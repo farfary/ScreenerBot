@@ -22,6 +22,7 @@ use crate::logger::{self, LogTag};
 use crate::pools::service::{
     get_debug_token_override, get_pool_analyzer, is_single_pool_mode_enabled,
 };
+use crate::pools::utils::is_sol_mint;
 
 use dashmap::DashMap;
 use solana_sdk::pubkey::Pubkey;
@@ -535,8 +536,45 @@ impl PoolDiscovery {
         // Stream to analyzer immediately
         if let Some(analyzer) = get_pool_analyzer() {
             let sender = analyzer.get_sender();
+            let mut sent_count = 0;
+            
             for pool in deduped.into_iter() {
-                // Let analyzer determine actual program id
+                // Check if pool is blacklisted
+                if let Ok(is_blacklisted) =
+                    super::db::is_pool_blacklisted(&pool.pool_id.to_string()).await
+                {
+                    if is_blacklisted {
+                        logger::debug(
+                            LogTag::PoolDiscovery,
+                            &format!("Skipping blacklisted pool: {}", pool.pool_id),
+                        );
+                        continue;
+                    }
+                }
+
+                // Check if token is blacklisted
+                let token_mint = if is_sol_mint(&pool.base_mint.to_string()) {
+                    pool.quote_mint.to_string()
+                } else {
+                    pool.base_mint.to_string()
+                };
+
+                if let Some(db) = crate::tokens::database::get_global_database() {
+                    if let Ok(is_blacklisted) = tokio::task::block_in_place(|| {
+                        tokio::runtime::Handle::current()
+                            .block_on(async { db.is_blacklisted(&token_mint) })
+                    }) {
+                        if is_blacklisted {
+                            logger::debug(
+                                LogTag::PoolDiscovery,
+                                &format!("Skipping pool for blacklisted token: {}", token_mint),
+                            );
+                            continue;
+                        }
+                    }
+                }
+
+                // Send to analyzer
                 let _ = sender.send(crate::pools::analyzer::AnalyzerMessage::AnalyzePool {
                     pool_id: pool.pool_id,
                     program_id: Pubkey::default(),
@@ -545,6 +583,7 @@ impl PoolDiscovery {
                     liquidity_usd: pool.liquidity_usd,
                     volume_h24_usd: pool.volume_h24_usd,
                 });
+                sent_count += 1;
             }
 
             record_safe(Event::info(
@@ -556,6 +595,8 @@ impl PoolDiscovery {
                     "pools_discovered": descriptors_count,
                     "pools_deduped": deduped_count,
                     "pools_final": final_pool_count,
+                    "pools_sent_to_analyzer": sent_count,
+                    "pools_filtered_blacklist": final_pool_count - sent_count,
                     "token_count": tokens.len(),
                     "duration_ms": tick_start.elapsed().as_millis(),
                     "single_pool_mode": is_single_pool_mode_enabled(),

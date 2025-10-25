@@ -205,6 +205,61 @@ impl PoolsDatabase {
         )
         .map_err(|e| format!("Failed to create created_at index: {}", e))?;
 
+        // Create blacklist_accounts table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS blacklist_accounts (
+                account_pubkey TEXT PRIMARY KEY,
+                reason TEXT NOT NULL,
+                source TEXT,
+                pool_id TEXT,
+                token_mint TEXT,
+                error_count INTEGER DEFAULT 1,
+                first_failed_at INTEGER NOT NULL,
+                last_failed_at INTEGER NOT NULL,
+                added_at INTEGER NOT NULL
+            )",
+            [],
+        )
+        .map_err(|e| format!("Failed to create blacklist_accounts table: {}", e))?;
+
+        // Create blacklist_pools table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS blacklist_pools (
+                pool_id TEXT PRIMARY KEY,
+                reason TEXT NOT NULL,
+                token_mint TEXT,
+                program_id TEXT,
+                error_count INTEGER DEFAULT 1,
+                first_failed_at INTEGER NOT NULL,
+                last_failed_at INTEGER NOT NULL,
+                added_at INTEGER NOT NULL
+            )",
+            [],
+        )
+        .map_err(|e| format!("Failed to create blacklist_pools table: {}", e))?;
+
+        // Create indices for blacklist tables
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_blacklist_accounts_pool 
+             ON blacklist_accounts(pool_id)",
+            [],
+        )
+        .map_err(|e| format!("Failed to create blacklist_accounts pool index: {}", e))?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_blacklist_accounts_token 
+             ON blacklist_accounts(token_mint)",
+            [],
+        )
+        .map_err(|e| format!("Failed to create blacklist_accounts token index: {}", e))?;
+
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_blacklist_pools_token 
+             ON blacklist_pools(token_mint)",
+            [],
+        )
+        .map_err(|e| format!("Failed to create blacklist_pools token index: {}", e))?;
+
         // Store connection
         let mut connection_guard = self.connection.lock().await;
         *connection_guard = Some(conn);
@@ -615,6 +670,199 @@ async fn flush_write_buffer(
 }
 
 // =============================================================================
+// BLACKLIST OPERATIONS
+// =============================================================================
+
+impl PoolsDatabase {
+    /// Add account to blacklist
+    pub async fn add_account_to_blacklist(
+        &self,
+        account_pubkey: &str,
+        reason: &str,
+        source: Option<&str>,
+        pool_id: Option<&str>,
+        token_mint: Option<&str>,
+    ) -> Result<(), String> {
+        let conn_guard = self.connection.lock().await;
+        if let Some(ref conn) = *conn_guard {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64;
+
+            // Check if already exists
+            let exists: bool = conn
+                .query_row(
+                    "SELECT 1 FROM blacklist_accounts WHERE account_pubkey = ?1",
+                    params![account_pubkey],
+                    |_| Ok(true),
+                )
+                .unwrap_or(false);
+
+            if exists {
+                // Increment error count and update last_failed_at
+                conn.execute(
+                    "UPDATE blacklist_accounts 
+                     SET error_count = error_count + 1, last_failed_at = ?1 
+                     WHERE account_pubkey = ?2",
+                    params![now, account_pubkey],
+                )
+                .map_err(|e| format!("Failed to update blacklist_accounts: {}", e))?;
+            } else {
+                // Insert new entry
+                conn.execute(
+                    "INSERT INTO blacklist_accounts 
+                     (account_pubkey, reason, source, pool_id, token_mint, error_count, first_failed_at, last_failed_at, added_at) 
+                     VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6, ?6)",
+                    params![account_pubkey, reason, source, pool_id, token_mint, now],
+                )
+                .map_err(|e| format!("Failed to insert into blacklist_accounts: {}", e))?;
+            }
+
+            Ok(())
+        } else {
+            Err("Database connection not available".to_string())
+        }
+    }
+
+    /// Check if account is blacklisted
+    pub async fn is_account_blacklisted(&self, account_pubkey: &str) -> Result<bool, String> {
+        let conn_guard = self.connection.lock().await;
+        if let Some(ref conn) = *conn_guard {
+            let exists = conn
+                .query_row(
+                    "SELECT 1 FROM blacklist_accounts WHERE account_pubkey = ?1",
+                    params![account_pubkey],
+                    |_| Ok(true),
+                )
+                .unwrap_or(false);
+            Ok(exists)
+        } else {
+            Err("Database connection not available".to_string())
+        }
+    }
+
+    /// Add pool to blacklist
+    pub async fn add_pool_to_blacklist(
+        &self,
+        pool_id: &str,
+        reason: &str,
+        token_mint: Option<&str>,
+        program_id: Option<&str>,
+    ) -> Result<(), String> {
+        let conn_guard = self.connection.lock().await;
+        if let Some(ref conn) = *conn_guard {
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap()
+                .as_secs() as i64;
+
+            // Check if already exists
+            let exists: bool = conn
+                .query_row(
+                    "SELECT 1 FROM blacklist_pools WHERE pool_id = ?1",
+                    params![pool_id],
+                    |_| Ok(true),
+                )
+                .unwrap_or(false);
+
+            if exists {
+                // Increment error count and update last_failed_at
+                conn.execute(
+                    "UPDATE blacklist_pools 
+                     SET error_count = error_count + 1, last_failed_at = ?1 
+                     WHERE pool_id = ?2",
+                    params![now, pool_id],
+                )
+                .map_err(|e| format!("Failed to update blacklist_pools: {}", e))?;
+            } else {
+                // Insert new entry
+                conn.execute(
+                    "INSERT INTO blacklist_pools 
+                     (pool_id, reason, token_mint, program_id, error_count, first_failed_at, last_failed_at, added_at) 
+                     VALUES (?1, ?2, ?3, ?4, 1, ?5, ?5, ?5)",
+                    params![pool_id, reason, token_mint, program_id, now],
+                )
+                .map_err(|e| format!("Failed to insert into blacklist_pools: {}", e))?;
+            }
+
+            Ok(())
+        } else {
+            Err("Database connection not available".to_string())
+        }
+    }
+
+    /// Check if pool is blacklisted
+    pub async fn is_pool_blacklisted(&self, pool_id: &str) -> Result<bool, String> {
+        let conn_guard = self.connection.lock().await;
+        if let Some(ref conn) = *conn_guard {
+            let exists = conn
+                .query_row(
+                    "SELECT 1 FROM blacklist_pools WHERE pool_id = ?1",
+                    params![pool_id],
+                    |_| Ok(true),
+                )
+                .unwrap_or(false);
+            Ok(exists)
+        } else {
+            Err("Database connection not available".to_string())
+        }
+    }
+
+    /// Remove account from blacklist
+    pub async fn remove_account_from_blacklist(&self, account_pubkey: &str) -> Result<(), String> {
+        let conn_guard = self.connection.lock().await;
+        if let Some(ref conn) = *conn_guard {
+            conn.execute(
+                "DELETE FROM blacklist_accounts WHERE account_pubkey = ?1",
+                params![account_pubkey],
+            )
+            .map_err(|e| format!("Failed to remove from blacklist_accounts: {}", e))?;
+            Ok(())
+        } else {
+            Err("Database connection not available".to_string())
+        }
+    }
+
+    /// Remove pool from blacklist
+    pub async fn remove_pool_from_blacklist(&self, pool_id: &str) -> Result<(), String> {
+        let conn_guard = self.connection.lock().await;
+        if let Some(ref conn) = *conn_guard {
+            conn.execute(
+                "DELETE FROM blacklist_pools WHERE pool_id = ?1",
+                params![pool_id],
+            )
+            .map_err(|e| format!("Failed to remove from blacklist_pools: {}", e))?;
+            Ok(())
+        } else {
+            Err("Database connection not available".to_string())
+        }
+    }
+
+    /// Get blacklist statistics
+    pub async fn get_blacklist_stats(&self) -> Result<(usize, usize), String> {
+        let conn_guard = self.connection.lock().await;
+        if let Some(ref conn) = *conn_guard {
+            let account_count: usize = conn
+                .query_row("SELECT COUNT(*) FROM blacklist_accounts", [], |row| {
+                    row.get(0)
+                })
+                .unwrap_or(0);
+
+            let pool_count: usize = conn
+                .query_row("SELECT COUNT(*) FROM blacklist_pools", [], |row| {
+                    row.get(0)
+                })
+                .unwrap_or(0);
+
+            Ok((account_count, pool_count))
+        } else {
+            Err("Database connection not available".to_string())
+        }
+    }
+}
+
+// =============================================================================
 // GLOBAL DATABASE INSTANCE
 // =============================================================================
 
@@ -698,6 +946,74 @@ pub async fn cleanup_all_gapped_data() -> Result<usize, String> {
             db.cleanup_all_gapped_data().await
         } else {
             Ok(0)
+        }
+    }
+}
+
+/// Add account to blacklist (global helper)
+pub async fn add_account_to_blacklist(
+    account_pubkey: &str,
+    reason: &str,
+    source: Option<&str>,
+    pool_id: Option<&str>,
+    token_mint: Option<&str>,
+) -> Result<(), String> {
+    unsafe {
+        if let Some(ref db) = GLOBAL_POOLS_DB {
+            db.add_account_to_blacklist(account_pubkey, reason, source, pool_id, token_mint)
+                .await
+        } else {
+            Err("Database not initialized".to_string())
+        }
+    }
+}
+
+/// Check if account is blacklisted (global helper)
+pub async fn is_account_blacklisted(account_pubkey: &str) -> Result<bool, String> {
+    unsafe {
+        if let Some(ref db) = GLOBAL_POOLS_DB {
+            db.is_account_blacklisted(account_pubkey).await
+        } else {
+            Ok(false) // If DB not available, assume not blacklisted
+        }
+    }
+}
+
+/// Add pool to blacklist (global helper)
+pub async fn add_pool_to_blacklist(
+    pool_id: &str,
+    reason: &str,
+    token_mint: Option<&str>,
+    program_id: Option<&str>,
+) -> Result<(), String> {
+    unsafe {
+        if let Some(ref db) = GLOBAL_POOLS_DB {
+            db.add_pool_to_blacklist(pool_id, reason, token_mint, program_id)
+                .await
+        } else {
+            Err("Database not initialized".to_string())
+        }
+    }
+}
+
+/// Check if pool is blacklisted (global helper)
+pub async fn is_pool_blacklisted(pool_id: &str) -> Result<bool, String> {
+    unsafe {
+        if let Some(ref db) = GLOBAL_POOLS_DB {
+            db.is_pool_blacklisted(pool_id).await
+        } else {
+            Ok(false) // If DB not available, assume not blacklisted
+        }
+    }
+}
+
+/// Get blacklist statistics (global helper)
+pub async fn get_blacklist_stats() -> Result<(usize, usize), String> {
+    unsafe {
+        if let Some(ref db) = GLOBAL_POOLS_DB {
+            db.get_blacklist_stats().await
+        } else {
+            Ok((0, 0))
         }
     }
 }

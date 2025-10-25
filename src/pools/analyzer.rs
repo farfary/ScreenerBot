@@ -53,8 +53,6 @@ pub struct PoolAnalyzer {
     analyzer_rx: Arc<RwLock<Option<mpsc::UnboundedReceiver<AnalyzerMessage>>>>,
     /// Channel sender for sending analysis requests
     analyzer_tx: mpsc::UnboundedSender<AnalyzerMessage>,
-    /// In-memory set of failed (pool_id, token_mint) pairs to avoid repeated re-analysis
-    failed_pairs: Arc<RwLock<HashSet<(Pubkey, Pubkey)>>>,
 }
 
 impl PoolAnalyzer {
@@ -70,7 +68,6 @@ impl PoolAnalyzer {
             rpc_client,
             analyzer_rx: Arc::new(RwLock::new(Some(analyzer_rx))),
             analyzer_tx,
-            failed_pairs: Arc::new(RwLock::new(HashSet::new())),
         }
     }
 
@@ -90,7 +87,6 @@ impl PoolAnalyzer {
 
         let pool_directory = self.pool_directory.clone();
         let rpc_client = self.rpc_client.clone();
-        let failed_pairs = self.failed_pairs.clone();
 
         // Take the receiver from the Arc<RwLock>
         let mut analyzer_rx = {
@@ -118,23 +114,19 @@ impl PoolAnalyzer {
                                     liquidity_usd,
                                     volume_h24_usd
                                 }) => {
-                                    // Determine the token side we consider for failure tracking
-                                    let token_to_check = if is_sol_mint(&base_mint.to_string()) { quote_mint } else { base_mint };
-                                    let pair = (pool_id, token_to_check);
-
-                                    // Skip re-analysis if this (pool, token) already failed earlier in this run
-                                    let already_failed = {
-                                        let fp = failed_pairs.read().unwrap();
-                                        fp.contains(&pair)
-                                    };
-
-                                    if already_failed {
-                                        logger::debug(
-                                            LogTag::PoolAnalyzer,
-                                            &format!("Skipping re-analysis of pool {} for token {} (previously failed this run)", pool_id, token_to_check),
-                                        );
-                                        continue;
+                                    // Check if pool is blacklisted in database
+                                    if let Ok(is_blacklisted) = super::db::is_pool_blacklisted(&pool_id.to_string()).await {
+                                        if is_blacklisted {
+                                            logger::debug(
+                                                LogTag::PoolAnalyzer,
+                                                &format!("Skipping blacklisted pool: {}", pool_id),
+                                            );
+                                            continue;
+                                        }
                                     }
+
+                                    // Determine the token side for blacklist tracking
+                                    let token_to_check = if is_sol_mint(&base_mint.to_string()) { quote_mint } else { base_mint };
 
                                     if let Some(descriptor) = Self::analyze_pool_static(
                                         pool_id,
@@ -172,13 +164,22 @@ impl PoolAnalyzer {
                                             ),
                                         );
                                     } else {
-                                        // Record failure in-memory to avoid repeated attempts this run
-                                        let mut fp = failed_pairs.write().unwrap();
-                                        fp.insert(pair);
+                                        // Blacklist pool in database to prevent future attempts
+                                        if let Err(e) = super::db::add_pool_to_blacklist(
+                                            &pool_id.to_string(),
+                                            "analysis_failed",
+                                            Some(&token_to_check.to_string()),
+                                            Some(&program_id.to_string())
+                                        ).await {
+                                            logger::warning(
+                                                LogTag::PoolAnalyzer,
+                                                &format!("Failed to blacklist pool {}: {}", pool_id, e),
+                                            );
+                                        }
 
                                         logger::warning(
                                             LogTag::PoolAnalyzer,
-                                            &format!("Failed to analyze pool {} for token {} - will skip retries this run", pool_id, token_to_check),
+                                            &format!("Failed to analyze pool {} for token {} - blacklisted permanently", pool_id, token_to_check),
                                         );
                                     }
                                 }

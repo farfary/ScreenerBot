@@ -273,6 +273,19 @@ impl AccountFetcher {
                 .collect();
 
         for pool in pools {
+            // Check if pool is blacklisted
+            if let Ok(is_blacklisted) =
+                super::db::is_pool_blacklisted(&pool.pool_id.to_string()).await
+            {
+                if is_blacklisted {
+                    logger::debug(
+                        LogTag::PoolFetcher,
+                        &format!("Skipping blacklisted pool: {}", pool.pool_id),
+                    );
+                    continue;
+                }
+            }
+
             // Determine the tracked (non-SOL) token mint for this pool
             let target_mint = if super::utils::is_sol_mint(&pool.base_mint.to_string()) {
                 pool.quote_mint.to_string()
@@ -288,6 +301,19 @@ impl AccountFetcher {
             };
 
             for account in &pool.reserve_accounts {
+                // Check if account is blacklisted
+                if let Ok(is_blacklisted) =
+                    super::db::is_account_blacklisted(&account.to_string()).await
+                {
+                    if is_blacklisted {
+                        logger::debug(
+                            LogTag::PoolFetcher,
+                            &format!("Skipping blacklisted account: {}", account),
+                        );
+                        continue;
+                    }
+                }
+
                 let needs_fetch = match last_fetch_map.get(account) {
                     Some(last_time) => last_time.elapsed().as_secs() > threshold,
                     None => true, // Never fetched
@@ -468,11 +494,28 @@ impl AccountFetcher {
                 let account_data = AccountData::from_account(accounts[i], account.clone(), 0);
                 account_data_list.push(account_data);
             } else {
-                missing_accounts.push(accounts[i].to_string());
+                let account_str = accounts[i].to_string();
+                missing_accounts.push(account_str.clone());
                 logger::warning(
                     LogTag::PoolFetcher,
-                    &format!("Account not found: {}", accounts[i]),
+                    &format!("Account not found: {}", account_str),
                 );
+
+                // Blacklist account after not found error
+                if let Err(e) = super::db::add_account_to_blacklist(
+                    &account_str,
+                    "account_not_found",
+                    Some("rpc_fetch"),
+                    None, // pool_id will be looked up if needed
+                    None, // token_mint will be looked up if needed
+                )
+                .await
+                {
+                    logger::warning(
+                        LogTag::PoolFetcher,
+                        &format!("Failed to blacklist account {}: {}", account_str, e),
+                    );
+                }
             }
         }
 
@@ -485,7 +528,8 @@ impl AccountFetcher {
                 serde_json::json!({
                     "missing_count": missing_accounts.len(),
                     "total_requested": accounts.len(),
-                    "missing_accounts": missing_accounts
+                    "missing_accounts": missing_accounts,
+                    "action": "accounts_blacklisted"
                 }),
             ))
             .await;
