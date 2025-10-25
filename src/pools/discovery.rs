@@ -540,14 +540,22 @@ impl PoolDiscovery {
             
             for pool in deduped.into_iter() {
                 // Check if pool is blacklisted
-                if let Ok(is_blacklisted) =
-                    super::db::is_pool_blacklisted(&pool.pool_id.to_string()).await
-                {
-                    if is_blacklisted {
-                        logger::debug(
+                match super::db::is_pool_blacklisted(&pool.pool_id.to_string()).await {
+                    Ok(true) => {
+                        continue; // Skip blacklisted pool silently
+                    }
+                    Ok(false) => {
+                        // Not blacklisted, proceed to check token
+                    }
+                    Err(e) => {
+                        logger::warning(
                             LogTag::PoolDiscovery,
-                            &format!("Skipping blacklisted pool: {}", pool.pool_id),
+                            &format!(
+                                "Failed to check pool blacklist for {}: {} - skipping as precaution",
+                                pool.pool_id, e
+                            ),
                         );
+                        // FAIL-CLOSED: Skip pool if blacklist check fails
                         continue;
                     }
                 }

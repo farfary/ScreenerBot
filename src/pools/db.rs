@@ -9,11 +9,14 @@ use crate::logger::{self, LogTag};
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, Row};
+use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::Mutex; // Changed to std::sync::Mutex for spawn_blocking compatibility
+use std::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 
 /// Database file path
 const POOLS_DB_PATH: &str = "data/pools.db";
@@ -132,6 +135,9 @@ pub struct PoolsDatabase {
     db_path: String,
     connection: Arc<Mutex<Option<Connection>>>,
     write_queue: Option<mpsc::UnboundedSender<PriceResult>>,
+    // In-memory blacklists (source of truth for runtime checks)
+    blacklisted_accounts: Arc<RwLock<HashSet<String>>>,
+    blacklisted_pools: Arc<RwLock<HashSet<String>>>,
 }
 
 impl Default for PoolsDatabase {
@@ -147,6 +153,8 @@ impl PoolsDatabase {
             db_path: POOLS_DB_PATH.to_string(),
             connection: Arc::new(Mutex::new(None)),
             write_queue: None,
+            blacklisted_accounts: Arc::new(RwLock::new(HashSet::new())),
+            blacklisted_pools: Arc::new(RwLock::new(HashSet::new())),
         }
     }
 
@@ -261,8 +269,10 @@ impl PoolsDatabase {
         .map_err(|e| format!("Failed to create blacklist_pools token index: {}", e))?;
 
         // Store connection
-        let mut connection_guard = self.connection.lock().await;
-        *connection_guard = Some(conn);
+        {
+            let mut connection_guard = self.connection.lock().unwrap();
+            *connection_guard = Some(conn);
+        }
 
         // Setup write queue for batched operations
         let (tx, rx) = mpsc::unbounded_channel();
@@ -277,6 +287,87 @@ impl PoolsDatabase {
         logger::info(
             LogTag::PoolService,
             &format!("✅ Pools database initialized: {}", self.db_path),
+        );
+
+        // Load blacklists into memory (priority for runtime checks)
+
+        let (account_keys, pool_keys) = {
+            let connection_guard = self.connection.lock().unwrap();
+            if let Some(ref conn) = *connection_guard {
+                // Accounts
+                let account_keys = match conn.prepare("SELECT account_pubkey FROM blacklist_accounts") {
+                    Ok(mut stmt) => {
+                        let rows = stmt.query_map([], |row| row.get::<_, String>(0));
+                        match rows {
+                            Ok(iter) => iter.filter_map(|r| r.ok()).collect::<Vec<_>>(),
+                            Err(e) => {
+                                logger::warning(
+                                    LogTag::PoolService,
+                                    &format!("Failed to load blacklist_accounts into memory: {}", e),
+                                );
+                                Vec::new()
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        logger::warning(
+                            LogTag::PoolService,
+                            &format!("Failed to prepare load for blacklist_accounts: {}", e),
+                        );
+                        Vec::new()
+                    }
+                };
+
+                // Pools
+                let pool_keys = match conn.prepare("SELECT pool_id FROM blacklist_pools") {
+                    Ok(mut stmt) => {
+                        let rows = stmt.query_map([], |row| row.get::<_, String>(0));
+                        match rows {
+                            Ok(iter) => iter.filter_map(|r| r.ok()).collect::<Vec<_>>(),
+                            Err(e) => {
+                                logger::warning(
+                                    LogTag::PoolService,
+                                    &format!("Failed to load blacklist_pools into memory: {}", e),
+                                );
+                                Vec::new()
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        logger::warning(
+                            LogTag::PoolService,
+                            &format!("Failed to prepare load for blacklist_pools: {}", e),
+                        );
+                        Vec::new()
+                    }
+                };
+
+                (account_keys, pool_keys)
+            } else {
+                (Vec::new(), Vec::new())
+            }
+        };
+
+        {
+            let mut set = self.blacklisted_accounts.write().unwrap();
+            set.clear();
+            set.extend(account_keys);
+        }
+
+        {
+            let mut set = self.blacklisted_pools.write().unwrap();
+            set.clear();
+            set.extend(pool_keys);
+        }
+
+        let acct_count = self.blacklisted_accounts.read().unwrap().len();
+        let pool_count = self.blacklisted_pools.read().unwrap().len();
+        logger::info(
+            LogTag::PoolService,
+            &format!(
+                "In-memory blacklists loaded: accounts={}, pools={}",
+                acct_count, pool_count
+            ),
         );
 
         Ok(())
@@ -298,7 +389,7 @@ impl PoolsDatabase {
         mint: &str,
         limit: usize,
     ) -> Result<Vec<PriceResult>, String> {
-        let connection_guard = self.connection.lock().await;
+        let connection_guard = self.connection.lock().unwrap();
         let conn = connection_guard
             .as_ref()
             .ok_or("Database not initialized")?;
@@ -346,7 +437,7 @@ impl PoolsDatabase {
         limit: Option<usize>,
         since_timestamp: Option<i64>,
     ) -> Result<Vec<PriceResult>, String> {
-        let connection_guard = self.connection.lock().await;
+        let connection_guard = self.connection.lock().unwrap();
         let conn = connection_guard
             .as_ref()
             .ok_or("Database not initialized")?;
@@ -405,7 +496,7 @@ impl PoolsDatabase {
 
     /// Cleanup old price history entries
     pub async fn cleanup_old_entries(&self) -> Result<usize, String> {
-        let connection_guard = self.connection.lock().await;
+        let connection_guard = self.connection.lock().unwrap();
         let conn = connection_guard
             .as_ref()
             .ok_or("Database not initialized")?;
@@ -432,7 +523,7 @@ impl PoolsDatabase {
 
     /// Remove price history entries older than the most recent gap for a specific token
     pub async fn cleanup_gapped_data_for_token(&self, mint: &str) -> Result<usize, String> {
-        let connection_guard = self.connection.lock().await;
+        let connection_guard = self.connection.lock().unwrap();
         let conn = connection_guard
             .as_ref()
             .ok_or("Database not initialized")?;
@@ -515,7 +606,7 @@ impl PoolsDatabase {
     pub async fn cleanup_all_gapped_data(&self) -> Result<usize, String> {
         // Get all unique tokens in the database
         let tokens = {
-            let connection_guard = self.connection.lock().await;
+            let connection_guard = self.connection.lock().unwrap();
             let conn = connection_guard
                 .as_ref()
                 .ok_or("Database not initialized")?;
@@ -619,7 +710,7 @@ async fn flush_write_buffer(
         return;
     }
 
-    let connection_guard = db_connection.lock().await;
+    let connection_guard = db_connection.lock().unwrap();
     if let Some(ref conn) = *connection_guard {
         // Begin transaction for atomicity
         if let Ok(tx) = conn.unchecked_transaction() {
@@ -683,63 +774,71 @@ impl PoolsDatabase {
         pool_id: Option<&str>,
         token_mint: Option<&str>,
     ) -> Result<(), String> {
-        let conn_guard = self.connection.lock().await;
-        if let Some(ref conn) = *conn_guard {
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs() as i64;
-
-            // Check if already exists
-            let exists: bool = conn
-                .query_row(
-                    "SELECT 1 FROM blacklist_accounts WHERE account_pubkey = ?1",
-                    params![account_pubkey],
-                    |_| Ok(true),
-                )
-                .unwrap_or(false);
-
-            if exists {
-                // Increment error count and update last_failed_at
-                conn.execute(
-                    "UPDATE blacklist_accounts 
-                     SET error_count = error_count + 1, last_failed_at = ?1 
-                     WHERE account_pubkey = ?2",
-                    params![now, account_pubkey],
-                )
-                .map_err(|e| format!("Failed to update blacklist_accounts: {}", e))?;
-            } else {
-                // Insert new entry
-                conn.execute(
-                    "INSERT INTO blacklist_accounts 
-                     (account_pubkey, reason, source, pool_id, token_mint, error_count, first_failed_at, last_failed_at, added_at) 
-                     VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6, ?6)",
-                    params![account_pubkey, reason, source, pool_id, token_mint, now],
-                )
-                .map_err(|e| format!("Failed to insert into blacklist_accounts: {}", e))?;
-            }
-
-            Ok(())
-        } else {
-            Err("Database connection not available".to_string())
+        let account_key = account_pubkey.to_string();
+        let reason_str = reason.to_string();
+        let source_str = source.map(|s| s.to_string());
+        let pool_id_str = pool_id.map(|s| s.to_string());
+        let token_mint_str = token_mint.map(|s| s.to_string());
+        // Update memory immediately
+        {
+            let mut set = self.blacklisted_accounts.write().unwrap();
+            set.insert(account_key.clone());
         }
+
+        let conn_arc = self.connection.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn_guard = conn_arc.lock()
+                .map_err(|e| format!("Failed to lock connection: {}", e))?;
+            
+            if let Some(ref conn) = *conn_guard {
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64;
+
+                // Check if already exists
+                let exists: bool = conn
+                    .query_row(
+                        "SELECT 1 FROM blacklist_accounts WHERE account_pubkey = ?1",
+                        params![&account_key],
+                        |_| Ok(true),
+                    )
+                    .unwrap_or(false);
+
+                if exists {
+                    // Increment error count and update last_failed_at
+                    conn.execute(
+                        "UPDATE blacklist_accounts 
+                         SET error_count = error_count + 1, last_failed_at = ?1 
+                         WHERE account_pubkey = ?2",
+                        params![now, &account_key],
+                    )
+                    .map_err(|e| format!("Failed to update blacklist_accounts: {}", e))?;
+                } else {
+                    // Insert new entry
+                    conn.execute(
+                        "INSERT INTO blacklist_accounts 
+                         (account_pubkey, reason, source, pool_id, token_mint, error_count, first_failed_at, last_failed_at, added_at) 
+                         VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6, ?6)",
+                        params![&account_key, &reason_str, source_str.as_deref(), pool_id_str.as_deref(), token_mint_str.as_deref(), now],
+                    )
+                    .map_err(|e| format!("Failed to insert into blacklist_accounts: {}", e))?;
+                }
+
+                Ok(())
+            } else {
+                Err("Database connection not available".to_string())
+            }
+        })
+        .await
+        .map_err(|e| format!("Blocking task failed: {}", e))?
     }
 
     /// Check if account is blacklisted
     pub async fn is_account_blacklisted(&self, account_pubkey: &str) -> Result<bool, String> {
-        let conn_guard = self.connection.lock().await;
-        if let Some(ref conn) = *conn_guard {
-            let exists = conn
-                .query_row(
-                    "SELECT 1 FROM blacklist_accounts WHERE account_pubkey = ?1",
-                    params![account_pubkey],
-                    |_| Ok(true),
-                )
-                .unwrap_or(false);
-            Ok(exists)
-        } else {
-            Err("Database connection not available".to_string())
-        }
+        // Hot path: memory only
+        let set = self.blacklisted_accounts.read().unwrap();
+        Ok(set.contains(account_pubkey))
     }
 
     /// Add pool to blacklist
@@ -750,115 +849,125 @@ impl PoolsDatabase {
         token_mint: Option<&str>,
         program_id: Option<&str>,
     ) -> Result<(), String> {
-        let conn_guard = self.connection.lock().await;
-        if let Some(ref conn) = *conn_guard {
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .unwrap()
-                .as_secs() as i64;
-
-            // Check if already exists
-            let exists: bool = conn
-                .query_row(
-                    "SELECT 1 FROM blacklist_pools WHERE pool_id = ?1",
-                    params![pool_id],
-                    |_| Ok(true),
-                )
-                .unwrap_or(false);
-
-            if exists {
-                // Increment error count and update last_failed_at
-                conn.execute(
-                    "UPDATE blacklist_pools 
-                     SET error_count = error_count + 1, last_failed_at = ?1 
-                     WHERE pool_id = ?2",
-                    params![now, pool_id],
-                )
-                .map_err(|e| format!("Failed to update blacklist_pools: {}", e))?;
-            } else {
-                // Insert new entry
-                conn.execute(
-                    "INSERT INTO blacklist_pools 
-                     (pool_id, reason, token_mint, program_id, error_count, first_failed_at, last_failed_at, added_at) 
-                     VALUES (?1, ?2, ?3, ?4, 1, ?5, ?5, ?5)",
-                    params![pool_id, reason, token_mint, program_id, now],
-                )
-                .map_err(|e| format!("Failed to insert into blacklist_pools: {}", e))?;
-            }
-
-            Ok(())
-        } else {
-            Err("Database connection not available".to_string())
+        let pool_id_str = pool_id.to_string();
+        let reason_str = reason.to_string();
+        let token_mint_str = token_mint.map(|s| s.to_string());
+        let program_id_str = program_id.map(|s| s.to_string());
+        // Update memory immediately
+        {
+            let mut set = self.blacklisted_pools.write().unwrap();
+            set.insert(pool_id_str.clone());
         }
+
+        let conn_arc = self.connection.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn_guard = conn_arc.lock()
+                .map_err(|e| format!("Failed to lock connection: {}", e))?;
+            
+            if let Some(ref conn) = *conn_guard {
+                let now = SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap()
+                    .as_secs() as i64;
+
+                // Check if already exists
+                let exists: bool = conn
+                    .query_row(
+                        "SELECT 1 FROM blacklist_pools WHERE pool_id = ?1",
+                        params![&pool_id_str],
+                        |_| Ok(true),
+                    )
+                    .unwrap_or(false);
+
+                if exists {
+                    // Increment error count and update last_failed_at
+                    conn.execute(
+                        "UPDATE blacklist_pools 
+                         SET error_count = error_count + 1, last_failed_at = ?1 
+                         WHERE pool_id = ?2",
+                        params![now, &pool_id_str],
+                    )
+                    .map_err(|e| format!("Failed to update blacklist_pools: {}", e))?;
+                } else {
+                    // Insert new entry
+                    conn.execute(
+                        "INSERT INTO blacklist_pools 
+                         (pool_id, reason, token_mint, program_id, error_count, first_failed_at, last_failed_at, added_at) 
+                         VALUES (?1, ?2, ?3, ?4, 1, ?5, ?5, ?5)",
+                        params![&pool_id_str, &reason_str, token_mint_str.as_deref(), program_id_str.as_deref(), now],
+                    )
+                    .map_err(|e| format!("Failed to insert into blacklist_pools: {}", e))?;
+                }
+
+                Ok(())
+            } else {
+                Err("Database connection not available".to_string())
+            }
+        })
+        .await
+        .map_err(|e| format!("Blocking task failed: {}", e))?
     }
 
     /// Check if pool is blacklisted
     pub async fn is_pool_blacklisted(&self, pool_id: &str) -> Result<bool, String> {
-        let conn_guard = self.connection.lock().await;
-        if let Some(ref conn) = *conn_guard {
-            let exists = conn
-                .query_row(
-                    "SELECT 1 FROM blacklist_pools WHERE pool_id = ?1",
-                    params![pool_id],
-                    |_| Ok(true),
-                )
-                .unwrap_or(false);
-            Ok(exists)
-        } else {
-            Err("Database connection not available".to_string())
-        }
+        // Hot path: memory only
+        let set = self.blacklisted_pools.read().unwrap();
+        Ok(set.contains(pool_id))
     }
 
     /// Remove account from blacklist
     pub async fn remove_account_from_blacklist(&self, account_pubkey: &str) -> Result<(), String> {
-        let conn_guard = self.connection.lock().await;
-        if let Some(ref conn) = *conn_guard {
-            conn.execute(
-                "DELETE FROM blacklist_accounts WHERE account_pubkey = ?1",
-                params![account_pubkey],
-            )
-            .map_err(|e| format!("Failed to remove from blacklist_accounts: {}", e))?;
-            Ok(())
-        } else {
-            Err("Database connection not available".to_string())
+        // Update memory immediately
+        {
+            let mut set = self.blacklisted_accounts.write().unwrap();
+            set.remove(account_pubkey);
         }
+        // Persist
+        let account_key = account_pubkey.to_string();
+        let conn_arc = self.connection.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn_guard = conn_arc.lock().map_err(|e| format!("Failed to lock connection: {}", e))?;
+            if let Some(ref conn) = *conn_guard {
+                conn.execute(
+                    "DELETE FROM blacklist_accounts WHERE account_pubkey = ?1",
+                    params![&account_key],
+                ).map_err(|e| format!("Failed to remove from blacklist_accounts: {}", e))?;
+                Ok(())
+            } else {
+                Err("Database connection not available".to_string())
+            }
+        }).await.map_err(|e| format!("Blocking task failed: {}", e))?
     }
 
     /// Remove pool from blacklist
     pub async fn remove_pool_from_blacklist(&self, pool_id: &str) -> Result<(), String> {
-        let conn_guard = self.connection.lock().await;
-        if let Some(ref conn) = *conn_guard {
-            conn.execute(
-                "DELETE FROM blacklist_pools WHERE pool_id = ?1",
-                params![pool_id],
-            )
-            .map_err(|e| format!("Failed to remove from blacklist_pools: {}", e))?;
-            Ok(())
-        } else {
-            Err("Database connection not available".to_string())
+        // Update memory immediately
+        {
+            let mut set = self.blacklisted_pools.write().unwrap();
+            set.remove(pool_id);
         }
+        // Persist
+        let pool_key = pool_id.to_string();
+        let conn_arc = self.connection.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn_guard = conn_arc.lock().map_err(|e| format!("Failed to lock connection: {}", e))?;
+            if let Some(ref conn) = *conn_guard {
+                conn.execute(
+                    "DELETE FROM blacklist_pools WHERE pool_id = ?1",
+                    params![&pool_key],
+                ).map_err(|e| format!("Failed to remove from blacklist_pools: {}", e))?;
+                Ok(())
+            } else {
+                Err("Database connection not available".to_string())
+            }
+        }).await.map_err(|e| format!("Blocking task failed: {}", e))?
     }
 
     /// Get blacklist statistics
     pub async fn get_blacklist_stats(&self) -> Result<(usize, usize), String> {
-        let conn_guard = self.connection.lock().await;
-        if let Some(ref conn) = *conn_guard {
-            let account_count: usize = conn
-                .query_row("SELECT COUNT(*) FROM blacklist_accounts", [], |row| {
-                    row.get(0)
-                })
-                .unwrap_or(0);
-
-            let pool_count: usize = conn
-                .query_row("SELECT COUNT(*) FROM blacklist_pools", [], |row| {
-                    row.get(0)
-                })
-                .unwrap_or(0);
-
-            Ok((account_count, pool_count))
-        } else {
-            Err("Database connection not available".to_string())
-        }
+        let accounts = self.blacklisted_accounts.read().unwrap().len();
+        let pools = self.blacklisted_pools.read().unwrap().len();
+        Ok((accounts, pools))
     }
 }
 
@@ -974,7 +1083,7 @@ pub async fn is_account_blacklisted(account_pubkey: &str) -> Result<bool, String
         if let Some(ref db) = GLOBAL_POOLS_DB {
             db.is_account_blacklisted(account_pubkey).await
         } else {
-            Ok(false) // If DB not available, assume not blacklisted
+            Err("Database not initialized".to_string())
         }
     }
 }
@@ -1002,7 +1111,7 @@ pub async fn is_pool_blacklisted(pool_id: &str) -> Result<bool, String> {
         if let Some(ref db) = GLOBAL_POOLS_DB {
             db.is_pool_blacklisted(pool_id).await
         } else {
-            Ok(false) // If DB not available, assume not blacklisted
+            Err("Database not initialized".to_string())
         }
     }
 }

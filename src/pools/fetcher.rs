@@ -274,14 +274,22 @@ impl AccountFetcher {
 
         for pool in pools {
             // Check if pool is blacklisted
-            if let Ok(is_blacklisted) =
-                super::db::is_pool_blacklisted(&pool.pool_id.to_string()).await
-            {
-                if is_blacklisted {
-                    logger::debug(
+            match super::db::is_pool_blacklisted(&pool.pool_id.to_string()).await {
+                Ok(true) => {
+                    continue; // Skip blacklisted pool silently
+                }
+                Ok(false) => {
+                    // Not blacklisted, proceed to process pool
+                }
+                Err(e) => {
+                    logger::warning(
                         LogTag::PoolFetcher,
-                        &format!("Skipping blacklisted pool: {}", pool.pool_id),
+                        &format!(
+                            "Failed to check blacklist for pool {}: {} - skipping as precaution",
+                            pool.pool_id, e
+                        ),
                     );
+                    // FAIL-CLOSED: Skip pool if blacklist check fails
                     continue;
                 }
             }
@@ -302,14 +310,22 @@ impl AccountFetcher {
 
             for account in &pool.reserve_accounts {
                 // Check if account is blacklisted
-                if let Ok(is_blacklisted) =
-                    super::db::is_account_blacklisted(&account.to_string()).await
-                {
-                    if is_blacklisted {
-                        logger::debug(
+                match super::db::is_account_blacklisted(&account.to_string()).await {
+                    Ok(true) => {
+                        continue; // Skip blacklisted account silently
+                    }
+                    Ok(false) => {
+                        // Not blacklisted, proceed to check if needs fetch
+                    }
+                    Err(e) => {
+                        logger::warning(
                             LogTag::PoolFetcher,
-                            &format!("Skipping blacklisted account: {}", account),
+                            &format!(
+                                "Failed to check blacklist for account {}: {} - skipping as precaution",
+                                account, e
+                            ),
                         );
+                        // FAIL-CLOSED: Skip account if blacklist check fails to avoid RPC waste
                         continue;
                     }
                 }
@@ -338,7 +354,38 @@ impl AccountFetcher {
         }
 
         // Convert to vector and batch
-        let accounts_to_fetch: Vec<Pubkey> = pending_accounts.drain().collect();
+        let drained_accounts: Vec<Pubkey> = pending_accounts.drain().collect();
+
+        if drained_accounts.is_empty() {
+            return;
+        }
+
+        let mut accounts_to_fetch = Vec::with_capacity(drained_accounts.len());
+        for account in drained_accounts {
+            let account_key = account.to_string();
+            match super::db::is_account_blacklisted(&account_key).await {
+                Ok(true) => {
+                    pending_accounts.remove(&account);
+                }
+                Ok(false) => {
+                    accounts_to_fetch.push(account);
+                }
+                Err(e) => {
+                    pending_accounts.remove(&account);
+                    logger::warning(
+                        LogTag::PoolFetcher,
+                        &format!(
+                            "Failed to check blacklist for account {}: {} - skipping as precaution",
+                            account_key, e
+                        ),
+                    );
+                }
+            }
+        }
+
+        if accounts_to_fetch.is_empty() {
+            return;
+        }
 
         logger::debug(
             LogTag::PoolFetcher,
@@ -363,7 +410,7 @@ impl AccountFetcher {
             .await;
 
             match Self::fetch_account_batch(rpc_client, batch).await {
-                Ok(account_data_list) => {
+                Ok((account_data_list, missing_accounts)) => {
                     let batch_duration = batch_start.elapsed();
 
                     record_safe(Event::info(
@@ -380,12 +427,22 @@ impl AccountFetcher {
                     ))
                     .await;
 
-                    // Update last fetch times
+                    // Update last fetch times only for successful accounts
                     {
                         let mut last_fetch = account_last_fetch.write().unwrap();
-                        for account in batch {
-                            last_fetch.insert(*account, Instant::now());
+                        let now = Instant::now();
+                        for acc_data in &account_data_list {
+                            last_fetch.insert(acc_data.pubkey, now);
                         }
+                        // Remove missing accounts from last_fetch to prevent stale logic re-adding them
+                        for missing in &missing_accounts {
+                            last_fetch.remove(missing);
+                        }
+                    }
+
+                    // Ensure missing accounts are not kept pending within this tick
+                    for missing in &missing_accounts {
+                        pending_accounts.remove(missing);
                     }
 
                     // Organize accounts into pool bundles
@@ -434,9 +491,9 @@ impl AccountFetcher {
     async fn fetch_account_batch(
         rpc_client: &Arc<RpcClient>,
         accounts: &[Pubkey],
-    ) -> Result<Vec<AccountData>, String> {
+    ) -> Result<(Vec<AccountData>, Vec<Pubkey>), String> {
         if accounts.is_empty() {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), Vec::new()));
         }
 
         logger::debug(
@@ -486,24 +543,24 @@ impl AccountFetcher {
             }
         };
 
-        let mut account_data_list = Vec::new();
-        let mut missing_accounts = Vec::new();
+    let mut account_data_list: Vec<AccountData> = Vec::new();
+    let mut missing_accounts: Vec<Pubkey> = Vec::new();
 
         for (i, account_opt) in account_results.iter().enumerate() {
             if let Some(account) = account_opt {
                 let account_data = AccountData::from_account(accounts[i], account.clone(), 0);
                 account_data_list.push(account_data);
             } else {
-                let account_str = accounts[i].to_string();
-                missing_accounts.push(account_str.clone());
+                let missing_key = accounts[i];
+                missing_accounts.push(missing_key);
                 logger::warning(
                     LogTag::PoolFetcher,
-                    &format!("Account not found: {}", account_str),
+                    &format!("Account not found: {}", missing_key),
                 );
 
                 // Blacklist account after not found error
                 if let Err(e) = super::db::add_account_to_blacklist(
-                    &account_str,
+                    &missing_key.to_string(),
                     "account_not_found",
                     Some("rpc_fetch"),
                     None, // pool_id will be looked up if needed
@@ -513,7 +570,7 @@ impl AccountFetcher {
                 {
                     logger::warning(
                         LogTag::PoolFetcher,
-                        &format!("Failed to blacklist account {}: {}", account_str, e),
+                        &format!("Failed to blacklist account {}: {}", missing_key, e),
                     );
                 }
             }
@@ -528,14 +585,14 @@ impl AccountFetcher {
                 serde_json::json!({
                     "missing_count": missing_accounts.len(),
                     "total_requested": accounts.len(),
-                    "missing_accounts": missing_accounts,
+                    "missing_accounts": missing_accounts.iter().map(|p| p.to_string()).collect::<Vec<_>>(),
                     "action": "accounts_blacklisted"
                 }),
             ))
             .await;
         }
 
-        Ok(account_data_list)
+        Ok((account_data_list, missing_accounts))
     }
 
     /// Organize fetched accounts into pool bundles
