@@ -8,8 +8,7 @@ use super::types::{PriceResult, PRICE_HISTORY_MAX_ENTRIES};
 use crate::logger::{self, LogTag};
 
 use chrono::{DateTime, Utc};
-use rusqlite::{params, types::Type, Connection, Row};
-use serde_json;
+use rusqlite::{params, Connection, Row};
 use std::fs;
 use std::path::Path;
 use std::sync::Arc;
@@ -123,41 +122,6 @@ impl DbPriceResult {
     }
 }
 
-/// Persistent blacklist record for pools with missing or invalid accounts
-#[derive(Debug, Clone)]
-pub struct PoolBlacklistRecord {
-    pub pool_id: String,
-    pub token_mint: String,
-    pub reason: String,
-    pub missing_accounts: Vec<String>,
-    pub retry_count: i64,
-    pub first_seen: i64,
-    pub last_seen: i64,
-}
-
-impl PoolBlacklistRecord {
-    fn from_row(row: &Row) -> Result<Self, rusqlite::Error> {
-        let missing_raw: String = row.get("missing_accounts")?;
-        let missing_accounts: Vec<String> = serde_json::from_str(&missing_raw)
-            .map_err(|e| rusqlite::Error::FromSqlConversionFailure(0, Type::Text, Box::new(e)))?;
-
-        Ok(Self {
-            pool_id: row.get("pool_id")?,
-            token_mint: row.get("token_mint")?,
-            reason: row.get("reason")?,
-            missing_accounts,
-            retry_count: row.get("retry_count")?,
-            first_seen: row.get("first_seen")?,
-            last_seen: row.get("last_seen")?,
-        })
-    }
-
-    fn missing_accounts_json(&self) -> Result<String, String> {
-        serde_json::to_string(&self.missing_accounts)
-            .map_err(|e| format!("Failed to serialize missing accounts: {}", e))
-    }
-}
-
 // =============================================================================
 // POOLS DATABASE
 // =============================================================================
@@ -241,27 +205,6 @@ impl PoolsDatabase {
         )
         .map_err(|e| format!("Failed to create created_at index: {}", e))?;
 
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS pool_blacklist (
-                pool_id TEXT PRIMARY KEY,
-                token_mint TEXT NOT NULL,
-                reason TEXT NOT NULL,
-                missing_accounts TEXT NOT NULL,
-                retry_count INTEGER NOT NULL DEFAULT 0,
-                first_seen INTEGER NOT NULL,
-                last_seen INTEGER NOT NULL
-            )",
-            [],
-        )
-        .map_err(|e| format!("Failed to create pool_blacklist table: {}", e))?;
-
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_pool_blacklist_token 
-             ON pool_blacklist(token_mint)",
-            [],
-        )
-        .map_err(|e| format!("Failed to create pool blacklist token index: {}", e))?;
-
         // Store connection
         let mut connection_guard = self.connection.lock().await;
         *connection_guard = Some(conn);
@@ -292,96 +235,6 @@ impl PoolsDatabase {
                 .map_err(|e| format!("Failed to queue price for storage: {}", e))?;
         }
         Ok(())
-    }
-
-    /// Insert or update a blacklist entry for a pool
-    pub async fn upsert_pool_blacklist_entry(
-        &self,
-        record: &PoolBlacklistRecord,
-    ) -> Result<(), String> {
-        let connection_guard = self.connection.lock().await;
-        let conn = connection_guard
-            .as_ref()
-            .ok_or("Database not initialized")?;
-
-        let missing_accounts = record.missing_accounts_json()?;
-
-        conn.execute(
-            "INSERT INTO pool_blacklist (pool_id, token_mint, reason, missing_accounts, retry_count, first_seen, last_seen)
-             VALUES (?, ?, ?, ?, ?, ?, ?)
-             ON CONFLICT(pool_id) DO UPDATE SET
-                 reason = excluded.reason,
-                 missing_accounts = excluded.missing_accounts,
-                 last_seen = excluded.last_seen",
-            params![
-                record.pool_id,
-                record.token_mint,
-                record.reason,
-                missing_accounts,
-                record.retry_count,
-                record.first_seen,
-                record.last_seen,
-            ],
-        )
-        .map_err(|e| format!("Failed to upsert pool blacklist entry {}: {}", record.pool_id, e))?;
-
-        Ok(())
-    }
-
-    /// Touch an existing blacklist entry and increment retry count
-    pub async fn touch_pool_blacklist_entry(
-        &self,
-        pool_id: &str,
-        missing_accounts: &[String],
-        reason: &str,
-    ) -> Result<(), String> {
-        let connection_guard = self.connection.lock().await;
-        let conn = connection_guard
-            .as_ref()
-            .ok_or("Database not initialized")?;
-
-        let missing_json = serde_json::to_string(missing_accounts)
-            .map_err(|e| format!("Failed to serialize missing accounts: {}", e))?;
-        let last_seen = Utc::now().timestamp();
-
-        conn.execute(
-            "UPDATE pool_blacklist
-             SET reason = ?,
-                 missing_accounts = ?,
-                 retry_count = retry_count + 1,
-                 last_seen = ?
-             WHERE pool_id = ?",
-            params![reason, missing_json, last_seen, pool_id],
-        )
-        .map_err(|e| format!("Failed to update pool blacklist entry {}: {}", pool_id, e))?;
-
-        Ok(())
-    }
-
-    /// Load all blacklist entries from disk
-    pub async fn load_pool_blacklist(&self) -> Result<Vec<PoolBlacklistRecord>, String> {
-        let connection_guard = self.connection.lock().await;
-        let conn = connection_guard
-            .as_ref()
-            .ok_or("Database not initialized")?;
-
-        let mut stmt = conn
-            .prepare(
-                "SELECT pool_id, token_mint, reason, missing_accounts, retry_count, first_seen, last_seen
-                 FROM pool_blacklist",
-            )
-            .map_err(|e| format!("Failed to prepare pool blacklist query: {}", e))?;
-
-        let rows = stmt
-            .query_map([], |row| PoolBlacklistRecord::from_row(row))
-            .map_err(|e| format!("Failed to query pool blacklist: {}", e))?;
-
-        let mut results = Vec::new();
-        for row in rows {
-            results.push(row.map_err(|e| format!("Failed to parse pool blacklist row: {}", e))?);
-        }
-
-        Ok(results)
     }
 
     /// Load recent price history for a token (for cache initialization)
@@ -797,44 +650,6 @@ pub async fn load_historical_data_for_token(mint: &str) -> Result<Vec<PriceResul
                 .await
         } else {
             Ok(Vec::new()) // Return empty if DB not available
-        }
-    }
-}
-
-/// Persist or update a pool blacklist entry in the global database
-pub async fn upsert_pool_blacklist_entry(record: &PoolBlacklistRecord) -> Result<(), String> {
-    unsafe {
-        if let Some(ref db) = GLOBAL_POOLS_DB {
-            db.upsert_pool_blacklist_entry(record).await
-        } else {
-            Err("Database not initialized".to_string())
-        }
-    }
-}
-
-/// Update retry metadata for a pool blacklist entry
-pub async fn touch_pool_blacklist_entry(
-    pool_id: &str,
-    missing_accounts: &[String],
-    reason: &str,
-) -> Result<(), String> {
-    unsafe {
-        if let Some(ref db) = GLOBAL_POOLS_DB {
-            db.touch_pool_blacklist_entry(pool_id, missing_accounts, reason)
-                .await
-        } else {
-            Err("Database not initialized".to_string())
-        }
-    }
-}
-
-/// Load all pool blacklist entries from disk
-pub async fn load_pool_blacklist_entries() -> Result<Vec<PoolBlacklistRecord>, String> {
-    unsafe {
-        if let Some(ref db) = GLOBAL_POOLS_DB {
-            db.load_pool_blacklist().await
-        } else {
-            Ok(Vec::new())
         }
     }
 }

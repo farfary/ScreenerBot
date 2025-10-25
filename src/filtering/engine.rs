@@ -121,22 +121,6 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
             },
         );
 
-        if token.is_blacklisted {
-            stats.record_rejection(FilterRejectionReason::TokenBlacklisted);
-            rejected_mints.push(token.mint.clone());
-            if rejected_tokens.len() >= MAX_DECISION_HISTORY {
-                rejected_tokens.pop_front();
-            }
-            rejected_tokens.push_back(RejectedToken {
-                mint: token.mint.clone(),
-                symbol: token.symbol.clone(),
-                name: Some(token.name.clone()),
-                reason: FilterRejectionReason::TokenBlacklisted.label().to_string(),
-                rejection_time: Utc::now().timestamp(),
-            });
-            continue;
-        }
-
         match apply_all_filters(token, &config).await {
             Ok(()) => {
                 filtered_mints.push(token.mint.clone());
