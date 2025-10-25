@@ -537,7 +537,7 @@ impl PoolDiscovery {
         if let Some(analyzer) = get_pool_analyzer() {
             let sender = analyzer.get_sender();
             let mut sent_count = 0;
-            
+
             for pool in deduped.into_iter() {
                 // Check if pool is blacklisted
                 match super::db::is_pool_blacklisted(&pool.pool_id.to_string()).await {

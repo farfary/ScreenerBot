@@ -62,10 +62,11 @@ impl Service for TokensServiceNew {
         // Preload all known decimals into memory cache for synchronous pool decoder access
         // This is CRITICAL: pool decoders run synchronously and need decimals available in cache
         let preload_start = std::time::Instant::now();
-        let all_decimals = tokio::task::spawn_blocking(move || db_arc.get_all_tokens_with_decimals())
-            .await
-            .map_err(|e| format!("Failed to spawn decimals preload task: {}", e))?
-            .map_err(|e| format!("Failed to fetch decimals from database: {}", e))?;
+        let all_decimals =
+            tokio::task::spawn_blocking(move || db_arc.get_all_tokens_with_decimals())
+                .await
+                .map_err(|e| format!("Failed to spawn decimals preload task: {}", e))?
+                .map_err(|e| format!("Failed to fetch decimals from database: {}", e))?;
 
         let mut preloaded_count = 0;
         for (mint, decimals) in all_decimals {

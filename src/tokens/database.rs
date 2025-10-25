@@ -438,7 +438,9 @@ impl TokenDatabase {
             .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
 
         let mut stmt = conn
-            .prepare("SELECT mint, decimals FROM tokens WHERE decimals IS NOT NULL AND decimals > 0")
+            .prepare(
+                "SELECT mint, decimals FROM tokens WHERE decimals IS NOT NULL AND decimals > 0",
+            )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
 
         let rows = stmt

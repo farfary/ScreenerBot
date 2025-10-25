@@ -543,8 +543,8 @@ impl AccountFetcher {
             }
         };
 
-    let mut account_data_list: Vec<AccountData> = Vec::new();
-    let mut missing_accounts: Vec<Pubkey> = Vec::new();
+        let mut account_data_list: Vec<AccountData> = Vec::new();
+        let mut missing_accounts: Vec<Pubkey> = Vec::new();
 
         for (i, account_opt) in account_results.iter().enumerate() {
             if let Some(account) = account_opt {

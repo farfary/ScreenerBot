@@ -311,15 +311,20 @@ async fn test_recent_tokens(client: &RugcheckClient) {
     match client.fetch_recent_tokens().await {
         Ok(tokens) => {
             println!("✓ Successfully fetched {} recent tokens", tokens.len());
-            
+
             // Count tokens with and without metadata
             let with_metadata = tokens.iter().filter(|t| t.metadata.is_some()).count();
             let without_metadata = tokens.len() - with_metadata;
             println!("  - With metadata: {}", with_metadata);
             println!("  - Without metadata: {}", without_metadata);
-            
+
             println!("\n[TOP 10 MOST VIEWED TOKENS]");
-            for (i, token) in tokens.iter().filter(|t| t.metadata.is_some()).take(10).enumerate() {
+            for (i, token) in tokens
+                .iter()
+                .filter(|t| t.metadata.is_some())
+                .take(10)
+                .enumerate()
+            {
                 if let Some(ref meta) = token.metadata {
                     println!(
                         "  {}. {} - {} (score: {})",
