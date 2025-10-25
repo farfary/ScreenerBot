@@ -429,6 +429,30 @@ impl TokenDatabase {
             .map_err(|e| TokenError::Database(format!("Failed to collect: {}", e)))
     }
 
+    /// Get all tokens with valid decimals for cache preloading
+    /// Used at startup to populate in-memory decimals cache
+    pub fn get_all_tokens_with_decimals(&self) -> TokenResult<Vec<(String, u8)>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let mut stmt = conn
+            .prepare("SELECT mint, decimals FROM tokens WHERE decimals IS NOT NULL AND decimals > 0")
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                let mint: String = row.get(0)?;
+                let decimals: i64 = row.get(1)?;
+                Ok((mint, decimals as u8))
+            })
+            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+
+        rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| TokenError::Database(format!("Failed to collect: {}", e)))
+    }
+
     // ========================================================================
     // DEXSCREENER DATA OPERATIONS
     // ========================================================================

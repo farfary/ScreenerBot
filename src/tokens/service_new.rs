@@ -57,7 +57,32 @@ impl Service for TokensServiceNew {
         crate::tokens::database::init_global_database(db_arc.clone())
             .map_err(|e| format!("Failed to init global database: {}", e))?;
 
-        self.db = Some(db_arc);
+        self.db = Some(db_arc.clone());
+
+        // Preload all known decimals into memory cache for synchronous pool decoder access
+        // This is CRITICAL: pool decoders run synchronously and need decimals available in cache
+        let preload_start = std::time::Instant::now();
+        let all_decimals = tokio::task::spawn_blocking(move || db_arc.get_all_tokens_with_decimals())
+            .await
+            .map_err(|e| format!("Failed to spawn decimals preload task: {}", e))?
+            .map_err(|e| format!("Failed to fetch decimals from database: {}", e))?;
+
+        let mut preloaded_count = 0;
+        for (mint, decimals) in all_decimals {
+            if decimals > 0 {
+                crate::tokens::decimals::cache(&mint, decimals);
+                preloaded_count += 1;
+            }
+        }
+
+        logger::info(
+            LogTag::Tokens,
+            &format!(
+                "Preloaded {} token decimals into memory cache in {:.2}ms",
+                preloaded_count,
+                preload_start.elapsed().as_secs_f64() * 1000.0
+            ),
+        );
 
         logger::info(
             LogTag::Tokens,
