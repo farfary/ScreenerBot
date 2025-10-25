@@ -1,8 +1,7 @@
 // GeckoTerminal API fetcher with rate limiting and priority queue
 
+use crate::apis::{get_api_manager, ApiManager};
 use crate::ohlcvs::types::{OhlcvDataPoint, OhlcvError, OhlcvResult, Priority, Timeframe};
-use reqwest::{Client, StatusCode};
-use serde::Deserialize;
 use std::collections::{BinaryHeap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -10,21 +9,6 @@ use tokio::time::sleep;
 
 const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
 const MAX_CANDLES_PER_REQUEST: usize = 1000;
-
-#[derive(Deserialize, Debug)]
-struct GeckoOhlcvResponse {
-    data: GeckoOhlcvData,
-}
-
-#[derive(Deserialize, Debug)]
-struct GeckoOhlcvData {
-    attributes: GeckoOhlcvAttributes,
-}
-
-#[derive(Deserialize, Debug)]
-struct GeckoOhlcvAttributes {
-    ohlcv_list: Vec<Vec<f64>>, // [timestamp, open, high, low, close, volume]
-}
 
 #[derive(Clone, Debug)]
 struct FetchRequest {
@@ -62,7 +46,7 @@ impl Ord for FetchRequest {
 }
 
 pub struct OhlcvFetcher {
-    client: Client,
+    api_manager: Arc<ApiManager>,
     request_history: Arc<Mutex<VecDeque<Instant>>>,
     request_queue: Arc<Mutex<BinaryHeap<FetchRequest>>>,
     api_calls_count: Arc<Mutex<u64>>,
@@ -72,10 +56,7 @@ pub struct OhlcvFetcher {
 impl OhlcvFetcher {
     pub fn new() -> Self {
         Self {
-            client: Client::builder()
-                .timeout(Duration::from_secs(30))
-                .build()
-                .unwrap_or_else(|_| Client::new()),
+            api_manager: get_api_manager(),
             request_history: Arc::new(Mutex::new(VecDeque::new())),
             request_queue: Arc::new(Mutex::new(BinaryHeap::new())),
             api_calls_count: Arc::new(Mutex::new(0)),
@@ -115,71 +96,33 @@ impl OhlcvFetcher {
         before_timestamp: Option<i64>,
         limit: usize,
     ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
-        // Rate limiting: rely on internal request_history window to respect per-minute caps
-
         // Record request attempt for local metrics
         self.record_attempt();
 
         let start = Instant::now();
+        let limit_clamped = limit.min(MAX_CANDLES_PER_REQUEST) as u32;
 
-        // Build URL
-        let timeframe_param = timeframe.to_api_param();
-        let mut url = format!(
-            "https://api.geckoterminal.com/api/v2/networks/solana/pools/{}/ohlcv/{}",
-            pool_address, timeframe_param
-        );
-
-        if let Some(before) = before_timestamp {
-            url.push_str(&format!("?before_timestamp={}", before));
-        }
-        url.push_str(&format!(
-            "{}limit={}&currency=token",
-            if before_timestamp.is_some() { "&" } else { "?" },
-            limit.min(MAX_CANDLES_PER_REQUEST)
-        ));
-
-        // Make request
         let response = self
-            .client
-            .get(&url)
-            .header("Accept", "application/json")
-            .send()
-            .await
-            .map_err(|e| OhlcvError::ApiError(format!("Request failed: {}", e)))?;
+            .api_manager
+            .geckoterminal
+            .fetch_ohlcv(
+                "solana",
+                pool_address,
+                timeframe.to_api_param(),
+                None,
+                Some(limit_clamped),
+                Some("token"),
+                before_timestamp,
+                None,
+            )
+            .await;
 
-        // Check rate limit
-        let status = response.status();
-
-        if status == StatusCode::TOO_MANY_REQUESTS {
-            return Err(OhlcvError::RateLimitExceeded);
-        }
-
-        if status == StatusCode::NOT_FOUND {
-            return Err(OhlcvError::PoolNotFound(pool_address.to_string()));
-        }
-
-        if !status.is_success() {
-            return Err(OhlcvError::ApiError(format!(
-                "API returned status: {}",
-                status
-            )));
-        }
-
-        // Parse response
-        let gecko_response: GeckoOhlcvResponse = response
-            .json()
-            .await
-            .map_err(|e| OhlcvError::ApiError(format!("Failed to parse response: {}", e)))?;
-
-        // Convert to our format
-        let data_points: Vec<OhlcvDataPoint> = gecko_response
-            .data
-            .attributes
-            .ohlcv_list
-            .into_iter()
-            .filter_map(|candle| {
-                if candle.len() == 6 {
-                    Some(OhlcvDataPoint {
+        match response {
+            Ok(ohlcv) => {
+                let data_points: Vec<OhlcvDataPoint> = ohlcv
+                    .ohlcv_list
+                    .into_iter()
+                    .map(|candle| OhlcvDataPoint {
                         timestamp: candle[0] as i64,
                         open: candle[1],
                         high: candle[2],
@@ -187,17 +130,28 @@ impl OhlcvFetcher {
                         close: candle[4],
                         volume: candle[5],
                     })
+                    .collect();
+
+                let latency = start.elapsed().as_millis() as u64;
+                self.record_api_call(latency);
+
+                Ok(data_points)
+            }
+            Err(err) => {
+                let lowered = err.to_lowercase();
+
+                if lowered.contains("429") || lowered.contains("too many requests") {
+                    Err(OhlcvError::RateLimitExceeded)
+                } else if lowered.contains("404")
+                    || lowered.contains("not found")
+                    || lowered.contains("no pool data returned")
+                {
+                    Err(OhlcvError::PoolNotFound(pool_address.to_string()))
                 } else {
-                    None
+                    Err(OhlcvError::ApiError(err))
                 }
-            })
-            .collect();
-
-        // Record metrics
-        let latency = start.elapsed().as_millis() as u64;
-        self.record_api_call(latency);
-
-        Ok(data_points)
+            }
+        }
     }
 
     /// Fetch multiple pages of data backwards

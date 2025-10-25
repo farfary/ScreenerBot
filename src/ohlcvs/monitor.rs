@@ -358,13 +358,23 @@ impl OhlcvMonitor {
         let mut tick = interval(Duration::from_secs(5)); // Check every 5 seconds
 
         // Calculate delay based on configured rate limit to respect API limits
-        // Formula: (60,000ms / rate_limit_per_minute) + buffer
-        use crate::apis::geckoterminal;
-        let rate_limit = geckoterminal::RATE_LIMIT_PER_MINUTE;
+        // Formula: (60_000ms / rate_limit_per_minute) + buffer
+        let rate_limit: usize = with_config(|cfg| {
+            if !cfg.tokens.sources.geckoterminal.enabled {
+                0
+            } else {
+                let configured = cfg.tokens.sources.geckoterminal.rate_limit_per_minute as usize;
+                if configured == 0 {
+                    crate::apis::geckoterminal::RATE_LIMIT_PER_MINUTE
+                } else {
+                    configured
+                }
+            }
+        });
         let delay_ms: u64 = if rate_limit > 0 {
-            ((60_000 / rate_limit) + 100) as u64 // Add 100ms buffer for safety
+            (60_000u64 / rate_limit as u64).saturating_add(100) // Add 100ms buffer for safety
         } else {
-            2_000 // Fallback to 2 seconds if config invalid
+            2_000 // Fallback to 2 seconds if config disabled or invalid
         };
 
         // Always log this critical info
