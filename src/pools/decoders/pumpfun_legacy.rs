@@ -213,7 +213,7 @@ impl PumpFunLegacyDecoder {
 
         let price_sol = sol_amount / token_amount;
 
-        logger::info(
+        logger::debug(
             LogTag::PoolDecoder,
             &format!(
                 "PumpFun bonding curve price calculated: pool={}, token={}, price={:.15} SOL/token (virt_sol={} virt_token={})",

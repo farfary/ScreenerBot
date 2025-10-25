@@ -113,7 +113,7 @@ impl PoolDecoder for FluxbeamAmmDecoder {
         let sol_balance = Self::decode_token_account_amount(&sol_account.data).ok()?;
         let token_balance = Self::decode_token_account_amount(&token_account.data).ok()?;
 
-        logger::debug(
+        logger::verbose(
             LogTag::PoolDecoder,
             &format!(
                 "FluxBeam vault balances: SOL={}, token={}",
@@ -166,7 +166,7 @@ impl PoolDecoder for FluxbeamAmmDecoder {
             return None;
         }
 
-        logger::debug(
+        logger::verbose(
             LogTag::PoolDecoder,
             &format!(
                 "FluxBeam price calculation: {:.12} SOL per token (sol_reserves={:.6}, token_reserves={:.6})",

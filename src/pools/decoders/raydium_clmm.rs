@@ -106,7 +106,7 @@ impl PoolDecoder for RaydiumClmmDecoder {
         let sol_balance = Self::decode_token_account_amount(&sol_account.data).ok()?;
         let token_balance = Self::decode_token_account_amount(&token_account.data).ok()?;
 
-        logger::debug(
+        logger::verbose(
             LogTag::PoolDecoder,
             &format!(
                 "CLMM vault balances: SOL={}, token={}, is_token_0={}",
@@ -178,7 +178,7 @@ impl PoolDecoder for RaydiumClmmDecoder {
         let sol_reserves = (sol_balance as f64) / (10_f64).powi(sol_decimals as i32);
         let token_reserves = (token_balance as f64) / (10_f64).powi(token_decimals as i32);
 
-        logger::debug(
+        logger::verbose(
             LogTag::PoolDecoder,
             &format!(
                 "CLMM price calculation: {:.12} SOL per token (sol_reserves={:.6}, token_reserves={:.6})",

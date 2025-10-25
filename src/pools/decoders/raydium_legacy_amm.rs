@@ -317,7 +317,7 @@ fn adjust_vaults(
         return None;
     }
 
-    logger::info(
+    logger::debug(
         LogTag::PoolDecoder,
         &format!(
             "Adjusted vaults: coin_vault={} pc_vault={}",
@@ -355,7 +355,7 @@ fn extract_reserves_from_pool_data(data: &[u8]) -> Option<(u64, u64)> {
                     && reserve2 > 10_000_000
                     && reserve2 < 1_000_000_000_000_000
                 {
-                    logger::info(
+                    logger::debug(
                         LogTag::PoolDecoder,
                         &format!(
                             "Found pool data reserves at offsets {} and {}: {} and {}",

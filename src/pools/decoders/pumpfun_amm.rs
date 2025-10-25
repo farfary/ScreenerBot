@@ -210,7 +210,7 @@ impl PumpFunAmmDecoder {
         let sol_reserve =
             Self::get_vault_balance_from_accounts(accounts, &pool_info.pool_quote_token_account)?;
 
-        logger::debug(
+        logger::verbose(
             LogTag::PoolDecoder,
             &format!(
                 "Raw reserves - Token: {}, SOL: {}",
@@ -269,7 +269,7 @@ impl PumpFunAmmDecoder {
             return None;
         }
 
-        logger::debug(
+        logger::verbose(
             LogTag::PoolDecoder,
             &format!(
                 "PumpFun price calculation:\n\
@@ -323,7 +323,7 @@ impl PumpFunAmmDecoder {
 
         match Self::decode_token_account_amount(&vault_data.data) {
             Some(amount) => {
-                logger::debug(
+                logger::verbose(
                     LogTag::PoolDecoder,
                     &format!("Vault {} balance: {}", &vault_account[..8], amount),
                 );
