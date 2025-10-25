@@ -707,7 +707,7 @@ impl RaydiumClmmDecoder {
         Self::parse_clmm_pool(&pool_account.data)
     }
 
-    /// Get basic trading info for CLMM pools (backward compatibility)
+    /// Get basic trading info for CLMM pools
     /// Returns only essential fields needed for trading calculations
     pub fn get_basic_pool_info(pool_data: &ClmmPoolInfo) -> ClmmBasicInfo {
         ClmmBasicInfo {
@@ -723,7 +723,7 @@ impl RaydiumClmmDecoder {
     }
 }
 
-/// Basic CLMM pool info for backward compatibility
+/// Basic CLMM pool info
 #[derive(Debug, Clone)]
 pub struct ClmmBasicInfo {
     pub token_mint_0: String,

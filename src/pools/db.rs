@@ -1,10 +1,13 @@
-use super::types::{PriceResult, PRICE_HISTORY_MAX_ENTRIES};
 /// Database module for persistent price history storage
 ///
 /// This module provides SQLite-based storage for price history data,
 /// enabling price history to survive service restarts and providing
 /// full historical data access beyond the in-memory cache limits.
+
+use super::types::{PriceResult, PRICE_HISTORY_MAX_ENTRIES};
+
 use crate::logger::{self, LogTag};
+
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, Row};
 use std::fs;
@@ -12,10 +15,6 @@ use std::path::Path;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::sync::{mpsc, Mutex};
-
-// =============================================================================
-// CONSTANTS
-// =============================================================================
 
 /// Database file path
 const POOLS_DB_PATH: &str = "data/pools.db";

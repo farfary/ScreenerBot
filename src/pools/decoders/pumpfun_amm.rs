@@ -75,8 +75,6 @@ impl PoolDecoder for PumpFunAmmDecoder {
 impl PumpFunAmmDecoder {
     /// Extract mints and vaults from PumpFun AMM pool data
     fn extract_pumpfun_mints_and_vaults(data: &[u8]) -> Option<PoolMintVaultInfo> {
-        // local debug flag removed; use centralized logger instead
-
         if data.len() < 200 {
             logger::error(
                 LogTag::PoolDecoder,

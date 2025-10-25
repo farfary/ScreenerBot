@@ -1,9 +1,16 @@
+/// FluxBeam AMM pool decoder
+///
+/// Handles decoding FluxBeam Automated Market Maker pools. Extracts pool account data,
+/// processes vault information, and calculates token prices.
+
 use super::super::utils::is_sol_mint;
 use super::{AccountData, PoolDecoder};
+
 use crate::constants::{FLUXBEAM_AMM_PROGRAM_ID, SOL_DECIMALS, SOL_MINT};
 use crate::logger::{self, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind};
 use crate::tokens::get_cached_decimals;
+
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::time::Instant;

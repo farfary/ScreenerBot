@@ -1,13 +1,16 @@
-use super::types::PoolDescriptor;
-use super::utils::is_sol_mint;
-use crate::events::{record_safe, Event, EventCategory, Severity};
 /// Account fetcher module
 ///
 /// This module handles efficient batched fetching of pool account data from RPC.
 /// It optimizes RPC usage by batching requests and managing rate limits.
+
+use super::types::PoolDescriptor;
+use super::utils::is_sol_mint;
+
+use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::logger::{self, LogTag};
-use crate::pools::service; // access global calculator
+use crate::pools::service;
 use crate::rpc::{get_rpc_client, RpcClient};
+
 use solana_sdk::{account::Account, pubkey::Pubkey};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
@@ -15,10 +18,9 @@ use std::time::Instant;
 use tokio::sync::{mpsc, Notify};
 
 /// Constants for batch processing
-const ACCOUNT_BATCH_SIZE: usize = 50; // Optimal batch size for RPC calls
-const FETCH_INTERVAL_MS: u64 = 500; // Fetch every 1 second
-const ACCOUNT_STALE_THRESHOLD_SECONDS: u64 = 30; // Default stale threshold for inactive tokens
-                                                 // Faster refresh threshold for pools backing currently open positions (tighter P&L responsiveness)
+const ACCOUNT_BATCH_SIZE: usize = 50;
+const FETCH_INTERVAL_MS: u64 = 500;
+const ACCOUNT_STALE_THRESHOLD_SECONDS: u64 = 30;
 const OPEN_POSITION_ACCOUNT_STALE_THRESHOLD_SECONDS: u64 = 5;
 
 /// Message types for fetcher communication

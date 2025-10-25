@@ -1,9 +1,3 @@
-use super::cache;
-use super::decoders;
-use super::fetcher::{AccountData, PoolAccountBundle};
-use super::types::{PoolDescriptor, PriceResult, ProgramKind};
-use crate::constants::{SOL_DECIMALS, SOL_MINT};
-use crate::events::{record_safe, Event, EventCategory, Severity};
 /// Price calculator module
 ///
 /// This module handles the core price calculation logic:
@@ -11,9 +5,18 @@ use crate::events::{record_safe, Event, EventCategory, Severity};
 /// - Calculates token prices from pool reserves (SOL-based pricing only)
 /// - Handles price triangulation for indirect pairs
 /// - Updates price cache and history
+
+use super::cache;
+use super::decoders;
+use super::fetcher::{AccountData, PoolAccountBundle};
+use super::types::{PoolDescriptor, PriceResult, ProgramKind};
+
+use crate::constants::{SOL_DECIMALS, SOL_MINT};
+use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::logger::{self, LogTag};
 use crate::pools::discovery::PoolDiscovery;
 use crate::tokens::get_cached_decimals;
+
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;

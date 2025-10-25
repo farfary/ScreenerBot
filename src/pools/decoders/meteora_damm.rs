@@ -1,9 +1,16 @@
+/// Meteora DAMM (Dual AMM) pool decoder
+///
+/// Handles decoding Meteora DAMM pools. Extracts pool data and calculates token prices
+/// based on vault balances and pool reserves.
+
 use super::super::utils::is_sol_mint;
 use super::{AccountData, PoolDecoder};
+
 use crate::constants::{METEORA_DAMM_PROGRAM_ID, SOL_DECIMALS, SOL_MINT};
 use crate::logger::{self, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind};
 use crate::tokens::get_cached_decimals;
+
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::time::Instant;

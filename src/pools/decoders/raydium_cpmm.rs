@@ -1,9 +1,10 @@
 /// Raydium CPMM pool decoder
 ///
 /// This module handles decoding Raydium Constant Product Market Maker pools.
-/// It extracts reserve data and calculates token prices using the proven logic
-/// from the old pool system.
+/// Extracts reserve data and calculates token prices.
+
 use super::{AccountData, PoolDecoder};
+
 use crate::constants::{SOL_DECIMALS, SOL_MINT, RAYDIUM_CPMM_PROGRAM_ID};
 use crate::logger::{self, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind};
@@ -11,6 +12,7 @@ use crate::pools::utils::{
     read_bool_at_offset, read_pubkey_at_offset, read_u64_at_offset, read_u8_at_offset,
 };
 use crate::tokens::get_cached_decimals;
+
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -61,11 +63,9 @@ impl PoolDecoder for RaydiumCpmmDecoder {
             ),
         );
 
-        // Parse pool state from account data using the enhanced method
         let pool_info =
             Self::decode_raydium_cpmm_pool(&pool_account.data, &pool_account.pubkey.to_string())?;
 
-        // Calculate price using the working logic from old system
         Self::calculate_raydium_cpmm_price(&pool_info, accounts, base_mint, quote_mint)
     }
 }
@@ -89,8 +89,7 @@ impl RaydiumCpmmDecoder {
         Some(vec![token_0_vault, token_1_vault])
     }
 
-    /// Decode Raydium CPMM pool data from account bytes (enhanced for swap operations)
-    /// Made public for use by the direct swap system
+    /// Decode Raydium CPMM pool data from account bytes
     pub fn decode_raydium_cpmm_pool(data: &[u8], pool_id: &str) -> Option<RaydiumCpmmPoolInfo> {
         if data.len() < 8 + 32 * 10 + 8 * 10 {
             logger::error(
@@ -241,7 +240,7 @@ impl RaydiumCpmmDecoder {
         })
     }
 
-    /// Calculate price for Raydium CPMM pool (from old working system)
+    /// Calculate price for Raydium CPMM pool
     fn calculate_raydium_cpmm_price(
         pool_info: &RaydiumCpmmPoolInfo,
         accounts: &HashMap<String, AccountData>,
@@ -385,7 +384,7 @@ impl RaydiumCpmmDecoder {
         ))
     }
 
-    /// Extract vault balance from token account data (from old system)
+    /// Extract vault balance from token account data
     fn get_vault_balance_from_accounts(
         accounts: &HashMap<String, AccountData>,
         vault_address: &str,
@@ -394,7 +393,7 @@ impl RaydiumCpmmDecoder {
         Self::decode_token_account_amount(&account_data.data).ok()
     }
 
-    /// Decode token account amount from account data (from old working system)
+    /// Decode token account amount from account data
     fn decode_token_account_amount(data: &[u8]) -> Result<u64, String> {
         if data.len() < 72 {
             return Err("Invalid token account data length".to_string());

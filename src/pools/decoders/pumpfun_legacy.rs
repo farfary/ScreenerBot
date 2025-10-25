@@ -1,18 +1,21 @@
-use super::{AccountData, PoolDecoder};
-use crate::constants::{SOL_MINT, SOL_DECIMALS, PUMP_FUN_LEGACY_PROGRAM_ID};
-use crate::logger::{self, LogTag};
-use crate::pools::types::{PriceResult, ProgramKind};
-use crate::tokens::get_cached_decimals;
-use solana_sdk::pubkey::Pubkey;
 /// PumpFun Legacy decoder for the original PumpFun program
-/// Handles pool decoding and price calculation for the legacy PumpFun program (6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P)
-use std::collections::HashMap;
-use std::time::Instant;
+///
+/// Handles pool decoding and price calculation for the legacy PumpFun program.
+/// Parses pool account data to extract mint and vault information.
 
-// Import centralized utilities
 use super::super::utils::{
     analyze_token_pair, is_sol_mint, read_pubkey_at_offset, PoolMintVaultInfo,
 };
+use super::{AccountData, PoolDecoder};
+
+use crate::constants::{SOL_DECIMALS, SOL_MINT, PUMP_FUN_LEGACY_PROGRAM_ID};
+use crate::logger::{self, LogTag};
+use crate::pools::types::{PriceResult, ProgramKind};
+use crate::tokens::get_cached_decimals;
+
+use solana_sdk::pubkey::Pubkey;
+use std::collections::HashMap;
+use std::time::Instant;
 
 /// PumpFun Legacy pool decoder and calculator
 pub struct PumpFunLegacyDecoder;

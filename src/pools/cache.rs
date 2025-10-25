@@ -1,15 +1,17 @@
-use super::db; // Database module for persistence
-use super::types::{price_cache_ttl_seconds, PriceHistory, PriceResult, PRICE_HISTORY_MAX_ENTRIES};
 /// Price cache and history management
 ///
 /// This module provides thread-safe caching for pool prices and maintains
 /// price history for tokens. It uses efficient concurrent data structures
 /// to minimize lock contention on the hot path.
+
+use super::db;
+use super::types::{price_cache_ttl_seconds, PriceHistory, PriceResult, PRICE_HISTORY_MAX_ENTRIES};
+
 use crate::logger::{self, LogTag};
+
 use dashmap::DashMap;
 use solana_sdk::pubkey::Pubkey;
-use std::sync::Arc;
-use std::sync::RwLock;
+use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use tokio::sync::Notify;
 

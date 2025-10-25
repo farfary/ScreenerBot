@@ -7,11 +7,10 @@
 /// - Database cache of known pools
 ///
 /// The discovery module feeds raw pool information to the analyzer for classification and program kind detection.
-// =============================================================================
-// POOL DISCOVERY SOURCE CONFIGURATION
-// =============================================================================
+
 use super::types::{max_watched_tokens, PoolDescriptor, ProgramKind};
 use super::utils::is_stablecoin_mint;
+
 use crate::constants::SOL_MINT;
 use crate::apis::{
     dexscreener_types::DexScreenerPool, geckoterminal_types::GeckoTerminalPool, get_api_manager,
@@ -24,6 +23,7 @@ use crate::logger::{self, LogTag};
 use crate::pools::service::{
     get_debug_token_override, get_pool_analyzer, is_single_pool_mode_enabled,
 };
+
 use dashmap::DashMap;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;

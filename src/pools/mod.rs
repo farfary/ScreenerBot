@@ -8,17 +8,24 @@
 /// - get_pool_price(mint) -> Get current price for a token
 /// - get_available_tokens() -> Get list of tokens with available prices
 /// - get_price_history(mint) -> Get price history for a token
+
 use std::sync::Arc;
 use tokio::sync::Notify;
 
+mod analyzer;
 mod api;
 mod cache;
-mod db; // Database module for price history persistence
-mod service;
-pub mod types; // Make types public
-pub mod utils; // Utility functions for SOL detection and vault pairing
+mod calculator;
+mod db;
+mod discovery;
+mod fetcher;
 
-// Re-export only the public API
+pub mod decoders;
+pub mod service;
+pub mod swap;
+pub mod types;
+pub mod utils;
+
 pub use api::{
     check_price_history_quality, get_available_tokens, get_cache_stats, get_extended_price_history,
     get_pool_price, get_price_history, get_price_history_stats, get_token_pools,
@@ -34,7 +41,6 @@ pub use service::{
     get_pool_analyzer,
     get_pool_discovery,
     get_price_calculator,
-    // New functions for ServiceManager integration
     initialize_pool_components,
     is_pool_service_running,
     is_single_pool_mode_enabled,
@@ -42,17 +48,5 @@ pub use service::{
     start_helper_tasks,
     stop_pool_service,
 };
-pub use types::{PoolError, PriceResult}; // Expose for configuration access
-
-// Internal modules (not exposed)
-mod analyzer;
-pub mod calculator; // Public for debug tooling
-pub mod decoders;
-pub mod discovery;
-pub mod fetcher; // Public for debug tooling // Temporarily public for debug tooling (consider gating with feature flag)
-
-// Direct swap module - modular direct swap system
-pub mod swap;
-
-// Temporary re-exports for debug tooling (consider gating with a feature flag)
+pub use types::{PoolError, PriceResult};
 pub use fetcher::AccountData;

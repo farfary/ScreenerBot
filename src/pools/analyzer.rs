@@ -1,3 +1,11 @@
+/// Pool analyzer module
+///
+/// This module analyzes discovered pools to:
+/// - Classify pool types by program ID
+/// - Extract pool metadata (base/quote tokens, reserve accounts)
+/// - Validate pool structure and data
+/// - Prepare account lists for fetching
+
 use super::decoders::{
     meteora_damm::MeteoraDammDecoder, meteora_dbc::MeteoraDbcDecoder,
     meteora_dlmm::MeteoraDlmmDecoder, orca_whirlpool::OrcaWhirlpoolDecoder,
@@ -7,20 +15,14 @@ use super::decoders::{
 };
 use super::types::{PoolDescriptor, ProgramKind};
 use super::utils::{is_sol_mint, PoolMintVaultInfo};
+
 use crate::events::{record_safe, Event, EventCategory, Severity};
-/// Pool analyzer module
-///
-/// This module analyzes discovered pools to:
-/// - Classify pool types by program ID
-/// - Extract pool metadata (base/quote tokens, reserve accounts)
-/// - Validate pool structure and data
-/// - Prepare account lists for fetching
 use crate::logger::{self, LogTag};
-use crate::pools::service; // access global fetcher
+use crate::pools::service;
 use crate::rpc::RpcClient;
+
 use solana_sdk::pubkey::Pubkey;
-use std::collections::HashMap;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
@@ -808,13 +810,7 @@ impl PoolAnalyzer {
         quote_mint: &Pubkey,
         rpc_client: &RpcClient,
     ) -> Option<Vec<Pubkey>> {
-        // For Moonit pools, we only need:
-        // - Curve account (pool_id) - contains all pool data including SOL balance in account lamports
-        // NOTE: Mint accounts removed - decimals now fetched from cache, not mint accounts
-
         let mut accounts = vec![*pool_id];
-
-        // NOTE: Mint accounts removed - decimals now fetched from cache, not mint account data
 
         logger::debug(
             LogTag::PoolAnalyzer,

@@ -1,17 +1,20 @@
+/// Pool service supervisor - manages the lifecycle of all pool-related tasks
+///
+/// This module provides the main entry points for starting and stopping the pool service.
+/// It coordinates all the background tasks needed for price discovery and calculation.
+
 use super::analyzer::PoolAnalyzer;
 use super::calculator::PriceCalculator;
 use super::discovery::{is_dexscreener_discovery_enabled, PoolDiscovery};
 use super::fetcher::AccountFetcher;
 use super::types::max_watched_tokens;
 use super::{cache, db, PoolError};
+
 use crate::config::with_config;
 use crate::events::{record_safe, Event, EventCategory, Severity};
-/// Pool service supervisor - manages the lifecycle of all pool-related tasks
-///
-/// This module provides the main entry points for starting and stopping the pool service.
-/// It coordinates all the background tasks needed for price discovery and calculation.
 use crate::logger::{self, LogTag};
 use crate::rpc::{get_rpc_client, RpcClient};
+
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -409,7 +412,6 @@ async fn initialize_service_components() -> Result<(), String> {
     ))
     .await;
 
-    // DexScreener global init removed; discovery now uses internal API clients via tokens subsystem
     if dexscreener_enabled {
         logger::debug(
             LogTag::PoolService,
@@ -417,8 +419,6 @@ async fn initialize_service_components() -> Result<(), String> {
         );
     }
 
-    // Get the global RPC client and clone it for sharing with pool components
-    // This ensures all RPC stats are aggregated in the global instance
     let rpc_client_ref = get_rpc_client();
     let shared_rpc_client = Arc::new(rpc_client_ref.clone());
 

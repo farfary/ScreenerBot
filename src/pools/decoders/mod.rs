@@ -1,3 +1,8 @@
+/// Pool decoders module
+///
+/// This module contains program-specific decoders for different DEX pool types.
+/// Each decoder knows how to parse the account data for its specific pool format.
+
 pub mod fluxbeam_amm;
 pub mod meteora_damm;
 pub mod meteora_dbc;
@@ -7,14 +12,9 @@ pub mod orca_whirlpool;
 pub mod pumpfun_amm;
 pub mod pumpfun_legacy;
 pub mod raydium_clmm;
-/// Pool decoders module
-///
-/// This module contains program-specific decoders for different DEX pool types.
-/// Each decoder knows how to parse the account data for its specific pool format.
 pub mod raydium_cpmm;
 pub mod raydium_legacy_amm;
 
-// Re-export commonly used types for external access
 pub use raydium_cpmm::{RaydiumCpmmDecoder, RaydiumCpmmPoolInfo};
 
 use super::fetcher::AccountData;

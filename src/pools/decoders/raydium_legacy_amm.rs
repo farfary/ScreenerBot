@@ -1,18 +1,16 @@
-use super::super::utils::read_pubkey_at;
 /// Raydium Legacy AMM decoder
 ///
-/// Ported minimal working logic from old pool system (pool_old.rs) lines ~6885-7210.
-/// Uses fixed offsets discovered via hex analysis to locate mints and vaults.
-/// Strategy:
-/// - Identify pool account by size (>= 752 bytes in old code; we relax to >= 600)
-/// - Parse vault + mint pubkeys at legacy offsets
-/// - Fetch vault token account balances from provided accounts map
-/// - Compute SOL price for target token
+/// Parses and decodes Raydium Legacy AMM pool accounts. Uses fixed offsets to locate mints and vaults.
+/// Fetches vault token account balances from provided accounts map and computes SOL price.
+
+use super::super::utils::read_pubkey_at;
 use super::{AccountData, PoolDecoder};
+
 use crate::constants::{SOL_DECIMALS, SOL_MINT};
 use crate::logger::{self, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind};
 use crate::tokens::get_cached_decimals;
+
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 
@@ -178,7 +176,6 @@ struct LegacyPoolInfo {
 
 impl LegacyPoolInfo {
     fn parse(data: &[u8]) -> Option<Self> {
-        // Offsets from legacy implementation
         if data.len() < 0x1c0 {
             return None;
         }
@@ -338,9 +335,7 @@ fn adjust_vaults(
 }
 
 /// Extract reserves directly from pool data when vault fetch fails
-/// Based on offsets found in working pool_old.rs implementation
 fn extract_reserves_from_pool_data(data: &[u8]) -> Option<(u64, u64)> {
-    // Promising reserve offsets from pool_old.rs analysis
     let promising_offsets = [
         (208, 216), // Primary candidate: quoteTotalPnl, baseTotalPnl
         (256, 272), // Secondary alternative
@@ -356,7 +351,6 @@ fn extract_reserves_from_pool_data(data: &[u8]) -> Option<(u64, u64)> {
                 let reserve1 = u64::from_le_bytes(reserve1_bytes);
                 let reserve2 = u64::from_le_bytes(reserve2_bytes);
 
-                // For Raydium Legacy with substantial liquidity, reserves should be significant
                 if reserve1 > 10_000_000
                     && reserve1 < 1_000_000_000_000_000
                     && reserve2 > 10_000_000
