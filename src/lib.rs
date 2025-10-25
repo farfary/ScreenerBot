@@ -14,6 +14,7 @@ pub mod ohlcvs;
 pub mod pools;
 pub mod positions;
 pub mod process_lock;
+pub mod reset;
 pub mod rpc;
 pub mod run;
 pub mod services;

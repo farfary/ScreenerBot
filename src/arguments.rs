@@ -143,6 +143,16 @@ pub fn get_blacklist_mint() -> Option<String> {
     get_arg_value("--add-to-blacklist")
 }
 
+/// Reset mode - clears pending verifications and optionally deletes database files
+pub fn is_reset_enabled() -> bool {
+    has_arg("--reset")
+}
+
+/// Force mode - skip confirmation prompts
+pub fn is_force_enabled() -> bool {
+    has_arg("--force")
+}
+
 // =============================================================================
 // HELP SYSTEM
 // =============================================================================
@@ -157,6 +167,8 @@ pub fn print_help() {
     println!("CORE FLAGS:");
     println!("    --run                     Enable bot execution (required to start trading)");
     println!("    --clear-all               Clear all data and reset the system");
+    println!("    --reset                   Reset pending verifications and delete database files");
+    println!("    --force                   Skip confirmation prompts (use with --reset)");
     println!("    --positions-sell-all      Sell all open positions");
     println!("    --add-to-blacklist <mint> Add a token mint address to blacklist");
     println!("    --help, -h                Show this help message");
@@ -194,6 +206,8 @@ pub fn print_help() {
     println!("    screenerbot --run                           # Start bot normally");
     println!("    screenerbot --run --dry-run                 # Start bot in simulation mode");
     println!("    screenerbot --run --debug-trader --dry-run  # Debug trader with simulation");
+    println!("    screenerbot --reset                         # Reset with confirmation");
+    println!("    screenerbot --reset --force                 # Reset without confirmation");
     println!("    screenerbot --clear-all                     # Clear all data and reset");
     println!("    screenerbot --positions-sell-all            # Sell all open positions");
     println!("    screenerbot --add-to-blacklist <mint>       # Add mint to blacklist");

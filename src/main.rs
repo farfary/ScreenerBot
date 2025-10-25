@@ -1,5 +1,8 @@
 use screenerbot::{
-    arguments::{is_dry_run_enabled, is_run_enabled, patterns, print_debug_info, print_help},
+    arguments::{
+        is_dry_run_enabled, is_force_enabled, is_reset_enabled, is_run_enabled, patterns,
+        print_debug_info, print_help,
+    },
     logger::{self as logger, LogTag},
 };
 
@@ -24,6 +27,27 @@ async fn main() {
 
     // Print debug information if any debug modes are enabled
     print_debug_info();
+
+    // Reset mode - execute and exit
+    if is_reset_enabled() {
+        logger::info(LogTag::System, "🔄 Reset mode enabled");
+
+        let config = screenerbot::reset::ResetConfig {
+            force: is_force_enabled(),
+            ..Default::default()
+        };
+
+        match screenerbot::reset::execute_extended_reset(config) {
+            Ok(()) => {
+                logger::info(LogTag::System, "✅ Reset completed successfully");
+                std::process::exit(0);
+            }
+            Err(e) => {
+                logger::error(LogTag::System, &format!("❌ Reset failed: {}", e));
+                std::process::exit(1);
+            }
+        }
+    }
 
     // Validate argument combinations
     if let Err(e) = validate_arguments() {
