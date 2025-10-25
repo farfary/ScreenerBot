@@ -375,7 +375,10 @@ fn resolve_page_and_size(
     (computed_page.max(1), effective_limit)
 }
 
-fn build_token_list_response(result: FilteringQueryResult, view: FilteringView) -> TokenListResponse {
+fn build_token_list_response(
+    result: FilteringQueryResult,
+    view: FilteringView,
+) -> TokenListResponse {
     let start_index = result
         .page
         .saturating_sub(1)

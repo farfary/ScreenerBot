@@ -1,9 +1,12 @@
-use super::db::{force_database_sync, update_position, update_position_price_fields};
+use super::db::{
+    force_database_sync, save_entry_record, update_position, update_position_price_fields,
+};
 use super::{
     loss_detection::process_position_loss_detection,
     state::{
-        get_position_by_id, get_position_by_mint, release_global_position_permit, remove_position,
-        remove_signature_from_index, update_position_state, POSITIONS,
+        clear_pending_dca_swap, get_position_by_id, get_position_by_mint,
+        release_global_position_permit, remove_position, remove_signature_from_index,
+        update_position_state, POSITIONS,
     },
     transitions::PositionTransition,
 };
@@ -25,6 +28,8 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
         position_closed: false,
     };
 
+    let requires_db_update = transition.requires_db_update();
+
     match transition {
         PositionTransition::EntryVerified {
             position_id,
@@ -40,10 +45,13 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     pos.total_size_sol = sol_size;
                     pos.token_amount = Some(token_amount_units);
                     pos.entry_fee_lamports = Some(fee_lamports);
+                    pos.entry_size_sol = sol_size;
+                    pos.remaining_token_amount = Some(token_amount_units);
+                    pos.average_entry_price = effective_entry_price;
                 })
                 .await;
 
-            if updated && transition.requires_db_update() {
+            if updated && requires_db_update {
                 if let Some(position) = get_position_by_id(position_id).await {
                     match update_position(&position).await {
                         Ok(_) => {
@@ -62,6 +70,30 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                 None,
                             )
                             .await;
+
+                            if let Some(entry_sig) = position.entry_transaction_signature.as_deref()
+                            {
+                                if let Err(err) = save_entry_record(
+                                    position_id,
+                                    position.entry_time,
+                                    token_amount_units,
+                                    effective_entry_price,
+                                    sol_size,
+                                    entry_sig,
+                                    false,
+                                    Some(fee_lamports),
+                                )
+                                .await
+                                {
+                                    logger::error(
+                                        LogTag::Positions,
+                                        &format!(
+                                            "Failed to persist entry history for position {}: {}",
+                                            position_id, err
+                                        ),
+                                    );
+                                }
+                            }
                         }
                         Err(e) => {
                             return Err(format!("Failed to update database: {}", e));
@@ -99,7 +131,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 })
                 .await;
 
-            if updated && transition.requires_db_update() {
+            if updated && requires_db_update {
                 if let Some(position) = get_position_by_id(position_id).await {
                     // Process loss detection and potential blacklisting
                     if let Err(e) = process_position_loss_detection(&position).await {
@@ -192,7 +224,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 .await;
             }
 
-            if updated && transition.requires_db_update() {
+            if updated && requires_db_update {
                 if let Some(position) = get_position_by_id(position_id).await {
                     match update_position(&position).await {
                         Ok(_) => {
@@ -219,7 +251,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 })
                 .await;
 
-            if updated && transition.requires_db_update() {
+            if updated && requires_db_update {
                 if let Some(position) = get_position_by_id(position_id).await {
                     match update_position(&position).await {
                         Ok(_) => {
@@ -339,7 +371,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 })
                 .await;
 
-            if updated && transition.requires_db_update() {
+            if updated && requires_db_update {
                 if let Some(position) = get_position_by_id(position_id).await {
                     match update_position(&position).await {
                         Ok(_) => {
@@ -423,6 +455,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             effective_price,
             fee_lamports,
             dca_time,
+            dca_signature,
         } => {
             let mint = find_mint_by_position_id(position_id).await?;
 
@@ -477,12 +510,43 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                 })
                 .await;
 
-            if updated && transition.requires_db_update() {
+            if updated && requires_db_update {
                 if let Some(position) = get_position_by_id(position_id).await {
                     match update_position(&position).await {
                         Ok(_) => {
                             effects.db_updated = true;
                             let _ = force_database_sync().await;
+
+                            if let Err(err) = clear_pending_dca_swap(&dca_signature).await {
+                                logger::error(
+                                    LogTag::Positions,
+                                    &format!(
+                                        "Failed to clear pending DCA {} for position {}: {}",
+                                        dca_signature, position_id, err
+                                    ),
+                                );
+                            }
+
+                            if let Err(err) = save_entry_record(
+                                position_id,
+                                dca_time,
+                                tokens_bought,
+                                effective_price,
+                                sol_spent,
+                                &dca_signature,
+                                true,
+                                Some(fee_lamports),
+                            )
+                            .await
+                            {
+                                logger::error(
+                                    LogTag::Positions,
+                                    &format!(
+                                        "Failed to persist DCA entry history for position {}: {}",
+                                        position_id, err
+                                    ),
+                                );
+                            }
 
                             crate::events::record_position_event(
                                 &position_id.to_string(),
@@ -519,12 +583,23 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
 
         PositionTransition::DcaFailed {
             position_id,
+            dca_signature,
             reason,
         } => {
             logger::error(
                 LogTag::Positions,
                 &format!("DCA failed for position {}: {}", position_id, reason),
             );
+
+            if let Err(err) = clear_pending_dca_swap(&dca_signature).await {
+                logger::error(
+                    LogTag::Positions,
+                    &format!(
+                        "Failed to clear pending DCA {} after failure: {}",
+                        dca_signature, err
+                    ),
+                );
+            }
             // TODO: Implement retry logic if needed
         }
 

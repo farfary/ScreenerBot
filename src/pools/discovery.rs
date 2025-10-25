@@ -7,16 +7,15 @@
 /// - Database cache of known pools
 ///
 /// The discovery module feeds raw pool information to the analyzer for classification and program kind detection.
-
 use super::types::{max_watched_tokens, PoolDescriptor, ProgramKind};
 use super::utils::is_stablecoin_mint;
 
-use crate::constants::SOL_MINT;
 use crate::apis::{
     dexscreener_types::DexScreenerPool, geckoterminal_types::GeckoTerminalPool, get_api_manager,
     DexScreenerClient, GeckoTerminalClient,
 };
 use crate::config::with_config;
+use crate::constants::SOL_MINT;
 use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::filtering;
 use crate::logger::{self, LogTag};

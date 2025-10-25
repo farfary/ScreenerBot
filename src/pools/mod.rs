@@ -8,7 +8,6 @@
 /// - get_pool_price(mint) -> Get current price for a token
 /// - get_available_tokens() -> Get list of tokens with available prices
 /// - get_price_history(mint) -> Get price history for a token
-
 use std::sync::Arc;
 use tokio::sync::Notify;
 
@@ -35,18 +34,10 @@ pub use discovery::{
     get_canonical_pool_address, is_dexscreener_discovery_enabled,
     is_geckoterminal_discovery_enabled, is_raydium_discovery_enabled, PoolDiscovery,
 };
+pub use fetcher::AccountData;
 pub use service::{
-    get_account_fetcher,
-    get_debug_token_override,
-    get_pool_analyzer,
-    get_pool_discovery,
-    get_price_calculator,
-    initialize_pool_components,
-    is_pool_service_running,
-    is_single_pool_mode_enabled,
-    set_debug_token_override,
-    start_helper_tasks,
-    stop_pool_service,
+    get_account_fetcher, get_debug_token_override, get_pool_analyzer, get_pool_discovery,
+    get_price_calculator, initialize_pool_components, is_pool_service_running,
+    is_single_pool_mode_enabled, set_debug_token_override, start_helper_tasks, stop_pool_service,
 };
 pub use types::{PoolError, PriceResult};
-pub use fetcher::AccountData;

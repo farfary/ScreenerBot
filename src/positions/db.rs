@@ -847,6 +847,43 @@ impl PositionsDatabase {
         Ok(())
     }
 
+    pub fn set_metadata_value(&self, key: &str, value: &str) -> Result<(), String> {
+        let conn = self.get_connection()?;
+
+        conn.execute(
+            "INSERT OR REPLACE INTO position_metadata (key, value, updated_at) VALUES (?1, ?2, datetime('now'))",
+            params![key, value],
+        )
+        .map_err(|e| format!("Failed to persist metadata key {}: {}", key, e))?;
+
+        Ok(())
+    }
+
+    pub fn get_metadata_value(&self, key: &str) -> Result<Option<String>, String> {
+        let conn = self.get_connection()?;
+
+        let mut stmt = conn
+            .prepare("SELECT value FROM position_metadata WHERE key = ?1 LIMIT 1")
+            .map_err(|e| format!("Failed to prepare metadata fetch for key {}: {}", key, e))?;
+
+        let mut rows = stmt
+            .query(params![key])
+            .map_err(|e| format!("Failed to query metadata for key {}: {}", key, e))?;
+
+        match rows
+            .next()
+            .map_err(|e| format!("Failed to iterate metadata for key {}: {}", key, e))?
+        {
+            Some(row) => {
+                let value: String = row.get(0).map_err(|e| {
+                    format!("Failed to decode metadata payload for key {}: {}", key, e)
+                })?;
+                Ok(Some(value))
+            }
+            None => Ok(None),
+        }
+    }
+
     /// Get position by ID
     pub async fn get_position_by_id(&self, id: i64) -> Result<Option<Position>, String> {
         let conn = self.get_connection()?;
@@ -2120,6 +2157,22 @@ pub async fn force_database_sync() -> Result<(), String> {
             }
             result
         }
+        None => Err("Positions database not initialized".to_string()),
+    }
+}
+
+pub async fn set_metadata(key: &str, value: &str) -> Result<(), String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.set_metadata_value(key, value),
+        None => Err("Positions database not initialized".to_string()),
+    }
+}
+
+pub async fn get_metadata(key: &str) -> Result<Option<String>, String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.get_metadata_value(key),
         None => Err("Positions database not initialized".to_string()),
     }
 }

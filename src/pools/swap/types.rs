@@ -1,7 +1,7 @@
 /// Swap types and common structures
 ///
 /// This module defines the core types used across the swap system.
-use crate::constants::{SOL_MINT, TOKEN_2022_PROGRAM_ID, SPL_TOKEN_PROGRAM_ID};
+use crate::constants::{SOL_MINT, SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID};
 use solana_sdk::{pubkey::Pubkey, signature::Signature, transaction::Transaction};
 use std::fmt;
 

@@ -3,7 +3,6 @@
 /// This module provides SQLite-based storage for price history data,
 /// enabling price history to survive service restarts and providing
 /// full historical data access beyond the in-memory cache limits.
-
 use super::types::{PriceResult, PRICE_HISTORY_MAX_ENTRIES};
 
 use crate::logger::{self, LogTag};

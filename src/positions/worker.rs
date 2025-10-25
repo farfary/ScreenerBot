@@ -7,7 +7,8 @@ use super::{
         VerificationKind,
     },
     state::{
-        reconcile_global_position_semaphore, MINT_TO_POSITION_INDEX, POSITIONS, SIG_TO_MINT_INDEX,
+        reconcile_global_position_semaphore, rehydrate_pending_dca_swaps, MINT_TO_POSITION_INDEX,
+        POSITIONS, SIG_TO_MINT_INDEX,
     },
     verifier::{verify_transaction, VerificationOutcome},
 };
@@ -119,6 +120,38 @@ pub async fn initialize_positions_system() -> Result<(), String> {
             logger::warning(
                 LogTag::Positions,
                 &format!("Failed to load positions from database: {}", e),
+            );
+        }
+    }
+
+    match rehydrate_pending_dca_swaps().await {
+        Ok(pending) => {
+            if !pending.is_empty() {
+                let mut restored = 0;
+                for entry in pending {
+                    let item = VerificationItem::new_dca(
+                        entry.signature.clone(),
+                        entry.mint.clone(),
+                        Some(entry.position_id),
+                        entry.expiry_height,
+                    );
+                    enqueue_verification(item).await;
+                    restored += 1;
+                }
+
+                logger::info(
+                    LogTag::Positions,
+                    &format!(
+                        "🔁 Restored {} pending DCA verifications from metadata",
+                        restored
+                    ),
+                );
+            }
+        }
+        Err(err) => {
+            logger::error(
+                LogTag::Positions,
+                &format!("Failed to rehydrate pending DCA swaps: {}", err),
             );
         }
     }
@@ -331,10 +364,19 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                         &format!("🧹 Cleaned up {} expired verifications", expired_items.len())
                     );
 
-                    // Handle expired entry transactions by removing orphan positions
+                    // Handle expired entry transactions by removing orphan positions or flagging DCA failures
                     for item in expired_items {
                         if item.kind == VerificationKind::Entry {
-                            if let Some(position_id) = item.position_id {
+                            if item.is_dca {
+                                if let Some(position_id) = item.position_id {
+                                    let transition = super::transitions::PositionTransition::DcaFailed {
+                                        position_id,
+                                        dca_signature: item.signature.clone(),
+                                        reason: "Verification expired".to_string(),
+                                    };
+                                    let _ = apply_transition(transition).await;
+                                }
+                            } else if let Some(position_id) = item.position_id {
                                 let transition = super::transitions::PositionTransition::RemoveOrphanEntry {
                                     position_id,
                                 };
@@ -487,8 +529,27 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                     // Handle abandoned verification based on kind
                                     match item.kind {
                                         VerificationKind::Entry => {
-                                            // Remove orphan entry position AND release semaphore permit
-                                            if let Some(position_id) = item.position_id {
+                                            if item.is_dca {
+                                                if let Some(position_id) = item.position_id {
+                                                    logger::warning(
+                                                        LogTag::Positions,
+                                                        &format!(
+                                                            "Marking DCA for position {} as failed after abandonment",
+                                                            position_id
+                                                        ),
+                                                    );
+
+                                                    let transition = super::transitions::PositionTransition::DcaFailed {
+                                                        position_id,
+                                                        dca_signature: item.signature.clone(),
+                                                        reason: format!(
+                                                            "Abandoned after {:?}",
+                                                            give_up_reason
+                                                        ),
+                                                    };
+                                                    let _ = super::apply::apply_transition(transition).await;
+                                                }
+                                            } else if let Some(position_id) = item.position_id {
                                                 logger::warning(LogTag::Positions, &format!("Removing orphan entry position {} after verification abandonment (will release semaphore permit)", position_id));
                                                 let transition = super::transitions::PositionTransition::RemoveOrphanEntry { position_id };
                                                 if let Ok(_) = super::apply::apply_transition(transition).await {

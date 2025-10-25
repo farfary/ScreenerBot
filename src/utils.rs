@@ -1198,8 +1198,8 @@ fn build_token_2022_close_instruction(
             account: TOKEN_2022_PROGRAM_ID.to_string(),
             expected_owner: "Program ID".to_string(),
             actual_owner: None,
-            })
-        })?;
+        })
+    })?;
 
     // Manually build the close account instruction for Token-2022
     // CloseAccount instruction: [9] (instruction discriminator)

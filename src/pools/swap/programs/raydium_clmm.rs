@@ -5,8 +5,7 @@
 /// account derivation and swap calculations based on the Uniswap V3 model.
 use super::ProgramSwap;
 use crate::constants::{
-    MEMO_PROGRAM_ID, RAYDIUM_CLMM_PROGRAM_ID, SOL_MINT, SPL_TOKEN_PROGRAM_ID,
-    TOKEN_2022_PROGRAM_ID,
+    MEMO_PROGRAM_ID, RAYDIUM_CLMM_PROGRAM_ID, SOL_MINT, SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID,
 };
 use crate::logger::{self, LogTag};
 use crate::pools::decoders::raydium_clmm::{ClmmPoolInfo, RaydiumClmmDecoder};
@@ -221,8 +220,7 @@ impl RaydiumClmmSwap {
         let wallet_pubkey = wallet.pubkey();
 
         // Determine token mint and programs - need to properly detect Token-2022
-        let (token_mint, token_program_id, is_token_0_sol) = if pool_info.token_mint_0 == SOL_MINT
-        {
+        let (token_mint, token_program_id, is_token_0_sol) = if pool_info.token_mint_0 == SOL_MINT {
             let token_mint = &pool_info.token_mint_1;
             // Check if this is a Token-2022 token by attempting to get account info
             let token_program_id = Self::get_token_program_for_mint(token_mint).await?;
@@ -415,12 +413,9 @@ impl RaydiumClmmSwap {
             AccountMeta::new(observation_key, false),          // observation_state
             AccountMeta::new_readonly(spl_token::id(), false), // token_program
             AccountMeta::new_readonly(spl_token_2022::id(), false), // token_program_2022
-            AccountMeta::new_readonly(
-                Pubkey::from_str(MEMO_PROGRAM_ID).unwrap(),
-                false,
-            ), // memo_program
-            AccountMeta::new_readonly(input_mint, false),      // input_vault_mint
-            AccountMeta::new_readonly(output_mint, false),     // output_vault_mint
+            AccountMeta::new_readonly(Pubkey::from_str(MEMO_PROGRAM_ID).unwrap(), false), // memo_program
+            AccountMeta::new_readonly(input_mint, false), // input_vault_mint
+            AccountMeta::new_readonly(output_mint, false), // output_vault_mint
         ];
 
         Ok(Instruction {

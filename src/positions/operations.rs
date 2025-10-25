@@ -4,7 +4,8 @@ use super::{
     queue::{enqueue_verification, VerificationItem, VerificationKind},
     state::{
         acquire_global_position_permit, acquire_position_lock, add_position,
-        add_signature_to_index, release_global_position_permit, LAST_OPEN_TIME,
+        add_signature_to_index, clear_pending_dca_swap, register_pending_dca_swap,
+        release_global_position_permit, PendingDcaSwap, LAST_OPEN_TIME,
     },
     transitions::PositionTransition,
 };
@@ -929,6 +930,35 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
         .transaction_signature
         .ok_or("No transaction signature")?;
 
+    // Pre-compute expiry height for verification + persistence
+    let expiry_height = get_rpc_client()
+        .get_block_height()
+        .await
+        .ok()
+        .map(|h| h + SOLANA_BLOCKHASH_VALIDITY_SLOTS);
+
+    // Persist pending DCA metadata before queuing verification to survive restarts
+    let pending_dca = PendingDcaSwap {
+        signature: transaction_signature.clone(),
+        mint: token_mint.to_string(),
+        position_id,
+        expiry_height,
+        created_at: Utc::now(),
+    };
+
+    register_pending_dca_swap(pending_dca.clone())
+        .await
+        .map_err(|e| {
+            logger::error(
+                LogTag::Positions,
+                &format!(
+                    "Failed to persist pending DCA metadata for position {} (mint {}): {}",
+                    position_id, token_mint, e
+                ),
+            );
+            format!("Failed to persist pending DCA metadata: {}", e)
+        })?;
+
     // Create DCA transition
     let price_info = get_pool_price(token_mint)
         .ok_or_else(|| format!("No price data for token: {}", token_mint))?;
@@ -941,20 +971,25 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
     };
 
     // Apply transition
-    super::apply::apply_transition(transition)
-        .await
-        .map_err(|e| format!("Failed to apply DCA transition: {}", e))?;
+    if let Err(e) = super::apply::apply_transition(transition).await {
+        if let Err(err) = clear_pending_dca_swap(&pending_dca.signature).await {
+            logger::error(
+                LogTag::Positions,
+                &format!(
+                    "Failed to rollback pending DCA {} after transition error: {}",
+                    pending_dca.signature, err
+                ),
+            );
+        }
+        return Err(format!("Failed to apply DCA transition: {}", e));
+    }
 
     // Enqueue for verification
-    let expiry_height =
-        get_rpc_client().get_block_height().await.unwrap_or(0) + SOLANA_BLOCKHASH_VALIDITY_SLOTS;
-
-    let verification_item = VerificationItem::new(
+    let verification_item = VerificationItem::new_dca(
         transaction_signature.clone(),
         token_mint.to_string(),
         Some(position_id),
-        VerificationKind::Entry, // DCA is another entry
-        Some(expiry_height),
+        expiry_height,
     );
 
     enqueue_verification(verification_item).await;

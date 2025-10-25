@@ -2,7 +2,6 @@
 ///
 /// This module provides the main entry points for starting and stopping the pool service.
 /// It coordinates all the background tasks needed for price discovery and calculation.
-
 use super::analyzer::PoolAnalyzer;
 use super::calculator::PriceCalculator;
 use super::discovery::{is_dexscreener_discovery_enabled, PoolDiscovery};

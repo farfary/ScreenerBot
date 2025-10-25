@@ -1,6 +1,7 @@
-use super::types::Position;
+use super::{db, types::Position};
 use crate::logger::{self, LogTag};
 use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
     sync::{Arc, LazyLock, OnceLock},
@@ -30,6 +31,21 @@ static PENDING_PARTIAL_EXITS: LazyLock<RwLock<HashMap<String, u32>>> =
 // but local flow fails before persisting a position. Keys are token mints; values are expiry times.
 static PENDING_OPEN_SWAPS: LazyLock<RwLock<HashMap<String, DateTime<Utc>>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
+
+// Pending DCA swaps registry: ensures DCA verifications survive restarts and duplicate submissions
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PendingDcaSwap {
+    pub signature: String,
+    pub mint: String,
+    pub position_id: i64,
+    pub expiry_height: Option<u64>,
+    pub created_at: DateTime<Utc>,
+}
+
+static PENDING_DCA_SWAPS: LazyLock<RwLock<HashMap<String, PendingDcaSwap>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
+
+const PENDING_DCA_METADATA_KEY: &str = "pending_dca_swaps";
 
 // Global position creation semaphore to enforce max_open_positions atomically
 // NOTE: Uses OnceLock because initialization requires config which isn't available at static init time
@@ -95,6 +111,85 @@ pub async fn clear_partial_exit_pending(mint: &str) {
 pub async fn has_partial_exit_pending(mint: &str) -> bool {
     let map = PENDING_PARTIAL_EXITS.read().await;
     map.get(mint).copied().unwrap_or(0) > 0
+}
+
+/// Persist current pending DCA map to the database metadata store
+async fn persist_pending_dca_swaps() -> Result<(), String> {
+    let pending: Vec<PendingDcaSwap> = {
+        let map = PENDING_DCA_SWAPS.read().await;
+        map.values().cloned().collect()
+    };
+
+    let serialized = serde_json::to_string(&pending)
+        .map_err(|e| format!("Failed to serialize pending DCA swaps: {}", e))?;
+
+    db::set_metadata(PENDING_DCA_METADATA_KEY, &serialized).await
+}
+
+/// Register a pending DCA swap for durability
+pub async fn register_pending_dca_swap(entry: PendingDcaSwap) -> Result<(), String> {
+    let signature = entry.signature.clone();
+    {
+        let mut map = PENDING_DCA_SWAPS.write().await;
+        map.insert(signature.clone(), entry);
+    }
+
+    if let Err(err) = persist_pending_dca_swaps().await {
+        let mut map = PENDING_DCA_SWAPS.write().await;
+        map.remove(&signature);
+        return Err(err);
+    }
+
+    Ok(())
+}
+
+/// Clear a pending DCA swap once processed
+pub async fn clear_pending_dca_swap(signature: &str) -> Result<Option<PendingDcaSwap>, String> {
+    let removed = {
+        let mut map = PENDING_DCA_SWAPS.write().await;
+        map.remove(signature)
+    };
+
+    if let Some(entry) = removed.clone() {
+        if let Err(err) = persist_pending_dca_swaps().await {
+            logger::error(
+                LogTag::Positions,
+                &format!(
+                    "Failed to persist pending DCA metadata after clearing {}: {}",
+                    signature, err
+                ),
+            );
+            // Reinsert to keep in-memory state consistent if persistence fails
+            {
+                let mut map = PENDING_DCA_SWAPS.write().await;
+                map.insert(entry.signature.clone(), entry);
+            }
+            return Err(err);
+        }
+    }
+
+    Ok(removed)
+}
+
+/// Load pending DCA swaps from metadata into memory (used at startup)
+pub async fn rehydrate_pending_dca_swaps() -> Result<Vec<PendingDcaSwap>, String> {
+    let raw = db::get_metadata(PENDING_DCA_METADATA_KEY).await?;
+
+    let entries: Vec<PendingDcaSwap> = match raw {
+        Some(payload) if !payload.is_empty() => serde_json::from_str(&payload)
+            .map_err(|e| format!("Failed to deserialize pending DCA metadata payload: {}", e))?,
+        _ => Vec::new(),
+    };
+
+    {
+        let mut map = PENDING_DCA_SWAPS.write().await;
+        map.clear();
+        for entry in &entries {
+            map.insert(entry.signature.clone(), entry.clone());
+        }
+    }
+
+    Ok(entries)
 }
 
 impl PositionLockGuard {

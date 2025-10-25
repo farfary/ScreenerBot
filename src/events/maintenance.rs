@@ -1,9 +1,9 @@
-use crate::events::db::EventsDatabase;
 /// Events Maintenance and MCP Integration
 ///
 /// This module provides maintenance functions and MCP server integration
 /// for the events system.
 use crate::constants::SOL_MINT;
+use crate::events::db::EventsDatabase;
 use crate::events::{Event, EventCategory, Severity};
 use crate::logger::{self, LogTag};
 use chrono::Utc;

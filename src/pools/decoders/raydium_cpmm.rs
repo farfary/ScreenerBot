@@ -2,10 +2,9 @@
 ///
 /// This module handles decoding Raydium Constant Product Market Maker pools.
 /// Extracts reserve data and calculates token prices.
-
 use super::{AccountData, PoolDecoder};
 
-use crate::constants::{SOL_DECIMALS, SOL_MINT, RAYDIUM_CPMM_PROGRAM_ID};
+use crate::constants::{RAYDIUM_CPMM_PROGRAM_ID, SOL_DECIMALS, SOL_MINT};
 use crate::logger::{self, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind};
 use crate::pools::utils::{

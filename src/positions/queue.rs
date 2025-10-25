@@ -36,6 +36,8 @@ pub struct VerificationItem {
     // Partial exit support
     pub is_partial_exit: bool,
     pub expected_exit_amount: Option<u64>,
+    // DCA support
+    pub is_dca: bool,
 }
 
 impl VerificationItem {
@@ -58,6 +60,7 @@ impl VerificationItem {
             expiry_height,
             is_partial_exit: false,
             expected_exit_amount: None,
+            is_dca: false,
         }
     }
 
@@ -81,7 +84,26 @@ impl VerificationItem {
             expiry_height,
             is_partial_exit: true,
             expected_exit_amount: Some(expected_exit_amount),
+            is_dca: false,
         }
+    }
+
+    /// Create verification item for DCA entries
+    pub fn new_dca(
+        signature: String,
+        mint: String,
+        position_id: Option<i64>,
+        expiry_height: Option<u64>,
+    ) -> Self {
+        let mut item = Self::new(
+            signature,
+            mint,
+            position_id,
+            VerificationKind::Entry,
+            expiry_height,
+        );
+        item.is_dca = true;
+        item
     }
 
     /// Check if verification should be abandoned due to excessive retries or age
@@ -154,6 +176,7 @@ impl VerificationItem {
             expiry_height: self.expiry_height,
             is_partial_exit: self.is_partial_exit,
             expected_exit_amount: self.expected_exit_amount,
+            is_dca: self.is_dca,
         }
     }
 

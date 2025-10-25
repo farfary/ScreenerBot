@@ -47,27 +47,22 @@ async fn update_all_position_prices() {
 
     for position in positions {
         match get_current_price(&position.mint).await {
-            Some((price, source)) => {
-                match update_position_price(&position.mint, price).await {
-                    Ok(_) => {
-                        updated_count += 1;
-                        match source {
-                            PriceSource::Pool => pool_price_count += 1,
-                            PriceSource::Api => api_price_count += 1,
-                        }
-                    }
-                    Err(e) => {
-                        logger::debug(
-                            LogTag::Positions,
-                            &format!(
-                                "Failed to update price for {}: {}",
-                                position.symbol, e
-                            ),
-                        );
-                        failed_count += 1;
+            Some((price, source)) => match update_position_price(&position.mint, price).await {
+                Ok(_) => {
+                    updated_count += 1;
+                    match source {
+                        PriceSource::Pool => pool_price_count += 1,
+                        PriceSource::Api => api_price_count += 1,
                     }
                 }
-            }
+                Err(e) => {
+                    logger::debug(
+                        LogTag::Positions,
+                        &format!("Failed to update price for {}: {}", position.symbol, e),
+                    );
+                    failed_count += 1;
+                }
+            },
             None => {
                 logger::debug(
                     LogTag::Positions,
@@ -109,9 +104,7 @@ async fn get_current_price(mint: &str) -> Option<(f64, PriceSource)> {
         Ok(Some(token)) => {
             // Check if price is recent (within last 5 seconds)
             let now = chrono::Utc::now();
-            let age_secs = now
-                .signed_duration_since(token.updated_at)
-                .num_seconds();
+            let age_secs = now.signed_duration_since(token.updated_at).num_seconds();
 
             if age_secs <= API_PRICE_MAX_AGE_SECS {
                 if token.price_sol > 0.0 && token.price_sol.is_finite() {

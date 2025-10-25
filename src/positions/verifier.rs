@@ -489,24 +489,77 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
     match item.kind {
         VerificationKind::Entry => {
             if swap_info.swap_type != "Buy" {
+                if item.is_dca {
+                    return VerificationOutcome::Transition(PositionTransition::DcaFailed {
+                        position_id: item.position_id.unwrap_or(0),
+                        dca_signature: item.signature.clone(),
+                        reason: "Swap analysis reported non-buy for DCA".to_string(),
+                    });
+                }
                 return VerificationOutcome::RetryTransient("Expected Buy transaction".to_string());
             }
 
             // Convert token amount to integer units with rounding
-            let (mut token_amount_units, decimals_opt) =
-                if let Some(decimals) = get_decimals(&item.mint).await {
-                    let scale = (10_f64).powi(decimals as i32);
-                    let units = (swap_info.token_amount.abs() * scale).round();
-                    (units.max(0.0) as u64, Some(decimals))
-                } else {
-                    (0u64, None)
+            let decimals = match get_decimals(&item.mint).await {
+                Some(dec) => dec,
+                None => {
+                    return VerificationOutcome::RetryTransient(
+                        "Token decimals not cached".to_string(),
+                    );
+                }
+            };
+
+            let scale = (10_f64).powi(decimals as i32);
+            let mut token_amount_units =
+                (swap_info.token_amount.abs() * scale).round().max(0.0) as u64;
+
+            if token_amount_units == 0 {
+                return VerificationOutcome::RetryTransient(
+                    "Zero token amount detected".to_string(),
+                );
+            }
+
+            if item.is_dca {
+                let position_id = match item.position_id {
+                    Some(id) => id,
+                    None => {
+                        return VerificationOutcome::RetryTransient(
+                            "DCA verification missing position context".to_string(),
+                        );
+                    }
                 };
 
-            // Enforce decimals presence as per tokens system contract
-            if decimals_opt.is_none() {
-                return VerificationOutcome::RetryTransient(
-                    "Token decimals not cached".to_string(),
-                );
+                let sol_spent = swap_info.effective_sol_spent.abs();
+                if sol_spent <= 0.0 || !sol_spent.is_finite() {
+                    return VerificationOutcome::RetryTransient(
+                        "Invalid SOL spent reported for DCA".to_string(),
+                    );
+                }
+
+                let token_amount_float = (token_amount_units as f64) / scale;
+                if token_amount_float <= 0.0 || !token_amount_float.is_finite() {
+                    return VerificationOutcome::RetryTransient(
+                        "Invalid token amount computed for DCA".to_string(),
+                    );
+                }
+
+                let effective_price = sol_spent / token_amount_float;
+                let dca_time = if let Some(block_time) = transaction.block_time {
+                    chrono::DateTime::<Utc>::from_timestamp(block_time, 0)
+                        .unwrap_or_else(|| Utc::now())
+                } else {
+                    Utc::now()
+                };
+
+                return VerificationOutcome::Transition(PositionTransition::DcaVerified {
+                    position_id,
+                    tokens_bought: token_amount_units,
+                    sol_spent,
+                    effective_price,
+                    fee_lamports: sol_to_lamports(swap_info.fee_sol),
+                    dca_time,
+                    dca_signature: item.signature.clone(),
+                });
             }
 
             // Prefer authoritative on-chain balance immediately after entry finalization, if available.
@@ -545,13 +598,15 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
             }
 
             // Calculate effective entry price using authoritative units when possible
-            let effective_price = match (decimals_opt, token_amount_units) {
-                (Some(decimals), units) if units > 0 && swap_info.effective_sol_spent > 0.0 => {
-                    let scale = (10_f64).powi(decimals as i32);
-                    let token_amount_float = (units as f64) / scale;
+            let effective_price = if token_amount_units > 0 && swap_info.effective_sol_spent > 0.0 {
+                let token_amount_float = (token_amount_units as f64) / scale;
+                if token_amount_float > 0.0 && token_amount_float.is_finite() {
                     swap_info.effective_sol_spent / token_amount_float
+                } else {
+                    swap_info.calculated_price_sol
                 }
-                _ => swap_info.calculated_price_sol,
+            } else {
+                swap_info.calculated_price_sol
             };
 
             VerificationOutcome::Transition(PositionTransition::EntryVerified {

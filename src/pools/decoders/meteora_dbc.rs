@@ -15,7 +15,7 @@
 /// - sqrt_price (u128)
 /// ... plus metadata. We compute price from live vault balances minus fees.
 use super::{AccountData, PoolDecoder};
-use crate::constants::{SOL_DECIMALS, SOL_MINT, METEORA_DBC_PROGRAM_ID};
+use crate::constants::{METEORA_DBC_PROGRAM_ID, SOL_DECIMALS, SOL_MINT};
 use crate::logger::{self, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind};
 use crate::pools::utils::{read_pubkey_at, read_token_account_amount};

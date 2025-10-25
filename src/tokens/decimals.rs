@@ -23,7 +23,6 @@ static FETCH_LOCKS: std::sync::LazyLock<Mutex<HashMap<String, Arc<AsyncMutex<()>
 static FAILED_CACHE: std::sync::LazyLock<Arc<RwLock<HashSet<String>>>> =
     std::sync::LazyLock::new(|| Arc::new(RwLock::new(HashSet::new())));
 
-
 // =============================================================================
 // PUBLIC API
 // =============================================================================

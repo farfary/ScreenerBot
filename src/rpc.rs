@@ -3090,8 +3090,7 @@ impl RpcClient {
                             if let Some(value) = result.get("value") {
                                 if let Some(owner) = value.get("owner") {
                                     if let Some(owner_str) = owner.as_str() {
-                                        let is_token_2022 = owner_str
-                                            == TOKEN_2022_PROGRAM_ID;
+                                        let is_token_2022 = owner_str == TOKEN_2022_PROGRAM_ID;
 
                                         // Record successful call
                                         self.record_success(Some(&current_url));
@@ -3228,8 +3227,7 @@ impl RpcClient {
                                         self.record_success(Some(&current_url));
 
                                         // Token Extensions Program ID (Token-2022)
-                                        let is_token_2022 = owner_str
-                                            == TOKEN_2022_PROGRAM_ID;
+                                        let is_token_2022 = owner_str == TOKEN_2022_PROGRAM_ID;
 
                                         logger::info(
                                             LogTag::Rpc,

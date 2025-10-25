@@ -2,13 +2,12 @@
 ///
 /// Handles pool decoding and price calculation for the legacy PumpFun program.
 /// Parses pool account data to extract mint and vault information.
-
 use super::super::utils::{
     analyze_token_pair, is_sol_mint, read_pubkey_at_offset, PoolMintVaultInfo,
 };
 use super::{AccountData, PoolDecoder};
 
-use crate::constants::{SOL_DECIMALS, SOL_MINT, PUMP_FUN_LEGACY_PROGRAM_ID};
+use crate::constants::{PUMP_FUN_LEGACY_PROGRAM_ID, SOL_DECIMALS, SOL_MINT};
 use crate::logger::{self, LogTag};
 use crate::pools::types::{PriceResult, ProgramKind};
 use crate::tokens::get_cached_decimals;

@@ -66,9 +66,11 @@ pub enum PositionTransition {
         effective_price: f64, // Actual price
         fee_lamports: u64,    // Transaction fee
         dca_time: DateTime<Utc>,
+        dca_signature: String,
     },
     DcaFailed {
         position_id: i64,
+        dca_signature: String,
         reason: String,
     },
 }

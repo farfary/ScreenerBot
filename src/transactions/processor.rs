@@ -9,8 +9,8 @@ use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use crate::logger::{self, LogTag};
 use crate::constants::SOL_MINT;
+use crate::logger::{self, LogTag};
 use crate::tokens::get_decimals;
 use crate::transactions::{
     analyzer::TransactionAnalyzer, fetcher::TransactionFetcher, program_ids::*, types::*, utils::*,
