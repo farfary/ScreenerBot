@@ -79,14 +79,19 @@
   background: rgba(239, 68, 68, 0.3);
 }
 
-/* Refresh button with embedded select */
+/* Refresh button with dropdown */
 .refresh-btn {
-  padding: 4px 8px;
+  padding: 4px 10px;
   gap: 6px;
 }
 
-.refresh-btn:hover {
-  background: rgba(255, 255, 255, 0.3);
+.refresh-btn:hover:not(:disabled) {
+  background: rgba(139, 92, 246, 0.3);
+}
+
+/* Power button with dropdown */
+.power-btn {
+  gap: 6px;
 }
 
 .power-btn:hover:not(:disabled) {
@@ -99,36 +104,6 @@
 
 .reboot-btn:hover:not(:disabled) {
   background: rgba(239, 68, 68, 0.3);
-}
-
-/* Refresh Interval Control */
-.refresh-interval-control {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.refresh-interval-dropdown {
-  background: transparent;
-  border: none;
-  color: var(--header-text);
-  padding: 0;
-  cursor: pointer;
-  font-size: 0.85rem;
-  font-weight: 500;
-  outline: none;
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-}
-
-.refresh-interval-dropdown::-ms-expand {
-  display: none;
-}
-
-.refresh-interval-dropdown option {
-  background: var(--card-bg);
-  color: var(--text-primary);
 }
 
 /* Connection Status Indicator */

@@ -38,22 +38,10 @@
         </button>
 
         <!-- Refresh Interval -->
-        <button class="control-btn refresh-btn" aria-label="Refresh interval">
+        <button class="control-btn refresh-btn" id="refreshIntervalBtn" aria-label="Refresh interval">
           <span>⏱️</span>
-          <select
-            id="refreshInterval"
-            class="refresh-interval-dropdown"
-            aria-label="Refresh interval"
-          >
-            <option value="1000">1s</option>
-            <option value="2000">2s</option>
-            <option value="3000">3s</option>
-            <option value="5000">5s</option>
-            <option value="10000">10s</option>
-            <option value="15000">15s</option>
-            <option value="30000">30s</option>
-            <option value="60000">1m</option>
-          </select>
+          <span id="refreshIntervalText">5s</span>
+          <span class="dropdown-arrow">▾</span>
         </button>
 
         <!-- Theme Toggle -->

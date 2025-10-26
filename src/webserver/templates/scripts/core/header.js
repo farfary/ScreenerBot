@@ -1,5 +1,5 @@
 // Header controls for global dashboard interactions (trader toggle)
-import { Poller, getInterval as getGlobalPollingInterval } from "./poller.js";
+import { Poller, getInterval as getGlobalPollingInterval, setInterval as setGlobalPollingInterval } from "./poller.js";
 import * as Utils from "./utils.js";
 import { Dropdown } from "../ui/dropdown.js";
 
@@ -18,6 +18,7 @@ let statusPoller = null;
 let currentStatusPromise = null;
 let currentController = null;
 let powerDropdown = null;
+let refreshDropdown = null;
 let traderDropdown = null;
 let notificationCount = 0;
 let connectionCheckInterval = null;
@@ -324,6 +325,9 @@ function initTraderControls() {
   // Initialize power menu dropdown
   initPowerMenu();
   
+  // Initialize refresh interval dropdown
+  initRefreshInterval();
+  
   // Initialize trader dropdown (future)
   initTraderDropdown();
   
@@ -373,6 +377,76 @@ function initPowerMenu() {
       },
     ],
     onSelect: handlePowerMenuAction,
+  });
+}
+
+function initRefreshInterval() {
+  const refreshBtn = document.getElementById("refreshIntervalBtn");
+  const refreshText = document.getElementById("refreshIntervalText");
+  
+  if (!refreshBtn || !refreshText) return;
+
+  // Get current interval from poller
+  const currentInterval = getGlobalPollingInterval();
+  
+  // Format display text
+  const formatInterval = (ms) => {
+    if (ms >= 60000) return `${ms / 60000}m`;
+    return `${ms / 1000}s`;
+  };
+  
+  // Update initial display
+  refreshText.textContent = formatInterval(currentInterval);
+  
+  // Define interval options
+  const intervals = [
+    { id: "1000", label: "1 second", display: "1s", ms: 1000 },
+    { id: "2000", label: "2 seconds", display: "2s", ms: 2000 },
+    { id: "3000", label: "3 seconds", display: "3s", ms: 3000 },
+    { id: "5000", label: "5 seconds", display: "5s", ms: 5000 },
+    { id: "10000", label: "10 seconds", display: "10s", ms: 10000 },
+    { id: "15000", label: "15 seconds", display: "15s", ms: 15000 },
+    { id: "30000", label: "30 seconds", display: "30s", ms: 30000 },
+    { id: "60000", label: "1 minute", display: "1m", ms: 60000 },
+  ];
+  
+  // Create dropdown items with checkmark for current selection
+  const items = intervals.map((interval) => ({
+    id: interval.id,
+    icon: currentInterval === interval.ms ? "✓" : " ",
+    label: interval.label,
+  }));
+  
+  refreshDropdown = new Dropdown({
+    trigger: refreshBtn,
+    align: "right",
+    items: items,
+    onSelect: (action) => {
+      const selected = intervals.find((i) => i.id === action);
+      if (selected) {
+        setGlobalPollingInterval(selected.ms);
+        refreshText.textContent = selected.display;
+        Utils.showToast(`⏱️ Refresh interval: ${selected.display}`, "success");
+        
+        // Recreate dropdown with updated checkmarks
+        if (refreshDropdown) {
+          refreshDropdown.destroy();
+        }
+        
+        const updatedItems = intervals.map((interval) => ({
+          id: interval.id,
+          icon: interval.ms === selected.ms ? "✓" : " ",
+          label: interval.label,
+        }));
+        
+        refreshDropdown = new Dropdown({
+          trigger: refreshBtn,
+          align: "right",
+          items: updatedItems,
+          onSelect: arguments.callee,
+        });
+      }
+    },
   });
 }
 
