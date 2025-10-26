@@ -240,9 +240,10 @@
 .table-toolbar-field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
   min-width: 160px;
   flex: 0 1 auto;
+  align-self: center;
 }
 
 .table-toolbar-field--switch {
@@ -380,11 +381,16 @@
 }
 
 .table-toolbar-field__label {
-  font-size: 0.7rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--text-muted);
-  line-height: 1.2;
+  /* Visually hidden but accessible to screen readers */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
 }
 
 .table-toolbar-input,
