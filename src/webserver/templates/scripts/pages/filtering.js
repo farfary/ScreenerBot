@@ -864,23 +864,23 @@ function renderInfoBar() {
     <div class="filtering-info-bar">
       <div class="info-item highlight">
         <span class="label">Total:</span>
-        <span class="value">${Utils.escapeHtml(Utils.formatNumber(total_tokens))}</span>
+        <span class="value">${Utils.escapeHtml(Utils.formatNumber(total_tokens, 0))}</span>
       </div>
       <div class="info-item">
         <span class="label">Priced:</span>
-        <span class="value">${Utils.escapeHtml(Utils.formatNumber(with_pool_price))} (${Utils.escapeHtml(priceRate)}%)</span>
+        <span class="value">${Utils.escapeHtml(Utils.formatNumber(with_pool_price, 0))} (${Utils.escapeHtml(priceRate)}%)</span>
       </div>
       <div class="info-item highlight">
         <span class="label">Passed:</span>
-        <span class="value">${Utils.escapeHtml(Utils.formatNumber(passed_filtering))} (${Utils.escapeHtml(passedRate)}%)</span>
+        <span class="value">${Utils.escapeHtml(Utils.formatNumber(passed_filtering, 0))} (${Utils.escapeHtml(passedRate)}%)</span>
       </div>
       <div class="info-item">
         <span class="label">Positions:</span>
-        <span class="value">${Utils.escapeHtml(Utils.formatNumber(open_positions))}</span>
+        <span class="value">${Utils.escapeHtml(Utils.formatNumber(open_positions, 0))}</span>
       </div>
       <div class="info-item warning">
         <span class="label">Blacklisted:</span>
-        <span class="value">${Utils.escapeHtml(Utils.formatNumber(blacklisted))}</span>
+        <span class="value">${Utils.escapeHtml(Utils.formatNumber(blacklisted, 0))}</span>
       </div>
       <div class="info-item">
         <span class="label">Cache:</span>
@@ -910,32 +910,32 @@ function renderStatusView() {
     <div class="status-view">
       <div class="status-card dominant">
         <span class="metric-label">Total Tokens</span>
-        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(total_tokens))}</span>
+        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(total_tokens, 0))}</span>
         <span class="metric-meta">In filtering cache</span>
       </div>
       <div class="status-card">
         <span class="metric-label">With Price</span>
-        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(with_pool_price))}</span>
+        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(with_pool_price, 0))}</span>
         <span class="metric-meta">${Utils.escapeHtml(`${priceRate}% have pricing`)}</span>
       </div>
       <div class="status-card dominant">
         <span class="metric-label">Passed Filters</span>
-        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(passed_filtering))}</span>
+        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(passed_filtering, 0))}</span>
         <span class="metric-meta">${Utils.escapeHtml(`${passedRate}% passed`)}</span>
       </div>
       <div class="status-card">
         <span class="metric-label">Open Positions</span>
-        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(open_positions))}</span>
+        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(open_positions, 0))}</span>
         <span class="metric-meta">Active trades</span>
       </div>
       <div class="status-card warning">
         <span class="metric-label">Blacklisted</span>
-        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(blacklisted))}</span>
+        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(blacklisted, 0))}</span>
         <span class="metric-meta">Flagged tokens</span>
       </div>
       <div class="status-card">
         <span class="metric-label">With OHLCV</span>
-        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(with_ohlcv))}</span>
+        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(with_ohlcv, 0))}</span>
         <span class="metric-meta">Historical data ready</span>
       </div>
       <div class="status-card">
