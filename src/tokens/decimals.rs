@@ -1,6 +1,20 @@
 // tokens/decimals.rs
 // Decimals lookup with memory caching and on-chain fallback
-// Refactored for new clean architecture (no dependency on old storage/provider)
+// 
+// ARCHITECTURE - SINGLE SOURCE OF TRUTH:
+// - Memory cache (DECIMALS_CACHE) is the PRIMARY source for all reads
+// - Database is ONLY for persistence and startup preload
+// - Chain RPC is ONLY fetched once per token, then cached forever
+// 
+// CACHE POPULATION:
+// 1. Startup: service_new.rs loads all DB decimals into cache
+// 2. Runtime: database.rs::upsert_token() caches on every DB write
+// 3. Fallback: decimals::get() fetches from chain if cache/DB miss
+// 
+// USAGE:
+// - Pool decoders (sync): MUST use get_cached() - no fallback
+// - Business logic (async): Use get() for guaranteed decimals with fallback
+// - NEVER read DB directly - always use cache or get()
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, RwLock};
@@ -12,6 +26,7 @@ pub use crate::constants::{SOL_DECIMALS, SOL_MINT};
 use tokio::sync::Mutex as AsyncMutex;
 
 // In-memory decimals cache for fast synchronous lookups
+// Populated at startup + updated on every DB write
 static DECIMALS_CACHE: std::sync::LazyLock<Arc<RwLock<HashMap<String, u8>>>> =
     std::sync::LazyLock::new(|| Arc::new(RwLock::new(HashMap::new())));
 
@@ -45,10 +60,13 @@ pub fn get_cached(mint: &str) -> Option<u8> {
         return None;
     }
 
-    DECIMALS_CACHE
+    let result = DECIMALS_CACHE
         .read()
         .ok()
-        .and_then(|m| m.get(mint).copied())
+        .and_then(|m| m.get(mint).copied());
+    
+    
+    result
 }
 
 /// Get decimals with fallback chain (cache → DB → chain)
@@ -291,7 +309,10 @@ async fn get_from_rugcheck(mint: &str) -> Option<u8> {
     }
 }
 
-/// Persist decimals to database
+/// Persist decimals to database (internal - only called by get() after chain fetch)
+/// 
+/// NOTE: This calls upsert_token() which will ALSO update the cache automatically.
+/// This ensures cache and DB stay synchronized.
 async fn persist_to_db(mint: &str, decimals: u8) -> Result<(), String> {
     use crate::tokens::database::get_global_database;
 

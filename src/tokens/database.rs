@@ -359,6 +359,15 @@ impl TokenDatabase {
         )
         .map_err(|e| TokenError::Database(format!("Failed to create tracking: {}", e)))?;
 
+        // CRITICAL: Update in-memory cache immediately after successful DB write
+        // This ensures the cache stays synchronized with the database
+        // Pool decoders rely on cached decimals being available
+        if let Some(d) = decimals {
+            if d > 0 {
+                crate::tokens::decimals::cache(mint, d);
+            }
+        }
+
         Ok(())
     }
 
@@ -438,6 +447,16 @@ impl TokenDatabase {
             .lock()
             .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
 
+        // First check how many tokens exist
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM tokens WHERE decimals IS NOT NULL AND decimals > 0", [], |row| row.get(0))
+            .unwrap_or(0);
+        
+        crate::logger::debug(
+            crate::logger::LogTag::Tokens,
+            &format!("[PRELOAD] Database query found {} tokens with decimals", count),
+        );
+
         let mut stmt = conn
             .prepare(
                 "SELECT mint, decimals FROM tokens WHERE decimals IS NOT NULL AND decimals > 0",
@@ -452,8 +471,15 @@ impl TokenDatabase {
             })
             .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
 
-        rows.collect::<Result<Vec<_>, _>>()
-            .map_err(|e| TokenError::Database(format!("Failed to collect: {}", e)))
+        let result = rows.collect::<Result<Vec<_>, _>>()
+            .map_err(|e| TokenError::Database(format!("Failed to collect: {}", e)))?;
+        
+        crate::logger::debug(
+            crate::logger::LogTag::Tokens,
+            &format!("[PRELOAD] Successfully collected {} decimals from database", result.len()),
+        );
+        
+        Ok(result)
     }
 
     // ========================================================================
