@@ -121,7 +121,7 @@ impl GeckoTerminalClient {
             Err(err) => {
                 self.stats.record_request(false, elapsed).await;
                 self.stats
-                    .record_error(format!("{} request failed: {}", endpoint, err))
+                    .record_error_with_event("GeckoTerminal", endpoint, format!("Request failed: {}", err))
                     .await;
                 Err(format!("Request failed: {}", err))
             }
@@ -143,7 +143,7 @@ impl GeckoTerminalClient {
             let body = response.text().await.unwrap_or_default();
             self.stats.record_request(false, elapsed).await;
             self.stats
-                .record_error(format!("{} HTTP {}: {}", endpoint, status, body))
+                .record_error_with_event("GeckoTerminal", endpoint, format!("HTTP {}: {}", status, body))
                 .await;
             // Simple 429 backoff to avoid hammering when provider clamps down
             if status.as_u16() == 429 {
@@ -161,7 +161,7 @@ impl GeckoTerminalClient {
             Err(err) => {
                 self.stats.record_request(false, elapsed).await;
                 self.stats
-                    .record_error(format!("{} parse error: {}", endpoint, err))
+                    .record_error_with_event("GeckoTerminal", endpoint, format!("Parse error: {}", err))
                     .await;
                 Err(format!("Failed to parse response: {}", err))
             }

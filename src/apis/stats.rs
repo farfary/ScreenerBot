@@ -1,4 +1,5 @@
 /// API statistics tracking
+use crate::events::{record_api_event, Severity};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -92,6 +93,38 @@ impl ApiStatsTracker {
 
     pub async fn record_error(&self, error_message: String) {
         *self.last_error.write().await = Some((Utc::now(), error_message));
+    }
+
+    /// Record error with event logging (for important API failures)
+    pub async fn record_error_with_event(&self, api_name: &str, action: &str, error_message: String) {
+        self.record_error(error_message.clone()).await;
+        
+        // Record API error event (sampled - every 10th error to avoid spam)
+        let failed = self.failed_requests.load(Ordering::Relaxed);
+        if failed % 10 == 1 {
+            tokio::spawn({
+                let api = api_name.to_string();
+                let act = action.to_string();
+                let err = error_message;
+                let total = self.total_requests.load(Ordering::Relaxed);
+                let success_rate = self.success_rate();
+                async move {
+                    record_api_event(
+                        &api,
+                        &act,
+                        Severity::Warn,
+                        serde_json::json!({
+                            "status": "error",
+                            "error": err,
+                            "total_requests": total,
+                            "failed_count": failed,
+                            "success_rate": format!("{:.1}%", success_rate),
+                        }),
+                    )
+                    .await;
+                }
+            });
+        }
     }
 
     pub fn record_cache_hit(&self) {

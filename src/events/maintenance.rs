@@ -457,6 +457,48 @@ pub async fn record_trader_event(
     crate::events::record_safe(event).await;
 }
 
+/// Record an API/RPC event with flexible payload metadata
+pub async fn record_api_event(
+    api_name: &str,
+    action: &str,
+    severity: Severity,
+    payload: Value,
+) {
+    let mut payload_obj: Map<String, Value> = match payload {
+        Value::Object(obj) => obj,
+        Value::Null => Map::new(),
+        other => {
+            let mut map = Map::new();
+            map.insert("details".to_string(), other);
+            map
+        }
+    };
+
+    payload_obj
+        .entry("api".to_string())
+        .or_insert_with(|| Value::String(api_name.to_string()));
+    payload_obj
+        .entry("action".to_string())
+        .or_insert_with(|| Value::String(action.to_string()));
+    payload_obj
+        .entry("event_time".to_string())
+        .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
+    payload_obj
+        .entry("message".to_string())
+        .or_insert_with(|| Value::String(format!("{} - {}", api_name, action)));
+
+    let event = Event::new(
+        EventCategory::Rpc,
+        Some(action.to_string()),
+        severity,
+        None,
+        None,
+        Value::Object(payload_obj),
+    );
+
+    crate::events::record_safe(event).await;
+}
+
 // =============================================================================
 // MCP INTEGRATION HELPERS
 // =============================================================================

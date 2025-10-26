@@ -3,6 +3,7 @@
 use std::sync::{Arc, LazyLock};
 
 use crate::config::get_config_clone;
+use crate::events::{record_api_event, Severity};
 use crate::logger::{self, LogTag};
 
 use super::coingecko::CoinGeckoClient;
@@ -70,6 +71,34 @@ impl ApiManager {
             && discovery_cfg.defillama.protocols_enabled;
 
         logger::info(LogTag::Api, "Initializing global API manager");
+
+        // Record API manager initialization event
+        tokio::spawn({
+            let dex = dexscreener_enabled;
+            let gecko = geckoterminal_enabled;
+            let rug = rug_enabled;
+            let jup = jup_enabled;
+            let cg = coingecko_enabled;
+            let dl = defillama_enabled;
+            async move {
+                record_api_event(
+                    "ApiManager",
+                    "initialization",
+                    Severity::Info,
+                    serde_json::json!({
+                        "enabled_apis": {
+                            "dexscreener": dex,
+                            "geckoterminal": gecko,
+                            "rugcheck": rug,
+                            "jupiter": jup,
+                            "coingecko": cg,
+                            "defillama": dl,
+                        },
+                    }),
+                )
+                .await;
+            }
+        });
 
         Self {
             dexscreener: DexScreenerClient::new(dexscreener_enabled, dex_timeout).unwrap_or_else(

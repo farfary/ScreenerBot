@@ -87,7 +87,7 @@ impl RugcheckClient {
             Ok(permit) => permit,
             Err(err) => {
                 self.stats
-                    .record_error(format!("{} rate limiter acquire failed: {}", endpoint, err))
+                    .record_error_with_event("Rugcheck", endpoint, format!("Rate limiter acquire failed: {}", err))
                     .await;
                 return Err(ApiError::RateLimitExceeded);
             }
@@ -104,7 +104,7 @@ impl RugcheckClient {
                 self.stats.record_cache_miss();
                 self.stats.record_request(false, elapsed).await;
                 self.stats
-                    .record_error(format!("{} request failed: {}", endpoint, err))
+                    .record_error_with_event("Rugcheck", endpoint, format!("Request failed: {}", err))
                     .await;
                 Err(ApiError::NetworkError(err.to_string()))
             }
@@ -122,7 +122,7 @@ impl RugcheckClient {
             self.stats.record_request(false, elapsed).await;
             let body = response.text().await.unwrap_or_default();
             self.stats
-                .record_error(format!("{} HTTP {}: {}", endpoint, status, body))
+                .record_error_with_event("Rugcheck", endpoint, format!("HTTP {}: {}", status, body))
                 .await;
 
             // Check for 404 Not Found
@@ -149,7 +149,7 @@ impl RugcheckClient {
             Err(err) => {
                 self.stats.record_request(false, elapsed).await;
                 self.stats
-                    .record_error(format!("{} parse error: {}", endpoint, err))
+                    .record_error_with_event("Rugcheck", endpoint, format!("Parse error: {}", err))
                     .await;
                 Err(ApiError::InvalidResponse(err.to_string()))
             }
