@@ -383,19 +383,6 @@ function createLifecycle() {
               },
             },
           ],
-          buttons: [
-            {
-              id: "refresh",
-              label: "Refresh",
-              variant: "primary",
-              onClick: () => {
-                requestReload("manual", {
-                  silent: false,
-                  preserveScroll: false,
-                }).catch(() => {});
-              },
-            },
-          ],
         },
       });
 
