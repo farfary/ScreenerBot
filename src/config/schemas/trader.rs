@@ -30,6 +30,13 @@ config_struct! {
             category: "Core Trading",
         })]
         trade_size_sol: f64 = 0.005,
+        #[metadata(field_metadata! {
+            label: "Entry Sizes",
+            hint: "Preset SOL amounts for manual trades [0.005, 0.01, 0.02, 0.05]",
+            impact: "medium",
+            category: "Core Trading",
+        })]
+        entry_sizes: Vec<f64> = vec![0.005, 0.01, 0.02, 0.05],
 
         // Profit thresholds
         #[metadata(field_metadata! {

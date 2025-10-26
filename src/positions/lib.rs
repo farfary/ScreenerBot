@@ -69,9 +69,12 @@ async fn find_position_by_signature(signature: &str) -> Option<(String, usize)> 
 
 /// Unified profit/loss calculation for both open and closed positions
 /// Supports partial exits and DCA with average entry price
-/// Returns (realized_pnl_sol, unrealized_pnl_sol, total_pnl_sol, total_pnl_percent)
+/// Returns (pnl_sol, pnl_percent)
 /// For open positions: calculates both realized (from partial exits) and unrealized P&L
 /// For closed positions: returns only realized P&L
+/// 
+/// NOTE: Returns (0.0, 0.0) if calculation fails due to invalid prices.
+/// Use calculate_position_pnl_safe() wrapper to distinguish between zero PnL and errors.
 pub async fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -> (f64, f64) {
     // Use average_entry_price for positions with DCA support
     let entry_price =
@@ -309,6 +312,46 @@ pub fn calculate_position_total_fees(position: &Position) -> f64 {
     let entry_fees_sol = lamports_to_sol(position.entry_fee_lamports.unwrap_or(0));
     let exit_fees_sol = lamports_to_sol(position.exit_fee_lamports.unwrap_or(0));
     entry_fees_sol + exit_fees_sol
+}
+
+/// Safe wrapper around calculate_position_pnl that returns Option to distinguish errors
+/// Returns None if calculation fails (invalid prices, missing decimals, etc.)
+/// Returns Some((pnl_sol, pnl_percent)) for successful calculations (may be zero for break-even)
+pub async fn calculate_position_pnl_safe(
+    position: &Position,
+    current_price: Option<f64>,
+) -> Option<(f64, f64)> {
+    // Pre-validate entry price
+    let entry_price = if position.average_entry_price > 0.0 && position.average_entry_price.is_finite() {
+        position.average_entry_price
+    } else {
+        position.effective_entry_price.unwrap_or(position.entry_price)
+    };
+
+    if entry_price <= 0.0 || !entry_price.is_finite() {
+        logger::debug(
+            LogTag::Positions,
+            &format!("Cannot calculate PnL for {} - invalid entry price: {}", position.symbol, entry_price),
+        );
+        return None;
+    }
+
+    // Pre-validate current price for open positions
+    if let Some(current) = current_price {
+        if current <= 0.0 || !current.is_finite() {
+            logger::debug(
+                LogTag::Positions,
+                &format!("Cannot calculate PnL for {} - invalid current price: {}", position.symbol, current),
+            );
+            return None;
+        }
+    }
+
+    // Call the calculation function
+    let result = calculate_position_pnl(position, current_price).await;
+    
+    // Return result wrapped in Some - caller can now distinguish None (error) from Some((0.0, 0.0)) (break-even)
+    Some(result)
 }
 
 // ==================== TOKEN SNAPSHOT FUNCTIONS ====================

@@ -36,6 +36,7 @@ pub struct TokenBalanceInfo {
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/wallet/current", get(get_wallet_current))
+        .route("/wallet/balance", get(get_wallet_balance)) // Alias for /wallet/current
         .route("/wallet/dashboard", post(get_wallet_dashboard))
         .route("/wallet/dashboard/refresh", post(refresh_wallet_dashboard))
         .route("/wallet/flow-cache", get(get_wallet_flow_cache_stats))
@@ -68,6 +69,11 @@ async fn get_wallet_current() -> Json<Option<WalletCurrentResponse>> {
         }
         _ => Json(None),
     }
+}
+
+/// Get wallet balance (alias for get_wallet_current)
+async fn get_wallet_balance() -> Json<Option<WalletCurrentResponse>> {
+    get_wallet_current().await
 }
 
 #[derive(Debug, Deserialize)]

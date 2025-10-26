@@ -3,6 +3,7 @@ import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";
 import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
+import { TradeActionDialog } from "../ui/trade_action_dialog.js";
 
 // Sub-tabs (views) configuration
 const TOKEN_VIEWS = [
@@ -109,6 +110,9 @@ function createLifecycle() {
   let table = null;
   let poller = null;
   let tabBar = null;
+  let tradeDialog = null;
+  let walletBalance = 0;
+  let lastUpdateInterval = null; // Track interval for updating "Last Update" display
 
   const state = {
     view: DEFAULT_VIEW,
@@ -595,6 +599,9 @@ function createLifecycle() {
 
   return {
     init(ctx) {
+      // Initialize trade dialog
+      tradeDialog = new TradeActionDialog();
+
       // Initialize tab bar for tokens page
       tabBar = new TabBar({
         container: "#subTabsContainer",
@@ -959,18 +966,36 @@ function createLifecycle() {
         const mint = btn.getAttribute("data-mint");
         if (!action || !mint) return;
 
+        // Find row data
+        const row = table.getData().find((r) => r.mint === mint);
+        if (!row) {
+          Utils.showToast("Token data not found", "error");
+          return;
+        }
+
         try {
           if (action === "buy") {
-            let sizeStr = prompt("Buy size (SOL) — leave empty for default");
-            let size = sizeStr != null && String(sizeStr).trim() !== "" ? Number(sizeStr) : null;
-            if (size != null && (!Number.isFinite(size) || size <= 0)) {
-              return Utils.showToast("Invalid size", "error");
-            }
+            // Open dialog
+            const result = await tradeDialog.open({
+              action: "buy",
+              mint: mint,
+              symbol: row.symbol || "?",
+              context: {
+                balance: walletBalance,
+              },
+            });
+
+            if (!result) return; // User cancelled
+
+            // Proceed with API call
             btn.disabled = true;
             const res = await fetch("/api/trader/manual/buy", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ mint, ...(size ? { size_sol: size } : {}) }),
+              body: JSON.stringify({
+                mint,
+                ...(result.amount ? { size_sol: result.amount } : {}),
+              }),
             });
             const data = await res.json();
             btn.disabled = false;
@@ -978,16 +1003,43 @@ function createLifecycle() {
             Utils.showToast("✅ Buy placed", "success");
             requestReload("manual", { silent: false, preserveScroll: true }).catch(() => {});
           } else if (action === "add") {
-            let sizeStr = prompt("Add size (SOL) — leave empty for default (50%)");
-            let size = sizeStr != null && String(sizeStr).trim() !== "" ? Number(sizeStr) : null;
-            if (size != null && (!Number.isFinite(size) || size <= 0)) {
-              return Utils.showToast("Invalid size", "error");
+            // Fetch config for entry sizes
+            let entrySizes = [0.005, 0.01, 0.02, 0.05];
+            try {
+              const configRes = await fetch("/api/config/trader");
+              if (configRes.ok) {
+                const configData = await configRes.json();
+                if (Array.isArray(configData?.data?.entry_sizes)) {
+                  entrySizes = configData.data.entry_sizes;
+                }
+              }
+            } catch (err) {
+              console.warn("Failed to fetch entry_sizes config:", err);
             }
+
+            // Open dialog
+            const result = await tradeDialog.open({
+              action: "add",
+              mint: mint,
+              symbol: row.symbol || "?",
+              context: {
+                balance: walletBalance,
+                entrySize: row.entry_sol || 0.005,
+                entrySizes: entrySizes,
+              },
+            });
+
+            if (!result) return; // User cancelled
+
+            // Proceed with API call
             btn.disabled = true;
             const res = await fetch("/api/trader/manual/add", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ mint, ...(size ? { size_sol: size } : {}) }),
+              body: JSON.stringify({
+                mint,
+                ...(result.amount ? { size_sol: result.amount } : {}),
+              }),
             });
             const data = await res.json();
             btn.disabled = false;
@@ -995,17 +1047,24 @@ function createLifecycle() {
             Utils.showToast("✅ Added to position", "success");
             requestReload("manual", { silent: false, preserveScroll: true }).catch(() => {});
           } else if (action === "sell") {
-            let pctStr = prompt("Sell percentage (1-100). Leave empty to sell 100%.");
-            let body;
-            if (pctStr == null || String(pctStr).trim() === "") {
-              body = { mint, close_all: true };
-            } else {
-              const pct = Number(pctStr);
-              if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
-                return Utils.showToast("Invalid percentage", "error");
-              }
-              body = { mint, percentage: pct };
-            }
+            // Open dialog
+            const result = await tradeDialog.open({
+              action: "sell",
+              mint: mint,
+              symbol: row.symbol || "?",
+              context: {
+                holdings: row.token_amount,
+              },
+            });
+
+            if (!result) return; // User cancelled
+
+            // Build request body
+            const body =
+              result.percentage === 100
+                ? { mint, close_all: true }
+                : { mint, percentage: result.percentage };
+
             btn.disabled = true;
             const res = await fetch("/api/trader/manual/sell", {
               method: "POST",
@@ -1096,6 +1155,28 @@ function createLifecycle() {
     },
 
     activate(ctx) {
+      // Fetch wallet balance for dialog context
+      fetch("/api/wallet/balance")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.sol_balance != null) {
+            walletBalance = data.sol_balance;
+          }
+        })
+        .catch(() => {
+          console.warn("[Tokens] Failed to fetch wallet balance");
+        });
+
+      // Start interval to update "Last Update" display every second
+      if (!lastUpdateInterval) {
+        lastUpdateInterval = setInterval(() => {
+          // Only update if we have a lastUpdate timestamp
+          if (state.lastUpdate && table) {
+            updateToolbar();
+          }
+        }, 1000);
+      }
+
       if (!poller) {
         poller = ctx.managePoller(
           new Poller(() => requestReload("poll", { silent: true, preserveScroll: true }), {
@@ -1111,9 +1192,23 @@ function createLifecycle() {
 
     deactivate() {
       table?.cancelPendingLoad();
+      // Stop the interval when page is deactivated
+      if (lastUpdateInterval) {
+        clearInterval(lastUpdateInterval);
+        lastUpdateInterval = null;
+      }
     },
 
     dispose() {
+      // Clean up interval
+      if (lastUpdateInterval) {
+        clearInterval(lastUpdateInterval);
+        lastUpdateInterval = null;
+      }
+      if (tradeDialog) {
+        tradeDialog.destroy();
+        tradeDialog = null;
+      }
       if (table) {
         table.destroy();
         table = null;
@@ -1128,6 +1223,7 @@ function createLifecycle() {
       state.sort = { ...DEFAULT_SERVER_SORT };
       state.filters = getDefaultFiltersForView(DEFAULT_VIEW);
       state.summary = { ...DEFAULT_SUMMARY };
+      walletBalance = 0;
     },
   };
 }

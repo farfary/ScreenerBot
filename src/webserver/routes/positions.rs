@@ -66,6 +66,13 @@ pub struct PositionResponse {
     pub pnl_percent: Option<f64>,
     pub unrealized_pnl: Option<f64>,
     pub unrealized_pnl_percent: Option<f64>,
+    // DCA & Partial Exit fields
+    pub dca_count: u32,
+    pub average_entry_price: f64,
+    pub partial_exit_count: u32,
+    pub average_exit_price: Option<f64>,
+    pub remaining_token_amount: Option<u64>,
+    pub total_exited_amount: u64,
 }
 
 #[derive(Debug, Serialize)]
@@ -213,43 +220,12 @@ async fn map_position_to_response_async(p: &positions::Position) -> PositionResp
     let exit_time_ts = p.exit_time.map(|dt| dt.timestamp());
     let current_price_updated_ts = p.current_price_updated.map(|dt| dt.timestamp());
 
-    let (pnl, pnl_percent) = if p.transaction_exit_verified {
-        if let (Some(exit_price), Some(sol_received)) = (p.effective_exit_price, p.sol_received) {
-            let invested = p.entry_size_sol;
-            let pnl_value = sol_received - invested;
-            let pnl_pct = if invested > 0.0 {
-                (pnl_value / invested) * 100.0
-            } else {
-                0.0
-            };
-            (Some(pnl_value), Some(pnl_pct))
-        } else if let (Some(exit_price), entry_price) = (p.exit_price, p.entry_price) {
-            let pnl_pct = ((exit_price - entry_price) / entry_price) * 100.0;
-            let pnl_value = p.entry_size_sol * (pnl_pct / 100.0);
-            (Some(pnl_value), Some(pnl_pct))
-        } else {
-            (None, None)
-        }
-    } else {
-        (None, None)
-    };
-
-    let (unrealized_pnl, unrealized_pnl_percent) = if !p.transaction_exit_verified {
-        if let Some(current_price) = p.current_price {
-            let entry_price = p.effective_entry_price.unwrap_or(p.entry_price);
-            if entry_price > 0.0 {
-                let pnl_pct = ((current_price - entry_price) / entry_price) * 100.0;
-                let pnl_value = p.entry_size_sol * (pnl_pct / 100.0);
-                (Some(pnl_value), Some(pnl_pct))
-            } else {
-                (None, None)
-            }
-        } else {
-            (None, None)
-        }
-    } else {
-        (None, None)
-    };
+    // NO CALCULATIONS - just read pre-calculated values from position object
+    // Positions system maintains these values automatically
+    let pnl = p.pnl;
+    let pnl_percent = p.pnl_percent;
+    let unrealized_pnl = p.unrealized_pnl;
+    let unrealized_pnl_percent = p.unrealized_pnl_percent;
 
     PositionResponse {
         id: p.id,
@@ -288,6 +264,12 @@ async fn map_position_to_response_async(p: &positions::Position) -> PositionResp
         pnl_percent,
         unrealized_pnl,
         unrealized_pnl_percent,
+        dca_count: p.dca_count,
+        average_entry_price: p.average_entry_price,
+        partial_exit_count: p.partial_exit_count,
+        average_exit_price: p.average_exit_price,
+        remaining_token_amount: p.remaining_token_amount,
+        total_exited_amount: p.total_exited_amount,
     }
 }
 

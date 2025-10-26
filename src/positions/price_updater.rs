@@ -1,6 +1,7 @@
 use crate::logger::{self, LogTag};
 use crate::pools;
 use crate::positions::{get_open_positions, update_position_price};
+use crate::positions::state::update_position_state;
 use crate::tokens;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -47,22 +48,25 @@ async fn update_all_position_prices() {
 
     for position in positions {
         match get_current_price(&position.mint).await {
-            Some((price, source)) => match update_position_price(&position.mint, price).await {
-                Ok(_) => {
-                    updated_count += 1;
-                    match source {
-                        PriceSource::Pool => pool_price_count += 1,
-                        PriceSource::Api => api_price_count += 1,
+            Some((price, source)) => {
+                // Atomically update both price AND PnL in single operation
+                match update_position_price_and_pnl(&position.mint, price).await {
+                    Ok(_) => {
+                        updated_count += 1;
+                        match source {
+                            PriceSource::Pool => pool_price_count += 1,
+                            PriceSource::Api => api_price_count += 1,
+                        }
+                    }
+                    Err(e) => {
+                        logger::debug(
+                            LogTag::Positions,
+                            &format!("Failed to update price+PnL for {}: {}", position.symbol, e),
+                        );
+                        failed_count += 1;
                     }
                 }
-                Err(e) => {
-                    logger::debug(
-                        LogTag::Positions,
-                        &format!("Failed to update price for {}: {}", position.symbol, e),
-                    );
-                    failed_count += 1;
-                }
-            },
+            }
             None => {
                 logger::debug(
                     LogTag::Positions,
@@ -77,11 +81,74 @@ async fn update_all_position_prices() {
         logger::debug(
             LogTag::Positions,
             &format!(
-                "Price update: updated={} (pool={}, api={}) failed={}",
+                "Price+PnL update: updated={} (pool={}, api={}) failed={}",
                 updated_count, pool_price_count, api_price_count, failed_count
             ),
         );
     }
+}
+
+/// Atomically update position price and PnL in a single database operation
+/// This eliminates the race condition and reduces DB writes from 2 to 1 per position
+async fn update_position_price_and_pnl(token_mint: &str, current_price: f64) -> Result<(), String> {
+    if !current_price.is_finite() || current_price <= 0.0 {
+        return Err(format!("Invalid price: {}", current_price));
+    }
+
+    let _lock = crate::positions::acquire_position_lock(token_mint).await;
+
+    let now = chrono::Utc::now();
+    
+    // First, update price in memory and get the updated position
+    let updated = update_position_state(token_mint, |pos| {
+        pos.current_price = Some(current_price);
+        pos.current_price_updated = Some(now);
+
+        if current_price > pos.price_highest {
+            pos.price_highest = current_price;
+        }
+
+        if current_price < pos.price_lowest || pos.price_lowest == 0.0 {
+            pos.price_lowest = current_price;
+        }
+    })
+    .await;
+
+    if !updated {
+        return Err(format!("Position not found for mint: {}", token_mint));
+    }
+
+    // Get updated position for PnL calculation
+    let mut position = crate::positions::get_position_by_mint(token_mint)
+        .await
+        .ok_or_else(|| format!("Position disappeared after price update: {}", token_mint))?;
+
+    // Calculate PnL with the new price
+    let (pnl_sol, pnl_pct) = crate::positions::calculate_position_pnl(&position, Some(current_price)).await;
+    
+    // Update PnL fields in memory
+    position.unrealized_pnl = Some(pnl_sol);
+    position.unrealized_pnl_percent = Some(pnl_pct);
+    
+    // Store back to in-memory state
+    update_position_state(token_mint, |pos| {
+        pos.unrealized_pnl = Some(pnl_sol);
+        pos.unrealized_pnl_percent = Some(pnl_pct);
+    }).await;
+    
+    // Release per-mint lock before database write
+    drop(_lock);
+    
+    // Single database write with all updated fields
+    crate::positions::update_position(&position).await.map_err(|e| {
+        logger::warning(
+            LogTag::Positions,
+            &format!("Failed to sync price+PnL to database for {}: {}", token_mint, e),
+        );
+        e
+    })?;
+
+    Ok(())
 }
 
 #[derive(Debug)]

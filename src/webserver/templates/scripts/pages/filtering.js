@@ -1424,7 +1424,7 @@ async function handleRefreshSnapshot() {
 
   try {
     await refreshSnapshot();
-    Utils.showToast("Filtering snapshot refreshed", "success");
+    // Removed success toast - silent refresh, only show errors
     // Reload stats after refresh
     setTimeout(() => loadStats(), 1000);
   } catch (error) {

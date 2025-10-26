@@ -40,6 +40,7 @@ const POSITION_SELECT_COLUMNS: &str = r#"
     transaction_entry_verified, transaction_exit_verified,
     entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
     phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
+    pnl, pnl_percent, unrealized_pnl, unrealized_pnl_percent,
     remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
     dca_count, average_entry_price, last_dca_time
 "#;
@@ -84,6 +85,11 @@ CREATE TABLE IF NOT EXISTS positions (
     phantom_first_seen TEXT, -- When first confirmed phantom
     synthetic_exit BOOLEAN NOT NULL DEFAULT false,
     closed_reason TEXT, -- Optional reason for closure
+    -- Pre-calculated P&L values (updated by positions system)
+    pnl REAL, -- Realized P&L in SOL (for closed positions)
+    pnl_percent REAL, -- Realized P&L percentage (for closed positions)
+    unrealized_pnl REAL, -- Unrealized P&L in SOL (for open positions)
+    unrealized_pnl_percent REAL, -- Unrealized P&L percentage (for open positions)
     -- Partial exit tracking
     remaining_token_amount INTEGER, -- Current holdings after partial exits
     total_exited_amount INTEGER NOT NULL DEFAULT 0, -- Cumulative tokens sold
@@ -217,6 +223,14 @@ CREATE TABLE IF NOT EXISTS token_snapshots (
     data_freshness_score INTEGER DEFAULT 0, -- 0-100 based on data recency
     FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE CASCADE
 );
+"#;
+
+const MIGRATION_ADD_PNL_FIELDS: &str = r#"
+-- Add P&L fields to positions table (safe migration - columns are nullable)
+ALTER TABLE positions ADD COLUMN pnl REAL;
+ALTER TABLE positions ADD COLUMN pnl_percent REAL;
+ALTER TABLE positions ADD COLUMN unrealized_pnl REAL;
+ALTER TABLE positions ADD COLUMN unrealized_pnl_percent REAL;
 "#;
 
 // Performance indexes
@@ -483,6 +497,38 @@ impl PositionsDatabase {
         conn.execute(SCHEMA_TOKEN_SNAPSHOTS, [])
             .map_err(|e| format!("Failed to create token_snapshots table: {}", e))?;
 
+        // Migrate existing database to add PnL fields if needed
+        // Check if migration is needed by attempting to add columns
+        match conn.execute_batch(MIGRATION_ADD_PNL_FIELDS) {
+            Ok(_) => {
+                if log_initialization {
+                    crate::logger::info(
+                        crate::logger::LogTag::Positions,
+                        "✅ PnL columns migration completed successfully"
+                    );
+                }
+            }
+            Err(e) => {
+                let err_msg = e.to_string().to_lowercase();
+                // SQLite returns "duplicate column name" if columns already exist - this is OK
+                if err_msg.contains("duplicate column") {
+                    if log_initialization {
+                        crate::logger::debug(
+                            crate::logger::LogTag::Positions,
+                            "PnL columns already exist, skipping migration"
+                        );
+                    }
+                } else {
+                    // Real error - this is critical and should be logged
+                    crate::logger::error(
+                        crate::logger::LogTag::Positions,
+                        &format!("⚠️ CRITICAL: Failed to migrate PnL columns: {}", e)
+                    );
+                    return Err(format!("Database migration failed: {}", e));
+                }
+            }
+        }
+
         // Create all indexes
         for index_sql in POSITIONS_INDEXES {
             conn.execute(index_sql, [])
@@ -597,12 +643,13 @@ impl PositionsDatabase {
                 transaction_entry_verified, transaction_exit_verified,
                 entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
                 phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
+                pnl, pnl_percent, unrealized_pnl, unrealized_pnl_percent,
                 remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
                 dca_count, average_entry_price, last_dca_time
             ) VALUES (
                 ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
                 ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31,
-                ?32, ?33, ?34, ?35, ?36, ?37, ?38
+                ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42
             ) RETURNING id
             "#,
                 params![
@@ -637,6 +684,10 @@ impl PositionsDatabase {
                     position.phantom_first_seen.map(|t| t.to_rfc3339()),
                     position.synthetic_exit,
                     position.closed_reason,
+                    position.pnl,
+                    position.pnl_percent,
+                    position.unrealized_pnl,
+                    position.unrealized_pnl_percent,
                     position.remaining_token_amount.map(|t| t as i64),
                     position.total_exited_amount as i64,
                     position.average_exit_price,
@@ -709,8 +760,9 @@ impl PositionsDatabase {
                 entry_fee_lamports = ?25, exit_fee_lamports = ?26, current_price = ?27,
                 current_price_updated = ?28, phantom_confirmations = ?29, phantom_first_seen = ?30,
                 synthetic_exit = ?31, closed_reason = ?32,
-                remaining_token_amount = ?33, total_exited_amount = ?34, average_exit_price = ?35,
-                partial_exit_count = ?36, dca_count = ?37, average_entry_price = ?38, last_dca_time = ?39,
+                pnl = ?33, pnl_percent = ?34, unrealized_pnl = ?35, unrealized_pnl_percent = ?36,
+                remaining_token_amount = ?37, total_exited_amount = ?38, average_exit_price = ?39,
+                partial_exit_count = ?40, dca_count = ?41, average_entry_price = ?42, last_dca_time = ?43,
                 updated_at = datetime('now')
             WHERE id = ?1
             "#,
@@ -747,6 +799,10 @@ impl PositionsDatabase {
                     position.phantom_first_seen.map(|t| t.to_rfc3339()),
                     position.synthetic_exit,
                     position.closed_reason,
+                    position.pnl,
+                    position.pnl_percent,
+                    position.unrealized_pnl,
+                    position.unrealized_pnl_percent,
                     position.remaining_token_amount.map(|t| t as i64),
                     position.total_exited_amount as i64,
                     position.average_exit_price,
@@ -954,24 +1010,13 @@ impl PositionsDatabase {
     ) -> Result<Option<Position>, String> {
         let conn = self.get_connection()?;
 
+        let query = format!(
+            "SELECT {} FROM positions WHERE exit_transaction_signature = ?1",
+            POSITION_SELECT_COLUMNS
+        );
+
         let result = conn
-            .query_row(
-                r#"
-            SELECT id, mint, symbol, name, entry_price, entry_time, exit_price, exit_time,
-                   position_type, entry_size_sol, total_size_sol, price_highest, price_lowest,
-                   entry_transaction_signature, exit_transaction_signature, token_amount,
-                   effective_entry_price, effective_exit_price, sol_received,
-                   profit_target_min, profit_target_max, liquidity_tier,
-                   transaction_entry_verified, transaction_exit_verified,
-                   entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
-                   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
-                   remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
-                   dca_count, average_entry_price, last_dca_time
-            FROM positions WHERE exit_transaction_signature = ?1
-            "#,
-                params![signature],
-                |row| self.row_to_position(row),
-            )
+            .query_row(&query, params![signature], |row| self.row_to_position(row))
             .optional()
             .map_err(|e| format!("Failed to get position by exit signature: {}", e))?;
 
@@ -986,20 +1031,10 @@ impl PositionsDatabase {
     ) -> Result<Vec<Position>, String> {
         let conn = self.get_connection()?;
 
-        let mut query = r#"
-            SELECT id, mint, symbol, name, entry_price, entry_time, exit_price, exit_time,
-                   position_type, entry_size_sol, total_size_sol, price_highest, price_lowest,
-                   entry_transaction_signature, exit_transaction_signature, token_amount,
-                   effective_entry_price, effective_exit_price, sol_received,
-                   profit_target_min, profit_target_max, liquidity_tier,
-                   transaction_entry_verified, transaction_exit_verified,
-                   entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
-                   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
-                   remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
-                   dca_count, average_entry_price, last_dca_time
-            FROM positions ORDER BY entry_time DESC
-        "#
-        .to_string();
+        let mut query = format!(
+            "SELECT {} FROM positions ORDER BY entry_time DESC",
+            POSITION_SELECT_COLUMNS
+        );
 
         if let Some(limit) = limit {
             query.push_str(&format!(" LIMIT {}", limit));
@@ -1029,22 +1064,13 @@ impl PositionsDatabase {
     pub async fn get_open_positions(&self) -> Result<Vec<Position>, String> {
         let conn = self.get_connection()?;
 
+        let query = format!(
+            "SELECT {} FROM positions WHERE transaction_exit_verified = 0 ORDER BY entry_time DESC",
+            POSITION_SELECT_COLUMNS
+        );
+
         let mut stmt = conn
-            .prepare(
-                r#"
-            SELECT id, mint, symbol, name, entry_price, entry_time, exit_price, exit_time,
-                   position_type, entry_size_sol, total_size_sol, price_highest, price_lowest,
-                   entry_transaction_signature, exit_transaction_signature, token_amount,
-                   effective_entry_price, effective_exit_price, sol_received,
-                   profit_target_min, profit_target_max, liquidity_tier,
-                   transaction_entry_verified, transaction_exit_verified,
-                   entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
-                   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
-                   remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
-                   dca_count, average_entry_price, last_dca_time
-            FROM positions WHERE transaction_exit_verified = 0 ORDER BY entry_time DESC
-            "#,
-            )
+            .prepare(&query)
             .map_err(|e| format!("Failed to prepare open positions query: {}", e))?;
 
         let position_iter = stmt
@@ -1064,22 +1090,13 @@ impl PositionsDatabase {
     pub async fn get_closed_positions(&self) -> Result<Vec<Position>, String> {
         let conn = self.get_connection()?;
 
+        let query = format!(
+            "SELECT {} FROM positions WHERE transaction_exit_verified = 1 ORDER BY exit_time DESC",
+            POSITION_SELECT_COLUMNS
+        );
+
         let mut stmt = conn
-            .prepare(
-                r#"
-            SELECT id, mint, symbol, name, entry_price, entry_time, exit_price, exit_time,
-                   position_type, entry_size_sol, total_size_sol, price_highest, price_lowest,
-                   entry_transaction_signature, exit_transaction_signature, token_amount,
-                   effective_entry_price, effective_exit_price, sol_received,
-                   profit_target_min, profit_target_max, liquidity_tier,
-                   transaction_entry_verified, transaction_exit_verified,
-                   entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
-                   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
-                   remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
-                   dca_count, average_entry_price, last_dca_time
-            FROM positions WHERE transaction_exit_verified = 1 ORDER BY exit_time DESC
-            "#,
-            )
+            .prepare(&query)
             .map_err(|e| format!("Failed to prepare closed positions query: {}", e))?;
 
         let position_iter = stmt
@@ -1127,25 +1144,14 @@ impl PositionsDatabase {
         limit: usize,
     ) -> Result<Vec<Position>, String> {
         let conn = self.get_connection()?;
+
+        let query = format!(
+            "SELECT {} FROM positions WHERE mint = ?1 AND transaction_exit_verified = 1 AND exit_price IS NOT NULL AND exit_time IS NOT NULL ORDER BY exit_time DESC LIMIT ?2",
+            POSITION_SELECT_COLUMNS
+        );
+
         let mut stmt = conn
-            .prepare(
-                r#"
-            SELECT id, mint, symbol, name, entry_price, entry_time, exit_price, exit_time,
-                   position_type, entry_size_sol, total_size_sol, price_highest, price_lowest,
-                   entry_transaction_signature, exit_transaction_signature, token_amount,
-                   effective_entry_price, effective_exit_price, sol_received,
-                   profit_target_min, profit_target_max, liquidity_tier,
-                   transaction_entry_verified, transaction_exit_verified,
-                   entry_fee_lamports, exit_fee_lamports, current_price, current_price_updated,
-                   phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
-                   remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
-                   dca_count, average_entry_price, last_dca_time
-            FROM positions WHERE mint = ?1 AND transaction_exit_verified = 1
-              AND exit_price IS NOT NULL AND exit_time IS NOT NULL
-            ORDER BY datetime(exit_time) DESC
-            LIMIT ?2
-            "#,
-            )
+            .prepare(&query)
             .map_err(|e| format!("Failed to prepare recent closed positions query: {}", e))?;
 
         let rows = stmt
@@ -1944,6 +1950,11 @@ impl PositionsDatabase {
             phantom_first_seen,
             synthetic_exit: row.get("synthetic_exit")?,
             closed_reason: row.get("closed_reason")?,
+            // Pre-calculated P&L fields
+            pnl: row.get::<_, Option<f64>>("pnl").ok().flatten(),
+            pnl_percent: row.get::<_, Option<f64>>("pnl_percent").ok().flatten(),
+            unrealized_pnl: row.get::<_, Option<f64>>("unrealized_pnl").ok().flatten(),
+            unrealized_pnl_percent: row.get::<_, Option<f64>>("unrealized_pnl_percent").ok().flatten(),
             // New fields for partial exit and DCA support
             remaining_token_amount: row
                 .get::<_, Option<i64>>("remaining_token_amount")?

@@ -1,9 +1,9 @@
-/* global prompt */
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";
 import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
+import { TradeActionDialog } from "../ui/trade_action_dialog.js";
 
 const SUB_TABS = [
   { id: "open", label: "📈 Open" },
@@ -14,6 +14,8 @@ function createLifecycle() {
   let table = null;
   let poller = null;
   let tabBar = null;
+  let tradeDialog = null;
+  let walletBalance = 0;
 
   const state = {
     view: "open", // 'open' | 'closed'
@@ -41,6 +43,23 @@ function createLifecycle() {
   const pnlCell = (v) => Utils.formatPnL(v, { decimals: 4 });
   const percentCell = (v) => Utils.formatPercent(v, { style: "pnl", decimals: 2, fallback: "—" });
   const timeCell = (v) => Utils.formatTimeFromSeconds(v, { includeSeconds: false });
+
+  const dcaCell = (count) => {
+    if (!count || count === 0) return "—";
+    return `<span class="chip">${count} DCA${count > 1 ? "s" : ""}</span>`;
+  };
+
+  const partialExitsCell = (count) => {
+    if (!count || count === 0) return "—";
+    return `<span class="chip warning">${count} exit${count > 1 ? "s" : ""}</span>`;
+  };
+
+  const currentSizeCell = (remaining, original) => {
+    if (!remaining || !original || original === 0) return "—";
+    const pct = Math.round((remaining / original) * 100);
+    const cls = pct === 100 ? "success" : pct >= 50 ? "warning" : "danger";
+    return `<span class="chip ${cls}">${pct}%</span>`;
+  };
 
   const columnsOpen = [
     {
@@ -76,8 +95,22 @@ function createLifecycle() {
       },
     },
     {
-      id: "entry_price",
-      label: "Entry Price (SOL)",
+      id: "entry_time",
+      label: "Entry Time",
+      sortable: true,
+      minWidth: 140,
+      render: (v) => timeCell(v),
+    },
+    {
+      id: "dca_count",
+      label: "DCA",
+      sortable: true,
+      minWidth: 80,
+      render: (v) => dcaCell(v),
+    },
+    {
+      id: "average_entry_price",
+      label: "Avg Entry (SOL)",
       sortable: true,
       minWidth: 140,
       render: (v) => priceCell(v),
@@ -90,11 +123,25 @@ function createLifecycle() {
       render: (v) => (v == null ? "—" : priceCell(v)),
     },
     {
-      id: "entry_size_sol",
-      label: "Entry Size",
+      id: "total_size_sol",
+      label: "Total Invested",
       sortable: true,
       minWidth: 120,
       render: (v) => solCell(v),
+    },
+    {
+      id: "current_size",
+      label: "Size",
+      sortable: true,
+      minWidth: 80,
+      render: (_v, r) => currentSizeCell(r.remaining_token_amount, r.token_amount),
+    },
+    {
+      id: "partial_exit_count",
+      label: "Exits",
+      sortable: true,
+      minWidth: 90,
+      render: (v) => partialExitsCell(v),
     },
     {
       id: "unrealized_pnl",
@@ -110,13 +157,6 @@ function createLifecycle() {
       minWidth: 110,
       render: (v) => percentCell(v),
     },
-    {
-      id: "entry_time",
-      label: "Entry Time",
-      sortable: true,
-      minWidth: 140,
-      render: (v) => timeCell(v),
-    },
   ];
 
   const columnsClosed = [
@@ -129,25 +169,46 @@ function createLifecycle() {
       render: (_v, r) => tokenCell(r),
     },
     {
-      id: "effective_entry_price",
-      label: "Eff. Entry (SOL)",
+      id: "exit_time",
+      label: "Exit Time",
       sortable: true,
       minWidth: 140,
-      render: (v, r) => priceCell(v ?? r.entry_price),
+      render: (v) => (v == null ? "—" : timeCell(v)),
     },
     {
-      id: "effective_exit_price",
-      label: "Eff. Exit (SOL)",
+      id: "dca_count",
+      label: "DCA",
+      sortable: true,
+      minWidth: 80,
+      render: (v) => dcaCell(v),
+    },
+    {
+      id: "average_entry_price",
+      label: "Avg Entry (SOL)",
+      sortable: true,
+      minWidth: 140,
+      render: (v, r) => priceCell(v || r.entry_price),
+    },
+    {
+      id: "average_exit_price",
+      label: "Avg Exit (SOL)",
       sortable: true,
       minWidth: 140,
       render: (v, r) => (v == null ? priceCell(r.exit_price) : priceCell(v)),
     },
     {
-      id: "entry_size_sol",
-      label: "Size",
+      id: "total_size_sol",
+      label: "Total Invested",
       sortable: true,
-      minWidth: 100,
+      minWidth: 120,
       render: (v) => solCell(v),
+    },
+    {
+      id: "partial_exit_count",
+      label: "Exits",
+      sortable: true,
+      minWidth: 90,
+      render: (v) => partialExitsCell(v),
     },
     {
       id: "sol_received",
@@ -163,13 +224,6 @@ function createLifecycle() {
       sortable: true,
       minWidth: 100,
       render: (v) => percentCell(v),
-    },
-    {
-      id: "exit_time",
-      label: "Exit Time",
-      sortable: true,
-      minWidth: 140,
-      render: (v) => (v == null ? "—" : timeCell(v)),
     },
   ];
 
@@ -237,15 +291,51 @@ function createLifecycle() {
     if (view !== "open" && view !== "closed") return;
     state.view = view;
     if (table) {
-      table.setColumns(selectedColumns());
-      table.setStateKey(`positions-table.${view}`, { render: false });
-      table.refresh({ reason: "view-switch", preserveScroll: false, resetScroll: true });
+      // DataTable doesn't support dynamic column changes - destroy and recreate
+      table.destroy();
+      
+      // Recreate table with new columns for the selected view
+      const columns = selectedColumns();
+      table = new DataTable({
+        container: "#positions-root",
+        columns,
+        rowIdField: "mint",
+        stateKey: `positions-table.${view}`,
+        enableLogging: false,
+        sorting: {
+          mode: "client",
+          column: view === "open" ? "entry_time" : "exit_time",
+          direction: "desc",
+        },
+        compact: true,
+        stickyHeader: true,
+        zebra: true,
+        fitToContainer: true,
+        uniformRowHeight: 2,
+        pagination: {
+          threshold: 160,
+          maxRows: 5000,
+          loadPage: loadPositionsPage,
+          dedupeKey: (row) => row?.mint ?? null,
+          rowIdField: "mint",
+        },
+        toolbar: {
+          icon: "📊",
+          title: "Positions",
+          search: { placeholder: "Search by symbol or mint..." },
+          refreshButton: true,
+          settingsButton: true,
+        },
+      });
     }
     updateToolbar();
   };
 
   return {
     init(ctx) {
+      // Initialize trade dialog
+      tradeDialog = new TradeActionDialog();
+
       // Sub-tabs
       tabBar = new TabBar({
         container: "#subTabsContainer",
@@ -319,18 +409,53 @@ function createLifecycle() {
         const mint = btn.getAttribute("data-mint");
         if (!action || !mint) return;
 
+        // Find row data
+        const row = table.getData().find((r) => r.mint === mint);
+        if (!row) {
+          Utils.showToast("Position data not found", "error");
+          return;
+        }
+
         try {
           if (action === "add") {
-            let sizeStr = prompt("Add size (SOL) — leave empty for default (50%)");
-            let size = sizeStr != null && String(sizeStr).trim() !== "" ? Number(sizeStr) : null;
-            if (size != null && (!Number.isFinite(size) || size <= 0)) {
-              return Utils.showToast("Invalid size", "error");
+            // Fetch config for entry sizes
+            let entrySizes = [0.005, 0.01, 0.02, 0.05];
+            try {
+              const configRes = await fetch("/api/config/trader");
+              if (configRes.ok) {
+                const configData = await configRes.json();
+                if (Array.isArray(configData?.data?.entry_sizes)) {
+                  entrySizes = configData.data.entry_sizes;
+                }
+              }
+            } catch (err) {
+              console.warn("Failed to fetch entry_sizes config:", err);
             }
+
+            // Open dialog
+            const result = await tradeDialog.open({
+              action: "add",
+              mint: mint,
+              symbol: row.symbol || "?",
+              context: {
+                balance: walletBalance,
+                entrySize: row.entry_sol || row.sol_size,
+                entrySizes: entrySizes,
+                currentSize: row.sol_size,
+              },
+            });
+
+            if (!result) return; // User cancelled
+
+            // Proceed with API call
             btn.disabled = true;
             const res = await fetch("/api/trader/manual/add", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ mint, ...(size ? { size_sol: size } : {}) }),
+              body: JSON.stringify({
+                mint,
+                ...(result.amount ? { size_sol: result.amount } : {}),
+              }),
             });
             const data = await res.json();
             btn.disabled = false;
@@ -338,17 +463,24 @@ function createLifecycle() {
             Utils.showToast("✅ Added to position", "success");
             table.refresh({ reason: "manual", preserveScroll: true });
           } else if (action === "sell") {
-            let pctStr = prompt("Sell percentage (1-100). Leave empty to sell 100%.");
-            let body;
-            if (pctStr == null || String(pctStr).trim() === "") {
-              body = { mint, close_all: true };
-            } else {
-              const pct = Number(pctStr);
-              if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
-                return Utils.showToast("Invalid percentage", "error");
-              }
-              body = { mint, percentage: pct };
-            }
+            // Open dialog
+            const result = await tradeDialog.open({
+              action: "sell",
+              mint: mint,
+              symbol: row.symbol || "?",
+              context: {
+                holdings: row.token_amount,
+              },
+            });
+
+            if (!result) return; // User cancelled
+
+            // Build request body
+            const body =
+              result.percentage === 100
+                ? { mint, close_all: true }
+                : { mint, percentage: result.percentage };
+
             btn.disabled = true;
             const res = await fetch("/api/trader/manual/sell", {
               method: "POST",
@@ -369,11 +501,23 @@ function createLifecycle() {
 
       if (containerEl) {
         containerEl.addEventListener("click", handleRowActionClick);
-        ctx.addCleanup(() => containerEl.removeEventListener("click", handleRowActionClick));
+        ctx.onDispose(() => containerEl.removeEventListener("click", handleRowActionClick));
       }
     },
 
     activate(ctx) {
+      // Fetch wallet balance for dialog context
+      fetch("/api/wallet/balance")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.sol_balance != null) {
+            walletBalance = data.sol_balance;
+          }
+        })
+        .catch(() => {
+          console.warn("[Positions] Failed to fetch wallet balance");
+        });
+
       if (!poller) {
         poller = ctx.managePoller(
           new Poller(() => table?.refresh({ reason: "poll", preserveScroll: true }), {
@@ -392,6 +536,10 @@ function createLifecycle() {
     },
 
     dispose() {
+      if (tradeDialog) {
+        tradeDialog.destroy();
+        tradeDialog = null;
+      }
       if (table) {
         table.destroy();
         table = null;
@@ -402,6 +550,7 @@ function createLifecycle() {
       state.view = "open";
       state.total = 0;
       state.lastUpdate = null;
+      walletBalance = 0;
     },
   };
 }

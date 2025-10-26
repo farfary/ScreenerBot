@@ -225,6 +225,11 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
         phantom_first_seen: None,
         synthetic_exit: false,
         closed_reason: None,
+        // P&L fields - initialized as None, will be calculated by positions system
+        pnl: None,
+        pnl_percent: None,
+        unrealized_pnl: None,
+        unrealized_pnl_percent: None,
         // Initialize partial exit and DCA fields
         remaining_token_amount: None, // Will be set after entry verification
         total_exited_amount: 0,

@@ -2834,16 +2834,13 @@ export class DataTable {
   }
 
   _updateLoadingClass() {
+    // Removed: No longer show "is-refreshing" visual indicator on successful refresh
+    // Only errors are shown to users, successful refreshes are silent
     const wrapper = this.elements.wrapper;
     if (!wrapper) {
       return;
     }
-
-    if (this.state.isLoading && this.state.filteredData.length > 0) {
-      wrapper.classList.add("is-refreshing");
-    } else {
-      wrapper.classList.remove("is-refreshing");
-    }
+    // Intentionally empty - we don't show loading states for successful refreshes
   }
 
   _setLoadingState(value) {

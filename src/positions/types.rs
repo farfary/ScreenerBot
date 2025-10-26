@@ -45,6 +45,15 @@ pub struct Position {
     pub synthetic_exit: bool,       // True if we synthetically closed due to missing exit tx
     pub closed_reason: Option<String>, // Optional reason for closure (e.g., "synthetic_phantom_closure")
 
+    // ==================== CALCULATED P&L VALUES ====================
+    // Pre-calculated P&L values - updated automatically by positions system
+    // For open positions: updated every time current_price changes
+    // For closed positions: calculated once at close time and stored permanently
+    pub pnl: Option<f64>,                 // Realized P&L in SOL (closed positions only)
+    pub pnl_percent: Option<f64>,         // Realized P&L percentage (closed positions only)
+    pub unrealized_pnl: Option<f64>,      // Unrealized P&L in SOL (open positions only)
+    pub unrealized_pnl_percent: Option<f64>, // Unrealized P&L percentage (open positions only)
+
     // ==================== PARTIAL EXIT & DCA SUPPORT ====================
     // Partial exit tracking
     pub remaining_token_amount: Option<u64>, // Current holdings after partial exits

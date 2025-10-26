@@ -165,7 +165,7 @@ export function createLifecycle() {
     if (refreshBtn) {
       refreshBtn.addEventListener("click", async () => {
         await loadStrategies();
-        Utils.showToast("Strategies refreshed", "success");
+        // Removed success toast - silent refresh, only show errors
       });
     }
   }
