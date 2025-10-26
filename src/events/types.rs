@@ -49,6 +49,9 @@ pub enum EventCategory {
     /// Security and risk assessment events
     Security,
 
+    /// Token filtering events (snapshot computation, token evaluation)
+    Filtering,
+
     /// Other events (with custom category name)
     Other(String),
 }
@@ -69,6 +72,7 @@ impl EventCategory {
             EventCategory::Ohlcv => "ohlcv".to_string(),
             EventCategory::Rpc => "rpc".to_string(),
             EventCategory::Security => "security".to_string(),
+            EventCategory::Filtering => "filtering".to_string(),
             EventCategory::Other(name) => name.clone(),
         }
     }
@@ -88,6 +92,7 @@ impl EventCategory {
             "ohlcv" => EventCategory::Ohlcv,
             "rpc" => EventCategory::Rpc,
             "security" => EventCategory::Security,
+            "filtering" => EventCategory::Filtering,
             other => EventCategory::Other(other.to_string()),
         }
     }

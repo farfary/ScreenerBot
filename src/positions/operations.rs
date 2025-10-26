@@ -62,6 +62,19 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
     // Re-check no existing open position for this mint (prevents duplicate concurrent entries)
     if super::state::is_open_position(&api_token.mint).await {
         // Record event for better post-mortem visibility
+        crate::events::record_position_event(
+            "0",
+            &api_token.mint,
+            "open_blocked",
+            None,
+            None,
+            trade_size_sol,
+            0,
+            None,
+            None,
+        )
+        .await;
+
         crate::events::record_safe(crate::events::Event::new(
             crate::events::EventCategory::Position,
             Some("open_blocked_in_memory".to_string()),
@@ -97,6 +110,19 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
                     ),
                 );
                 // Record event for DB guard block
+                crate::events::record_position_event(
+                    &db_pos.id.unwrap_or(0).to_string(),
+                    &api_token.mint,
+                    "open_blocked_db",
+                    db_pos.entry_transaction_signature.as_deref(),
+                    db_pos.exit_transaction_signature.as_deref(),
+                    trade_size_sol,
+                    0,
+                    None,
+                    None,
+                )
+                .await;
+
                 crate::events::record_safe(crate::events::Event::new(
                     crate::events::EventCategory::Position,
                     Some("open_blocked_db_guard".to_string()),
@@ -245,6 +271,20 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
         Ok(id) => id,
         Err(e) => {
             // Keep pending-open state for TTL so retries are blocked; propagate error
+            // Record database save failure
+            crate::events::record_position_event(
+                "0",
+                &api_token.mint,
+                "open_db_save_failed",
+                Some(&transaction_signature),
+                None,
+                trade_size_sol,
+                0,
+                None,
+                None,
+            )
+            .await;
+
             return Err(format!("Failed to save position: {}", e));
         }
     };
@@ -384,6 +424,21 @@ pub async fn close_position_direct(
                 }),
             ))
             .await;
+
+            // Record structured position event
+            crate::events::record_position_event(
+                &existing_position.id.unwrap_or(0).to_string(),
+                &api_token.mint,
+                "exit_blocked",
+                existing_position.entry_transaction_signature.as_deref(),
+                Some(pending_sig),
+                0.0,
+                0,
+                None,
+                None,
+            )
+            .await;
+
             return Err(format!(
                 "Position already has pending exit transaction: {}",
                 &pending_sig[..8]
@@ -673,6 +728,20 @@ pub async fn partial_close_position(
         ),
     );
 
+    // Record partial exit initiation
+    crate::events::record_position_event(
+        &position_id.to_string(),
+        token_mint,
+        "partial_exit_initiated",
+        position.entry_transaction_signature.as_deref(),
+        None,
+        0.0,
+        exit_amount,
+        None,
+        Some(exit_percentage),
+    )
+    .await;
+
     // Get API token for swap
     let api_token = crate::tokens::get_full_token_async(token_mint)
         .await
@@ -778,6 +847,21 @@ pub async fn partial_close_position(
         Ok(res) => res,
         Err(e) => {
             super::state::clear_partial_exit_pending(token_mint).await;
+
+            // Record partial exit failure
+            crate::events::record_position_event(
+                &position_id.to_string(),
+                token_mint,
+                "partial_exit_swap_failed",
+                position.entry_transaction_signature.as_deref(),
+                None,
+                0.0,
+                exit_amount,
+                None,
+                Some(exit_percentage),
+            )
+            .await;
+
             return Err(format!("Partial exit swap failed: {}", e));
         }
     };
@@ -927,6 +1011,20 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
             position.dca_count + 1
         ),
     );
+
+    // Record DCA initiation
+    crate::events::record_position_event(
+        &position_id.to_string(),
+        token_mint,
+        "dca_initiated",
+        position.entry_transaction_signature.as_deref(),
+        None,
+        dca_amount_sol,
+        0,
+        None,
+        None,
+    )
+    .await;
 
     // Get API token for swap
     let api_token = crate::tokens::get_full_token_async(token_mint)

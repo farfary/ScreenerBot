@@ -277,6 +277,20 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
 
             if updated && requires_db_update {
                 if let Some(position) = get_position_by_id(position_id).await {
+                    // Record synthetic exit event
+                    crate::events::record_position_event(
+                        &position_id.to_string(),
+                        &position.mint,
+                        "exit_synthetic",
+                        position.entry_transaction_signature.as_deref(),
+                        position.exit_transaction_signature.as_deref(),
+                        position.total_size_sol,
+                        position.remaining_token_amount.unwrap_or(0),
+                        None,
+                        None,
+                    )
+                    .await;
+
                     match update_position(&position).await {
                         Ok(_) => {
                             effects.db_updated = true;
@@ -343,6 +357,23 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             exit_percentage,
             market_price,
         } => {
+            // Record partial exit submitted event
+            if let Some(position) = get_position_by_id(position_id).await {
+                let sol_estimate = (exit_amount as f64 / 10_f64.powi(9)) * market_price;
+                crate::events::record_position_event(
+                    &position_id.to_string(),
+                    &position.mint,
+                    "partial_exit_submitted",
+                    position.entry_transaction_signature.as_deref(),
+                    Some(&exit_signature),
+                    sol_estimate,
+                    exit_amount,
+                    None,
+                    Some(exit_percentage),
+                )
+                .await;
+            }
+
             logger::info(
                 LogTag::Positions,
                 &format!(
@@ -496,6 +527,22 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             position_id,
             reason,
         } => {
+            // Record partial exit failure event
+            if let Some(position) = get_position_by_id(position_id).await {
+                crate::events::record_position_event(
+                    &position_id.to_string(),
+                    &position.mint,
+                    "partial_exit_failed",
+                    position.entry_transaction_signature.as_deref(),
+                    position.exit_transaction_signature.as_deref(),
+                    position.total_size_sol,
+                    position.remaining_token_amount.unwrap_or(0),
+                    None,
+                    None,
+                )
+                .await;
+            }
+
             logger::error(
                 LogTag::Positions,
                 &format!(
@@ -527,6 +574,23 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             dca_amount_sol,
             market_price,
         } => {
+            // Record DCA submitted event
+            if let Some(position) = get_position_by_id(position_id).await {
+                let token_estimate = (dca_amount_sol / market_price) * 10_f64.powi(9);
+                crate::events::record_position_event(
+                    &position_id.to_string(),
+                    &position.mint,
+                    "dca_submitted",
+                    position.entry_transaction_signature.as_deref(),
+                    Some(&dca_signature),
+                    dca_amount_sol,
+                    token_estimate as u64,
+                    None,
+                    None,
+                )
+                .await;
+            }
+
             logger::info(
                 LogTag::Positions,
                 &format!(
@@ -672,6 +736,22 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             dca_signature,
             reason,
         } => {
+            // Record DCA failure event
+            if let Some(position) = get_position_by_id(position_id).await {
+                crate::events::record_position_event(
+                    &position_id.to_string(),
+                    &position.mint,
+                    "dca_failed",
+                    position.entry_transaction_signature.as_deref(),
+                    Some(&dca_signature),
+                    position.total_size_sol,
+                    position.remaining_token_amount.unwrap_or(0),
+                    None,
+                    None,
+                )
+                .await;
+            }
+
             logger::error(
                 LogTag::Positions,
                 &format!("DCA failed for position {}: {}", position_id, reason),

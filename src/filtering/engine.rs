@@ -3,8 +3,10 @@ use std::time::Instant as StdInstant;
 
 use chrono::Utc;
 use futures::stream::{self, StreamExt};
+use serde_json::json;
 
 use crate::config::FilteringConfig;
+use crate::events::{record_filtering_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::tokens::types::{DataSource, Token};
@@ -19,6 +21,19 @@ const TOKEN_FETCH_CONCURRENCY: usize = 24;
 
 pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapshot, String> {
     let start = StdInstant::now();
+
+    // INFO: Record snapshot computation start
+    record_filtering_event(
+        "snapshot_compute_start",
+        Severity::Info,
+        None,
+        None,
+        json!({
+            "max_tokens_to_process": config.max_tokens_to_process,
+            "target_filtered_tokens": config.target_filtered_tokens,
+        }),
+    )
+    .await;
 
     let max_candidates = config.max_tokens_to_process.max(100);
     let fetch_limit = if config.target_filtered_tokens > 0 {
@@ -36,6 +51,19 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
             LogTag::Filtering,
             "Token store empty - snapshot remains empty",
         );
+
+        // DEBUG: Record empty token store
+        record_filtering_event(
+            "snapshot_empty_store",
+            Severity::Debug,
+            None,
+            None,
+            json!({
+                "reason": "token_store_empty",
+            }),
+        )
+        .await;
+
         return Ok(FilteringSnapshot::empty());
     }
 
@@ -68,6 +96,20 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
                 total_candidates
             ),
         );
+
+        // WARN: Record no tokens loaded
+        record_filtering_event(
+            "snapshot_no_tokens_loaded",
+            Severity::Warn,
+            None,
+            None,
+            json!({
+                "total_candidates": total_candidates,
+                "reason": "failed_to_load_full_tokens",
+            }),
+        )
+        .await;
+
         return Ok(FilteringSnapshot::empty());
     }
 
@@ -135,6 +177,25 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
                     name: Some(token.name.clone()),
                     passed_time: Utc::now().timestamp(),
                 });
+
+                // DEBUG: Record token passed (sample to avoid spam)
+                if stats.passed % 10 == 1 {
+                    let mint = token.mint.clone();
+                    let symbol = token.symbol.clone();
+                    tokio::spawn(async move {
+                        record_filtering_event(
+                            "token_passed",
+                            Severity::Debug,
+                            Some(&mint),
+                            None,
+                            json!({
+                                "mint": mint,
+                                "symbol": symbol,
+                            }),
+                        )
+                        .await
+                    });
+                }
             }
             Err(reason) => {
                 stats.record_rejection(reason);
@@ -149,6 +210,27 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
                     reason: reason.label().to_string(),
                     rejection_time: Utc::now().timestamp(),
                 });
+
+                // DEBUG: Record token rejection (sample to avoid spam)
+                if stats.rejected % 10 == 1 {
+                    let mint = token.mint.clone();
+                    let symbol = token.symbol.clone();
+                    let reason_str = reason.label().to_string();
+                    tokio::spawn(async move {
+                        record_filtering_event(
+                            "token_rejected",
+                            Severity::Debug,
+                            Some(&mint),
+                            None,
+                            json!({
+                                "mint": mint,
+                                "symbol": symbol,
+                                "reason": reason_str,
+                            }),
+                        )
+                        .await
+                    });
+                }
             }
         }
 
@@ -170,6 +252,30 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
             stats.target_reached,
             elapsed_ms,
             rejection_summary));
+
+    // INFO: Record snapshot computation complete
+    let top_rejections: Vec<(String, usize)> = stats
+        .rejection_counts
+        .iter()
+        .map(|(reason, count)| (reason.label().to_string(), *count))
+        .collect::<Vec<_>>();
+    
+    record_filtering_event(
+        "snapshot_compute_complete",
+        Severity::Info,
+        None,
+        None,
+        json!({
+            "total_candidates": total_candidates,
+            "total_processed": stats.total_processed,
+            "passed": stats.passed,
+            "rejected": stats.rejected,
+            "target_reached": stats.target_reached,
+            "duration_ms": elapsed_ms as u64,
+            "top_rejection_reasons": top_rejections,
+        }),
+    )
+    .await;
 
     let snapshot = FilteringSnapshot {
         updated_at: Utc::now(),

@@ -5,8 +5,10 @@ use std::time::Duration;
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use once_cell::sync::Lazy;
+use serde_json::json;
 use tokio::sync::RwLock;
 
+use crate::events::{record_filtering_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::tokens::types::Token;
 
@@ -41,6 +43,24 @@ impl FilteringStore {
 
         if let Some(existing) = stale_snapshot.as_ref() {
             if !is_snapshot_stale(existing, max_age) {
+                // DEBUG: Record cache hit (sampled)
+                if existing.filtered_mints.len() % 50 == 0 {
+                    let age_secs = snapshot_age_secs(existing.as_ref());
+                    let passed_count = existing.filtered_mints.len();
+                    tokio::spawn(async move {
+                        record_filtering_event(
+                            "snapshot_cache_hit",
+                            Severity::Debug,
+                            None,
+                            None,
+                            json!({
+                                "age_secs": age_secs,
+                                "passed_count": passed_count,
+                            }),
+                        )
+                        .await
+                    });
+                }
                 return Ok(existing.clone());
             }
         }
@@ -57,8 +77,40 @@ impl FilteringStore {
                             err, age_secs
                         ),
                     );
+
+                    // WARN: Record using stale snapshot
+                    let err_clone = err.clone();
+                    tokio::spawn(async move {
+                        record_filtering_event(
+                            "snapshot_using_stale",
+                            Severity::Warn,
+                            None,
+                            None,
+                            json!({
+                                "error": err_clone,
+                                "age_secs": age_secs,
+                            }),
+                        )
+                        .await
+                    });
+
                     Ok(existing)
                 } else {
+                    // ERROR: Record no snapshot available
+                    let err_clone = err.clone();
+                    tokio::spawn(async move {
+                        record_filtering_event(
+                            "snapshot_unavailable",
+                            Severity::Error,
+                            None,
+                            None,
+                            json!({
+                                "error": err_clone,
+                            }),
+                        )
+                        .await
+                    });
+
                     Err(err)
                 }
             }
@@ -70,6 +122,25 @@ impl FilteringStore {
         let snapshot = Arc::new(compute_snapshot(config).await?);
         let mut guard = self.snapshot.write().await;
         *guard = Some(snapshot.clone());
+
+        // INFO: Record snapshot refresh
+        let passed_count = snapshot.filtered_mints.len();
+        let rejected_count = snapshot.rejected_mints.len();
+        tokio::spawn(async move {
+            record_filtering_event(
+                "snapshot_refreshed",
+                Severity::Info,
+                None,
+                None,
+                json!({
+                    "passed_count": passed_count,
+                    "rejected_count": rejected_count,
+                    "total_tokens": passed_count + rejected_count,
+                }),
+            )
+            .await
+        });
+
         Ok(snapshot)
     }
 

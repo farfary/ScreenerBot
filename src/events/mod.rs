@@ -48,9 +48,10 @@ pub mod types;
 use crate::logger::{self, LogTag};
 use db::EventsDatabase;
 pub use maintenance::{
-    get_events_summary, record_entry_event, record_ohlcv_event, record_pool_event,
-    record_position_event, record_security_event, record_swap_event, record_system_event,
-    record_token_event, record_transaction_event, search_events, start_maintenance_task,
+    get_events_summary, record_entry_event, record_filtering_event, record_ohlcv_event,
+    record_pool_event, record_position_event, record_security_event, record_swap_event,
+    record_system_event, record_token_event, record_transaction_event, search_events,
+    start_maintenance_task,
 };
 use once_cell::sync::{Lazy, OnceCell};
 use std::collections::VecDeque;
