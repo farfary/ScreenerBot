@@ -1,5 +1,6 @@
 use crate::apis::get_api_manager;
 use crate::config;
+use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::pools::utils::{is_sol_mint, is_stablecoin_mint};
 use crate::tokens::database::TokenDatabase;
@@ -103,12 +104,53 @@ pub fn start_discovery_loop(
                                     source_summary
                                 ),
                             );
+
+                            // Record discovery run completion (INFO if new tokens found, DEBUG otherwise)
+                            let severity = if stats.newly_added > 0 { Severity::Info } else { Severity::Debug };
+                            tokio::spawn({
+                                let stats = stats.clone();
+                                async move {
+                                    record_token_event(
+                                        "system", // system-level event, no specific mint
+                                        "discovery_run_complete",
+                                        severity,
+                                        serde_json::json!({
+                                            "total_candidates": stats.total_candidates,
+                                            "unique_mints": stats.unique_mints,
+                                            "newly_added": stats.newly_added,
+                                            "already_known": stats.already_known,
+                                            "blacklisted": stats.blacklisted,
+                                            "invalid": stats.invalid,
+                                            "errors": stats.errors,
+                                            "duration_ms": stats.duration_ms,
+                                            "by_source": stats.by_source,
+                                        }),
+                                    )
+                                    .await;
+                                }
+                            });
                         }
                         Err(err) => {
                             logger::error(
                                 LogTag::Tokens,
                                 &format!("[DISCOVERY] Run failed: {}", err),
                             );
+
+                            // Record discovery error
+                            tokio::spawn({
+                                let error_msg = err.to_string();
+                                async move {
+                                    record_token_event(
+                                        "system",
+                                        "discovery_run_failed",
+                                        Severity::Error,
+                                        serde_json::json!({
+                                            "error": error_msg,
+                                        }),
+                                    )
+                                    .await;
+                                }
+                            });
                         }
                     }
                 }
@@ -403,9 +445,29 @@ pub async fn run_discovery_once(
 
         events::emit(TokenEvent::TokenDiscovered {
             mint: mint.clone(),
-            source: source_summary,
+            source: source_summary.clone(),
             at: Utc::now(),
         });
+
+        // Record token discovery event (sampled - every 10th to avoid spam)
+        if stats.newly_added % 10 == 0 {
+            tokio::spawn({
+                let mint = mint.clone();
+                let source = source_summary.clone();
+                async move {
+                    record_token_event(
+                        &mint,
+                        "token_discovered",
+                        Severity::Debug,
+                        serde_json::json!({
+                            "source": source,
+                            "newly_added_count": stats.newly_added + 1,
+                        }),
+                    )
+                    .await;
+                }
+            });
+        }
 
         stats.newly_added += 1;
     }

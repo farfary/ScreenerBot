@@ -6,6 +6,7 @@
 ///
 /// NOTE: Liquidity and security scores are FILTERING criteria, not blacklist criteria.
 /// Blacklist is for tokens that should NEVER be traded due to fundamental risks.
+use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::types::{TokenError, TokenResult};
@@ -94,6 +95,24 @@ pub async fn run_cleanup_scan(db: &TokenDatabase) -> TokenResult<CleanupResult> 
                             LogTag::Tokens,
                             &format!("[CLEANUP] Blacklisted {}: {}", token.mint, reason),
                         );
+
+                        // Record blacklist event
+                        tokio::spawn({
+                            let mint = token.mint.clone();
+                            let reason_msg = reason.clone();
+                            async move {
+                                record_token_event(
+                                    &mint,
+                                    "token_blacklisted",
+                                    Severity::Info,
+                                    serde_json::json!({
+                                        "reason": reason_msg,
+                                        "source": "auto_cleanup",
+                                    }),
+                                )
+                                .await;
+                            }
+                        });
                     }
                     Err(e) => {
                         errors += 1;

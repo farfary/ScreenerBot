@@ -2,6 +2,7 @@ use crate::apis::dexscreener::RATE_LIMIT_TOKEN_POOLS_PER_MINUTE as DEX_DEFAULT_P
 use crate::apis::geckoterminal::RATE_LIMIT_PER_MINUTE as GECKO_DEFAULT_PER_MINUTE;
 use crate::apis::rugcheck::RATE_LIMIT_PER_MINUTE as RUG_DEFAULT_PER_MINUTE;
 use crate::config::with_config;
+use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::pools;
 /// Updates orchestrator - Priority-based background updates
@@ -369,6 +370,46 @@ pub async fn update_token(
     if market_data_updated {
         let had_errors = !failures.is_empty();
         let _ = db.mark_updated(mint, had_errors);
+
+        // Record market data update event (sampled - every 50th token to avoid spam)
+        let hash = mint.chars().fold(0u32, |acc, c| acc.wrapping_add(c as u32));
+        if hash % 50 == 0 {
+            tokio::spawn({
+                let mint = mint.to_string();
+                let successes = successes.clone();
+                let failures = failures.clone();
+                async move {
+                    record_token_event(
+                        &mint,
+                        "market_data_updated",
+                        Severity::Debug,
+                        serde_json::json!({
+                            "sources": successes,
+                            "failures": failures,
+                            "partial_failure": !failures.is_empty(),
+                        }),
+                    )
+                    .await;
+                }
+            });
+        }
+    } else if !failures.is_empty() {
+        // Record total failure (no successful updates)
+        tokio::spawn({
+            let mint = mint.to_string();
+            let failures = failures.clone();
+            async move {
+                record_token_event(
+                    &mint,
+                    "market_data_update_failed",
+                    Severity::Warn,
+                    serde_json::json!({
+                        "failures": failures,
+                    }),
+                )
+                .await;
+            }
+        });
     }
 
     Ok(UpdateResult {

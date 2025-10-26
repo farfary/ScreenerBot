@@ -3,6 +3,7 @@
 /// Flow: API -> Parse -> Database -> Store cache
 /// Updates: Every 30 minutes (security data is relatively stable)
 use crate::apis::rugcheck::RugcheckInfo;
+use crate::events::record_security_event;
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::store::{self, CacheMetrics};
@@ -161,6 +162,39 @@ pub async fn fetch_rugcheck_data(
                 mint, err
             ),
         );
+    }
+
+    // Record security analysis event (sampled - only for high-risk tokens or every 20th)
+    let score = calculate_security_score(&data);
+    let is_high_risk = score < 50 || data.rugged;
+    let hash = mint.chars().fold(0u32, |acc, c| acc.wrapping_add(c as u32));
+    if is_high_risk || hash % 20 == 0 {
+        tokio::spawn({
+            let mint = mint.to_string();
+            let risks = data.risks.clone();
+            let rugged = data.rugged;
+            async move {
+                let risk_level = if rugged {
+                    "critical"
+                } else if is_high_risk {
+                    "high"
+                } else {
+                    "low"
+                };
+                record_security_event(
+                    &mint,
+                    "rugcheck_analysis",
+                    risk_level,
+                    serde_json::json!({
+                        "score": score,
+                        "rugged": rugged,
+                        "risk_count": risks.len(),
+                        "high_risk": is_high_risk,
+                    }),
+                )
+                .await;
+            }
+        });
     }
 
     Ok(Some(data))
