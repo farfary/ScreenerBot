@@ -81,7 +81,7 @@ function timeAgoCell(seconds) {
 function tokenCell(row) {
   const src = row.logo_url || row.image_url;
   const logo = src
-    ? `<img class="token-logo clickable-logo" alt="" src="${Utils.escapeHtml(src)}" data-logo-url="${Utils.escapeHtml(src)}" data-token-symbol="${Utils.escapeHtml(row.symbol || '')}" data-token-name="${Utils.escapeHtml(row.name || '')}" data-token-age="${row.token_birth_at || row.first_seen_at || ''}" title="Click to enlarge" />`
+    ? `<img class="token-logo clickable-logo" alt="" src="${Utils.escapeHtml(src)}" data-logo-url="${Utils.escapeHtml(src)}" data-token-symbol="${Utils.escapeHtml(row.symbol || '')}" data-token-name="${Utils.escapeHtml(row.name || '')}" data-token-mint="${Utils.escapeHtml(row.mint || '')}" title="Click to enlarge" />`
     : '<span class="token-logo">N/A</span>';
   const sym = Utils.escapeHtml(row.symbol || "—");
   const name = row.name ? `<div class="token-name">${Utils.escapeHtml(row.name)}</div>` : "";
@@ -726,16 +726,20 @@ function createLifecycle() {
       const imageUrl = logo.dataset.logoUrl;
       const symbol = logo.dataset.tokenSymbol || "";
       const name = logo.dataset.tokenName || "";
-      const ageSecondsRaw = logo.dataset.tokenAge;
+      const mint = logo.dataset.tokenMint || "";
       
       if (!imageUrl) return;
 
-      // Parse age value properly - it should be a number of seconds
+      // Look up age from current table data instead of stale data attribute
       let ageText = "Unknown";
-      if (ageSecondsRaw && ageSecondsRaw !== "") {
-        const ageSeconds = Number(ageSecondsRaw);
-        if (!isNaN(ageSeconds) && ageSeconds > 0) {
-          ageText = Utils.formatTimeAgo(ageSeconds, { fallback: "Unknown" });
+      if (mint && table) {
+        const tableData = table.getData();
+        const rowData = tableData.find(row => row.mint === mint);
+        if (rowData) {
+          const ageSeconds = rowData.token_birth_at || rowData.first_seen_at;
+          if (ageSeconds !== null && ageSeconds !== undefined) {
+            ageText = Utils.formatTimeAgo(ageSeconds, { fallback: "Unknown" });
+          }
         }
       }
 
