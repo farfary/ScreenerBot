@@ -152,7 +152,8 @@ function createLifecycle() {
       '.table-toolbar-field[data-filter-id="rejection_reason"]'
     );
     if (reasonField) {
-      reasonField.hidden = state.view !== "rejected";
+      const shouldShow = state.view === "rejected";
+      reasonField.style.display = shouldShow ? "" : "none";
     }
   };
 
@@ -245,24 +246,24 @@ function createLifecycle() {
       {
         id: "tokens-total",
         label: "Total",
-        value: Utils.formatNumber(totalGlobal),
+        value: Utils.formatNumber(totalGlobal, 0),
       },
       {
         id: "tokens-priced",
         label: "With Price",
-        value: Utils.formatNumber(summaryPriced),
+        value: Utils.formatNumber(summaryPriced, 0),
         variant: "info",
       },
       {
         id: "tokens-positions",
         label: "Positions",
-        value: Utils.formatNumber(summaryPositions),
+        value: Utils.formatNumber(summaryPositions, 0),
         variant: summaryPositions > 0 ? "success" : "secondary",
       },
       {
         id: "tokens-blacklisted",
         label: "Blacklisted",
-        value: Utils.formatNumber(summaryBlacklisted),
+        value: Utils.formatNumber(summaryBlacklisted, 0),
         variant: summaryBlacklisted > 0 ? "warning" : "success",
       },
     ]);
@@ -878,6 +879,10 @@ function createLifecycle() {
           ],
         },
       });
+
+      // Hide rejection_reason filter immediately if not in rejected tab
+      updateFilterVisibility();
+
       // Row actions: delegate clicks on the table container
       const containerEl = document.querySelector("#tokens-root");
       const handleRowActionClick = async (e) => {

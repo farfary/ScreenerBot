@@ -79,20 +79,20 @@ function createLifecycle() {
       {
         id: "services-total",
         label: "Total",
-        value: Utils.formatNumber(total),
+        value: Utils.formatNumber(total, 0),
       },
       {
         id: "services-healthy",
         label: "Healthy",
-        value: Utils.formatNumber(healthy),
+        value: Utils.formatNumber(healthy, 0),
         variant: "success",
       },
       {
         id: "services-alerts",
         label: "Alerts",
-        value: Utils.formatNumber(alerts),
+        value: Utils.formatNumber(alerts, 0),
         variant: alerts > 0 ? "warning" : "success",
-        tooltip: `${Utils.formatNumber(degraded)} degraded / ${Utils.formatNumber(unhealthy)} unhealthy`,
+        tooltip: `${Utils.formatNumber(degraded, 0)} degraded / ${Utils.formatNumber(unhealthy, 0)} unhealthy`,
       },
     ]);
 

@@ -114,7 +114,7 @@ function createLifecycle() {
       {
         id: "events-total",
         label: "Total",
-        value: Utils.formatNumber(total),
+        value: Utils.formatNumber(total, 0),
       },
     ]);
 
