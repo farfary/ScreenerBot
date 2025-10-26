@@ -81,7 +81,7 @@ function timeAgoCell(seconds) {
 function tokenCell(row) {
   const src = row.logo_url || row.image_url;
   const logo = src
-    ? `<img class="token-logo" alt="" src="${Utils.escapeHtml(src)}" />`
+    ? `<img class="token-logo clickable-logo" alt="" src="${Utils.escapeHtml(src)}" data-logo-url="${Utils.escapeHtml(src)}" data-token-symbol="${Utils.escapeHtml(row.symbol || '')}" data-token-name="${Utils.escapeHtml(row.name || '')}" data-token-age="${row.token_birth_at || row.first_seen_at || ''}" title="Click to enlarge" />`
     : '<span class="token-logo">N/A</span>';
   const sym = Utils.escapeHtml(row.symbol || "—");
   const name = row.name ? `<div class="token-name">${Utils.escapeHtml(row.name)}</div>` : "";
@@ -707,6 +707,101 @@ function createLifecycle() {
     container.addEventListener("click", clickHandler);
   };
 
+  const initializeImageLightbox = () => {
+    // Use event delegation for logo clicks
+    if (!table?.elements?.scrollContainer) return;
+
+    const container = table.elements.scrollContainer;
+    if (container._logoClickHandler) {
+      container.removeEventListener("click", container._logoClickHandler);
+    }
+
+    const clickHandler = (e) => {
+      const logo = e.target.closest(".clickable-logo");
+      if (!logo) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const imageUrl = logo.dataset.logoUrl;
+      const symbol = logo.dataset.tokenSymbol || "";
+      const name = logo.dataset.tokenName || "";
+      const ageSecondsRaw = logo.dataset.tokenAge;
+      
+      if (!imageUrl) return;
+
+      // Parse age value properly - it should be a number of seconds
+      let ageText = "Unknown";
+      if (ageSecondsRaw && ageSecondsRaw !== "") {
+        const ageSeconds = Number(ageSecondsRaw);
+        if (!isNaN(ageSeconds) && ageSeconds > 0) {
+          ageText = Utils.formatTimeAgo(ageSeconds, { fallback: "Unknown" });
+        }
+      }
+
+      // Create lightbox overlay
+      const lightbox = document.createElement("div");
+      lightbox.className = "image-lightbox";
+      
+      const symbolHtml = symbol ? `<div class="lightbox-token-symbol">${Utils.escapeHtml(symbol)}</div>` : "";
+      const nameHtml = name ? `<div class="lightbox-token-name">${Utils.escapeHtml(name)}</div>` : "";
+      
+      lightbox.innerHTML = `
+        <div class="lightbox-backdrop"></div>
+        <div class="lightbox-container">
+          <div class="lightbox-header">
+            ${symbolHtml}
+            ${nameHtml}
+            <button class="lightbox-close" type="button" title="Close (ESC)">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
+          </div>
+          <div class="lightbox-body">
+            <div class="lightbox-image-wrapper">
+              <img src="${Utils.escapeHtml(imageUrl)}" alt="Token logo" class="lightbox-image" />
+            </div>
+          </div>
+          <div class="lightbox-footer">
+            <div class="lightbox-stat">
+              <div class="stat-label">Token Age</div>
+              <div class="stat-value">${Utils.escapeHtml(ageText)}</div>
+            </div>
+          </div>
+        </div>
+      `;
+
+      document.body.appendChild(lightbox);
+
+      // Animate in
+      requestAnimationFrame(() => {
+        lightbox.classList.add("active");
+      });
+
+      // Close handlers
+      const close = () => {
+        lightbox.classList.remove("active");
+        setTimeout(() => lightbox.remove(), 300);
+      };
+
+      lightbox.querySelector(".lightbox-close").addEventListener("click", close);
+      lightbox.querySelector(".lightbox-backdrop").addEventListener("click", close);
+
+      const escapeHandler = (e) => {
+        if (e.key === "Escape") {
+          close();
+          document.removeEventListener("keydown", escapeHandler);
+        }
+      };
+      document.addEventListener("keydown", escapeHandler);
+    };
+
+    container._logoClickHandler = clickHandler;
+    container.addEventListener("click", clickHandler);
+  };
+
   return {
     init(ctx) {
       // Initialize trade dialog
@@ -975,6 +1070,7 @@ function createLifecycle() {
           onPageLoaded: () => {
             updateToolbar();
             initializeLinkDropdowns();
+            initializeImageLightbox();
           },
         },
         toolbar: {
@@ -1291,6 +1387,11 @@ function createLifecycle() {
       const existingMenu = document.querySelector(".links-dropdown-menu");
       if (existingMenu) {
         existingMenu.remove();
+      }
+      // Clean up any open image lightbox
+      const existingLightbox = document.querySelector(".image-lightbox");
+      if (existingLightbox) {
+        existingLightbox.remove();
       }
       if (tradeDialog) {
         tradeDialog.destroy();
