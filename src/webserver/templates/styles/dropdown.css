@@ -1,0 +1,188 @@
+/* Dropdown Component Styles */
+
+.dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  min-width: 180px;
+  max-width: 250px;
+  z-index: 9999;
+  padding: 4px 0;
+  display: none;
+  backdrop-filter: blur(10px);
+}
+
+.dropdown-menu.open {
+  display: block;
+}
+
+.dropdown-menu[data-align="left"] {
+  left: 0;
+}
+
+.dropdown-menu[data-align="right"] {
+  right: 0;
+}
+
+.dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  user-select: none;
+  position: relative;
+}
+
+.dropdown-item:hover:not(.disabled) {
+  background: var(--hover-bg);
+}
+
+.dropdown-item:active:not(.disabled) {
+  background: var(--active-bg);
+}
+
+.dropdown-item .icon {
+  flex-shrink: 0;
+  font-size: 1rem;
+  width: 18px;
+  text-align: center;
+}
+
+.dropdown-item .label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dropdown-item .badge {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  padding: 2px 6px;
+  border-radius: 10px;
+  font-weight: 600;
+  background: var(--badge-bg, #e0e0e0);
+  color: var(--badge-color, #333);
+}
+
+.dropdown-item .badge[data-variant="success"] {
+  --badge-bg: #e8f5e9;
+  --badge-color: #2e7d32;
+}
+
+.dropdown-item .badge[data-variant="warning"] {
+  --badge-bg: #fff3e0;
+  --badge-color: #f57c00;
+}
+
+.dropdown-item .badge[data-variant="error"] {
+  --badge-bg: #ffebee;
+  --badge-color: #c62828;
+}
+
+.dropdown-item .badge[data-variant="info"] {
+  --badge-bg: #e3f2fd;
+  --badge-color: #1565c0;
+}
+
+.dropdown-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dropdown-item.danger {
+  color: var(--error-color, #d32f2f);
+}
+
+.dropdown-item.danger:hover:not(.disabled) {
+  background: rgba(211, 47, 47, 0.08);
+}
+
+.dropdown-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+}
+
+/* Dropdown arrow indicator on trigger buttons */
+.dropdown-arrow {
+  font-size: 0.7rem;
+  margin-left: 2px;
+  opacity: 0.7;
+  transition: transform 0.2s ease;
+}
+
+.control-btn:hover .dropdown-arrow {
+  opacity: 1;
+}
+
+/* Power button specific styles */
+.power-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Notification badge styles */
+.notification-badge {
+  position: absolute;
+  top: -6px;
+  right: -8px;
+  background: var(--error-color, #d32f2f);
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 5px;
+  border-radius: 10px;
+  min-width: 16px;
+  text-align: center;
+  line-height: 1;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+/* Enhanced badge styles */
+.badge-secondary {
+  background: var(--secondary-bg, #757575) !important;
+  color: white !important;
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Dark theme adjustments */
+:root[data-theme="dark"] .dropdown-menu {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+:root[data-theme="dark"] .dropdown-item .badge {
+  --badge-bg: #424242;
+  --badge-color: #e0e0e0;
+}
+
+:root[data-theme="dark"] .dropdown-item .badge[data-variant="success"] {
+  --badge-bg: #1b5e20;
+  --badge-color: #a5d6a7;
+}
+
+:root[data-theme="dark"] .dropdown-item .badge[data-variant="warning"] {
+  --badge-bg: #e65100;
+  --badge-color: #ffcc80;
+}
+
+:root[data-theme="dark"] .dropdown-item .badge[data-variant="error"] {
+  --badge-bg: #b71c1c;
+  --badge-color: #ef9a9a;
+}
+
+:root[data-theme="dark"] .dropdown-item .badge[data-variant="info"] {
+  --badge-bg: #0d47a1;
+  --badge-color: #90caf9;
+}

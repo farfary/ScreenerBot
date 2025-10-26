@@ -4,7 +4,7 @@
 .header {
   background: var(--header-bg);
   color: var(--header-text);
-  padding: 8px 14px;
+  padding: 6px 14px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -15,18 +15,19 @@
 .header h1 {
   font-size: 1.1em;
   font-weight: 600;
+  margin: 0;
 }
 
 .header-controls {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
 }
 
 .status-indicator {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
 }
 
 /* Control Buttons */
@@ -34,16 +35,21 @@
   background: rgba(255, 255, 255, 0.2);
   border: none;
   color: var(--header-text);
-  padding: 4px 10px;
+  padding: 6px 12px;
   border-radius: 14px;
   cursor: pointer;
   font-size: 0.9em;
+  line-height: 1.4;
+  height: 36px;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   transition:
     background 0.3s ease,
-    opacity 0.3s ease;
+    opacity 0.3s ease,
+    transform 0.1s ease;
+  position: relative;
 }
 
 .control-btn:hover:not(:disabled) {
@@ -59,12 +65,36 @@
   cursor: not-allowed;
 }
 
+/* Trader button with embedded badge */
+.trader-btn {
+  gap: 8px;
+  padding: 6px 12px;
+}
+
 .trader-btn.running {
   background: rgba(16, 185, 129, 0.3);
 }
 
 .trader-btn.stopped {
   background: rgba(239, 68, 68, 0.3);
+}
+
+/* Refresh button with embedded select */
+.refresh-btn {
+  padding: 6px 10px;
+  gap: 6px;
+}
+
+.refresh-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.power-btn:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.3);
+}
+
+.notification-btn:hover:not(:disabled) {
+  background: rgba(245, 158, 11, 0.3);
 }
 
 .reboot-btn:hover:not(:disabled) {
@@ -79,27 +109,21 @@
 }
 
 .refresh-interval-dropdown {
-  background: rgba(255, 255, 255, 0.2);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: transparent;
+  border: none;
   color: var(--header-text);
-  padding: 4px 8px;
-  border-radius: 12px;
+  padding: 0;
   cursor: pointer;
   font-size: 0.85rem;
   font-weight: 500;
-  transition: all 0.2s ease;
   outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
 }
 
-.refresh-interval-dropdown:hover {
-  background: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.4);
-}
-
-.refresh-interval-dropdown:focus {
-  background: rgba(255, 255, 255, 0.35);
-  border-color: rgba(255, 255, 255, 0.5);
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.1);
+.refresh-interval-dropdown::-ms-expand {
+  display: none;
 }
 
 .refresh-interval-dropdown option {
@@ -107,15 +131,44 @@
   color: var(--text-primary);
 }
 
+/* Connection Status Indicator */
+.connection-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 12px;
+  border-radius: 14px;
+  font-size: 1.1em;
+  line-height: 1.4;
+  height: 36px;
+  box-sizing: border-box;
+  transition: background 0.3s ease;
+}
+
+.connection-status.connected {
+  background: rgba(16, 185, 129, 0.3);
+}
+
+.connection-status.disconnected {
+  background: rgba(239, 68, 68, 0.3);
+}
+
+.connection-status.connecting {
+  background: rgba(245, 158, 11, 0.3);
+}
+
 /* Theme Toggle Button */
 .theme-toggle {
   background: rgba(255, 255, 255, 0.2);
   border: none;
   color: var(--header-text);
-  padding: 4px 10px;
+  padding: 6px 12px;
   border-radius: 14px;
   cursor: pointer;
   font-size: 0.9em;
+  line-height: 1.4;
+  height: 36px;
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   gap: 8px;

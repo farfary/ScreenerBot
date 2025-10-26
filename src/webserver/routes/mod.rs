@@ -208,6 +208,7 @@ async fn get_page_script(axum::extract::Path(file): axum::extract::Path<String>)
 async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
     let content = match file.as_str() {
         "data_table.js" => Some(templates::DATA_TABLE_UI),
+        "dropdown.js" => Some(templates::DROPDOWN_UI),
         "table_toolbar.js" => Some(templates::TABLE_TOOLBAR_UI),
         "events_dialog.js" => Some(templates::EVENTS_DIALOG_UI),
         "trade_action_dialog.js" => Some(templates::TRADE_ACTION_DIALOG_UI),

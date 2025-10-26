@@ -1,6 +1,7 @@
 // Header controls for global dashboard interactions (trader toggle)
 import { Poller, getInterval as getGlobalPollingInterval } from "./poller.js";
 import * as Utils from "./utils.js";
+import { Dropdown } from "../ui/dropdown.js";
 
 const MIN_STATUS_POLL_INTERVAL = 5000;
 
@@ -10,11 +11,16 @@ const state = {
   available: false,
   loading: false,
   fetching: false,
+  connected: false,
 };
 
 let statusPoller = null;
 let currentStatusPromise = null;
 let currentController = null;
+let powerDropdown = null;
+let traderDropdown = null;
+let notificationCount = 0;
+let connectionCheckInterval = null;
 
 function getElements() {
   return {
@@ -22,11 +28,15 @@ function getElements() {
     icon: document.getElementById("traderIcon"),
     text: document.getElementById("traderText"),
     badge: document.getElementById("botBadge"),
+    badgeIcon: document.getElementById("botStatusIcon"),
+    badgeText: document.getElementById("botStatusText"),
+    connectionStatus: document.getElementById("connectionStatus"),
+    connectionIcon: document.getElementById("connectionIcon"),
   };
 }
 
-function updateBadge({ badge }) {
-  if (!badge) {
+function updateBadge({ badge, badgeIcon, badgeText }) {
+  if (!badge || !badgeIcon || !badgeText) {
     return;
   }
 
@@ -34,22 +44,26 @@ function updateBadge({ badge }) {
 
   if (state.loading) {
     badge.classList.add("loading");
-    badge.textContent = "🤖 LOADING";
+    badgeIcon.textContent = "🤖";
+    badgeText.textContent = "LOADING";
     return;
   }
 
   if (!state.available) {
     badge.classList.add("warning");
-    badge.textContent = "🤖 UNKNOWN";
+    badgeIcon.textContent = "⚠️";
+    badgeText.textContent = "UNKNOWN";
     return;
   }
 
   if (state.running) {
     badge.classList.add("success");
-    badge.textContent = "🤖 RUNNING";
+    badgeIcon.textContent = "✅";
+    badgeText.textContent = "RUNNING";
   } else {
     badge.classList.add("warning");
-    badge.textContent = "🤖 STOPPED";
+    badgeIcon.textContent = "🛑";
+    badgeText.textContent = "STOPPED";
   }
 }
 
@@ -61,6 +75,14 @@ function updateToggle({ toggle, icon, text }) {
   toggle.disabled = state.loading || !state.available;
   toggle.setAttribute("aria-busy", state.loading ? "true" : "false");
   toggle.dataset.traderState = state.running ? "running" : "stopped";
+
+  // Update button classes for styling
+  toggle.classList.remove("running", "stopped");
+  if (state.running) {
+    toggle.classList.add("running");
+  } else {
+    toggle.classList.add("stopped");
+  }
 
   if (state.loading) {
     icon.textContent = "⏳";
@@ -97,6 +119,7 @@ function applyStatus(newStatus) {
   const elements = getElements();
   updateToggle(elements);
   updateBadge(elements);
+  updateConnectionStatus(true);
 }
 
 function setAvailability(isAvailable) {
@@ -104,6 +127,28 @@ function setAvailability(isAvailable) {
   const elements = getElements();
   updateToggle(elements);
   updateBadge(elements);
+  updateConnectionStatus(isAvailable);
+}
+
+function updateConnectionStatus(isConnected) {
+  const elements = getElements();
+  if (!elements.connectionStatus || !elements.connectionIcon) {
+    return;
+  }
+
+  state.connected = isConnected;
+
+  elements.connectionStatus.classList.remove("connected", "disconnected", "connecting");
+
+  if (isConnected) {
+    elements.connectionStatus.classList.add("connected");
+    elements.connectionIcon.textContent = "🟢";
+    elements.connectionStatus.title = "Backend Connected";
+  } else {
+    elements.connectionStatus.classList.add("disconnected");
+    elements.connectionIcon.textContent = "🔴";
+    elements.connectionStatus.title = "Backend Disconnected";
+  }
 }
 
 function setLoading(isLoading) {
@@ -267,10 +312,160 @@ function initTraderControls() {
     return;
   }
 
+  // Initialize connection status as connecting
+  if (elements.connectionStatus && elements.connectionIcon) {
+    elements.connectionStatus.classList.add("connecting");
+    elements.connectionIcon.textContent = "🟡";
+    elements.connectionStatus.title = "Connecting to Backend...";
+  }
+
   attachToggleHandler(elements.toggle);
+  
+  // Initialize power menu dropdown
+  initPowerMenu();
+  
+  // Initialize trader dropdown (future)
+  initTraderDropdown();
+  
+  // Initialize notifications
+  initNotifications();
+  
   fetchTraderStatus({ silent: true, showLoading: true }).finally(() => {
     startStatusPolling();
   });
+}
+
+function initPowerMenu() {
+  const powerBtn = document.getElementById("powerMenuBtn");
+  if (!powerBtn) return;
+
+  powerDropdown = new Dropdown({
+    trigger: powerBtn,
+    align: "right",
+    items: [
+      {
+        id: "restart",
+        icon: "🔄",
+        label: "Restart Bot",
+      },
+      {
+        id: "pause-services",
+        icon: "⏸️",
+        label: "Pause Services",
+        badge: "Soon",
+        disabled: true,
+      },
+      { divider: true },
+      {
+        id: "shutdown",
+        icon: "🛑",
+        label: "Shutdown",
+        danger: true,
+        disabled: true,
+        badge: "Soon",
+      },
+      { divider: true },
+      {
+        id: "system-info",
+        icon: "ℹ️",
+        label: "System Info",
+        disabled: true,
+      },
+    ],
+    onSelect: handlePowerMenuAction,
+  });
+}
+
+function initTraderDropdown() {
+  // Placeholder for future trader dropdown menu
+  // Will add: Start, Stop, Restart, View Logs options
+}
+
+function initNotifications() {
+  const notifBtn = document.getElementById("notificationBtn");
+
+  if (!notifBtn) return;
+
+  notifBtn.addEventListener("click", () => {
+    // Placeholder - will show notifications panel in future
+    Utils.showToast("📬 Notifications panel coming soon", "info");
+  });
+
+  // Update badge count (placeholder)
+  updateNotificationBadge(0);
+}
+
+function updateNotificationBadge(count) {
+  const badge = document.getElementById("notificationBadge");
+  if (!badge) return;
+  
+  notificationCount = count;
+  badge.textContent = count > 99 ? "99+" : count.toString();
+  badge.style.display = count > 0 ? "flex" : "none";
+}
+
+async function handlePowerMenuAction(action) {
+  switch (action) {
+    case "restart":
+      await handleRestart();
+      break;
+    case "pause-services":
+      Utils.showToast("⏸️ Pause Services feature coming soon", "info");
+      break;
+    case "shutdown":
+      Utils.showToast("🛑 Shutdown feature coming soon", "info");
+      break;
+    case "system-info":
+      Utils.showToast("ℹ️ System Info panel coming soon", "info");
+      break;
+  }
+}
+
+async function handleRestart() {
+  const confirmed = window.confirm(
+    "Are you sure you want to restart the bot?\n\nThis will:\n• Stop all services\n• Restart the process\n• Take ~10-15 seconds"
+  );
+
+  if (!confirmed) return;
+
+  try {
+    Utils.showToast("🔄 Restarting bot...", "info");
+
+    const res = await fetch("/api/system/reboot", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (!res.ok) {
+      throw new Error(`Restart failed: ${res.status}`);
+    }
+
+    Utils.showToast("✅ Bot restarting... Please wait.", "success");
+
+    // Poll for reconnection
+    setTimeout(() => {
+      let attempts = 0;
+      const checkConnection = setInterval(async () => {
+        attempts++;
+        try {
+          const ping = await fetch("/api/trader/status", { cache: "no-store" });
+          if (ping.ok) {
+            clearInterval(checkConnection);
+            Utils.showToast("✅ Bot restarted successfully!", "success");
+            window.location.reload();
+          }
+        } catch {
+          if (attempts > 30) {
+            clearInterval(checkConnection);
+            Utils.showToast("⚠️ Restart taking longer than expected", "warning");
+          }
+        }
+      }, 1000);
+    }, 2000);
+  } catch (err) {
+    console.error("[Header] Restart failed:", err);
+    Utils.showToast(`❌ ${err.message}`, "error");
+  }
 }
 
 if (document.readyState === "loading") {

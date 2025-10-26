@@ -9,6 +9,7 @@ const BASE_TEMPLATE: &str = include_str!("templates/base.html");
 const FOUNDATION_STYLES: &str = include_str!("templates/styles/foundation.css");
 const LAYOUT_STYLES: &str = include_str!("templates/styles/layout.css");
 const COMPONENT_STYLES: &str = include_str!("templates/styles/components.css");
+const DROPDOWN_STYLES: &str = include_str!("templates/styles/dropdown.css");
 const COMMON_STYLES: &str = include_str!("templates/styles/common.css");
 const SERVICES_PAGE_STYLES: &str = include_str!("templates/styles/pages/services.css");
 const TRANSACTIONS_PAGE_STYLES: &str = include_str!("templates/styles/pages/transactions.css");
@@ -37,6 +38,7 @@ pub const CORE_HEADER: &str = include_str!("templates/scripts/core/header.js");
 const THEME_SCRIPTS: &str = include_str!("templates/scripts/theme.js");
 
 pub const DATA_TABLE_UI: &str = include_str!("templates/scripts/ui/data_table.js");
+pub const DROPDOWN_UI: &str = include_str!("templates/scripts/ui/dropdown.js");
 pub const TABLE_TOOLBAR_UI: &str = include_str!("templates/scripts/ui/table_toolbar.js");
 pub const EVENTS_DIALOG_UI: &str = include_str!("templates/scripts/ui/events_dialog.js");
 pub const TRADE_ACTION_DIALOG_UI: &str = include_str!("templates/scripts/ui/trade_action_dialog.js");
@@ -70,6 +72,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         FOUNDATION_STYLES,
         LAYOUT_STYLES,
         COMPONENT_STYLES,
+        DROPDOWN_STYLES,
         COMMON_STYLES,
         DATA_TABLE_STYLES,
         TABLE_TOOLBAR_STYLES,

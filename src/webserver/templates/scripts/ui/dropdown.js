@@ -1,0 +1,146 @@
+/**
+ * Dropdown Menu Component
+ * Reusable dropdown for power menu, trader controls, etc.
+ */
+
+export class Dropdown {
+  constructor(options = {}) {
+    this.trigger = options.trigger; // Button element that triggers dropdown
+    this.items = options.items || []; // Array of menu items
+    this.onSelect = options.onSelect || (() => {}); // Callback when item selected
+    this.align = options.align || "right"; // 'left' or 'right'
+    this.isOpen = false;
+    this.dropdownEl = null;
+
+    this._init();
+  }
+
+  _init() {
+    if (!this.trigger) return;
+
+    // Add aria attributes
+    this.trigger.setAttribute("aria-haspopup", "true");
+    this.trigger.setAttribute("aria-expanded", "false");
+
+    // Create dropdown menu
+    this._createDropdown();
+
+    // Attach event listeners
+    this.trigger.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.toggle();
+    });
+
+    // Close on outside click
+    document.addEventListener("click", (e) => {
+      if (this.isOpen && !this.dropdownEl.contains(e.target)) {
+        this.close();
+      }
+    });
+
+    // Close on escape
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && this.isOpen) {
+        this.close();
+      }
+    });
+  }
+
+  _createDropdown() {
+    this.dropdownEl = document.createElement("div");
+    this.dropdownEl.className = "dropdown-menu";
+    this.dropdownEl.setAttribute("data-align", this.align);
+
+    this.items.forEach((item) => {
+      if (item.divider) {
+        const divider = document.createElement("div");
+        divider.className = "dropdown-divider";
+        this.dropdownEl.appendChild(divider);
+        return;
+      }
+
+      const itemEl = document.createElement("button");
+      itemEl.className = "dropdown-item";
+      itemEl.type = "button";
+
+      if (item.icon) {
+        const icon = document.createElement("span");
+        icon.className = "icon";
+        icon.textContent = item.icon;
+        itemEl.appendChild(icon);
+      }
+
+      const text = document.createElement("span");
+      text.className = "label";
+      text.textContent = item.label;
+      itemEl.appendChild(text);
+
+      if (item.badge) {
+        const badge = document.createElement("span");
+        badge.className = "badge";
+        if (item.badgeVariant) {
+          badge.setAttribute("data-variant", item.badgeVariant);
+        }
+        badge.textContent = item.badge;
+        itemEl.appendChild(badge);
+      }
+
+      if (item.disabled) {
+        itemEl.classList.add("disabled");
+        itemEl.disabled = true;
+      }
+
+      if (item.danger) {
+        itemEl.classList.add("danger");
+      }
+
+      itemEl.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!item.disabled) {
+          this.onSelect(item.id, item);
+          if (!item.keepOpen) {
+            this.close();
+          }
+        }
+      });
+
+      this.dropdownEl.appendChild(itemEl);
+    });
+
+    // Position dropdown relative to trigger
+    const wrapper = document.createElement("div");
+    wrapper.style.position = "relative";
+    wrapper.style.display = "inline-block";
+    this.trigger.parentNode.insertBefore(wrapper, this.trigger);
+    wrapper.appendChild(this.trigger);
+    wrapper.appendChild(this.dropdownEl);
+  }
+
+  toggle() {
+    if (this.isOpen) {
+      this.close();
+    } else {
+      this.open();
+    }
+  }
+
+  open() {
+    this.isOpen = true;
+    this.dropdownEl.classList.add("open");
+    this.trigger.setAttribute("aria-expanded", "true");
+    this.trigger.classList.add("active");
+  }
+
+  close() {
+    this.isOpen = false;
+    this.dropdownEl.classList.remove("open");
+    this.trigger.setAttribute("aria-expanded", "false");
+    this.trigger.classList.remove("active");
+  }
+
+  destroy() {
+    if (this.dropdownEl) {
+      this.dropdownEl.remove();
+    }
+  }
+}

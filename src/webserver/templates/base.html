@@ -12,22 +12,34 @@
 
   <body>
     <div class="header">
-      <h1>🤖 ScreenerBot Dashboard</h1>
+      <h1>🤖 ScreenerBot</h1>
       <div class="header-controls">
+        <!-- Trader Control with Status -->
         <button class="control-btn trader-btn" id="traderToggle" aria-label="Toggle trader">
           <span id="traderIcon">⏸️</span>
           <span id="traderText">Stop Trader</span>
+          <span id="botBadge" class="badge loading" title="Bot Status">
+            <span id="botStatusIcon">🤖</span>
+            <span id="botStatusText">LOADING</span>
+          </span>
         </button>
-        <button class="control-btn reboot-btn" id="rebootBtn" aria-label="Reboot system">
-          <span>🔄</span>
-          <span>Reboot</span>
+
+        <!-- Notifications -->
+        <button class="control-btn notification-btn" id="notificationBtn" aria-label="Notifications">
+          <span style="position: relative">
+            🔔
+            <span
+              id="notificationBadge"
+              class="notification-badge"
+              style="display: none"
+              >0</span
+            >
+          </span>
         </button>
-        <div class="refresh-interval-control">
-          <label
-            for="refreshInterval"
-            style="font-size: 0.85rem; color: var(--text-secondary); margin-right: 4px"
-            >⏱️</label
-          >
+
+        <!-- Refresh Interval -->
+        <button class="control-btn refresh-btn" aria-label="Refresh interval">
+          <span>⏱️</span>
           <select
             id="refreshInterval"
             class="refresh-interval-dropdown"
@@ -42,15 +54,24 @@
             <option value="30000">30s</option>
             <option value="60000">1m</option>
           </select>
-        </div>
+        </button>
+
+        <!-- Theme Toggle -->
         <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
           <span id="themeIcon">🌙</span>
           <span id="themeText">Dark</span>
         </button>
-        <div class="status-indicator">
-          <div style="display: flex; gap: 8px; align-items: center">
-            <span id="botBadge" class="badge loading" title="Bot Status">🤖 BOT</span>
-          </div>
+
+        <!-- Power Menu -->
+        <button class="control-btn power-btn" id="powerMenuBtn" aria-label="Power menu">
+          <span>⚡</span>
+          <span>Power</span>
+          <span class="dropdown-arrow">▾</span>
+        </button>
+
+        <!-- Connection Status -->
+        <div class="connection-status disconnected" id="connectionStatus" title="Backend Connection">
+          <span id="connectionIcon">🔴</span>
         </div>
       </div>
     </div>
