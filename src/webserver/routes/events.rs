@@ -28,6 +28,7 @@ pub struct EventResponse {
 pub struct EventsListResponse {
     pub events: Vec<EventResponse>,
     pub count: usize,
+    pub total_count: Option<i64>,
     pub max_id: i64,
     pub timestamp: String,
 }
@@ -95,6 +96,20 @@ async fn get_events_head(Query(params): Query<HeadQuery>) -> Json<EventsListResp
         .await
         .unwrap_or((Vec::new(), 0));
 
+    // Get total count with same filters (recreate from params since we moved them)
+    let category_for_count = params
+        .category
+        .as_ref()
+        .map(|s| events::EventCategory::from_string(s));
+    let severity_for_count = params
+        .severity
+        .as_ref()
+        .map(|s| events::Severity::from_string(s));
+    let total_count = db
+        .count_events_filtered(category_for_count, severity_for_count, mint, reference, search)
+        .await
+        .ok();
+
     let event_responses: Vec<EventResponse> = events_vec
         .into_iter()
         .map(|e| {
@@ -128,6 +143,7 @@ async fn get_events_head(Query(params): Query<HeadQuery>) -> Json<EventsListResp
     Json(EventsListResponse {
         events: event_responses,
         count,
+        total_count,
         max_id,
         timestamp: chrono::Utc::now().to_rfc3339(),
     })
@@ -195,6 +211,7 @@ async fn get_events_since(Query(params): Query<SinceQuery>) -> Json<EventsListRe
     Json(EventsListResponse {
         events: event_responses,
         count,
+        total_count: None,
         max_id,
         timestamp: chrono::Utc::now().to_rfc3339(),
     })
@@ -264,6 +281,7 @@ async fn get_events_before(Query(params): Query<BeforeQuery>) -> Json<EventsList
     Json(EventsListResponse {
         events: event_responses,
         count,
+        total_count: None,
         max_id,
         timestamp: chrono::Utc::now().to_rfc3339(),
     })

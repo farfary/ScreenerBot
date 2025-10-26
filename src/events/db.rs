@@ -947,4 +947,76 @@ impl EventsDatabase {
         }
         Ok((events, max_id))
     }
+
+    /// Count total events matching filters
+    pub async fn count_events_filtered(
+        &self,
+        category: Option<EventCategory>,
+        severity: Option<Severity>,
+        mint: Option<&str>,
+        reference_id: Option<&str>,
+        search: Option<&str>,
+    ) -> Result<i64, String> {
+        let conn = self.get_read_connection()?;
+        let mut query = String::from("SELECT COUNT(*) FROM events");
+        let mut where_added = false;
+        let mut bind: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        let mut idx = 1;
+
+        if let Some(cat) = category {
+            query.push_str(&format!(
+                "{} category = ?{}",
+                if where_added { " AND" } else { where_added = true; " WHERE" },
+                idx
+            ));
+            bind.push(Box::new(cat.to_string()));
+            idx += 1;
+        }
+        if let Some(sev) = severity {
+            query.push_str(&format!(
+                "{} severity = ?{}",
+                if where_added { " AND" } else { where_added = true; " WHERE" },
+                idx
+            ));
+            bind.push(Box::new(sev.to_string()));
+            idx += 1;
+        }
+        if let Some(m) = mint {
+            query.push_str(&format!(
+                "{} mint = ?{}",
+                if where_added { " AND" } else { where_added = true; " WHERE" },
+                idx
+            ));
+            bind.push(Box::new(m.to_string()));
+            idx += 1;
+        }
+        if let Some(r) = reference_id {
+            query.push_str(&format!(
+                "{} reference_id = ?{}",
+                if where_added { " AND" } else { where_added = true; " WHERE" },
+                idx
+            ));
+            bind.push(Box::new(r.to_string()));
+            idx += 1;
+        }
+        if let Some(search_term) = search {
+            let wildcard = format!("%{}%", search_term.to_lowercase());
+            query.push_str(&format!(
+                "{} LOWER(json_payload) LIKE ?{}",
+                if where_added { " AND" } else { where_added = true; " WHERE" },
+                idx
+            ));
+            bind.push(Box::new(wildcard));
+        }
+
+        let count: i64 = conn
+            .query_row(
+                &query,
+                bind.iter().map(|b| b.as_ref()).collect::<Vec<_>>().as_slice(),
+                |row| row.get(0),
+            )
+            .map_err(|e| format!("Failed to count filtered events: {}", e))?;
+
+        Ok(count)
+    }
 }

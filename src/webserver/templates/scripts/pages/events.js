@@ -87,6 +87,7 @@ function createLifecycle() {
   const state = {
     filters: { ...DEFAULT_FILTERS },
     search: "",
+    totalCount: null,
   };
 
   const buildBaseParams = (limit = PAGE_LIMIT) => {
@@ -109,7 +110,7 @@ function createLifecycle() {
     }
 
     const rows = table.getData();
-    const total = rows.length;
+    const total = state.totalCount !== null ? state.totalCount : rows.length;
     table.updateToolbarSummary([
       {
         id: "events-total",
@@ -216,6 +217,11 @@ function createLifecycle() {
     const fresh = normaliseEvents(data?.events, "desc", false);
     const cursorPrev = fresh.length > 0 ? fresh[0].id : (cursor ?? null);
     const cursorNext = fresh.length > 0 ? fresh[fresh.length - 1].id : (cursor ?? null);
+
+    // Store total count from API response
+    if (typeof data?.total_count === "number") {
+      state.totalCount = data.total_count;
+    }
 
     return {
       rows: fresh,
