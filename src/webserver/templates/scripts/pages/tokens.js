@@ -545,7 +545,7 @@ function createLifecycle() {
 
     // Update table stateKey for per-tab state persistence
     if (table) {
-      table.setStateKey(`tokens-table.${view}`, { render: false });
+      table.setStateKey(`tokens-table-v2.${view}`, { render: false }); // v2: fixed column order
 
       // Read restored sort state from table and sync to state.sort
       const restoredTableState = table.getServerState();
@@ -571,6 +571,140 @@ function createLifecycle() {
     syncToolbarFilters();
     updateToolbar();
     requestReload("view", { silent: false, resetScroll: true }).catch(() => {});
+  };
+
+  const handleLinkAction = (actionId, mint) => {
+    const urlMap = {
+      dexscreener: `https://dexscreener.com/solana/${mint}`,
+      gmgn: `https://gmgn.ai/sol/token/${mint}`,
+      solscan: `https://solscan.io/token/${mint}`,
+      birdeye: `https://birdeye.so/token/${mint}`,
+      rugcheck: `https://rugcheck.xyz/tokens/${mint}`,
+      pumpfun: `https://pump.fun/${mint}`,
+    };
+
+    if (actionId === "copy") {
+      navigator.clipboard
+        .writeText(mint)
+        .then(() => {
+          Utils.showToast("📋 Mint address copied", "success");
+        })
+        .catch((err) => {
+          console.error("Failed to copy mint:", err);
+          Utils.showToast("⚠️ Failed to copy mint", "warning");
+        });
+    } else if (urlMap[actionId]) {
+      window.open(urlMap[actionId], "_blank", "noopener,noreferrer");
+    }
+  };
+
+  const initializeLinkDropdowns = () => {
+    // Use event delegation instead of creating Dropdown instances
+    // This works better with dynamic table data that re-renders
+    if (!table?.elements?.scrollContainer) return;
+
+    // Remove existing listener if any
+    const container = table.elements.scrollContainer;
+    if (container._linksClickHandler) {
+      container.removeEventListener("click", container._linksClickHandler);
+    }
+
+    // Add delegated click handler
+    const clickHandler = (e) => {
+      const trigger = e.target.closest(".links-dropdown-trigger");
+      if (!trigger) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const mint = trigger.dataset.mint;
+      if (!mint) return;
+
+      // Close any existing dropdown
+      const existingMenu = document.querySelector(".links-dropdown-menu.open");
+      if (existingMenu) {
+        existingMenu.remove();
+      }
+
+      // Create dropdown menu
+      const menu = document.createElement("div");
+      menu.className = "links-dropdown-menu dropdown-menu open";
+      menu.setAttribute("data-align", "left");
+      menu.innerHTML = `
+        <button class="dropdown-item" data-action="dexscreener" type="button">
+          <span class="icon">📊</span>
+          <span class="label">DexScreener</span>
+        </button>
+        <button class="dropdown-item" data-action="gmgn" type="button">
+          <span class="icon">📈</span>
+          <span class="label">GMGN</span>
+        </button>
+        <button class="dropdown-item" data-action="solscan" type="button">
+          <span class="icon">🔍</span>
+          <span class="label">Solscan</span>
+        </button>
+        <button class="dropdown-item" data-action="birdeye" type="button">
+          <span class="icon">🦅</span>
+          <span class="label">Birdeye</span>
+        </button>
+        <button class="dropdown-item" data-action="rugcheck" type="button">
+          <span class="icon">🛡️</span>
+          <span class="label">RugCheck</span>
+        </button>
+        <button class="dropdown-item" data-action="pumpfun" type="button">
+          <span class="icon">🚀</span>
+          <span class="label">Pump.fun</span>
+        </button>
+        <div class="dropdown-divider"></div>
+        <button class="dropdown-item" data-action="copy" type="button">
+          <span class="icon">📋</span>
+          <span class="label">Copy Mint</span>
+        </button>
+      `;
+
+      // Position menu relative to trigger
+      const rect = trigger.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      menu.style.position = "absolute";
+      menu.style.top = `${rect.bottom - containerRect.top + container.scrollTop + 6}px`;
+      menu.style.left = `${rect.left - containerRect.left + container.scrollLeft}px`;
+      menu.style.zIndex = "9999";
+
+      container.appendChild(menu);
+
+      // Handle menu item clicks
+      menu.addEventListener("click", (e) => {
+        const item = e.target.closest(".dropdown-item");
+        if (!item) return;
+
+        const action = item.dataset.action;
+        if (action) {
+          handleLinkAction(action, mint);
+        }
+        menu.remove();
+      });
+
+      // Close on outside click
+      const closeHandler = (e) => {
+        if (!menu.contains(e.target) && e.target !== trigger) {
+          menu.remove();
+          document.removeEventListener("click", closeHandler);
+        }
+      };
+      setTimeout(() => document.addEventListener("click", closeHandler), 0);
+
+      // Close on escape
+      const escapeHandler = (e) => {
+        if (e.key === "Escape") {
+          menu.remove();
+          document.removeEventListener("keydown", escapeHandler);
+        }
+      };
+      document.addEventListener("keydown", escapeHandler);
+    };
+
+    container._linksClickHandler = clickHandler;
+    container.addEventListener("click", clickHandler);
   };
 
   return {
@@ -619,47 +753,68 @@ function createLifecycle() {
           wrap: false,
           render: (_v, row) => tokenCell(row),
         },
-          // Conditionally add Actions column for Pool view
-          ...(state.view === "pool"
-            ? [
-                {
-                  id: "actions",
-                  label: "Actions",
-                  sortable: false,
-                  minWidth: 180,
-                  wrap: false,
-                  render: (_v, row) => {
-                    const mint = row?.mint || "";
-                    const isBlacklisted = Boolean(row?.blacklisted);
-                    const hasOpen = Boolean(row?.has_open_position);
-                    const disabledAttr = isBlacklisted ? " disabled aria-disabled=\"true\"" : "";
+        // Conditionally add Actions column for Pool view
+        ...(state.view === "pool"
+          ? [
+              {
+                id: "actions",
+                label: "Actions",
+                sortable: false,
+                minWidth: 100,
+                wrap: false,
+                render: (_v, row) => {
+                  const mint = row?.mint || "";
+                  const isBlacklisted = Boolean(row?.blacklisted);
+                  const hasOpen = Boolean(row?.has_open_position);
+                  const disabledAttr = isBlacklisted ? " disabled aria-disabled=\"true\"" : "";
 
-                    if (!mint) return "—";
+                  if (!mint) return "—";
 
-                    if (hasOpen) {
-                      return `
-                        <div class="row-actions">
-                          <button class="btn row-action" data-action="add" data-mint="${Utils.escapeHtml(
-                            mint
-                          )}" title="Add to position (DCA)"${disabledAttr}>Add</button>
-                          <button class="btn warning row-action" data-action="sell" data-mint="${Utils.escapeHtml(
-                            mint
-                          )}" title="Sell (full or % partial)"${disabledAttr}>Sell</button>
-                        </div>
-                      `;
-                    }
-
+                  if (hasOpen) {
                     return `
                       <div class="row-actions">
-                        <button class="btn success row-action" data-action="buy" data-mint="${Utils.escapeHtml(
+                        <button class="btn row-action" data-action="add" data-mint="${Utils.escapeHtml(
                           mint
-                        )}" title="Buy position"${disabledAttr}>Buy</button>
+                        )}" title="Add to position (DCA)"${disabledAttr}>Add</button>
+                        <button class="btn warning row-action" data-action="sell" data-mint="${Utils.escapeHtml(
+                          mint
+                        )}" title="Sell (full or % partial)"${disabledAttr}>Sell</button>
                       </div>
                     `;
-                  },
+                  }
+
+                  return `
+                    <div class="row-actions">
+                      <button class="btn success row-action" data-action="buy" data-mint="${Utils.escapeHtml(
+                        mint
+                      )}" title="Buy position"${disabledAttr}>Buy</button>
+                    </div>
+                  `;
                 },
-              ]
-            : []),
+              },
+            ]
+          : []),
+        {
+          id: "links",
+          label: "Links",
+          sortable: false,
+          minWidth: 70,
+          wrap: false,
+          render: (_v, row) => {
+            const mint = row?.mint || "";
+            if (!mint) return "—";
+            return `
+              <button 
+                class="btn btn-sm links-dropdown-trigger" 
+                data-mint="${Utils.escapeHtml(mint)}"
+                title="External links"
+                type="button"
+              >
+                🔗
+              </button>
+            `;
+          },
+        },
         {
           id: "price_sol",
           label: "Price (SOL)",
@@ -797,7 +952,7 @@ function createLifecycle() {
         container: "#tokens-root",
         columns,
         rowIdField: "mint",
-        stateKey: `tokens-table.${state.view}`,
+        stateKey: `tokens-table-v2.${state.view}`, // v2: fixed column order (Actions before Links)
         enableLogging: false,
         sorting: {
           mode: "server",
@@ -817,7 +972,10 @@ function createLifecycle() {
           loadPage: loadTokensPage,
           dedupeKey: (row) => row?.mint ?? null,
           rowIdField: "mint",
-          onPageLoaded: () => updateToolbar(),
+          onPageLoaded: () => {
+            updateToolbar();
+            initializeLinkDropdowns();
+          },
         },
         toolbar: {
           title: {
@@ -1011,8 +1169,6 @@ function createLifecycle() {
 
       if (containerEl) {
         containerEl.addEventListener("click", handleRowActionClick);
-        // Clean up on dispose
-        ctx.addCleanup(() => containerEl.removeEventListener("click", handleRowActionClick));
       }
       applyViewPreferences();
 
@@ -1130,6 +1286,11 @@ function createLifecycle() {
       if (lastUpdateInterval) {
         clearInterval(lastUpdateInterval);
         lastUpdateInterval = null;
+      }
+      // Clean up any open dropdown menus
+      const existingMenu = document.querySelector(".links-dropdown-menu");
+      if (existingMenu) {
+        existingMenu.remove();
       }
       if (tradeDialog) {
         tradeDialog.destroy();
