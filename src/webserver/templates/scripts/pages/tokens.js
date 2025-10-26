@@ -147,31 +147,12 @@ function createLifecycle() {
     }
     const toolbar = table.elements.toolbar;
 
+    // Only show rejection_reason filter in "rejected" tab
     const reasonField = toolbar.querySelector(
       '.table-toolbar-field[data-filter-id="rejection_reason"]'
     );
     if (reasonField) {
       reasonField.hidden = state.view !== "rejected";
-    }
-
-    const poolToggle = toolbar.querySelector('.dt-filter[data-filter-id="pool_price"]');
-    if (poolToggle) {
-      const container = poolToggle.closest(".table-toolbar-field--switch");
-      const disabled = state.view === "no_market";
-      poolToggle.disabled = disabled;
-      if (container) {
-        container.classList.toggle("is-disabled", disabled);
-      }
-    }
-
-    const positionsToggle = toolbar.querySelector('.dt-filter[data-filter-id="positions"]');
-    if (positionsToggle) {
-      const container = positionsToggle.closest(".table-toolbar-field--switch");
-      const disabled = state.view === "positions";
-      positionsToggle.disabled = disabled;
-      if (container) {
-        container.classList.toggle("is-disabled", disabled);
-      }
     }
   };
 
@@ -389,12 +370,6 @@ function createLifecycle() {
     if (!table) {
       return;
     }
-    table.setToolbarFilterValue("pool_price", state.filters.pool_price, {
-      apply: false,
-    });
-    table.setToolbarFilterValue("positions", state.filters.positions, {
-      apply: false,
-    });
     table.setToolbarFilterValue("rejection_reason", state.filters.rejection_reason, {
       apply: false,
     });
@@ -880,48 +855,6 @@ function createLifecycle() {
           },
           filters: [
             {
-              id: "pool_price",
-              label: "Pool Price",
-              mode: "server",
-              control: "switch",
-              defaultValue: DEFAULT_FILTERS.pool_price,
-              switchLabels: { on: "Only", off: "All" },
-              onChange: (value, _el, options) => {
-                state.filters.pool_price = Boolean(value);
-                if (options?.restored) {
-                  return;
-                }
-                state.totalCount = null;
-                state.lastUpdate = null;
-                updateToolbar();
-                requestReload("filters", {
-                  silent: false,
-                  resetScroll: true,
-                }).catch(() => {});
-              },
-            },
-            {
-              id: "positions",
-              label: "Positions",
-              mode: "server",
-              control: "switch",
-              defaultValue: DEFAULT_FILTERS.positions,
-              switchLabels: { on: "Only", off: "All" },
-              onChange: (value, _el, options) => {
-                state.filters.positions = Boolean(value);
-                if (options?.restored) {
-                  return;
-                }
-                state.totalCount = null;
-                state.lastUpdate = null;
-                updateToolbar();
-                requestReload("filters", {
-                  silent: false,
-                  resetScroll: true,
-                }).catch(() => {});
-              },
-            },
-            {
               id: "rejection_reason",
               label: "Reject Reason",
               mode: "server",
@@ -941,18 +874,6 @@ function createLifecycle() {
                   resetScroll: true,
                 }).catch(() => {});
               },
-            },
-          ],
-          buttons: [
-            {
-              id: "refresh",
-              label: "Refresh",
-              variant: "primary",
-              onClick: () =>
-                requestReload("manual", {
-                  silent: false,
-                  preserveScroll: false,
-                }).catch(() => {}),
             },
           ],
         },

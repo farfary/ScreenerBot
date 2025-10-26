@@ -238,7 +238,7 @@ function createLifecycle() {
       {
         id: "positions-total",
         label: state.view === "open" ? "Open" : "Closed",
-        value: Utils.formatNumber(state.total),
+        value: Utils.formatNumber(state.total, 0),
       },
     ]);
 
@@ -296,6 +296,7 @@ function createLifecycle() {
       
       // Recreate table with new columns for the selected view
       const columns = selectedColumns();
+      const viewLabel = view === "open" ? "Open" : "Closed";
       table = new DataTable({
         container: "#positions-root",
         columns,
@@ -318,13 +319,20 @@ function createLifecycle() {
           loadPage: loadPositionsPage,
           dedupeKey: (row) => row?.mint ?? null,
           rowIdField: "mint",
+          onPageLoaded: () => updateToolbar(),
         },
         toolbar: {
-          icon: "📊",
-          title: "Positions",
-          search: { placeholder: "Search by symbol or mint..." },
-          refreshButton: true,
-          settingsButton: true,
+          title: {
+            icon: "📊",
+            text: `Positions: ${viewLabel}`,
+            meta: [{ id: "positions-last-update", lines: ["Last Update", "—"] }],
+          },
+          summary: [{ id: "positions-total", label: "Total", value: "0", variant: "secondary" }],
+          search: {
+            enabled: true,
+            mode: "client",
+            placeholder: "Search by symbol or mint...",
+          },
         },
       });
     }
@@ -349,7 +357,11 @@ function createLifecycle() {
       ctx.manageTabBar(tabBar);
       tabBar.show();
 
+      // Sync state.view with TabBar's restored state (from localStorage or URL)
+      state.view = tabBar.getActiveTab() || state.view;
+
       const columns = selectedColumns();
+      const viewLabel = state.view === "open" ? "Open" : "Closed";
 
       table = new DataTable({
         container: "#positions-root",
@@ -378,7 +390,7 @@ function createLifecycle() {
         toolbar: {
           title: {
             icon: "📊",
-            text: "Positions",
+            text: `Positions: ${viewLabel}`,
             meta: [{ id: "positions-last-update", lines: ["Last Update", "—"] }],
           },
           summary: [{ id: "positions-total", label: "Total", value: "0", variant: "secondary" }],
@@ -387,14 +399,6 @@ function createLifecycle() {
             mode: "client",
             placeholder: "Search by symbol or mint...",
           },
-          buttons: [
-            {
-              id: "refresh",
-              label: "Refresh",
-              variant: "primary",
-              onClick: () => table.refresh({ reason: "manual" }),
-            },
-          ],
         },
       });
 
