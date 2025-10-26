@@ -1,7 +1,9 @@
 // Pool manager for multi-pool support and failover
 
+use crate::events::{record_ohlcv_event, Severity};
 use crate::ohlcvs::database::OhlcvDatabase;
 use crate::ohlcvs::types::{OhlcvError, OhlcvResult, PoolConfig, PoolMetadata};
+use serde_json::json;
 use std::cmp::Ordering;
 use std::sync::Arc;
 
@@ -24,6 +26,22 @@ impl PoolManager {
     ) -> OhlcvResult<()> {
         let pool = PoolConfig::new(pool_address.to_string(), dex.to_string(), liquidity);
         self.db.upsert_pool(mint, &pool)?;
+
+        // INFO: Record pool registration
+        record_ohlcv_event(
+            "pool_registered",
+            Severity::Info,
+            Some(mint),
+            Some(pool_address),
+            json!({
+                "mint": mint,
+                "pool_address": pool_address,
+                "dex": dex,
+                "liquidity": liquidity,
+            }),
+        )
+        .await;
+
         Ok(())
     }
 
@@ -64,12 +82,38 @@ impl PoolManager {
             self.db.upsert_pool(mint, pool)?;
         }
 
+        // INFO: Record default pool change
+        record_ohlcv_event(
+            "default_pool_changed",
+            Severity::Info,
+            Some(mint),
+            Some(pool_address),
+            json!({
+                "mint": mint,
+                "pool_address": pool_address,
+            }),
+        )
+        .await;
+
         Ok(())
     }
 
     /// Mark a pool as failed
     pub async fn mark_failure(&self, mint: &str, pool_address: &str) -> OhlcvResult<()> {
         self.db.mark_pool_failure(mint, pool_address)?;
+
+        // WARN: Record pool failure
+        record_ohlcv_event(
+            "pool_failure",
+            Severity::Warn,
+            Some(mint),
+            Some(pool_address),
+            json!({
+                "mint": mint,
+                "pool_address": pool_address,
+            }),
+        )
+        .await;
 
         // Check if we need to switch default
         let default_pool = self.get_default_pool(mint).await?;
@@ -113,6 +157,18 @@ impl PoolManager {
     pub async fn discover_pools(&self, mint: &str) -> OhlcvResult<Vec<PoolConfig>> {
         use rusqlite::Connection;
         use tokio::task;
+
+        // DEBUG: Record pool discovery start
+        record_ohlcv_event(
+            "pool_discovery_start",
+            Severity::Debug,
+            Some(mint),
+            None,
+            json!({
+                "mint": mint,
+            }),
+        )
+        .await;
 
         // Perform blocking SQLite work off the async runtime
         let mint_owned = mint.to_string();
@@ -172,7 +228,24 @@ impl PoolManager {
         })?;
 
         // Unwrap inner result from blocking task
-        let discovered = discovered?;
+        let discovered = match discovered {
+            Ok(pools) => pools,
+            Err(e) => {
+                // ERROR: Record pool discovery failure
+                record_ohlcv_event(
+                    "pool_discovery_error",
+                    Severity::Error,
+                    Some(mint),
+                    None,
+                    json!({
+                        "mint": mint,
+                        "error": e.to_string(),
+                    }),
+                )
+                .await;
+                return Err(e);
+            }
+        };
 
         // Upsert discovered pools into OHLCV DB on the async side (rusqlite is still blocking but short)
         let mut result = Vec::new();
@@ -180,6 +253,20 @@ impl PoolManager {
             self.db.upsert_pool(mint, &config)?;
             result.push(config);
         }
+
+        // INFO: Record successful pool discovery
+        record_ohlcv_event(
+            "pool_discovery_complete",
+            Severity::Info,
+            Some(mint),
+            None,
+            json!({
+                "mint": mint,
+                "pools_found": result.len(),
+                "pool_addresses": result.iter().map(|p| &p.address).collect::<Vec<_>>(),
+            }),
+        )
+        .await;
 
         Ok(result)
     }

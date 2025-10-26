@@ -1,7 +1,9 @@
 // GeckoTerminal API fetcher with rate limiting and priority queue
 
 use crate::apis::{get_api_manager, ApiManager};
+use crate::events::{record_ohlcv_event, Severity};
 use crate::ohlcvs::types::{OhlcvDataPoint, OhlcvError, OhlcvResult, Priority, Timeframe};
+use serde_json::json;
 use std::collections::{BinaryHeap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -102,6 +104,21 @@ impl OhlcvFetcher {
         let start = Instant::now();
         let limit_clamped = limit.min(MAX_CANDLES_PER_REQUEST) as u32;
 
+        // DEBUG: Record fetch attempt
+        record_ohlcv_event(
+            "fetch_attempt",
+            Severity::Debug,
+            None,
+            Some(pool_address),
+            json!({
+                "pool_address": pool_address,
+                "timeframe": timeframe.to_string(),
+                "before_timestamp": before_timestamp,
+                "limit": limit_clamped,
+            }),
+        )
+        .await;
+
         let response = self
             .api_manager
             .geckoterminal
@@ -135,10 +152,54 @@ impl OhlcvFetcher {
                 let latency = start.elapsed().as_millis() as u64;
                 self.record_api_call(latency);
 
+                // INFO: Record successful fetch
+                record_ohlcv_event(
+                    "fetch_success",
+                    Severity::Info,
+                    None,
+                    Some(pool_address),
+                    json!({
+                        "pool_address": pool_address,
+                        "timeframe": timeframe.to_string(),
+                        "data_points": data_points.len(),
+                        "latency_ms": latency,
+                        "before_timestamp": before_timestamp,
+                    }),
+                )
+                .await;
+
                 Ok(data_points)
             }
             Err(err) => {
                 let lowered = err.to_lowercase();
+
+                let error_type = if lowered.contains("429") || lowered.contains("too many requests")
+                {
+                    "rate_limit"
+                } else if lowered.contains("404")
+                    || lowered.contains("not found")
+                    || lowered.contains("no pool data returned")
+                {
+                    "pool_not_found"
+                } else {
+                    "api_error"
+                };
+
+                // ERROR: Record fetch failure
+                record_ohlcv_event(
+                    "fetch_error",
+                    Severity::Error,
+                    None,
+                    Some(pool_address),
+                    json!({
+                        "pool_address": pool_address,
+                        "timeframe": timeframe.to_string(),
+                        "error_type": error_type,
+                        "error": err,
+                        "before_timestamp": before_timestamp,
+                    }),
+                )
+                .await;
 
                 if lowered.contains("429") || lowered.contains("too many requests") {
                     Err(OhlcvError::RateLimitExceeded)
@@ -165,6 +226,21 @@ impl OhlcvFetcher {
         if from_timestamp >= to_timestamp {
             return Ok(Vec::new());
         }
+
+        // DEBUG: Record historical fetch start
+        record_ohlcv_event(
+            "historical_fetch_start",
+            Severity::Debug,
+            None,
+            Some(pool_address),
+            json!({
+                "pool_address": pool_address,
+                "timeframe": timeframe.to_string(),
+                "from_timestamp": from_timestamp,
+                "to_timestamp": to_timestamp,
+            }),
+        )
+        .await;
 
         let mut all_data = Vec::new();
         let timeframe_seconds = timeframe.to_seconds();
@@ -218,6 +294,23 @@ impl OhlcvFetcher {
 
         all_data.sort_by_key(|d| d.timestamp);
         all_data.dedup_by_key(|d| d.timestamp);
+
+        // INFO: Record historical fetch completion
+        record_ohlcv_event(
+            "historical_fetch_complete",
+            Severity::Info,
+            None,
+            Some(pool_address),
+            json!({
+                "pool_address": pool_address,
+                "timeframe": timeframe.to_string(),
+                "from_timestamp": from_timestamp,
+                "to_timestamp": to_timestamp,
+                "data_points": all_data.len(),
+                "attempts": attempts,
+            }),
+        )
+        .await;
 
         Ok(all_data)
     }

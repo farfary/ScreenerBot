@@ -1,11 +1,13 @@
 // Database layer for OHLCV module
 
+use crate::events::{record_ohlcv_event, Severity};
 use crate::ohlcvs::types::{
     MintGapAggregate, OhlcvDataPoint, OhlcvError, OhlcvResult, PoolConfig, Priority, Timeframe,
     TokenOhlcvConfig,
 };
 use chrono::{DateTime, Duration, Utc};
 use rusqlite::{params, params_from_iter, Connection, OptionalExtension, Result as SqliteResult};
+use serde_json::json;
 use std::collections::HashSet;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
@@ -292,6 +294,34 @@ impl OhlcvDatabase {
 
         tx.commit()
             .map_err(|e| OhlcvError::DatabaseError(format!("Failed to commit: {}", e)))?;
+
+        // INFO: Record data insertion (only for significant inserts)
+        if inserted > 0 {
+            let severity = if inserted >= 100 {
+                Severity::Info
+            } else {
+                Severity::Debug
+            };
+
+            let mint = mint.to_string();
+            let pool_address = pool_address.to_string();
+            let data_len = data.len();
+            tokio::spawn(async move {
+                record_ohlcv_event(
+                    "data_inserted",
+                    severity,
+                    Some(&mint),
+                    Some(&pool_address),
+                    json!({
+                        "mint": mint,
+                        "pool_address": pool_address,
+                        "data_points": inserted,
+                        "total_attempted": data_len,
+                    }),
+                )
+                .await
+            });
+        }
 
         Ok(inserted)
     }

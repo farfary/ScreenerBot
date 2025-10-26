@@ -1,6 +1,8 @@
 // Timeframe aggregation logic
 
+use crate::events::{record_ohlcv_event, Severity};
 use crate::ohlcvs::types::{OhlcvDataPoint, OhlcvError, OhlcvResult, Timeframe};
+use serde_json::json;
 use std::collections::HashMap;
 
 pub struct OhlcvAggregator;
@@ -38,6 +40,27 @@ impl OhlcvAggregator {
 
         // Sort by timestamp
         aggregated.sort_by_key(|p| p.timestamp);
+
+        // DEBUG: Record large aggregation operations
+        if data.len() >= 1000 {
+            let input_len = data.len();
+            let output_len = aggregated.len();
+            let target_timeframe_str = target_timeframe.to_string();
+            tokio::spawn(async move {
+                record_ohlcv_event(
+                    "large_aggregation",
+                    Severity::Debug,
+                    None,
+                    None,
+                    json!({
+                        "input_points": input_len,
+                        "output_points": output_len,
+                        "target_timeframe": target_timeframe_str,
+                    }),
+                )
+                .await
+            });
+        }
 
         Ok(aggregated)
     }

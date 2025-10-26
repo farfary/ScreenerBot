@@ -3,7 +3,9 @@
 // INVARIANT: All cached data MUST be stored in ASC timestamp order.
 // This ensures consistent behavior across cache hits, DB queries, and aggregations.
 
+use crate::events::{record_ohlcv_event, Severity};
 use crate::ohlcvs::types::{OhlcvDataPoint, OhlcvError, OhlcvResult, Timeframe};
+use serde_json::json;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -81,6 +83,26 @@ impl OhlcvCache {
             )) {
                 cache.remove(&key);
                 self.record_miss();
+
+                // DEBUG: Record cache expiration
+                let mint = mint.to_string();
+                let pool_address_owned = pool_address.map(|s| s.to_string());
+                let timeframe_str = timeframe.to_string();
+                tokio::spawn(async move {
+                    record_ohlcv_event(
+                        "cache_expired",
+                        Severity::Debug,
+                        Some(&mint),
+                        pool_address_owned.as_deref(),
+                        json!({
+                            "mint": mint,
+                            "pool_address": pool_address_owned,
+                            "timeframe": timeframe_str,
+                        }),
+                    )
+                    .await
+                });
+
                 return Ok(None);
             }
 
@@ -89,6 +111,29 @@ impl OhlcvCache {
 
             // Record hit
             self.record_hit();
+
+            // DEBUG: Record cache hit (only occasionally to avoid spam)
+            if *self.hit_count.lock().unwrap_or_else(|e| e.into_inner()) % 100 == 0 {
+                let mint = mint.to_string();
+                let pool_address_owned = pool_address.map(|s| s.to_string());
+                let timeframe_str = timeframe.to_string();
+                let data_len = entry.data.len();
+                tokio::spawn(async move {
+                    record_ohlcv_event(
+                        "cache_hit",
+                        Severity::Debug,
+                        Some(&mint),
+                        pool_address_owned.as_deref(),
+                        json!({
+                            "mint": mint,
+                            "pool_address": pool_address_owned,
+                            "timeframe": timeframe_str,
+                            "data_points": data_len,
+                        }),
+                    )
+                    .await
+                });
+            }
 
             Ok(Some(entry.access().clone()))
         } else {

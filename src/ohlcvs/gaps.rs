@@ -1,12 +1,14 @@
 // Gap detection and filling system
 
 use crate::config::with_config;
+use crate::events::{record_ohlcv_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::database::OhlcvDatabase;
 use crate::ohlcvs::fetcher::OhlcvFetcher;
 use crate::ohlcvs::types::{OhlcvDataPoint, OhlcvError, OhlcvResult, Priority, Timeframe};
 use chrono::Utc;
+use serde_json::json;
 use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 
@@ -35,6 +37,22 @@ impl GapManager {
 
         let estimated_points = ((window_seconds / 60).max(1) as usize).saturating_add(512);
         let limit = estimated_points.min(200_000);
+
+        // DEBUG: Record gap detection start
+        record_ohlcv_event(
+            "gap_detection_start",
+            Severity::Debug,
+            Some(mint),
+            Some(pool_address),
+            json!({
+                "mint": mint,
+                "pool_address": pool_address,
+                "timeframe": timeframe.to_string(),
+                "lookback_start": lookback_start,
+                "limit": limit,
+            }),
+        )
+        .await;
 
         // Get existing data sliced to the retention window in ascending order
         let mut data = self.db.get_1m_data_range_asc(
@@ -65,6 +83,22 @@ impl GapManager {
                 .insert_gap(mint, pool_address, timeframe, *start, *end)?;
         }
 
+        // INFO: Record gap detection completion
+        record_ohlcv_event(
+            "gap_detection_complete",
+            Severity::Info,
+            Some(mint),
+            Some(pool_address),
+            json!({
+                "mint": mint,
+                "pool_address": pool_address,
+                "timeframe": timeframe.to_string(),
+                "gaps_found": gaps.len(),
+                "data_points_analyzed": normalized.len(),
+            }),
+        )
+        .await;
+
         Ok(gaps)
     }
 
@@ -78,6 +112,23 @@ impl GapManager {
         end_timestamp: i64,
         priority: Priority,
     ) -> OhlcvResult<usize> {
+        // DEBUG: Record gap fill start
+        record_ohlcv_event(
+            "gap_fill_start",
+            Severity::Debug,
+            Some(mint),
+            Some(pool_address),
+            json!({
+                "mint": mint,
+                "pool_address": pool_address,
+                "timeframe": timeframe.to_string(),
+                "start_timestamp": start_timestamp,
+                "end_timestamp": end_timestamp,
+                "priority": format!("{:?}", priority),
+            }),
+        )
+        .await;
+
         // Always fetch 1m base data (API constraint)
         let data_1m = self
             .fetcher
@@ -116,6 +167,23 @@ impl GapManager {
                 start_timestamp,
                 end_timestamp,
             )?;
+
+            // INFO: Record successful gap fill
+            record_ohlcv_event(
+                "gap_fill_complete",
+                Severity::Info,
+                Some(mint),
+                Some(pool_address),
+                json!({
+                    "mint": mint,
+                    "pool_address": pool_address,
+                    "timeframe": timeframe.to_string(),
+                    "start_timestamp": start_timestamp,
+                    "end_timestamp": end_timestamp,
+                    "data_points_inserted": inserted,
+                }),
+            )
+            .await;
         }
 
         Ok(inserted)
@@ -175,10 +243,43 @@ impl GapManager {
                     Err(e) => {
                         stats.failed_gaps += 1;
                         logger::error(LogTag::Ohlcv, &format!("Failed to fill gap: {}", e));
+
+                        // ERROR: Record gap fill failure
+                        record_ohlcv_event(
+                            "gap_fill_error",
+                            Severity::Error,
+                            Some(&gap.mint),
+                            Some(&gap.pool_address),
+                            json!({
+                                "mint": gap.mint,
+                                "pool_address": gap.pool_address,
+                                "timeframe": gap.timeframe.to_string(),
+                                "start_timestamp": gap.start_timestamp,
+                                "end_timestamp": gap.end_timestamp,
+                                "error": e.to_string(),
+                            }),
+                        )
+                        .await;
                     }
                 }
             }
         }
+
+        // INFO: Record fill_all_gaps summary
+        record_ohlcv_event(
+            "fill_all_gaps_complete",
+            Severity::Info,
+            Some(mint),
+            None,
+            json!({
+                "mint": mint,
+                "total_gaps": stats.total_gaps,
+                "filled_gaps": stats.filled_gaps,
+                "failed_gaps": stats.failed_gaps,
+                "data_points_added": stats.data_points_added,
+            }),
+        )
+        .await;
 
         Ok(stats)
     }
