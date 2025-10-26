@@ -1,8 +1,10 @@
 //! Trader service implementation
 
+use crate::events::{record_trader_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::trader::auto;
 use crate::trader::config;
+use serde_json::json;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -32,17 +34,16 @@ impl TraderService {
         logger::info(LogTag::Trader, "Starting Trader Service...");
 
         // Record service start event
-        crate::events::record_safe(crate::events::Event::new(
-            crate::events::EventCategory::Trader,
-            Some("service_start".to_string()),
-            crate::events::Severity::Info,
+        record_trader_event(
+            "service_start",
+            Severity::Info,
             None,
             None,
-            serde_json::json!({
+            json!({
                 "action": "startup",
                 "message": "Trader service initialization beginning",
             }),
-        ))
+        )
         .await;
 
         // Initialize trader system
@@ -57,31 +58,29 @@ impl TraderService {
             );
 
             // Record disabled state event
-            crate::events::record_safe(crate::events::Event::new(
-                crate::events::EventCategory::Trader,
-                Some("trading_disabled".to_string()),
-                crate::events::Severity::Warn,
+            record_trader_event(
+                "trading_disabled",
+                Severity::Warn,
                 None,
                 None,
-                serde_json::json!({
+                json!({
                     "enabled": false,
                     "message": "Trading is disabled in configuration",
                 }),
-            ))
+            )
             .await;
         } else {
             // Record enabled state event
-            crate::events::record_safe(crate::events::Event::new(
-                crate::events::EventCategory::Trader,
-                Some("trading_enabled".to_string()),
-                crate::events::Severity::Info,
+            record_trader_event(
+                "trading_enabled",
+                Severity::Info,
                 None,
                 None,
-                serde_json::json!({
+                json!({
                     "enabled": true,
                     "message": "Trading is enabled and active",
                 }),
-            ))
+            )
             .await;
         }
 
@@ -95,17 +94,16 @@ impl TraderService {
                 logger::error(LogTag::Trader, &format!("Auto trading error: {}", e));
 
                 // Record auto trading error event
-                crate::events::record_safe(crate::events::Event::new(
-                    crate::events::EventCategory::Trader,
-                    Some("auto_trading_error".to_string()),
-                    crate::events::Severity::Error,
+                record_trader_event(
+                    "auto_trading_error",
+                    Severity::Error,
                     None,
                     None,
-                    serde_json::json!({
+                    json!({
                         "error": e.to_string(),
                         "message": "Auto trading encountered an error",
                     }),
-                ))
+                )
                 .await;
             }
         });
@@ -113,17 +111,16 @@ impl TraderService {
         logger::info(LogTag::Trader, "Trader Service started successfully");
 
         // Record successful start event
-        crate::events::record_safe(crate::events::Event::new(
-            crate::events::EventCategory::Trader,
-            Some("service_started".to_string()),
-            crate::events::Severity::Info,
+        record_trader_event(
+            "service_started",
+            Severity::Info,
             None,
             None,
-            serde_json::json!({
+            json!({
                 "status": "running",
                 "message": "Trader service fully initialized and running",
             }),
-        ))
+        )
         .await;
 
         Ok(())
@@ -133,17 +130,16 @@ impl TraderService {
         logger::info(LogTag::Trader, "Stopping Trader Service...");
 
         // Record shutdown event
-        crate::events::record_safe(crate::events::Event::new(
-            crate::events::EventCategory::Trader,
-            Some("service_stop".to_string()),
-            crate::events::Severity::Info,
+        record_trader_event(
+            "service_stop",
+            Severity::Info,
             None,
             None,
-            serde_json::json!({
+            json!({
                 "action": "shutdown",
                 "message": "Trader service shutdown initiated",
             }),
-        ))
+        )
         .await;
 
         // Send shutdown signal
@@ -157,17 +153,16 @@ impl TraderService {
         logger::info(LogTag::Trader, "Trader Service stopped");
 
         // Record stopped event
-        crate::events::record_safe(crate::events::Event::new(
-            crate::events::EventCategory::Trader,
-            Some("service_stopped".to_string()),
-            crate::events::Severity::Info,
+        record_trader_event(
+            "service_stopped",
+            Severity::Info,
             None,
             None,
-            serde_json::json!({
+            json!({
                 "status": "stopped",
                 "message": "Trader service gracefully stopped",
             }),
-        ))
+        )
         .await;
 
         Ok(())

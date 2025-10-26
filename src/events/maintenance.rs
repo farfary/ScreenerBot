@@ -417,6 +417,46 @@ pub async fn record_filtering_event(
     crate::events::record_safe(event).await;
 }
 
+/// Record a trader event with flexible payload metadata
+pub async fn record_trader_event(
+    subtype: &str,
+    severity: Severity,
+    mint: Option<&str>,
+    reference_id: Option<&str>,
+    payload: Value,
+) {
+    let mut payload_obj: Map<String, Value> = match payload {
+        Value::Object(obj) => obj,
+        Value::Null => Map::new(),
+        other => {
+            let mut map = Map::new();
+            map.insert("details".to_string(), other);
+            map
+        }
+    };
+
+    payload_obj
+        .entry("subtype".to_string())
+        .or_insert_with(|| Value::String(subtype.to_string()));
+    payload_obj
+        .entry("event_time".to_string())
+        .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
+    payload_obj
+        .entry("message".to_string())
+        .or_insert_with(|| Value::String(format!("Trader event: {}", subtype)));
+
+    let event = Event::new(
+        EventCategory::Trader,
+        Some(subtype.to_string()),
+        severity,
+        mint.map(|m| m.to_string()),
+        reference_id.map(|r| r.to_string()),
+        Value::Object(payload_obj),
+    );
+
+    crate::events::record_safe(event).await;
+}
+
 // =============================================================================
 // MCP INTEGRATION HELPERS
 // =============================================================================
