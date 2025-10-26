@@ -1484,12 +1484,14 @@ impl TokenDatabase {
                 d.txns_5m_buys, d.txns_5m_sells, d.txns_1h_buys, d.txns_1h_sells,
                 d.txns_6h_buys, d.txns_6h_sells, d.txns_24h_buys, d.txns_24h_sells,
                 d.fetched_at as d_fetched_at,
+                d.image_url as d_image_url, d.header_image_url as d_header_image_url,
                 g.price_usd, g.price_sol, g.price_native,
                 g.price_change_5m, g.price_change_1h, g.price_change_6h, g.price_change_24h,
                 g.market_cap, g.fdv, g.liquidity_usd,
                 g.volume_5m, g.volume_1h, g.volume_6h, g.volume_24h,
                 g.pool_count, g.reserve_in_usd,
                 g.fetched_at as g_fetched_at,
+                g.image_url as g_image_url,
                 ut.last_market_update,
                 ut.last_decimals_update,
                 d.pair_created_at
@@ -1561,30 +1563,33 @@ impl TokenDatabase {
                 let d_txn_24h_buys: Option<i64> = row.get(30)?;
                 let d_txn_24h_sells: Option<i64> = row.get(31)?;
                 let d_fetched_at: Option<i64> = row.get(32)?;
+                let d_image_url: Option<String> = row.get(33)?;
+                let d_header_image_url: Option<String> = row.get(34)?;
 
-                // GeckoTerminal fields 33..=45
-                let g_price_usd: Option<f64> = row.get(33)?;
-                let g_price_sol: Option<f64> = row.get(34)?;
-                let g_price_native: Option<String> = row.get(35)?;
-                let g_change_5m: Option<f64> = row.get(36)?;
-                let g_change_1h: Option<f64> = row.get(37)?;
-                let g_change_6h: Option<f64> = row.get(38)?;
-                let g_change_24h: Option<f64> = row.get(39)?;
-                let g_market_cap: Option<f64> = row.get(40)?;
-                let g_fdv: Option<f64> = row.get(41)?;
-                let g_liquidity_usd: Option<f64> = row.get(42)?;
-                let g_vol_5m: Option<f64> = row.get(43)?;
-                let g_vol_1h: Option<f64> = row.get(44)?;
-                let g_vol_6h: Option<f64> = row.get(45)?;
-                let g_vol_24h: Option<f64> = row.get(46)?;
-                let g_pool_count: Option<i64> = row.get(47)?;
-                let g_reserve_in_usd: Option<f64> = row.get(48)?;
-                let g_fetched_at: Option<i64> = row.get(49)?;
+                // GeckoTerminal fields 35..=48
+                let g_price_usd: Option<f64> = row.get(35)?;
+                let g_price_sol: Option<f64> = row.get(36)?;
+                let g_price_native: Option<String> = row.get(37)?;
+                let g_change_5m: Option<f64> = row.get(38)?;
+                let g_change_1h: Option<f64> = row.get(39)?;
+                let g_change_6h: Option<f64> = row.get(40)?;
+                let g_change_24h: Option<f64> = row.get(41)?;
+                let g_market_cap: Option<f64> = row.get(42)?;
+                let g_fdv: Option<f64> = row.get(43)?;
+                let g_liquidity_usd: Option<f64> = row.get(44)?;
+                let g_vol_5m: Option<f64> = row.get(45)?;
+                let g_vol_1h: Option<f64> = row.get(46)?;
+                let g_vol_6h: Option<f64> = row.get(47)?;
+                let g_vol_24h: Option<f64> = row.get(48)?;
+                let g_pool_count: Option<i64> = row.get(49)?;
+                let g_reserve_in_usd: Option<f64> = row.get(50)?;
+                let g_fetched_at: Option<i64> = row.get(51)?;
+                let g_image_url: Option<String> = row.get(52)?;
 
                 // Update tracking and pair creation timestamps
-                let last_market_update_ts: Option<i64> = row.get(50)?;
-                let last_decimals_update_ts: Option<i64> = row.get(51)?;
-                let d_pair_created_at: Option<i64> = row.get(52)?;
+                let last_market_update_ts: Option<i64> = row.get(53)?;
+                let last_decimals_update_ts: Option<i64> = row.get(54)?;
+                let d_pair_created_at: Option<i64> = row.get(55)?;
 
                 Ok((
                     mint,
@@ -1621,6 +1626,8 @@ impl TokenDatabase {
                     d_txn_24h_buys,
                     d_txn_24h_sells,
                     d_fetched_at,
+                    d_image_url,
+                    d_header_image_url,
                     // Gecko (match SELECT order)
                     g_price_usd,
                     g_price_sol,
@@ -1639,6 +1646,7 @@ impl TokenDatabase {
                     g_pool_count,
                     g_reserve_in_usd,
                     g_fetched_at,
+                    g_image_url,
                     last_market_update_ts,
                     last_decimals_update_ts,
                     d_pair_created_at,
@@ -1683,6 +1691,8 @@ impl TokenDatabase {
                 d_txn_24h_buys,
                 d_txn_24h_sells,
                 d_fetched_at,
+                d_image_url,
+                d_header_image_url,
                 // Gecko fields
                 g_price_usd,
                 g_price_sol,
@@ -1701,6 +1711,7 @@ impl TokenDatabase {
                 g_pool_count,
                 g_reserve_in_usd,
                 g_fetched_at,
+                g_image_url,
                 last_market_update_ts,
                 last_decimals_update_ts,
                 d_pair_created_at,
@@ -1944,6 +1955,14 @@ impl TokenDatabase {
 
             let market_updated_dt = last_market_update_dt.unwrap_or(fetched_at_dt);
 
+            // Determine image_url and header_image_url based on data source
+            let (resolved_image_url, resolved_header_image_url) = match data_source {
+                DataSource::DexScreener => (d_image_url, d_header_image_url),
+                DataSource::GeckoTerminal => (g_image_url, None),
+                DataSource::Unknown => (None, None),
+                _ => (None, None),
+            };
+
             let token = Token {
                 // Core Identity & Metadata
                 mint: mint.clone(),
@@ -1951,8 +1970,8 @@ impl TokenDatabase {
                 name: name.unwrap_or_else(|| "Unknown Token".to_string()),
                 decimals: decimals.unwrap_or(9),
                 description: None,
-                image_url: None,
-                header_image_url: None,
+                image_url: resolved_image_url,
+                header_image_url: resolved_header_image_url,
                 supply: None,
 
                 // Data source & timestamps
