@@ -101,7 +101,7 @@ impl ConnectivityService {
         )
         .await;
 
-        // Log health changes
+        // Log health changes and record events
         if let Some(health) = state::get_endpoint_health(name).await {
             match &health {
                 crate::connectivity::types::EndpointHealth::Healthy { latency_ms, .. } => {
@@ -109,6 +109,24 @@ impl ConnectivityService {
                         LogTag::Connectivity,
                         &format!("{} endpoint healthy (latency={}ms)", name, latency_ms),
                     );
+
+                    // Record recovery event if this is a transition from unhealthy/degraded
+                    tokio::spawn({
+                        let name = name.to_string();
+                        let latency = *latency_ms;
+                        async move {
+                            record_connectivity_event(
+                                &name,
+                                "healthy",
+                                Severity::Info,
+                                serde_json::json!({
+                                    "latency_ms": latency,
+                                    "message": "Endpoint recovered and is now healthy",
+                                }),
+                            )
+                            .await;
+                        }
+                    });
                 }
                 crate::connectivity::types::EndpointHealth::Degraded {
                     latency_ms, reason, ..
@@ -238,6 +256,25 @@ impl ConnectivityService {
                                 unhealthy
                             ),
                         );
+
+                        // Record critical endpoints event
+                        tokio::spawn({
+                            let unhealthy_list: Vec<String> = unhealthy.iter().map(|s| s.to_string()).collect();
+                            let count = unhealthy.len();
+                            async move {
+                                record_connectivity_event(
+                                    "system",
+                                    "critical_endpoints_unhealthy",
+                                    Severity::Error,
+                                    serde_json::json!({
+                                        "unhealthy_count": count,
+                                        "unhealthy_endpoints": unhealthy_list,
+                                        "message": format!("{} critical endpoint(s) unhealthy - System should pause operations", count),
+                                    }),
+                                )
+                                .await;
+                            }
+                        });
                     }
                 }
             }
@@ -281,6 +318,23 @@ impl Service for ConnectivityService {
             ),
         );
 
+        // Record initialization event
+        tokio::spawn({
+            let monitor_count = self.monitors.len();
+            async move {
+                record_connectivity_event(
+                    "system",
+                    "service_initialized",
+                    Severity::Info,
+                    serde_json::json!({
+                        "monitor_count": monitor_count,
+                        "message": format!("Connectivity service initialized with {} monitors", monitor_count),
+                    }),
+                )
+                .await;
+            }
+        });
+
         Ok(())
     }
 
@@ -300,6 +354,23 @@ impl Service for ConnectivityService {
             return Ok(vec![]);
         }
 
+        // Record service start event
+        tokio::spawn({
+            let check_interval = cfg.connectivity.check_interval_secs;
+            async move {
+                record_connectivity_event(
+                    "system",
+                    "service_started",
+                    Severity::Info,
+                    serde_json::json!({
+                        "check_interval_secs": check_interval,
+                        "message": format!("Connectivity monitoring started (interval={}s)", check_interval),
+                    }),
+                )
+                .await;
+            }
+        });
+
         // Move monitors out for the background task
         let monitors = std::mem::take(&mut self.monitors);
 
@@ -312,6 +383,20 @@ impl Service for ConnectivityService {
 
     async fn stop(&mut self) -> Result<(), String> {
         logger::info(LogTag::Connectivity, "Connectivity service stopped");
+
+        // Record service stop event
+        tokio::spawn(async move {
+            record_connectivity_event(
+                "system",
+                "service_stopped",
+                Severity::Info,
+                serde_json::json!({
+                    "message": "Connectivity monitoring stopped",
+                }),
+            )
+            .await;
+        });
+
         Ok(())
     }
 

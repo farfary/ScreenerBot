@@ -409,6 +409,7 @@ function createLifecycle() {
                 { value: "ohlcv", label: "OHLCV" },
                 { value: "rpc", label: "RPC" },
                 { value: "security", label: "Security" },
+                { value: "connectivity", label: "Connectivity" },
                 { value: "learner", label: "Learner" },
                 { value: "other", label: "Other" },
               ],
