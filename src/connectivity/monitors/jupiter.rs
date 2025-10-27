@@ -13,7 +13,7 @@ impl JupiterMonitor {
         Self
     }
 
-    const BASE_URL: &'static str = "https://quote-api.jup.ag/v6";
+    const BASE_URL: &'static str = "https://lite-api.jup.ag";
 }
 
 #[async_trait]
@@ -49,12 +49,8 @@ impl EndpointMonitor for JupiterMonitor {
             Err(e) => return HealthCheckResult::failure(format!("Failed to create client: {}", e)),
         };
 
-        // Use a simple quote request as health check
-        // SOL to USDC quote (small amount to keep it lightweight)
-        let url = format!(
-            "{}/quote?inputMint=So11111111111111111111111111111111111111112&outputMint=EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v&amount=1000000",
-            Self::BASE_URL
-        );
+        // Use token search endpoint for health check (lightweight, no auth required)
+        let url = format!("{}/tokens/v2/search?query=SOL", Self::BASE_URL);
         let start = Instant::now();
 
         match timeout(Duration::from_secs(timeout_secs), client.get(&url).send()).await {

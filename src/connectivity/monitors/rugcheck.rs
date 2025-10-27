@@ -13,7 +13,7 @@ impl RugcheckMonitor {
         Self
     }
 
-    const BASE_URL: &'static str = "https://api.rugcheck.xyz/v1";
+    const BASE_URL: &'static str = "https://api.rugcheck.xyz";
 }
 
 #[async_trait]
@@ -47,8 +47,8 @@ impl EndpointMonitor for RugcheckMonitor {
             Err(e) => return HealthCheckResult::failure(format!("Failed to create client: {}", e)),
         };
 
-        // Use stats/summary endpoint for health check (lightweight)
-        let url = format!("{}/stats/summary", Self::BASE_URL);
+        // Use ping endpoint for health check (lightweight, documented)
+        let url = format!("{}/ping", Self::BASE_URL);
         let start = Instant::now();
 
         match timeout(Duration::from_secs(timeout_secs), client.get(&url).send()).await {
