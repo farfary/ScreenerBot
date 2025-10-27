@@ -354,8 +354,6 @@ export class TokenDetailsDialog {
         this._loadRugCheckTab(content);
         break;
     }
-
-    content.dataset.loaded = "true";
   }
 
   /**
@@ -373,6 +371,9 @@ export class TokenDetailsDialog {
     setTimeout(() => {
       this._initializeChart(this.fullTokenData.mint);
     }, 100);
+
+    // Mark as loaded after successful content creation
+    content.dataset.loaded = "true";
   }
 
   /**
@@ -939,6 +940,7 @@ export class TokenDetailsDialog {
    */
   _loadPositionsTab(content) {
     content.innerHTML = '<div class="tab-placeholder">Positions content will be loaded here</div>';
+    content.dataset.loaded = "true";
   }
 
   /**
@@ -946,6 +948,7 @@ export class TokenDetailsDialog {
    */
   _loadPoolsTab(content) {
     content.innerHTML = '<div class="tab-placeholder">Pools content will be loaded here</div>';
+    content.dataset.loaded = "true";
   }
 
   /**
@@ -965,6 +968,7 @@ export class TokenDetailsDialog {
               <div class="placeholder-hint">Data may not be synced yet</div>
             </div>
           `;
+          content.dataset.loaded = "true";
           return;
         }
         throw new Error(`Failed to fetch DexScreener data: ${response.statusText}`);
@@ -972,6 +976,7 @@ export class TokenDetailsDialog {
 
       const data = await response.json();
       content.innerHTML = this._renderDexScreenerData(data);
+      content.dataset.loaded = "true";
     } catch (error) {
       console.error("Error loading DexScreener data:", error);
       content.innerHTML = `
@@ -981,6 +986,7 @@ export class TokenDetailsDialog {
           <div class="placeholder-hint">${this._escapeHtml(error.message)}</div>
         </div>
       `;
+      content.dataset.loaded = "true";
     }
   }
 
@@ -1409,6 +1415,7 @@ export class TokenDetailsDialog {
    */
   _loadGmgnTab(content) {
     content.innerHTML = '<div class="tab-placeholder">GMGN iframe will be loaded here</div>';
+    content.dataset.loaded = "true";
   }
 
   /**
@@ -1416,6 +1423,7 @@ export class TokenDetailsDialog {
    */
   _loadRugCheckTab(content) {
     content.innerHTML = '<div class="tab-placeholder">RugCheck content will be loaded here</div>';
+    content.dataset.loaded = "true";
   }
 
   /**
