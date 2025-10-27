@@ -17,6 +17,24 @@ impl StrategyManager {
         token_mint: &str,
         price_info: &PriceResult,
     ) -> Result<Option<TradeDecision>, String> {
+        // Check connectivity before evaluating - entry depends on external data
+        if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&[
+            "rpc",
+            "dexscreener",
+            "rugcheck",
+        ])
+        .await
+        {
+            logger::warning(
+                LogTag::Trader,
+                &format!(
+                    "⚠️ Skipping entry evaluation for {} - Unhealthy endpoints: {}",
+                    token_mint, unhealthy
+                ),
+            );
+            return Ok(None);
+        }
+
         logger::info(
             LogTag::Trader,
             &format!(
@@ -111,6 +129,23 @@ impl StrategyManager {
         position: &Position,
         current_price: f64,
     ) -> Result<Option<TradeDecision>, String> {
+        // Check connectivity before evaluating - exit depends on fresh price data
+        if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&[
+            "rpc",
+            "dexscreener",
+        ])
+        .await
+        {
+            logger::warning(
+                LogTag::Trader,
+                &format!(
+                    "⚠️ Skipping exit evaluation for position {:?} - Unhealthy endpoints: {}",
+                    position.id, unhealthy
+                ),
+            );
+            return Ok(None);
+        }
+
         logger::info(
             LogTag::Trader,
             &format!(

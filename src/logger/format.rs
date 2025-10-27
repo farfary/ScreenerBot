@@ -113,6 +113,9 @@ fn format_tag(tag: &LogTag) -> ColoredString {
         LogTag::System => format!("{:<width$}", "SYSTEM", width = TAG_WIDTH)
             .bright_yellow()
             .bold(),
+        LogTag::Connectivity => format!("{:<width$}", "CONNECT", width = TAG_WIDTH)
+            .bright_green()
+            .bold(),
         LogTag::Pool => format!("{:<width$}", "POOL", width = TAG_WIDTH)
             .bright_blue()
             .bold(),

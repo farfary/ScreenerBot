@@ -7,6 +7,16 @@ use crate::trader::types::{TradeDecision, TradeResult};
 
 /// Execute a buy trade
 pub async fn execute_buy(decision: &TradeDecision) -> Result<TradeResult, String> {
+    // Check connectivity before executing trade - critical operation
+    if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["rpc"]).await {
+        let error = format!(
+            "Cannot execute buy - Unhealthy endpoints: {}",
+            unhealthy
+        );
+        logger::error(LogTag::Trader, &error);
+        return Ok(TradeResult::failure(decision.clone(), error, 0));
+    }
+
     logger::info(
         LogTag::Trader,
         &format!(
@@ -50,6 +60,16 @@ pub async fn execute_buy(decision: &TradeDecision) -> Result<TradeResult, String
 
 /// Execute a DCA (dollar cost averaging) buy
 pub async fn execute_dca(decision: &TradeDecision) -> Result<TradeResult, String> {
+    // Check connectivity before executing DCA - critical operation
+    if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["rpc"]).await {
+        let error = format!(
+            "Cannot execute DCA - Unhealthy endpoints: {}",
+            unhealthy
+        );
+        logger::error(LogTag::Trader, &error);
+        return Ok(TradeResult::failure(decision.clone(), error, 0));
+    }
+
     logger::info(
         LogTag::Trader,
         &format!(

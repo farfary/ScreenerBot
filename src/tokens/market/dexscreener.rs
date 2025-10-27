@@ -113,6 +113,18 @@ pub async fn fetch_dexscreener_data_batch(
     mints: &[String],
     db: &TokenDatabase,
 ) -> TokenResult<HashMap<String, Option<DexScreenerData>>> {
+    // Check connectivity before API call - fallback to cache/DB if unhealthy
+    let connectivity_ok = crate::connectivity::check_endpoints_healthy(&["dexscreener"])
+        .await
+        .is_none();
+
+    if !connectivity_ok {
+        logger::debug(
+            LogTag::Tokens,
+            "DexScreener endpoint unhealthy - using cached/DB data only",
+        );
+    }
+
     if mints.is_empty() {
         return Ok(HashMap::new());
     }
@@ -156,6 +168,22 @@ pub async fn fetch_dexscreener_data_batch(
 
     // If all tokens were cached, return early
     if to_fetch.is_empty() {
+        return Ok(results);
+    }
+
+    // Skip API fetch if connectivity is down - return what we have from cache/DB
+    if !connectivity_ok {
+        logger::debug(
+            LogTag::Tokens,
+            &format!(
+                "Skipping DexScreener API fetch for {} tokens - connectivity issue",
+                to_fetch.len()
+            ),
+        );
+        // Return None for tokens we couldn't fetch
+        for mint in &to_fetch {
+            results.insert(mint.clone(), None);
+        }
         return Ok(results);
     }
 

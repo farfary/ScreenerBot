@@ -492,6 +492,20 @@ impl AccountFetcher {
         rpc_client: &Arc<RpcClient>,
         accounts: &[Pubkey],
     ) -> Result<(Vec<AccountData>, Vec<Pubkey>), String> {
+        // Check connectivity before RPC batch fetch - graceful degradation
+        if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["rpc"]).await {
+            logger::debug(
+                LogTag::PoolFetcher,
+                &format!(
+                    "Skipping account batch fetch ({} accounts) - Unhealthy endpoints: {}",
+                    accounts.len(),
+                    unhealthy
+                ),
+            );
+            // Return empty list - caller will use cached data
+            return Ok((Vec::new(), Vec::new()));
+        }
+
         if accounts.is_empty() {
             return Ok((Vec::new(), Vec::new()));
         }

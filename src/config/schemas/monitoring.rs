@@ -7,6 +7,7 @@ use crate::config_struct;
 config_struct! {
     /// System monitoring configuration
     pub struct MonitoringConfig {
-        // Reserved for future monitoring configuration
+        // Reserved for future monitoring configuration (metrics, profiling, etc.)
     }
 }
+

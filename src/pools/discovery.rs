@@ -91,6 +91,18 @@ impl PoolDiscovery {
     }
 
     async fn fetch_dexscreener_batch(tokens: &[String]) -> DexsBatchResult {
+        // Check connectivity before API call - graceful degradation
+        if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["dexscreener"]).await
+        {
+            logger::debug(
+                LogTag::PoolDiscovery,
+                &format!("Skipping DexScreener fetch - Unhealthy endpoints: {}", unhealthy),
+            );
+            return DexsBatchResult {
+                pools: HashMap::new(),
+            };
+        }
+
         // DexScreener has a batch endpoint returning one best pair per token.
         // We'll chunk inputs by 30 and fetch sequentially to keep it simple.
         let apis = get_api_manager();
@@ -136,6 +148,18 @@ impl PoolDiscovery {
     }
 
     async fn fetch_geckoterminal_batch(tokens: &[String]) -> GeckoBatchResult {
+        // Check connectivity before API call - graceful degradation
+        if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["geckoterminal"]).await
+        {
+            logger::debug(
+                LogTag::PoolDiscovery,
+                &format!("Skipping GeckoTerminal fetch - Unhealthy endpoints: {}", unhealthy),
+            );
+            return GeckoBatchResult {
+                pools: HashMap::new(),
+            };
+        }
+
         let apis = get_api_manager();
         let client = &apis.geckoterminal;
         let mut out: HashMap<String, Vec<GeckoTerminalPool>> = HashMap::new();

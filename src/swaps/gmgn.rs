@@ -45,6 +45,13 @@ pub struct GMGNSwapResult {
 pub async fn gmgn_sign_and_send_transaction(
     swap_transaction_base64: &str,
 ) -> Result<String, ScreenerBotError> {
+    // Check connectivity before sending transaction - critical operation
+    if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["internet", "rpc"]).await {
+        let error = format!("Cannot send GMGN transaction - Unhealthy endpoints: {}", unhealthy);
+        logger::error(LogTag::Swap, &error);
+        return Err(ScreenerBotError::connectivity_error(error));
+    }
+
     logger::debug(
         LogTag::Swap,
         &format!(
@@ -97,6 +104,14 @@ pub async fn get_gmgn_quote(
     slippage: f64,
     swap_mode: &str,
 ) -> Result<SwapData, ScreenerBotError> {
+    // Check connectivity before fetching quote - GMGN API required
+    if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["internet", "rpc"]).await
+    {
+        let error = format!("Cannot fetch GMGN quote - Unhealthy endpoints: {}", unhealthy);
+        logger::warning(LogTag::Swap, &error);
+        return Err(ScreenerBotError::connectivity_error(error));
+    }
+
     // Load config values
     let gmgn_fee_sol = with_config(|cfg| cfg.swaps.gmgn.fee_sol);
     let gmgn_anti_mev = with_config(|cfg| cfg.swaps.gmgn.anti_mev);

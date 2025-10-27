@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 pub mod blacklist;
 pub mod config;
+pub mod connectivity;
 pub mod dashboard;
 pub mod events;
 pub mod filtering_api;
@@ -110,6 +111,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .merge(config::routes())
         .merge(services::routes())
         .merge(ohlcv::ohlcv_routes())
+        .nest("/connectivity", connectivity::routes())
         .nest("/trading", trading::routes())
         .nest("/trader", trader::routes())
         .nest("/system", system::routes())

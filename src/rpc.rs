@@ -1438,6 +1438,15 @@ impl RpcClient {
         &self,
         pubkeys: &[Pubkey],
     ) -> Result<Vec<Option<Account>>, String> {
+        // Check connectivity before RPC operation - critical for data fetching
+        if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["rpc"]).await {
+            logger::debug(
+                LogTag::Rpc,
+                &format!("Skipping get_multiple_accounts - Unhealthy endpoints: {}", unhealthy),
+            );
+            return Err(format!("RPC connectivity issue: {}", unhealthy));
+        }
+
         if pubkeys.is_empty() {
             return Ok(Vec::new());
         }
@@ -2185,6 +2194,18 @@ impl RpcClient {
         &self,
         transaction: &Transaction,
     ) -> Result<String, ScreenerBotError> {
+        // Check connectivity before sending transaction - absolutely critical
+        if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["rpc"]).await {
+            logger::error(
+                LogTag::Rpc,
+                &format!("Cannot send transaction - Unhealthy endpoints: {}", unhealthy),
+            );
+            return Err(ScreenerBotError::connectivity_error(format!(
+                "RPC connectivity issue: {}",
+                unhealthy
+            )));
+        }
+
         // Serialize transaction
         let serialized_tx = bincode::serialize(transaction).map_err(|e| {
             ScreenerBotError::Data(crate::errors::DataError::ParseError {

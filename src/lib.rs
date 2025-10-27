@@ -4,6 +4,7 @@ pub mod apis;
 pub mod arguments;
 pub mod ata_cleanup;
 pub mod config;
+pub mod connectivity;
 pub mod constants;
 pub mod errors;
 pub mod events;

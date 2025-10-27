@@ -100,6 +100,7 @@ fn register_all_services(manager: &mut ServiceManager) {
     // Register all services (order doesn't matter - manager handles dependencies and priority)
 
     // Core infrastructure services
+    manager.register(Box::new(crate::connectivity::ConnectivityService::new())); // Priority 5 - Foundation service
     manager.register(Box::new(EventsService));
     manager.register(Box::new(TransactionsService));
     manager.register(Box::new(SolPriceService));
@@ -126,7 +127,7 @@ fn register_all_services(manager: &mut ServiceManager) {
 
     logger::info(
         LogTag::System,
-        "All services registered (20 total - centralized TokensService)",
+        "All services registered (21 total - includes ConnectivityService)",
     );
 }
 

@@ -19,6 +19,7 @@ pub static STARTUP_TIME: Lazy<DateTime<Utc>> = Lazy::new(|| Utc::now());
 // ================================================================================================
 
 /// Core services readiness flags - prevents trading until all critical services are ready
+pub static CONNECTIVITY_SYSTEM_READY: AtomicBool = AtomicBool::new(false);
 pub static TOKENS_SYSTEM_READY: AtomicBool = AtomicBool::new(false);
 pub static POSITIONS_SYSTEM_READY: AtomicBool = AtomicBool::new(false);
 pub static POOL_SERVICE_READY: AtomicBool = AtomicBool::new(false);
@@ -26,7 +27,8 @@ pub static TRANSACTIONS_SYSTEM_READY: AtomicBool = AtomicBool::new(false);
 
 /// Check if all critical services are ready for trading operations
 pub fn are_core_services_ready() -> bool {
-    TOKENS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst)
+    CONNECTIVITY_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst)
+        && TOKENS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst)
         && POSITIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst)
         && POOL_SERVICE_READY.load(std::sync::atomic::Ordering::SeqCst)
         && TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst)
@@ -36,6 +38,9 @@ pub fn are_core_services_ready() -> bool {
 pub fn get_pending_services() -> Vec<&'static str> {
     let mut pending = Vec::new();
 
+    if !CONNECTIVITY_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst) {
+        pending.push("Connectivity System");
+    }
     if !TOKENS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst) {
         pending.push("Tokens System");
     }

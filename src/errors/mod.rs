@@ -381,6 +381,13 @@ impl ScreenerBotError {
         })
     }
 
+    /// Create a connectivity error for endpoint health issues
+    pub fn connectivity_error(message: impl Into<String>) -> Self {
+        ScreenerBotError::Network(NetworkError::Generic {
+            message: format!("Connectivity issue: {}", message.into()),
+        })
+    }
+
     /// Create an invalid response error (replaces ScreenerBotError::InvalidResponse)
     pub fn invalid_response(message: impl Into<String>) -> Self {
         ScreenerBotError::Data(DataError::InvalidFormat {

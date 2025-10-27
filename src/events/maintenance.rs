@@ -337,6 +337,32 @@ pub async fn record_security_event(
     crate::events::record_safe(event).await;
 }
 
+/// Record a connectivity/endpoint health event
+pub async fn record_connectivity_event(
+    endpoint_name: &str,
+    action: &str,
+    severity: Severity,
+    details: Value,
+) {
+    let payload = json!({
+        "endpoint": endpoint_name,
+        "action": action,
+        "details": details,
+        "event_time": Utc::now().to_rfc3339()
+    });
+
+    let event = Event::new(
+        EventCategory::Connectivity,
+        Some(action.to_string()),
+        severity,
+        None,
+        Some(endpoint_name.to_string()),
+        payload,
+    );
+
+    crate::events::record_safe(event).await;
+}
+
 /// Record an OHLCV monitoring event with flexible payload metadata
 pub async fn record_ohlcv_event(
     subtype: &str,

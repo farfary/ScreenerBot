@@ -99,7 +99,22 @@ pub async fn fetch_rugcheck_data(
     mint: &str,
     db: &TokenDatabase,
 ) -> TokenResult<Option<RugcheckData>> {
-    // 1. Check in-memory store cache
+    // Check connectivity before API call - fallback to cache/DB if unhealthy
+    let connectivity_ok = crate::connectivity::check_endpoints_healthy(&["rugcheck"])
+        .await
+        .is_none();
+
+    if !connectivity_ok {
+        logger::debug(
+            LogTag::Tokens,
+            &format!(
+                "Rugcheck endpoint unhealthy for {} - using cached/DB data only",
+                mint
+            ),
+        );
+    }
+
+    // 1. Check cache first (fastest path)
     if let Some(data) = store::get_cached_rugcheck(mint) {
         return Ok(Some(data));
     }
@@ -126,6 +141,16 @@ pub async fn fetch_rugcheck_data(
             }
             return Ok(Some(db_data));
         }
+    }
+
+    // Skip API fetch if connectivity is down - return what we have from DB or None
+    if !connectivity_ok {
+        logger::debug(
+            LogTag::Tokens,
+            &format!("Skipping Rugcheck API fetch for {} - connectivity issue", mint),
+        );
+        // Return stale DB data if available, otherwise None
+        return Ok(db.get_rugcheck_data(mint)?);
     }
 
     // 3. Fetch from API

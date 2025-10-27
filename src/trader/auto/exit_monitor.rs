@@ -244,6 +244,23 @@ struct PositionEvaluation {
 async fn evaluate_position_for_exit(
     position: crate::positions::Position,
 ) -> Option<PositionEvaluation> {
+    // Check connectivity before evaluating - exit depends on fresh price data
+    if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&[
+        "rpc",
+        "dexscreener",
+    ])
+    .await
+    {
+        logger::debug(
+            LogTag::Trader,
+            &format!(
+                "⚠️ Skipping exit evaluation for position {:?} - Unhealthy endpoints: {}",
+                position.id, unhealthy
+            ),
+        );
+        return None;
+    }
+
     // Get current price
     let current_price = match pools::get_pool_price(&position.mint) {
         Some(price_info) => {

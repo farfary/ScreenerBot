@@ -2,6 +2,7 @@
 
 use crate::config_struct;
 
+mod connectivity;
 mod events;
 mod filtering;
 mod monitoring;
@@ -17,6 +18,7 @@ mod tokens;
 mod trader;
 mod wallet;
 
+pub use connectivity::*;
 pub use events::*;
 pub use filtering::*;
 pub use monitoring::*;
@@ -74,6 +76,9 @@ config_struct! {
 
         /// Monitoring configuration
         monitoring: MonitoringConfig = MonitoringConfig::default(),
+
+        /// Connectivity monitoring configuration
+        connectivity: ConnectivityMonitoringConfig = ConnectivityMonitoringConfig::default(),
 
         /// OHLCV data configuration
         ohlcv: OhlcvConfig = OhlcvConfig::default(),
