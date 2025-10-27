@@ -2,6 +2,7 @@
  * Token Details Dialog
  * Full-screen dialog showing comprehensive token information with multiple tabs
  */
+/* global LightweightCharts, ResizeObserver */
 import * as Utils from "../core/utils.js";
 
 export class TokenDetailsDialog {
@@ -293,6 +294,11 @@ export class TokenDetailsDialog {
     }
 
     content.innerHTML = this._buildOverviewHTML(this.fullTokenData);
+
+    // Initialize chart after DOM is ready
+    setTimeout(() => {
+      this._initializeChart(this.fullTokenData.mint);
+    }, 100);
   }
 
   /**
@@ -300,8 +306,28 @@ export class TokenDetailsDialog {
    */
   _buildOverviewHTML(token) {
     return `
-      <div class="overview-layout">
-        ${this._buildOverviewTable(token)}
+      <div class="overview-split-layout">
+        <div class="overview-left">
+          ${this._buildOverviewTable(token)}
+        </div>
+        <div class="overview-right">
+          <div class="chart-container">
+            <div class="chart-header">
+              <div class="chart-title">Price Chart</div>
+              <div class="chart-controls">
+                <select class="chart-timeframe" id="chartTimeframe">
+                  <option value="1m">1 Minute</option>
+                  <option value="5m" selected>5 Minutes</option>
+                  <option value="15m">15 Minutes</option>
+                  <option value="1h">1 Hour</option>
+                  <option value="4h">4 Hours</option>
+                  <option value="1d">1 Day</option>
+                </select>
+              </div>
+            </div>
+            <div id="tradingview-chart" class="tradingview-chart"></div>
+          </div>
+        </div>
       </div>
     `;
   }
@@ -688,6 +714,112 @@ export class TokenDetailsDialog {
   }
 
   /**
+   * Initialize TradingView chart
+   */
+  async _initializeChart(mint) {
+    const chartContainer = this.dialogEl.querySelector("#tradingview-chart");
+    const timeframeSelect = this.dialogEl.querySelector("#chartTimeframe");
+
+    if (!chartContainer || !window.LightweightCharts) {
+      console.error("Chart container or LightweightCharts library not found");
+      return;
+    }
+
+    // Create chart
+    const chart = window.LightweightCharts.createChart(chartContainer, {
+      layout: {
+        background: { color: "#1a1a1a" },
+        textColor: "#d1d4dc",
+      },
+      grid: {
+        vertLines: { color: "#2b2b2b" },
+        horzLines: { color: "#2b2b2b" },
+      },
+      crosshair: {
+        mode: window.LightweightCharts.CrosshairMode.Normal,
+      },
+      rightPriceScale: {
+        borderColor: "#2b2b2b",
+      },
+      timeScale: {
+        borderColor: "#2b2b2b",
+        timeVisible: true,
+        secondsVisible: false,
+      },
+      width: chartContainer.clientWidth,
+      height: chartContainer.clientHeight,
+    });
+
+    // Create candlestick series
+    const candlestickSeries = chart.addCandlestickSeries({
+      upColor: "#26a69a",
+      downColor: "#ef5350",
+      borderVisible: false,
+      wickUpColor: "#26a69a",
+      wickDownColor: "#ef5350",
+    });
+
+    // Store chart instance for cleanup
+    this.chart = chart;
+    this.candlestickSeries = candlestickSeries;
+
+    // Load initial data
+    await this._loadChartData(mint, timeframeSelect.value);
+
+    // Handle timeframe changes
+    timeframeSelect.addEventListener("change", async (e) => {
+      await this._loadChartData(mint, e.target.value);
+    });
+
+    // Handle resize
+    const resizeObserver = new ResizeObserver(() => {
+      chart.applyOptions({
+        width: chartContainer.clientWidth,
+        height: chartContainer.clientHeight,
+      });
+    });
+    resizeObserver.observe(chartContainer);
+    this.chartResizeObserver = resizeObserver;
+  }
+
+  /**
+   * Load chart data from API
+   */
+  async _loadChartData(mint, timeframe) {
+    try {
+      const response = await fetch(`/api/tokens/${mint}/ohlcv?timeframe=${timeframe}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch OHLCV data: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+
+      // Backend returns flat array of OhlcvPoint objects
+      if (!Array.isArray(data) || data.length === 0) {
+        console.warn("No OHLCV data available for this token");
+        return;
+      }
+
+      // Convert data to LightweightCharts format
+      const chartData = data.map((candle) => ({
+        time: candle.timestamp,
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+      }));
+
+      // Update chart
+      this.candlestickSeries.setData(chartData);
+
+      // Fit content
+      this.chart.timeScale().fitContent();
+    } catch (error) {
+      console.error("Error loading chart data:", error);
+    }
+  }
+
+  /**
    * Load Positions tab content
    */
   _loadPositionsTab(content) {
@@ -737,6 +869,13 @@ export class TokenDetailsDialog {
   destroy() {
     if (this._escapeHandler) {
       document.removeEventListener("keydown", this._escapeHandler);
+    }
+    if (this.chartResizeObserver) {
+      this.chartResizeObserver.disconnect();
+    }
+    if (this.chart) {
+      this.chart.remove();
+      this.chart = null;
     }
     if (this.dialogEl) {
       this.dialogEl.remove();
