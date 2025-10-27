@@ -154,7 +154,8 @@
   background: var(--bg-primary);
 }
 
-.tab-content {
+/* Scope tab-content to token details dialog only */
+.token-details-dialog .tab-content {
   position: absolute;
   inset: 0;
   padding: 24px;
@@ -162,7 +163,7 @@
   display: none;
 }
 
-.tab-content.active {
+.token-details-dialog .tab-content.active {
   display: block;
 }
 
@@ -187,21 +188,21 @@
   font-style: italic;
 }
 
-/* Scrollbar styling */
-.tab-content::-webkit-scrollbar {
+/* Scrollbar styling - scoped to token details dialog */
+.token-details-dialog .tab-content::-webkit-scrollbar {
   width: 8px;
 }
 
-.tab-content::-webkit-scrollbar-track {
+.token-details-dialog .tab-content::-webkit-scrollbar-track {
   background: var(--bg-primary);
 }
 
-.tab-content::-webkit-scrollbar-thumb {
+.token-details-dialog .tab-content::-webkit-scrollbar-thumb {
   background: var(--bg-secondary);
   border-radius: 4px;
 }
 
-.tab-content::-webkit-scrollbar-thumb:hover {
+.token-details-dialog .tab-content::-webkit-scrollbar-thumb:hover {
   background: var(--bg-tertiary);
 }
 
@@ -242,7 +243,7 @@
     font-size: 0.8rem;
   }
 
-  .tab-content {
+  .token-details-dialog .tab-content {
     padding: 16px;
   }
 }
