@@ -45,7 +45,7 @@ export class TokenDetailsDialog {
       console.error("Error loading token details:", error);
       const headerMetrics = this.dialogEl.querySelector(".header-metrics");
       if (headerMetrics) {
-        headerMetrics.innerHTML = `<div class="error-text">Failed to load details</div>`;
+        headerMetrics.innerHTML = "<div class=\"error-text\">Failed to load details</div>";
       }
     }
 
@@ -289,7 +289,7 @@ export class TokenDetailsDialog {
    */
   _loadOverviewTab(content) {
     if (!this.fullTokenData) {
-      content.innerHTML = `<div class="loading-spinner">Waiting for token data...</div>`;
+      content.innerHTML = "<div class=\"loading-spinner\">Waiting for token data...</div>";
       return;
     }
 
@@ -362,10 +362,10 @@ export class TokenDetailsDialog {
 
     // Status flags
     const badges = [];
-    if (token.verified) badges.push(`<span class="badge-success">✓ Verified</span>`);
-    if (token.has_open_position) badges.push(`<span class="badge-info">📊 Position Open</span>`);
-    if (token.blacklisted) badges.push(`<span class="badge-danger">🚫 Blacklisted</span>`);
-    if (token.has_ohlcv) badges.push(`<span class="badge-success">📈 Chart Data</span>`);
+    if (token.verified) badges.push("<span class=\"badge-success\">✓ Verified</span>");
+    if (token.has_open_position) badges.push("<span class=\"badge-info\">📊 Position Open</span>");
+    if (token.blacklisted) badges.push("<span class=\"badge-danger\">🚫 Blacklisted</span>");
+    if (token.has_ohlcv) badges.push("<span class=\"badge-success\">📈 Chart Data</span>");
     if (badges.length > 0) {
       rows.push(this._buildDataRow("Status", badges.join(" ")));
     }
@@ -560,14 +560,14 @@ export class TokenDetailsDialog {
     }
     if (token.mint_authority !== null && token.mint_authority !== undefined) {
       const value = token.mint_authority
-        ? `<span class="badge-warning">Present</span>`
-        : `<span class="badge-success">Revoked</span>`;
+        ? "<span class=\"badge-warning\">Present</span>"
+        : "<span class=\"badge-success\">Revoked</span>";
       rows.push(this._buildDataRow("Mint Authority", value));
     }
     if (token.freeze_authority !== null && token.freeze_authority !== undefined) {
       const value = token.freeze_authority
-        ? `<span class="badge-warning">Present</span>`
-        : `<span class="badge-success">Revoked</span>`;
+        ? "<span class=\"badge-warning\">Present</span>"
+        : "<span class=\"badge-success\">Revoked</span>";
       rows.push(this._buildDataRow("Freeze Authority", value));
     }
     if (token.total_holders !== null && token.total_holders !== undefined) {
@@ -583,7 +583,7 @@ export class TokenDetailsDialog {
     }
     if (token.rugged) {
       rows.push(
-        this._buildDataRow("Status", `<span class="badge-danger">⚠️ Flagged as Rugged</span>`)
+        this._buildDataRow("Status", "<span class=\"badge-danger\">⚠️ Flagged as Rugged</span>")
       );
     }
     if (token.security_summary) {
@@ -643,11 +643,11 @@ export class TokenDetailsDialog {
           )
         );
         if (pool.liquidity_usd !== null && pool.liquidity_usd !== undefined) {
-          rows.push(this._buildDataRow(`  Liquidity`, Utils.formatCurrencyUSD(pool.liquidity_usd)));
+          rows.push(this._buildDataRow("  Liquidity", Utils.formatCurrencyUSD(pool.liquidity_usd)));
         }
         if (pool.volume_h24_usd !== null && pool.volume_h24_usd !== undefined) {
           rows.push(
-            this._buildDataRow(`  Volume 24H`, Utils.formatCurrencyUSD(pool.volume_h24_usd))
+            this._buildDataRow("  Volume 24H", Utils.formatCurrencyUSD(pool.volume_h24_usd))
           );
         }
       });
@@ -864,35 +864,387 @@ export class TokenDetailsDialog {
    * Load Positions tab content
    */
   _loadPositionsTab(content) {
-    content.innerHTML = `<div class="tab-placeholder">Positions content will be loaded here</div>`;
+    content.innerHTML = "<div class=\"tab-placeholder\">Positions content will be loaded here</div>";
   }
 
   /**
    * Load Pools tab content
    */
   _loadPoolsTab(content) {
-    content.innerHTML = `<div class="tab-placeholder">Pools content will be loaded here</div>`;
+    content.innerHTML = "<div class=\"tab-placeholder\">Pools content will be loaded here</div>";
   }
 
   /**
    * Load DexScreener tab content
    */
-  _loadDexScreenerTab(content) {
-    content.innerHTML = `<div class="tab-placeholder">DexScreener iframe will be loaded here</div>`;
+  async _loadDexScreenerTab(content) {
+    content.innerHTML = "<div class=\"loading-spinner\">Loading DexScreener data...</div>";
+
+    try {
+      const response = await fetch(`/api/tokens/${this.tokenData.mint}/dexscreener`);
+      if (!response.ok) {
+        if (response.status === 404) {
+          content.innerHTML = `
+            <div class="tab-placeholder">
+              <div class="placeholder-icon">📊</div>
+              <div>No DexScreener data available for this token</div>
+              <div class="placeholder-hint">Data may not be synced yet</div>
+            </div>
+          `;
+          return;
+        }
+        throw new Error(`Failed to fetch DexScreener data: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      content.innerHTML = this._renderDexScreenerData(data);
+    } catch (error) {
+      console.error("Error loading DexScreener data:", error);
+      content.innerHTML = `
+        <div class="tab-placeholder error">
+          <div class="placeholder-icon">⚠️</div>
+          <div>Failed to load DexScreener data</div>
+          <div class="placeholder-hint">${this._escapeHtml(error.message)}</div>
+        </div>
+      `;
+    }
+  }
+
+  /**
+   * Render DexScreener data in organized sections
+   */
+  _renderDexScreenerData(data) {
+    const sections = [];
+
+    // Price Section
+    sections.push(`
+      <div class="dex-section">
+        <h3 class="dex-section-title">💰 Price Information</h3>
+        <div class="dex-grid">
+          <div class="dex-item">
+            <div class="dex-label">USD Price</div>
+            <div class="dex-value">${this._formatPrice(data.price_usd)}</div>
+          </div>
+          <div class="dex-item">
+            <div class="dex-label">SOL Price</div>
+            <div class="dex-value">${this._formatPrice(data.price_sol)} SOL</div>
+          </div>
+          <div class="dex-item">
+            <div class="dex-label">Native Price</div>
+            <div class="dex-value">${this._escapeHtml(data.price_native)}</div>
+          </div>
+        </div>
+      </div>
+    `);
+
+    // Price Changes Section
+    const hasChanges = data.price_change_5m !== null || data.price_change_1h !== null || 
+                       data.price_change_6h !== null || data.price_change_24h !== null;
+    if (hasChanges) {
+      sections.push(`
+        <div class="dex-section">
+          <h3 class="dex-section-title">📈 Price Changes</h3>
+          <div class="dex-grid">
+            ${data.price_change_5m !== null ? `
+              <div class="dex-item">
+                <div class="dex-label">5 Minutes</div>
+                <div class="dex-value ${this._getChangeClass(data.price_change_5m)}">
+                  ${this._formatPercent(data.price_change_5m)}
+                </div>
+              </div>
+            ` : ""}
+            ${data.price_change_1h !== null ? `
+              <div class="dex-item">
+                <div class="dex-label">1 Hour</div>
+                <div class="dex-value ${this._getChangeClass(data.price_change_1h)}">
+                  ${this._formatPercent(data.price_change_1h)}
+                </div>
+              </div>
+            ` : ""}
+            ${data.price_change_6h !== null ? `
+              <div class="dex-item">
+                <div class="dex-label">6 Hours</div>
+                <div class="dex-value ${this._getChangeClass(data.price_change_6h)}">
+                  ${this._formatPercent(data.price_change_6h)}
+                </div>
+              </div>
+            ` : ""}
+            ${data.price_change_24h !== null ? `
+              <div class="dex-item">
+                <div class="dex-label">24 Hours</div>
+                <div class="dex-value ${this._getChangeClass(data.price_change_24h)}">
+                  ${this._formatPercent(data.price_change_24h)}
+                </div>
+              </div>
+            ` : ""}
+          </div>
+        </div>
+      `);
+    }
+
+    // Market Metrics Section
+    const hasMarket = data.market_cap !== null || data.fdv !== null || data.liquidity_usd !== null;
+    if (hasMarket) {
+      sections.push(`
+        <div class="dex-section">
+          <h3 class="dex-section-title">💎 Market Metrics</h3>
+          <div class="dex-grid">
+            ${data.market_cap !== null ? `
+              <div class="dex-item">
+                <div class="dex-label">Market Cap</div>
+                <div class="dex-value">${this._formatUSD(data.market_cap)}</div>
+              </div>
+            ` : ""}
+            ${data.fdv !== null ? `
+              <div class="dex-item">
+                <div class="dex-label">Fully Diluted Value</div>
+                <div class="dex-value">${this._formatUSD(data.fdv)}</div>
+              </div>
+            ` : ""}
+            ${data.liquidity_usd !== null ? `
+              <div class="dex-item">
+                <div class="dex-label">Liquidity (USD)</div>
+                <div class="dex-value">${this._formatUSD(data.liquidity_usd)}</div>
+              </div>
+            ` : ""}
+          </div>
+        </div>
+      `);
+    }
+
+    // Volume Section
+    const hasVolume = data.volume_5m !== null || data.volume_1h !== null || 
+                      data.volume_6h !== null || data.volume_24h !== null;
+    if (hasVolume) {
+      sections.push(`
+        <div class="dex-section">
+          <h3 class="dex-section-title">📊 Volume</h3>
+          <div class="dex-grid">
+            ${data.volume_5m !== null ? `
+              <div class="dex-item">
+                <div class="dex-label">5 Minutes</div>
+                <div class="dex-value">${this._formatUSD(data.volume_5m)}</div>
+              </div>
+            ` : ""}
+            ${data.volume_1h !== null ? `
+              <div class="dex-item">
+                <div class="dex-label">1 Hour</div>
+                <div class="dex-value">${this._formatUSD(data.volume_1h)}</div>
+              </div>
+            ` : ""}
+            ${data.volume_6h !== null ? `
+              <div class="dex-item">
+                <div class="dex-label">6 Hours</div>
+                <div class="dex-value">${this._formatUSD(data.volume_6h)}</div>
+              </div>
+            ` : ""}
+            ${data.volume_24h !== null ? `
+              <div class="dex-item">
+                <div class="dex-label">24 Hours</div>
+                <div class="dex-value">${this._formatUSD(data.volume_24h)}</div>
+              </div>
+            ` : ""}
+          </div>
+        </div>
+      `);
+    }
+
+    // Transactions Section
+    const hasTxns = data.txns_5m !== null || data.txns_1h !== null || 
+                    data.txns_6h !== null || data.txns_24h !== null;
+    if (hasTxns) {
+      sections.push(`
+        <div class="dex-section">
+          <h3 class="dex-section-title">🔄 Transactions (Buys / Sells)</h3>
+          <div class="dex-grid">
+            ${data.txns_5m !== null ? `
+              <div class="dex-item">
+                <div class="dex-label">5 Minutes</div>
+                <div class="dex-value">
+                  <span class="txn-buys">${data.txns_5m[0]}</span> / 
+                  <span class="txn-sells">${data.txns_5m[1]}</span>
+                </div>
+              </div>
+            ` : ""}
+            ${data.txns_1h !== null ? `
+              <div class="dex-item">
+                <div class="dex-label">1 Hour</div>
+                <div class="dex-value">
+                  <span class="txn-buys">${data.txns_1h[0]}</span> / 
+                  <span class="txn-sells">${data.txns_1h[1]}</span>
+                </div>
+              </div>
+            ` : ""}
+            ${data.txns_6h !== null ? `
+              <div class="dex-item">
+                <div class="dex-label">6 Hours</div>
+                <div class="dex-value">
+                  <span class="txn-buys">${data.txns_6h[0]}</span> / 
+                  <span class="txn-sells">${data.txns_6h[1]}</span>
+                </div>
+              </div>
+            ` : ""}
+            ${data.txns_24h !== null ? `
+              <div class="dex-item">
+                <div class="dex-label">24 Hours</div>
+                <div class="dex-value">
+                  <span class="txn-buys">${data.txns_24h[0]}</span> / 
+                  <span class="txn-sells">${data.txns_24h[1]}</span>
+                </div>
+              </div>
+            ` : ""}
+          </div>
+        </div>
+      `);
+    }
+
+    // Pool Information Section
+    const hasPool = data.pair_address || data.dex_id || data.chain_id || data.pair_created_at;
+    if (hasPool) {
+      sections.push(`
+        <div class="dex-section">
+          <h3 class="dex-section-title">🏊 Pool Information</h3>
+          <div class="dex-grid">
+            ${data.dex_id ? `
+              <div class="dex-item">
+                <div class="dex-label">DEX</div>
+                <div class="dex-value">${this._escapeHtml(data.dex_id)}</div>
+              </div>
+            ` : ""}
+            ${data.chain_id ? `
+              <div class="dex-item">
+                <div class="dex-label">Chain</div>
+                <div class="dex-value">${this._escapeHtml(data.chain_id)}</div>
+              </div>
+            ` : ""}
+            ${data.pair_address ? `
+              <div class="dex-item full-width">
+                <div class="dex-label">Pair Address</div>
+                <div class="dex-value dex-address">${this._escapeHtml(data.pair_address)}</div>
+              </div>
+            ` : ""}
+            ${data.pair_created_at ? `
+              <div class="dex-item">
+                <div class="dex-label">Created</div>
+                <div class="dex-value">${this._formatDate(data.pair_created_at)}</div>
+              </div>
+            ` : ""}
+          </div>
+        </div>
+      `);
+    }
+
+    // Links Section
+    const hasLinks = data.url || (data.image_url || data.header_image_url);
+    if (hasLinks) {
+      sections.push(`
+        <div class="dex-section">
+          <h3 class="dex-section-title">🔗 Links & Images</h3>
+          <div class="dex-grid">
+            ${data.url ? `
+              <div class="dex-item full-width">
+                <div class="dex-label">DexScreener Page</div>
+                <div class="dex-value">
+                  <a href="${this._escapeHtml(data.url)}" target="_blank" rel="noopener noreferrer" class="dex-link">
+                    View on DexScreener →
+                  </a>
+                </div>
+              </div>
+            ` : ""}
+            ${data.image_url ? `
+              <div class="dex-item full-width">
+                <div class="dex-label">Token Image</div>
+                <div class="dex-value">
+                  <img src="${this._escapeHtml(data.image_url)}" alt="Token" class="dex-image" />
+                </div>
+              </div>
+            ` : ""}
+            ${data.header_image_url ? `
+              <div class="dex-item full-width">
+                <div class="dex-label">Header Image</div>
+                <div class="dex-value">
+                  <img src="${this._escapeHtml(data.header_image_url)}" alt="Header" class="dex-image" />
+                </div>
+              </div>
+            ` : ""}
+          </div>
+        </div>
+      `);
+    }
+
+    // Data Freshness Footer
+    sections.push(`
+      <div class="dex-footer">
+        <div class="dex-timestamp">
+          📅 Data fetched: ${this._formatDate(data.fetched_at)}
+        </div>
+      </div>
+    `);
+
+    return `<div class="dex-container">${sections.join("")}</div>`;
+  }
+
+  /**
+   * Format price with appropriate precision
+   */
+  _formatPrice(value) {
+    if (value === null || value === undefined) return "N/A";
+    if (value < 0.000001) return value.toExponential(2);
+    if (value < 0.01) return value.toFixed(9);
+    if (value < 1) return value.toFixed(6);
+    return Utils.formatNumber(value);
+  }
+
+  /**
+   * Format USD value with abbreviations
+   */
+  _formatUSD(value) {
+    if (value === null || value === undefined) return "N/A";
+    return Utils.formatCurrencyUSD(value, { fallback: "N/A" });
+  }
+
+  /**
+   * Format percentage with + sign
+   */
+  _formatPercent(value) {
+    if (value === null || value === undefined) return "N/A";
+    const sign = value >= 0 ? "+" : "";
+    return `${sign}${value.toFixed(2)}%`;
+  }
+
+  /**
+   * Get CSS class for price change
+   */
+  _getChangeClass(value) {
+    if (value === null || value === undefined) return "";
+    return value >= 0 ? "positive" : "negative";
+  }
+
+  /**
+   * Format date/timestamp
+   */
+  _formatDate(timestamp) {
+    if (!timestamp) return "N/A";
+    try {
+      const date = new Date(timestamp);
+      return date.toLocaleString();
+    } catch {
+      return String(timestamp);
+    }
   }
 
   /**
    * Load GMGN tab content
    */
   _loadGmgnTab(content) {
-    content.innerHTML = `<div class="tab-placeholder">GMGN iframe will be loaded here</div>`;
+    content.innerHTML = "<div class=\"tab-placeholder\">GMGN iframe will be loaded here</div>";
   }
 
   /**
    * Load RugCheck tab content
    */
   _loadRugCheckTab(content) {
-    content.innerHTML = `<div class="tab-placeholder">RugCheck content will be loaded here</div>`;
+    content.innerHTML = "<div class=\"tab-placeholder\">RugCheck content will be loaded here</div>";
   }
 
   /**

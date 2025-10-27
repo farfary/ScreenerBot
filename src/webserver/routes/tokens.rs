@@ -514,6 +514,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/tokens/filter", post(filter_tokens))
         .route("/tokens/:mint", get(get_token_detail))
         .route("/tokens/:mint/ohlcv", get(get_token_ohlcv))
+        .route("/tokens/:mint/dexscreener", get(get_token_dexscreener))
 }
 
 // =============================================================================
@@ -1156,6 +1157,48 @@ async fn get_token_ohlcv(
         .collect();
 
     Ok(Json(points))
+}
+
+/// Get DexScreener data for a token
+async fn get_token_dexscreener(
+    Path(mint): Path<String>,
+) -> Result<Json<crate::tokens::DexScreenerData>, StatusCode> {
+    logger::debug(LogTag::Webserver, &format!("mint={}", mint));
+
+    // Get DexScreener data from token database
+    let mint_clone = mint.clone();
+    let data = tokio::task::spawn_blocking(move || {
+        let db = crate::tokens::get_global_database()
+            .ok_or_else(|| "Token database not initialized".to_string())?;
+        db.get_dexscreener_data(&mint_clone)
+            .map_err(|e| format!("Database error: {}", e))
+    })
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    match data {
+        Some(dexscreener_data) => {
+            logger::info(
+                LogTag::Webserver,
+                &format!(
+                    "mint={} price_sol={:.9} liquidity_usd={} fetched={}",
+                    mint,
+                    dexscreener_data.price_sol,
+                    dexscreener_data.liquidity_usd.map_or("N/A".to_string(), |v| format!("{:.2}", v)),
+                    dexscreener_data.fetched_at.format("%Y-%m-%d %H:%M:%S")
+                ),
+            );
+            Ok(Json(dexscreener_data))
+        }
+        None => {
+            logger::info(
+                LogTag::Webserver,
+                &format!("mint={} not found", mint),
+            );
+            Err(StatusCode::NOT_FOUND)
+        }
+    }
 }
 
 /// Get token statistics
