@@ -12,6 +12,8 @@ export class TokenDetailsDialog {
     this.currentTab = "overview";
     this.tokenData = null;
     this.tabHandlers = new Map();
+    this.refreshInterval = null;
+    this.isRefreshing = false;
   }
 
   /**
@@ -29,25 +31,10 @@ export class TokenDetailsDialog {
     this._attachEventHandlers();
 
     // Fetch full token details from API
-    try {
-      const response = await fetch(`/api/tokens/${tokenData.mint}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch token details: ${response.statusText}`);
-      }
-      this.fullTokenData = await response.json();
+    await this._fetchTokenData();
 
-      // Update header with full data
-      this._updateHeader(this.fullTokenData);
-
-      // Load overview tab with full data
-      this._loadTabContent(this.currentTab);
-    } catch (error) {
-      console.error("Error loading token details:", error);
-      const headerMetrics = this.dialogEl.querySelector(".header-metrics");
-      if (headerMetrics) {
-        headerMetrics.innerHTML = '<div class="error-text">Failed to load details</div>';
-      }
-    }
+    // Start polling every 1 second
+    this._startPolling();
 
     // Animate in
     requestAnimationFrame(() => {
@@ -56,10 +43,97 @@ export class TokenDetailsDialog {
   }
 
   /**
+   * Fetch token data from API
+   */
+  async _fetchTokenData() {
+    if (this.isRefreshing) return;
+    this.isRefreshing = true;
+
+    try {
+      const response = await fetch(`/api/tokens/${this.tokenData.mint}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch token details: ${response.statusText}`);
+      }
+      const newData = await response.json();
+
+      // Check if this is initial load
+      const isInitialLoad = !this.fullTokenData;
+
+      // Update stored data
+      this.fullTokenData = newData;
+
+      // Update header with full data
+      this._updateHeader(this.fullTokenData);
+
+      // Load or refresh overview tab content if it's the current tab
+      if (isInitialLoad && this.currentTab === "overview") {
+        this._loadTabContent(this.currentTab);
+      } else if (!isInitialLoad && this.currentTab === "overview") {
+        this._refreshOverviewTab();
+      }
+    } catch (error) {
+      console.error("Error loading token details:", error);
+      const headerMetrics = this.dialogEl?.querySelector(".header-metrics");
+      if (headerMetrics) {
+        headerMetrics.innerHTML = '<div class="error-text">Failed to load details</div>';
+      }
+    } finally {
+      this.isRefreshing = false;
+    }
+  }
+
+  /**
+   * Start polling for token data updates
+   */
+  _startPolling() {
+    // Clear any existing interval
+    this._stopPolling();
+
+    // Poll every 1 second
+    this.refreshInterval = setInterval(() => {
+      this._fetchTokenData();
+    }, 1000);
+  }
+
+  /**
+   * Stop polling for token data updates
+   */
+  _stopPolling() {
+    if (this.refreshInterval) {
+      clearInterval(this.refreshInterval);
+      this.refreshInterval = null;
+    }
+  }
+
+  /**
+   * Refresh overview tab content without full reload
+   */
+  _refreshOverviewTab() {
+    const content = this.dialogEl?.querySelector('[data-tab-content="overview"]');
+    if (!content || !this.fullTokenData) return;
+
+    // Only refresh if overview tab is loaded
+    if (content.dataset.loaded !== "true") return;
+
+    // Find the overview table and update only its content
+    const overviewTable = content.querySelector('.overview-left');
+    if (overviewTable) {
+      // Update only the data table, not the entire layout
+      overviewTable.innerHTML = this._buildOverviewTable(this.fullTokenData);
+    }
+
+    // Chart stays untouched - no reinitialization needed
+    // The chart instance persists and continues to work
+  }
+
+  /**
    * Close dialog
    */
   close() {
     if (!this.dialogEl) return;
+
+    // Stop polling
+    this._stopPolling();
 
     this.dialogEl.classList.remove("active");
     setTimeout(() => {
@@ -1357,6 +1431,9 @@ export class TokenDetailsDialog {
    * Destroy dialog and cleanup
    */
   destroy() {
+    // Stop polling
+    this._stopPolling();
+
     if (this._escapeHandler) {
       document.removeEventListener("keydown", this._escapeHandler);
     }
