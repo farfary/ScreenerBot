@@ -22,11 +22,9 @@ const STRATEGIES_PAGE_STYLES: &str = include_str!("templates/styles/pages/strate
 const DATA_TABLE_STYLES: &str = include_str!("templates/styles/ui/data_table.css");
 const TABLE_TOOLBAR_STYLES: &str = include_str!("templates/styles/ui/table_toolbar.css");
 const EVENTS_DIALOG_STYLES: &str = include_str!("templates/styles/ui/events_dialog.css");
-const TRADE_ACTION_DIALOG_STYLES: &str =
-    include_str!("templates/styles/ui/trade_action_dialog.css");
+const TRADE_ACTION_DIALOG_STYLES: &str = include_str!("templates/styles/ui/trade_action_dialog.css");
 const TAB_BAR_STYLES: &str = include_str!("templates/styles/ui/tab_bar.css");
-const TABLE_SETTINGS_DIALOG_STYLES: &str =
-    include_str!("templates/styles/ui/table_settings_dialog.css");
+const TABLE_SETTINGS_DIALOG_STYLES: &str = include_str!("templates/styles/ui/table_settings_dialog.css");
 const TOKEN_DETAILS_DIALOG_STYLES: &str = include_str!("templates/styles/token_details_dialog.css");
 
 pub const CORE_LIFECYCLE: &str = include_str!("templates/scripts/core/lifecycle.js");
@@ -43,13 +41,10 @@ pub const DATA_TABLE_UI: &str = include_str!("templates/scripts/ui/data_table.js
 pub const DROPDOWN_UI: &str = include_str!("templates/scripts/ui/dropdown.js");
 pub const TABLE_TOOLBAR_UI: &str = include_str!("templates/scripts/ui/table_toolbar.js");
 pub const EVENTS_DIALOG_UI: &str = include_str!("templates/scripts/ui/events_dialog.js");
-pub const TRADE_ACTION_DIALOG_UI: &str =
-    include_str!("templates/scripts/ui/trade_action_dialog.js");
+pub const TRADE_ACTION_DIALOG_UI: &str = include_str!("templates/scripts/ui/trade_action_dialog.js");
 pub const TAB_BAR_UI: &str = include_str!("templates/scripts/ui/tab_bar.js");
-pub const TABLE_SETTINGS_DIALOG_UI: &str =
-    include_str!("templates/scripts/ui/table_settings_dialog.js");
-pub const TOKEN_DETAILS_DIALOG_UI: &str =
-    include_str!("templates/scripts/ui/token_details_dialog.js");
+pub const TABLE_SETTINGS_DIALOG_UI: &str = include_str!("templates/scripts/ui/table_settings_dialog.js");
+pub const TOKEN_DETAILS_DIALOG_UI: &str = include_str!("templates/scripts/ui/token_details_dialog.js");
 
 pub const SERVICES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/services.js");
 pub const TRANSACTIONS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/transactions.js");
@@ -143,14 +138,14 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
 
 fn nav_tabs(active: &str) -> String {
     let tabs = vec![
-        ("services", "🔧 Services"),
-        ("tokens", "🪙 Tokens"),
-        ("transactions", "💱 Transactions"),
         ("positions", "📊 Positions"),
-        ("strategies", "🎯 Strategies"),
-        ("events", "📡 Events"),
+        ("tokens", "🪙 Tokens"),
         ("filtering", "🔍 Filtering"),
+        ("strategies", "🎯 Strategies"),
+        ("transactions", "💱 Transactions"),
+        ("services", "🔧 Services"),
         ("config", "⚙️ Config"),
+        ("events", "📡 Events"),
     ];
 
     tabs.iter()
