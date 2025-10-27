@@ -1,7 +1,7 @@
 .table-settings-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 18, 30, 0.75);
+  background: rgb(15, 18, 30, 0.75);
   backdrop-filter: blur(3px);
   z-index: 1200;
   display: flex;
@@ -24,8 +24,8 @@
   flex-direction: column;
   background: var(--surface-raised, #141826);
   border-radius: 12px;
-  box-shadow: 0 20px 60px rgba(7, 10, 25, 0.35);
-  border: 1px solid rgba(82, 90, 130, 0.35);
+  box-shadow: 0 20px 60px rgb(7, 10, 25, 0.35);
+  border: 1px solid rgb(82, 90, 130, 0.35);
   padding: 0;
   outline: none;
 }
@@ -33,7 +33,7 @@
 .table-settings-header,
 .table-settings-footer {
   padding: 16px 20px;
-  border-bottom: 1px solid rgba(82, 90, 130, 0.2);
+  border-bottom: 1px solid rgb(82, 90, 130, 0.2);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -42,7 +42,7 @@
 
 .table-settings-footer {
   border-bottom: none;
-  border-top: 1px solid rgba(82, 90, 130, 0.2);
+  border-top: 1px solid rgb(82, 90, 130, 0.2);
 }
 
 .table-settings-footer-actions {
@@ -72,7 +72,7 @@
 .table-settings-close:hover,
 .table-settings-close:focus-visible {
   color: var(--text-primary, #f5f7ff);
-  background: rgba(82, 90, 130, 0.2);
+  background: rgb(82, 90, 130, 0.2);
 }
 
 .table-settings-body {
@@ -92,8 +92,8 @@
 .table-settings-controls-group {
   flex: 1 1 220px;
   min-width: 220px;
-  background: rgba(23, 28, 45, 0.85);
-  border: 1px solid rgba(82, 90, 130, 0.25);
+  background: rgb(23, 28, 45, 0.85);
+  border: 1px solid rgb(82, 90, 130, 0.25);
   border-radius: 10px;
   padding: 12px;
   display: flex;
@@ -132,16 +132,16 @@
   gap: 12px;
   padding: 10px 12px;
   border-radius: 10px;
-  background: rgba(23, 28, 45, 0.9);
-  border: 1px solid rgba(82, 90, 130, 0.25);
+  background: rgb(23, 28, 45, 0.9);
+  border: 1px solid rgb(82, 90, 130, 0.25);
   transition:
     background 120ms ease-in-out,
     border-color 120ms ease-in-out;
 }
 
 .table-settings-column-item:hover {
-  background: rgba(32, 38, 60, 0.95);
-  border-color: rgba(82, 90, 130, 0.35);
+  background: rgb(32, 38, 60, 0.95);
+  border-color: rgb(82, 90, 130, 0.35);
 }
 
 .table-settings-column-index {
@@ -154,7 +154,7 @@
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-secondary, #c3caef);
-  background: rgba(82, 90, 130, 0.25);
+  background: rgb(82, 90, 130, 0.25);
 }
 
 .table-settings-column-label {
@@ -194,8 +194,8 @@
   padding-inline: 8px;
   font-size: 0.8rem;
   border-radius: 8px;
-  border: 1px solid rgba(82, 90, 130, 0.3);
-  background: rgba(18, 22, 35, 0.95);
+  border: 1px solid rgb(82, 90, 130, 0.3);
+  background: rgb(18, 22, 35, 0.95);
   color: var(--text-secondary, #c3caef);
   cursor: pointer;
   transition:
@@ -206,8 +206,8 @@
 
 .table-settings-btn-move:hover:not(:disabled),
 .table-settings-btn-move:focus-visible:not(:disabled) {
-  background: rgba(36, 44, 68, 0.95);
-  border-color: rgba(108, 125, 255, 0.55);
+  background: rgb(36, 44, 68, 0.95);
+  border-color: rgb(108, 125, 255, 0.55);
   color: var(--text-primary, #f5f7ff);
 }
 
@@ -220,8 +220,8 @@
   padding: 24px;
   text-align: center;
   color: var(--text-muted, #9aa3c6);
-  background: rgba(23, 28, 45, 0.9);
-  border: 1px dashed rgba(82, 90, 130, 0.35);
+  background: rgb(23, 28, 45, 0.9);
+  border: 1px dashed rgb(82, 90, 130, 0.35);
   border-radius: 10px;
 }
 

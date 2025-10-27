@@ -499,7 +499,7 @@
   background: rgb(30 41 59 / 0.2);
 }
 
-@media (max-width: 1024px) {
+@media (width <= 1024px) {
   .cards-grid {
     grid-template-columns: 1fr;
   }
@@ -509,7 +509,7 @@
   }
 }
 
-@media (max-width: 720px) {
+@media (width <= 720px) {
   .filtering-search-bar {
     flex-direction: column;
     align-items: stretch;

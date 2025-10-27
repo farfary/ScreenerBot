@@ -32,7 +32,7 @@
 
 /* Control Buttons */
 .control-btn {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgb(255, 255, 255, 0.2);
   border: none;
   color: var(--header-text);
   padding: 4px 10px;
@@ -53,7 +53,7 @@
 }
 
 .control-btn:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.3);
+  background: rgb(255, 255, 255, 0.3);
 }
 
 .control-btn:active:not(:disabled) {
@@ -72,11 +72,11 @@
 }
 
 .trader-btn.running {
-  background: rgba(16, 185, 129, 0.3);
+  background: rgb(16, 185, 129, 0.3);
 }
 
 .trader-btn.stopped {
-  background: rgba(239, 68, 68, 0.3);
+  background: rgb(239, 68, 68, 0.3);
 }
 
 /* Refresh button with dropdown */
@@ -86,7 +86,7 @@
 }
 
 .refresh-btn:hover:not(:disabled) {
-  background: rgba(139, 92, 246, 0.3);
+  background: rgb(139, 92, 246, 0.3);
 }
 
 /* Power button with dropdown */
@@ -95,15 +95,15 @@
 }
 
 .power-btn:hover:not(:disabled) {
-  background: rgba(59, 130, 246, 0.3);
+  background: rgb(59, 130, 246, 0.3);
 }
 
 .notification-btn:hover:not(:disabled) {
-  background: rgba(245, 158, 11, 0.3);
+  background: rgb(245, 158, 11, 0.3);
 }
 
 .reboot-btn:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.3);
+  background: rgb(239, 68, 68, 0.3);
 }
 
 /* Connection Status Indicator */
@@ -121,20 +121,20 @@
 }
 
 .connection-status.connected {
-  background: rgba(16, 185, 129, 0.3);
+  background: rgb(16, 185, 129, 0.3);
 }
 
 .connection-status.disconnected {
-  background: rgba(239, 68, 68, 0.3);
+  background: rgb(239, 68, 68, 0.3);
 }
 
 .connection-status.connecting {
-  background: rgba(245, 158, 11, 0.3);
+  background: rgb(245, 158, 11, 0.3);
 }
 
 /* Theme Toggle Button */
 .theme-toggle {
-  background: rgba(255, 255, 255, 0.2);
+  background: rgb(255, 255, 255, 0.2);
   border: none;
   color: var(--header-text);
   padding: 4px 10px;
@@ -151,7 +151,7 @@
 }
 
 .theme-toggle:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: rgb(255, 255, 255, 0.3);
 }
 
 /* Toolbar container (third row for action buttons) */

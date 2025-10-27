@@ -61,7 +61,7 @@
 
 .row-actions .btn.warning {
   background: var(--badge-error);
-  color: #ffffff;
+  color: #fff;
 }
 
 .row-actions .btn.warning:hover {

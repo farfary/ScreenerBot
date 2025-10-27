@@ -205,14 +205,14 @@
 @media (prefers-contrast: high) {
   .tab,
   .sub-tab {
-    border: 1px solid currentColor;
+    border: 1px solid currentcolor;
   }
 
   .tab.active,
   .sub-tab.active {
     background: var(--tab-bar-text-active);
     color: var(--tab-bar-bg-primary);
-    border-color: currentColor;
+    border-color: currentcolor;
   }
 }
 
@@ -221,7 +221,7 @@
    ============================================================================ */
 
 /* Tablet and below: Reduce padding for more tabs visible */
-@media (max-width: 1024px) {
+@media (width <= 1024px) {
   :root {
     --tab-bar-padding-x: 10px;
     --tab-bar-font-size: 0.9em;
@@ -239,7 +239,7 @@
 }
 
 /* Mobile: Further reduce for small screens */
-@media (max-width: 768px) {
+@media (width <= 768px) {
   :root {
     --tab-bar-padding-x: 8px;
     --tab-bar-padding-y: 6px;
@@ -263,7 +263,7 @@
 }
 
 /* Very small screens: Minimal padding */
-@media (max-width: 425px) {
+@media (width <= 425px) {
   :root {
     --tab-bar-padding-x: 6px;
     --tab-bar-padding-y: 5px;

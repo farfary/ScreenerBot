@@ -7,7 +7,7 @@
   align-items: center;
   justify-content: center;
   padding: 20px;
-  background: rgba(8, 12, 20, 0.7);
+  background: rgb(8, 12, 20, 0.7);
   backdrop-filter: blur(6px);
   z-index: 1100;
   animation: fadeIn 200ms ease;
@@ -28,9 +28,9 @@ body.trade-action-dialog-open {
   flex-direction: column;
   background: var(--bg-surface, #111827);
   color: var(--text-primary, #f9fafb);
-  border: 1px solid var(--border-color, rgba(148, 163, 184, 0.25));
+  border: 1px solid var(--border-color, rgb(148, 163, 184, 0.25));
   border-radius: 16px;
-  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.6);
+  box-shadow: 0 20px 45px rgb(15, 23, 42, 0.6);
   overflow: hidden;
   animation: slideUp 250ms cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -41,7 +41,7 @@ body.trade-action-dialog-open {
   justify-content: space-between;
   padding: 18px 20px;
   gap: 16px;
-  border-bottom: 1px solid var(--border-color, rgba(148, 163, 184, 0.25));
+  border-bottom: 1px solid var(--border-color, rgb(148, 163, 184, 0.25));
 }
 
 .trade-action-title {
@@ -74,7 +74,7 @@ body.trade-action-dialog-open {
 .trade-action-close:hover,
 .trade-action-close:focus-visible {
   color: var(--text-primary, #f9fafb);
-  background: rgba(148, 163, 184, 0.15);
+  background: rgb(148, 163, 184, 0.15);
   outline: none;
 }
 
@@ -92,8 +92,8 @@ body.trade-action-dialog-open {
   flex-direction: column;
   gap: 6px;
   padding: 12px 14px;
-  background: rgba(30, 41, 59, 0.55);
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgb(30, 41, 59, 0.55);
+  border: 1px solid rgb(148, 163, 184, 0.18);
   border-radius: 10px;
 }
 
@@ -145,8 +145,8 @@ body.trade-action-dialog-open {
 
 .trade-action-preset-btn {
   padding: 12px 14px;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  background: rgba(30, 41, 59, 0.4);
+  border: 1px solid rgb(148, 163, 184, 0.25);
+  background: rgb(30, 41, 59, 0.4);
   color: var(--text-secondary, #cbd5f5);
   border-radius: 8px;
   cursor: pointer;
@@ -163,17 +163,17 @@ body.trade-action-dialog-open {
 }
 
 .trade-action-preset-btn:hover:not(:disabled) {
-  border-color: rgba(59, 130, 246, 0.5);
-  background: rgba(59, 130, 246, 0.08);
+  border-color: rgb(59, 130, 246, 0.5);
+  background: rgb(59, 130, 246, 0.08);
   color: var(--text-primary, #f9fafb);
   transform: translateY(-2px);
 }
 
 .trade-action-preset-btn.selected {
   border-color: var(--link-color, #3b82f6);
-  background: rgba(59, 130, 246, 0.2);
+  background: rgb(59, 130, 246, 0.2);
   color: #60a5fa;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  box-shadow: 0 0 0 3px rgb(59, 130, 246, 0.15);
   transform: translateY(-2px);
 }
 
@@ -212,8 +212,8 @@ body.trade-action-dialog-open {
 .trade-action-input {
   width: 100%;
   padding: 12px 16px;
-  background: rgba(15, 23, 42, 0.45);
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  background: rgb(15, 23, 42, 0.45);
+  border: 1px solid rgb(148, 163, 184, 0.25);
   border-radius: 8px;
   color: var(--text-primary, #f9fafb);
   font-size: 1rem;
@@ -223,14 +223,14 @@ body.trade-action-dialog-open {
 
 .trade-action-input:focus {
   border-color: var(--link-color, #3b82f6);
-  background: rgba(15, 23, 42, 0.65);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  background: rgb(15, 23, 42, 0.65);
+  box-shadow: 0 0 0 3px rgb(59, 130, 246, 0.15);
   outline: none;
 }
 
 .trade-action-input.error {
   border-color: #ef4444;
-  background: rgba(239, 68, 68, 0.05);
+  background: rgb(239, 68, 68, 0.05);
 }
 
 .trade-action-input:disabled {
@@ -257,7 +257,7 @@ body.trade-action-dialog-open {
   align-items: center;
   gap: 12px;
   padding: 16px 20px;
-  border-top: 1px solid var(--border-color, rgba(148, 163, 184, 0.25));
+  border-top: 1px solid var(--border-color, rgb(148, 163, 184, 0.25));
 }
 
 .trade-action-btn {
@@ -272,28 +272,28 @@ body.trade-action-dialog-open {
 }
 
 .trade-action-btn-cancel {
-  background: rgba(30, 41, 59, 0.75);
+  background: rgb(30, 41, 59, 0.75);
   color: var(--text-primary, #f9fafb);
-  border-color: rgba(148, 163, 184, 0.25);
+  border-color: rgb(148, 163, 184, 0.25);
 }
 
 .trade-action-btn-cancel:hover:not(:disabled),
 .trade-action-btn-cancel:focus-visible {
-  background: rgba(30, 41, 59, 0.95);
-  border-color: rgba(148, 163, 184, 0.45);
+  background: rgb(30, 41, 59, 0.95);
+  border-color: rgb(148, 163, 184, 0.45);
   outline: none;
 }
 
 .trade-action-btn-confirm {
   background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
-  color: #ffffff;
-  box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+  color: #fff;
+  box-shadow: 0 2px 8px rgb(59, 130, 246, 0.3);
 }
 
 .trade-action-btn-confirm:hover:not(:disabled),
 .trade-action-btn-confirm:focus-visible {
   background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+  box-shadow: 0 4px 12px rgb(59, 130, 246, 0.4);
   transform: translateY(-1px);
   outline: none;
 }
@@ -315,6 +315,7 @@ body.trade-action-dialog-open {
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -325,6 +326,7 @@ body.trade-action-dialog-open {
     opacity: 0;
     transform: translateY(20px) scale(0.95);
   }
+
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
@@ -332,7 +334,7 @@ body.trade-action-dialog-open {
 }
 
 /* Responsive */
-@media (max-width: 480px) {
+@media (width <= 480px) {
   .trade-action-dialog {
     width: 100%;
     max-height: 100vh;

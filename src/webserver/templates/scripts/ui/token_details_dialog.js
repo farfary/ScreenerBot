@@ -45,7 +45,7 @@ export class TokenDetailsDialog {
       console.error("Error loading token details:", error);
       const headerMetrics = this.dialogEl.querySelector(".header-metrics");
       if (headerMetrics) {
-        headerMetrics.innerHTML = "<div class=\"error-text\">Failed to load details</div>";
+        headerMetrics.innerHTML = '<div class="error-text">Failed to load details</div>';
       }
     }
 
@@ -289,7 +289,7 @@ export class TokenDetailsDialog {
    */
   _loadOverviewTab(content) {
     if (!this.fullTokenData) {
-      content.innerHTML = "<div class=\"loading-spinner\">Waiting for token data...</div>";
+      content.innerHTML = '<div class="loading-spinner">Waiting for token data...</div>';
       return;
     }
 
@@ -362,10 +362,10 @@ export class TokenDetailsDialog {
 
     // Status flags
     const badges = [];
-    if (token.verified) badges.push("<span class=\"badge-success\">✓ Verified</span>");
-    if (token.has_open_position) badges.push("<span class=\"badge-info\">📊 Position Open</span>");
-    if (token.blacklisted) badges.push("<span class=\"badge-danger\">🚫 Blacklisted</span>");
-    if (token.has_ohlcv) badges.push("<span class=\"badge-success\">📈 Chart Data</span>");
+    if (token.verified) badges.push('<span class="badge-success">✓ Verified</span>');
+    if (token.has_open_position) badges.push('<span class="badge-info">📊 Position Open</span>');
+    if (token.blacklisted) badges.push('<span class="badge-danger">🚫 Blacklisted</span>');
+    if (token.has_ohlcv) badges.push('<span class="badge-success">📈 Chart Data</span>');
     if (badges.length > 0) {
       rows.push(this._buildDataRow("Status", badges.join(" ")));
     }
@@ -560,14 +560,14 @@ export class TokenDetailsDialog {
     }
     if (token.mint_authority !== null && token.mint_authority !== undefined) {
       const value = token.mint_authority
-        ? "<span class=\"badge-warning\">Present</span>"
-        : "<span class=\"badge-success\">Revoked</span>";
+        ? '<span class="badge-warning">Present</span>'
+        : '<span class="badge-success">Revoked</span>';
       rows.push(this._buildDataRow("Mint Authority", value));
     }
     if (token.freeze_authority !== null && token.freeze_authority !== undefined) {
       const value = token.freeze_authority
-        ? "<span class=\"badge-warning\">Present</span>"
-        : "<span class=\"badge-success\">Revoked</span>";
+        ? '<span class="badge-warning">Present</span>'
+        : '<span class="badge-success">Revoked</span>';
       rows.push(this._buildDataRow("Freeze Authority", value));
     }
     if (token.total_holders !== null && token.total_holders !== undefined) {
@@ -583,7 +583,7 @@ export class TokenDetailsDialog {
     }
     if (token.rugged) {
       rows.push(
-        this._buildDataRow("Status", "<span class=\"badge-danger\">⚠️ Flagged as Rugged</span>")
+        this._buildDataRow("Status", '<span class="badge-danger">⚠️ Flagged as Rugged</span>')
       );
     }
     if (token.security_summary) {
@@ -847,7 +847,7 @@ export class TokenDetailsDialog {
       if (chartData.length > 0) {
         const targetVisibleBars = 80;
         const lastIndex = chartData.length - 1;
-        
+
         // Set logical range: show from (lastIndex - 80) to lastIndex
         // This maintains consistent spacing regardless of actual data count
         this.chart.timeScale().setVisibleLogicalRange({
@@ -864,21 +864,21 @@ export class TokenDetailsDialog {
    * Load Positions tab content
    */
   _loadPositionsTab(content) {
-    content.innerHTML = "<div class=\"tab-placeholder\">Positions content will be loaded here</div>";
+    content.innerHTML = '<div class="tab-placeholder">Positions content will be loaded here</div>';
   }
 
   /**
    * Load Pools tab content
    */
   _loadPoolsTab(content) {
-    content.innerHTML = "<div class=\"tab-placeholder\">Pools content will be loaded here</div>";
+    content.innerHTML = '<div class="tab-placeholder">Pools content will be loaded here</div>';
   }
 
   /**
    * Load DexScreener tab content
    */
   async _loadDexScreenerTab(content) {
-    content.innerHTML = "<div class=\"loading-spinner\">Loading DexScreener data...</div>";
+    content.innerHTML = '<div class="loading-spinner">Loading DexScreener data...</div>';
 
     try {
       const response = await fetch(`/api/tokens/${this.tokenData.mint}/dexscreener`);
@@ -938,45 +938,64 @@ export class TokenDetailsDialog {
     `);
 
     // Price Changes Section
-    const hasChanges = data.price_change_5m !== null || data.price_change_1h !== null || 
-                       data.price_change_6h !== null || data.price_change_24h !== null;
+    const hasChanges =
+      data.price_change_5m !== null ||
+      data.price_change_1h !== null ||
+      data.price_change_6h !== null ||
+      data.price_change_24h !== null;
     if (hasChanges) {
       sections.push(`
         <div class="dex-section">
           <h3 class="dex-section-title">📈 Price Changes</h3>
           <div class="dex-grid">
-            ${data.price_change_5m !== null ? `
+            ${
+              data.price_change_5m !== null
+                ? `
               <div class="dex-item">
                 <div class="dex-label">5 Minutes</div>
                 <div class="dex-value ${this._getChangeClass(data.price_change_5m)}">
                   ${this._formatPercent(data.price_change_5m)}
                 </div>
               </div>
-            ` : ""}
-            ${data.price_change_1h !== null ? `
+            `
+                : ""
+            }
+            ${
+              data.price_change_1h !== null
+                ? `
               <div class="dex-item">
                 <div class="dex-label">1 Hour</div>
                 <div class="dex-value ${this._getChangeClass(data.price_change_1h)}">
                   ${this._formatPercent(data.price_change_1h)}
                 </div>
               </div>
-            ` : ""}
-            ${data.price_change_6h !== null ? `
+            `
+                : ""
+            }
+            ${
+              data.price_change_6h !== null
+                ? `
               <div class="dex-item">
                 <div class="dex-label">6 Hours</div>
                 <div class="dex-value ${this._getChangeClass(data.price_change_6h)}">
                   ${this._formatPercent(data.price_change_6h)}
                 </div>
               </div>
-            ` : ""}
-            ${data.price_change_24h !== null ? `
+            `
+                : ""
+            }
+            ${
+              data.price_change_24h !== null
+                ? `
               <div class="dex-item">
                 <div class="dex-label">24 Hours</div>
                 <div class="dex-value ${this._getChangeClass(data.price_change_24h)}">
                   ${this._formatPercent(data.price_change_24h)}
                 </div>
               </div>
-            ` : ""}
+            `
+                : ""
+            }
           </div>
         </div>
       `);
@@ -989,75 +1008,111 @@ export class TokenDetailsDialog {
         <div class="dex-section">
           <h3 class="dex-section-title">💎 Market Metrics</h3>
           <div class="dex-grid">
-            ${data.market_cap !== null ? `
+            ${
+              data.market_cap !== null
+                ? `
               <div class="dex-item">
                 <div class="dex-label">Market Cap</div>
                 <div class="dex-value">${this._formatUSD(data.market_cap)}</div>
               </div>
-            ` : ""}
-            ${data.fdv !== null ? `
+            `
+                : ""
+            }
+            ${
+              data.fdv !== null
+                ? `
               <div class="dex-item">
                 <div class="dex-label">Fully Diluted Value</div>
                 <div class="dex-value">${this._formatUSD(data.fdv)}</div>
               </div>
-            ` : ""}
-            ${data.liquidity_usd !== null ? `
+            `
+                : ""
+            }
+            ${
+              data.liquidity_usd !== null
+                ? `
               <div class="dex-item">
                 <div class="dex-label">Liquidity (USD)</div>
                 <div class="dex-value">${this._formatUSD(data.liquidity_usd)}</div>
               </div>
-            ` : ""}
+            `
+                : ""
+            }
           </div>
         </div>
       `);
     }
 
     // Volume Section
-    const hasVolume = data.volume_5m !== null || data.volume_1h !== null || 
-                      data.volume_6h !== null || data.volume_24h !== null;
+    const hasVolume =
+      data.volume_5m !== null ||
+      data.volume_1h !== null ||
+      data.volume_6h !== null ||
+      data.volume_24h !== null;
     if (hasVolume) {
       sections.push(`
         <div class="dex-section">
           <h3 class="dex-section-title">📊 Volume</h3>
           <div class="dex-grid">
-            ${data.volume_5m !== null ? `
+            ${
+              data.volume_5m !== null
+                ? `
               <div class="dex-item">
                 <div class="dex-label">5 Minutes</div>
                 <div class="dex-value">${this._formatUSD(data.volume_5m)}</div>
               </div>
-            ` : ""}
-            ${data.volume_1h !== null ? `
+            `
+                : ""
+            }
+            ${
+              data.volume_1h !== null
+                ? `
               <div class="dex-item">
                 <div class="dex-label">1 Hour</div>
                 <div class="dex-value">${this._formatUSD(data.volume_1h)}</div>
               </div>
-            ` : ""}
-            ${data.volume_6h !== null ? `
+            `
+                : ""
+            }
+            ${
+              data.volume_6h !== null
+                ? `
               <div class="dex-item">
                 <div class="dex-label">6 Hours</div>
                 <div class="dex-value">${this._formatUSD(data.volume_6h)}</div>
               </div>
-            ` : ""}
-            ${data.volume_24h !== null ? `
+            `
+                : ""
+            }
+            ${
+              data.volume_24h !== null
+                ? `
               <div class="dex-item">
                 <div class="dex-label">24 Hours</div>
                 <div class="dex-value">${this._formatUSD(data.volume_24h)}</div>
               </div>
-            ` : ""}
+            `
+                : ""
+            }
           </div>
         </div>
       `);
     }
 
     // Transactions Section
-    const hasTxns = data.txns_5m !== null || data.txns_1h !== null || 
-                    data.txns_6h !== null || data.txns_24h !== null;
+    const hasTxns =
+      data.txns_5m !== null ||
+      data.txns_1h !== null ||
+      data.txns_6h !== null ||
+      data.txns_24h !== null;
     if (hasTxns) {
       sections.push(`
         <div class="dex-section">
           <h3 class="dex-section-title">🔄 Transactions (Buys / Sells)</h3>
           <div class="dex-grid">
-            ${data.txns_5m !== null ? `
+            ${
+              data.txns_5m !== null
+                ? `
               <div class="dex-item">
                 <div class="dex-label">5 Minutes</div>
                 <div class="dex-value">
@@ -1065,8 +1120,12 @@ export class TokenDetailsDialog {
                   <span class="txn-sells">${data.txns_5m[1]}</span>
                 </div>
               </div>
-            ` : ""}
-            ${data.txns_1h !== null ? `
+            `
+                : ""
+            }
+            ${
+              data.txns_1h !== null
+                ? `
               <div class="dex-item">
                 <div class="dex-label">1 Hour</div>
                 <div class="dex-value">
@@ -1074,8 +1133,12 @@ export class TokenDetailsDialog {
                   <span class="txn-sells">${data.txns_1h[1]}</span>
                 </div>
               </div>
-            ` : ""}
-            ${data.txns_6h !== null ? `
+            `
+                : ""
+            }
+            ${
+              data.txns_6h !== null
+                ? `
               <div class="dex-item">
                 <div class="dex-label">6 Hours</div>
                 <div class="dex-value">
@@ -1083,8 +1146,12 @@ export class TokenDetailsDialog {
                   <span class="txn-sells">${data.txns_6h[1]}</span>
                 </div>
               </div>
-            ` : ""}
-            ${data.txns_24h !== null ? `
+            `
+                : ""
+            }
+            ${
+              data.txns_24h !== null
+                ? `
               <div class="dex-item">
                 <div class="dex-label">24 Hours</div>
                 <div class="dex-value">
@@ -1092,7 +1159,9 @@ export class TokenDetailsDialog {
                   <span class="txn-sells">${data.txns_24h[1]}</span>
                 </div>
               </div>
-            ` : ""}
+            `
+                : ""
+            }
           </div>
         </div>
       `);
@@ -1105,43 +1174,61 @@ export class TokenDetailsDialog {
         <div class="dex-section">
           <h3 class="dex-section-title">🏊 Pool Information</h3>
           <div class="dex-grid">
-            ${data.dex_id ? `
+            ${
+              data.dex_id
+                ? `
               <div class="dex-item">
                 <div class="dex-label">DEX</div>
                 <div class="dex-value">${this._escapeHtml(data.dex_id)}</div>
               </div>
-            ` : ""}
-            ${data.chain_id ? `
+            `
+                : ""
+            }
+            ${
+              data.chain_id
+                ? `
               <div class="dex-item">
                 <div class="dex-label">Chain</div>
                 <div class="dex-value">${this._escapeHtml(data.chain_id)}</div>
               </div>
-            ` : ""}
-            ${data.pair_address ? `
+            `
+                : ""
+            }
+            ${
+              data.pair_address
+                ? `
               <div class="dex-item full-width">
                 <div class="dex-label">Pair Address</div>
                 <div class="dex-value dex-address">${this._escapeHtml(data.pair_address)}</div>
               </div>
-            ` : ""}
-            ${data.pair_created_at ? `
+            `
+                : ""
+            }
+            ${
+              data.pair_created_at
+                ? `
               <div class="dex-item">
                 <div class="dex-label">Created</div>
                 <div class="dex-value">${this._formatDate(data.pair_created_at)}</div>
               </div>
-            ` : ""}
+            `
+                : ""
+            }
           </div>
         </div>
       `);
     }
 
     // Links Section
-    const hasLinks = data.url || (data.image_url || data.header_image_url);
+    const hasLinks = data.url || data.image_url || data.header_image_url;
     if (hasLinks) {
       sections.push(`
         <div class="dex-section">
           <h3 class="dex-section-title">🔗 Links & Images</h3>
           <div class="dex-grid">
-            ${data.url ? `
+            ${
+              data.url
+                ? `
               <div class="dex-item full-width">
                 <div class="dex-label">DexScreener Page</div>
                 <div class="dex-value">
@@ -1150,23 +1237,33 @@ export class TokenDetailsDialog {
                   </a>
                 </div>
               </div>
-            ` : ""}
-            ${data.image_url ? `
+            `
+                : ""
+            }
+            ${
+              data.image_url
+                ? `
               <div class="dex-item full-width">
                 <div class="dex-label">Token Image</div>
                 <div class="dex-value">
                   <img src="${this._escapeHtml(data.image_url)}" alt="Token" class="dex-image" />
                 </div>
               </div>
-            ` : ""}
-            ${data.header_image_url ? `
+            `
+                : ""
+            }
+            ${
+              data.header_image_url
+                ? `
               <div class="dex-item full-width">
                 <div class="dex-label">Header Image</div>
                 <div class="dex-value">
                   <img src="${this._escapeHtml(data.header_image_url)}" alt="Header" class="dex-image" />
                 </div>
               </div>
-            ` : ""}
+            `
+                : ""
+            }
           </div>
         </div>
       `);
@@ -1237,14 +1334,14 @@ export class TokenDetailsDialog {
    * Load GMGN tab content
    */
   _loadGmgnTab(content) {
-    content.innerHTML = "<div class=\"tab-placeholder\">GMGN iframe will be loaded here</div>";
+    content.innerHTML = '<div class="tab-placeholder">GMGN iframe will be loaded here</div>';
   }
 
   /**
    * Load RugCheck tab content
    */
   _loadRugCheckTab(content) {
-    content.innerHTML = "<div class=\"tab-placeholder\">RugCheck content will be loaded here</div>";
+    content.innerHTML = '<div class="tab-placeholder">RugCheck content will be loaded here</div>';
   }
 
   /**

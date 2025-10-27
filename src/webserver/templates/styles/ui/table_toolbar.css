@@ -74,7 +74,7 @@
 .table-toolbar-title__tag {
   padding: 0.125rem 0.5rem;
   border-radius: 999px;
-  background: rgba(59, 130, 246, 0.12);
+  background: rgb(59, 130, 246, 0.12);
   color: var(--primary-color);
   font-size: 0.65rem;
   font-weight: 600;
@@ -255,8 +255,8 @@
   min-width: 0;
   padding: 10px 14px;
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  background: rgba(30, 41, 59, 0.45);
+  border: 1px solid rgb(148, 163, 184, 0.22);
+  background: rgb(30, 41, 59, 0.45);
   transition:
     border-color 0.2s ease,
     background 0.2s ease;
@@ -264,7 +264,7 @@
 
 .table-toolbar-field--switch:not(.is-disabled):hover {
   border-color: var(--primary-color);
-  background: rgba(59, 130, 246, 0.08);
+  background: rgb(59, 130, 246, 0.08);
 }
 
 .table-toolbar-field--switch .table-toolbar-field__label {
@@ -276,7 +276,7 @@
 
 .table-toolbar-field--switch.is-disabled {
   opacity: 0.55;
-  border-color: rgba(148, 163, 184, 0.18);
+  border-color: rgb(148, 163, 184, 0.18);
 }
 
 .table-toolbar-field--switch .table-toolbar-switch {
@@ -292,7 +292,7 @@
   min-width: 210px;
 }
 
-@media (max-width: 900px) {
+@media (width <= 900px) {
   .table-toolbar-controls {
     align-items: stretch;
     gap: 14px;
@@ -351,7 +351,7 @@
   left: 1px;
   background: var(--bg-primary);
   border-radius: 50%;
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.25);
+  box-shadow: 0 1px 3px rgb(15, 23, 42, 0.25);
   transition: transform 0.2s ease;
 }
 
@@ -415,7 +415,7 @@
 .dt-search-input:focus {
   outline: none;
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 3px rgb(59, 130, 246, 0.1);
 }
 
 .table-toolbar-input:hover,
@@ -517,7 +517,7 @@
   background: var(--bg-hover);
   border-color: var(--primary-color);
   transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.1);
 }
 
 .table-toolbar-btn:active {
@@ -536,12 +536,12 @@
 .table-toolbar-btn--primary {
   background: var(--primary-color);
   border-color: var(--primary-color);
-  color: #ffffff;
+  color: #fff;
 }
 
 .table-toolbar-btn--danger {
-  background: var(--danger-bg, rgba(248, 113, 113, 0.2));
-  border-color: rgba(248, 113, 113, 0.35);
+  background: var(--danger-bg, rgb(248, 113, 113, 0.2));
+  border-color: rgb(248, 113, 113, 0.35);
   color: var(--danger-color, #f87171);
 }
 
@@ -549,7 +549,7 @@
   position: relative;
 }
 
-@media (max-width: 960px) {
+@media (width <= 960px) {
   .table-toolbar__row {
     gap: 10px;
   }
@@ -584,7 +584,7 @@
   }
 }
 
-@media (max-width: 720px) {
+@media (width <= 720px) {
   .data-table-toolbar {
     padding: 10px 12px;
   }
@@ -599,6 +599,7 @@
     min-width: 0;
   }
 }
+
 .toolbar {
   display: flex;
   flex-direction: column;
@@ -607,7 +608,7 @@
   border: 1px solid var(--border-color);
   border-radius: 8px;
   background: var(--bg-card);
-  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 1px 2px rgb(15, 23, 42, 0.12);
 }
 
 .toolbar--dense {
@@ -732,15 +733,13 @@
 .toolbar-input:focus,
 .toolbar-select:focus {
   border-color: var(--link-color);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.18);
+  box-shadow: 0 0 0 2px rgb(59, 130, 246, 0.18);
   outline: none;
 }
 
 .toolbar-select {
   min-width: 140px;
   appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
   background-image:
     linear-gradient(45deg, transparent 50%, var(--text-secondary) 50%),
     linear-gradient(135deg, var(--text-secondary) 50%, transparent 50%);
@@ -837,7 +836,7 @@
 .filter-chip.active {
   background: var(--link-color);
   border-color: var(--link-color);
-  color: #ffffff;
+  color: #fff;
 }
 
 .toolbar-quick-group {
@@ -860,24 +859,24 @@
   gap: 6px;
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.12);
+  background: rgb(148, 163, 184, 0.12);
   color: var(--text-secondary);
   font-size: 0.78em;
   font-weight: 600;
 }
 
 .toolbar-metric[data-variant="success"] {
-  background: rgba(34, 197, 94, 0.16);
+  background: rgb(34, 197, 94, 0.16);
   color: #4ade80;
 }
 
 .toolbar-metric[data-variant="warn"] {
-  background: rgba(250, 204, 21, 0.16);
+  background: rgb(250, 204, 21, 0.16);
   color: #facc15;
 }
 
 .toolbar-metric[data-variant="error"] {
-  background: rgba(248, 113, 113, 0.16);
+  background: rgb(248, 113, 113, 0.16);
   color: #f87171;
 }
 
@@ -902,7 +901,7 @@
   color: var(--text-secondary);
 }
 
-@media (max-width: 1024px) {
+@media (width <= 1024px) {
   .toolbar-actions {
     margin-left: 0;
     width: 100%;
@@ -910,7 +909,7 @@
   }
 }
 
-@media (max-width: 720px) {
+@media (width <= 720px) {
   .toolbar {
     padding: 10px 12px;
     gap: 10px;

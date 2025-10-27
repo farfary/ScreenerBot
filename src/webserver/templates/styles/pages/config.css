@@ -5,7 +5,7 @@
   gap: 16px;
   height: 100%;
   min-height: 0;
-  padding: 8px 8px;
+  padding: 8px;
 }
 
 .config-sidebar {
@@ -57,7 +57,7 @@
   gap: 10px;
   padding: 8px 12px;
   border: none;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  border-bottom: 1px solid rgb(148, 163, 184, 0.15);
   background: transparent;
   color: var(--text-primary);
   font-size: 0.85rem;
@@ -149,7 +149,7 @@
   gap: 8px;
   padding: 10px 12px;
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  border: 1px solid rgb(148, 163, 184, 0.25);
   background: rgb(30 41 59 / 0.45);
   color: var(--text-primary);
   font-size: 0.8rem;
@@ -198,7 +198,7 @@
   gap: 12px;
   padding: 14px 16px;
   background: linear-gradient(135deg, rgb(15 23 42 / 0.5), rgb(15 23 42 / 0.2));
-  border-bottom: 1px solid rgba(148, 163, 184, 0.18);
+  border-bottom: 1px solid rgb(148, 163, 184, 0.18);
 }
 
 .config-section-title {
@@ -243,7 +243,7 @@
   padding: 2px 8px;
   border-radius: 999px;
   background: rgb(30 41 59 / 0.6);
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  border: 1px solid rgb(148, 163, 184, 0.25);
   font-weight: 600;
 }
 
@@ -269,8 +269,8 @@
 .config-header-action {
   padding: 6px 12px;
   border-radius: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  background: rgba(15, 23, 42, 0.3);
+  border: 1px solid rgb(148, 163, 184, 0.35);
+  background: rgb(15, 23, 42, 0.3);
   color: var(--text-primary);
   font-size: 0.8rem;
   font-weight: 600;
@@ -289,7 +289,7 @@
 .config-header-action.primary {
   background: rgb(59 130 246);
   border-color: rgb(59 130 246);
-  color: #ffffff;
+  color: #fff;
 }
 
 .config-header-action.primary:hover {
@@ -298,7 +298,7 @@
 
 .config-header-action.ghost {
   background: transparent;
-  border-color: rgba(148, 163, 184, 0.3);
+  border-color: rgb(148, 163, 184, 0.3);
   color: var(--text-secondary);
 }
 
@@ -319,7 +319,7 @@
   flex-wrap: wrap;
   gap: 10px;
   padding: 8px 16px;
-  border-bottom: 1px solid rgba(148, 163, 184, 0.15);
+  border-bottom: 1px solid rgb(148, 163, 184, 0.15);
   background: linear-gradient(180deg, rgb(15 23 42 / 0.25), transparent);
 }
 
@@ -330,7 +330,7 @@
   padding: 4px 10px;
   border-radius: 999px;
   background: rgb(30 41 59 / 0.55);
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  border: 1px solid rgb(148, 163, 184, 0.25);
   font-size: 0.75rem;
   color: var(--text-secondary);
 }
@@ -372,7 +372,7 @@
   padding: 24px;
   margin-bottom: 20px;
   border-radius: 12px;
-  border: 1px dashed rgba(148, 163, 184, 0.35);
+  border: 1px dashed rgb(148, 163, 184, 0.35);
   background: linear-gradient(145deg, rgb(15 23 42 / 0.35), rgb(15 23 42 / 0.1));
   color: var(--text-secondary);
   font-size: 0.85rem;
@@ -398,7 +398,7 @@
 }
 
 .config-category {
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  border: 1px solid rgb(148, 163, 184, 0.18);
   border-radius: 12px;
   background: rgb(15 23 42 / 0.35);
   overflow: hidden;
@@ -439,7 +439,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.35);
+  border: 1px solid rgb(148, 163, 184, 0.35);
   font-size: 0.65rem;
   transition: transform 0.2s ease;
 }
@@ -459,8 +459,8 @@
 .config-category-chip {
   padding: 2px 6px;
   border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgb(148, 163, 184, 0.3);
+  background: rgb(30, 41, 59, 0.6);
   font-weight: 600;
 }
 
@@ -561,7 +561,7 @@
   text-transform: uppercase;
   letter-spacing: 0.3px;
   font-size: 0.65rem;
-  background: rgba(148, 163, 184, 0.2);
+  background: rgb(148, 163, 184, 0.2);
   color: var(--text-secondary);
 }
 
@@ -627,7 +627,7 @@
   padding: 14px;
   border-radius: 10px;
   background: rgb(15 23 42 / 0.3);
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  border: 1px solid rgb(148, 163, 184, 0.18);
 }
 
 .config-object-field {
@@ -636,7 +636,7 @@
   gap: 14px;
   padding: 10px 12px;
   border-radius: 9px;
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  border: 1px solid rgb(148, 163, 184, 0.25);
   background: rgb(15 23 42 / 0.5);
   transition:
     border-color 0.2s ease,
@@ -645,7 +645,7 @@
 
 .config-object-field:hover {
   background: rgb(59 130 246 / 0.08);
-  border-color: rgba(148, 163, 184, 0.4);
+  border-color: rgb(148, 163, 184, 0.4);
 }
 
 .config-object-field--changed {
@@ -664,19 +664,19 @@
   grid-template-columns: 1fr;
   gap: 10px;
   background: rgb(15 23 42 / 0.6);
-  border-color: rgba(148, 163, 184, 0.3);
+  border-color: rgb(148, 163, 184, 0.3);
 }
 
 /* Add visual depth for multiple nesting levels */
 .config-object-group .config-object-group {
   background: rgb(15 23 42 / 0.4);
-  border-color: rgba(148, 163, 184, 0.2);
+  border-color: rgb(148, 163, 184, 0.2);
   margin-left: 8px;
 }
 
 .config-object-group .config-object-group .config-object-group {
   background: rgb(15 23 42 / 0.5);
-  border-color: rgba(148, 163, 184, 0.22);
+  border-color: rgb(148, 163, 184, 0.22);
   margin-left: 12px;
 }
 
@@ -701,8 +701,8 @@
   width: 100%;
   padding: 6px 9px;
   border-radius: 8px;
-  border: 1px solid rgba(148, 163, 184, 0.35);
-  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgb(148, 163, 184, 0.35);
+  background: rgb(15, 23, 42, 0.6);
   color: var(--text-primary);
   font-size: 0.85rem;
   transition:
@@ -743,7 +743,7 @@
   align-self: flex-end;
   padding: 2px 8px;
   border-radius: 6px;
-  border: 1px solid rgba(148, 163, 184, 0.35);
+  border: 1px solid rgb(148, 163, 184, 0.35);
   background: transparent;
   color: var(--text-secondary);
   font-size: 0.7rem;
@@ -772,7 +772,7 @@
   min-height: 1em;
 }
 
-@media (max-width: 1180px) {
+@media (width <= 1180px) {
   .config-page {
     flex-direction: column;
   }
@@ -801,7 +801,7 @@
   }
 }
 
-@media (max-width: 1024px) {
+@media (width <= 1024px) {
   .config-field {
     grid-template-columns: 1fr;
   }
@@ -832,7 +832,7 @@
   }
 }
 
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .config-main-header,
   .config-main-toolbar {
     padding: 12px 16px;
@@ -857,6 +857,7 @@
 .config-category.has-match .config-category-header {
   background: rgb(34 197 94 / 0.06);
 }
+
 .config-category.has-match .config-category-label .chevron {
   border-color: rgb(34 197 94 / 0.5);
 }

@@ -21,7 +21,7 @@ body.dt-column-resizing .data-table col {
   background: var(--bg-primary);
   border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.1);
   position: relative;
 }
 
@@ -37,13 +37,13 @@ body.dt-column-resizing .data-table col {
   right: 16px;
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgba(148, 163, 184, 0.15);
+  background: rgb(148, 163, 184, 0.15);
   color: var(--text-secondary);
   font-size: 0.7rem;
   font-weight: 600;
   letter-spacing: 0.04em;
   backdrop-filter: blur(6px);
-  border: 1px solid rgba(148, 163, 184, 0.3);
+  border: 1px solid rgb(148, 163, 184, 0.3);
 }
 
 /* Column toggle */
@@ -59,7 +59,7 @@ body.dt-column-resizing .data-table col {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 8px 24px rgb(0, 0, 0, 0.2);
   z-index: 1000;
   min-width: 220px;
   max-height: 420px;
@@ -72,6 +72,7 @@ body.dt-column-resizing .data-table col {
     opacity: 0;
     transform: translateY(-8px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -139,14 +140,14 @@ body.dt-column-resizing .data-table col {
 /* Table header */
 .data-table thead {
   background: var(--bg-secondary);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.05);
 }
 
 .data-table thead.sticky {
   position: sticky;
   top: 0;
   z-index: 10;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgb(0, 0, 0, 0.1);
 }
 
 .data-table th {
@@ -216,9 +217,9 @@ body.dt-column-resizing .data-table col {
 
 .dt-header-column.dt-resizing,
 .dt-header-column.dt-resizing-adjacent {
-  background: rgba(59, 130, 246, 0.12);
+  background: rgb(59, 130, 246, 0.12);
   border-bottom-color: var(--primary-color);
-  box-shadow: inset 0 -2px 0 rgba(59, 130, 246, 0.35);
+  box-shadow: inset 0 -2px 0 rgb(59, 130, 246, 0.35);
   color: var(--text-primary);
 }
 
@@ -270,7 +271,7 @@ body.dt-column-resizing * {
 }
 
 .dt-column-menu-item.drag-over {
-  background: rgba(59, 130, 246, 0.1);
+  background: rgb(59, 130, 246, 0.1);
   border: 1px dashed var(--primary-color);
 }
 
@@ -315,13 +316,13 @@ body.dt-column-resizing * {
 
 .dt-resize-handle:hover,
 .dt-resize-handle.active {
-  background: rgba(59, 130, 246, 0.1);
+  background: rgb(59, 130, 246, 0.1);
 }
 
 .dt-resize-handle:hover::after,
 .dt-resize-handle.active::after {
   background: var(--primary-color);
-  box-shadow: 0 0 6px rgba(59, 130, 246, 0.6);
+  box-shadow: 0 0 6px rgb(59, 130, 246, 0.6);
 }
 
 /* Table body */
@@ -337,19 +338,19 @@ body.dt-column-resizing * {
 
 .data-table tbody tr:hover {
   background: var(--bg-hover);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.05);
 }
 
 .data-table tbody tr.selected {
-  background: rgba(59, 130, 246, 0.1);
+  background: rgb(59, 130, 246, 0.1);
 }
 
 .data-table tbody tr.selected:hover {
-  background: rgba(59, 130, 246, 0.15);
+  background: rgb(59, 130, 246, 0.15);
 }
 
 .data-table.zebra tbody tr:nth-child(even) {
-  background: rgba(0, 0, 0, 0.02);
+  background: rgb(0, 0, 0, 0.02);
 }
 
 .data-table.zebra tbody tr:nth-child(even):hover {
@@ -361,7 +362,6 @@ body.dt-column-resizing * {
   color: var(--text-primary);
   border-bottom: 1px solid var(--border-color);
   transition: color 0.15s ease;
-  word-wrap: break-word;
   overflow-wrap: break-word;
   max-width: none;
   box-sizing: border-box; /* Make width include padding and borders */
@@ -375,6 +375,7 @@ body.dt-column-resizing * {
   --dt-row-line-height: 1.4;
   --dt-row-lines: var(--dt-row-lines, 2);
   --dt-row-padding-y: 16px; /* td padding top + bottom */
+
   height: calc((var(--dt-row-line-height) * 1em * var(--dt-row-lines)) + var(--dt-row-padding-y));
   max-height: calc(
     (var(--dt-row-line-height) * 1em * var(--dt-row-lines)) + var(--dt-row-padding-y)
@@ -467,6 +468,7 @@ body.dt-column-resizing * {
   100% {
     opacity: 0.5;
   }
+
   50% {
     opacity: 1;
   }
@@ -479,19 +481,19 @@ body.dt-column-resizing * {
 }
 
 .data-table-scroll-container::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.05);
+  background: rgb(0, 0, 0, 0.05);
   border-radius: 5px;
 }
 
 .data-table-scroll-container::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.2);
+  background: rgb(0, 0, 0, 0.2);
   border-radius: 5px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 .data-table-scroll-container::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.3);
+  background: rgb(0, 0, 0, 0.3);
   background-clip: padding-box;
 }
 
@@ -500,7 +502,7 @@ body.dt-column-resizing * {
 }
 
 /* Responsive adjustments */
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .data-table-toolbar {
     flex-direction: column;
     align-items: stretch;
@@ -539,7 +541,7 @@ body.dt-column-resizing * {
 [data-theme="dark"] .dt-column-menu {
   background: var(--bg-secondary);
   border-color: var(--border-color);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.5);
 }
 
 /* Loading state */
@@ -554,6 +556,7 @@ body.dt-column-resizing * {
     opacity: 0;
     transform: translateY(-4px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -660,14 +663,14 @@ body.dt-column-resizing * {
   font-size: 0.75rem;
   font-weight: 500;
   padding: 2px 6px;
-  background: rgba(239, 68, 68, 0.1);
+  background: rgb(239, 68, 68, 0.1);
   border-radius: 3px;
   cursor: help;
 }
 
 /* Dark theme adjustments */
 [data-theme="dark"] .dt-image {
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: rgb(255, 255, 255, 0.1);
 }
 
 [data-theme="dark"] .dt-image:hover {
@@ -675,8 +678,8 @@ body.dt-column-resizing * {
 }
 
 [data-theme="dark"] .dt-image-fallback {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.1);
+  background: rgb(255, 255, 255, 0.05);
+  border-color: rgb(255, 255, 255, 0.1);
 }
 
 /* Loading skeleton for lazy-loaded images */
@@ -684,6 +687,7 @@ body.dt-column-resizing * {
   0% {
     background-position: -468px 0;
   }
+
   100% {
     background-position: 468px 0;
   }
@@ -701,7 +705,7 @@ body.dt-column-resizing * {
 }
 
 /* Responsive adjustments */
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .dt-image-text {
     max-width: 100px;
     font-size: 0.8125rem;
@@ -750,7 +754,7 @@ body.dt-column-resizing * {
   background: var(--bg-hover);
   border-color: var(--primary-color);
   transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.1);
 }
 
 .dt-action-btn:active {
@@ -874,7 +878,7 @@ body.dt-column-resizing * {
   background: var(--bg-hover);
   border-color: var(--primary-color);
   transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.1);
 }
 
 .dt-actions-dropdown-trigger:active {
@@ -896,7 +900,7 @@ body.dt-column-resizing * {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  box-shadow: 0 8px 24px rgb(0, 0, 0, 0.15);
   z-index: 1000;
   animation: slideDown 0.15s ease;
 }
@@ -942,7 +946,7 @@ body.dt-column-resizing * {
 }
 
 .dt-actions-dropdown-item.danger:hover {
-  background: rgba(239, 68, 68, 0.1);
+  background: rgb(239, 68, 68, 0.1);
   color: var(--error-color, #ef4444);
 }
 
@@ -962,21 +966,21 @@ body.dt-column-resizing * {
 
 /* Dark theme support */
 [data-theme="dark"] .dt-action-btn {
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: rgb(255, 255, 255, 0.1);
 }
 
 [data-theme="dark"] .dt-actions-dropdown-trigger {
-  border-color: rgba(255, 255, 255, 0.1);
+  border-color: rgb(255, 255, 255, 0.1);
 }
 
 [data-theme="dark"] .dt-actions-dropdown-menu {
   background: var(--bg-secondary);
-  border-color: rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  border-color: rgb(255, 255, 255, 0.1);
+  box-shadow: 0 8px 24px rgb(0, 0, 0, 0.5);
 }
 
 /* Responsive adjustments */
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .dt-actions-container {
     gap: 4px;
   }

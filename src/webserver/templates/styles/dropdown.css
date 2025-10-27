@@ -6,7 +6,7 @@
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 20px rgb(0, 0, 0, 0.4);
   min-width: 180px;
   max-width: 250px;
   z-index: 9999;
@@ -102,7 +102,7 @@
 }
 
 .dropdown-item.danger:hover:not(.disabled) {
-  background: rgba(211, 47, 47, 0.08);
+  background: rgb(211, 47, 47, 0.08);
 }
 
 .dropdown-divider {
@@ -144,7 +144,7 @@
   min-width: 16px;
   text-align: center;
   line-height: 1;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.2);
 }
 
 /* Enhanced badge styles */
@@ -159,7 +159,7 @@
 
 /* Dark theme adjustments */
 :root[data-theme="dark"] .dropdown-menu {
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 16px rgb(0, 0, 0, 0.4);
 }
 
 :root[data-theme="dark"] .dropdown-item .badge {
