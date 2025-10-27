@@ -117,9 +117,13 @@ pub struct Token {
     // ========================================================================
     // Volume Data (timeframes from chosen source)
     // ========================================================================
+    #[serde(rename = "volume_5m")]
     pub volume_m5: Option<f64>,
+    #[serde(rename = "volume_1h")]
     pub volume_h1: Option<f64>,
+    #[serde(rename = "volume_6h")]
     pub volume_h6: Option<f64>,
+    #[serde(rename = "volume_24h")]
     pub volume_h24: Option<f64>,
 
     // Pool metrics (source-specific)
