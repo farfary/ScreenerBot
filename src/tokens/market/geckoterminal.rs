@@ -143,7 +143,35 @@ pub async fn fetch_geckoterminal_data_batch(
             fetched_at: Utc::now(),
         };
 
+        // Store market data in database
         db.upsert_geckoterminal_data(mint, &data).ok();
+
+        // CRITICAL: Update token metadata (symbol/name) from GeckoTerminal data
+        // This fixes race condition where Pool Service discovers token first without metadata
+        let symbol = if !attrs.symbol.is_empty() {
+            Some(attrs.symbol.as_str())
+        } else {
+            None
+        };
+        let name = if !attrs.name.is_empty() {
+            Some(attrs.name.as_str())
+        } else {
+            None
+        };
+
+        if symbol.is_some() || name.is_some() {
+            if let Err(e) = db.upsert_token(mint, symbol, name, None) {
+                logger::error(
+                    LogTag::Tokens,
+                    &format!(
+                        "[TOKENS][GECKOTERMINAL] Failed to update metadata for {}: {}",
+                        mint, e
+                    ),
+                );
+            }
+        }
+
+        // Cache it
         store::store_geckoterminal(mint, &data);
         store::refresh_token_snapshot(mint).await.ok();
 

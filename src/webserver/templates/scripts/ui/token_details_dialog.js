@@ -340,7 +340,7 @@ export class TokenDetailsDialog {
 
     // === BASIC INFORMATION ===
     rows.push(this._buildSectionHeader("Basic Information"));
-    rows.push(this._buildDataRow("Mint Address", this._formatMintAddress(token.mint), "mono"));
+    rows.push(this._buildDataRow("Mint Address", token.mint || "—", "mono"));
     rows.push(this._buildDataRow("Symbol", token.symbol || "—"));
     rows.push(this._buildDataRow("Name", token.name || "—"));
     if (token.decimals !== null && token.decimals !== undefined) {
@@ -348,8 +348,7 @@ export class TokenDetailsDialog {
     }
     if (token.pair_created_at) {
       const birthDate = new Date(token.pair_created_at * 1000);
-      const age = Math.floor((Date.now() - birthDate.getTime()) / 1000);
-      rows.push(this._buildDataRow("Token Age", Utils.formatTimeAgo(age)));
+      rows.push(this._buildDataRow("Token Age", Utils.formatTimeAgo(birthDate)));
       rows.push(this._buildDataRow("Birth Date", birthDate.toLocaleString()));
     } else if (token.created_at) {
       const createdDate = new Date(token.created_at * 1000);
@@ -357,8 +356,7 @@ export class TokenDetailsDialog {
     }
     if (token.last_updated) {
       const updatedDate = new Date(token.last_updated * 1000);
-      const age = Math.floor((Date.now() - updatedDate.getTime()) / 1000);
-      rows.push(this._buildDataRow("Last Updated", Utils.formatTimeAgo(age)));
+      rows.push(this._buildDataRow("Last Updated", Utils.formatTimeAgo(updatedDate)));
     }
 
     // Status flags
@@ -489,9 +487,7 @@ export class TokenDetailsDialog {
         rows.push(this._buildDataRow("DEX", token.pool_dex));
       }
       if (token.pool_address) {
-        rows.push(
-          this._buildDataRow("Pool Address", this._formatMintAddress(token.pool_address), "mono")
-        );
+        rows.push(this._buildDataRow("Pool Address", token.pool_address, "mono"));
       }
     }
 
@@ -642,7 +638,7 @@ export class TokenDetailsDialog {
         rows.push(
           this._buildDataRow(
             `Pool #${idx + 1}`,
-            `${pool.program} - ${this._formatShortAddress(pool.pool_id)}${pool.is_canonical ? " <span class='badge-info'>Canonical</span>" : ""}`
+            `<span class="mono">${pool.pool_id}</span> - ${pool.program}${pool.is_canonical ? " <span class='badge-info'>Canonical</span>" : ""}`
           )
         );
         if (pool.liquidity_usd !== null && pool.liquidity_usd !== undefined) {
@@ -740,11 +736,30 @@ export class TokenDetailsDialog {
       },
       rightPriceScale: {
         borderColor: "#2b2b2b",
+        scaleMargins: {
+          top: 0.1,
+          bottom: 0.2,
+        },
+      },
+      localization: {
+        priceFormatter: (price) => {
+          // Format SOL price with 12 decimals
+          if (price === 0) return "0";
+          // For very small prices, use scientific notation
+          if (Math.abs(price) < 0.000001) {
+            return price.toExponential(6);
+          }
+          // For normal small prices, show 12 decimals, trim trailing zeros
+          const formatted = price.toFixed(12);
+          return formatted.replace(/\.?0+$/, "");
+        },
       },
       timeScale: {
         borderColor: "#2b2b2b",
         timeVisible: true,
         secondsVisible: false,
+        barSpacing: 12, // Fixed spacing for consistent candle width across timeframes
+        minBarSpacing: 4,
       },
       width: chartContainer.clientWidth,
       height: chartContainer.clientHeight,
@@ -757,6 +772,20 @@ export class TokenDetailsDialog {
       borderVisible: false,
       wickUpColor: "#26a69a",
       wickDownColor: "#ef5350",
+      priceFormat: {
+        type: "custom",
+        formatter: (price) => {
+          // Format SOL price with 12 decimals
+          if (price === 0) return "0";
+          // For very small prices, use scientific notation
+          if (Math.abs(price) < 0.000001) {
+            return price.toExponential(6);
+          }
+          // For normal small prices, show 12 decimals, trim trailing zeros
+          const formatted = price.toFixed(12);
+          return formatted.replace(/\.?0+$/, "");
+        },
+      },
     });
 
     // Store chart instance for cleanup
@@ -812,8 +841,19 @@ export class TokenDetailsDialog {
       // Update chart
       this.candlestickSeries.setData(chartData);
 
-      // Fit content
-      this.chart.timeScale().fitContent();
+      // Use logical range to maintain consistent bar spacing across timeframes
+      // Always show 80 bars worth of space, even if we have fewer data points
+      if (chartData.length > 0) {
+        const targetVisibleBars = 80;
+        const lastIndex = chartData.length - 1;
+        
+        // Set logical range: show from (lastIndex - 80) to lastIndex
+        // This maintains consistent spacing regardless of actual data count
+        this.chart.timeScale().setVisibleLogicalRange({
+          from: lastIndex - targetVisibleBars,
+          to: lastIndex,
+        });
+      }
     } catch (error) {
       console.error("Error loading chart data:", error);
     }

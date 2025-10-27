@@ -184,7 +184,7 @@ pub async fn fetch_dexscreener_data_batch(
         let is_sol_pair = pool.quote_token_address == SOL_MINT;
         let data = convert_pool_to_data(&pool, is_sol_pair);
 
-        // Store in database
+        // Store market data in database
         if let Err(e) = db.upsert_dexscreener_data(mint, &data) {
             logger::error(
                 LogTag::Tokens,
@@ -193,6 +193,31 @@ pub async fn fetch_dexscreener_data_batch(
                     mint, e
                 ),
             );
+        }
+
+        // CRITICAL: Update token metadata (symbol/name) from pool data
+        // This fixes race condition where Pool Service discovers token first without metadata
+        let symbol = if !pool.base_token_symbol.is_empty() {
+            Some(pool.base_token_symbol.as_str())
+        } else {
+            None
+        };
+        let name = if !pool.base_token_name.is_empty() {
+            Some(pool.base_token_name.as_str())
+        } else {
+            None
+        };
+
+        if symbol.is_some() || name.is_some() {
+            if let Err(e) = db.upsert_token(mint, symbol, name, None) {
+                logger::error(
+                    LogTag::Tokens,
+                    &format!(
+                        "[TOKENS][DEXSCREENER] Failed to update metadata for {}: {}",
+                        mint, e
+                    ),
+                );
+            }
         }
 
         // Cache it
