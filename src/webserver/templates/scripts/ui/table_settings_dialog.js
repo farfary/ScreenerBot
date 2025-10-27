@@ -163,9 +163,7 @@ export class TableSettingsDialog {
     this.resetBtn = overlay.querySelector('[data-action="reset"]');
 
     const closeBtn = overlay.querySelector('[data-action="close"]');
-    const quickActionButtons = Array.from(
-      overlay.querySelectorAll('[data-quick-action]')
-    );
+    const quickActionButtons = Array.from(overlay.querySelectorAll("[data-quick-action]"));
 
     on(overlay, "click", this._overlayListener);
     if (closeBtn) {

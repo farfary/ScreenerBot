@@ -217,13 +217,13 @@ export class TradeActionDialog {
 
   destroy() {
     this.close({ restoreFocus: false });
-    
+
     // Resolve pending promise to prevent hanging
     if (this._resolveOpen) {
       this._resolveOpen(null);
       this._resolveOpen = null;
     }
-    
+
     if (!this.root) {
       return;
     }

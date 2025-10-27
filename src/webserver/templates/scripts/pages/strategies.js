@@ -51,15 +51,21 @@ export function createLifecycle() {
 
       // Create pollers
       strategiesPoller = ctx.managePoller(
-        new Poller(async () => {
-          await loadStrategies();
-        }, { label: "Strategies" })
+        new Poller(
+          async () => {
+            await loadStrategies();
+          },
+          { label: "Strategies" }
+        )
       );
 
       templatesPoller = ctx.managePoller(
-        new Poller(async () => {
-          await loadTemplates();
-        }, { label: "Templates" })
+        new Poller(
+          async () => {
+            await loadTemplates();
+          },
+          { label: "Templates" }
+        )
       );
 
       // Start pollers
@@ -211,9 +217,7 @@ export function createLifecycle() {
       categories.forEach((cat) => {
         cat.style.display = "block";
         const categoryName = cat.querySelector(".category-header").dataset.category;
-        const savedStates = JSON.parse(
-          localStorage.getItem("condition-category-states") || "{}"
-        );
+        const savedStates = JSON.parse(localStorage.getItem("condition-category-states") || "{}");
         const items = cat.querySelector(".category-items");
         const header = cat.querySelector(".category-header");
         const isCollapsed = savedStates[categoryName] !== false;
@@ -365,8 +369,8 @@ export function createLifecycle() {
       const response = await fetch("/api/strategies/templates");
       if (!response.ok) throw new Error("Failed to load templates");
 
-  const data = await response.json();
-  templates = data.items || [];
+      const data = await response.json();
+      templates = data.items || [];
 
       renderTemplates();
     } catch (error) {
@@ -377,7 +381,7 @@ export function createLifecycle() {
 
   async function loadConditionSchemas() {
     try {
-  const response = await fetch("/api/strategies/conditions/schemas");
+      const response = await fetch("/api/strategies/conditions/schemas");
       if (!response.ok) throw new Error("Failed to load condition schemas");
 
       const data = await response.json();
@@ -669,8 +673,9 @@ export function createLifecycle() {
         return;
       }
 
-  const matchesCategory = category === "all" || (template.category || "").toLowerCase() === category;
-  const matchesRisk = risk === "all" || (template.risk_level || "").toLowerCase() === risk;
+      const matchesCategory =
+        category === "all" || (template.category || "").toLowerCase() === category;
+      const matchesRisk = risk === "all" || (template.risk_level || "").toLowerCase() === risk;
 
       item.style.display = matchesCategory && matchesRisk ? "" : "none";
     });
@@ -686,8 +691,16 @@ export function createLifecycle() {
     const schema = conditionSchemas?.[conditionType];
     if (!schema) return Utils.showToast("Unknown condition type", "error");
     const params = {};
-    Object.entries(schema.parameters || {}).forEach(([k, p]) => { params[k] = p.default ?? null; });
-    conditions.push({ type: conditionType, name: schema.name || conditionType, enabled: true, required: true, params });
+    Object.entries(schema.parameters || {}).forEach(([k, p]) => {
+      params[k] = p.default ?? null;
+    });
+    conditions.push({
+      type: conditionType,
+      name: schema.name || conditionType,
+      enabled: true,
+      required: true,
+      params,
+    });
     renderConditionsList();
     updateRuleTreeFromEditor();
     Utils.showToast(`Added ${schema.name || conditionType}`, "success");
@@ -739,29 +752,34 @@ export function createLifecycle() {
     });
 
     // Param inputs
-    $$(".condition-card .param-field input, .condition-card .param-field select").forEach((input) => {
-      input.addEventListener("change", () => {
-        const card = input.closest(".condition-card");
-        const idx = parseInt(card.dataset.index, 10);
-        const key = input.dataset.key;
-        const schema = conditionSchemas[conditions[idx].type];
-        const spec = schema.parameters?.[key] || {};
-        let value = input.value;
-        if (spec.type === "number" || spec.type === "percent" || spec.type === "sol") value = parseFloat(value);
-        if (spec.type === "boolean") value = input.checked;
-        conditions[idx].params[key] = value;
-        updateRuleTreeFromEditor();
-        // Update summary text
-        const summary = card.querySelector(".condition-summary");
-        if (summary) summary.textContent = buildConditionSummary(conditions[idx]);
-      });
-    });
+    $$(".condition-card .param-field input, .condition-card .param-field select").forEach(
+      (input) => {
+        input.addEventListener("change", () => {
+          const card = input.closest(".condition-card");
+          const idx = parseInt(card.dataset.index, 10);
+          const key = input.dataset.key;
+          const schema = conditionSchemas[conditions[idx].type];
+          const spec = schema.parameters?.[key] || {};
+          let value = input.value;
+          if (spec.type === "number" || spec.type === "percent" || spec.type === "sol")
+            value = parseFloat(value);
+          if (spec.type === "boolean") value = input.checked;
+          conditions[idx].params[key] = value;
+          updateRuleTreeFromEditor();
+          // Update summary text
+          const summary = card.querySelector(".condition-summary");
+          if (summary) summary.textContent = buildConditionSummary(conditions[idx]);
+        });
+      }
+    );
   }
 
   function renderConditionCard(c, idx) {
     const schema = conditionSchemas?.[c.type] || {};
     const icon = schema.icon || getConditionIcon(c.type);
-    const badges = [schema.category || "General"].map((b) => `<span class="condition-badge">${Utils.escapeHtml(b)}</span>`).join("");
+    const badges = [schema.category || "General"]
+      .map((b) => `<span class="condition-badge">${Utils.escapeHtml(b)}</span>`)
+      .join("");
     const summary = buildConditionSummary(c);
     const body = renderParamEditor(c, schema, idx);
     return `
@@ -832,7 +850,7 @@ export function createLifecycle() {
 
   function renderParamEditor(c, schema, idx) {
     const entries = Object.entries(schema.parameters || {});
-    if (!entries.length) return "<div class=\"param-row\">No parameters</div>";
+    if (!entries.length) return '<div class="param-row">No parameters</div>';
     // Basic approach: show all params; could gate last N as advanced in future
     const fields = entries.map(([key, spec]) => {
       const label = spec.name || key;
@@ -861,13 +879,15 @@ export function createLifecycle() {
       case "enum": {
         // Handle both old format (string array) and new format (object array with value/label)
         const options = spec.options || spec.values || [];
-        const optionsHtml = options.map((opt) => {
-          // Check if option is an object with value/label or a simple string
-          const optValue = typeof opt === "object" ? opt.value : opt;
-          const optLabel = typeof opt === "object" ? opt.label : opt;
-          const selected = optValue === value ? "selected" : "";
-          return `<option value="${Utils.escapeHtml(String(optValue))}" ${selected}>${Utils.escapeHtml(String(optLabel))}</option>`;
-        }).join("");
+        const optionsHtml = options
+          .map((opt) => {
+            // Check if option is an object with value/label or a simple string
+            const optValue = typeof opt === "object" ? opt.value : opt;
+            const optLabel = typeof opt === "object" ? opt.label : opt;
+            const selected = optValue === value ? "selected" : "";
+            return `<option value="${Utils.escapeHtml(String(optValue))}" ${selected}>${Utils.escapeHtml(String(optLabel))}</option>`;
+          })
+          .join("");
         return `<select id="${id}" ${data}>${optionsHtml}</select>`;
       }
       default:
@@ -877,7 +897,10 @@ export function createLifecycle() {
 
   function updateRuleTreeFromEditor() {
     if (!currentStrategy) return;
-    if (conditions.length === 0) { currentStrategy.rules = null; return; }
+    if (conditions.length === 0) {
+      currentStrategy.rules = null;
+      return;
+    }
     const condNodes = conditions
       .filter((c) => c.enabled)
       .map((c) => {
@@ -993,7 +1016,8 @@ export function createLifecycle() {
 
   function renderParameterField(key, schema, value) {
     const type = schema.type || "string";
-    const effectiveValue = value && typeof value === "object" && "value" in value ? value.value : value;
+    const effectiveValue =
+      value && typeof value === "object" && "value" in value ? value.value : value;
     const description = schema.description
       ? `<div class="property-description">${Utils.escapeHtml(schema.description)}</div>`
       : "";
@@ -1014,7 +1038,8 @@ export function createLifecycle() {
 
       case "enum":
         {
-          const opts = (schema.values && Array.isArray(schema.values)) ? schema.values : (schema.options || []);
+          const opts =
+            schema.values && Array.isArray(schema.values) ? schema.values : schema.options || [];
           if (opts && Array.isArray(opts) && opts.length > 0) {
             inputHtml = `<select class="property-input" id="param-${key}">
               ${opts.map((v) => `<option value="${v}" ${v === effectiveValue ? "selected" : ""}>${v}</option>`).join("")}
@@ -1186,10 +1211,10 @@ export function createLifecycle() {
     if (nameInput) nameInput.value = currentStrategy.name;
     if (typeSelect) typeSelect.value = currentStrategy.type;
 
-  // Clear editor conditions
-  conditions = [];
-  renderConditionsList();
-  renderPropertiesPanel(null);
+    // Clear editor conditions
+    conditions = [];
+    renderConditionsList();
+    renderPropertiesPanel(null);
 
     Utils.showToast("New strategy created", "success");
   }
@@ -1247,7 +1272,10 @@ export function createLifecycle() {
     const leafs = [];
     function walk(node) {
       if (!node) return;
-      if (node.condition) { leafs.push(node.condition); return; }
+      if (node.condition) {
+        leafs.push(node.condition);
+        return;
+      }
       (node.conditions || []).forEach((c) => walk(c));
     }
     walk(rules);
@@ -1256,9 +1284,18 @@ export function createLifecycle() {
       const params = {};
       Object.keys(schema.parameters || {}).forEach((k) => {
         const p = cond.parameters?.[k];
-        params[k] = p && typeof p === "object" && "value" in p ? p.value : (schema.parameters[k]?.default ?? null);
+        params[k] =
+          p && typeof p === "object" && "value" in p
+            ? p.value
+            : (schema.parameters[k]?.default ?? null);
       });
-      conditions.push({ type: cond.type, name: schema.name || cond.type, enabled: true, required: true, params });
+      conditions.push({
+        type: cond.type,
+        name: schema.name || cond.type,
+        enabled: true,
+        required: true,
+        params,
+      });
     });
   }
 
@@ -1543,11 +1580,11 @@ export function createLifecycle() {
     if (nameInput) nameInput.value = currentStrategy.name;
     if (typeSelect) typeSelect.value = currentStrategy.type;
 
-  // Render into vertical editor
-  parseRuleTreeToConditions(currentStrategy.rules);
-  renderConditionsList();
+    // Render into vertical editor
+    parseRuleTreeToConditions(currentStrategy.rules);
+    renderConditionsList();
 
-  // Switch to strategies tab
+    // Switch to strategies tab
     const strategiesTab = $(".tab-btn[data-tab='strategies']");
     if (strategiesTab) strategiesTab.click();
 
@@ -1570,7 +1607,6 @@ export function createLifecycle() {
       status.classList.add("invalid");
       if (icon) icon.textContent = "✗";
     }
-
 
     if (text) text.textContent = message;
   }

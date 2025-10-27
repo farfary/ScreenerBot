@@ -4,7 +4,7 @@
     <div class="sidebar-header">
       <h2>Strategy Management</h2>
     </div>
-    
+
     <div class="tab-container">
       <!-- Tab Navigation -->
       <div class="sidebar-tabs">
@@ -21,7 +21,7 @@
           Properties
         </button>
       </div>
-      
+
       <!-- Strategies Tab -->
       <div class="tab-content active" data-tab="strategies">
         <div class="sidebar-section">
@@ -29,13 +29,13 @@
             <h3>My Strategies</h3>
             <button class="btn-icon" id="refresh-strategies" title="Refresh">🔄</button>
           </div>
-          
+
           <div class="strategy-filters">
             <button class="filter-btn active" data-filter="all">All</button>
             <button class="filter-btn" data-filter="entry">Entry</button>
             <button class="filter-btn" data-filter="exit">Exit</button>
           </div>
-          
+
           <div class="strategy-list" id="strategy-list">
             <div class="empty-state">
               <span class="icon">📝</span>
@@ -44,7 +44,7 @@
             </div>
           </div>
         </div>
-        
+
         <div class="sidebar-actions">
           <button class="btn primary" id="create-strategy">
             <span class="icon">➕</span>
@@ -56,14 +56,14 @@
           </button>
         </div>
       </div>
-      
+
       <!-- Templates Tab -->
       <div class="tab-content" data-tab="templates">
         <div class="sidebar-section">
           <div class="section-header">
             <h3>Strategy Templates</h3>
           </div>
-          
+
           <div class="template-filters">
             <select id="template-category">
               <option value="all">All Categories</option>
@@ -79,7 +79,7 @@
               <option value="high">High Risk</option>
             </select>
           </div>
-          
+
           <div class="template-list" id="template-list">
             <div class="empty-state">
               <span class="icon">📦</span>
@@ -88,14 +88,14 @@
           </div>
         </div>
       </div>
-      
+
       <!-- Properties Tab -->
       <div class="tab-content" data-tab="properties">
         <div class="sidebar-section">
           <div class="section-header">
             <h3>Properties</h3>
           </div>
-          
+
           <div class="property-editor" id="property-editor">
             <div class="empty-state">
               <span class="icon">🎯</span>
@@ -112,7 +112,12 @@
   <main class="strategy-editor-container">
     <div class="editor-header">
       <div class="editor-title">
-        <input type="text" id="strategy-name" placeholder="Untitled Strategy" class="strategy-name-input">
+        <input
+          type="text"
+          id="strategy-name"
+          placeholder="Untitled Strategy"
+          class="strategy-name-input"
+        />
         <select id="strategy-type" class="strategy-type-select">
           <option value="ENTRY">Entry Strategy</option>
           <option value="EXIT">Exit Strategy</option>
@@ -147,7 +152,12 @@
       </div>
       <div class="condition-catalog-body">
         <div class="search-container">
-          <input type="text" id="condition-search" placeholder="Search conditions..." class="search-input">
+          <input
+            type="text"
+            id="condition-search"
+            placeholder="Search conditions..."
+            class="search-input"
+          />
           <button class="btn-icon" id="clear-search">✕</button>
         </div>
         <div class="condition-categories" id="condition-categories">
@@ -173,14 +183,14 @@
         Duplicate
       </button>
     </div>
-    
+
     <div class="toolbar-section center">
       <div class="validation-status" id="validation-status">
         <span class="status-icon">✓</span>
         <span class="status-text">Valid strategy</span>
       </div>
     </div>
-    
+
     <div class="toolbar-section right">
       <button class="btn" id="validate-strategy">
         <span class="icon">🔍</span>

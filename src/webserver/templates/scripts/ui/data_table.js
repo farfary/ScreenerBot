@@ -3081,7 +3081,12 @@ export class DataTable {
       const validOrder = settings.columnOrder.filter((colId) => validColumnIds.has(colId));
 
       if (validOrder.length > 0 && !this._arraysEqual(validOrder, this.state.columnOrder)) {
-        console.log("[DataTable] Updating column order from", this.state.columnOrder, "to", validOrder);
+        console.log(
+          "[DataTable] Updating column order from",
+          this.state.columnOrder,
+          "to",
+          validOrder
+        );
         this.state.columnOrder = validOrder;
         hasChanges = true;
       } else {
@@ -3098,7 +3103,9 @@ export class DataTable {
         if (validColumnIds.has(colId)) {
           const newVisibility = settings.visibleColumns[colId];
           if (this.state.visibleColumns[colId] !== newVisibility) {
-            console.log(`[DataTable] Updating visibility for ${colId}: ${this.state.visibleColumns[colId]} -> ${newVisibility}`);
+            console.log(
+              `[DataTable] Updating visibility for ${colId}: ${this.state.visibleColumns[colId]} -> ${newVisibility}`
+            );
             this.state.visibleColumns[colId] = newVisibility;
             hasChanges = true;
           }

@@ -134,7 +134,9 @@
   border-radius: 10px;
   background: rgba(23, 28, 45, 0.9);
   border: 1px solid rgba(82, 90, 130, 0.25);
-  transition: background 120ms ease-in-out, border-color 120ms ease-in-out;
+  transition:
+    background 120ms ease-in-out,
+    border-color 120ms ease-in-out;
 }
 
 .table-settings-column-item:hover {
@@ -196,7 +198,10 @@
   background: rgba(18, 22, 35, 0.95);
   color: var(--text-secondary, #c3caef);
   cursor: pointer;
-  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    color 120ms ease;
 }
 
 .table-settings-btn-move:hover:not(:disabled),

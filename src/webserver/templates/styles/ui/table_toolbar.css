@@ -195,7 +195,7 @@
 
 /* Separator between chips */
 .table-toolbar-chip:not(:last-child)::after {
-  content: '|';
+  content: "|";
   position: absolute;
   right: -0.5rem;
   opacity: 0.3;

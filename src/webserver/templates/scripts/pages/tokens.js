@@ -4,6 +4,7 @@ import * as Utils from "../core/utils.js";
 import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { TradeActionDialog } from "../ui/trade_action_dialog.js";
+import { TokenDetailsDialog } from "../ui/token_details_dialog.js";
 
 // Sub-tabs (views) configuration
 const TOKEN_VIEWS = [
@@ -58,7 +59,7 @@ const SORT_KEY_TO_COLUMN = Object.entries(COLUMN_TO_SORT_KEY).reduce((acc, [colu
 const PAGE_LIMIT = 100; // chunked fetch size for incremental scrolling
 
 function priceCell(value) {
-  return Utils.formatPriceSol(value, { fallback: "—", decimals: 9 });
+  return Utils.formatPriceSol(value, { fallback: "—", decimals: 12 });
 }
 
 function usdCell(value) {
@@ -81,7 +82,7 @@ function timeAgoCell(seconds) {
 function tokenCell(row) {
   const src = row.logo_url || row.image_url;
   const logo = src
-    ? `<img class="token-logo clickable-logo" alt="" src="${Utils.escapeHtml(src)}" data-logo-url="${Utils.escapeHtml(src)}" data-token-symbol="${Utils.escapeHtml(row.symbol || '')}" data-token-name="${Utils.escapeHtml(row.name || '')}" data-token-mint="${Utils.escapeHtml(row.mint || '')}" title="Click to enlarge" />`
+    ? `<img class="token-logo clickable-logo" alt="" src="${Utils.escapeHtml(src)}" data-logo-url="${Utils.escapeHtml(src)}" data-token-symbol="${Utils.escapeHtml(row.symbol || "")}" data-token-name="${Utils.escapeHtml(row.name || "")}" data-token-mint="${Utils.escapeHtml(row.mint || "")}" title="Click to enlarge" />`
     : '<span class="token-logo">N/A</span>';
   const sym = Utils.escapeHtml(row.symbol || "—");
   const name = row.name ? `<div class="token-name">${Utils.escapeHtml(row.name)}</div>` : "";
@@ -111,6 +112,7 @@ function createLifecycle() {
   let poller = null;
   let tabBar = null;
   let tradeDialog = null;
+  let tokenDetailsDialog = null;
   let walletBalance = 0;
   let lastUpdateInterval = null; // Track interval for updating "Last Update" display
 
@@ -727,14 +729,14 @@ function createLifecycle() {
       const symbol = logo.dataset.tokenSymbol || "";
       const name = logo.dataset.tokenName || "";
       const mint = logo.dataset.tokenMint || "";
-      
+
       if (!imageUrl) return;
 
       // Look up age from current table data instead of stale data attribute
       let ageText = "Unknown";
       if (mint && table) {
         const tableData = table.getData();
-        const rowData = tableData.find(row => row.mint === mint);
+        const rowData = tableData.find((row) => row.mint === mint);
         if (rowData) {
           const ageSeconds = rowData.token_birth_at || rowData.first_seen_at;
           if (ageSeconds !== null && ageSeconds !== undefined) {
@@ -746,10 +748,14 @@ function createLifecycle() {
       // Create lightbox overlay
       const lightbox = document.createElement("div");
       lightbox.className = "image-lightbox";
-      
-      const symbolHtml = symbol ? `<div class="lightbox-token-symbol">${Utils.escapeHtml(symbol)}</div>` : "";
-      const nameHtml = name ? `<div class="lightbox-token-name">${Utils.escapeHtml(name)}</div>` : "";
-      
+
+      const symbolHtml = symbol
+        ? `<div class="lightbox-token-symbol">${Utils.escapeHtml(symbol)}</div>`
+        : "";
+      const nameHtml = name
+        ? `<div class="lightbox-token-name">${Utils.escapeHtml(name)}</div>`
+        : "";
+
       lightbox.innerHTML = `
         <div class="lightbox-backdrop"></div>
         <div class="lightbox-container">
@@ -806,10 +812,61 @@ function createLifecycle() {
     container.addEventListener("click", clickHandler);
   };
 
+  const initializeRowClickHandler = () => {
+    // Use event delegation for row clicks
+    if (!table?.elements?.scrollContainer) return;
+
+    const container = table.elements.scrollContainer;
+    if (container._rowClickHandler) {
+      container.removeEventListener("click", container._rowClickHandler);
+    }
+
+    const clickHandler = (e) => {
+      // Ignore clicks on logos, buttons, and interactive elements
+      if (
+        e.target.closest(".clickable-logo") ||
+        e.target.closest(".row-action") ||
+        e.target.closest(".links-dropdown-trigger") ||
+        e.target.closest("button") ||
+        e.target.closest("a")
+      ) {
+        return;
+      }
+
+      // Find the row element
+      const row = e.target.closest("tr");
+      if (!row) return;
+
+      // Get the mint from row dataset or find it in the cells
+      const mintCell = row.querySelector("[data-token-mint]");
+      if (!mintCell) return;
+
+      const mint = mintCell.dataset.tokenMint;
+      if (!mint) return;
+
+      // Find token data in table
+      const tableData = table.getData();
+      const tokenData = tableData.find((token) => token.mint === mint);
+      if (!tokenData) return;
+
+      // Show token details dialog
+      if (!tokenDetailsDialog) {
+        tokenDetailsDialog = new TokenDetailsDialog();
+      }
+      tokenDetailsDialog.show(tokenData);
+    };
+
+    container._rowClickHandler = clickHandler;
+    container.addEventListener("click", clickHandler);
+  };
+
   return {
     init(ctx) {
       // Initialize trade dialog
       tradeDialog = new TradeActionDialog();
+
+      // Initialize token details dialog
+      tokenDetailsDialog = new TokenDetailsDialog();
 
       // Initialize tab bar for tokens page
       tabBar = new TabBar({
@@ -865,7 +922,7 @@ function createLifecycle() {
                   const mint = row?.mint || "";
                   const isBlacklisted = Boolean(row?.blacklisted);
                   const hasOpen = Boolean(row?.has_open_position);
-                  const disabledAttr = isBlacklisted ? " disabled aria-disabled=\"true\"" : "";
+                  const disabledAttr = isBlacklisted ? ' disabled aria-disabled="true"' : "";
 
                   if (!mint) return "—";
 
@@ -1075,6 +1132,7 @@ function createLifecycle() {
             updateToolbar();
             initializeLinkDropdowns();
             initializeImageLightbox();
+            initializeRowClickHandler();
           },
         },
         toolbar: {
@@ -1400,6 +1458,10 @@ function createLifecycle() {
       if (tradeDialog) {
         tradeDialog.destroy();
         tradeDialog = null;
+      }
+      if (tokenDetailsDialog) {
+        tokenDetailsDialog.destroy();
+        tokenDetailsDialog = null;
       }
       if (table) {
         table.destroy();

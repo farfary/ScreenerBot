@@ -38,7 +38,7 @@ function createLifecycle() {
     </div></div>`;
   };
 
-  const priceCell = (value) => Utils.formatPriceSol(value, { fallback: "—", decimals: 9 });
+  const priceCell = (value) => Utils.formatPriceSol(value, { fallback: "—", decimals: 12 });
   const solCell = (v) => Utils.formatSol(v, { decimals: 4 });
   const pnlCell = (v) => Utils.formatPnL(v, { decimals: 4 });
   const percentCell = (v) => Utils.formatPercent(v, { style: "pnl", decimals: 2, fallback: "—" });
@@ -79,7 +79,7 @@ function createLifecycle() {
       render: (_v, row) => {
         const mint = row?.mint || "";
         const isOpen = !row?.transaction_exit_verified;
-        
+
         if (!mint || !isOpen) return "—";
 
         return `
@@ -293,7 +293,7 @@ function createLifecycle() {
     if (table) {
       // DataTable doesn't support dynamic column changes - destroy and recreate
       table.destroy();
-      
+
       // Recreate table with new columns for the selected view
       const columns = selectedColumns();
       const viewLabel = view === "open" ? "Open" : "Closed";

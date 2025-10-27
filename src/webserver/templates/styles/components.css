@@ -501,7 +501,9 @@
 
 .clickable-logo {
   cursor: pointer;
-  transition: transform 0.2s ease, opacity 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    opacity 0.2s ease;
 }
 
 .clickable-logo:hover {
@@ -548,7 +550,9 @@
   background: var(--bg-primary);
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.7), 0 0 0 1px var(--border-color);
+  box-shadow:
+    0 30px 90px rgba(0, 0, 0, 0.7),
+    0 0 0 1px var(--border-color);
   animation: lightboxSlideUp 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
@@ -654,7 +658,8 @@
 }
 
 @keyframes imageFloat {
-  0%, 100% {
+  0%,
+  100% {
     transform: translateY(0px);
   }
   50% {
@@ -698,37 +703,36 @@
     width: 95vw;
     max-width: 420px;
   }
-  
+
   .lightbox-header {
     padding: 16px 20px;
   }
-  
+
   .lightbox-token-symbol {
     font-size: 1.4rem;
   }
-  
+
   .lightbox-token-name {
     font-size: 0.9rem;
   }
-  
+
   .lightbox-close {
     width: 32px;
     height: 32px;
     top: 14px;
     right: 14px;
   }
-  
+
   .lightbox-body {
     padding: 32px 24px;
     min-height: 280px;
   }
-  
+
   .lightbox-image-wrapper {
     max-width: 240px;
   }
-  
+
   .lightbox-footer {
     padding: 16px 20px;
   }
 }
-

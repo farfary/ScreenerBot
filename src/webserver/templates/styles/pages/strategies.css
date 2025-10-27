@@ -23,7 +23,9 @@
   border-right: 2px solid var(--border-color);
 }
 
-.strategies-sidebar.right { display: none; }
+.strategies-sidebar.right {
+  display: none;
+}
 
 .sidebar-header {
   padding: 1rem;
@@ -429,26 +431,107 @@
   cursor: pointer;
 }
 
-.editor-actions { display: flex; gap: 0.5rem; }
+.editor-actions {
+  display: flex;
+  gap: 0.5rem;
+}
 
-.editor-content { flex: 1; overflow: auto; display: flex; justify-content: center; padding: 1rem; }
-.conditions-list { width: 100%; max-width: 1080px; display: flex; flex-direction: column; gap: 0.75rem; }
-.condition-card { background: var(--surface-color); border: 1px solid var(--border-color); border-radius: 10px; }
-.condition-card .card-header { display: flex; align-items: center; justify-content: space-between; padding: 0.75rem 1rem; }
-.condition-card .card-title { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: 0.95rem; }
-.condition-card .card-meta { display: flex; align-items: center; gap: 0.5rem; }
-.condition-card .card-body { display: none; padding: 0.75rem 1rem 1rem; border-top: 1px solid var(--border-color); }
-.condition-card.expanded .card-body { display: block; }
-.condition-badges { display: flex; align-items: center; gap: 0.5rem; }
-.condition-badge { font-size: 0.7rem; padding: 0.2rem 0.5rem; border-radius: 999px; background: var(--background-color); border: 1px solid var(--border-color); }
-.condition-actions { display: flex; gap: 0.25rem; }
-.condition-summary { color: var(--text-muted); font-size: 0.8rem; }
-.param-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-.param-field { display: flex; flex-direction: column; gap: 0.35rem; }
-.param-field label { font-size: 0.8rem; color: var(--text-color); }
-.param-field input, .param-field select { padding: 0.45rem 0.5rem; background: var(--background-color); border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.85rem; color: var(--text-color); }
-.param-advanced { margin-top: 0.75rem; }
-.param-advanced-toggle { font-size: 0.8rem; color: var(--primary-color); cursor: pointer; }
+.editor-content {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  padding: 1rem;
+}
+.conditions-list {
+  width: 100%;
+  max-width: 1080px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.condition-card {
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+.condition-card .card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+}
+.condition-card .card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.condition-card .card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.condition-card .card-body {
+  display: none;
+  padding: 0.75rem 1rem 1rem;
+  border-top: 1px solid var(--border-color);
+}
+.condition-card.expanded .card-body {
+  display: block;
+}
+.condition-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.condition-badge {
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: var(--background-color);
+  border: 1px solid var(--border-color);
+}
+.condition-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+.condition-summary {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+.param-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+.param-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.param-field label {
+  font-size: 0.8rem;
+  color: var(--text-color);
+}
+.param-field input,
+.param-field select {
+  padding: 0.45rem 0.5rem;
+  background: var(--background-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--text-color);
+}
+.param-advanced {
+  margin-top: 0.75rem;
+}
+.param-advanced-toggle {
+  font-size: 0.8rem;
+  color: var(--primary-color);
+  cursor: pointer;
+}
 
 .empty-state-content .icon {
   font-size: 3rem;
@@ -1016,15 +1099,21 @@
 
 /* Responsive */
 @media (max-width: 1400px) {
-  .strategies-page { grid-template-columns: 280px 1fr; }
+  .strategies-page {
+    grid-template-columns: 280px 1fr;
+  }
 }
 
 @media (max-width: 1200px) {
-  .strategies-page { grid-template-columns: 260px 1fr; }
+  .strategies-page {
+    grid-template-columns: 260px 1fr;
+  }
 
   .sidebar-header h2 {
     font-size: 1rem;
   }
 
-  .category-items { grid-template-columns: 1fr; }
+  .category-items {
+    grid-template-columns: 1fr;
+  }
 }
