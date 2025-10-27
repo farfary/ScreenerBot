@@ -42,6 +42,7 @@ impl Timeframe {
     ///
     /// GeckoTerminal API only supports: "minute", "hour", "day", "second"
     /// We fetch base granularity and aggregate locally for finer timeframes
+    /// DEPRECATED: Use to_api_params() for proper native timeframe support
     pub fn to_api_param(&self) -> &'static str {
         match self {
             // All minute-based timeframes fetch from "minute" endpoint (1m candles)
@@ -50,6 +51,47 @@ impl Timeframe {
             Timeframe::Hour1 | Timeframe::Hour4 | Timeframe::Hour12 => "hour",
             // Day timeframe
             Timeframe::Day1 => "day",
+        }
+    }
+
+    /// Returns GeckoTerminal API params: (endpoint, aggregate)
+    /// This properly leverages native timeframe support from the API
+    pub fn to_api_params(&self) -> (&'static str, u32) {
+        match self {
+            Timeframe::Minute1 => ("minute", 1),
+            Timeframe::Minute5 => ("minute", 5),
+            Timeframe::Minute15 => ("minute", 15),
+            Timeframe::Hour1 => ("hour", 1),
+            Timeframe::Hour4 => ("hour", 4),
+            Timeframe::Hour12 => ("hour", 12),
+            Timeframe::Day1 => ("day", 1),
+        }
+    }
+
+    /// Maximum candles available from API for 30 days
+    pub fn max_candles_30d(&self) -> usize {
+        match self {
+            Timeframe::Minute1 => 43_200,  // 30 * 24 * 60
+            Timeframe::Minute5 => 8_640,   // 30 * 24 * 12
+            Timeframe::Minute15 => 2_880,  // 30 * 24 * 4
+            Timeframe::Hour1 => 720,       // 30 * 24
+            Timeframe::Hour4 => 180,       // 30 * 6
+            Timeframe::Hour12 => 60,       // 30 * 2
+            Timeframe::Day1 => 30,         // 30
+        }
+    }
+
+    /// Priority order for backfilling (fastest first)
+    /// Lower number = higher priority (faster to fetch)
+    pub fn backfill_priority(&self) -> u8 {
+        match self {
+            Timeframe::Day1 => 1,      // Fastest: 1 call
+            Timeframe::Hour12 => 2,    // Fast: 1 call
+            Timeframe::Hour4 => 3,     // Fast: 1 call
+            Timeframe::Hour1 => 4,     // Medium: 1 call
+            Timeframe::Minute15 => 5,  // Medium: 3 calls
+            Timeframe::Minute5 => 6,   // Slow: 9 calls
+            Timeframe::Minute1 => 7,   // Slowest: 44 calls
         }
     }
 

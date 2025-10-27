@@ -55,9 +55,10 @@ impl GapManager {
         .await;
 
         // Get existing data sliced to the retention window in ascending order
-        let mut data = self.db.get_1m_data_range_asc(
+        let mut data = self.db.get_candles(
             mint,
-            pool_address,
+            Some(pool_address),
+            Timeframe::Minute1,
             Some(lookback_start),
             None,
             Some(limit),
@@ -144,19 +145,8 @@ impl GapManager {
             return Ok(0);
         }
 
-        // Store 1m data
-        let inserted = self.db.insert_1m_data(mint, pool_address, &data_1m)?;
-
-        // If higher timeframe, aggregate and cache
-        if timeframe != Timeframe::Minute1 {
-            if let Ok(aggregated) =
-                crate::ohlcvs::aggregator::OhlcvAggregator::aggregate(&data_1m, timeframe)
-            {
-                let _ = self
-                    .db
-                    .cache_aggregated_data(mint, pool_address, timeframe, &aggregated);
-            }
-        }
+        // Store 1m data in unified table
+        let inserted = self.db.insert_candles_batch(mint, pool_address, Timeframe::Minute1, &data_1m, "gap_filler")?;
 
         // Mark gap as filled if we got data
         if inserted > 0 {
@@ -303,7 +293,7 @@ impl GapManager {
     ) -> OhlcvResult<DataQualityReport> {
         let mut data = self
             .db
-            .get_1m_data(mint, Some(pool_address), None, None, 10000)?;
+            .get_candles(mint, Some(pool_address), Timeframe::Minute1, None, None, Some(10000))?;
 
         let total_candles = data.len();
 

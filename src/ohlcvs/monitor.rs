@@ -192,8 +192,57 @@ impl OhlcvMonitor {
         self.db.upsert_monitor_config(&config)?;
 
         // Add to active tokens
-        let mut active = self.active_tokens.write().await;
-        active.insert(mint, config);
+        {
+            let mut active = self.active_tokens.write().await;
+            active.insert(mint.clone(), config.clone());
+        }
+
+        // Trigger multi-timeframe backfill for new token
+        if let Some(pool) = config.get_best_pool() {
+            let runner = self.clone();
+            let mint_owned = mint.clone();
+            let pool_owned = pool.address.clone();
+            let priority_owned = priority;
+
+            tokio::spawn(async move {
+                logger::info(
+                    LogTag::Ohlcv,
+                    &format!(
+                        "Triggering 30-day backfill for new token mint={} pool={} priority={:?}",
+                        mint_owned, pool_owned, priority_owned
+                    ),
+                );
+
+                match runner
+                    .backfill_all_timeframes_30d(&mint_owned, &pool_owned, priority_owned)
+                    .await
+                {
+                    Ok(total) => {
+                        logger::info(
+                            LogTag::Ohlcv,
+                            &format!(
+                                "Backfill completed for mint={} total_candles={}",
+                                mint_owned, total
+                            ),
+                        );
+                    }
+                    Err(e) => {
+                        logger::warning(
+                            LogTag::Ohlcv,
+                            &format!("Backfill failed for mint={}: {}", mint_owned, e),
+                        );
+                    }
+                }
+            });
+        } else {
+            logger::warning(
+                LogTag::Ohlcv,
+                &format!(
+                    "No pool available for mint={}, backfill deferred until pool discovered",
+                    mint
+                ),
+            );
+        }
 
         Ok(())
     }
@@ -664,7 +713,7 @@ impl OhlcvMonitor {
         // Fetch 1-minute data (base timeframe) with priority-based batch size
         let data = self
             .fetcher
-            .fetch_immediate(&pool_address, Timeframe::Minute1, None, batch_size)
+            .fetch_with_aggregate(&pool_address, "minute", 1, None, batch_size)
             .await;
 
         match data {
@@ -926,26 +975,16 @@ impl OhlcvMonitor {
         data_points.sort_by_key(|p| p.timestamp);
         data_points.dedup_by_key(|p| p.timestamp);
 
-        self.db.insert_1m_data(mint, pool_address, &data_points)?;
+        // Store in unified candles table with timeframe=Minute1
+        self.db.insert_candles_batch(mint, pool_address, Timeframe::Minute1, &data_points, "monitor")?;
 
+        // Update cache
         self.cache.put(
             mint,
             Some(pool_address),
             Timeframe::Minute1,
             data_points.clone(),
         )?;
-
-        for timeframe in AGGREGATED_TIMEFRAMES.iter().copied() {
-            let aggregated = OhlcvAggregator::aggregate(&data_points, timeframe)?;
-            if aggregated.is_empty() {
-                continue;
-            }
-
-            self.db
-                .cache_aggregated_data(mint, pool_address, timeframe, &aggregated)?;
-            self.cache
-                .put(mint, Some(pool_address), timeframe, aggregated)?;
-        }
 
         Ok(data_points)
     }
@@ -956,20 +995,19 @@ impl OhlcvMonitor {
             return Ok(());
         }
 
-        let retention_seconds = retention_days * 86_400;
-        let target_start = (Utc::now().timestamp() - retention_seconds).max(0);
-        let maybe_range = match self.db.get_time_bounds(mint, pool_address)? {
-            Some((oldest, _latest)) if oldest <= target_start => None,
-            Some((oldest, _latest)) => Some((target_start, oldest)),
-            None => {
-                let now_ts = Utc::now().timestamp();
-                let end = now_ts.max(target_start + 60);
-                Some((target_start, end))
-            }
-        };
-
-        let Some((from_ts, to_ts)) = maybe_range else {
+        // Check if we need backfill by checking the oldest timeframe (1d)
+        // If 1d is complete, all timeframes should be complete
+        if self.db.is_backfill_complete(mint, Timeframe::Day1)? {
             return Ok(());
+        }
+
+        // Get token priority for rate limiting
+        let priority = {
+            let active = self.active_tokens.read().await;
+            active
+                .get(mint)
+                .map(|config| config.priority)
+                .unwrap_or(Priority::Medium)
         };
 
         if !self.try_start_backfill(mint) {
@@ -985,12 +1023,11 @@ impl OhlcvMonitor {
             Some(pool_address),
             json!({
                 "message": format!(
-                    "Scheduled retention backfill for {} via {}",
+                    "Scheduled multi-timeframe backfill for {} via {}",
                     mint, pool_address
                 ),
-                "from_timestamp": from_ts,
-                "to_timestamp": to_ts,
-                "range_seconds": to_ts.saturating_sub(from_ts),
+                "retention_days": retention_days,
+                "timeframes": ["1d", "12h", "4h", "1h", "15m", "5m", "1m"],
             }),
         )
         .await;
@@ -999,27 +1036,24 @@ impl OhlcvMonitor {
         let mint_owned = mint.to_string();
         let pool_owned = pool_address.to_string();
 
-        logger::debug(
+        logger::info(
             LogTag::Ohlcv,
             &format!(
-                "Scheduling retention backfill for {} via {} (target start: {}, current oldest requested: {})",
-                mint_owned,
-                pool_owned,
-                from_ts,
-                to_ts
+                "Scheduling multi-timeframe backfill for {} via {} (retention: {} days)",
+                mint_owned, pool_owned, retention_days
             ),
         );
 
         tokio::spawn(async move {
             match runner
-                .backfill_range(&mint_owned, &pool_owned, from_ts, to_ts)
+                .backfill_all_timeframes_30d(&mint_owned, &pool_owned, priority)
                 .await
             {
                 Ok(points) => {
-                    logger::debug(
+                    logger::info(
                         LogTag::Ohlcv,
                         &format!(
-                            "Retention backfill for {} via {} completed (points inserted: {})",
+                            "Multi-timeframe backfill for {} via {} completed (total candles: {})",
                             mint_owned, pool_owned, points
                         ),
                     );
@@ -1028,7 +1062,7 @@ impl OhlcvMonitor {
                     logger::warning(
                         LogTag::Ohlcv,
                         &format!(
-                            "Retention backfill failed for {} via {}: {}",
+                            "Multi-timeframe backfill failed for {} via {}: {}",
                             mint_owned, pool_owned, e
                         ),
                     );
@@ -1058,113 +1092,6 @@ impl OhlcvMonitor {
     fn finish_backfill(&self, mint: &str) {
         if let Ok(mut set) = self.backfill_in_progress.lock() {
             set.remove(mint);
-        }
-    }
-
-    async fn backfill_range(
-        &self,
-        mint: &str,
-        pool_address: &str,
-        from_timestamp: i64,
-        to_timestamp: i64,
-    ) -> OhlcvResult<usize> {
-        if from_timestamp >= to_timestamp {
-            return Ok(0);
-        }
-
-        let start = Instant::now();
-
-        let result: OhlcvResult<usize> = async {
-            let mut cursor_end = to_timestamp;
-            let mut total_inserted = 0usize;
-
-            loop {
-                let chunk = self
-                    .fetcher
-                    .fetch_historical(pool_address, Timeframe::Minute1, from_timestamp, cursor_end)
-                    .await?;
-
-                if chunk.is_empty() {
-                    break;
-                }
-
-                let earliest = chunk.first().map(|p| p.timestamp).unwrap_or(cursor_end);
-
-                let stored = self.persist_chunk(mint, pool_address, chunk)?;
-                if !stored.is_empty() {
-                    total_inserted += stored.len();
-                }
-
-                if earliest <= from_timestamp {
-                    break;
-                }
-
-                cursor_end = earliest.saturating_sub(Timeframe::Minute1.to_seconds());
-
-                if cursor_end <= from_timestamp {
-                    break;
-                }
-            }
-
-            if total_inserted > 0 {
-                self.gap_manager
-                    .detect_gaps(mint, pool_address, Timeframe::Minute1)
-                    .await?;
-            }
-
-            Ok(total_inserted)
-        }
-        .await;
-
-        let duration_ms = start.elapsed().as_millis() as u64;
-
-        match result {
-            Ok(points) => {
-                self.record_backfill_completed(duration_ms, points).await;
-                record_ohlcv_event(
-                    "backfill_completed",
-                    Severity::Info,
-                    Some(mint),
-                    Some(pool_address),
-                    json!({
-                        "message": format!(
-                            "Backfill completed for {} via {}",
-                            mint, pool_address
-                        ),
-                        "inserted_points": points,
-                        "duration_ms": duration_ms,
-                        "from_timestamp": from_timestamp,
-                        "to_timestamp": to_timestamp,
-                        "range_seconds": to_timestamp.saturating_sub(from_timestamp),
-                    }),
-                )
-                .await;
-                Ok(points)
-            }
-            Err(err) => {
-                let error_message = err.to_string();
-                self.record_backfill_failed(duration_ms, error_message.clone())
-                    .await;
-                record_ohlcv_event(
-                    "backfill_failed",
-                    Severity::Error,
-                    Some(mint),
-                    Some(pool_address),
-                    json!({
-                        "message": format!(
-                            "Backfill failed for {} via {}",
-                            mint, pool_address
-                        ),
-                        "error": error_message,
-                        "duration_ms": duration_ms,
-                        "from_timestamp": from_timestamp,
-                        "to_timestamp": to_timestamp,
-                        "range_seconds": to_timestamp.saturating_sub(from_timestamp),
-                    }),
-                )
-                .await;
-                Err(err)
-            }
         }
     }
 
@@ -1422,6 +1349,160 @@ impl OhlcvMonitor {
         }
 
         to_remove
+    }
+
+    // ==================== Multi-Timeframe Backfill ====================
+
+    /// Backfill all timeframes for a token with 30-day history
+    /// Fetches timeframes in priority order (1d → 12h → 4h → 1h → 15m → 5m → 1m)
+    async fn backfill_all_timeframes_30d(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        priority: Priority,
+    ) -> OhlcvResult<usize> {
+        let now = Utc::now().timestamp();
+        let thirty_days_ago = now - (30 * 86400);
+        let mut total_fetched = 0;
+
+        // All timeframes in backfill priority order
+        let timeframes = [
+            Timeframe::Day1,
+            Timeframe::Hour12,
+            Timeframe::Hour4,
+            Timeframe::Hour1,
+            Timeframe::Minute15,
+            Timeframe::Minute5,
+            Timeframe::Minute1,
+        ];
+
+        logger::info(
+            LogTag::Ohlcv,
+            &format!(
+                "Starting 30-day backfill for mint={} pool={} priority={:?}",
+                mint, pool_address, priority
+            ),
+        );
+
+        for timeframe in timeframes.iter() {
+            // Check if already complete
+            if self.db.is_backfill_complete(mint, *timeframe)? {
+                logger::debug(
+                    LogTag::Ohlcv,
+                    &format!(
+                        "Skipping {} backfill for mint={} (already complete)",
+                        timeframe.as_str(),
+                        mint
+                    ),
+                );
+                continue;
+            }
+
+            // Fetch this timeframe
+            match self
+                .backfill_timeframe(mint, pool_address, *timeframe, thirty_days_ago, now)
+                .await
+            {
+                Ok(count) => {
+                    total_fetched += count;
+                    // Mark as complete
+                    self.db.mark_backfill_complete(mint, *timeframe)?;
+                    logger::info(
+                        LogTag::Ohlcv,
+                        &format!(
+                            "Backfill complete for mint={} timeframe={} candles={}",
+                            mint,
+                            timeframe.as_str(),
+                            count
+                        ),
+                    );
+                }
+                Err(e) => {
+                    logger::warning(
+                        LogTag::Ohlcv,
+                        &format!(
+                            "Backfill failed for mint={} timeframe={}: {}",
+                            mint,
+                            timeframe.as_str(),
+                            e
+                        ),
+                    );
+                    // Continue to next timeframe
+                }
+            }
+
+            // Rate limiting based on priority
+            let delay_ms = match priority {
+                Priority::Critical => 100,
+                Priority::High => 200,
+                Priority::Medium => 400,
+                Priority::Low => 800,
+            };
+            sleep(Duration::from_millis(delay_ms)).await;
+        }
+
+        // Mark all as complete if we got here
+        self.db.mark_all_backfills_complete(mint)?;
+
+        logger::info(
+            LogTag::Ohlcv,
+            &format!(
+                "Completed 30-day backfill for mint={} pool={} total_candles={}",
+                mint, pool_address, total_fetched
+            ),
+        );
+
+        Ok(total_fetched)
+    }
+
+    /// Backfill a specific timeframe for a token
+    async fn backfill_timeframe(
+        &self,
+        mint: &str,
+        pool_address: &str,
+        timeframe: Timeframe,
+        from_ts: i64,
+        to_ts: i64,
+    ) -> OhlcvResult<usize> {
+        let (api_endpoint, aggregate) = timeframe.to_api_params();
+        let max_candles = timeframe.max_candles_30d();
+
+        logger::debug(
+            LogTag::Ohlcv,
+            &format!(
+                "Fetching timeframe={} mint={} endpoint={} aggregate={} expected_candles={}",
+                timeframe.as_str(),
+                mint,
+                api_endpoint,
+                aggregate,
+                max_candles
+            ),
+        );
+
+        // Fetch using native timeframe
+        let candles = self
+            .fetcher
+            .fetch_with_aggregate(pool_address, api_endpoint, aggregate, None, max_candles)
+            .await?;
+
+        if candles.is_empty() {
+            return Ok(0);
+        }
+
+        // Store in database
+        let inserted = self.db.insert_candles_batch(
+            mint,
+            pool_address,
+            timeframe,
+            &candles,
+            "backfill",
+        )?;
+
+        // Update cache
+        self.cache
+            .put(mint, Some(pool_address), timeframe, candles.clone())?;
+
+        Ok(inserted)
     }
 
     async fn cleanup_loop(self: Arc<Self>) {

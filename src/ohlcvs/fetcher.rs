@@ -90,6 +90,124 @@ impl OhlcvFetcher {
         self.process_queue().await
     }
 
+    /// Fetch with explicit aggregate parameter (NEW - native timeframe support)
+    /// Uses GeckoTerminal's native aggregate feature instead of client-side aggregation
+    pub async fn fetch_with_aggregate(
+        &self,
+        pool_address: &str,
+        api_endpoint: &str,
+        aggregate: u32,
+        before_timestamp: Option<i64>,
+        limit: usize,
+    ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
+        self.record_attempt();
+        let start = Instant::now();
+        let limit_clamped = limit.min(1000) as u32;
+
+        // DEBUG: Record fetch attempt with aggregate
+        record_ohlcv_event(
+            "fetch_aggregate_attempt",
+            Severity::Debug,
+            None,
+            Some(pool_address),
+            json!({
+                "pool_address": pool_address,
+                "api_endpoint": api_endpoint,
+                "aggregate": aggregate,
+                "before_timestamp": before_timestamp,
+                "limit": limit_clamped,
+            }),
+        )
+        .await;
+
+        let response = self
+            .api_manager
+            .geckoterminal
+            .fetch_ohlcv(
+                "solana",
+                pool_address,
+                api_endpoint,
+                Some(aggregate),
+                Some(limit_clamped),
+                Some("token"),
+                before_timestamp,
+                None,
+            )
+            .await;
+
+        match response {
+            Ok(ohlcv) => {
+                let data_points: Vec<OhlcvDataPoint> = ohlcv
+                    .ohlcv_list
+                    .into_iter()
+                    .map(|candle| OhlcvDataPoint {
+                        timestamp: candle[0] as i64,
+                        open: candle[1],
+                        high: candle[2],
+                        low: candle[3],
+                        close: candle[4],
+                        volume: candle[5],
+                    })
+                    .collect();
+
+                let latency = start.elapsed().as_millis() as u64;
+                self.record_api_call(latency);
+
+                // INFO: Record successful fetch
+                record_ohlcv_event(
+                    "fetch_aggregate_success",
+                    Severity::Info,
+                    None,
+                    Some(pool_address),
+                    json!({
+                        "pool_address": pool_address,
+                        "api_endpoint": api_endpoint,
+                        "aggregate": aggregate,
+                        "data_points": data_points.len(),
+                        "latency_ms": latency,
+                    }),
+                )
+                .await;
+
+                Ok(data_points)
+            }
+            Err(err) => {
+                let lowered = err.to_lowercase();
+                let error_type = if lowered.contains("429") || lowered.contains("too many requests")
+                {
+                    "rate_limit"
+                } else if lowered.contains("404") || lowered.contains("not found") {
+                    "pool_not_found"
+                } else {
+                    "api_error"
+                };
+
+                record_ohlcv_event(
+                    "fetch_aggregate_error",
+                    Severity::Error,
+                    None,
+                    Some(pool_address),
+                    json!({
+                        "pool_address": pool_address,
+                        "api_endpoint": api_endpoint,
+                        "aggregate": aggregate,
+                        "error_type": error_type,
+                        "error": err,
+                    }),
+                )
+                .await;
+
+                if lowered.contains("429") || lowered.contains("too many requests") {
+                    Err(OhlcvError::RateLimitExceeded)
+                } else if lowered.contains("404") || lowered.contains("not found") {
+                    Err(OhlcvError::PoolNotFound(pool_address.to_string()))
+                } else {
+                    Err(OhlcvError::ApiError(err))
+                }
+            }
+        }
+    }
+
     /// Fetch OHLCV data immediately (bypasses queue, use for critical requests only)
     pub async fn fetch_immediate(
         &self,

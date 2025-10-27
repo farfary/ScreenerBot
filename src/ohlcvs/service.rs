@@ -104,61 +104,31 @@ impl OhlcvServiceImpl {
             }
         }
 
-        // Try aggregated cache in database
-        if timeframe != Timeframe::Minute1 {
-            let mut aggregated = self.db.get_aggregated_data(
-                mint,
-                &pool,
-                timeframe,
-                from_timestamp,
-                to_timestamp,
-                limit,
-            )?;
-
-            if !aggregated.is_empty() {
-                // Normalize to ASC ordering
-                aggregated.sort_by_key(|d| d.timestamp);
-
-                // Update cache with normalized data
-                let _ = self
-                    .cache
-                    .put(mint, Some(&pool), timeframe, aggregated.clone());
-
-                // Take last N entries (most recent)
-                let start_idx = aggregated.len().saturating_sub(limit);
-                return Ok(aggregated.into_iter().skip(start_idx).collect());
-            }
-        }
-
-        // Fall back to raw 1m data and aggregate
-        let raw_data = self.db.get_1m_data(
+        // Fetch from unified candles table
+        let mut candles = self.db.get_candles(
             mint,
             Some(&pool),
+            timeframe,
             from_timestamp,
             to_timestamp,
-            limit * 1000,
-        )?; // Fetch more for aggregation
+            Some(limit),
+        )?;
 
-        if raw_data.is_empty() {
+        if candles.is_empty() {
             return Ok(Vec::new());
         }
 
-        // Aggregate if needed
-        let mut result = if timeframe == Timeframe::Minute1 {
-            raw_data
-        } else {
-            OhlcvAggregator::aggregate(&raw_data, timeframe)?
-        };
-
         // Normalize to ASC ordering
-        result.sort_by_key(|d| d.timestamp);
+        candles.sort_by_key(|d| d.timestamp);
 
-        // Cache the result
-        let _ = self.cache.put(mint, Some(&pool), timeframe, result.clone());
+        // Update cache
+        let _ = self
+            .cache
+            .put(mint, Some(&pool), timeframe, candles.clone());
 
-        // Take only requested limit from the end (most recent)
-        let start_idx = result.len().saturating_sub(limit);
-        Ok(result.into_iter().skip(start_idx).collect())
+        // Take last N entries (most recent)
+        let start_idx = candles.len().saturating_sub(limit);
+        Ok(candles.into_iter().skip(start_idx).collect())
     }
 
     fn has_data(&self, mint: &str) -> OhlcvResult<bool> {
