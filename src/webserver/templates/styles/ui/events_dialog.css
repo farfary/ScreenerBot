@@ -5,7 +5,7 @@
   align-items: center;
   justify-content: center;
   padding: 32px 20px;
-  background: rgba(8, 12, 20, 0.65);
+  background: rgb(8, 12, 20, 0.65);
   backdrop-filter: blur(6px);
   z-index: 1100;
 }
@@ -25,9 +25,9 @@ body.events-dialog-open {
   flex-direction: column;
   background: var(--bg-surface, #111827);
   color: var(--text-primary, #f9fafb);
-  border: 1px solid var(--border-color, rgba(148, 163, 184, 0.25));
+  border: 1px solid var(--border-color, rgb(148, 163, 184, 0.25));
   border-radius: 16px;
-  box-shadow: 0 20px 45px rgba(15, 23, 42, 0.45);
+  box-shadow: 0 20px 45px rgb(15, 23, 42, 0.45);
   overflow: hidden;
 }
 
@@ -37,7 +37,7 @@ body.events-dialog-open {
   justify-content: space-between;
   padding: 20px 24px 12px;
   gap: 16px;
-  border-bottom: 1px solid var(--border-color, rgba(148, 163, 184, 0.25));
+  border-bottom: 1px solid var(--border-color, rgb(148, 163, 184, 0.25));
 }
 
 .events-dialog-heading {
@@ -93,7 +93,7 @@ body.events-dialog-open {
 .events-dialog-close:hover,
 .events-dialog-close:focus-visible {
   color: var(--text-primary, #f9fafb);
-  background: rgba(148, 163, 184, 0.15);
+  background: rgb(148, 163, 184, 0.15);
   outline: none;
 }
 
@@ -108,11 +108,11 @@ body.events-dialog-open {
 .events-dialog-message {
   padding: 14px 16px;
   border-radius: 10px;
-  background: rgba(59, 130, 246, 0.08);
+  background: rgb(59, 130, 246, 0.08);
   color: var(--text-primary, #f9fafb);
   line-height: 1.45;
   font-size: 0.95rem;
-  border: 1px solid rgba(59, 130, 246, 0.25);
+  border: 1px solid rgb(59, 130, 246, 0.25);
 }
 
 .events-dialog-message[data-visible="false"] {
@@ -131,8 +131,8 @@ body.events-dialog-open {
   gap: 4px;
   padding: 12px 14px;
   border-radius: 10px;
-  background: rgba(30, 41, 59, 0.55);
-  border: 1px solid rgba(148, 163, 184, 0.18);
+  background: rgb(30, 41, 59, 0.55);
+  border: 1px solid rgb(148, 163, 184, 0.18);
 }
 
 .events-dialog-field-label {
@@ -146,12 +146,12 @@ body.events-dialog-open {
 .events-dialog-field-value {
   font-size: 0.95rem;
   color: var(--text-primary, #f9fafb);
-  word-break: break-word;
+  overflow-wrap: break-word;
 }
 
 .events-dialog-field-value code {
   font-size: 0.9rem;
-  background: rgba(15, 23, 42, 0.45);
+  background: rgb(15, 23, 42, 0.45);
   padding: 2px 6px;
   border-radius: 6px;
 }
@@ -182,9 +182,9 @@ body.events-dialog-open {
   max-height: 280px;
   overflow: auto;
   padding: 16px;
-  background: rgba(15, 23, 42, 0.65);
+  background: rgb(15, 23, 42, 0.65);
   border-radius: 10px;
-  border: 1px solid rgba(148, 163, 184, 0.25);
+  border: 1px solid rgb(148, 163, 184, 0.25);
   font-size: 0.85rem;
   line-height: 1.5;
   color: var(--text-primary, #f9fafb);
@@ -192,19 +192,72 @@ body.events-dialog-open {
 
 .events-dialog-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   align-items: center;
   gap: 12px;
   padding: 16px 24px;
-  border-top: 1px solid var(--border-color, rgba(148, 163, 184, 0.25));
+  border-top: 1px solid var(--border-color, rgb(148, 163, 184, 0.25));
+}
+
+.events-dialog-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: 999px;
+  border: 1px solid rgb(59, 130, 246, 0.4);
+  background: rgb(59, 130, 246, 0.12);
+  color: rgb(96, 165, 250);
+  font-size: 0.95rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    border 0.2s ease,
+    color 0.2s ease,
+    transform 0.15s ease;
+}
+
+.events-dialog-copy:hover:not(:disabled),
+.events-dialog-copy:focus-visible:not(:disabled) {
+  background: rgb(59, 130, 246, 0.22);
+  border-color: rgb(59, 130, 246, 0.6);
+  color: rgb(147, 197, 253);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.events-dialog-copy:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.events-dialog-copy:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.events-dialog-copy.success {
+  border-color: rgb(34, 197, 94, 0.5);
+  background: rgb(34, 197, 94, 0.15);
+  color: rgb(134, 239, 172);
+}
+
+.events-dialog-copy.error {
+  border-color: rgb(239, 68, 68, 0.5);
+  background: rgb(239, 68, 68, 0.15);
+  color: rgb(252, 165, 165);
+}
+
+.events-dialog-copy svg {
+  flex-shrink: 0;
 }
 
 .events-dialog-dismiss {
   min-width: 96px;
   padding: 10px 18px;
   border-radius: 999px;
-  border: 1px solid rgba(148, 163, 184, 0.25);
-  background: rgba(30, 41, 59, 0.75);
+  border: 1px solid rgb(148, 163, 184, 0.25);
+  background: rgb(30, 41, 59, 0.75);
   color: var(--text-primary, #f9fafb);
   font-size: 0.95rem;
   font-weight: 500;
@@ -216,12 +269,12 @@ body.events-dialog-open {
 
 .events-dialog-dismiss:hover,
 .events-dialog-dismiss:focus-visible {
-  background: rgba(59, 130, 246, 0.25);
-  border-color: rgba(59, 130, 246, 0.55);
+  background: rgb(59, 130, 246, 0.25);
+  border-color: rgb(59, 130, 246, 0.55);
   outline: none;
 }
 
-@media (max-width: 600px) {
+@media (width <= 600px) {
   .events-dialog {
     border-radius: 12px;
   }

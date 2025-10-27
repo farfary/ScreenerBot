@@ -62,13 +62,16 @@ export class EventDetailsDialog {
     this.payloadSection = null;
     this.payloadCodeEl = null;
     this.closeButtons = [];
+    this.copyButton = null;
 
     this._isOpen = false;
     this._previousActiveElement = null;
+    this._currentEvent = null;
 
     this._overlayListener = this._handleOverlayClick.bind(this);
     this._closeListener = this._handleCloseClick.bind(this);
     this._keyListener = this._handleKeyDown.bind(this);
+    this._copyListener = this._handleCopyClick.bind(this);
 
     this._ensureElements();
   }
@@ -101,6 +104,13 @@ export class EventDetailsDialog {
           </section>
         </div>
         <footer class="events-dialog-footer">
+          <button type="button" class="events-dialog-copy" data-action="copy" title="Copy all event details">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+              <rect x="5" y="5" width="9" height="9" rx="1.5"></rect>
+              <path d="M3 10V3a1.5 1.5 0 0 1 1.5-1.5H10"></path>
+            </svg>
+            <span>Copy Details</span>
+          </button>
           <button type="button" class="events-dialog-dismiss" data-action="close">Close</button>
         </footer>
       </div>
@@ -117,9 +127,13 @@ export class EventDetailsDialog {
     this.payloadSection = overlay.querySelector(".events-dialog-payload");
     this.payloadCodeEl = overlay.querySelector(".events-dialog-payload-code code");
     this.closeButtons = Array.from(overlay.querySelectorAll('[data-action="close"]'));
+    this.copyButton = overlay.querySelector('[data-action="copy"]');
 
     on(overlay, "click", this._overlayListener);
     this.closeButtons.forEach((button) => on(button, "click", this._closeListener));
+    if (this.copyButton) {
+      on(this.copyButton, "click", this._copyListener);
+    }
   }
 
   open(event) {
@@ -132,6 +146,7 @@ export class EventDetailsDialog {
     this._previousActiveElement =
       document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
+    this._currentEvent = event;
     this._render(event);
 
     this.root.classList.add("is-visible");
@@ -177,6 +192,7 @@ export class EventDetailsDialog {
       }
     }
     this._previousActiveElement = null;
+    this._currentEvent = null;
   }
 
   destroy() {
@@ -187,6 +203,9 @@ export class EventDetailsDialog {
 
     off(this.root, "click", this._overlayListener);
     this.closeButtons.forEach((button) => off(button, "click", this._closeListener));
+    if (this.copyButton) {
+      off(this.copyButton, "click", this._copyListener);
+    }
 
     if (this.root.parentNode) {
       this.root.parentNode.removeChild(this.root);
@@ -201,6 +220,8 @@ export class EventDetailsDialog {
     this.payloadSection = null;
     this.payloadCodeEl = null;
     this.closeButtons = [];
+    this.copyButton = null;
+    this._currentEvent = null;
   }
 
   _render(event) {
@@ -385,5 +406,138 @@ export class EventDetailsDialog {
       event.stopPropagation();
       this.close();
     }
+  }
+
+  _handleCopyClick(event) {
+    event.preventDefault();
+    if (!this._currentEvent) {
+      return;
+    }
+
+    const textToCopy = this._formatEventForCopy(this._currentEvent);
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard
+        .writeText(textToCopy)
+        .then(() => {
+          this._showCopyFeedback(true);
+        })
+        .catch(() => {
+          this._showCopyFeedback(false);
+        });
+    } else {
+      // Fallback for older browsers
+      const textarea = document.createElement("textarea");
+      textarea.value = textToCopy;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.select();
+      try {
+        document.execCommand("copy");
+        this._showCopyFeedback(true);
+      } catch (_error) {
+        this._showCopyFeedback(false);
+      }
+      document.body.removeChild(textarea);
+    }
+  }
+
+  _formatEventForCopy(event) {
+    const lines = [];
+
+    lines.push("=".repeat(60));
+    lines.push("EVENT DETAILS");
+    lines.push("=".repeat(60));
+    lines.push("");
+
+    // Basic info
+    lines.push(`Event ID: ${event.id || "N/A"}`);
+    lines.push(`Severity: ${event.severity || "N/A"}`);
+    lines.push(`Category: ${event.category || "N/A"}`);
+    lines.push(`Subtype: ${event.subtype || "N/A"}`);
+
+    if (event.event_time) {
+      const formatted = Utils.formatTimestamp(event.event_time, {
+        includeSeconds: true,
+        fallback: "N/A",
+      });
+      lines.push(`Event Time: ${formatted}`);
+      lines.push(`Age: ${Utils.formatTimeAgo(event.event_time, { fallback: "-" })}`);
+    }
+
+    if (event.created_at) {
+      const formatted = Utils.formatTimestamp(event.created_at, {
+        includeSeconds: true,
+        fallback: "N/A",
+      });
+      lines.push(`Created: ${formatted}`);
+    }
+
+    if (event.mint) {
+      lines.push(`Token Mint: ${event.mint}`);
+    }
+
+    if (event.reference_id) {
+      lines.push(`Reference: ${event.reference_id}`);
+    }
+
+    // Message
+    if (event.message) {
+      lines.push("");
+      lines.push("-".repeat(60));
+      lines.push("MESSAGE");
+      lines.push("-".repeat(60));
+      lines.push(event.message);
+    }
+
+    // Payload
+    if (event.payload && typeof event.payload === "object") {
+      lines.push("");
+      lines.push("-".repeat(60));
+      lines.push("PAYLOAD");
+      lines.push("-".repeat(60));
+      try {
+        lines.push(JSON.stringify(event.payload, null, 2));
+      } catch (_error) {
+        lines.push(String(event.payload));
+      }
+    } else if (event.payload !== null && event.payload !== undefined) {
+      lines.push("");
+      lines.push("-".repeat(60));
+      lines.push("PAYLOAD");
+      lines.push("-".repeat(60));
+      lines.push(String(event.payload));
+    }
+
+    lines.push("");
+    lines.push("=".repeat(60));
+
+    return lines.join("\n");
+  }
+
+  _showCopyFeedback(success) {
+    if (!this.copyButton) {
+      return;
+    }
+
+    const originalContent = this.copyButton.innerHTML;
+    const icon = success
+      ? '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8l3 3 7-7"></path></svg>'
+      : '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4l8 8M12 4l-8 8"></path></svg>';
+    const text = success ? "Copied!" : "Failed";
+
+    this.copyButton.innerHTML = `${icon}<span>${text}</span>`;
+    this.copyButton.classList.add(success ? "success" : "error");
+    this.copyButton.disabled = true;
+
+    setTimeout(() => {
+      if (!this.copyButton) {
+        return;
+      }
+      this.copyButton.innerHTML = originalContent;
+      this.copyButton.classList.remove("success", "error");
+      this.copyButton.disabled = false;
+    }, 2000);
   }
 }
