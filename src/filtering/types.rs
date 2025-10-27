@@ -103,6 +103,10 @@ pub enum TokenSortKey {
     MetadataUpdatedAt,
     TokenBirthAt,
     Mint,
+    Txns5m,
+    Txns1h,
+    Txns6h,
+    Txns24h,
 }
 
 impl TokenSortKey {
@@ -121,6 +125,10 @@ impl TokenSortKey {
             "first_seen_at" => TokenSortKey::FirstSeenAt,
             "metadata_updated_at" => TokenSortKey::MetadataUpdatedAt,
             "token_birth_at" => TokenSortKey::TokenBirthAt,
+            "txns_5m" => TokenSortKey::Txns5m,
+            "txns_1h" => TokenSortKey::Txns1h,
+            "txns_6h" => TokenSortKey::Txns6h,
+            "txns_24h" => TokenSortKey::Txns24h,
             _ => TokenSortKey::Mint,
         }
     }

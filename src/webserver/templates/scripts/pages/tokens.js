@@ -45,6 +45,10 @@ const COLUMN_TO_SORT_KEY = {
   market_cap: "market_cap",
   price_change_h1: "price_change_h1",
   price_change_h24: "price_change_h24",
+  txns_5m: "txns_5m",
+  txns_1h: "txns_1h",
+  txns_6h: "txns_6h",
+  txns_24h: "txns_24h",
   risk_score: "risk_score",
   updated_at: "updated_at",
   first_seen_at: "first_seen_at",
@@ -1026,6 +1030,58 @@ function createLifecycle() {
           minWidth: 90,
           wrap: false,
           render: (v) => percentCell(v),
+        },
+        {
+          id: "txns_5m",
+          label: "Txns 5m",
+          sortable: true,
+          minWidth: 80,
+          wrap: false,
+          render: (_v, row) => {
+            const buys = row.txns_5m_buys || 0;
+            const sells = row.txns_5m_sells || 0;
+            if (buys === 0 && sells === 0) return "—";
+            return `${Utils.formatNumber(buys, 0)}/${Utils.formatNumber(sells, 0)}`;
+          },
+        },
+        {
+          id: "txns_1h",
+          label: "Txns 1h",
+          sortable: true,
+          minWidth: 80,
+          wrap: false,
+          render: (_v, row) => {
+            const buys = row.txns_1h_buys || 0;
+            const sells = row.txns_1h_sells || 0;
+            if (buys === 0 && sells === 0) return "—";
+            return `${Utils.formatNumber(buys, 0)}/${Utils.formatNumber(sells, 0)}`;
+          },
+        },
+        {
+          id: "txns_6h",
+          label: "Txns 6h",
+          sortable: true,
+          minWidth: 80,
+          wrap: false,
+          render: (_v, row) => {
+            const buys = row.txns_6h_buys || 0;
+            const sells = row.txns_6h_sells || 0;
+            if (buys === 0 && sells === 0) return "—";
+            return `${Utils.formatNumber(buys, 0)}/${Utils.formatNumber(sells, 0)}`;
+          },
+        },
+        {
+          id: "txns_24h",
+          label: "Txns 24h",
+          sortable: true,
+          minWidth: 90,
+          wrap: false,
+          render: (_v, row) => {
+            const buys = row.txns_24h_buys || 0;
+            const sells = row.txns_24h_sells || 0;
+            if (buys === 0 && sells === 0) return "—";
+            return `${Utils.formatNumber(buys, 0)}/${Utils.formatNumber(sells, 0)}`;
+          },
         },
         {
           id: "risk_score",

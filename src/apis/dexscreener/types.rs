@@ -168,19 +168,17 @@ pub struct TokenInfo {
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
+pub struct TransactionPeriod {
+    pub buys: Option<i64>,
+    pub sells: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct Transactions {
-    pub m5: Option<serde_json::Value>,
-    pub h1: Option<serde_json::Value>,
-    pub h24: Option<serde_json::Value>,
-    pub m5_buys: Option<i64>,
-    pub m5_sells: Option<i64>,
-    pub h1_buys: Option<i64>,
-    pub h1_sells: Option<i64>,
-    pub h6_buys: Option<i64>,
-    pub h6_sells: Option<i64>,
-    pub h24_buys: Option<i64>,
-    pub h24_sells: Option<i64>,
+    pub m5: Option<TransactionPeriod>,
+    pub h1: Option<TransactionPeriod>,
+    pub h6: Option<TransactionPeriod>,
+    pub h24: Option<TransactionPeriod>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -322,14 +320,22 @@ impl DexScreenerPairRaw {
         }
 
         if let Some(ref txns) = self.txns {
-            pool.txns_m5_buys = txns.m5_buys;
-            pool.txns_m5_sells = txns.m5_sells;
-            pool.txns_h1_buys = txns.h1_buys;
-            pool.txns_h1_sells = txns.h1_sells;
-            pool.txns_h6_buys = txns.h6_buys;
-            pool.txns_h6_sells = txns.h6_sells;
-            pool.txns_h24_buys = txns.h24_buys;
-            pool.txns_h24_sells = txns.h24_sells;
+            if let Some(ref m5) = txns.m5 {
+                pool.txns_m5_buys = m5.buys;
+                pool.txns_m5_sells = m5.sells;
+            }
+            if let Some(ref h1) = txns.h1 {
+                pool.txns_h1_buys = h1.buys;
+                pool.txns_h1_sells = h1.sells;
+            }
+            if let Some(ref h6) = txns.h6 {
+                pool.txns_h6_buys = h6.buys;
+                pool.txns_h6_sells = h6.sells;
+            }
+            if let Some(ref h24) = txns.h24 {
+                pool.txns_h24_buys = h24.buys;
+                pool.txns_h24_sells = h24.sells;
+            }
         }
 
         if let Some(ref pc) = self.price_change {

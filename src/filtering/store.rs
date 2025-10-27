@@ -340,6 +340,10 @@ impl FilteringStore {
             TokenSortKey::MetadataUpdatedAt => Some("metadata_updated_at".to_string()),
             TokenSortKey::TokenBirthAt => Some("token_birth_at".to_string()),
             TokenSortKey::Mint => Some("mint".to_string()),
+            // Transaction sorts require in-memory sorting (need sum of buys+sells)
+            TokenSortKey::Txns5m | TokenSortKey::Txns1h | TokenSortKey::Txns6h | TokenSortKey::Txns24h => {
+                None
+            }
         };
 
         let sort_direction = match query.sort_direction {
@@ -715,6 +719,26 @@ fn sort_tokens(items: &mut [Token], sort_key: TokenSortKey, direction: SortDirec
                 lhs.cmp(&rhs)
             }
             TokenSortKey::Mint => a.mint.cmp(&b.mint),
+            TokenSortKey::Txns5m => {
+                let a_total = a.txns_5m_total();
+                let b_total = b.txns_5m_total();
+                a_total.cmp(&b_total)
+            }
+            TokenSortKey::Txns1h => {
+                let a_total = a.txns_1h_total();
+                let b_total = b.txns_1h_total();
+                a_total.cmp(&b_total)
+            }
+            TokenSortKey::Txns6h => {
+                let a_total = a.txns_6h_total();
+                let b_total = b.txns_6h_total();
+                a_total.cmp(&b_total)
+            }
+            TokenSortKey::Txns24h => {
+                let a_total = a.txns_24h_total();
+                let b_total = b.txns_24h_total();
+                a_total.cmp(&b_total)
+            }
         };
 
         if ascending {

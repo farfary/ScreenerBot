@@ -133,13 +133,21 @@ pub struct Token {
     // ========================================================================
     // Transaction Activity (from chosen source)
     // ========================================================================
+    #[serde(rename = "txns_5m_buys")]
     pub txns_m5_buys: Option<i64>,
+    #[serde(rename = "txns_5m_sells")]
     pub txns_m5_sells: Option<i64>,
+    #[serde(rename = "txns_1h_buys")]
     pub txns_h1_buys: Option<i64>,
+    #[serde(rename = "txns_1h_sells")]
     pub txns_h1_sells: Option<i64>,
+    #[serde(rename = "txns_6h_buys")]
     pub txns_h6_buys: Option<i64>,
+    #[serde(rename = "txns_6h_sells")]
     pub txns_h6_sells: Option<i64>,
+    #[serde(rename = "txns_24h_buys")]
     pub txns_h24_buys: Option<i64>,
+    #[serde(rename = "txns_24h_sells")]
     pub txns_h24_sells: Option<i64>,
 
     // ========================================================================
@@ -182,6 +190,52 @@ pub struct Token {
     pub priority: Priority,
     pub first_seen_at: DateTime<Utc>,
     pub last_price_update: DateTime<Utc>,
+}
+
+impl Token {
+    /// Calculate total transactions (buys + sells) for 5 minute range
+    #[allow(dead_code)]
+    pub fn txns_5m_total(&self) -> Option<i64> {
+        match (self.txns_m5_buys, self.txns_m5_sells) {
+            (Some(b), Some(s)) => Some(b + s),
+            (Some(b), None) => Some(b),
+            (None, Some(s)) => Some(s),
+            (None, None) => None,
+        }
+    }
+
+    /// Calculate total transactions (buys + sells) for 1 hour range
+    #[allow(dead_code)]
+    pub fn txns_1h_total(&self) -> Option<i64> {
+        match (self.txns_h1_buys, self.txns_h1_sells) {
+            (Some(b), Some(s)) => Some(b + s),
+            (Some(b), None) => Some(b),
+            (None, Some(s)) => Some(s),
+            (None, None) => None,
+        }
+    }
+
+    /// Calculate total transactions (buys + sells) for 6 hour range
+    #[allow(dead_code)]
+    pub fn txns_6h_total(&self) -> Option<i64> {
+        match (self.txns_h6_buys, self.txns_h6_sells) {
+            (Some(b), Some(s)) => Some(b + s),
+            (Some(b), None) => Some(b),
+            (None, Some(s)) => Some(s),
+            (None, None) => None,
+        }
+    }
+
+    /// Calculate total transactions (buys + sells) for 24 hour range
+    #[allow(dead_code)]
+    pub fn txns_24h_total(&self) -> Option<i64> {
+        match (self.txns_h24_buys, self.txns_h24_sells) {
+            (Some(b), Some(s)) => Some(b + s),
+            (Some(b), None) => Some(b),
+            (None, Some(s)) => Some(s),
+            (None, None) => None,
+        }
+    }
 }
 
 /// Security risk item
