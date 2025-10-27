@@ -40,7 +40,9 @@ pub use database::{
     get_token_async,
     get_tokens_no_market_async,
     init_global_database,
+    is_market_data_stale_async,
     list_tokens_async,
+    update_token_priority_async,
     TokenDatabase,
 };
 pub use filtered_store::{

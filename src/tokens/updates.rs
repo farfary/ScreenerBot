@@ -939,6 +939,19 @@ async fn update_pool_priority_tokens(db: &TokenDatabase, coordinator: &RateLimit
                                 result.failures.len()
                             ),
                         );
+                    } else if result.is_success() {
+                        // Success: Demote from Pool (75) to High (50) priority
+                        // This happens for tokens that were elevated due to stale data
+                        // After fresh update, they can use normal High priority intervals
+                        if let Err(e) = db.update_priority(&result.mint, 50) {
+                            logger::warning(
+                                LogTag::Tokens,
+                                &format!(
+                                    "Failed to demote {} from Pool to High priority: {}",
+                                    result.mint, e
+                                ),
+                            );
+                        }
                     }
                 }
             }

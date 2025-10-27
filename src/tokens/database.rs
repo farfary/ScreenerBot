@@ -865,6 +865,32 @@ impl TokenDatabase {
         Ok(())
     }
 
+    /// Check if token has stale market data (>2 minutes old or missing)
+    pub fn is_market_data_stale(&self, mint: &str, threshold_seconds: i64) -> TokenResult<bool> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT last_market_update FROM update_tracking WHERE mint = ?1",
+            )
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+
+        let result: Result<i64, rusqlite::Error> = stmt.query_row(params![mint], |row| row.get(0));
+
+        match result {
+            Ok(last_update) => {
+                let now = chrono::Utc::now().timestamp();
+                let age = now - last_update;
+                Ok(age > threshold_seconds)
+            }
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(true), // No update tracking = stale
+            Err(e) => Err(TokenError::Database(format!("Query failed: {}", e))),
+        }
+    }
+
     /// Get priority mapping for specific tokens
     pub fn get_priorities_for_tokens(&self, mints: &[String]) -> TokenResult<HashMap<String, i32>> {
         if mints.is_empty() {
@@ -2585,6 +2611,26 @@ pub async fn get_tokens_no_market_async(
     })
     .await
     .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async: update token priority
+pub async fn update_token_priority_async(mint: &str, priority: i32) -> TokenResult<()> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+    let mint_owned = mint.to_string();
+    tokio::task::spawn_blocking(move || db.update_priority(&mint_owned, priority))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async: check if token market data is stale
+pub async fn is_market_data_stale_async(mint: &str, threshold_seconds: i64) -> TokenResult<bool> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+    let mint_owned = mint.to_string();
+    tokio::task::spawn_blocking(move || db.is_market_data_stale(&mint_owned, threshold_seconds))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
 }
 
 fn map_tracking_row(row: &rusqlite::Row) -> rusqlite::Result<UpdateTrackingInfo> {
