@@ -83,3 +83,41 @@ pub use decimals::{
     clear_cache as clear_decimals_cache, get as get_decimals, get_cached as get_cached_decimals,
     get_token_decimals_from_chain, SOL_DECIMALS, SOL_MINT,
 };
+
+// Re-export updates API
+pub use updates::UpdateResult;
+
+// ============================================================================
+// PUBLIC FORCE UPDATE API
+// ============================================================================
+
+/// Request immediate update for a token (bypasses normal scheduling)
+///
+/// This function provides on-demand token data refresh for use cases like
+/// viewing token details where user expects fresh data immediately.
+///
+/// # Arguments
+/// * `mint` - Token address to update
+///
+/// # Returns
+/// UpdateResult with success/failure details from each data source
+///
+/// # Example
+/// ```no_run
+/// match request_immediate_update("TokenMintAddress").await {
+///     Ok(result) if result.is_success() => println!("Updated successfully"),
+///     Ok(result) => println!("Update failed: {:?}", result.failures),
+///     Err(e) => println!("Error: {}", e),
+/// }
+/// ```
+pub async fn request_immediate_update(mint: &str) -> TokenResult<UpdateResult> {
+    let db = get_global_database().ok_or_else(|| TokenError::Database(
+        "Token database not initialized".to_string(),
+    ))?;
+
+    let coordinator = service_new::get_rate_coordinator().ok_or_else(|| {
+        TokenError::Database("Rate limit coordinator not available".to_string())
+    })?;
+
+    updates::force_update_token(mint, db, coordinator).await
+}

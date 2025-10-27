@@ -513,7 +513,9 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/tokens/stats", get(get_tokens_stats))
         .route("/tokens/filter", post(filter_tokens))
         .route("/tokens/:mint", get(get_token_detail))
+        .route("/tokens/:mint/refresh", post(refresh_token_data))
         .route("/tokens/:mint/ohlcv", get(get_token_ohlcv))
+        .route("/tokens/:mint/ohlcv/refresh", post(refresh_token_ohlcv))
         .route("/tokens/:mint/dexscreener", get(get_token_dexscreener))
 }
 
@@ -571,6 +573,62 @@ pub(crate) async fn get_tokens_list(
                 rejection_reasons: HashMap::new(),
                 available_rejection_reasons: Vec::new(),
             })
+        }
+    }
+}
+
+/// Force refresh token data (immediate update outside scheduled loops)
+async fn refresh_token_data(Path(mint): Path<String>) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    logger::debug(LogTag::Webserver, &format!("Force refresh requested for mint={}", mint));
+
+    match crate::tokens::request_immediate_update(&mint).await {
+        Ok(result) => {
+            if result.is_success() {
+                logger::info(
+                    LogTag::Webserver,
+                    &format!(
+                        "mint={} refresh_success sources={:?}",
+                        mint, result.successes
+                    ),
+                );
+                Ok(Json(serde_json::json!({
+                    "success": true,
+                    "mint": mint,
+                    "sources_updated": result.successes,
+                    "partial_failures": result.failures,
+                })))
+            } else {
+                logger::info(
+                    LogTag::Webserver,
+                    &format!(
+                        "mint={} refresh_failed failures={:?}",
+                        mint, result.failures
+                    ),
+                );
+                Err((
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    Json(serde_json::json!({
+                        "success": false,
+                        "mint": mint,
+                        "error": "All data sources failed",
+                        "failures": result.failures,
+                    })),
+                ))
+            }
+        }
+        Err(e) => {
+            logger::warning(
+                LogTag::Webserver,
+                &format!("mint={} refresh_error error={}", mint, e),
+            );
+            Err((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(serde_json::json!({
+                    "success": false,
+                    "mint": mint,
+                    "error": format!("Failed to refresh token: {}", e),
+                })),
+            ))
         }
     }
 }
@@ -1138,11 +1196,30 @@ async fn get_token_ohlcv(
         );
     }
 
-    // Fetch OHLCV data using new API
-    let data =
-        crate::ohlcvs::get_ohlcv_data(&mint, timeframe, None, query.limit as usize, None, None)
-            .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    // Fetch OHLCV data using new API - return empty array if no data available
+    let data = match crate::ohlcvs::get_ohlcv_data(
+        &mint,
+        timeframe,
+        None,
+        query.limit as usize,
+        None,
+        None,
+    )
+    .await
+    {
+        Ok(data) => data,
+        Err(e) => {
+            logger::debug(
+                LogTag::Webserver,
+                &format!(
+                    "mint={} timeframe={} no_data error={}",
+                    mint, timeframe, e
+                ),
+            );
+            // Return empty array for tokens without OHLCV data yet
+            Vec::new()
+        }
+    };
 
     let points: Vec<OhlcvPoint> = data
         .iter()
@@ -1157,6 +1234,53 @@ async fn get_token_ohlcv(
         .collect();
 
     Ok(Json(points))
+}
+
+/// Force refresh OHLCV data (immediate fetch outside scheduled monitoring)
+async fn refresh_token_ohlcv(Path(mint): Path<String>) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    logger::debug(LogTag::Webserver, &format!("OHLCV refresh requested for mint={}", mint));
+
+    // First, ensure token is being monitored (add if not already)
+    let is_open_position = positions::is_open_position(&mint).await;
+    let priority = if is_open_position {
+        crate::ohlcvs::Priority::Critical
+    } else {
+        crate::ohlcvs::Priority::High
+    };
+
+    // Add to monitoring (idempotent - no-op if already monitored)
+    let _ = crate::ohlcvs::add_token_monitoring(&mint, priority).await;
+
+    // Record activity
+    let _ = crate::ohlcvs::record_activity(&mint, crate::ohlcvs::ActivityType::DataRequested).await;
+
+    // Try to refresh - but don't fail if no pools available yet
+    match crate::ohlcvs::request_refresh(&mint).await {
+        Ok(_) => {
+            logger::info(
+                LogTag::Webserver,
+                &format!("mint={} ohlcv_refresh_success", mint),
+            );
+            Ok(Json(serde_json::json!({
+                "success": true,
+                "mint": mint,
+                "message": "OHLCV refresh triggered",
+            })))
+        }
+        Err(e) => {
+            // Log as debug, not warning - this is normal for new tokens without pools
+            logger::debug(
+                LogTag::Webserver,
+                &format!("mint={} ohlcv_refresh_deferred error={}", mint, e),
+            );
+            // Return success anyway - monitoring is active, data will come when pools are available
+            Ok(Json(serde_json::json!({
+                "success": true,
+                "mint": mint,
+                "message": "OHLCV monitoring active, data pending pool availability",
+            })))
+        }
+    }
 }
 
 /// Get DexScreener data for a token

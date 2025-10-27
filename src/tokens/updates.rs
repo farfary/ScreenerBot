@@ -330,10 +330,13 @@ impl PoolPriorityManager {
 // UPDATE FUNCTIONS
 // ============================================================================
 
-/// Update a single token from market data sources (DexScreener + GeckoTerminal)
+/// Update a single token from market data sources (DexScreener only)
 ///
 /// Note: Security data (Rugcheck) is handled separately in update_security_data()
 /// and is fetched only once per token, not on every update cycle.
+///
+/// GeckoTerminal is no longer used for market data updates due to strict rate limits (30/min).
+/// It is still used in discovery for finding new tokens.
 ///
 /// Returns overall success if at least one source succeeds.
 pub async fn update_token(
@@ -344,7 +347,7 @@ pub async fn update_token(
     let mut successes = Vec::new();
     let mut failures = Vec::new();
 
-    // 1. Update DexScreener market data
+    // Update DexScreener market data only
     match coordinator.acquire_dexscreener().await {
         Ok(_) => match dexscreener::fetch_dexscreener_data(mint, db).await {
             Ok(Some(_)) => successes.push("DexScreener".to_string()),
@@ -352,16 +355,6 @@ pub async fn update_token(
             Err(e) => failures.push(format!("DexScreener: {}", e)),
         },
         Err(e) => failures.push(format!("DexScreener rate limit: {}", e)),
-    }
-
-    // 2. Update GeckoTerminal market data
-    match coordinator.acquire_geckoterminal().await {
-        Ok(_) => match geckoterminal::fetch_geckoterminal_data(mint, db).await {
-            Ok(Some(_)) => successes.push("GeckoTerminal".to_string()),
-            Ok(None) => failures.push(format!("GeckoTerminal: Token not listed")),
-            Err(e) => failures.push(format!("GeckoTerminal: {}", e)),
-        },
-        Err(e) => failures.push(format!("GeckoTerminal rate limit: {}", e)),
     }
 
     // Update tracking timestamp for market data
@@ -464,33 +457,17 @@ pub async fn update_tokens_batch(
 
     let mut results = Vec::new();
 
-    // Acquire rate limit permits for both sources in parallel
-    let (dex_permit, gecko_permit) = tokio::join!(
-        coordinator.acquire_dexscreener(),
-        coordinator.acquire_geckoterminal()
-    );
+    // Acquire rate limit permit for DexScreener only
+    let dex_permit = coordinator.acquire_dexscreener().await;
 
-    // 1 & 2. Fetch DexScreener and GeckoTerminal in PARALLEL
-    let (dex_result, gecko_result) = tokio::join!(
-        async {
-            match dex_permit {
-                Ok(_) => dexscreener::fetch_dexscreener_data_batch(mints, db).await,
-                Err(e) => Err(TokenError::RateLimit {
-                    source: "DexScreener".to_string(),
-                    message: e.to_string(),
-                }),
-            }
-        },
-        async {
-            match gecko_permit {
-                Ok(_) => geckoterminal::fetch_geckoterminal_data_batch(mints, db).await,
-                Err(e) => Err(TokenError::RateLimit {
-                    source: "GeckoTerminal".to_string(),
-                    message: e.to_string(),
-                }),
-            }
-        }
-    );
+    // Fetch DexScreener data
+    let dex_result = match dex_permit {
+        Ok(_) => dexscreener::fetch_dexscreener_data_batch(mints, db).await,
+        Err(e) => Err(TokenError::RateLimit {
+            source: "DexScreener".to_string(),
+            message: e.to_string(),
+        }),
+    };
 
     // Process DexScreener results
     let (dex_results, dex_global_err): (HashMap<String, Option<()>>, Option<String>) =
@@ -506,21 +483,7 @@ pub async fn update_tokens_batch(
             }
         };
 
-    // Process GeckoTerminal results
-    let (gecko_results, gecko_global_err): (HashMap<String, Option<()>>, Option<String>) =
-        match gecko_result {
-            Ok(data) => (
-                data.into_iter().map(|(k, v)| (k, v.map(|_| ()))).collect(),
-                None,
-            ),
-            Err(e) => {
-                let msg = format!("GeckoTerminal batch failed: {}", e);
-                logger::error(LogTag::Tokens, &msg);
-                (HashMap::new(), Some(msg))
-            }
-        };
-
-    // 3. Process each token with batch results (market data only)
+    // Process each token with batch results (market data from DexScreener only)
     for mint in mints {
         let mut successes = Vec::new();
         let mut failures = Vec::new();
@@ -534,16 +497,7 @@ pub async fn update_tokens_batch(
             failures.push(err.clone());
         }
 
-        // GeckoTerminal result from batch
-        if let Some(Some(_)) = gecko_results.get(mint) {
-            successes.push("GeckoTerminal".to_string());
-        } else if gecko_results.contains_key(mint) {
-            failures.push("GeckoTerminal: Token not listed".to_string());
-        } else if let Some(err) = &gecko_global_err {
-            failures.push(err.clone());
-        }
-
-        // If both maps are empty and no global errors, still mark as failure to avoid ambiguity
+        // If no results at all, mark as failure
         if successes.is_empty() && failures.is_empty() {
             failures.push("No market sources responded".to_string());
         }
@@ -1083,4 +1037,37 @@ async fn update_low_priority_tokens(db: &TokenDatabase, coordinator: &RateLimitC
             );
         }
     }
+}
+
+// ============================================================================
+// FORCE UPDATE API (for immediate fetching outside scheduled loops)
+// ============================================================================
+
+/// Force immediate update for a single token (bypasses normal scheduling)
+///
+/// This function is designed for on-demand updates when user explicitly
+/// requests fresh data (e.g., viewing token details dialog).
+///
+/// Uses the same rate limit coordinator as scheduled updates but executes
+/// immediately without waiting for next loop iteration.
+///
+/// # Arguments
+/// * `mint` - Token address to update
+/// * `db` - Database instance
+/// * `coordinator` - Rate limit coordinator
+///
+/// # Returns
+/// UpdateResult with success/failure details
+pub async fn force_update_token(
+    mint: &str,
+    db: Arc<TokenDatabase>,
+    coordinator: Arc<RateLimitCoordinator>,
+) -> TokenResult<UpdateResult> {
+    logger::debug(
+        LogTag::Tokens,
+        &format!("Force update requested for mint={}", mint),
+    );
+
+    // Use existing update_token function (same logic, same rate limits)
+    update_token(mint, &db, &coordinator).await
 }

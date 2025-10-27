@@ -17,9 +17,18 @@ use crate::tokens::schema;
 use crate::tokens::updates;
 use crate::tokens::updates::RateLimitCoordinator;
 use async_trait::async_trait;
+use once_cell::sync::OnceCell;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
+
+// Global rate limit coordinator for force update API
+static RATE_COORDINATOR: OnceCell<Arc<RateLimitCoordinator>> = OnceCell::new();
+
+/// Get global rate limit coordinator (for force update API)
+pub fn get_rate_coordinator() -> Option<Arc<RateLimitCoordinator>> {
+    RATE_COORDINATOR.get().cloned()
+}
 
 /// New tokens service using clean architecture
 pub struct TokensServiceNew {
@@ -105,6 +114,9 @@ impl Service for TokensServiceNew {
 
         // Create a single shared rate limit coordinator for all token tasks
         let coordinator = Arc::new(RateLimitCoordinator::new());
+
+        // Store coordinator globally for force update API
+        let _ = RATE_COORDINATOR.set(coordinator.clone());
 
         // Start a single refill task (every minute) shared by all loops
         let coord_refill = coordinator.clone();

@@ -13,7 +13,10 @@ export class TokenDetailsDialog {
     this.tokenData = null;
     this.tabHandlers = new Map();
     this.refreshInterval = null;
+    this.chartPollInterval = null;
     this.isRefreshing = false;
+    this.currentTimeframe = "5m"; // Track current chart timeframe
+    this.isOpening = false; // Guard against multiple simultaneous opens
   }
 
   /**
@@ -26,20 +29,99 @@ export class TokenDetailsDialog {
       return;
     }
 
-    this.tokenData = tokenData;
-    this._createDialog();
-    this._attachEventHandlers();
+    // Guard against multiple simultaneous opens
+    if (this.isOpening) {
+      console.log("Dialog already opening, ignoring duplicate request");
+      return;
+    }
 
-    // Fetch full token details from API
-    await this._fetchTokenData();
+    // If dialog is already open with different token, close it first
+    if (this.dialogEl && this.tokenData && this.tokenData.mint !== tokenData.mint) {
+      console.log("Closing existing dialog to open new token");
+      this.close();
+      // Wait for close animation
+      await new Promise(resolve => setTimeout(resolve, 350));
+    }
 
-    // Start polling every 1 second
-    this._startPolling();
+    // If dialog is open with same token, ignore
+    if (this.dialogEl && this.tokenData && this.tokenData.mint === tokenData.mint) {
+      console.log("Dialog already open for this token, ignoring");
+      return;
+    }
 
-    // Animate in
-    requestAnimationFrame(() => {
-      this.dialogEl.classList.add("active");
-    });
+    this.isOpening = true;
+
+    try {
+      this.tokenData = tokenData;
+      
+      // Create and show dialog IMMEDIATELY with available data
+      this._createDialog();
+      this._attachEventHandlers();
+
+      // Load overview tab immediately (will show loading spinner if no data)
+      this._loadTabContent("overview");
+
+      // Animate in immediately (don't wait for data)
+      requestAnimationFrame(() => {
+        if (this.dialogEl) {
+          this.dialogEl.classList.add("active");
+        }
+      });
+
+      // Start background refresh (non-blocking)
+      this._triggerTokenRefresh().catch(err => {
+        console.warn("Token refresh failed:", err);
+      });
+      
+      this._triggerOhlcvRefresh().catch(err => {
+        // Silent - expected for new tokens
+      });
+
+      // Fetch full token details (non-blocking)
+      this._fetchTokenData().catch(err => {
+        console.error("Failed to fetch token data:", err);
+      });
+
+      // Start polling for updates
+      this._startPolling();
+
+    } finally {
+      this.isOpening = false;
+    }
+  }
+
+  /**
+   * Trigger immediate token data refresh
+   */
+  async _triggerTokenRefresh() {
+    try {
+      const response = await fetch(`/api/tokens/${this.tokenData.mint}/refresh`, {
+        method: 'POST'
+      });
+      if (response.ok) {
+        const result = await response.json();
+        console.log('Token data refresh triggered:', result);
+      }
+    } catch (error) {
+      console.warn('Failed to trigger token refresh:', error);
+    }
+  }
+
+  /**
+   * Trigger immediate OHLCV data refresh
+   */
+  async _triggerOhlcvRefresh() {
+    try {
+      const response = await fetch(`/api/tokens/${this.tokenData.mint}/ohlcv/refresh`, {
+        method: 'POST'
+      });
+      if (response.ok) {
+        const result = await response.json();
+        console.log('OHLCV data refresh triggered:', result);
+      }
+    } catch (error) {
+      // Silently ignore - OHLCV may not be available for new tokens
+    }
   }
 
   /**
@@ -106,6 +188,63 @@ export class TokenDetailsDialog {
   }
 
   /**
+   * Start polling for chart data updates (every 5 seconds)
+   */
+  _startChartPolling() {
+    // Clear any existing interval
+    this._stopChartPolling();
+
+    // Poll every 5 seconds for new candles
+    this.chartPollInterval = setInterval(() => {
+      this._refreshChartData();
+    }, 5000);
+  }
+
+  /**
+   * Stop polling for chart data updates
+   */
+  _stopChartPolling() {
+    if (this.chartPollInterval) {
+      clearInterval(this.chartPollInterval);
+      this.chartPollInterval = null;
+    }
+  }
+
+  /**
+   * Refresh chart data (append new candles without full reload)
+   */
+  async _refreshChartData() {
+    if (!this.candlestickSeries || !this.tokenData || this.currentTab !== "overview") {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `/api/tokens/${this.tokenData.mint}/ohlcv?timeframe=${this.currentTimeframe}&limit=200`
+      );
+      
+      if (!response.ok) return;
+
+      const data = await response.json();
+      if (!Array.isArray(data) || data.length === 0) return;
+
+      // Convert to chart format
+      const chartData = data.map((candle) => ({
+        time: candle.timestamp,
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+      }));
+
+      // Update chart with new data (LightweightCharts handles deduplication)
+      this.candlestickSeries.setData(chartData);
+    } catch (error) {
+      // Silently fail - don't spam console on polling errors
+    }
+  }
+
+  /**
    * Refresh overview tab content without full reload
    */
   _refreshOverviewTab() {
@@ -132,15 +271,50 @@ export class TokenDetailsDialog {
   close() {
     if (!this.dialogEl) return;
 
-    // Stop polling
+    // Stop all polling immediately
     this._stopPolling();
+    this._stopChartPolling();
 
+    // Animate out
     this.dialogEl.classList.remove("active");
+    
+    // Clean up after animation
     setTimeout(() => {
+      // Remove event listeners
+      if (this._escapeHandler) {
+        document.removeEventListener("keydown", this._escapeHandler);
+        this._escapeHandler = null;
+      }
+
+      // Clean up chart
+      if (this.chartResizeObserver) {
+        this.chartResizeObserver.disconnect();
+        this.chartResizeObserver = null;
+      }
+      if (this.chart) {
+        this.chart.remove();
+        this.chart = null;
+      }
+      if (this.candlestickSeries) {
+        this.candlestickSeries = null;
+      }
+
+      // Remove DOM element
       if (this.dialogEl) {
         this.dialogEl.remove();
         this.dialogEl = null;
       }
+
+      // Reset all state for next open
+      this.tokenData = null;
+      this.fullTokenData = null;
+      this.currentTab = "overview";
+      this.currentTimeframe = "5m";
+      this.isRefreshing = false;
+      this.isOpening = false; // Reset guard
+      this.tabHandlers.clear();
+
+      // Notify parent
       this.onClose();
     }, 300);
   }
@@ -318,6 +492,16 @@ export class TokenDetailsDialog {
         content.classList.remove("active");
       }
     });
+
+    // Pause chart polling when leaving overview tab
+    if (this.currentTab === "overview" && tabId !== "overview") {
+      this._stopChartPolling();
+    }
+
+    // Resume chart polling when returning to overview tab
+    if (tabId === "overview" && this.candlestickSeries) {
+      this._startChartPolling();
+    }
 
     this.currentTab = tabId;
     this._loadTabContent(tabId);
@@ -869,11 +1053,26 @@ export class TokenDetailsDialog {
     this.candlestickSeries = candlestickSeries;
 
     // Load initial data
-    await this._loadChartData(mint, timeframeSelect.value);
+    this.currentTimeframe = timeframeSelect.value;
+    await this._loadChartData(mint, this.currentTimeframe);
+
+    // Start chart polling (every 5 seconds for new candles)
+    this._startChartPolling();
 
     // Handle timeframe changes
     timeframeSelect.addEventListener("change", async (e) => {
-      await this._loadChartData(mint, e.target.value);
+      this.currentTimeframe = e.target.value;
+      
+      // Trigger immediate OHLCV refresh for new timeframe
+      await this._triggerOhlcvRefresh();
+      
+      // Small delay to let backend fetch fresh data
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // Load chart data
+      await this._loadChartData(mint, this.currentTimeframe);
+      
+      // Chart polling will continue with new timeframe
     });
 
     // Handle resize
@@ -894,14 +1093,15 @@ export class TokenDetailsDialog {
     try {
       const response = await fetch(`/api/tokens/${mint}/ohlcv?timeframe=${timeframe}`);
       if (!response.ok) {
-        throw new Error(`Failed to fetch OHLCV data: ${response.statusText}`);
+        // Silently return - expected for new tokens
+        return;
       }
 
       const data = await response.json();
 
       // Backend returns flat array of OhlcvPoint objects
       if (!Array.isArray(data) || data.length === 0) {
-        console.warn("No OHLCV data available for this token");
+        // Silently return - no data available yet
         return;
       }
 
@@ -931,7 +1131,7 @@ export class TokenDetailsDialog {
         });
       }
     } catch (error) {
-      console.error("Error loading chart data:", error);
+      // Silently fail - expected for tokens without OHLCV data
     }
   }
 
