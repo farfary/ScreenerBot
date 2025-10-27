@@ -9,10 +9,7 @@ use crate::trader::types::{TradeDecision, TradeReason, TradeResult};
 pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, String> {
     // Check connectivity before executing trade - critical operation
     if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["rpc"]).await {
-        let error = format!(
-            "Cannot execute sell - Unhealthy endpoints: {}",
-            unhealthy
-        );
+        let error = format!("Cannot execute sell - Unhealthy endpoints: {}", unhealthy);
         logger::error(LogTag::Trader, &error);
         return Ok(TradeResult::failure(decision.clone(), error, 0));
     }

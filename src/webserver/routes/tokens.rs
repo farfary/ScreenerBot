@@ -1185,17 +1185,16 @@ async fn get_token_dexscreener(
                     "mint={} price_sol={:.9} liquidity_usd={} fetched={}",
                     mint,
                     dexscreener_data.price_sol,
-                    dexscreener_data.liquidity_usd.map_or("N/A".to_string(), |v| format!("{:.2}", v)),
+                    dexscreener_data
+                        .liquidity_usd
+                        .map_or("N/A".to_string(), |v| format!("{:.2}", v)),
                     dexscreener_data.fetched_at.format("%Y-%m-%d %H:%M:%S")
                 ),
             );
             Ok(Json(dexscreener_data))
         }
         None => {
-            logger::info(
-                LogTag::Webserver,
-                &format!("mint={} not found", mint),
-            );
+            logger::info(LogTag::Webserver, &format!("mint={} not found", mint));
             Err(StatusCode::NOT_FOUND)
         }
     }

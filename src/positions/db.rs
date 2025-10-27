@@ -504,7 +504,7 @@ impl PositionsDatabase {
                 if log_initialization {
                     crate::logger::info(
                         crate::logger::LogTag::Positions,
-                        "✅ PnL columns migration completed successfully"
+                        "✅ PnL columns migration completed successfully",
                     );
                 }
             }
@@ -515,14 +515,14 @@ impl PositionsDatabase {
                     if log_initialization {
                         crate::logger::debug(
                             crate::logger::LogTag::Positions,
-                            "PnL columns already exist, skipping migration"
+                            "PnL columns already exist, skipping migration",
                         );
                     }
                 } else {
                     // Real error - this is critical and should be logged
                     crate::logger::error(
                         crate::logger::LogTag::Positions,
-                        &format!("⚠️ CRITICAL: Failed to migrate PnL columns: {}", e)
+                        &format!("⚠️ CRITICAL: Failed to migrate PnL columns: {}", e),
                     );
                     return Err(format!("Database migration failed: {}", e));
                 }
@@ -1954,7 +1954,10 @@ impl PositionsDatabase {
             pnl: row.get::<_, Option<f64>>("pnl").ok().flatten(),
             pnl_percent: row.get::<_, Option<f64>>("pnl_percent").ok().flatten(),
             unrealized_pnl: row.get::<_, Option<f64>>("unrealized_pnl").ok().flatten(),
-            unrealized_pnl_percent: row.get::<_, Option<f64>>("unrealized_pnl_percent").ok().flatten(),
+            unrealized_pnl_percent: row
+                .get::<_, Option<f64>>("unrealized_pnl_percent")
+                .ok()
+                .flatten(),
             // New fields for partial exit and DCA support
             remaining_token_amount: row
                 .get::<_, Option<i64>>("remaining_token_amount")?

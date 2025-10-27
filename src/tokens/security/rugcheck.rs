@@ -147,7 +147,10 @@ pub async fn fetch_rugcheck_data(
     if !connectivity_ok {
         logger::debug(
             LogTag::Tokens,
-            &format!("Skipping Rugcheck API fetch for {} - connectivity issue", mint),
+            &format!(
+                "Skipping Rugcheck API fetch for {} - connectivity issue",
+                mint
+            ),
         );
         // Return stale DB data if available, otherwise None
         return Ok(db.get_rugcheck_data(mint)?);

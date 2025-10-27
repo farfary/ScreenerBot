@@ -449,12 +449,19 @@ impl TokenDatabase {
 
         // First check how many tokens exist
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM tokens WHERE decimals IS NOT NULL AND decimals > 0", [], |row| row.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM tokens WHERE decimals IS NOT NULL AND decimals > 0",
+                [],
+                |row| row.get(0),
+            )
             .unwrap_or(0);
-        
+
         crate::logger::debug(
             crate::logger::LogTag::Tokens,
-            &format!("[PRELOAD] Database query found {} tokens with decimals", count),
+            &format!(
+                "[PRELOAD] Database query found {} tokens with decimals",
+                count
+            ),
         );
 
         let mut stmt = conn
@@ -471,14 +478,18 @@ impl TokenDatabase {
             })
             .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
 
-        let result = rows.collect::<Result<Vec<_>, _>>()
+        let result = rows
+            .collect::<Result<Vec<_>, _>>()
             .map_err(|e| TokenError::Database(format!("Failed to collect: {}", e)))?;
-        
+
         crate::logger::debug(
             crate::logger::LogTag::Tokens,
-            &format!("[PRELOAD] Successfully collected {} decimals from database", result.len()),
+            &format!(
+                "[PRELOAD] Successfully collected {} decimals from database",
+                result.len()
+            ),
         );
-        
+
         Ok(result)
     }
 
@@ -873,9 +884,7 @@ impl TokenDatabase {
             .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
 
         let mut stmt = conn
-            .prepare(
-                "SELECT last_market_update FROM update_tracking WHERE mint = ?1",
-            )
+            .prepare("SELECT last_market_update FROM update_tracking WHERE mint = ?1")
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
 
         let result: Result<i64, rusqlite::Error> = stmt.query_row(params![mint], |row| row.get(0));

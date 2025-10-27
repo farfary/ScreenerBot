@@ -36,12 +36,43 @@ impl ConnectivityState {
         criticality: EndpointCriticality,
         fallback: Option<FallbackStrategy>,
     ) {
-        self.health
-            .insert(name, EndpointHealth::Unknown);
+        self.health.insert(name, EndpointHealth::Unknown);
         self.criticality.insert(name, criticality);
         self.fallback.insert(name, fallback);
         self.failures.insert(name, 0);
         self.successes.insert(name, 0);
+    }
+
+    /// Ensure endpoint metadata exists without resetting current health
+    pub fn ensure_endpoint_metadata(
+        &mut self,
+        name: &'static str,
+        criticality: EndpointCriticality,
+        fallback: Option<FallbackStrategy>,
+    ) {
+        self.health.entry(name).or_insert(EndpointHealth::Unknown);
+        self.failures.entry(name).or_insert(0);
+        self.successes.entry(name).or_insert(0);
+
+        let should_update_criticality = self
+            .criticality
+            .get(name)
+            .map(|current| *current != criticality)
+            .unwrap_or(true);
+
+        if should_update_criticality {
+            self.criticality.insert(name, criticality);
+        }
+
+        let should_update_fallback = self
+            .fallback
+            .get(name)
+            .map(|current| current != &fallback)
+            .unwrap_or(true);
+
+        if should_update_fallback {
+            self.fallback.insert(name, fallback);
+        }
     }
 
     /// Update health status for an endpoint
@@ -192,6 +223,17 @@ pub async fn register_endpoint(
     let state_arc = get_state();
     let mut state = state_arc.write().await;
     state.register_endpoint(name, criticality, fallback);
+}
+
+/// Ensure endpoint metadata exists without overwriting health state
+pub async fn ensure_endpoint_registered(
+    name: &'static str,
+    criticality: EndpointCriticality,
+    fallback: Option<FallbackStrategy>,
+) {
+    let state_arc = get_state();
+    let mut state = state_arc.write().await;
+    state.ensure_endpoint_metadata(name, criticality, fallback);
 }
 
 /// Update health status for an endpoint

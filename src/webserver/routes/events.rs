@@ -106,7 +106,13 @@ async fn get_events_head(Query(params): Query<HeadQuery>) -> Json<EventsListResp
         .as_ref()
         .map(|s| events::Severity::from_string(s));
     let total_count = db
-        .count_events_filtered(category_for_count, severity_for_count, mint, reference, search)
+        .count_events_filtered(
+            category_for_count,
+            severity_for_count,
+            mint,
+            reference,
+            search,
+        )
         .await
         .ok();
 

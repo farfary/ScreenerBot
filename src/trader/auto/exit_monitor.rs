@@ -245,11 +245,8 @@ async fn evaluate_position_for_exit(
     position: crate::positions::Position,
 ) -> Option<PositionEvaluation> {
     // Check connectivity before evaluating - exit depends on fresh price data
-    if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&[
-        "rpc",
-        "dexscreener",
-    ])
-    .await
+    if let Some(unhealthy) =
+        crate::connectivity::check_endpoints_healthy(&["rpc", "dexscreener"]).await
     {
         logger::debug(
             LogTag::Trader,

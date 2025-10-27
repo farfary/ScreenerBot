@@ -96,9 +96,14 @@ impl ApiStatsTracker {
     }
 
     /// Record error with event logging (for important API failures)
-    pub async fn record_error_with_event(&self, api_name: &str, action: &str, error_message: String) {
+    pub async fn record_error_with_event(
+        &self,
+        api_name: &str,
+        action: &str,
+        error_message: String,
+    ) {
         self.record_error(error_message.clone()).await;
-        
+
         // Record API error event (sampled - every 10th error to avoid spam)
         let failed = self.failed_requests.load(Ordering::Relaxed);
         if failed % 10 == 1 {

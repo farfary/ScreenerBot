@@ -92,11 +92,15 @@ impl PoolDiscovery {
 
     async fn fetch_dexscreener_batch(tokens: &[String]) -> DexsBatchResult {
         // Check connectivity before API call - graceful degradation
-        if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["dexscreener"]).await
+        if let Some(unhealthy) =
+            crate::connectivity::check_endpoints_healthy(&["dexscreener"]).await
         {
             logger::debug(
                 LogTag::PoolDiscovery,
-                &format!("Skipping DexScreener fetch - Unhealthy endpoints: {}", unhealthy),
+                &format!(
+                    "Skipping DexScreener fetch - Unhealthy endpoints: {}",
+                    unhealthy
+                ),
             );
             return DexsBatchResult {
                 pools: HashMap::new(),
@@ -149,11 +153,15 @@ impl PoolDiscovery {
 
     async fn fetch_geckoterminal_batch(tokens: &[String]) -> GeckoBatchResult {
         // Check connectivity before API call - graceful degradation
-        if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["geckoterminal"]).await
+        if let Some(unhealthy) =
+            crate::connectivity::check_endpoints_healthy(&["geckoterminal"]).await
         {
             logger::debug(
                 LogTag::PoolDiscovery,
-                &format!("Skipping GeckoTerminal fetch - Unhealthy endpoints: {}", unhealthy),
+                &format!(
+                    "Skipping GeckoTerminal fetch - Unhealthy endpoints: {}",
+                    unhealthy
+                ),
             );
             return GeckoBatchResult {
                 pools: HashMap::new(),

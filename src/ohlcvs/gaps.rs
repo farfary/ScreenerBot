@@ -146,7 +146,13 @@ impl GapManager {
         }
 
         // Store 1m data in unified table
-        let inserted = self.db.insert_candles_batch(mint, pool_address, Timeframe::Minute1, &data_1m, "gap_filler")?;
+        let inserted = self.db.insert_candles_batch(
+            mint,
+            pool_address,
+            Timeframe::Minute1,
+            &data_1m,
+            "gap_filler",
+        )?;
 
         // Mark gap as filled if we got data
         if inserted > 0 {
@@ -291,9 +297,14 @@ impl GapManager {
         pool_address: &str,
         timeframe: Timeframe,
     ) -> OhlcvResult<DataQualityReport> {
-        let mut data = self
-            .db
-            .get_candles(mint, Some(pool_address), Timeframe::Minute1, None, None, Some(10000))?;
+        let mut data = self.db.get_candles(
+            mint,
+            Some(pool_address),
+            Timeframe::Minute1,
+            None,
+            None,
+            Some(10000),
+        )?;
 
         let total_candles = data.len();
 

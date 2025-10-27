@@ -82,6 +82,12 @@ config_struct! {
             enabled: true,
             timeout_secs: 5,
         },
+
+        /// GMGN API monitoring
+        gmgn: EndpointMonitorConfig = EndpointMonitorConfig {
+            enabled: true,
+            timeout_secs: 10,
+        },
     }
 }
 

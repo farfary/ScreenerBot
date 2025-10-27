@@ -140,7 +140,11 @@ impl DexScreenerClient {
             Err(err) => {
                 self.stats.record_request(false, elapsed).await;
                 self.stats
-                    .record_error_with_event("DexScreener", endpoint, format!("Request failed: {}", err))
+                    .record_error_with_event(
+                        "DexScreener",
+                        endpoint,
+                        format!("Request failed: {}", err),
+                    )
                     .await;
                 Err(format!("Request failed: {}", err))
             }
@@ -163,7 +167,11 @@ impl DexScreenerClient {
             let body = response.text().await.unwrap_or_default();
             self.stats.record_request(false, elapsed).await;
             self.stats
-                .record_error_with_event("DexScreener", endpoint, format!("HTTP {}: {}", status, body))
+                .record_error_with_event(
+                    "DexScreener",
+                    endpoint,
+                    format!("HTTP {}: {}", status, body),
+                )
                 .await;
             return Err(format!("DexScreener API error {}: {}", status, body));
         }
@@ -176,7 +184,11 @@ impl DexScreenerClient {
             Err(err) => {
                 self.stats.record_request(false, elapsed).await;
                 self.stats
-                    .record_error_with_event("DexScreener", endpoint, format!("Parse error: {}", err))
+                    .record_error_with_event(
+                        "DexScreener",
+                        endpoint,
+                        format!("Parse error: {}", err),
+                    )
                     .await;
                 Err(format!("Failed to parse response: {}", err))
             }
@@ -343,7 +355,11 @@ impl DexScreenerClient {
             let body = response.text().await.unwrap_or_default();
             self.stats.record_request(false, elapsed).await;
             self.stats
-                .record_error_with_event("DexScreener", endpoint, format!("HTTP {}: {}", status, body))
+                .record_error_with_event(
+                    "DexScreener",
+                    endpoint,
+                    format!("HTTP {}: {}", status, body),
+                )
                 .await;
             return Err(format!("DexScreener API error {}: {}", status, body));
         }
@@ -353,7 +369,11 @@ impl DexScreenerClient {
             Err(err) => {
                 self.stats.record_request(false, elapsed).await;
                 self.stats
-                    .record_error_with_event("DexScreener", endpoint, format!("Parse error: {}", err))
+                    .record_error_with_event(
+                        "DexScreener",
+                        endpoint,
+                        format!("Parse error: {}", err),
+                    )
                     .await;
                 return Err(format!("Failed to parse response: {}", err));
             }
@@ -367,7 +387,11 @@ impl DexScreenerClient {
             Err(err) => {
                 self.stats.record_request(false, elapsed).await;
                 self.stats
-                    .record_error_with_event("DexScreener", endpoint, format!("Conversion error: {}", err))
+                    .record_error_with_event(
+                        "DexScreener",
+                        endpoint,
+                        format!("Conversion error: {}", err),
+                    )
                     .await;
                 Err(format!("Failed to decode token profiles: {}", err))
             }
@@ -463,7 +487,11 @@ impl DexScreenerClient {
             let body = response.text().await.unwrap_or_default();
             self.stats.record_request(false, elapsed).await;
             self.stats
-                .record_error_with_event("DexScreener", endpoint, format!("HTTP {}: {}", status, body))
+                .record_error_with_event(
+                    "DexScreener",
+                    endpoint,
+                    format!("HTTP {}: {}", status, body),
+                )
                 .await;
             return Err(format!("DexScreener API error {}: {}", status, body));
         }
@@ -478,7 +506,11 @@ impl DexScreenerClient {
             Err(err) => {
                 self.stats.record_request(false, elapsed).await;
                 self.stats
-                    .record_error_with_event("DexScreener", endpoint, format!("Parse error: {}", err))
+                    .record_error_with_event(
+                        "DexScreener",
+                        endpoint,
+                        format!("Parse error: {}", err),
+                    )
                     .await;
                 Err(format!("Failed to parse response: {}", err))
             }
@@ -511,7 +543,11 @@ impl DexScreenerClient {
             let body = response.text().await.unwrap_or_default();
             self.stats.record_request(false, elapsed).await;
             self.stats
-                .record_error_with_event("DexScreener", &endpoint, format!("HTTP {}: {}", status, body))
+                .record_error_with_event(
+                    "DexScreener",
+                    &endpoint,
+                    format!("HTTP {}: {}", status, body),
+                )
                 .await;
             return Err(format!("DexScreener API error {}: {}", status, body));
         }
@@ -524,7 +560,11 @@ impl DexScreenerClient {
             Err(err) => {
                 self.stats.record_request(false, elapsed).await;
                 self.stats
-                    .record_error_with_event("DexScreener", &endpoint, format!("Parse error: {}", err))
+                    .record_error_with_event(
+                        "DexScreener",
+                        &endpoint,
+                        format!("Parse error: {}", err),
+                    )
                     .await;
                 Err(format!("Failed to parse response: {}", err))
             }

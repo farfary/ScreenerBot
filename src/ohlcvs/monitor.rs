@@ -976,7 +976,13 @@ impl OhlcvMonitor {
         data_points.dedup_by_key(|p| p.timestamp);
 
         // Store in unified candles table with timeframe=Minute1
-        self.db.insert_candles_batch(mint, pool_address, Timeframe::Minute1, &data_points, "monitor")?;
+        self.db.insert_candles_batch(
+            mint,
+            pool_address,
+            Timeframe::Minute1,
+            &data_points,
+            "monitor",
+        )?;
 
         // Update cache
         self.cache.put(
@@ -1490,13 +1496,9 @@ impl OhlcvMonitor {
         }
 
         // Store in database
-        let inserted = self.db.insert_candles_batch(
-            mint,
-            pool_address,
-            timeframe,
-            &candles,
-            "backfill",
-        )?;
+        let inserted =
+            self.db
+                .insert_candles_batch(mint, pool_address, timeframe, &candles, "backfill")?;
 
         // Update cache
         self.cache

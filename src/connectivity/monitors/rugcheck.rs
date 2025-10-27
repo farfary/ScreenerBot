@@ -1,6 +1,6 @@
+use crate::config::get_config_clone;
 use crate::connectivity::monitor::EndpointMonitor;
 use crate::connectivity::types::{EndpointCriticality, FallbackStrategy, HealthCheckResult};
-use crate::config::get_config_clone;
 use async_trait::async_trait;
 use std::time::Instant;
 use tokio::time::{timeout, Duration};
@@ -32,8 +32,7 @@ impl EndpointMonitor for RugcheckMonitor {
 
     fn is_enabled(&self) -> bool {
         let cfg = get_config_clone();
-        cfg.connectivity.enabled
-            && cfg.connectivity.endpoints.rugcheck.enabled
+        cfg.connectivity.enabled && cfg.connectivity.endpoints.rugcheck.enabled
     }
 
     async fn check_health(&self) -> HealthCheckResult {

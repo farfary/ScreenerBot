@@ -1,16 +1,16 @@
 // tokens/decimals.rs
 // Decimals lookup with memory caching and on-chain fallback
-// 
+//
 // ARCHITECTURE - SINGLE SOURCE OF TRUTH:
 // - Memory cache (DECIMALS_CACHE) is the PRIMARY source for all reads
 // - Database is ONLY for persistence and startup preload
 // - Chain RPC is ONLY fetched once per token, then cached forever
-// 
+//
 // CACHE POPULATION:
 // 1. Startup: service_new.rs loads all DB decimals into cache
 // 2. Runtime: database.rs::upsert_token() caches on every DB write
 // 3. Fallback: decimals::get() fetches from chain if cache/DB miss
-// 
+//
 // USAGE:
 // - Pool decoders (sync): MUST use get_cached() - no fallback
 // - Business logic (async): Use get() for guaranteed decimals with fallback
@@ -64,8 +64,7 @@ pub fn get_cached(mint: &str) -> Option<u8> {
         .read()
         .ok()
         .and_then(|m| m.get(mint).copied());
-    
-    
+
     result
 }
 
@@ -310,7 +309,7 @@ async fn get_from_rugcheck(mint: &str) -> Option<u8> {
 }
 
 /// Persist decimals to database (internal - only called by get() after chain fetch)
-/// 
+///
 /// NOTE: This calls upsert_token() which will ALSO update the cache automatically.
 /// This ensures cache and DB stay synchronized.
 async fn persist_to_db(mint: &str, decimals: u8) -> Result<(), String> {

@@ -681,8 +681,7 @@ impl OhlcvDatabase {
             .prepare(&query)
             .map_err(|e| OhlcvError::DatabaseError(format!("Prepare failed: {}", e)))?;
 
-        let param_refs: Vec<&dyn rusqlite::ToSql> =
-            params_vec.iter().map(|p| p.as_ref()).collect();
+        let param_refs: Vec<&dyn rusqlite::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
 
         let candles = stmt
             .query_map(param_refs.as_slice(), |row| {
@@ -800,11 +799,9 @@ impl OhlcvDatabase {
             .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
 
         let count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM ohlcv_candles",
-                params![],
-                |row| row.get(0),
-            )
+            .query_row("SELECT COUNT(*) FROM ohlcv_candles", params![], |row| {
+                row.get(0)
+            })
             .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {}", e)))?;
 
         Ok(count as usize)

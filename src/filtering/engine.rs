@@ -185,21 +185,30 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
                 let mint_for_priority = token.mint.clone();
                 tokio::spawn(async move {
                     // Check if market data is stale (>120 seconds old)
-                    let is_stale = match crate::tokens::is_market_data_stale_async(&mint_for_priority, 120).await {
-                        Ok(stale) => stale,
-                        Err(e) => {
-                            logger::warning(
-                                LogTag::Filtering,
-                                &format!("Failed to check staleness for {}: {}, assuming stale", mint_for_priority, e),
-                            );
-                            true // Default to stale on error
-                        }
-                    };
+                    let is_stale =
+                        match crate::tokens::is_market_data_stale_async(&mint_for_priority, 120)
+                            .await
+                        {
+                            Ok(stale) => stale,
+                            Err(e) => {
+                                logger::warning(
+                                    LogTag::Filtering,
+                                    &format!(
+                                        "Failed to check staleness for {}: {}, assuming stale",
+                                        mint_for_priority, e
+                                    ),
+                                );
+                                true // Default to stale on error
+                            }
+                        };
 
                     // Set priority: Pool (75) if stale, High (50) if fresh
                     let priority = if is_stale { 75 } else { 50 };
-                    
-                    if let Err(e) = crate::tokens::update_token_priority_async(&mint_for_priority, priority).await {
+
+                    if let Err(e) =
+                        crate::tokens::update_token_priority_async(&mint_for_priority, priority)
+                            .await
+                    {
                         logger::error(
                             LogTag::Filtering,
                             &format!(
@@ -299,7 +308,7 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
         .iter()
         .map(|(reason, count)| (reason.label().to_string(), *count))
         .collect::<Vec<_>>();
-    
+
     record_filtering_event(
         "snapshot_compute_complete",
         Severity::Info,

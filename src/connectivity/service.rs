@@ -1,10 +1,10 @@
+use crate::config::get_config_clone;
 use crate::connectivity::monitor::EndpointMonitor;
 use crate::connectivity::monitors::{
-    DexScreenerMonitor, GeckoTerminalMonitor, InternetMonitor, JupiterMonitor, RpcMonitor,
-    RugcheckMonitor,
+    DexScreenerMonitor, GeckoTerminalMonitor, GmgnMonitor, InternetMonitor, JupiterMonitor,
+    RpcMonitor, RugcheckMonitor,
 };
 use crate::connectivity::state;
-use crate::config::get_config_clone;
 use crate::events::{record_connectivity_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth};
@@ -37,6 +37,7 @@ impl ConnectivityService {
             Box::new(DexScreenerMonitor::new()),
             Box::new(GeckoTerminalMonitor::new()),
             Box::new(RugcheckMonitor::new()),
+            Box::new(GmgnMonitor::new()),
             Box::new(JupiterMonitor::new()),
         ];
 
@@ -78,6 +79,11 @@ impl ConnectivityService {
         }
 
         let name = monitor.name();
+        let criticality = monitor.criticality();
+        let fallback = monitor.fallback_strategy();
+
+        state::ensure_endpoint_registered(name, criticality, fallback).await;
+
         let result = monitor.check_health().await;
 
         let cfg = get_config_clone();
@@ -105,9 +111,7 @@ impl ConnectivityService {
                     );
                 }
                 crate::connectivity::types::EndpointHealth::Degraded {
-                    latency_ms,
-                    reason,
-                    ..
+                    latency_ms, reason, ..
                 } => {
                     logger::warning(
                         LogTag::Connectivity,
@@ -141,11 +145,8 @@ impl ConnectivityService {
                     consecutive_failures,
                     ..
                 } => {
-                    let criticality = monitor.criticality();
                     let log_fn = match criticality {
-                        crate::connectivity::types::EndpointCriticality::Critical => {
-                            logger::error
-                        }
+                        crate::connectivity::types::EndpointCriticality::Critical => logger::error,
                         crate::connectivity::types::EndpointCriticality::Important => {
                             logger::warning
                         }
@@ -270,8 +271,7 @@ impl Service for ConnectivityService {
         self.register_monitors().await;
 
         // Set readiness flag
-        crate::global::CONNECTIVITY_SYSTEM_READY
-            .store(true, std::sync::atomic::Ordering::SeqCst);
+        crate::global::CONNECTIVITY_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);
 
         logger::info(
             LogTag::Connectivity,
@@ -293,7 +293,10 @@ impl Service for ConnectivityService {
 
         let cfg = get_config_clone();
         if !cfg.connectivity.enabled {
-            logger::info(LogTag::Connectivity, "Connectivity monitoring disabled in config");
+            logger::info(
+                LogTag::Connectivity,
+                "Connectivity monitoring disabled in config",
+            );
             return Ok(vec![]);
         }
 

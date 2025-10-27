@@ -46,8 +46,13 @@ pub async fn gmgn_sign_and_send_transaction(
     swap_transaction_base64: &str,
 ) -> Result<String, ScreenerBotError> {
     // Check connectivity before sending transaction - critical operation
-    if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["internet", "rpc"]).await {
-        let error = format!("Cannot send GMGN transaction - Unhealthy endpoints: {}", unhealthy);
+    if let Some(unhealthy) =
+        crate::connectivity::check_endpoints_healthy(&["internet", "rpc"]).await
+    {
+        let error = format!(
+            "Cannot send GMGN transaction - Unhealthy endpoints: {}",
+            unhealthy
+        );
         logger::error(LogTag::Swap, &error);
         return Err(ScreenerBotError::connectivity_error(error));
     }
@@ -105,9 +110,13 @@ pub async fn get_gmgn_quote(
     swap_mode: &str,
 ) -> Result<SwapData, ScreenerBotError> {
     // Check connectivity before fetching quote - GMGN API required
-    if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["internet", "rpc"]).await
+    if let Some(unhealthy) =
+        crate::connectivity::check_endpoints_healthy(&["internet", "rpc"]).await
     {
-        let error = format!("Cannot fetch GMGN quote - Unhealthy endpoints: {}", unhealthy);
+        let error = format!(
+            "Cannot fetch GMGN quote - Unhealthy endpoints: {}",
+            unhealthy
+        );
         logger::warning(LogTag::Swap, &error);
         return Err(ScreenerBotError::connectivity_error(error));
     }

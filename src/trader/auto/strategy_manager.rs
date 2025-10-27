@@ -18,12 +18,8 @@ impl StrategyManager {
         price_info: &PriceResult,
     ) -> Result<Option<TradeDecision>, String> {
         // Check connectivity before evaluating - entry depends on external data
-        if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&[
-            "rpc",
-            "dexscreener",
-            "rugcheck",
-        ])
-        .await
+        if let Some(unhealthy) =
+            crate::connectivity::check_endpoints_healthy(&["rpc", "dexscreener", "rugcheck"]).await
         {
             logger::warning(
                 LogTag::Trader,
@@ -130,11 +126,8 @@ impl StrategyManager {
         current_price: f64,
     ) -> Result<Option<TradeDecision>, String> {
         // Check connectivity before evaluating - exit depends on fresh price data
-        if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&[
-            "rpc",
-            "dexscreener",
-        ])
-        .await
+        if let Some(unhealthy) =
+            crate::connectivity::check_endpoints_healthy(&["rpc", "dexscreener"]).await
         {
             logger::warning(
                 LogTag::Trader,

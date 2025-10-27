@@ -56,7 +56,10 @@ pub async fn jupiter_sign_and_send_transaction(
 ) -> Result<String, ScreenerBotError> {
     // Check connectivity before sending transaction - critical operation
     if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["rpc"]).await {
-        let error = format!("Cannot send Jupiter transaction - Unhealthy endpoints: {}", unhealthy);
+        let error = format!(
+            "Cannot send Jupiter transaction - Unhealthy endpoints: {}",
+            unhealthy
+        );
         logger::error(LogTag::Swap, &error);
         return Err(ScreenerBotError::connectivity_error(error));
     }
@@ -104,7 +107,10 @@ pub async fn get_jupiter_quote(
     // Check connectivity before fetching quote - Jupiter API required
     if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["jupiter", "rpc"]).await
     {
-        let error = format!("Cannot fetch Jupiter quote - Unhealthy endpoints: {}", unhealthy);
+        let error = format!(
+            "Cannot fetch Jupiter quote - Unhealthy endpoints: {}",
+            unhealthy
+        );
         logger::warning(LogTag::Swap, &error);
         return Err(ScreenerBotError::connectivity_error(error));
     }

@@ -135,8 +135,9 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             if updated && requires_db_update {
                 if let Some(position) = get_position_by_id(position_id).await {
                     // Calculate final P&L for closed position BEFORE any database operations
-                    let (pnl_sol, pnl_pct) = crate::positions::calculate_position_pnl(&position, None).await;
-                    
+                    let (pnl_sol, pnl_pct) =
+                        crate::positions::calculate_position_pnl(&position, None).await;
+
                     // Atomically update position with PnL in a single operation
                     let pnl_updated = update_position_state(&position.mint, |pos| {
                         pos.pnl = Some(pnl_sol);
@@ -144,16 +145,20 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         // Clear unrealized PnL (position is now closed)
                         pos.unrealized_pnl = None;
                         pos.unrealized_pnl_percent = None;
-                    }).await;
-                    
+                    })
+                    .await;
+
                     if !pnl_updated {
                         logger::error(
                             LogTag::Positions,
-                            &format!("Failed to update PnL for closed position {}", position.symbol),
+                            &format!(
+                                "Failed to update PnL for closed position {}",
+                                position.symbol
+                            ),
                         );
                         // Continue anyway - position is closed, PnL is secondary
                     }
-                    
+
                     // Refresh position after PnL update for loss detection
                     if let Some(position) = get_position_by_id(position_id).await {
                         // Process loss detection and potential blacklisting
@@ -168,52 +173,52 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         }
 
                         match update_position(&position).await {
-                        Ok(_) => {
-                            effects.db_updated = true;
-                            effects.position_closed = true;
-                            let _ = force_database_sync().await;
+                            Ok(_) => {
+                                effects.db_updated = true;
+                                effects.position_closed = true;
+                                let _ = force_database_sync().await;
 
-                            // CRITICAL: Release global position permit when position is verified closed
-                            // This allows new positions to be opened, fixing the MAX_OPEN_POSITIONS limit
-                            release_global_position_permit();
+                                // CRITICAL: Release global position permit when position is verified closed
+                                // This allows new positions to be opened, fixing the MAX_OPEN_POSITIONS limit
+                                release_global_position_permit();
 
-                            // Record an exit verified event with basic P&L if computable
-                            let pnl_sol =
-                                position.sol_received.map(|s| s - position.total_size_sol);
-                            let pnl_pct = position.effective_entry_price.and_then(|ep| {
-                                position.effective_exit_price.map(|xp| {
-                                    if ep > 0.0 {
-                                        ((xp - ep) / ep) * 100.0
-                                    } else {
-                                        0.0
-                                    }
-                                })
-                            });
-                            crate::events::record_position_event(
-                                &position_id.to_string(),
-                                &position.mint,
-                                "exit_verified",
-                                position.entry_transaction_signature.as_deref(),
-                                position.exit_transaction_signature.as_deref(),
-                                position.total_size_sol,
-                                position.token_amount.unwrap_or(0),
-                                pnl_sol,
-                                pnl_pct,
-                            )
-                            .await;
+                                // Record an exit verified event with basic P&L if computable
+                                let pnl_sol =
+                                    position.sol_received.map(|s| s - position.total_size_sol);
+                                let pnl_pct = position.effective_entry_price.and_then(|ep| {
+                                    position.effective_exit_price.map(|xp| {
+                                        if ep > 0.0 {
+                                            ((xp - ep) / ep) * 100.0
+                                        } else {
+                                            0.0
+                                        }
+                                    })
+                                });
+                                crate::events::record_position_event(
+                                    &position_id.to_string(),
+                                    &position.mint,
+                                    "exit_verified",
+                                    position.entry_transaction_signature.as_deref(),
+                                    position.exit_transaction_signature.as_deref(),
+                                    position.total_size_sol,
+                                    position.token_amount.unwrap_or(0),
+                                    pnl_sol,
+                                    pnl_pct,
+                                )
+                                .await;
 
-                            logger::info(
-                                LogTag::Positions,
-                                &format!(
-                                    "🔓 Released position slot for verified exit (ID: {})",
-                                    position_id
-                                ),
-                            );
+                                logger::info(
+                                    LogTag::Positions,
+                                    &format!(
+                                        "🔓 Released position slot for verified exit (ID: {})",
+                                        position_id
+                                    ),
+                                );
+                            }
+                            Err(e) => {
+                                return Err(format!("Failed to update database: {}", e));
+                            }
                         }
-                        Err(e) => {
-                            return Err(format!("Failed to update database: {}", e));
-                        }
-                    }
                     }
                 }
             }
@@ -429,14 +434,19 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     // Calculate unrealized PnL immediately after partial exit
                     // Don't wait for price updater (eliminates up to 1 second delay)
                     if let Some(current_price) = position.current_price {
-                        let (pnl_sol, pnl_pct) = crate::positions::calculate_position_pnl(&position, Some(current_price)).await;
-                        
+                        let (pnl_sol, pnl_pct) = crate::positions::calculate_position_pnl(
+                            &position,
+                            Some(current_price),
+                        )
+                        .await;
+
                         // Update unrealized PnL in memory
                         update_position_state(&position.mint, |pos| {
                             pos.unrealized_pnl = Some(pnl_sol);
                             pos.unrealized_pnl_percent = Some(pnl_pct);
-                        }).await;
-                        
+                        })
+                        .await;
+
                         // Refresh position to get updated PnL
                         if let Some(updated_pos) = get_position_by_id(position_id).await {
                             position = updated_pos;
@@ -447,7 +457,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             &format!("No current price available for {} after partial exit, PnL will update on next price tick", position.symbol),
                         );
                     }
-                    
+
                     match update_position(&position).await {
                         Ok(_) => {
                             effects.db_updated = true;

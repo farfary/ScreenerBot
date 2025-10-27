@@ -72,7 +72,7 @@ impl EndpointHealth {
 }
 
 /// Fallback strategy when endpoint is unavailable
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "lowercase")]
 pub enum FallbackStrategy {
     /// Use cached data if available and not older than max_age_secs

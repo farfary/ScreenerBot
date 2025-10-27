@@ -104,16 +104,16 @@ async fn get_connectivity_status() -> Response {
         if !health.is_available() {
             all_healthy = false;
         }
-        endpoints.insert(name.to_string(), EndpointHealthResponse::from(health.clone()));
+        endpoints.insert(
+            name.to_string(),
+            EndpointHealthResponse::from(health.clone()),
+        );
     }
 
     let response = ConnectivityStatusResponse {
         all_healthy,
         critical_healthy: unhealthy_critical.is_empty(),
-        unhealthy_critical_endpoints: unhealthy_critical
-            .iter()
-            .map(|s| s.to_string())
-            .collect(),
+        unhealthy_critical_endpoints: unhealthy_critical.iter().map(|s| s.to_string()).collect(),
         endpoints,
     };
 

@@ -72,7 +72,7 @@ async fn find_position_by_signature(signature: &str) -> Option<(String, usize)> 
 /// Returns (pnl_sol, pnl_percent)
 /// For open positions: calculates both realized (from partial exits) and unrealized P&L
 /// For closed positions: returns only realized P&L
-/// 
+///
 /// NOTE: Returns (0.0, 0.0) if calculation fails due to invalid prices.
 /// Use calculate_position_pnl_safe() wrapper to distinguish between zero PnL and errors.
 pub async fn calculate_position_pnl(position: &Position, current_price: Option<f64>) -> (f64, f64) {
@@ -322,16 +322,22 @@ pub async fn calculate_position_pnl_safe(
     current_price: Option<f64>,
 ) -> Option<(f64, f64)> {
     // Pre-validate entry price
-    let entry_price = if position.average_entry_price > 0.0 && position.average_entry_price.is_finite() {
-        position.average_entry_price
-    } else {
-        position.effective_entry_price.unwrap_or(position.entry_price)
-    };
+    let entry_price =
+        if position.average_entry_price > 0.0 && position.average_entry_price.is_finite() {
+            position.average_entry_price
+        } else {
+            position
+                .effective_entry_price
+                .unwrap_or(position.entry_price)
+        };
 
     if entry_price <= 0.0 || !entry_price.is_finite() {
         logger::debug(
             LogTag::Positions,
-            &format!("Cannot calculate PnL for {} - invalid entry price: {}", position.symbol, entry_price),
+            &format!(
+                "Cannot calculate PnL for {} - invalid entry price: {}",
+                position.symbol, entry_price
+            ),
         );
         return None;
     }
@@ -341,7 +347,10 @@ pub async fn calculate_position_pnl_safe(
         if current <= 0.0 || !current.is_finite() {
             logger::debug(
                 LogTag::Positions,
-                &format!("Cannot calculate PnL for {} - invalid current price: {}", position.symbol, current),
+                &format!(
+                    "Cannot calculate PnL for {} - invalid current price: {}",
+                    position.symbol, current
+                ),
             );
             return None;
         }
@@ -349,7 +358,7 @@ pub async fn calculate_position_pnl_safe(
 
     // Call the calculation function
     let result = calculate_position_pnl(position, current_price).await;
-    
+
     // Return result wrapped in Some - caller can now distinguish None (error) from Some((0.0, 0.0)) (break-even)
     Some(result)
 }

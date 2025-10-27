@@ -966,7 +966,12 @@ impl EventsDatabase {
         if let Some(cat) = category {
             query.push_str(&format!(
                 "{} category = ?{}",
-                if where_added { " AND" } else { where_added = true; " WHERE" },
+                if where_added {
+                    " AND"
+                } else {
+                    where_added = true;
+                    " WHERE"
+                },
                 idx
             ));
             bind.push(Box::new(cat.to_string()));
@@ -975,7 +980,12 @@ impl EventsDatabase {
         if let Some(sev) = severity {
             query.push_str(&format!(
                 "{} severity = ?{}",
-                if where_added { " AND" } else { where_added = true; " WHERE" },
+                if where_added {
+                    " AND"
+                } else {
+                    where_added = true;
+                    " WHERE"
+                },
                 idx
             ));
             bind.push(Box::new(sev.to_string()));
@@ -984,7 +994,12 @@ impl EventsDatabase {
         if let Some(m) = mint {
             query.push_str(&format!(
                 "{} mint = ?{}",
-                if where_added { " AND" } else { where_added = true; " WHERE" },
+                if where_added {
+                    " AND"
+                } else {
+                    where_added = true;
+                    " WHERE"
+                },
                 idx
             ));
             bind.push(Box::new(m.to_string()));
@@ -993,7 +1008,12 @@ impl EventsDatabase {
         if let Some(r) = reference_id {
             query.push_str(&format!(
                 "{} reference_id = ?{}",
-                if where_added { " AND" } else { where_added = true; " WHERE" },
+                if where_added {
+                    " AND"
+                } else {
+                    where_added = true;
+                    " WHERE"
+                },
                 idx
             ));
             bind.push(Box::new(r.to_string()));
@@ -1003,7 +1023,12 @@ impl EventsDatabase {
             let wildcard = format!("%{}%", search_term.to_lowercase());
             query.push_str(&format!(
                 "{} LOWER(json_payload) LIKE ?{}",
-                if where_added { " AND" } else { where_added = true; " WHERE" },
+                if where_added {
+                    " AND"
+                } else {
+                    where_added = true;
+                    " WHERE"
+                },
                 idx
             ));
             bind.push(Box::new(wildcard));
@@ -1012,7 +1037,10 @@ impl EventsDatabase {
         let count: i64 = conn
             .query_row(
                 &query,
-                bind.iter().map(|b| b.as_ref()).collect::<Vec<_>>().as_slice(),
+                bind.iter()
+                    .map(|b| b.as_ref())
+                    .collect::<Vec<_>>()
+                    .as_slice(),
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to count filtered events: {}", e))?;

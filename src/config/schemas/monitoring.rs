@@ -10,4 +10,3 @@ config_struct! {
         // Reserved for future monitoring configuration (metrics, profiling, etc.)
     }
 }
-

@@ -1,6 +1,6 @@
+use crate::config::get_config_clone;
 use crate::connectivity::monitor::EndpointMonitor;
 use crate::connectivity::types::{EndpointCriticality, FallbackStrategy, HealthCheckResult};
-use crate::config::get_config_clone;
 use async_trait::async_trait;
 use std::time::Instant;
 use tokio::net::TcpStream;
@@ -43,10 +43,7 @@ impl InternetMonitor {
             }
         }
 
-        Err(format!(
-            "All DNS servers unreachable: {:?}",
-            dns_servers
-        ))
+        Err(format!("All DNS servers unreachable: {:?}", dns_servers))
     }
 
     /// Check HTTP connectivity by making request to known endpoints
@@ -71,7 +68,7 @@ impl InternetMonitor {
                     let latency = start.elapsed().as_millis() as u64;
                     return Ok(latency);
                 }
-                Ok(_) => continue, // Non-success status, try next
+                Ok(_) => continue,  // Non-success status, try next
                 Err(_) => continue, // Request failed, try next
             }
         }

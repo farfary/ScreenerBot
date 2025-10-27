@@ -1,9 +1,7 @@
+use crate::config::get_config_clone;
 use crate::connectivity::monitor::EndpointMonitor;
 use crate::connectivity::types::{EndpointCriticality, FallbackStrategy, HealthCheckResult};
-use crate::config::get_config_clone;
 use async_trait::async_trait;
-use solana_client::rpc_client::RpcClient;
-use std::time::Instant;
 
 /// RPC endpoint monitor - checks health of all configured RPC URLs
 pub struct RpcMonitor;
@@ -11,27 +9,6 @@ pub struct RpcMonitor;
 impl RpcMonitor {
     pub fn new() -> Self {
         Self
-    }
-
-    /// Check health of a single RPC URL
-    async fn check_rpc_url(&self, url: &str, timeout_secs: u64) -> Result<u64, String> {
-        let start = Instant::now();
-
-        // Create temporary RPC client for health check
-        let rpc_client = RpcClient::new_with_timeout(
-            url.to_string(),
-            std::time::Duration::from_secs(timeout_secs),
-        );
-
-        // Use getHealth RPC method (lightweight and fast)
-        match tokio::task::spawn_blocking(move || rpc_client.get_health()).await {
-            Ok(Ok(_)) => {
-                let latency = start.elapsed().as_millis() as u64;
-                Ok(latency)
-            }
-            Ok(Err(e)) => Err(format!("RPC health check failed: {}", e)),
-            Err(e) => Err(format!("RPC health check task failed: {}", e)),
-        }
     }
 }
 
@@ -56,8 +33,9 @@ impl EndpointMonitor for RpcMonitor {
 
     async fn check_health(&self) -> HealthCheckResult {
         let cfg = get_config_clone();
-        let timeout_secs = cfg.connectivity.health_check_timeout_secs;
-        let rpc_urls = &cfg.rpc.urls;
+        let timeout_secs = cfg.connectivity.endpoints.rpc.timeout_secs.max(1);
+        let rpc_client = crate::rpc::get_rpc_client();
+        let rpc_urls = rpc_client.get_all_urls();
 
         if rpc_urls.is_empty() {
             return HealthCheckResult::failure("No RPC URLs configured".to_string());
@@ -68,8 +46,8 @@ impl EndpointMonitor for RpcMonitor {
         let mut errors = Vec::new();
 
         // Check all RPC URLs
-        for url in rpc_urls {
-            match self.check_rpc_url(url, timeout_secs).await {
+        for url in &rpc_urls {
+            match rpc_client.probe_get_health(url, timeout_secs).await {
                 Ok(latency) => {
                     successful_checks += 1;
                     total_latency += latency;
@@ -83,7 +61,7 @@ impl EndpointMonitor for RpcMonitor {
         // If at least one RPC is healthy, consider the endpoint available
         if successful_checks > 0 {
             let avg_latency = total_latency / successful_checks;
-            
+
             if (successful_checks as usize) < rpc_urls.len() {
                 // Some RPCs failed
                 HealthCheckResult::degraded(

@@ -484,12 +484,7 @@ pub async fn record_trader_event(
 }
 
 /// Record an API/RPC event with flexible payload metadata
-pub async fn record_api_event(
-    api_name: &str,
-    action: &str,
-    severity: Severity,
-    payload: Value,
-) {
+pub async fn record_api_event(api_name: &str, action: &str, severity: Severity, payload: Value) {
     let mut payload_obj: Map<String, Value> = match payload {
         Value::Object(obj) => obj,
         Value::Null => Map::new(),

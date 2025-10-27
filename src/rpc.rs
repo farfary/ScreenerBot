@@ -1205,6 +1205,102 @@ impl RpcClient {
         rate_limiter.wait_for_url(url).await;
     }
 
+    /// Lightweight health probe for a specific RPC URL using getHealth endpoint
+    pub async fn probe_get_health(&self, url: &str, timeout_secs: u64) -> Result<u64, String> {
+        let payload = serde_json::json!({
+            "jsonrpc": "2.0",
+            "id": 1,
+            "method": "getHealth"
+        });
+
+        let timeout_secs = timeout_secs.max(1);
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(timeout_secs))
+            .build()
+            .map_err(|e| format!("Failed to build RPC health client: {}", e))?;
+
+        self.wait_for_rate_limit_url(url).await;
+        self.record_call_for_url(url, "getHealth");
+
+        let start = Instant::now();
+
+        match client
+            .post(url)
+            .header("Content-Type", "application/json")
+            .json(&payload)
+            .send()
+            .await
+        {
+            Ok(response) => {
+                if response.status().is_success() {
+                    match response.json::<serde_json::Value>().await {
+                        Ok(body) => {
+                            if let Some(error) = body.get("error") {
+                                let error_str = error.to_string();
+
+                                if Self::is_rate_limit_error(&error_str) {
+                                    self.record_429_error(Some(url));
+                                }
+
+                                self.record_error(url, "getHealth");
+                                return Err(format!("RPC {} getHealth error: {}", url, error_str));
+                            }
+
+                            match body.get("result").and_then(|value| value.as_str()) {
+                                Some("ok") => {
+                                    let latency = start.elapsed().as_millis() as u64;
+                                    self.record_response_time(url, "getHealth", latency);
+                                    self.record_success(Some(url));
+                                    Ok(latency)
+                                }
+                                Some(other) => {
+                                    self.record_error(url, "getHealth");
+                                    Err(format!(
+                                        "RPC {} getHealth returned unexpected result: {}",
+                                        url, other
+                                    ))
+                                }
+                                None => {
+                                    self.record_error(url, "getHealth");
+                                    Err(format!("RPC {} getHealth missing result field", url))
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            self.record_error(url, "getHealth");
+                            Err(format!(
+                                "Failed to parse getHealth response from {}: {}",
+                                url, e
+                            ))
+                        }
+                    }
+                } else if response.status() == reqwest::StatusCode::TOO_MANY_REQUESTS {
+                    self.record_429_error(Some(url));
+                    self.record_error(url, "getHealth");
+                    Err(format!("Rate limited on RPC {} (HTTP 429)", url))
+                } else {
+                    self.record_error(url, "getHealth");
+                    Err(format!(
+                        "RPC {} getHealth HTTP error: {}",
+                        url,
+                        response.status()
+                    ))
+                }
+            }
+            Err(e) => {
+                let error_str = e.to_string();
+                if Self::is_rate_limit_error(&error_str) {
+                    self.record_429_error(Some(url));
+                }
+                self.record_error(url, "getHealth");
+                Err(format!(
+                    "RPC {} getHealth request failed: {}",
+                    url, error_str
+                ))
+            }
+        }
+    }
+
     /// Record a successful RPC call for adaptive rate limiting
     fn record_success(&self, url: Option<&str>) {
         let rate_limiter = self.rate_limiter.clone();
@@ -1442,7 +1538,10 @@ impl RpcClient {
         if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["rpc"]).await {
             logger::debug(
                 LogTag::Rpc,
-                &format!("Skipping get_multiple_accounts - Unhealthy endpoints: {}", unhealthy),
+                &format!(
+                    "Skipping get_multiple_accounts - Unhealthy endpoints: {}",
+                    unhealthy
+                ),
             );
             return Err(format!("RPC connectivity issue: {}", unhealthy));
         }
@@ -2198,7 +2297,10 @@ impl RpcClient {
         if let Some(unhealthy) = crate::connectivity::check_endpoints_healthy(&["rpc"]).await {
             logger::error(
                 LogTag::Rpc,
-                &format!("Cannot send transaction - Unhealthy endpoints: {}", unhealthy),
+                &format!(
+                    "Cannot send transaction - Unhealthy endpoints: {}",
+                    unhealthy
+                ),
             );
             return Err(ScreenerBotError::connectivity_error(format!(
                 "RPC connectivity issue: {}",

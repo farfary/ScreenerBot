@@ -1,7 +1,7 @@
 use crate::logger::{self, LogTag};
 use crate::pools;
-use crate::positions::{get_open_positions, update_position_price};
 use crate::positions::state::update_position_state;
+use crate::positions::{get_open_positions, update_position_price};
 use crate::tokens;
 use std::time::Duration;
 use tokio::time::sleep;
@@ -98,7 +98,7 @@ async fn update_position_price_and_pnl(token_mint: &str, current_price: f64) -> 
     let _lock = crate::positions::acquire_position_lock(token_mint).await;
 
     let now = chrono::Utc::now();
-    
+
     // First, update price in memory and get the updated position
     let updated = update_position_state(token_mint, |pos| {
         pos.current_price = Some(current_price);
@@ -124,29 +124,36 @@ async fn update_position_price_and_pnl(token_mint: &str, current_price: f64) -> 
         .ok_or_else(|| format!("Position disappeared after price update: {}", token_mint))?;
 
     // Calculate PnL with the new price
-    let (pnl_sol, pnl_pct) = crate::positions::calculate_position_pnl(&position, Some(current_price)).await;
-    
+    let (pnl_sol, pnl_pct) =
+        crate::positions::calculate_position_pnl(&position, Some(current_price)).await;
+
     // Update PnL fields in memory
     position.unrealized_pnl = Some(pnl_sol);
     position.unrealized_pnl_percent = Some(pnl_pct);
-    
+
     // Store back to in-memory state
     update_position_state(token_mint, |pos| {
         pos.unrealized_pnl = Some(pnl_sol);
         pos.unrealized_pnl_percent = Some(pnl_pct);
-    }).await;
-    
+    })
+    .await;
+
     // Release per-mint lock before database write
     drop(_lock);
-    
+
     // Single database write with all updated fields
-    crate::positions::update_position(&position).await.map_err(|e| {
-        logger::warning(
-            LogTag::Positions,
-            &format!("Failed to sync price+PnL to database for {}: {}", token_mint, e),
-        );
-        e
-    })?;
+    crate::positions::update_position(&position)
+        .await
+        .map_err(|e| {
+            logger::warning(
+                LogTag::Positions,
+                &format!(
+                    "Failed to sync price+PnL to database for {}: {}",
+                    token_mint, e
+                ),
+            );
+            e
+        })?;
 
     Ok(())
 }
