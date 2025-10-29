@@ -177,15 +177,34 @@ impl TokenStore {
     }
 
     fn get(&self, mint: &str) -> Option<Token> {
-        let guard = self.entries.read().expect("token store poisoned");
-        let entry = guard.get(mint)?;
-        if entry.refreshed_at.elapsed() > self.ttl {
-            drop(guard);
-            self.invalidate(mint);
-            None
-        } else {
-            Some(entry.token.clone())
+        let mut stale_marker: Option<Instant> = None;
+
+        {
+            let guard = self.entries.read().expect("token store poisoned");
+            let entry = match guard.get(mint) {
+                Some(entry) => entry,
+                None => return None,
+            };
+
+            if entry.refreshed_at.elapsed() <= self.ttl {
+                return Some(entry.token.clone());
+            }
+
+            stale_marker = Some(entry.refreshed_at);
         }
+
+        if let Some(expected_refreshed_at) = stale_marker {
+            let mut guard = self.entries.write().expect("token store poisoned");
+            if let Some(entry) = guard.get(mint) {
+                let is_same_entry = entry.refreshed_at == expected_refreshed_at;
+                let still_expired = entry.refreshed_at.elapsed() > self.ttl;
+                if is_same_entry && still_expired {
+                    guard.remove(mint);
+                }
+            }
+        }
+
+        None
     }
 
     fn set(&self, token: Token) {
