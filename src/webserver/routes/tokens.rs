@@ -578,8 +578,13 @@ pub(crate) async fn get_tokens_list(
 }
 
 /// Force refresh token data (immediate update outside scheduled loops)
-async fn refresh_token_data(Path(mint): Path<String>) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
-    logger::debug(LogTag::Webserver, &format!("Force refresh requested for mint={}", mint));
+async fn refresh_token_data(
+    Path(mint): Path<String>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    logger::debug(
+        LogTag::Webserver,
+        &format!("Force refresh requested for mint={}", mint),
+    );
 
     match crate::tokens::request_immediate_update(&mint).await {
         Ok(result) => {
@@ -1211,10 +1216,7 @@ async fn get_token_ohlcv(
         Err(e) => {
             logger::debug(
                 LogTag::Webserver,
-                &format!(
-                    "mint={} timeframe={} no_data error={}",
-                    mint, timeframe, e
-                ),
+                &format!("mint={} timeframe={} no_data error={}", mint, timeframe, e),
             );
             // Return empty array for tokens without OHLCV data yet
             Vec::new()
@@ -1237,8 +1239,13 @@ async fn get_token_ohlcv(
 }
 
 /// Force refresh OHLCV data (immediate fetch outside scheduled monitoring)
-async fn refresh_token_ohlcv(Path(mint): Path<String>) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
-    logger::debug(LogTag::Webserver, &format!("OHLCV refresh requested for mint={}", mint));
+async fn refresh_token_ohlcv(
+    Path(mint): Path<String>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+    logger::debug(
+        LogTag::Webserver,
+        &format!("OHLCV refresh requested for mint={}", mint),
+    );
 
     // First, ensure token is being monitored (add if not already)
     let is_open_position = positions::is_open_position(&mint).await;

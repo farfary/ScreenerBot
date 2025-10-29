@@ -4,10 +4,10 @@ use crate::events::{record_ohlcv_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::database::OhlcvDatabase;
 use crate::ohlcvs::types::{OhlcvError, OhlcvResult, PoolConfig, PoolMetadata};
+use crate::tokens::types::{TokenPoolInfo, TokenPoolsSnapshot};
 use crate::tokens::{
     get_token_pools_snapshot, get_token_pools_snapshot_allow_stale, prefetch_token_pools,
 };
-use crate::tokens::types::{TokenPoolInfo, TokenPoolsSnapshot};
 use serde_json::json;
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -271,7 +271,11 @@ impl PoolManager {
         }
 
         if !removed_addresses.is_empty() {
-            let preview: Vec<&str> = removed_addresses.iter().take(3).map(|s| s.as_str()).collect();
+            let preview: Vec<&str> = removed_addresses
+                .iter()
+                .take(3)
+                .map(|s| s.as_str())
+                .collect();
             let suffix = if removed_addresses.len() > 3 {
                 format!(" (+{} more)", removed_addresses.len() - 3)
             } else {
@@ -413,8 +417,18 @@ impl PoolManager {
         });
 
         config.address = pool.pool_address.clone();
-        config.dex = dex_label;
-        config.liquidity = liquidity;
+
+        let incoming_dex_known = !dex_label.eq_ignore_ascii_case("unknown");
+        if incoming_dex_known
+            || config.dex.trim().is_empty()
+            || config.dex.eq_ignore_ascii_case("unknown")
+        {
+            config.dex = dex_label;
+        }
+
+        if liquidity.is_finite() && liquidity > 0.0 {
+            config.liquidity = liquidity;
+        }
 
         if let Some(canonical_address) = canonical {
             config.is_default = canonical_address == config.address;

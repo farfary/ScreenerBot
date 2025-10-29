@@ -341,9 +341,10 @@ impl FilteringStore {
             TokenSortKey::TokenBirthAt => Some("token_birth_at".to_string()),
             TokenSortKey::Mint => Some("mint".to_string()),
             // Transaction sorts require in-memory sorting (need sum of buys+sells)
-            TokenSortKey::Txns5m | TokenSortKey::Txns1h | TokenSortKey::Txns6h | TokenSortKey::Txns24h => {
-                None
-            }
+            TokenSortKey::Txns5m
+            | TokenSortKey::Txns1h
+            | TokenSortKey::Txns6h
+            | TokenSortKey::Txns24h => None,
         };
 
         let sort_direction = match query.sort_direction {

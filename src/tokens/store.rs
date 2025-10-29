@@ -405,7 +405,6 @@ pub fn clear_pool_cache() {
     if let Ok(mut guard) = POOL_PREFETCH_STATE.try_lock() {
         guard.clear();
     }
-
 }
 fn parse_gecko_token_id(value: &str) -> Option<String> {
     let candidate = value
@@ -502,16 +501,11 @@ fn choose_canonical_pool(pools: &[TokenPoolInfo]) -> Option<String> {
         .max_by(|a, b| {
             let metric_a = pool_metric(a);
             let metric_b = pool_metric(b);
-            match metric_a
-                .partial_cmp(&metric_b)
-                .unwrap_or(Ordering::Equal)
-            {
+            match metric_a.partial_cmp(&metric_b).unwrap_or(Ordering::Equal) {
                 Ordering::Equal => {
                     let vol_a = a.volume_h24.unwrap_or(0.0);
                     let vol_b = b.volume_h24.unwrap_or(0.0);
-                    vol_a
-                        .partial_cmp(&vol_b)
-                        .unwrap_or(Ordering::Equal)
+                    vol_a.partial_cmp(&vol_b).unwrap_or(Ordering::Equal)
                 }
                 ordering => ordering,
             }
@@ -520,20 +514,16 @@ fn choose_canonical_pool(pools: &[TokenPoolInfo]) -> Option<String> {
 }
 
 fn sort_pools_for_snapshot(pools: &mut [TokenPoolInfo]) {
-    pools.sort_by(|a, b| {
-        match (b.is_sol_pair, a.is_sol_pair) {
-            (true, false) => Ordering::Less,
-            (false, true) => Ordering::Greater,
-            _ => match pool_metric(b)
-                .partial_cmp(&pool_metric(a))
-                .unwrap_or(Ordering::Equal)
-            {
-                Ordering::Equal => a
-                    .pool_address
-                    .cmp(&b.pool_address),
-                ordering => ordering,
-            },
-        }
+    pools.sort_by(|a, b| match (b.is_sol_pair, a.is_sol_pair) {
+        (true, false) => Ordering::Less,
+        (false, true) => Ordering::Greater,
+        _ => match pool_metric(b)
+            .partial_cmp(&pool_metric(a))
+            .unwrap_or(Ordering::Equal)
+        {
+            Ordering::Equal => a.pool_address.cmp(&b.pool_address),
+            ordering => ordering,
+        },
     });
 }
 
@@ -615,13 +605,18 @@ fn convert_dexscreener_pool(pool: &DexScreenerPool) -> Option<TokenPoolInfo> {
     })
 }
 
-fn convert_geckoterminal_pool(pool: &GeckoTerminalPool, sol_price_usd: f64) -> Option<TokenPoolInfo> {
+fn convert_geckoterminal_pool(
+    pool: &GeckoTerminalPool,
+    sol_price_usd: f64,
+) -> Option<TokenPoolInfo> {
     if pool.pool_address.trim().is_empty() {
         return None;
     }
 
-    let base_mint = parse_gecko_token_id(&pool.base_token_id).unwrap_or_else(|| pool.base_token_id.clone());
-    let quote_mint = parse_gecko_token_id(&pool.quote_token_id).unwrap_or_else(|| pool.quote_token_id.clone());
+    let base_mint =
+        parse_gecko_token_id(&pool.base_token_id).unwrap_or_else(|| pool.base_token_id.clone());
+    let quote_mint =
+        parse_gecko_token_id(&pool.quote_token_id).unwrap_or_else(|| pool.quote_token_id.clone());
 
     if base_mint.is_empty() || quote_mint.is_empty() {
         return None;
@@ -636,8 +631,7 @@ fn convert_geckoterminal_pool(pool: &GeckoTerminalPool, sol_price_usd: f64) -> O
             } else {
                 Some(pool.base_token_price_native.clone())
             },
-            parse_f64(&pool.base_token_price_usd)
-                .or_else(|| parse_f64(&pool.token_price_usd)),
+            parse_f64(&pool.base_token_price_usd).or_else(|| parse_f64(&pool.token_price_usd)),
         )
     } else if pool.mint == quote_mint {
         (
@@ -646,8 +640,7 @@ fn convert_geckoterminal_pool(pool: &GeckoTerminalPool, sol_price_usd: f64) -> O
             } else {
                 Some(pool.quote_token_price_native.clone())
             },
-            parse_f64(&pool.quote_token_price_usd)
-                .or_else(|| parse_f64(&pool.token_price_usd)),
+            parse_f64(&pool.quote_token_price_usd).or_else(|| parse_f64(&pool.token_price_usd)),
         )
     } else {
         (
@@ -845,7 +838,9 @@ async fn refresh_token_pools_and_cache(
 ) -> TokenResult<Option<TokenPoolsSnapshot>> {
     let mint_trimmed = mint.trim();
     if mint_trimmed.is_empty() {
-        return Err(TokenError::InvalidMint("Mint address cannot be empty".to_string()));
+        return Err(TokenError::InvalidMint(
+            "Mint address cannot be empty".to_string(),
+        ));
     }
 
     // Fast path: use cached snapshot if already loaded and fresh
@@ -868,7 +863,12 @@ async fn refresh_token_pools_and_cache(
         TokenError::Database("Rate limit coordinator not initialized".to_string())
     })?;
 
-    let (pools_map, success_sources) = match fetch_pools_from_sources(mint_trimmed, coordinator.clone()).await {
+    let (pools_map, success_sources) = match fetch_pools_from_sources(
+        mint_trimmed,
+        coordinator.clone(),
+    )
+    .await
+    {
         Ok(result) => result,
         Err(err) => {
             if allow_stale {
@@ -946,7 +946,9 @@ async fn get_token_pools_snapshot_internal(
 ) -> TokenResult<Option<TokenPoolsSnapshot>> {
     let trimmed = mint.trim();
     if trimmed.is_empty() {
-        return Err(TokenError::InvalidMint("Mint address cannot be empty".to_string()));
+        return Err(TokenError::InvalidMint(
+            "Mint address cannot be empty".to_string(),
+        ));
     }
 
     if let Some(snapshot) = get_cached_pool_snapshot(trimmed) {
@@ -960,9 +962,7 @@ async fn get_token_pools_snapshot_internal(
     }
 
     let (should_refresh, notifier) = {
-        let mut guard = POOL_REFRESH_INFLIGHT
-            .lock()
-            .await;
+        let mut guard = POOL_REFRESH_INFLIGHT.lock().await;
         match guard.entry(trimmed.to_string()) {
             Entry::Occupied(entry) => (false, entry.get().clone()),
             Entry::Vacant(entry) => {
@@ -987,9 +987,7 @@ async fn get_token_pools_snapshot_internal(
     let result = refresh_token_pools_and_cache(trimmed, allow_stale).await;
 
     {
-        let mut guard = POOL_REFRESH_INFLIGHT
-            .lock()
-            .await;
+        let mut guard = POOL_REFRESH_INFLIGHT.lock().await;
         guard.remove(trimmed);
     }
     notifier.notify_waiters();

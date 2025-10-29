@@ -183,8 +183,7 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
                 let mint_for_priority = token.mint.clone();
                 tokio::spawn(async move {
                     if let Err(e) =
-                        crate::tokens::update_token_priority_async(&mint_for_priority, 60)
-                            .await
+                        crate::tokens::update_token_priority_async(&mint_for_priority, 60).await
                     {
                         logger::error(
                             LogTag::Filtering,

@@ -72,11 +72,11 @@ pub use priorities::Priority;
 
 // Re-export store APIs
 pub use store::{
-    dexscreener_cache_metrics, dexscreener_cache_size, geckoterminal_cache_metrics,
-    geckoterminal_cache_size, get_cached_token, get_token_pools_snapshot,
-    get_token_pools_snapshot_allow_stale, invalidate_token_snapshot, prefetch_token_pools,
-    refresh_token_snapshot, rugcheck_cache_metrics, rugcheck_cache_size, store_token_snapshot,
-    CacheMetrics, clear_pool_cache,
+    clear_pool_cache, dexscreener_cache_metrics, dexscreener_cache_size,
+    geckoterminal_cache_metrics, geckoterminal_cache_size, get_cached_token,
+    get_token_pools_snapshot, get_token_pools_snapshot_allow_stale, invalidate_token_snapshot,
+    prefetch_token_pools, refresh_token_snapshot, rugcheck_cache_metrics, rugcheck_cache_size,
+    store_token_snapshot, CacheMetrics,
 };
 
 // Re-export decimals API
@@ -113,13 +113,11 @@ pub use updates::UpdateResult;
 /// }
 /// ```
 pub async fn request_immediate_update(mint: &str) -> TokenResult<UpdateResult> {
-    let db = get_global_database().ok_or_else(|| TokenError::Database(
-        "Token database not initialized".to_string(),
-    ))?;
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Token database not initialized".to_string()))?;
 
-    let coordinator = service::get_rate_coordinator().ok_or_else(|| {
-        TokenError::Database("Rate limit coordinator not available".to_string())
-    })?;
+    let coordinator = service::get_rate_coordinator()
+        .ok_or_else(|| TokenError::Database("Rate limit coordinator not available".to_string()))?;
 
     updates::force_update_token(mint, db, coordinator).await
 }

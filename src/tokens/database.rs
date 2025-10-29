@@ -2,8 +2,8 @@
 /// All SQL operations in one place with proper error handling
 use chrono::{DateTime, Utc};
 use once_cell::sync::OnceCell;
-use rusqlite::{params, params_from_iter, Connection, Row};
 use rusqlite::types::FromSql;
+use rusqlite::{params, params_from_iter, Connection, Row};
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -737,8 +737,11 @@ impl TokenDatabase {
             .transaction()
             .map_err(|e| TokenError::Database(format!("Failed to start transaction: {}", e)))?;
 
-        tx.execute("DELETE FROM token_pools WHERE mint = ?1", params![&snapshot.mint])
-            .map_err(|e| TokenError::Database(format!("Failed to clear token pools: {}", e)))?;
+        tx.execute(
+            "DELETE FROM token_pools WHERE mint = ?1",
+            params![&snapshot.mint],
+        )
+        .map_err(|e| TokenError::Database(format!("Failed to clear token pools: {}", e)))?;
 
         for pool in snapshot.pools.iter() {
             let sources_json = serde_json::to_string(&pool.sources).map_err(|e| {
@@ -772,9 +775,9 @@ impl TokenDatabase {
             .map_err(|e| TokenError::Database(format!("Failed to insert token pool: {}", e)))?;
         }
 
-        tx.commit()
-            .map_err(|e| TokenError::Database(format!("Failed to commit pool transaction: {}", e)))?
-            ;
+        tx.commit().map_err(|e| {
+            TokenError::Database(format!("Failed to commit pool transaction: {}", e))
+        })?;
 
         Ok(())
     }
@@ -2626,16 +2629,11 @@ fn select_canonical_pool(pools: &[TokenPoolInfo]) -> Option<String> {
         .max_by(|a, b| {
             let metric_a = pool_metric_for_selection(a);
             let metric_b = pool_metric_for_selection(b);
-            match metric_a
-                .partial_cmp(&metric_b)
-                .unwrap_or(Ordering::Equal)
-            {
+            match metric_a.partial_cmp(&metric_b).unwrap_or(Ordering::Equal) {
                 Ordering::Equal => {
                     let vol_a = a.volume_h24.unwrap_or(0.0);
                     let vol_b = b.volume_h24.unwrap_or(0.0);
-                    vol_a
-                        .partial_cmp(&vol_b)
-                        .unwrap_or(Ordering::Equal)
+                    vol_a.partial_cmp(&vol_b).unwrap_or(Ordering::Equal)
                 }
                 ordering => ordering,
             }
@@ -2644,10 +2642,8 @@ fn select_canonical_pool(pools: &[TokenPoolInfo]) -> Option<String> {
 }
 
 fn read_row_value<T: FromSql>(row: &Row<'_>, index: usize, field: &str) -> TokenResult<T> {
-    row.get(index).map_err(|e| TokenError::Database(format!(
-        "Failed to read {}: {}",
-        field, e
-    )))
+    row.get(index)
+        .map_err(|e| TokenError::Database(format!("Failed to read {}: {}", field, e)))
 }
 
 /// Assemble Token without market data (for tokens discovered but not yet enriched)

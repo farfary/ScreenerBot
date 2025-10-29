@@ -1,10 +1,10 @@
 /// Pool discovery module
 ///
-/// This module handles discovering pools for watched tokens from various sources:
-/// - DexScreener API pool discovery
-/// - GeckoTerminal API pool discovery
-/// - Raydium API pool discovery
-/// - Database cache of known pools
+/// This module handles discovering pools for watched tokens using the centralized
+/// token pool snapshots managed by the tokens module. The underlying data sources
+/// remain DexScreener, GeckoTerminal, and future providers, but all external API
+/// calls are performed by the tokens module to guarantee consistent caching and
+/// rate limiting across the system.
 ///
 /// The discovery module feeds raw pool information to the analyzer for classification and program kind detection.
 use super::types::{max_watched_tokens, PoolDescriptor, ProgramKind};
@@ -19,10 +19,10 @@ use crate::pools::service::{
     get_debug_token_override, get_pool_analyzer, is_single_pool_mode_enabled,
 };
 use crate::pools::utils::is_sol_mint;
+use crate::tokens::types::TokenPoolInfo;
 use crate::tokens::{
     get_token_pools_snapshot, get_token_pools_snapshot_allow_stale, prefetch_token_pools,
 };
-use crate::tokens::types::TokenPoolInfo;
 
 use dashmap::DashMap;
 use solana_sdk::pubkey::Pubkey;
@@ -605,11 +605,7 @@ impl PoolDiscovery {
         out
     }
 
-    fn pool_sources_allowed(
-        pool: &TokenPoolInfo,
-        dex_enabled: bool,
-        gecko_enabled: bool,
-    ) -> bool {
+    fn pool_sources_allowed(pool: &TokenPoolInfo, dex_enabled: bool, gecko_enabled: bool) -> bool {
         let has_dex = pool.sources.dexscreener.is_some();
         let has_gecko = pool.sources.geckoterminal.is_some();
 
@@ -704,19 +700,13 @@ impl PoolDiscovery {
             Err(err) => {
                 logger::warning(
                     LogTag::PoolDiscovery,
-                    &format!(
-                        "Pool snapshot fetch failed for mint={} error={}",
-                        mint, err
-                    ),
+                    &format!("Pool snapshot fetch failed for mint={} error={}", mint, err),
                 );
                 match get_token_pools_snapshot_allow_stale(mint).await {
                     Ok(Some(snapshot)) => {
                         logger::warning(
                             LogTag::PoolDiscovery,
-                            &format!(
-                                "Using stale pool snapshot for mint={} after error",
-                                mint
-                            ),
+                            &format!("Using stale pool snapshot for mint={} after error", mint),
                         );
                         Some(snapshot)
                     }
@@ -835,7 +825,8 @@ impl PoolDiscovery {
         let dex_enabled = is_dexscreener_discovery_enabled();
         let gecko_enabled = is_geckoterminal_discovery_enabled();
 
-        let descriptors = Self::load_descriptors_from_snapshot(mint, dex_enabled, gecko_enabled).await;
+        let descriptors =
+            Self::load_descriptors_from_snapshot(mint, dex_enabled, gecko_enabled).await;
 
         if descriptors.is_empty() {
             logger::debug(
@@ -848,46 +839,16 @@ impl PoolDiscovery {
             return Vec::new();
         }
 
-        // Deduplicate pools by pool address
-        let deduplicated_pools = self.deduplicate_pools(descriptors);
-
-        // Return all deduplicated pools - always use biggest pool by liquidity for accurate pricing
-        deduplicated_pools
-    }
-
-    /// Deduplicate pools by pool address, keeping the one with highest liquidity
-    fn deduplicate_pools(&self, pools: Vec<PoolDescriptor>) -> Vec<PoolDescriptor> {
-        let mut unique_pools: HashMap<Pubkey, PoolDescriptor> = HashMap::new();
-
-        for pool in pools {
-            match unique_pools.get(&pool.pool_id) {
-                Some(existing) => {
-                    // Keep the pool with higher liquidity
-                    if pool.liquidity_usd > existing.liquidity_usd {
-                        unique_pools.insert(pool.pool_id, pool);
-                    }
-                }
-                None => {
-                    unique_pools.insert(pool.pool_id, pool);
-                }
-            }
-        }
-
-        let mut result: Vec<PoolDescriptor> = unique_pools.into_values().collect();
-
-        // Sort by liquidity (highest first)
-        result.sort_by(|a, b| {
-            b.liquidity_usd
-                .partial_cmp(&a.liquidity_usd)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
+        // Deduplicate pools by pool address and sort descending by liquidity
+        let deduplicated = Self::deduplicate_discovered(descriptors);
 
         logger::debug(
             LogTag::PoolDiscovery,
-            &format!("Deduplicated to {} unique pools", result.len()),
+            &format!("Deduplicated to {} unique pools", deduplicated.len()),
         );
 
-        result
+        // Return all deduplicated pools - always use biggest pool by liquidity for accurate pricing
+        deduplicated
     }
 }
 
