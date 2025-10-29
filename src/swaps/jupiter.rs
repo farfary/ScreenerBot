@@ -16,6 +16,16 @@ use reqwest;
 use tokio::time::{timeout, Duration};
 
 // ============================================================================
+// API CONSTANTS - Hardcoded Jupiter API endpoints
+// ============================================================================
+
+/// Jupiter V6 quote API endpoint for Solana swaps
+const JUPITER_QUOTE_API: &str = "https://lite-api.jup.ag/swap/v1/quote";
+
+/// Jupiter V6 swap API endpoint for transaction building
+const JUPITER_SWAP_API: &str = "https://lite-api.jup.ag/swap/v1/swap";
+
+// ============================================================================
 // TIMING CONSTANTS - Hardcoded for optimal Jupiter swap performance
 // ============================================================================
 
@@ -147,10 +157,9 @@ pub async fn get_jupiter_quote(
         ("swapMode".to_string(), swap_mode.to_string()),
     ];
 
-    let jupiter_quote_api = with_config(|cfg| cfg.swaps.jupiter.quote_api.clone());
     let url = format!(
         "{}?{}",
-        jupiter_quote_api,
+        JUPITER_QUOTE_API,
         params
             .iter()
             .map(|(k, v)| format!("{}={}", k, v))
@@ -342,20 +351,19 @@ pub async fn get_jupiter_swap_transaction(
     );
 
     let client = reqwest::Client::new();
-    let jupiter_swap_api = with_config(|cfg| cfg.swaps.jupiter.swap_api.clone());
     let api_timeout_secs = API_TIMEOUT_SECS;
 
     logger::debug(
         LogTag::Swap,
         &format!(
             "📡 Jupiter: Sending transaction build request to {}",
-            jupiter_swap_api
+            JUPITER_SWAP_API
         ),
     );
 
     let response = timeout(
         Duration::from_secs(api_timeout_secs),
-        client.post(&jupiter_swap_api).json(&request_body).send(),
+        client.post(JUPITER_SWAP_API).json(&request_body).send(),
     )
     .await
     .map_err(|_| {

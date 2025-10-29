@@ -16,13 +16,6 @@ config_struct! {
         })]
         enabled: bool = true,
         #[metadata(field_metadata! {
-            label: "Quote API",
-            hint: "GMGN API endpoint for quotes",
-            impact: "low",
-            category: "API",
-        })]
-        quote_api: String = "https://gmgn.ai/defi/router/v1/sol/tx/get_swap_route".to_string(),
-        #[metadata(field_metadata! {
             label: "Partner",
             hint: "Partner identifier for GMGN",
             impact: "low",
@@ -67,20 +60,6 @@ config_struct! {
             category: "Router",
         })]
         enabled: bool = true,
-        #[metadata(field_metadata! {
-            label: "Quote API",
-            hint: "Jupiter API endpoint for quotes",
-            impact: "low",
-            category: "API",
-        })]
-        quote_api: String = "https://lite-api.jup.ag/swap/v1/quote".to_string(),
-        #[metadata(field_metadata! {
-            label: "Swap API",
-            hint: "Jupiter API endpoint for swaps",
-            impact: "low",
-            category: "API",
-        })]
-        swap_api: String = "https://lite-api.jup.ag/swap/v1/swap".to_string(),
         #[metadata(field_metadata! {
             label: "Dynamic CU Limit",
             hint: "Let Jupiter calculate compute units",

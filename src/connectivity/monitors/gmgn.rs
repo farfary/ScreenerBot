@@ -8,6 +8,9 @@ use serde_json::Value;
 use std::time::Instant;
 use tokio::time::{timeout, Duration};
 
+/// GMGN API endpoint
+const GMGN_QUOTE_API: &str = "https://gmgn.ai/defi/router/v1/sol/tx/get_swap_route";
+
 /// GMGN router health monitor
 pub struct GmgnMonitor;
 
@@ -54,7 +57,6 @@ impl EndpointMonitor for GmgnMonitor {
             }
         };
 
-        let quote_api = cfg.swaps.gmgn.quote_api.clone();
         let partner = cfg.swaps.gmgn.partner.clone();
         let swap_mode = cfg.swaps.gmgn.default_swap_mode.clone();
         let fee_sol = cfg.swaps.gmgn.fee_sol;
@@ -62,11 +64,9 @@ impl EndpointMonitor for GmgnMonitor {
         let slippage = cfg.swaps.slippage.quote_default_pct;
         let input_amount = 1_000_000u64; // 0.001 SOL keeps call lightweight
 
-        let separator = if quote_api.contains('?') { '&' } else { '?' };
         let url = format!(
-            "{}{}token_in_address={}&token_out_address={}&in_amount={}&from_address={}&slippage={}&swap_mode={}&fee={}&is_anti_mev={}&partner={}",
-            quote_api,
-            separator,
+            "{}?token_in_address={}&token_out_address={}&in_amount={}&from_address={}&slippage={}&swap_mode={}&fee={}&is_anti_mev={}&partner={}",
+            GMGN_QUOTE_API,
             SOL_MINT,
             USDC_MINT,
             input_amount,

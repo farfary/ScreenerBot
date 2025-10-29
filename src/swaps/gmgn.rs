@@ -12,6 +12,13 @@ use reqwest;
 use serde_json::Value;
 
 // ============================================================================
+// API CONSTANTS - Hardcoded GMGN API endpoints
+// ============================================================================
+
+/// GMGN quote API endpoint for Solana swaps
+const GMGN_QUOTE_API: &str = "https://gmgn.ai/defi/router/v1/sol/tx/get_swap_route";
+
+// ============================================================================
 // TIMING CONSTANTS - Hardcoded for optimal GMGN swap performance
 // ============================================================================
 
@@ -124,7 +131,6 @@ pub async fn get_gmgn_quote(
     // Load config values
     let gmgn_fee_sol = with_config(|cfg| cfg.swaps.gmgn.fee_sol);
     let gmgn_anti_mev = with_config(|cfg| cfg.swaps.gmgn.anti_mev);
-    let gmgn_quote_api = with_config(|cfg| cfg.swaps.gmgn.quote_api.clone());
     let gmgn_partner = with_config(|cfg| cfg.swaps.gmgn.partner.clone());
     let quote_timeout_secs = QUOTE_TIMEOUT_SECS;
     let retry_attempts = RETRY_ATTEMPTS;
@@ -154,7 +160,7 @@ pub async fn get_gmgn_quote(
 
     let url = format!(
         "{}?token_in_address={}&token_out_address={}&in_amount={}&from_address={}&slippage={}&swap_mode={}&fee={}&is_anti_mev={}&partner={}",
-        gmgn_quote_api,
+        GMGN_QUOTE_API,
         input_mint,
         output_mint,
         input_amount,
