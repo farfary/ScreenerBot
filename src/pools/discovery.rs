@@ -1,35 +1,27 @@
 /// Pool discovery module
 ///
-/// This module handles discovering pools for watched tokens using the centralized
-/// token pool snapshots managed by the tokens module. The underlying data sources
-/// remain DexScreener, GeckoTerminal, and future providers, but all external API
-/// calls are performed by the tokens module to guarantee consistent caching and
-/// rate limiting across the system.
+/// This module orchestrates pool discovery for watched tokens by:
+/// 1. Building token list (filtered + position tokens)
+/// 2. Fetching pool snapshots from tokens module (which handles all caching, deduplication, selection)
+/// 3. Converting canonical pools to PoolDescriptor format
+/// 4. Sending to analyzer for classification
 ///
-/// The discovery module feeds raw pool information to the analyzer for classification and program kind detection.
+/// All pool data fetching, caching, deduplication, and canonical selection is handled by tokens/pools module.
 use super::types::{max_watched_tokens, PoolDescriptor, ProgramKind};
 use super::utils::is_stablecoin_mint;
 
 use crate::config::with_config;
-use crate::constants::SOL_MINT;
-use crate::events::{record_safe, Event, EventCategory, Severity};
-use crate::filtering;
+use crate::events::{record_safe, Event, EventCategory};
 use crate::logger::{self, LogTag};
-use crate::pools::service::{
-    get_debug_token_override, get_pool_analyzer, is_single_pool_mode_enabled,
-};
+use crate::pools::service::{get_debug_token_override, get_pool_analyzer, is_single_pool_mode_enabled};
 use crate::pools::utils::is_sol_mint;
-use crate::tokens::types::TokenPoolInfo;
-use crate::tokens::{
-    get_token_pools_snapshot, get_token_pools_snapshot_allow_stale, prefetch_token_pools,
-};
+use crate::tokens::{get_token_pools_snapshot, prefetch_token_pools};
 
-use dashmap::DashMap;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
-use std::sync::{Arc, OnceLock};
-use std::time::{Duration, Instant};
+use std::sync::Arc;
+use std::time::Instant;
 use tokio::sync::Notify;
 
 // Timing constants
@@ -78,21 +70,9 @@ impl PoolDiscovery {
     pub fn log_source_config() {
         let (dex_enabled, gecko_enabled, raydium_enabled) = Self::get_source_config();
         let enabled_sources: Vec<&str> = [
-            if dex_enabled {
-                Some("DexScreener")
-            } else {
-                None
-            },
-            if gecko_enabled {
-                Some("GeckoTerminal")
-            } else {
-                None
-            },
-            if raydium_enabled {
-                Some("Raydium")
-            } else {
-                None
-            },
+            if dex_enabled { Some("DexScreener") } else { None },
+            if gecko_enabled { Some("GeckoTerminal") } else { None },
+            if raydium_enabled { Some("Raydium") } else { None },
         ]
         .iter()
         .filter_map(|&s| s)
@@ -113,23 +93,10 @@ impl PoolDiscovery {
             );
         }
 
-        // Log disabled sources for clarity
         let disabled_sources: Vec<&str> = [
-            if !dex_enabled {
-                Some("DexScreener")
-            } else {
-                None
-            },
-            if !gecko_enabled {
-                Some("GeckoTerminal")
-            } else {
-                None
-            },
-            if !raydium_enabled {
-                Some("Raydium")
-            } else {
-                None
-            },
+            if !dex_enabled { Some("DexScreener") } else { None },
+            if !gecko_enabled { Some("GeckoTerminal") } else { None },
+            if !raydium_enabled { Some("Raydium") } else { None },
         ]
         .iter()
         .filter_map(|&s| s)
@@ -146,11 +113,11 @@ impl PoolDiscovery {
         }
     }
 
+
     /// Start discovery background task
     pub async fn start_discovery_task(&self, shutdown: Arc<Notify>) {
         logger::info(LogTag::PoolDiscovery, "Starting pool discovery task");
 
-        // Log the current source configuration
         Self::log_source_config();
 
         let interval_seed = DISCOVERY_TICK_INTERVAL_SECS;
@@ -180,11 +147,10 @@ impl PoolDiscovery {
         });
     }
 
-    /// Execute one batched discovery tick: fetch pools for all tokens via batch APIs and stream to analyzer
+    /// Execute one batched discovery tick: fetch canonical pools from tokens module and stream to analyzer
     async fn batched_discovery_tick() {
         let tick_start = Instant::now();
 
-        // Check if any sources are enabled (hot-reload aware)
         let (dex_enabled, gecko_enabled, raydium_enabled) = with_config(|cfg| {
             (
                 cfg.pools.enable_dexscreener_discovery,
@@ -212,19 +178,6 @@ impl PoolDiscovery {
                 LogTag::PoolDiscovery,
                 "All pool discovery sources disabled - skipping tick",
             );
-
-            record_safe(Event::warn(
-                EventCategory::Pool,
-                Some("discovery_sources_disabled".to_string()),
-                None,
-                None,
-                serde_json::json!({
-                    "warning": "All discovery sources disabled",
-                    "action": "skipping_tick"
-                }),
-            ))
-            .await;
-
             return;
         }
 
@@ -232,29 +185,16 @@ impl PoolDiscovery {
         let mut tokens: Vec<String> = if let Some(override_tokens) = get_debug_token_override() {
             override_tokens
         } else {
-            // Get passed tokens from tokens module (not filtering module)
-            let passed_tokens = crate::tokens::get_passed_tokens();
-
-            if passed_tokens.is_empty() {
-                logger::info(
-                    LogTag::PoolDiscovery,
-                    "No tokens passed filtering - pool service has nothing to price",
-                );
-            }
-
-            passed_tokens
+            crate::tokens::get_passed_tokens()
         };
 
-        // CRITICAL FIX: Always include tokens with open positions for price monitoring
-        // Position tokens must be monitored regardless of whether they still meet filtering criteria
+        // Always include tokens with open positions for price monitoring
         let open_position_mints: Vec<String> = crate::positions::get_open_mints().await;
         let initial_count = tokens.len();
 
-        // Use HashSet for efficient duplicate checking
         let mut token_set: std::collections::HashSet<String> = tokens.iter().cloned().collect();
 
         for mint in open_position_mints.iter() {
-            // Skip stablecoins and tokens already in the set
             if !is_stablecoin_mint(mint) && !token_set.contains(mint) {
                 token_set.insert(mint.clone());
                 tokens.push(mint.clone());
@@ -274,41 +214,24 @@ impl PoolDiscovery {
 
         if tokens.is_empty() {
             logger::debug(LogTag::PoolDiscovery, "No tokens to discover this tick");
-
-            record_safe(Event::info(
-                EventCategory::Pool,
-                Some("discovery_tick_empty".to_string()),
-                None,
-                None,
-                serde_json::json!({
-                    "reason": "no_tokens_to_discover",
-                    "duration_ms": tick_start.elapsed().as_millis()
-                }),
-            ))
-            .await;
-
             return;
         }
 
-        // Early stablecoin filtering - position tokens already filtered above
+        // Early stablecoin filtering
         tokens.retain(|m| !is_stablecoin_mint(m));
 
-        // Cap to configured max_watched but prioritize position tokens
+        // Cap to max_watched, prioritizing position tokens
         if tokens.len() > max_watched {
-            // Ensure position tokens are preserved when truncating — reuse the set we already fetched
             let open_position_mints_set: std::collections::HashSet<String> =
                 open_position_mints.iter().cloned().collect();
 
-            // Separate position tokens from others
             let (mut position_tokens, mut other_tokens): (Vec<String>, Vec<String>) = tokens
                 .into_iter()
                 .partition(|mint| open_position_mints_set.contains(mint));
 
-            // Always include all position tokens, then fill remaining slots with other tokens
             let remaining_slots = max_watched.saturating_sub(position_tokens.len());
             other_tokens.truncate(remaining_slots);
 
-            // Combine back: position tokens first, then others
             position_tokens.extend(other_tokens);
             tokens = position_tokens;
 
@@ -327,155 +250,156 @@ impl PoolDiscovery {
             &format!("Discovery tick: {} tokens queued", tokens.len()),
         );
 
-        record_safe(Event::info(
-            EventCategory::Pool,
-            Some("discovery_tokens_prepared".to_string()),
-            None,
-            None,
-            serde_json::json!({
-                "token_count": tokens.len(),
-                "position_tokens": open_position_mints.len(),
-                "initial_filtered": initial_count,
-                "max_watched": max_watched
-            }),
-        ))
-        .await;
-
-        // Prefetch pool snapshots through the tokens module to reuse cached data
+        // Prefetch pool snapshots (triggers tokens module caching)
         prefetch_token_pools(&tokens).await;
 
-        // Convert to PoolDescriptor list sourced exclusively from token snapshots
-        let mut descriptors: Vec<PoolDescriptor> = Vec::new();
-        let mut tokens_with_pools = 0usize;
+        // Convert canonical pools to descriptors for analyzer
+        let mut sent_count = 0;
+        let mut tokens_with_pools = 0;
+        let mut blacklist_filtered = 0;
 
-        for mint in tokens.iter() {
-            let before = descriptors.len();
-            let mut token_descriptors =
-                Self::load_descriptors_from_snapshot(mint, dex_enabled, gecko_enabled).await;
-
-            if token_descriptors.is_empty() {
-                logger::debug(
-                    LogTag::PoolDiscovery,
-                    &format!("No eligible pool descriptors found for mint={}", mint),
-                );
-                continue;
-            }
-
-            tokens_with_pools += 1;
-            descriptors.append(&mut token_descriptors);
-
-            let added = descriptors.len().saturating_sub(before);
-            logger::debug(
-                LogTag::PoolDiscovery,
-                &format!("Discovered {} pool descriptors for mint={}", added, mint),
-            );
-        }
-
-        if raydium_enabled {
-            logger::debug(
-                LogTag::PoolDiscovery,
-                "Raydium discovery configured but handled by analyzer using existing snapshots",
-            );
-        }
-
-        logger::debug(
-            LogTag::PoolDiscovery,
-            &format!(
-                "Discovery tick processed {} tokens, {} yielded pool snapshots",
-                tokens.len(),
-                tokens_with_pools
-            ),
-        );
-
-        if descriptors.is_empty() {
-            logger::debug(LogTag::PoolDiscovery, "No pools discovered in this tick");
-
-            record_safe(Event::info(
-                EventCategory::Pool,
-                Some("discovery_tick_completed".to_string()),
-                None,
-                None,
-                serde_json::json!({
-                    "pools_discovered": 0,
-                    "token_count": tokens.len(),
-                    "duration_ms": tick_start.elapsed().as_millis(),
-                    "result": "no_pools_found"
-                }),
-            ))
-            .await;
-
-            return;
-        }
-
-        // Deduplicate by pool_id and sort by liquidity desc
-        let descriptors_count = descriptors.len();
-        let mut deduped = Self::deduplicate_discovered(descriptors);
-        let deduped_count = deduped.len();
-
-        // If single pool mode, keep only highest-liquidity pool per token mint
-        if is_single_pool_mode_enabled() {
-            deduped = Self::select_highest_liquidity_per_token(deduped);
-        }
-
-        let final_pool_count = deduped.len();
-
-        // Stream to analyzer immediately
         if let Some(analyzer) = get_pool_analyzer() {
             let sender = analyzer.get_sender();
-            let mut sent_count = 0;
 
-            for pool in deduped.into_iter() {
-                // Check if pool is blacklisted
-                match super::db::is_pool_blacklisted(&pool.pool_id.to_string()).await {
+            for mint in tokens.iter() {
+                // Get snapshot from tokens module (already cached, deduplicated, canonical selected)
+                let snapshot = match get_token_pools_snapshot(mint).await {
+                    Ok(Some(s)) => s,
+                    Ok(None) => {
+                        logger::debug(
+                            LogTag::PoolDiscovery,
+                            &format!("No pool snapshot for mint={}", mint),
+                        );
+                        continue;
+                    }
+                    Err(e) => {
+                        logger::debug(
+                            LogTag::PoolDiscovery,
+                            &format!("Failed to get snapshot for mint={}: {}", mint, e),
+                        );
+                        continue;
+                    }
+                };
+
+                // Use canonical pool address (already selected by tokens/pools module)
+                let canonical_address = match snapshot.canonical_pool_address {
+                    Some(addr) => addr,
+                    None => {
+                        logger::debug(
+                            LogTag::PoolDiscovery,
+                            &format!("No canonical pool for mint={}", mint),
+                        );
+                        continue;
+                    }
+                };
+
+                tokens_with_pools += 1;
+
+                // Find the canonical pool in the snapshot
+                let canonical_pool = snapshot
+                    .pools
+                    .iter()
+                    .find(|p| p.pool_address == canonical_address);
+
+                let canonical_pool = match canonical_pool {
+                    Some(p) => p,
+                    None => {
+                        logger::warning(
+                            LogTag::PoolDiscovery,
+                            &format!(
+                                "Canonical pool {} not found in snapshot for mint={}",
+                                canonical_address, mint
+                            ),
+                        );
+                        continue;
+                    }
+                };
+
+                // Check blacklists
+                match super::db::is_pool_blacklisted(&canonical_address).await {
                     Ok(true) => {
-                        continue; // Skip blacklisted pool silently
+                        blacklist_filtered += 1;
+                        continue;
                     }
-                    Ok(false) => {
-                        // Not blacklisted, proceed to check token
-                    }
+                    Ok(false) => {}
                     Err(e) => {
                         logger::warning(
                             LogTag::PoolDiscovery,
                             &format!(
-                                "Failed to check pool blacklist for {}: {} - skipping as precaution",
-                                pool.pool_id, e
+                                "Failed to check pool blacklist for {}: {} - skipping",
+                                canonical_address, e
                             ),
                         );
-                        // FAIL-CLOSED: Skip pool if blacklist check fails
+                        blacklist_filtered += 1;
                         continue;
                     }
                 }
 
-                // Check if token is blacklisted
-                let token_mint = if is_sol_mint(&pool.base_mint.to_string()) {
-                    pool.quote_mint.to_string()
+                // Check token blacklist
+                let token_mint = if is_sol_mint(&canonical_pool.base_mint) {
+                    &canonical_pool.quote_mint
                 } else {
-                    pool.base_mint.to_string()
+                    &canonical_pool.base_mint
                 };
 
                 if let Some(db) = crate::tokens::database::get_global_database() {
                     if let Ok(is_blacklisted) = tokio::task::block_in_place(|| {
                         tokio::runtime::Handle::current()
-                            .block_on(async { db.is_blacklisted(&token_mint) })
+                            .block_on(async { db.is_blacklisted(token_mint) })
                     }) {
                         if is_blacklisted {
                             logger::debug(
                                 LogTag::PoolDiscovery,
                                 &format!("Skipping pool for blacklisted token: {}", token_mint),
                             );
+                            blacklist_filtered += 1;
                             continue;
                         }
                     }
                 }
 
+                // Parse addresses
+                let pool_id = match Pubkey::from_str(&canonical_address) {
+                    Ok(pk) => pk,
+                    Err(e) => {
+                        logger::warning(
+                            LogTag::PoolDiscovery,
+                            &format!("Invalid pool address {}: {}", canonical_address, e),
+                        );
+                        continue;
+                    }
+                };
+
+                let base_mint = match Pubkey::from_str(&canonical_pool.base_mint) {
+                    Ok(pk) => pk,
+                    Err(e) => {
+                        logger::warning(
+                            LogTag::PoolDiscovery,
+                            &format!("Invalid base mint {}: {}", canonical_pool.base_mint, e),
+                        );
+                        continue;
+                    }
+                };
+
+                let quote_mint = match Pubkey::from_str(&canonical_pool.quote_mint) {
+                    Ok(pk) => pk,
+                    Err(e) => {
+                        logger::warning(
+                            LogTag::PoolDiscovery,
+                            &format!("Invalid quote mint {}: {}", canonical_pool.quote_mint, e),
+                        );
+                        continue;
+                    }
+                };
+
                 // Send to analyzer
                 let _ = sender.send(crate::pools::analyzer::AnalyzerMessage::AnalyzePool {
-                    pool_id: pool.pool_id,
+                    pool_id,
                     program_id: Pubkey::default(),
-                    base_mint: pool.base_mint,
-                    quote_mint: pool.quote_mint,
-                    liquidity_usd: pool.liquidity_usd,
-                    volume_h24_usd: pool.volume_h24_usd,
+                    base_mint,
+                    quote_mint,
+                    liquidity_usd: canonical_pool.liquidity_usd.unwrap_or(0.0),
+                    volume_h24_usd: canonical_pool.volume_h24.unwrap_or(0.0),
                 });
                 sent_count += 1;
             }
@@ -486,33 +410,16 @@ impl PoolDiscovery {
                 None,
                 None,
                 serde_json::json!({
-                    "pools_discovered": descriptors_count,
-                    "pools_deduped": deduped_count,
-                    "pools_final": final_pool_count,
+                    "tokens_with_pools": tokens_with_pools,
                     "pools_sent_to_analyzer": sent_count,
-                    "pools_filtered_blacklist": final_pool_count - sent_count,
+                    "pools_filtered_blacklist": blacklist_filtered,
                     "token_count": tokens.len(),
                     "duration_ms": tick_start.elapsed().as_millis(),
-                    "single_pool_mode": is_single_pool_mode_enabled(),
                     "result": "success"
                 }),
             ))
             .await;
         } else {
-            record_safe(Event::error(
-                EventCategory::Pool,
-                Some("discovery_analyzer_unavailable".to_string()),
-                None,
-                None,
-                serde_json::json!({
-                    "error": "Analyzer not initialized",
-                    "pools_discovered": final_pool_count,
-                    "token_count": tokens.len(),
-                    "duration_ms": tick_start.elapsed().as_millis()
-                }),
-            ))
-            .await;
-
             logger::warning(
                 LogTag::PoolDiscovery,
                 "Analyzer not initialized; cannot stream discovered pools",
@@ -520,486 +427,98 @@ impl PoolDiscovery {
         }
     }
 
-    fn deduplicate_discovered(pools: Vec<PoolDescriptor>) -> Vec<PoolDescriptor> {
-        let mut map: HashMap<Pubkey, PoolDescriptor> = HashMap::new();
-        for p in pools.into_iter() {
-            match map.get(&p.pool_id) {
-                Some(existing) => {
-                    if p.liquidity_usd > existing.liquidity_usd {
-                        map.insert(p.pool_id, p);
-                    }
-                }
-                None => {
-                    map.insert(p.pool_id, p);
-                }
-            }
-        }
-        let mut v: Vec<PoolDescriptor> = map.into_values().collect();
-        v.sort_by(|a, b| {
-            b.liquidity_usd
-                .partial_cmp(&a.liquidity_usd)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        v
-    }
-
-    pub(crate) fn select_highest_liquidity_per_token(
-        pools: Vec<PoolDescriptor>,
-    ) -> Vec<PoolDescriptor> {
-        // Group by non-SOL token
-        let sol = match Pubkey::from_str(SOL_MINT) {
-            Ok(v) => v,
-            Err(e) => {
-                // Respect project rule: no unwrap/panic; log and return input unchanged
-                logger::warning(
-                    LogTag::PoolDiscovery,
-                    &format!(
-                        "Failed to parse SOL_MINT '{}': {} — returning pools unchanged",
-                        SOL_MINT, e
-                    ),
-                );
-                return pools;
-            }
-        };
-        let mut best_by_token: HashMap<Pubkey, PoolDescriptor> = HashMap::new();
-        for p in pools.into_iter() {
-            let token = if p.base_mint == sol {
-                p.quote_mint
-            } else {
-                p.base_mint
-            };
-            match best_by_token.get(&token) {
-                Some(existing) => {
-                    // Smart pool selection: prioritize volume when liquidity is misleading
-                    let should_replace = if existing.liquidity_usd <= 0.0 && p.liquidity_usd <= 0.0
-                    {
-                        // Both have no/low liquidity, choose based on volume
-                        p.volume_h24_usd > existing.volume_h24_usd
-                    } else if existing.liquidity_usd <= 0.0 {
-                        // Current has no liquidity, new has some - prefer new
-                        true
-                    } else if p.liquidity_usd <= 0.0 {
-                        // New has no liquidity, current has some - keep current unless volume is massively higher
-                        p.volume_h24_usd > existing.volume_h24_usd * 100.0 // 100x volume threshold
-                    } else {
-                        // Both have liquidity, use traditional liquidity comparison
-                        p.liquidity_usd > existing.liquidity_usd
-                    };
-
-                    if should_replace {
-                        best_by_token.insert(token, p);
-                    }
-                }
-                None => {
-                    best_by_token.insert(token, p);
-                }
-            }
-        }
-        // Return sorted for determinism (highest liquidity first)
-        let mut out: Vec<PoolDescriptor> = best_by_token.into_values().collect();
-        out.sort_by(|a, b| {
-            b.liquidity_usd
-                .partial_cmp(&a.liquidity_usd)
-                .unwrap_or(std::cmp::Ordering::Equal)
-        });
-        out
-    }
-
-    fn pool_sources_allowed(pool: &TokenPoolInfo, dex_enabled: bool, gecko_enabled: bool) -> bool {
-        let has_dex = pool.sources.dexscreener.is_some();
-        let has_gecko = pool.sources.geckoterminal.is_some();
-
-        let mut allowed = false;
-        if has_dex {
-            allowed |= dex_enabled;
-        }
-        if has_gecko {
-            allowed |= gecko_enabled;
-        }
-
-        if !has_dex && !has_gecko {
-            // Persisted entries or future sources – allow by default
-            allowed = true;
-        }
-
-        allowed
-    }
-
-    fn convert_token_pool_to_descriptor(pool: &TokenPoolInfo) -> Result<PoolDescriptor, String> {
-        if pool.pool_address.trim().is_empty() {
-            return Err("Missing pool address".to_string());
-        }
-
-        if !pool.is_sol_pair {
-            return Err("Pool does not contain SOL".to_string());
-        }
-
-        let pool_id = Pubkey::from_str(&pool.pool_address)
-            .map_err(|_| format!("Invalid pool address: {}", pool.pool_address))?;
-        let base_mint = Pubkey::from_str(&pool.base_mint)
-            .map_err(|_| format!("Invalid base mint: {}", pool.base_mint))?;
-        let quote_mint = Pubkey::from_str(&pool.quote_mint)
-            .map_err(|_| format!("Invalid quote mint: {}", pool.quote_mint))?;
-
-        let liquidity_usd = pool.liquidity_usd.unwrap_or(0.0);
-        let volume_h24_usd = pool.volume_h24.unwrap_or(0.0);
-
-        Ok(PoolDescriptor {
-            pool_id,
-            program_kind: ProgramKind::Unknown,
-            base_mint,
-            quote_mint,
-            reserve_accounts: Vec::new(),
-            liquidity_usd,
-            volume_h24_usd,
-            last_updated: std::time::Instant::now(),
-        })
-    }
-
-    async fn load_descriptors_from_snapshot(
-        mint: &str,
-        dex_enabled: bool,
-        gecko_enabled: bool,
-    ) -> Vec<PoolDescriptor> {
-        let primary = get_token_pools_snapshot(mint).await;
-
-        let snapshot = match primary {
-            Ok(Some(snapshot)) => Some(snapshot),
-            Ok(None) => {
-                logger::debug(
-                    LogTag::PoolDiscovery,
-                    &format!(
-                        "No pool snapshot available for mint={} (primary fetch)",
-                        mint
-                    ),
-                );
-                match get_token_pools_snapshot_allow_stale(mint).await {
-                    Ok(Some(snapshot)) => {
-                        logger::warning(
-                            LogTag::PoolDiscovery,
-                            &format!(
-                                "Using stale pool snapshot for mint={} (no fresh data)",
-                                mint
-                            ),
-                        );
-                        Some(snapshot)
-                    }
-                    Ok(None) => None,
-                    Err(err) => {
-                        logger::warning(
-                            LogTag::PoolDiscovery,
-                            &format!(
-                                "Failed to load stale pool snapshot for mint={} error={}",
-                                mint, err
-                            ),
-                        );
-                        None
-                    }
-                }
-            }
-            Err(err) => {
-                logger::warning(
-                    LogTag::PoolDiscovery,
-                    &format!("Pool snapshot fetch failed for mint={} error={}", mint, err),
-                );
-                match get_token_pools_snapshot_allow_stale(mint).await {
-                    Ok(Some(snapshot)) => {
-                        logger::warning(
-                            LogTag::PoolDiscovery,
-                            &format!("Using stale pool snapshot for mint={} after error", mint),
-                        );
-                        Some(snapshot)
-                    }
-                    Ok(None) => None,
-                    Err(fallback_err) => {
-                        logger::warning(
-                            LogTag::PoolDiscovery,
-                            &format!(
-                                "Failed to load fallback pool snapshot for mint={} error={}",
-                                mint, fallback_err
-                            ),
-                        );
-                        None
-                    }
-                }
-            }
-        };
-
-        let snapshot = match snapshot {
-            Some(snapshot) => snapshot,
-            None => {
-                logger::debug(
-                    LogTag::PoolDiscovery,
-                    &format!("No pool snapshot found for mint={}", mint),
-                );
-                return Vec::new();
-            }
-        };
-
-        let mut descriptors = Vec::new();
-        let mut skipped_non_sol = 0usize;
-        let mut skipped_disabled = 0usize;
-        let mut parse_errors = 0usize;
-
-        for pool in snapshot.pools.iter() {
-            if !Self::pool_sources_allowed(pool, dex_enabled, gecko_enabled) {
-                skipped_disabled += 1;
-                continue;
-            }
-
-            if !pool.is_sol_pair {
-                skipped_non_sol += 1;
-                continue;
-            }
-
-            match Self::convert_token_pool_to_descriptor(pool) {
-                Ok(desc) => descriptors.push(desc),
-                Err(err) => {
-                    parse_errors += 1;
-                    logger::debug(
-                        LogTag::PoolDiscovery,
-                        &format!(
-                            "Failed to convert pool for mint={} address={} reason={}",
-                            mint, pool.pool_address, err
-                        ),
-                    );
-                }
-            }
-        }
-
-        if skipped_disabled > 0 {
-            logger::debug(
-                LogTag::PoolDiscovery,
-                &format!(
-                    "Filtered {} pools for mint={} due to disabled sources",
-                    skipped_disabled, mint
-                ),
-            );
-        }
-
-        if skipped_non_sol > 0 {
-            logger::debug(
-                LogTag::PoolDiscovery,
-                &format!(
-                    "Filtered {} non-SOL pools for mint={}",
-                    skipped_non_sol, mint
-                ),
-            );
-        }
-
-        if parse_errors > 0 {
-            logger::debug(
-                LogTag::PoolDiscovery,
-                &format!(
-                    "Encountered {} pool conversion errors for mint={}",
-                    parse_errors, mint
-                ),
-            );
-        }
-
-        descriptors
-    }
-
-    /// Discover pools for a specific token
+    /// Discover pools for a specific token (uses tokens module snapshot directly)
     pub async fn discover_pools_for_token(&self, mint: &str) -> Vec<PoolDescriptor> {
         logger::debug(
             LogTag::PoolDiscovery,
-            &format!("Starting pool discovery for token {mint}"),
+            &format!("Starting pool discovery for token {}", mint),
         );
 
-        // Early stablecoin filtering - reject stablecoin tokens immediately
         if is_stablecoin_mint(mint) {
             logger::warning(
                 LogTag::PoolDiscovery,
                 &format!(
                     "Token {} is a stablecoin - skipping pool discovery",
-                    &mint[..8]
+                    &mint[..8.min(mint.len())]
                 ),
             );
             return Vec::new();
         }
 
-        let single = vec![mint.to_string()];
-        prefetch_token_pools(&single).await;
+        // Get snapshot from tokens module
+        let snapshot = match get_token_pools_snapshot(mint).await {
+            Ok(Some(s)) => s,
+            Ok(None) => {
+                logger::debug(
+                    LogTag::PoolDiscovery,
+                    &format!("No pool snapshot available for mint={}", mint),
+                );
+                return Vec::new();
+            }
+            Err(e) => {
+                logger::warning(
+                    LogTag::PoolDiscovery,
+                    &format!("Failed to get pool snapshot for mint={}: {}", mint, e),
+                );
+                return Vec::new();
+            }
+        };
 
-        let dex_enabled = is_dexscreener_discovery_enabled();
-        let gecko_enabled = is_geckoterminal_discovery_enabled();
+        // Convert pools to descriptors
+        let mut descriptors = Vec::new();
+        for pool in snapshot.pools.iter() {
+            if !pool.is_sol_pair {
+                continue;
+            }
 
-        let descriptors =
-            Self::load_descriptors_from_snapshot(mint, dex_enabled, gecko_enabled).await;
+            let pool_id = match Pubkey::from_str(&pool.pool_address) {
+                Ok(pk) => pk,
+                Err(_) => continue,
+            };
 
-        if descriptors.is_empty() {
-            logger::debug(
-                LogTag::PoolDiscovery,
-                &format!(
-                    "No pool descriptors available for token {} via centralized snapshot",
-                    mint
-                ),
-            );
-            return Vec::new();
+            let base_mint = match Pubkey::from_str(&pool.base_mint) {
+                Ok(pk) => pk,
+                Err(_) => continue,
+            };
+
+            let quote_mint = match Pubkey::from_str(&pool.quote_mint) {
+                Ok(pk) => pk,
+                Err(_) => continue,
+            };
+
+            descriptors.push(PoolDescriptor {
+                pool_id,
+                program_kind: ProgramKind::Unknown,
+                base_mint,
+                quote_mint,
+                reserve_accounts: Vec::new(),
+                liquidity_usd: pool.liquidity_usd.unwrap_or(0.0),
+                volume_h24_usd: pool.volume_h24.unwrap_or(0.0),
+                last_updated: Instant::now(),
+            });
         }
-
-        // Deduplicate pools by pool address and sort descending by liquidity
-        let deduplicated = Self::deduplicate_discovered(descriptors);
 
         logger::debug(
             LogTag::PoolDiscovery,
-            &format!("Deduplicated to {} unique pools", deduplicated.len()),
+            &format!("Discovered {} pools for token {}", descriptors.len(), mint),
         );
 
-        // Return all deduplicated pools - always use biggest pool by liquidity for accurate pricing
-        deduplicated
+        descriptors
     }
 }
 
-// =============================================================================
-// Lightweight, in-memory discovery cache (canonical pool per mint)
-// =============================================================================
-
-// TTL for discovered pools used by non-monitoring components (e.g., OHLCV)
-const DISCOVERY_CACHE_TTL_SECS: u64 = 6 * 60 * 60; // 6 hours
-
-// Cache: mint -> (canonical PoolDescriptor, cached_at)
-static DISCOVERY_CACHE: OnceLock<Arc<DashMap<Pubkey, (PoolDescriptor, Instant)>>> = OnceLock::new();
-
-// In-flight guard: mint -> Notify; ensures single-flight discovery per mint
-static INFLIGHT_GUARD: OnceLock<Arc<DashMap<Pubkey, Arc<Notify>>>> = OnceLock::new();
-
-fn discovery_cache() -> &'static Arc<DashMap<Pubkey, (PoolDescriptor, Instant)>> {
-    DISCOVERY_CACHE.get_or_init(|| Arc::new(DashMap::new()))
-}
-
-fn inflight_guard() -> &'static Arc<DashMap<Pubkey, Arc<Notify>>> {
-    INFLIGHT_GUARD.get_or_init(|| Arc::new(DashMap::new()))
-}
-
-fn is_cache_fresh(cached_at: Instant) -> bool {
-    cached_at.elapsed() < Duration::from_secs(DISCOVERY_CACHE_TTL_SECS)
-}
-
-/// Public accessor: get canonical pool address for a mint (cache-first, single-flight discovery on miss)
-///
-/// Contract:
-/// - Does NOT touch price APIs or price cache
-/// - Uses existing discovery + selection logic (no duplication)
-/// - Returns Some(<pool_pubkey_string>) on success, None on failure/invalid mint
+/// Get canonical pool address for a mint (uses tokens/pools module directly)
 pub async fn get_canonical_pool_address(mint: &str) -> Option<String> {
-    // Parse mint pubkey
-    let mint_pk = match Pubkey::from_str(mint) {
-        Ok(pk) => pk,
+    // Simply use the tokens module which already handles caching and canonical selection
+    match get_token_pools_snapshot(mint).await {
+        Ok(Some(snapshot)) => snapshot.canonical_pool_address,
+        Ok(None) => None,
         Err(e) => {
-            logger::warning(
+            logger::debug(
                 LogTag::PoolDiscovery,
-                &format!(
-                    "Invalid mint provided to get_canonical_pool_address: {} ({})",
-                    mint, e
-                ),
+                &format!("Failed to get canonical pool for mint={}: {}", mint, e),
             );
-            return None;
-        }
-    };
-
-    // Fast path: check cache
-    if let Some(entry) = discovery_cache().get(&mint_pk) {
-        let (desc, cached_at) = entry.value();
-        if is_cache_fresh(*cached_at) {
-            return Some(desc.pool_id.to_string());
-        }
-    }
-
-    // Single-flight guard: only one discovery per mint at a time
-    let notify = {
-        let guards = inflight_guard();
-        match guards.entry(mint_pk) {
-            dashmap::mapref::entry::Entry::Vacant(v) => {
-                let n = Arc::new(Notify::new());
-                v.insert(n.clone());
-                // Leader path: perform discovery
-                drop(guards);
-                // Re-check cache just before doing network work in case another thread populated it
-                if let Some(entry) = discovery_cache().get(&mint_pk) {
-                    let (desc, cached_at) = entry.value();
-                    if is_cache_fresh(*cached_at) {
-                        inflight_guard().remove(&mint_pk);
-                        n.notify_waiters();
-                        return Some(desc.pool_id.to_string());
-                    }
-                }
-
-                // Perform discovery using existing logic
-                let discovery = PoolDiscovery::new();
-                let pools = discovery.discover_pools_for_token(mint).await;
-
-                // Deduplicate and select canonical pool using existing helpers
-                let deduped = PoolDiscovery::deduplicate_discovered(pools);
-                let selected = PoolDiscovery::select_highest_liquidity_per_token(deduped);
-
-                // Keep only the first selected pool (canonical)
-                let result = selected.first().cloned();
-
-                // Update cache and notify waiters
-                if let Some(desc) = result.as_ref() {
-                    discovery_cache().insert(mint_pk, (desc.clone(), Instant::now()));
-                    logger::debug(
-                        LogTag::PoolDiscovery,
-                        &format!(
-                            "Cached canonical pool for mint {} -> {} (program: {:?})",
-                            mint, desc.pool_id, desc.program_kind
-                        ),
-                    );
-                } else {
-                    logger::warning(
-                        LogTag::PoolDiscovery,
-                        &format!("No pools discovered for mint {}", mint),
-                    );
-                }
-
-                // Prepare return value without moving `result`
-                let pool_id_str = result.as_ref().map(|d| d.pool_id.to_string());
-
-                inflight_guard().remove(&mint_pk);
-                n.notify_waiters();
-
-                return pool_id_str;
-            }
-            dashmap::mapref::entry::Entry::Occupied(o) => {
-                // Follower path: wait for leader to finish
-                o.get().clone()
-            }
-        }
-    };
-
-    // Wait for leader with short polling to avoid lost-notify race
-    let start = Instant::now();
-    let max_wait = Duration::from_secs(5);
-    loop {
-        // If cache is now fresh, return immediately
-        if let Some(entry) = discovery_cache().get(&mint_pk) {
-            let (desc, cached_at) = entry.value();
-            if is_cache_fresh(*cached_at) {
-                return Some(desc.pool_id.to_string());
-            }
-        }
-
-        // If the guard is gone, leader finished; break to final read
-        if !inflight_guard().contains_key(&mint_pk) {
-            break;
-        }
-
-        // Wait briefly, then re-check
-        let _ = tokio::time::timeout(Duration::from_millis(150), notify.notified()).await;
-        if start.elapsed() >= max_wait {
-            break;
-        }
-    }
-
-    // Final cache read
-    discovery_cache().get(&mint_pk).and_then(|e| {
-        let (desc, cached_at) = e.value();
-        if is_cache_fresh(*cached_at) {
-            Some(desc.pool_id.to_string())
-        } else {
             None
         }
-    })
+    }
 }

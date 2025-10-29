@@ -474,10 +474,14 @@ impl PriceCalculator {
             return None;
         }
 
-        let mut selected = PoolDiscovery::select_highest_liquidity_per_token(candidates);
-        selected
+        // Select highest liquidity pool for this mint
+        candidates
             .into_iter()
-            .find(|pool| pool.base_mint == *mint || pool.quote_mint == *mint)
+            .max_by(|a, b| {
+                a.liquidity_usd
+                    .partial_cmp(&b.liquidity_usd)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
     }
 }
 
