@@ -7,7 +7,7 @@ use tokio::task::JoinHandle;
 /// Centralized tokens service that delegates all token background logic
 /// to the tokens module orchestrator (new architecture).
 pub struct TokensService {
-    orchestrator: Option<crate::tokens::service_new::TokensServiceNew>,
+    orchestrator: Option<crate::tokens::service::TokensServiceNew>,
 }
 
 impl Default for TokensService {
@@ -31,7 +31,7 @@ impl Service for TokensService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        let mut service = crate::tokens::service_new::TokensServiceNew::default();
+        let mut service = crate::tokens::service::TokensServiceNew::default();
         service.initialize().await?;
         self.orchestrator = Some(service);
         Ok(())

@@ -18,12 +18,12 @@ pub mod database;
 pub mod decimals;
 pub mod discovery;
 pub mod events;
-pub mod filtered_store;
+pub mod filtered;
 pub mod market;
 pub mod priorities;
 pub mod schema;
 pub mod security;
-pub mod service_new;
+pub mod service;
 pub mod store;
 pub mod types;
 pub mod updates;
@@ -45,7 +45,7 @@ pub use database::{
     update_token_priority_async,
     TokenDatabase,
 };
-pub use filtered_store::{
+pub use filtered::{
     get_blacklisted_tokens, get_counts as get_filtered_counts, get_filtered_lists,
     get_last_update_time as get_filtered_last_update, get_passed_tokens, get_rejected_tokens,
     get_tokens_with_open_positions, get_tokens_with_pool_price, store_filtered_results,
@@ -115,7 +115,7 @@ pub async fn request_immediate_update(mint: &str) -> TokenResult<UpdateResult> {
         "Token database not initialized".to_string(),
     ))?;
 
-    let coordinator = service_new::get_rate_coordinator().ok_or_else(|| {
+    let coordinator = service::get_rate_coordinator().ok_or_else(|| {
         TokenError::Database("Rate limit coordinator not available".to_string())
     })?;
 
