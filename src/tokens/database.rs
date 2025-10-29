@@ -305,7 +305,7 @@ impl TokenDatabase {
 
             let priority = priority_value
                 .map(Priority::from_value)
-                .unwrap_or(Priority::Medium);
+                .unwrap_or(Priority::Standard);
 
             let token = assemble_token_without_market_data(
                 meta,
@@ -1764,7 +1764,7 @@ impl TokenDatabase {
 
             let priority = priority_value
                 .map(Priority::from_value)
-                .unwrap_or(Priority::Medium);
+                .unwrap_or(Priority::Standard);
             // Determine chosen market source based on config preference then fallback
             let preferred_source =
                 crate::config::with_config(|cfg| cfg.tokens.preferred_market_data_source.clone());

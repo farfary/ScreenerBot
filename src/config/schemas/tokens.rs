@@ -52,44 +52,44 @@ config_struct! {
     /// Background update loop intervals (in seconds)
     pub struct UpdateIntervalsConfig {
         #[metadata(field_metadata! {
-            label: "Critical Interval (s)",
-            hint: "How often to update open positions (critical)",
+            label: "Open Position Interval (s)",
+            hint: "How often to update tokens with active trading positions",
             impact: "high",
             category: "Updates",
             min: 1.0,
             step: 1.0,
         })]
-        critical_seconds: u64 = 5,
+        open_position_seconds: u64 = 5,
 
         #[metadata(field_metadata! {
-            label: "Pool Interval (s)",
-            hint: "How often to update tokens sourced from Pool Service",
+            label: "Pool Tracked Interval (s)",
+            hint: "How often to update tokens tracked by Pool Service",
             impact: "high",
             category: "Updates",
             min: 1.0,
             step: 1.0,
         })]
-        pool_seconds: u64 = 7,
+        pool_tracked_seconds: u64 = 7,
 
         #[metadata(field_metadata! {
-            label: "High Interval (s)",
-            hint: "How often to update filtered/watched tokens (high)",
-            impact: "medium",
+            label: "Filter Passed Interval (s)",
+            hint: "How often to update tokens that passed filtering criteria",
+            impact: "high",
             category: "Updates",
             min: 1.0,
             step: 1.0,
         })]
-        high_seconds: u64 = 10,
+        filter_passed_seconds: u64 = 8,
 
         #[metadata(field_metadata! {
-            label: "Low Interval (s)",
-            hint: "How often to update oldest non-blacklisted tokens (low)",
+            label: "Background Interval (s)",
+            hint: "How often to update oldest tokens in background refresh",
             impact: "low",
             category: "Updates",
             min: 5.0,
             step: 5.0,
         })]
-        low_seconds: u64 = 30,
+        background_seconds: u64 = 30,
 
         #[metadata(field_metadata! {
             label: "Security Interval (s)",

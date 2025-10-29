@@ -178,50 +178,19 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
                     passed_time: Utc::now().timestamp(),
                 });
 
-                // CRITICAL: Dynamic priority based on market data staleness
-                // - If data is stale (>2min) or missing → Pool priority (75) for immediate update
-                // - If data is fresh → High priority (50) for normal updates
-                // This ensures passed tokens get fresh data quickly without overwhelming the system
+                // Set priority for passed tokens: FilterPassed (60)
+                // This is separate from PoolTracked priority (75) to avoid conflicts
                 let mint_for_priority = token.mint.clone();
                 tokio::spawn(async move {
-                    // Check if market data is stale (>120 seconds old)
-                    let is_stale =
-                        match crate::tokens::is_market_data_stale_async(&mint_for_priority, 120)
-                            .await
-                        {
-                            Ok(stale) => stale,
-                            Err(e) => {
-                                logger::warning(
-                                    LogTag::Filtering,
-                                    &format!(
-                                        "Failed to check staleness for {}: {}, assuming stale",
-                                        mint_for_priority, e
-                                    ),
-                                );
-                                true // Default to stale on error
-                            }
-                        };
-
-                    // Set priority: Pool (75) if stale, High (50) if fresh
-                    let priority = if is_stale { 75 } else { 50 };
-
                     if let Err(e) =
-                        crate::tokens::update_token_priority_async(&mint_for_priority, priority)
+                        crate::tokens::update_token_priority_async(&mint_for_priority, 60)
                             .await
                     {
                         logger::error(
                             LogTag::Filtering,
                             &format!(
-                                "Failed to set priority {} for passed token {}: {}",
-                                priority, mint_for_priority, e
-                            ),
-                        );
-                    } else if is_stale {
-                        logger::info(
-                            LogTag::Filtering,
-                            &format!(
-                                "Elevated {} to Pool priority (75) due to stale market data",
-                                mint_for_priority
+                                "Failed to set FilterPassed priority for {}: {}",
+                                mint_for_priority, e
                             ),
                         );
                     }

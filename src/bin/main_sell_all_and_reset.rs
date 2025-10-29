@@ -1471,7 +1471,7 @@ async fn attempt_single_sell(account: &TokenAccountInfo) -> Result<String, Strin
 
         // Bot-specific state
         is_blacklisted: false,
-        priority: screenerbot::tokens::priorities::Priority::Low,
+        priority: screenerbot::tokens::priorities::Priority::Background,
         first_seen_at: now,
         last_price_update: now,
     };

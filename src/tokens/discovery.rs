@@ -432,7 +432,7 @@ pub async fn run_discovery_once(
         )
         .map_err(|e| e.to_string())?;
 
-        if let Err(err) = db.update_priority(&mint, Priority::High.to_value()) {
+        if let Err(err) = db.update_priority(&mint, Priority::FilterPassed.to_value()) {
             logger::error(
                 LogTag::Tokens,
                 &format!("[DISCOVERY] Failed to set priority for {}: {}", mint, err),
@@ -552,9 +552,9 @@ async fn fetch_dexscreener_profiles(
     api: &Arc<crate::apis::ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
-    // Share DexScreener budget with updates
+    // Use profiles-specific rate limit (60/min, separate from market data updates)
     let _ = coordinator
-        .acquire_dexscreener()
+        .acquire_dexscreener_profiles()
         .await
         .map_err(|e| e.to_string())?;
     let profiles = api.dexscreener.get_latest_profiles().await?;
@@ -581,8 +581,9 @@ async fn fetch_dexscreener_latest_boosts(
     api: &Arc<crate::apis::ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
+    // Use boosts-specific rate limit (60/min, separate from market data updates)
     let _ = coordinator
-        .acquire_dexscreener()
+        .acquire_dexscreener_boosts()
         .await
         .map_err(|e| e.to_string())?;
     let boosts = api.dexscreener.get_latest_boosted_tokens().await?;
@@ -603,8 +604,9 @@ async fn fetch_dexscreener_top_boosts(
     api: &Arc<crate::apis::ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
+    // Use boosts-specific rate limit (60/min, separate from market data updates)
     let _ = coordinator
-        .acquire_dexscreener()
+        .acquire_dexscreener_boosts()
         .await
         .map_err(|e| e.to_string())?;
     let boosts = api

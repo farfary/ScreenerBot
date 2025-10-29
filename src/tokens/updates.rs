@@ -1,19 +1,27 @@
-use crate::apis::dexscreener::RATE_LIMIT_TOKEN_POOLS_PER_MINUTE as DEX_DEFAULT_PER_MINUTE;
+use crate::apis::dexscreener::{
+    RATE_LIMIT_LATEST_BOOSTS_PER_MINUTE as DEX_BOOSTS_PER_MINUTE,
+    RATE_LIMIT_LATEST_PROFILES_PER_MINUTE as DEX_PROFILES_PER_MINUTE,
+    RATE_LIMIT_TOKEN_BATCH_PER_MINUTE as DEX_BATCH_PER_MINUTE,
+};
 use crate::apis::geckoterminal::RATE_LIMIT_PER_MINUTE as GECKO_DEFAULT_PER_MINUTE;
 use crate::apis::rugcheck::RATE_LIMIT_PER_MINUTE as RUG_DEFAULT_PER_MINUTE;
 use crate::config::with_config;
 use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::pools;
-/// Updates orchestrator - Priority-based background updates
+/// Updates orchestrator - State-based priority updates
 ///
 /// Coordinates fetching from all sources (DexScreener, GeckoTerminal, Rugcheck)
-/// with rate limiting and priority-based scheduling.
+/// with rate limiting and state-based priority scheduling.
 ///
-/// Priority levels (actual loop intervals):
-/// - Critical (100): Open positions → Update every 5s
-/// - High (50): Filtered/watched tokens → Update every 10s  
-/// - Low (10): Oldest non-blacklisted → Update every 30s
+/// Priority levels (named by token state):
+/// - OpenPosition (100): Tokens with active trading positions → Update every 5s
+/// - PoolTracked (75): Tokens tracked by Pool Service → Update every 7s
+/// - FilterPassed (60): Tokens that passed filtering criteria → Update every 8s
+/// - Uninitialized (55): New tokens without market data yet → Update every 10s (immediate seeding)
+/// - Stale (40): Tokens with outdated market data → Update every 15s
+/// - Standard (25): Regular tokens with fresh data → Update every 20s
+/// - Background (10): Oldest tokens being refreshed in background → Update every 30s
 ///
 /// Security data (Rugcheck) is fetched in a separate loop, one token per interval (configurable, default 60s),
 /// and only for tokens that don't have security data yet.
@@ -22,6 +30,7 @@ use crate::tokens::market::{dexscreener, geckoterminal};
 use crate::tokens::priorities::Priority;
 use crate::tokens::security::rugcheck;
 use crate::tokens::types::{TokenError, TokenResult};
+use futures::future::join_all;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -35,15 +44,23 @@ use tokio::time::sleep;
 
 /// Global rate limit coordinator for all API sources
 ///
-/// Uses semaphores to enforce API rate limits:
-/// - DexScreener: 300/min
+/// Uses separate semaphores per endpoint to prevent different operations from blocking each other:
+/// - DexScreener token batch (market data): 300/min
+/// - DexScreener profiles (discovery): 60/min
+/// - DexScreener boosts (discovery): 60/min
 /// - GeckoTerminal: 30/min
 /// - Rugcheck: 60/min
 pub struct RateLimitCoordinator {
-    dexscreener_sem: Arc<Semaphore>,
+    // DexScreener endpoints (separate limits per endpoint)
+    dexscreener_batch_sem: Arc<Semaphore>,
+    dexscreener_profiles_sem: Arc<Semaphore>,
+    dexscreener_boosts_sem: Arc<Semaphore>,
+    dexscreener_batch_budget: usize,
+    dexscreener_profiles_budget: usize,
+    dexscreener_boosts_budget: usize,
+    // Other API endpoints
     geckoterminal_sem: Arc<Semaphore>,
     rugcheck_sem: Arc<Semaphore>,
-    dexscreener_budget: usize,
     geckoterminal_budget: usize,
     rugcheck_budget: usize,
 }
@@ -51,7 +68,6 @@ pub struct RateLimitCoordinator {
 impl RateLimitCoordinator {
     pub fn new() -> Self {
         // Read limits from config; fall back to API defaults if unset (0)
-        let dex_limit = DEX_DEFAULT_PER_MINUTE;
         let (gecko_limit, rug_limit) = with_config(|cfg| {
             let s = &cfg.tokens.sources;
             let gecko = if s.geckoterminal.rate_limit_per_minute == 0 {
@@ -68,18 +84,25 @@ impl RateLimitCoordinator {
         });
 
         Self {
-            dexscreener_sem: Arc::new(Semaphore::new(dex_limit)),
+            // DexScreener endpoints with separate limits
+            dexscreener_batch_sem: Arc::new(Semaphore::new(DEX_BATCH_PER_MINUTE)),
+            dexscreener_profiles_sem: Arc::new(Semaphore::new(DEX_PROFILES_PER_MINUTE)),
+            dexscreener_boosts_sem: Arc::new(Semaphore::new(DEX_BOOSTS_PER_MINUTE)),
+            dexscreener_batch_budget: DEX_BATCH_PER_MINUTE,
+            dexscreener_profiles_budget: DEX_PROFILES_PER_MINUTE,
+            dexscreener_boosts_budget: DEX_BOOSTS_PER_MINUTE,
+            // Other API endpoints
             geckoterminal_sem: Arc::new(Semaphore::new(gecko_limit)),
             rugcheck_sem: Arc::new(Semaphore::new(rug_limit)),
-            dexscreener_budget: dex_limit,
             geckoterminal_budget: gecko_limit,
             rugcheck_budget: rug_limit,
         }
     }
 
-    /// Acquire permit for DexScreener API call
-    pub async fn acquire_dexscreener(&self) -> Result<(), TokenError> {
-        self.dexscreener_sem
+    /// Acquire permit for DexScreener token batch API call (market data updates)
+    /// Rate limit: 300/min
+    pub async fn acquire_dexscreener_batch(&self) -> Result<(), TokenError> {
+        self.dexscreener_batch_sem
             .clone()
             .acquire_owned()
             .await
@@ -88,7 +111,39 @@ impl RateLimitCoordinator {
                 permit.forget();
             })
             .map_err(|e| TokenError::RateLimit {
-                source: "DexScreener".to_string(),
+                source: "DexScreener-Batch".to_string(),
+                message: format!("Failed to acquire permit: {}", e),
+            })
+    }
+
+    /// Acquire permit for DexScreener profiles API call (discovery)
+    /// Rate limit: 60/min
+    pub async fn acquire_dexscreener_profiles(&self) -> Result<(), TokenError> {
+        self.dexscreener_profiles_sem
+            .clone()
+            .acquire_owned()
+            .await
+            .map(|permit| {
+                permit.forget();
+            })
+            .map_err(|e| TokenError::RateLimit {
+                source: "DexScreener-Profiles".to_string(),
+                message: format!("Failed to acquire permit: {}", e),
+            })
+    }
+
+    /// Acquire permit for DexScreener boosts API call (discovery)
+    /// Rate limit: 60/min
+    pub async fn acquire_dexscreener_boosts(&self) -> Result<(), TokenError> {
+        self.dexscreener_boosts_sem
+            .clone()
+            .acquire_owned()
+            .await
+            .map(|permit| {
+                permit.forget();
+            })
+            .map_err(|e| TokenError::RateLimit {
+                source: "DexScreener-Boosts".to_string(),
                 message: format!("Failed to acquire permit: {}", e),
             })
     }
@@ -121,9 +176,20 @@ impl RateLimitCoordinator {
 
     /// Refill all semaphores (called every minute)
     pub fn refill_all(&self) {
-        if self.dexscreener_budget > 0 {
-            self.dexscreener_sem.add_permits(self.dexscreener_budget);
+        // DexScreener endpoints
+        if self.dexscreener_batch_budget > 0 {
+            self.dexscreener_batch_sem
+                .add_permits(self.dexscreener_batch_budget);
         }
+        if self.dexscreener_profiles_budget > 0 {
+            self.dexscreener_profiles_sem
+                .add_permits(self.dexscreener_profiles_budget);
+        }
+        if self.dexscreener_boosts_budget > 0 {
+            self.dexscreener_boosts_sem
+                .add_permits(self.dexscreener_boosts_budget);
+        }
+        // Other API endpoints
         if self.geckoterminal_budget > 0 {
             self.geckoterminal_sem
                 .add_permits(self.geckoterminal_budget);
@@ -188,9 +254,9 @@ impl PoolPriorityManager {
                 let current_priority = priorities
                     .get(mint)
                     .copied()
-                    .unwrap_or(Priority::Medium.to_value());
+                    .unwrap_or(Priority::Standard.to_value());
 
-                if current_priority == Priority::Critical.to_value() {
+                if current_priority == Priority::OpenPosition.to_value() {
                     state.remove(mint);
                     continue;
                 }
@@ -202,7 +268,7 @@ impl PoolPriorityManager {
                         previous_priority: current_priority,
                     });
 
-                if current_priority != Priority::Pool.to_value() {
+                if current_priority != Priority::PoolTracked.to_value() {
                     entry.previous_priority = current_priority;
                     promotions.push(mint.clone());
                 }
@@ -226,16 +292,16 @@ impl PoolPriorityManager {
         if !promotions.is_empty() {
             let mut promoted = Vec::new();
             for mint in promotions {
-                if let Err(e) = db.update_priority(&mint, Priority::Pool.to_value()) {
+                if let Err(e) = db.update_priority(&mint, Priority::PoolTracked.to_value()) {
                     logger::error(
                         LogTag::Tokens,
-                        &format!("Failed to promote {} to pool priority: {}", mint, e),
+                        &format!("Failed to promote {} to PoolTracked priority: {}", mint, e),
                     );
                 } else {
                     let previous_priority = priorities
                         .get(&mint)
                         .copied()
-                        .unwrap_or(Priority::Medium.to_value());
+                        .unwrap_or(Priority::Standard.to_value());
                     promoted.push((mint, previous_priority));
                 }
             }
@@ -285,21 +351,21 @@ impl PoolPriorityManager {
             let current_priority = current_priorities
                 .get(&mint)
                 .copied()
-                .unwrap_or(Priority::Medium.to_value());
+                .unwrap_or(Priority::Standard.to_value());
 
-            if current_priority != Priority::Pool.to_value() {
+            if current_priority != Priority::PoolTracked.to_value() {
                 continue;
             }
 
             let mut target_priority = previous_priority;
-            if target_priority == Priority::Pool.to_value() {
-                target_priority = Priority::Medium.to_value();
+            if target_priority == Priority::PoolTracked.to_value() {
+                target_priority = Priority::Standard.to_value();
             }
 
             if let Err(e) = db.update_priority(&mint, target_priority) {
                 logger::error(
                     LogTag::Tokens,
-                    &format!("Failed to demote {} from pool priority: {}", mint, e),
+                    &format!("Failed to demote {} from PoolTracked priority: {}", mint, e),
                 );
             } else {
                 demoted.push((mint, target_priority));
@@ -348,7 +414,7 @@ pub async fn update_token(
     let mut failures = Vec::new();
 
     // Update DexScreener market data only
-    match coordinator.acquire_dexscreener().await {
+    match coordinator.acquire_dexscreener_batch().await {
         Ok(_) => match dexscreener::fetch_dexscreener_data(mint, db).await {
             Ok(Some(_)) => successes.push("DexScreener".to_string()),
             Ok(None) => failures.push(format!("DexScreener: Token not listed")),
@@ -457,14 +523,14 @@ pub async fn update_tokens_batch(
 
     let mut results = Vec::new();
 
-    // Acquire rate limit permit for DexScreener only
-    let dex_permit = coordinator.acquire_dexscreener().await;
+    // Acquire rate limit permit for DexScreener batch endpoint (market data)
+    let dex_permit = coordinator.acquire_dexscreener_batch().await;
 
     // Fetch DexScreener data
     let dex_result = match dex_permit {
         Ok(_) => dexscreener::fetch_dexscreener_data_batch(mints, db).await,
         Err(e) => Err(TokenError::RateLimit {
-            source: "DexScreener".to_string(),
+            source: "DexScreener-Batch".to_string(),
             message: e.to_string(),
         }),
     };
@@ -651,62 +717,62 @@ pub fn start_update_loop(
         }
     }));
 
-    // Pool priority update loop (configurable)
+    // Pool-tracked tokens loop (configurable)
     let db_pool_update = db.clone();
     let coord_pool = coordinator.clone();
     let shutdown_pool_update = shutdown.clone();
     handles.push(tokio::spawn(async move {
-        update_pool_priority_tokens(&db_pool_update, &coord_pool).await;
+        update_pool_tracked_tokens(&db_pool_update, &coord_pool).await;
         loop {
             tokio::select! {
                 _ = shutdown_pool_update.notified() => break,
-                _ = sleep(Duration::from_secs(with_config(|cfg| cfg.tokens.update_intervals.pool_seconds))) => {
-                    update_pool_priority_tokens(&db_pool_update, &coord_pool).await;
+                _ = sleep(Duration::from_secs(with_config(|cfg| cfg.tokens.update_intervals.pool_tracked_seconds))) => {
+                    update_pool_tracked_tokens(&db_pool_update, &coord_pool).await;
                 }
             }
         }
     }));
 
-    // Critical priority loop (configurable)
-    let db_critical = db.clone();
-    let coord_critical = coordinator.clone();
-    let shutdown_critical = shutdown.clone();
+    // Open position tokens loop (configurable)
+    let db_open_pos = db.clone();
+    let coord_open_pos = coordinator.clone();
+    let shutdown_open_pos = shutdown.clone();
     handles.push(tokio::spawn(async move {
         loop {
             tokio::select! {
-                _ = shutdown_critical.notified() => break,
-                _ = sleep(Duration::from_secs(with_config(|cfg| cfg.tokens.update_intervals.critical_seconds))) => {
-                    update_critical_tokens(&db_critical, &coord_critical).await;
+                _ = shutdown_open_pos.notified() => break,
+                _ = sleep(Duration::from_secs(with_config(|cfg| cfg.tokens.update_intervals.open_position_seconds))) => {
+                    update_open_position_tokens(&db_open_pos, &coord_open_pos).await;
                 }
             }
         }
     }));
 
-    // High priority loop (configurable)
-    let db_high = db.clone();
-    let coord_high = coordinator.clone();
-    let shutdown_high = shutdown.clone();
+    // Filter-passed tokens loop (configurable)
+    let db_filter_passed = db.clone();
+    let coord_filter_passed = coordinator.clone();
+    let shutdown_filter_passed = shutdown.clone();
     handles.push(tokio::spawn(async move {
         loop {
             tokio::select! {
-                _ = shutdown_high.notified() => break,
-                _ = sleep(Duration::from_secs(with_config(|cfg| cfg.tokens.update_intervals.high_seconds))) => {
-                    update_high_priority_tokens(&db_high, &coord_high).await;
+                _ = shutdown_filter_passed.notified() => break,
+                _ = sleep(Duration::from_secs(with_config(|cfg| cfg.tokens.update_intervals.filter_passed_seconds))) => {
+                    update_filter_passed_tokens(&db_filter_passed, &coord_filter_passed).await;
                 }
             }
         }
     }));
 
-    // Low priority loop (configurable)
-    let db_low = db.clone();
-    let coord_low = coordinator.clone();
-    let shutdown_low = shutdown.clone();
+    // Background tokens loop (configurable)
+    let db_background = db.clone();
+    let coord_background = coordinator.clone();
+    let shutdown_background = shutdown.clone();
     handles.push(tokio::spawn(async move {
         loop {
             tokio::select! {
-                _ = shutdown_low.notified() => break,
-                _ = sleep(Duration::from_secs(with_config(|cfg| cfg.tokens.update_intervals.low_seconds))) => {
-                    update_low_priority_tokens(&db_low, &coord_low).await;
+                _ = shutdown_background.notified() => break,
+                _ = sleep(Duration::from_secs(with_config(|cfg| cfg.tokens.update_intervals.background_seconds))) => {
+                    update_background_tokens(&db_background, &coord_background).await;
                 }
             }
         }
@@ -742,9 +808,21 @@ async fn update_uninitialized_tokens(db: &TokenDatabase, coordinator: &RateLimit
         ),
     );
 
-    // Process in batches of 30
-    for chunk in tokens.chunks(30) {
-        match update_tokens_batch(chunk, db, coordinator).await {
+    // Process all chunks concurrently to maximize rate limit utilization
+    let chunk_futures: Vec<_> = tokens
+        .chunks(30)
+        .map(|chunk| {
+            let chunk_vec = chunk.to_vec();
+            let db_clone = db.clone();
+            let coord_clone = coordinator.clone();
+            async move { update_tokens_batch(&chunk_vec, &db_clone, &coord_clone).await }
+        })
+        .collect();
+
+    let all_results = join_all(chunk_futures).await;
+
+    for batch_result in all_results {
+        match batch_result {
             Ok(results) => {
                 for result in results {
                     if result.is_total_failure() {
@@ -781,15 +859,14 @@ async fn update_uninitialized_tokens(db: &TokenDatabase, coordinator: &RateLimit
     }
 }
 
-/// Update critical priority tokens (open positions)
-async fn update_critical_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
-    // Get tokens with priority = 100 (open positions)
-    let tokens = match db.get_tokens_by_priority(100, 200) {
+/// Update open position tokens (tokens with active trading positions)
+async fn update_open_position_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
+    let tokens = match db.get_tokens_by_priority(Priority::OpenPosition.to_value(), 200) {
         Ok(tokens) => tokens,
         Err(e) => {
             logger::error(
                 LogTag::Tokens,
-                &format!("Failed to get critical tokens: {}", e),
+                &format!("Failed to get open position tokens: {}", e),
             );
             return;
         }
@@ -801,12 +878,24 @@ async fn update_critical_tokens(db: &TokenDatabase, coordinator: &RateLimitCoord
 
     logger::info(
         LogTag::Tokens,
-        &format!("Updating {} critical priority tokens", tokens.len()),
+        &format!("Updating {} open position tokens", tokens.len()),
     );
 
-    // Process in batches of 30
-    for chunk in tokens.chunks(30) {
-        match update_tokens_batch(chunk, db, coordinator).await {
+    // Process all chunks concurrently to maximize rate limit utilization
+    let chunk_futures: Vec<_> = tokens
+        .chunks(30)
+        .map(|chunk| {
+            let chunk_vec = chunk.to_vec();
+            let db_clone = db.clone();
+            let coord_clone = coordinator.clone();
+            async move { update_tokens_batch(&chunk_vec, &db_clone, &coord_clone).await }
+        })
+        .collect();
+
+    let all_results = join_all(chunk_futures).await;
+
+    for batch_result in all_results {
+        match batch_result {
             Ok(results) => {
                 for result in results {
                     if result.is_total_failure() {
@@ -839,21 +928,21 @@ async fn update_critical_tokens(db: &TokenDatabase, coordinator: &RateLimitCoord
             Err(e) => {
                 logger::error(
                     LogTag::Tokens,
-                    &format!("Batch error for critical tokens: {}", e),
+                    &format!("Batch error for open position tokens: {}", e),
                 );
             }
         }
     }
 }
 
-/// Update pool-priority tokens (Pool Service tracked)
-async fn update_pool_priority_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
-    let tokens = match db.get_tokens_by_priority(Priority::Pool.to_value(), 200) {
+/// Update pool-tracked tokens (Pool Service tracked tokens)
+async fn update_pool_tracked_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
+    let tokens = match db.get_tokens_by_priority(Priority::PoolTracked.to_value(), 200) {
         Ok(tokens) => tokens,
         Err(e) => {
             logger::error(
                 LogTag::Tokens,
-                &format!("Failed to get pool priority tokens: {}", e),
+                &format!("Failed to get pool-tracked tokens: {}", e),
             );
             return;
         }
@@ -866,11 +955,24 @@ async fn update_pool_priority_tokens(db: &TokenDatabase, coordinator: &RateLimit
     let batch = &tokens[..tokens.len().min(90)];
     logger::info(
         LogTag::Tokens,
-        &format!("Updating {} pool priority tokens", batch.len()),
+        &format!("Updating {} pool-tracked tokens", batch.len()),
     );
 
-    for chunk in batch.chunks(30) {
-        match update_tokens_batch(chunk, db, coordinator).await {
+    // Process all chunks concurrently to maximize rate limit utilization
+    let chunk_futures: Vec<_> = batch
+        .chunks(30)
+        .map(|chunk| {
+            let chunk_vec = chunk.to_vec();
+            let db_clone = db.clone();
+            let coord_clone = coordinator.clone();
+            async move { update_tokens_batch(&chunk_vec, &db_clone, &coord_clone).await }
+        })
+        .collect();
+
+    let all_results = join_all(chunk_futures).await;
+
+    for batch_result in all_results {
+        match batch_result {
             Ok(results) => {
                 for result in results {
                     if result.is_total_failure() {
@@ -919,15 +1021,14 @@ async fn update_pool_priority_tokens(db: &TokenDatabase, coordinator: &RateLimit
     }
 }
 
-/// Update high priority tokens (filtered/watched)
-async fn update_high_priority_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
-    // Get tokens with priority = 50
-    let tokens = match db.get_tokens_by_priority(50, 200) {
+/// Update filter-passed tokens (tokens that passed filtering criteria)
+async fn update_filter_passed_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
+    let tokens = match db.get_tokens_by_priority(Priority::FilterPassed.to_value(), 200) {
         Ok(tokens) => tokens,
         Err(e) => {
             logger::error(
                 LogTag::Tokens,
-                &format!("Failed to get high priority tokens: {}", e),
+                &format!("Failed to get filter-passed tokens: {}", e),
             );
             return;
         }
@@ -941,11 +1042,24 @@ async fn update_high_priority_tokens(db: &TokenDatabase, coordinator: &RateLimit
     let batch = &tokens[..tokens.len().min(60)];
     logger::info(
         LogTag::Tokens,
-        &format!("Updating {} high priority tokens", batch.len()),
+        &format!("Updating {} filter-passed tokens", batch.len()),
     );
 
-    for chunk in batch.chunks(30) {
-        match update_tokens_batch(chunk, db, coordinator).await {
+    // Process all chunks concurrently to maximize rate limit utilization
+    let chunk_futures: Vec<_> = batch
+        .chunks(30)
+        .map(|chunk| {
+            let chunk_vec = chunk.to_vec();
+            let db_clone = db.clone();
+            let coord_clone = coordinator.clone();
+            async move { update_tokens_batch(&chunk_vec, &db_clone, &coord_clone).await }
+        })
+        .collect();
+
+    let all_results = join_all(chunk_futures).await;
+
+    for batch_result in all_results {
+        match batch_result {
             Ok(results) => {
                 for result in results {
                     if result.is_total_failure() {
@@ -974,22 +1088,22 @@ async fn update_high_priority_tokens(db: &TokenDatabase, coordinator: &RateLimit
             Err(e) => {
                 logger::error(
                     LogTag::Tokens,
-                    &format!("Batch error for high priority tokens: {}", e),
+                    &format!("Batch error for passed priority tokens: {}", e),
                 );
             }
         }
     }
 }
 
-/// Update low priority tokens (oldest non-blacklisted)
-async fn update_low_priority_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
+/// Update background tokens (oldest non-blacklisted tokens)
+async fn update_background_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
     // Get oldest 30 non-blacklisted tokens (batch size)
     let tokens = match db.get_oldest_non_blacklisted(30) {
         Ok(tokens) => tokens,
         Err(e) => {
             logger::error(
                 LogTag::Tokens,
-                &format!("Failed to get low priority tokens: {}", e),
+                &format!("Failed to get background tokens: {}", e),
             );
             return;
         }
@@ -1001,7 +1115,7 @@ async fn update_low_priority_tokens(db: &TokenDatabase, coordinator: &RateLimitC
 
     logger::info(
         LogTag::Tokens,
-        &format!("Updating {} low priority tokens", tokens.len()),
+        &format!("Updating {} background tokens", tokens.len()),
     );
 
     // Process all in one batch (already limited to 30)
