@@ -4,6 +4,7 @@ use crate::events::{record_ohlcv_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::database::OhlcvDatabase;
 use crate::ohlcvs::types::{OhlcvError, OhlcvResult, PoolConfig, PoolMetadata};
+use crate::tokens::pools;
 use crate::tokens::types::{TokenPoolInfo, TokenPoolsSnapshot};
 use crate::tokens::{
     get_token_pools_snapshot, get_token_pools_snapshot_allow_stale, prefetch_token_pools,
@@ -194,7 +195,7 @@ impl PoolManager {
         let canonical_address = snapshot
             .canonical_pool_address
             .clone()
-            .or_else(|| Self::select_highest_liquidity_address(&snapshot.pools));
+            .or_else(|| pools::choose_canonical_pool(&snapshot.pools));
 
         let mut existing_map: HashMap<String, PoolConfig> = self
             .db
@@ -409,8 +410,8 @@ impl PoolManager {
         canonical: Option<&str>,
         existing: Option<PoolConfig>,
     ) -> PoolConfig {
-        let dex_label = Self::pool_info_dex_label(pool);
-        let liquidity = Self::pool_info_liquidity(pool);
+        let dex_label = pools::extract_dex_label(pool);
+        let liquidity = pools::extract_pool_liquidity(pool);
 
         let mut config = existing.unwrap_or_else(|| {
             PoolConfig::new(pool.pool_address.clone(), dex_label.clone(), liquidity)
@@ -435,57 +436,6 @@ impl PoolManager {
         }
 
         config
-    }
-
-    fn pool_info_dex_label(pool: &TokenPoolInfo) -> String {
-        if let Some(dex) = &pool.dex {
-            let trimmed = dex.trim();
-            if !trimmed.is_empty() {
-                return trimmed.to_string();
-            }
-        }
-
-        if pool.sources.dexscreener.is_some() {
-            "dexscreener".to_string()
-        } else if pool.sources.geckoterminal.is_some() {
-            "geckoterminal".to_string()
-        } else {
-            "unknown".to_string()
-        }
-    }
-
-    fn pool_info_liquidity(pool: &TokenPoolInfo) -> f64 {
-        if let Some(liquidity) = pool.liquidity_usd {
-            if liquidity.is_finite() && liquidity > 0.0 {
-                return liquidity;
-            }
-        }
-
-        if let Some(liquidity) = pool.liquidity_sol {
-            if liquidity.is_finite() && liquidity > 0.0 {
-                return liquidity;
-            }
-        }
-
-        if let Some(volume) = pool.volume_h24 {
-            if volume.is_finite() && volume > 0.0 {
-                return volume;
-            }
-        }
-
-        0.0
-    }
-
-    fn select_highest_liquidity_address(pools: &[TokenPoolInfo]) -> Option<String> {
-        pools
-            .iter()
-            .filter(|pool| pool.is_sol_pair)
-            .max_by(|a, b| {
-                Self::pool_info_liquidity(a)
-                    .partial_cmp(&Self::pool_info_liquidity(b))
-                    .unwrap_or(Ordering::Equal)
-            })
-            .map(|pool| pool.pool_address.clone())
     }
 
     fn best_pool_index(configs: &[PoolConfig]) -> Option<usize> {

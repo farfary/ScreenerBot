@@ -4,10 +4,10 @@ use chrono::{DateTime, Utc};
 use once_cell::sync::OnceCell;
 use rusqlite::types::FromSql;
 use rusqlite::{params, params_from_iter, Connection, Row};
-use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use crate::tokens::pools;
 use crate::tokens::types::{
     DataSource, DexScreenerData, GeckoTerminalData, Priority, RugcheckData, SecurityRisk,
     SocialLink, Token, TokenError, TokenHolder, TokenMetadata, TokenPoolInfo, TokenPoolSources,
@@ -856,7 +856,7 @@ impl TokenDatabase {
             .map(|p| p.fetched_at)
             .max()
             .unwrap_or_else(|| Utc::now());
-        let canonical_pool_address = select_canonical_pool(&pools);
+        let canonical_pool_address = pools::choose_canonical_pool(&pools);
 
         Ok(Some(TokenPoolsSnapshot {
             mint: mint.to_string(),
@@ -901,7 +901,7 @@ impl TokenDatabase {
                     .map(|p| p.fetched_at)
                     .max()
                     .unwrap_or_else(|| Utc::now());
-                let canonical_pool_address = select_canonical_pool(&current_pools);
+                let canonical_pool_address = pools::choose_canonical_pool(&current_pools);
 
                 snapshots.push(TokenPoolsSnapshot {
                     mint: current_mint.take().unwrap(),
@@ -947,7 +947,7 @@ impl TokenDatabase {
                     .map(|p| p.fetched_at)
                     .max()
                     .unwrap_or_else(|| Utc::now());
-                let canonical_pool_address = select_canonical_pool(&current_pools);
+                let canonical_pool_address = pools::choose_canonical_pool(&current_pools);
 
                 snapshots.push(TokenPoolsSnapshot {
                     mint,
@@ -2613,32 +2613,6 @@ fn assemble_token(
         first_seen_at: created_dt,
         last_price_update: fetched_at,
     }
-}
-
-fn pool_metric_for_selection(pool: &TokenPoolInfo) -> f64 {
-    pool.liquidity_sol
-        .or(pool.liquidity_usd)
-        .or(pool.volume_h24)
-        .unwrap_or(0.0)
-}
-
-fn select_canonical_pool(pools: &[TokenPoolInfo]) -> Option<String> {
-    pools
-        .iter()
-        .filter(|pool| pool.is_sol_pair)
-        .max_by(|a, b| {
-            let metric_a = pool_metric_for_selection(a);
-            let metric_b = pool_metric_for_selection(b);
-            match metric_a.partial_cmp(&metric_b).unwrap_or(Ordering::Equal) {
-                Ordering::Equal => {
-                    let vol_a = a.volume_h24.unwrap_or(0.0);
-                    let vol_b = b.volume_h24.unwrap_or(0.0);
-                    vol_a.partial_cmp(&vol_b).unwrap_or(Ordering::Equal)
-                }
-                ordering => ordering,
-            }
-        })
-        .map(|pool| pool.pool_address.clone())
 }
 
 fn read_row_value<T: FromSql>(row: &Row<'_>, index: usize, field: &str) -> TokenResult<T> {

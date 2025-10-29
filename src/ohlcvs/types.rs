@@ -42,7 +42,6 @@ impl Timeframe {
     ///
     /// GeckoTerminal API only supports: "minute", "hour", "day", "second"
     /// We fetch base granularity and aggregate locally for finer timeframes
-    /// DEPRECATED: Use to_api_params() for proper native timeframe support
     pub fn to_api_param(&self) -> &'static str {
         match self {
             // All minute-based timeframes fetch from "minute" endpoint (1m candles)

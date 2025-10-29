@@ -20,6 +20,7 @@ pub mod discovery;
 pub mod events;
 pub mod filtered;
 pub mod market;
+pub mod pools;
 pub mod priorities;
 pub mod schema;
 pub mod security;
@@ -72,11 +73,19 @@ pub use priorities::Priority;
 
 // Re-export store APIs
 pub use store::{
-    clear_pool_cache, dexscreener_cache_metrics, dexscreener_cache_size,
-    geckoterminal_cache_metrics, geckoterminal_cache_size, get_cached_token,
-    get_token_pools_snapshot, get_token_pools_snapshot_allow_stale, invalidate_token_snapshot,
-    prefetch_token_pools, refresh_token_snapshot, rugcheck_cache_metrics, rugcheck_cache_size,
-    store_token_snapshot, CacheMetrics,
+    dexscreener_cache_metrics, dexscreener_cache_size, get_cached_token,
+    geckoterminal_cache_metrics, geckoterminal_cache_size, invalidate_token_snapshot,
+    refresh_token_snapshot, rugcheck_cache_metrics, rugcheck_cache_size, store_token_snapshot,
+    CacheMetrics,
+};
+
+// Re-export pools APIs
+pub use pools::{
+    cache_metrics as pool_cache_metrics, calculate_pool_metric, choose_canonical_pool,
+    clear_cache as clear_pool_cache, extract_dex_label, extract_pool_liquidity,
+    get_snapshot as get_token_pools_snapshot,
+    get_snapshot_allow_stale as get_token_pools_snapshot_allow_stale, merge_pool_info,
+    prefetch as prefetch_token_pools,
 };
 
 // Re-export decimals API
