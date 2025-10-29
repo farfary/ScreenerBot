@@ -81,6 +81,28 @@ pub const CREATE_TABLES: &[&str] = &[
         FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE RESTRICT
     )
     "#,
+    // Aggregated token pool data (multi-source, per pool)
+    r#"
+    CREATE TABLE IF NOT EXISTS token_pools (
+        mint TEXT NOT NULL,
+        pool_address TEXT NOT NULL,
+        dex TEXT,
+        base_mint TEXT NOT NULL,
+        quote_mint TEXT NOT NULL,
+        is_sol_pair INTEGER NOT NULL,
+        liquidity_usd REAL,
+        liquidity_token REAL,
+        liquidity_sol REAL,
+        volume_h24 REAL,
+        price_usd REAL,
+        price_sol REAL,
+        price_native TEXT,
+        sources_json TEXT,
+        fetched_at INTEGER NOT NULL,
+        PRIMARY KEY (mint, pool_address),
+        FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE CASCADE
+    )
+    "#,
     // Rugcheck security data (per token)
     r#"
     CREATE TABLE IF NOT EXISTS security_rugcheck (
@@ -150,6 +172,9 @@ pub const CREATE_INDEXES: &[&str] = &[
 
     "CREATE INDEX IF NOT EXISTS idx_market_gecko_fetched ON market_geckoterminal(fetched_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_market_gecko_liquidity ON market_geckoterminal(liquidity_usd DESC)",
+
+    "CREATE INDEX IF NOT EXISTS idx_token_pools_mint ON token_pools(mint)",
+    "CREATE INDEX IF NOT EXISTS idx_token_pools_fetched ON token_pools(fetched_at DESC)",
 
     "CREATE INDEX IF NOT EXISTS idx_security_rug_fetched ON security_rugcheck(fetched_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_security_rug_score ON security_rugcheck(score DESC)",

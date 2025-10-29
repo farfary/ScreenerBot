@@ -1,10 +1,16 @@
 // Pool manager for multi-pool support and failover
 
 use crate::events::{record_ohlcv_event, Severity};
+use crate::logger::{self, LogTag};
 use crate::ohlcvs::database::OhlcvDatabase;
 use crate::ohlcvs::types::{OhlcvError, OhlcvResult, PoolConfig, PoolMetadata};
+use crate::tokens::{
+    get_token_pools_snapshot, get_token_pools_snapshot_allow_stale, prefetch_token_pools,
+};
+use crate::tokens::types::{TokenPoolInfo, TokenPoolsSnapshot};
 use serde_json::json;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 pub struct PoolManager {
@@ -152,13 +158,8 @@ impl PoolManager {
         Ok(None)
     }
 
-    /// Discover and register pools from Pool Service
-    /// Queries pools.db price_history table to find pools for this token
+    /// Discover and register pools for a token using centralized token snapshots.
     pub async fn discover_pools(&self, mint: &str) -> OhlcvResult<Vec<PoolConfig>> {
-        use rusqlite::Connection;
-        use tokio::task;
-
-        // DEBUG: Record pool discovery start
         record_ohlcv_event(
             "pool_discovery_start",
             Severity::Debug,
@@ -170,68 +171,11 @@ impl PoolManager {
         )
         .await;
 
-        // Perform blocking SQLite work off the async runtime
-        let mint_owned = mint.to_string();
-        let discovered: OhlcvResult<Vec<PoolConfig>> = task::spawn_blocking(move || {
-            // Open pools.db (Pool Service database)
-            // Use read-only to avoid writer locks and configure for read speed
-            let mut pools_db = Connection::open_with_flags(
-                "data/pools.db",
-                rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
-            )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Failed to open pools.db: {}", e)))?;
-            let _ = pools_db.pragma_update(None, "query_only", "1");
-            let _ = pools_db.pragma_update(None, "cache_size", 20000);
-            let _ = pools_db.pragma_update(None, "temp_store", "memory");
+        prefetch_token_pools(&[mint.to_string()]).await;
 
-            // Query for pools associated with this mint
-            let mut stmt = pools_db
-                .prepare(
-                    "SELECT DISTINCT pool_address \
-             FROM price_history \
-             WHERE mint = ? \
-             ORDER BY timestamp_unix DESC \
-             LIMIT 10",
-                )
-                .map_err(|e| {
-                    OhlcvError::DatabaseError(format!("Failed to prepare query: {}", e))
-                })?;
-
-            let mut pools = Vec::new();
-            let rows = stmt
-                .query_map([mint_owned.as_str()], |row| row.get::<_, String>(0))
-                .map_err(|e| OhlcvError::DatabaseError(format!("Query failed: {}", e)))?;
-
-            for row in rows {
-                if let Ok(pool_address) = row {
-                    // Create pool config (DEX/liquidity unknown from price_history)
-                    pools.push(PoolConfig::new(
-                        pool_address,
-                        "dexscreener".to_string(),
-                        0.0,
-                    ));
-                }
-            }
-
-            if pools.is_empty() {
-                return Err(OhlcvError::PoolNotFound(format!(
-                    "No pools found in Pool Service for token: {}",
-                    mint_owned
-                )));
-            }
-
-            Ok(pools)
-        })
-        .await
-        .map_err(|e| {
-            OhlcvError::DatabaseError(format!("Join error during pool discovery: {}", e))
-        })?;
-
-        // Unwrap inner result from blocking task
-        let discovered = match discovered {
-            Ok(pools) => pools,
-            Err(e) => {
-                // ERROR: Record pool discovery failure
+        let snapshot = match Self::load_snapshot_with_fallback(mint).await {
+            Ok(snapshot) => snapshot,
+            Err(err) => {
                 record_ohlcv_event(
                     "pool_discovery_error",
                     Severity::Error,
@@ -239,22 +183,116 @@ impl PoolManager {
                     None,
                     json!({
                         "mint": mint,
-                        "error": e.to_string(),
+                        "error": err.to_string(),
                     }),
                 )
                 .await;
-                return Err(e);
+                return Err(err);
             }
         };
 
-        // Upsert discovered pools into OHLCV DB on the async side (rusqlite is still blocking but short)
-        let mut result = Vec::new();
-        for config in discovered.into_iter() {
-            self.db.upsert_pool(mint, &config)?;
-            result.push(config);
+        let canonical_address = snapshot
+            .canonical_pool_address
+            .clone()
+            .or_else(|| Self::select_highest_liquidity_address(&snapshot.pools));
+
+        let mut existing_map: HashMap<String, PoolConfig> = self
+            .db
+            .get_pools(mint)?
+            .into_iter()
+            .map(|cfg| (cfg.address.clone(), cfg))
+            .collect();
+
+        let mut discovered_configs = Vec::new();
+        let mut skipped_non_sol = 0usize;
+
+        for pool in snapshot.pools.iter() {
+            if !pool.is_sol_pair {
+                skipped_non_sol += 1;
+                continue;
+            }
+
+            let existing = existing_map.remove(&pool.pool_address);
+            let config = Self::merge_pool_info(pool, canonical_address.as_deref(), existing);
+            discovered_configs.push(config);
         }
 
-        // INFO: Record successful pool discovery
+        if discovered_configs.is_empty() {
+            logger::debug(
+                LogTag::Ohlcv,
+                &format!(
+                    "No SOL pools discovered for mint={} ({} pools skipped as non-SOL)",
+                    mint, skipped_non_sol
+                ),
+            );
+
+            record_ohlcv_event(
+                "pool_discovery_empty",
+                Severity::Warn,
+                Some(mint),
+                None,
+                json!({
+                    "mint": mint,
+                    "skipped_non_sol": skipped_non_sol,
+                }),
+            )
+            .await;
+
+            return Err(OhlcvError::NotFound(format!(
+                "No SOL pools available for mint {}",
+                mint
+            )));
+        }
+
+        if !discovered_configs.iter().any(|cfg| cfg.is_default) {
+            if let Some(best_idx) = Self::best_pool_index(&discovered_configs) {
+                discovered_configs[best_idx].is_default = true;
+            }
+        }
+
+        for config in &discovered_configs {
+            self.db.upsert_pool(mint, config)?;
+        }
+
+        let mut removed_addresses = Vec::new();
+        for leftover in existing_map.into_values() {
+            self.db.delete_pool(mint, &leftover.address)?;
+            removed_addresses.push(leftover.address);
+        }
+
+        if skipped_non_sol > 0 {
+            logger::debug(
+                LogTag::Ohlcv,
+                &format!(
+                    "Filtered {} non-SOL pools while discovering mint={}",
+                    skipped_non_sol, mint
+                ),
+            );
+        }
+
+        if !removed_addresses.is_empty() {
+            let preview: Vec<&str> = removed_addresses.iter().take(3).map(|s| s.as_str()).collect();
+            let suffix = if removed_addresses.len() > 3 {
+                format!(" (+{} more)", removed_addresses.len() - 3)
+            } else {
+                String::new()
+            };
+
+            logger::debug(
+                LogTag::Ohlcv,
+                &format!(
+                    "Removed {} stale pool entries for mint={}{}",
+                    removed_addresses.len(),
+                    mint,
+                    if preview.is_empty() {
+                        String::new()
+                    } else {
+                        format!(" [{}]{}", preview.join(", "), suffix)
+                    }
+                ),
+            );
+        }
+
         record_ohlcv_event(
             "pool_discovery_complete",
             Severity::Info,
@@ -262,13 +300,198 @@ impl PoolManager {
             None,
             json!({
                 "mint": mint,
-                "pools_found": result.len(),
-                "pool_addresses": result.iter().map(|p| &p.address).collect::<Vec<_>>(),
+                "pools_found": discovered_configs.len(),
+                "skipped_non_sol": skipped_non_sol,
+                "removed_pools": removed_addresses.len(),
+                "canonical_address": canonical_address,
             }),
         )
         .await;
 
-        Ok(result)
+        Ok(discovered_configs)
+    }
+
+    async fn load_snapshot_with_fallback(mint: &str) -> OhlcvResult<TokenPoolsSnapshot> {
+        match get_token_pools_snapshot(mint).await {
+            Ok(Some(snapshot)) => Ok(snapshot),
+            Ok(None) => {
+                record_ohlcv_event(
+                    "pool_discovery_snapshot_missing",
+                    Severity::Warn,
+                    Some(mint),
+                    None,
+                    json!({
+                        "mint": mint,
+                        "reason": "no_fresh_snapshot",
+                    }),
+                )
+                .await;
+
+                logger::debug(
+                    LogTag::Ohlcv,
+                    &format!(
+                        "No fresh pool snapshot for mint={} – attempting stale fallback",
+                        mint
+                    ),
+                );
+
+                Self::load_stale_snapshot(mint).await
+            }
+            Err(err) => {
+                let message = err.to_string();
+                record_ohlcv_event(
+                    "pool_discovery_snapshot_error",
+                    Severity::Error,
+                    Some(mint),
+                    None,
+                    json!({
+                        "mint": mint,
+                        "error": message,
+                    }),
+                )
+                .await;
+
+                logger::warning(
+                    LogTag::Ohlcv,
+                    &format!(
+                        "Pool snapshot fetch failed for mint={} error={} – attempting stale fallback",
+                        mint, message
+                    ),
+                );
+
+                Self::load_stale_snapshot(mint).await
+            }
+        }
+    }
+
+    async fn load_stale_snapshot(mint: &str) -> OhlcvResult<TokenPoolsSnapshot> {
+        match get_token_pools_snapshot_allow_stale(mint).await {
+            Ok(Some(snapshot)) => {
+                record_ohlcv_event(
+                    "pool_discovery_snapshot_stale",
+                    Severity::Warn,
+                    Some(mint),
+                    None,
+                    json!({
+                        "mint": mint,
+                        "fetched_at": snapshot.fetched_at,
+                    }),
+                )
+                .await;
+
+                logger::warning(
+                    LogTag::Ohlcv,
+                    &format!(
+                        "Using stale pool snapshot for mint={} fetched_at={}",
+                        mint, snapshot.fetched_at
+                    ),
+                );
+
+                Ok(snapshot)
+            }
+            Ok(None) => Err(OhlcvError::NotFound(format!(
+                "No pool snapshot available for mint {}",
+                mint
+            ))),
+            Err(err) => Err(OhlcvError::ApiError(format!(
+                "Failed to load stale pool snapshot for {}: {}",
+                mint, err
+            ))),
+        }
+    }
+
+    fn merge_pool_info(
+        pool: &TokenPoolInfo,
+        canonical: Option<&str>,
+        existing: Option<PoolConfig>,
+    ) -> PoolConfig {
+        let dex_label = Self::pool_info_dex_label(pool);
+        let liquidity = Self::pool_info_liquidity(pool);
+
+        let mut config = existing.unwrap_or_else(|| {
+            PoolConfig::new(pool.pool_address.clone(), dex_label.clone(), liquidity)
+        });
+
+        config.address = pool.pool_address.clone();
+        config.dex = dex_label;
+        config.liquidity = liquidity;
+
+        if let Some(canonical_address) = canonical {
+            config.is_default = canonical_address == config.address;
+        }
+
+        config
+    }
+
+    fn pool_info_dex_label(pool: &TokenPoolInfo) -> String {
+        if let Some(dex) = &pool.dex {
+            let trimmed = dex.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+
+        if pool.sources.dexscreener.is_some() {
+            "dexscreener".to_string()
+        } else if pool.sources.geckoterminal.is_some() {
+            "geckoterminal".to_string()
+        } else {
+            "unknown".to_string()
+        }
+    }
+
+    fn pool_info_liquidity(pool: &TokenPoolInfo) -> f64 {
+        if let Some(liquidity) = pool.liquidity_usd {
+            if liquidity.is_finite() && liquidity > 0.0 {
+                return liquidity;
+            }
+        }
+
+        if let Some(liquidity) = pool.liquidity_sol {
+            if liquidity.is_finite() && liquidity > 0.0 {
+                return liquidity;
+            }
+        }
+
+        if let Some(volume) = pool.volume_h24 {
+            if volume.is_finite() && volume > 0.0 {
+                return volume;
+            }
+        }
+
+        0.0
+    }
+
+    fn select_highest_liquidity_address(pools: &[TokenPoolInfo]) -> Option<String> {
+        pools
+            .iter()
+            .filter(|pool| pool.is_sol_pair)
+            .max_by(|a, b| {
+                Self::pool_info_liquidity(a)
+                    .partial_cmp(&Self::pool_info_liquidity(b))
+                    .unwrap_or(Ordering::Equal)
+            })
+            .map(|pool| pool.pool_address.clone())
+    }
+
+    fn best_pool_index(configs: &[PoolConfig]) -> Option<usize> {
+        configs
+            .iter()
+            .enumerate()
+            .max_by(|(_, a), (_, b)| {
+                Self::pool_config_liquidity(a)
+                    .partial_cmp(&Self::pool_config_liquidity(b))
+                    .unwrap_or(Ordering::Equal)
+            })
+            .map(|(idx, _)| idx)
+    }
+
+    fn pool_config_liquidity(config: &PoolConfig) -> f64 {
+        if config.liquidity.is_finite() && config.liquidity > 0.0 {
+            config.liquidity
+        } else {
+            0.0
+        }
     }
 
     /// Get pool metadata for API responses

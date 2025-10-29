@@ -1,6 +1,7 @@
 /// Core types for the unified token data system
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 // Re-export Priority for external modules
 pub use crate::tokens::priorities::Priority;
@@ -376,6 +377,86 @@ pub struct GeckoTerminalData {
 pub struct MarketDataBundle {
     pub dexscreener: Option<DexScreenerData>,
     pub geckoterminal: Option<GeckoTerminalData>,
+}
+
+// ============================================================================
+// TOKEN POOL SNAPSHOTS (multi-source aggregated pool data)
+// ============================================================================
+
+/// Raw source payloads captured for each pool entry (serialized JSON blobs).
+///
+/// We keep source data in JSON form to avoid circular dependencies between the
+/// tokens module and API client type definitions while still exposing full
+/// payloads for debugging and UI purposes.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TokenPoolSources {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dexscreener: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub geckoterminal: Option<Value>,
+}
+
+/// Aggregated pool information for a specific AMM pool.
+///
+/// Fields are normalized across providers so downstream systems (pools module,
+/// OHLCV monitor, dashboard) can consume a single representation without
+/// duplicating merge logic.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenPoolInfo {
+    pub pool_address: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub dex: Option<String>,
+    pub base_mint: String,
+    pub quote_mint: String,
+    pub is_sol_pair: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub liquidity_usd: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub liquidity_token: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub liquidity_sol: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub volume_h24: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub price_usd: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub price_sol: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub price_native: Option<String>,
+    #[serde(default)]
+    pub sources: TokenPoolSources,
+    pub fetched_at: DateTime<Utc>,
+}
+
+impl Default for TokenPoolInfo {
+    fn default() -> Self {
+        Self {
+            pool_address: String::new(),
+            dex: None,
+            base_mint: String::new(),
+            quote_mint: String::new(),
+            is_sol_pair: false,
+            liquidity_usd: None,
+            liquidity_token: None,
+            liquidity_sol: None,
+            volume_h24: None,
+            price_usd: None,
+            price_sol: None,
+            price_native: None,
+            sources: TokenPoolSources::default(),
+            fetched_at: Utc::now(),
+        }
+    }
+}
+
+/// Complete pool snapshot for a token across all discovery sources.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TokenPoolsSnapshot {
+    pub mint: String,
+    pub pools: Vec<TokenPoolInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub canonical_pool_address: Option<String>,
+    pub fetched_at: DateTime<Utc>,
 }
 
 // ============================================================================

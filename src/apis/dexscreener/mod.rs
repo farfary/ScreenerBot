@@ -101,6 +101,10 @@ impl DexScreenerClient {
         })
     }
 
+    pub fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
     /// Get API stats (placeholder - DexScreener uses direct HTTP without stats tracking)
     pub async fn get_stats(&self) -> crate::apis::stats::ApiStats {
         self.stats.get_stats().await

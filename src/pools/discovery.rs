@@ -10,10 +10,6 @@
 use super::types::{max_watched_tokens, PoolDescriptor, ProgramKind};
 use super::utils::is_stablecoin_mint;
 
-use crate::apis::{
-    dexscreener_types::DexScreenerPool, geckoterminal_types::GeckoTerminalPool, get_api_manager,
-    DexScreenerClient, GeckoTerminalClient,
-};
 use crate::config::with_config;
 use crate::constants::SOL_MINT;
 use crate::events::{record_safe, Event, EventCategory, Severity};
@@ -23,6 +19,10 @@ use crate::pools::service::{
     get_debug_token_override, get_pool_analyzer, is_single_pool_mode_enabled,
 };
 use crate::pools::utils::is_sol_mint;
+use crate::tokens::{
+    get_token_pools_snapshot, get_token_pools_snapshot_allow_stale, prefetch_token_pools,
+};
+use crate::tokens::types::TokenPoolInfo;
 
 use dashmap::DashMap;
 use solana_sdk::pubkey::Pubkey;
@@ -34,31 +34,6 @@ use tokio::sync::Notify;
 
 // Timing constants
 const DISCOVERY_TICK_INTERVAL_SECS: u64 = 5;
-
-// Lightweight batch result structures for this module only
-struct DexsBatchResult {
-    pools: HashMap<String, Vec<DexScreenerPool>>, // mint -> pools
-}
-
-impl DexsBatchResult {
-    fn empty() -> Self {
-        Self {
-            pools: HashMap::new(),
-        }
-    }
-}
-
-struct GeckoBatchResult {
-    pools: HashMap<String, Vec<GeckoTerminalPool>>, // mint -> pools
-}
-
-impl GeckoBatchResult {
-    fn empty() -> Self {
-        Self {
-            pools: HashMap::new(),
-        }
-    }
-}
 
 /// Returns whether DexScreener discovery is enabled via configuration
 pub fn is_dexscreener_discovery_enabled() -> bool {
@@ -88,103 +63,6 @@ impl PoolDiscovery {
             known_pools: HashMap::new(),
             watched_tokens: Vec::new(),
         }
-    }
-
-    async fn fetch_dexscreener_batch(tokens: &[String]) -> DexsBatchResult {
-        // Check connectivity before API call - graceful degradation
-        if let Some(unhealthy) =
-            crate::connectivity::check_endpoints_healthy(&["dexscreener"]).await
-        {
-            logger::debug(
-                LogTag::PoolDiscovery,
-                &format!(
-                    "Skipping DexScreener fetch - Unhealthy endpoints: {}",
-                    unhealthy
-                ),
-            );
-            return DexsBatchResult {
-                pools: HashMap::new(),
-            };
-        }
-
-        // DexScreener has a batch endpoint returning one best pair per token.
-        // We'll chunk inputs by 30 and fetch sequentially to keep it simple.
-        let apis = get_api_manager();
-        let client = &apis.dexscreener;
-
-        let mut out: HashMap<String, Vec<DexScreenerPool>> = HashMap::new();
-        let mut i = 0;
-        while i < tokens.len() {
-            let end = (i + 30).min(tokens.len());
-            let batch = &tokens[i..end];
-            match client.fetch_token_batch(batch, Some("solana")).await {
-                Ok(pairs) => {
-                    for pool in pairs {
-                        // Determine which input mint this pair corresponds to
-                        // Prefer matching base, else quote
-                        let mut assigned = false;
-                        for mint in batch {
-                            if &pool.base_token_address == mint || &pool.quote_token_address == mint
-                            {
-                                out.entry(mint.clone()).or_default().push(pool.clone());
-                                assigned = true;
-                                break;
-                            }
-                        }
-                        if !assigned {
-                            // Fallback: group under base token
-                            out.entry(pool.base_token_address.clone())
-                                .or_default()
-                                .push(pool.clone());
-                        }
-                    }
-                }
-                Err(e) => {
-                    logger::warning(
-                        LogTag::PoolDiscovery,
-                        &format!("DexScreener batch failed ({}..{}): {}", i, end, e),
-                    );
-                }
-            }
-            i = end;
-        }
-        DexsBatchResult { pools: out }
-    }
-
-    async fn fetch_geckoterminal_batch(tokens: &[String]) -> GeckoBatchResult {
-        // Check connectivity before API call - graceful degradation
-        if let Some(unhealthy) =
-            crate::connectivity::check_endpoints_healthy(&["geckoterminal"]).await
-        {
-            logger::debug(
-                LogTag::PoolDiscovery,
-                &format!(
-                    "Skipping GeckoTerminal fetch - Unhealthy endpoints: {}",
-                    unhealthy
-                ),
-            );
-            return GeckoBatchResult {
-                pools: HashMap::new(),
-            };
-        }
-
-        let apis = get_api_manager();
-        let client = &apis.geckoterminal;
-        let mut out: HashMap<String, Vec<GeckoTerminalPool>> = HashMap::new();
-        for mint in tokens {
-            match client.fetch_pools(mint).await {
-                Ok(mut pools) => {
-                    out.entry(mint.clone()).or_default().append(&mut pools);
-                }
-                Err(e) => {
-                    logger::warning(
-                        LogTag::PoolDiscovery,
-                        &format!("GeckoTerminal fetch_pools failed for {}: {}", mint, e),
-                    );
-                }
-            }
-        }
-        GeckoBatchResult { pools: out }
     }
 
     /// Get current discovery source configuration
@@ -463,75 +341,51 @@ impl PoolDiscovery {
         ))
         .await;
 
-        // Run batch fetches for all sources concurrently (each handles rate limiting internally)
-        // Using tokio::join! to minimize total tick latency vs sequential awaits
-        // Only fetch from enabled sources
-        let (dexs_batch, gecko_batch) = tokio::join!(
-            async {
-                if dex_enabled {
-                    Self::fetch_dexscreener_batch(&tokens).await
-                } else {
-                    DexsBatchResult::empty()
-                }
-            },
-            async {
-                if gecko_enabled {
-                    Self::fetch_geckoterminal_batch(&tokens).await
-                } else {
-                    GeckoBatchResult::empty()
-                }
-            }
-        );
+        // Prefetch pool snapshots through the tokens module to reuse cached data
+        prefetch_token_pools(&tokens).await;
 
-        // Convert to PoolDescriptor list
+        // Convert to PoolDescriptor list sourced exclusively from token snapshots
         let mut descriptors: Vec<PoolDescriptor> = Vec::new();
+        let mut tokens_with_pools = 0usize;
 
-        // Process DexScreener results only if enabled
-        if is_dexscreener_discovery_enabled() {
-            for (mint, pairs) in dexs_batch.pools.into_iter() {
-                let before = descriptors.len();
-                for pair in pairs {
-                    if let Ok(desc) = Self::convert_dexscreener_pair_to_descriptor_static(&pair) {
-                        descriptors.push(desc);
-                    }
-                }
-                let added = descriptors.len().saturating_sub(before);
+        for mint in tokens.iter() {
+            let before = descriptors.len();
+            let mut token_descriptors =
+                Self::load_descriptors_from_snapshot(mint, dex_enabled, gecko_enabled).await;
+
+            if token_descriptors.is_empty() {
                 logger::debug(
                     LogTag::PoolDiscovery,
-                    &format!("DexScreener batched pools for {mint}: added {added}"),
+                    &format!("No eligible pool descriptors found for mint={}", mint),
                 );
+                continue;
             }
-        } else {
-            logger::debug(LogTag::PoolDiscovery, "DexScreener discovery disabled");
-        }
 
-        // Process GeckoTerminal results only if enabled
-        if is_geckoterminal_discovery_enabled() {
-            for (mint, pools) in gecko_batch.pools.into_iter() {
-                let before = descriptors.len();
-                for pool in pools {
-                    if let Ok(desc) = Self::convert_gecko_pool_to_descriptor_static(&pool) {
-                        descriptors.push(desc);
-                    }
-                }
-                let added = descriptors.len().saturating_sub(before);
-                logger::debug(
-                    LogTag::PoolDiscovery,
-                    &format!("GeckoTerminal batched pools for {mint}: added {added}"),
-                );
-            }
-        } else {
-            logger::debug(LogTag::PoolDiscovery, "GeckoTerminal discovery disabled");
-        }
+            tokens_with_pools += 1;
+            descriptors.append(&mut token_descriptors);
 
-        // Process Raydium results only if enabled
-        // Raydium discovery not implemented via direct API client in this module
-        if is_raydium_discovery_enabled() {
+            let added = descriptors.len().saturating_sub(before);
             logger::debug(
                 LogTag::PoolDiscovery,
-                "Raydium discovery is configured but not implemented in this path",
+                &format!("Discovered {} pool descriptors for mint={}", added, mint),
             );
         }
+
+        if raydium_enabled {
+            logger::debug(
+                LogTag::PoolDiscovery,
+                "Raydium discovery configured but handled by analyzer using existing snapshots",
+            );
+        }
+
+        logger::debug(
+            LogTag::PoolDiscovery,
+            &format!(
+                "Discovery tick processed {} tokens, {} yielded pool snapshots",
+                tokens.len(),
+                tokens_with_pools
+            ),
+        );
 
         if descriptors.is_empty() {
             logger::debug(LogTag::PoolDiscovery, "No pools discovered in this tick");
@@ -751,23 +605,49 @@ impl PoolDiscovery {
         out
     }
 
-    fn convert_dexscreener_pair_to_descriptor_static(
-        pair: &DexScreenerPool,
-    ) -> Result<PoolDescriptor, String> {
-        let pool_id = Pubkey::from_str(&pair.pair_address).map_err(|_| "Invalid pool address")?;
-        let base_mint =
-            Pubkey::from_str(&pair.base_token_address).map_err(|_| "Invalid base token address")?;
-        let quote_mint = Pubkey::from_str(&pair.quote_token_address)
-            .map_err(|_| "Invalid quote token address")?;
+    fn pool_sources_allowed(
+        pool: &TokenPoolInfo,
+        dex_enabled: bool,
+        gecko_enabled: bool,
+    ) -> bool {
+        let has_dex = pool.sources.dexscreener.is_some();
+        let has_gecko = pool.sources.geckoterminal.is_some();
 
-        // Ensure SOL on one side
-        let sol_mint_pubkey = Pubkey::from_str(SOL_MINT).map_err(|_| "Invalid SOL mint")?;
-        if base_mint != sol_mint_pubkey && quote_mint != sol_mint_pubkey {
-            return Err("Pool does not contain SOL - skipping".to_string());
+        let mut allowed = false;
+        if has_dex {
+            allowed |= dex_enabled;
+        }
+        if has_gecko {
+            allowed |= gecko_enabled;
         }
 
-        let liquidity_usd = pair.liquidity_usd.unwrap_or(0.0);
-        let volume_h24_usd = pair.volume_h24.unwrap_or(0.0);
+        if !has_dex && !has_gecko {
+            // Persisted entries or future sources – allow by default
+            allowed = true;
+        }
+
+        allowed
+    }
+
+    fn convert_token_pool_to_descriptor(pool: &TokenPoolInfo) -> Result<PoolDescriptor, String> {
+        if pool.pool_address.trim().is_empty() {
+            return Err("Missing pool address".to_string());
+        }
+
+        if !pool.is_sol_pair {
+            return Err("Pool does not contain SOL".to_string());
+        }
+
+        let pool_id = Pubkey::from_str(&pool.pool_address)
+            .map_err(|_| format!("Invalid pool address: {}", pool.pool_address))?;
+        let base_mint = Pubkey::from_str(&pool.base_mint)
+            .map_err(|_| format!("Invalid base mint: {}", pool.base_mint))?;
+        let quote_mint = Pubkey::from_str(&pool.quote_mint)
+            .map_err(|_| format!("Invalid quote mint: {}", pool.quote_mint))?;
+
+        let liquidity_usd = pool.liquidity_usd.unwrap_or(0.0);
+        let volume_h24_usd = pool.volume_h24.unwrap_or(0.0);
+
         Ok(PoolDescriptor {
             pool_id,
             program_kind: ProgramKind::Unknown,
@@ -780,28 +660,154 @@ impl PoolDiscovery {
         })
     }
 
-    fn convert_gecko_pool_to_descriptor_static(
-        pool: &GeckoTerminalPool,
-    ) -> Result<PoolDescriptor, String> {
-        let pool_id = Pubkey::from_str(&pool.pool_address).map_err(|_| "Invalid pool address")?;
-        let base_mint =
-            Pubkey::from_str(&pool.base_token_id).map_err(|_| "Invalid base token address")?;
-        let quote_mint =
-            Pubkey::from_str(&pool.quote_token_id).map_err(|_| "Invalid quote token address")?;
-        let sol_mint_pubkey = Pubkey::from_str(SOL_MINT).map_err(|_| "Invalid SOL mint")?;
-        if base_mint != sol_mint_pubkey && quote_mint != sol_mint_pubkey {
-            return Err("Pool does not contain SOL - skipping".to_string());
+    async fn load_descriptors_from_snapshot(
+        mint: &str,
+        dex_enabled: bool,
+        gecko_enabled: bool,
+    ) -> Vec<PoolDescriptor> {
+        let primary = get_token_pools_snapshot(mint).await;
+
+        let snapshot = match primary {
+            Ok(Some(snapshot)) => Some(snapshot),
+            Ok(None) => {
+                logger::debug(
+                    LogTag::PoolDiscovery,
+                    &format!(
+                        "No pool snapshot available for mint={} (primary fetch)",
+                        mint
+                    ),
+                );
+                match get_token_pools_snapshot_allow_stale(mint).await {
+                    Ok(Some(snapshot)) => {
+                        logger::warning(
+                            LogTag::PoolDiscovery,
+                            &format!(
+                                "Using stale pool snapshot for mint={} (no fresh data)",
+                                mint
+                            ),
+                        );
+                        Some(snapshot)
+                    }
+                    Ok(None) => None,
+                    Err(err) => {
+                        logger::warning(
+                            LogTag::PoolDiscovery,
+                            &format!(
+                                "Failed to load stale pool snapshot for mint={} error={}",
+                                mint, err
+                            ),
+                        );
+                        None
+                    }
+                }
+            }
+            Err(err) => {
+                logger::warning(
+                    LogTag::PoolDiscovery,
+                    &format!(
+                        "Pool snapshot fetch failed for mint={} error={}",
+                        mint, err
+                    ),
+                );
+                match get_token_pools_snapshot_allow_stale(mint).await {
+                    Ok(Some(snapshot)) => {
+                        logger::warning(
+                            LogTag::PoolDiscovery,
+                            &format!(
+                                "Using stale pool snapshot for mint={} after error",
+                                mint
+                            ),
+                        );
+                        Some(snapshot)
+                    }
+                    Ok(None) => None,
+                    Err(fallback_err) => {
+                        logger::warning(
+                            LogTag::PoolDiscovery,
+                            &format!(
+                                "Failed to load fallback pool snapshot for mint={} error={}",
+                                mint, fallback_err
+                            ),
+                        );
+                        None
+                    }
+                }
+            }
+        };
+
+        let snapshot = match snapshot {
+            Some(snapshot) => snapshot,
+            None => {
+                logger::debug(
+                    LogTag::PoolDiscovery,
+                    &format!("No pool snapshot found for mint={}", mint),
+                );
+                return Vec::new();
+            }
+        };
+
+        let mut descriptors = Vec::new();
+        let mut skipped_non_sol = 0usize;
+        let mut skipped_disabled = 0usize;
+        let mut parse_errors = 0usize;
+
+        for pool in snapshot.pools.iter() {
+            if !Self::pool_sources_allowed(pool, dex_enabled, gecko_enabled) {
+                skipped_disabled += 1;
+                continue;
+            }
+
+            if !pool.is_sol_pair {
+                skipped_non_sol += 1;
+                continue;
+            }
+
+            match Self::convert_token_pool_to_descriptor(pool) {
+                Ok(desc) => descriptors.push(desc),
+                Err(err) => {
+                    parse_errors += 1;
+                    logger::debug(
+                        LogTag::PoolDiscovery,
+                        &format!(
+                            "Failed to convert pool for mint={} address={} reason={}",
+                            mint, pool.pool_address, err
+                        ),
+                    );
+                }
+            }
         }
-        Ok(PoolDescriptor {
-            pool_id,
-            program_kind: ProgramKind::Unknown,
-            base_mint,
-            quote_mint,
-            reserve_accounts: Vec::new(),
-            liquidity_usd: pool.reserve_usd.unwrap_or(0.0),
-            volume_h24_usd: pool.volume_h24.unwrap_or(0.0),
-            last_updated: std::time::Instant::now(),
-        })
+
+        if skipped_disabled > 0 {
+            logger::debug(
+                LogTag::PoolDiscovery,
+                &format!(
+                    "Filtered {} pools for mint={} due to disabled sources",
+                    skipped_disabled, mint
+                ),
+            );
+        }
+
+        if skipped_non_sol > 0 {
+            logger::debug(
+                LogTag::PoolDiscovery,
+                &format!(
+                    "Filtered {} non-SOL pools for mint={}",
+                    skipped_non_sol, mint
+                ),
+            );
+        }
+
+        if parse_errors > 0 {
+            logger::debug(
+                LogTag::PoolDiscovery,
+                &format!(
+                    "Encountered {} pool conversion errors for mint={}",
+                    parse_errors, mint
+                ),
+            );
+        }
+
+        descriptors
     }
 
     /// Discover pools for a specific token
@@ -823,158 +829,30 @@ impl PoolDiscovery {
             return Vec::new();
         }
 
-        let mut discovered_pools = Vec::new();
+        let single = vec![mint.to_string()];
+        prefetch_token_pools(&single).await;
 
-        // Discover from DexScreener API only if enabled
-        if is_dexscreener_discovery_enabled() {
-            // Use global API manager
-            let apis = get_api_manager();
-            let client = &apis.dexscreener;
+        let dex_enabled = is_dexscreener_discovery_enabled();
+        let gecko_enabled = is_geckoterminal_discovery_enabled();
 
-            match client.fetch_token_pools(mint, Some("solana")).await {
-                Ok(token_pairs) => {
-                    let mut pools = Vec::new();
-                    let mut filtered_count = 0;
+        let descriptors = Self::load_descriptors_from_snapshot(mint, dex_enabled, gecko_enabled).await;
 
-                    for pair in token_pairs {
-                        match Self::convert_dexscreener_pair_to_descriptor_static(&pair) {
-                            Ok(pool_descriptor) => {
-                                pools.push(pool_descriptor);
-                            }
-                            Err(e) => {
-                                if e.contains("does not contain SOL") {
-                                    filtered_count += 1;
-                                }
-                                // Skip logging individual errors to avoid spam
-                            }
-                        }
-                    }
-
-                    if filtered_count > 0 {
-                        logger::debug(
-                            LogTag::PoolDiscovery,
-                            &format!(
-                                "DexScreener: Filtered out {} non-SOL pools for {mint}",
-                                filtered_count
-                            ),
-                        );
-                    }
-                    logger::debug(
-                        LogTag::PoolDiscovery,
-                        &format!("DexScreener found {} pools for {mint}", pools.len()),
-                    );
-                    discovered_pools.extend(pools);
-                }
-                Err(e) => {
-                    logger::warning(
-                        LogTag::PoolDiscovery,
-                        &format!("DexScreener discovery failed for {mint}: {}", e),
-                    );
-                }
-            }
-        } else {
-            logger::debug(
-                LogTag::PoolDiscovery,
-                &format!("DexScreener discovery disabled for {mint}"),
-            );
-        }
-
-        // Discover from GeckoTerminal API only if enabled
-        if is_geckoterminal_discovery_enabled() {
-            match self.discover_from_geckoterminal(mint).await {
-                Ok(mut pools) => {
-                    logger::debug(
-                        LogTag::PoolDiscovery,
-                        &format!("GeckoTerminal found {} pools for {mint}", pools.len()),
-                    );
-                    discovered_pools.append(&mut pools);
-                }
-                Err(e) => {
-                    logger::warning(
-                        LogTag::PoolDiscovery,
-                        &format!("GeckoTerminal discovery failed for {mint}: {}", e),
-                    );
-                }
-            }
-        } else {
-            logger::debug(
-                LogTag::PoolDiscovery,
-                &format!("GeckoTerminal discovery disabled for {mint}"),
-            );
-        }
-
-        // Deduplicate pools by pool address
-        let deduplicated_pools = self.deduplicate_pools(discovered_pools);
-
-        // Return all deduplicated pools - always use biggest pool by liquidity for accurate pricing
-        deduplicated_pools
-    }
-
-    /// Discover pools from GeckoTerminal API
-    async fn discover_from_geckoterminal(&self, mint: &str) -> Result<Vec<PoolDescriptor>, String> {
-        let apis = get_api_manager();
-        let client = &apis.geckoterminal;
-        let gecko_pools = client.fetch_pools(mint).await?;
-
-        let mut pools = Vec::new();
-        let mut filtered_count = 0;
-
-        for pool in gecko_pools {
-            match self.convert_geckoterminal_pool_to_descriptor(&pool) {
-                Ok(pool_descriptor) => {
-                    pools.push(pool_descriptor);
-                }
-                Err(e) => {
-                    if e.contains("does not contain SOL") {
-                        filtered_count += 1;
-                    }
-                    // Skip logging individual errors to avoid spam
-                }
-            }
-        }
-
-        if filtered_count > 0 {
+        if descriptors.is_empty() {
             logger::debug(
                 LogTag::PoolDiscovery,
                 &format!(
-                    "GeckoTerminal: Filtered out {} non-SOL pools for {mint}",
-                    filtered_count
+                    "No pool descriptors available for token {} via centralized snapshot",
+                    mint
                 ),
             );
+            return Vec::new();
         }
 
-        Ok(pools)
-    }
+        // Deduplicate pools by pool address
+        let deduplicated_pools = self.deduplicate_pools(descriptors);
 
-    /// Convert GeckoTerminal pool to PoolDescriptor
-    fn convert_geckoterminal_pool_to_descriptor(
-        &self,
-        pool: &GeckoTerminalPool,
-    ) -> Result<PoolDescriptor, String> {
-        let pool_id = Pubkey::from_str(&pool.pool_address).map_err(|_| "Invalid pool address")?;
-
-        let base_mint =
-            Pubkey::from_str(&pool.base_token_id).map_err(|_| "Invalid base token address")?;
-
-        let quote_mint =
-            Pubkey::from_str(&pool.quote_token_id).map_err(|_| "Invalid quote token address")?;
-
-        // Check if pool contains SOL - reject if neither side is SOL
-        let sol_mint_pubkey = Pubkey::from_str(SOL_MINT).map_err(|_| "Invalid SOL mint")?;
-        if base_mint != sol_mint_pubkey && quote_mint != sol_mint_pubkey {
-            return Err("Pool does not contain SOL - skipping".to_string());
-        }
-
-        Ok(PoolDescriptor {
-            pool_id,
-            program_kind: ProgramKind::Unknown,
-            base_mint,
-            quote_mint,
-            reserve_accounts: Vec::new(),
-            liquidity_usd: pool.reserve_usd.unwrap_or(0.0),
-            volume_h24_usd: pool.volume_h24.unwrap_or(0.0),
-            last_updated: std::time::Instant::now(),
-        })
+        // Return all deduplicated pools - always use biggest pool by liquidity for accurate pricing
+        deduplicated_pools
     }
 
     /// Deduplicate pools by pool address, keeping the one with highest liquidity

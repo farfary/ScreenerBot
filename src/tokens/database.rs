@@ -2,14 +2,16 @@
 /// All SQL operations in one place with proper error handling
 use chrono::{DateTime, Utc};
 use once_cell::sync::OnceCell;
-use rusqlite::{params, params_from_iter, Connection};
+use rusqlite::{params, params_from_iter, Connection, Row};
+use rusqlite::types::FromSql;
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 use crate::tokens::types::{
     DataSource, DexScreenerData, GeckoTerminalData, Priority, RugcheckData, SecurityRisk,
-    SocialLink, Token, TokenError, TokenHolder, TokenMetadata, TokenResult, UpdateTrackingInfo,
-    WebsiteLink,
+    SocialLink, Token, TokenError, TokenHolder, TokenMetadata, TokenPoolInfo, TokenPoolSources,
+    TokenPoolsSnapshot, TokenResult, UpdateTrackingInfo, WebsiteLink,
 };
 
 // Global database instance for easy access
@@ -48,7 +50,7 @@ impl TokenDatabase {
 
     /// Store Rugcheck security data (clean schema)
     pub fn upsert_rugcheck_data(&self, mint: &str, data: &RugcheckData) -> TokenResult<()> {
-        let conn = self
+        let mut conn = self
             .conn
             .lock()
             .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
@@ -718,6 +720,242 @@ impl TokenDatabase {
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
             Err(e) => Err(TokenError::Database(format!("Query failed: {}", e))),
         }
+    }
+
+    // ========================================================================
+    // POOL DATA OPERATIONS
+    // ========================================================================
+
+    /// Replace all stored pool records for a token with the provided snapshot
+    pub fn replace_token_pools(&self, snapshot: &TokenPoolsSnapshot) -> TokenResult<()> {
+        let mut conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let tx = conn
+            .transaction()
+            .map_err(|e| TokenError::Database(format!("Failed to start transaction: {}", e)))?;
+
+        tx.execute("DELETE FROM token_pools WHERE mint = ?1", params![&snapshot.mint])
+            .map_err(|e| TokenError::Database(format!("Failed to clear token pools: {}", e)))?;
+
+        for pool in snapshot.pools.iter() {
+            let sources_json = serde_json::to_string(&pool.sources).map_err(|e| {
+                TokenError::Database(format!("Failed to serialize pool sources: {}", e))
+            })?;
+
+            tx.execute(
+                "INSERT INTO token_pools (
+                    mint, pool_address, dex, base_mint, quote_mint, is_sol_pair,
+                    liquidity_usd, liquidity_token, liquidity_sol, volume_h24,
+                    price_usd, price_sol, price_native, sources_json, fetched_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                params![
+                    &snapshot.mint,
+                    &pool.pool_address,
+                    &pool.dex,
+                    &pool.base_mint,
+                    &pool.quote_mint,
+                    if pool.is_sol_pair { 1 } else { 0 },
+                    pool.liquidity_usd,
+                    pool.liquidity_token,
+                    pool.liquidity_sol,
+                    pool.volume_h24,
+                    pool.price_usd,
+                    pool.price_sol,
+                    &pool.price_native,
+                    sources_json,
+                    pool.fetched_at.timestamp(),
+                ],
+            )
+            .map_err(|e| TokenError::Database(format!("Failed to insert token pool: {}", e)))?;
+        }
+
+        tx.commit()
+            .map_err(|e| TokenError::Database(format!("Failed to commit pool transaction: {}", e)))?
+            ;
+
+        Ok(())
+    }
+
+    /// Load pool snapshot for a token (if any pools stored)
+    pub fn get_token_pools(&self, mint: &str) -> TokenResult<Option<TokenPoolsSnapshot>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT pool_address, dex, base_mint, quote_mint, is_sol_pair,
+                        liquidity_usd, liquidity_token, liquidity_sol, volume_h24,
+                        price_usd, price_sol, price_native, sources_json, fetched_at
+                 FROM token_pools WHERE mint = ?1",
+            )
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+
+        let mut rows = stmt
+            .query(params![mint])
+            .map_err(|e| TokenError::Database(format!("Failed to query pools: {}", e)))?;
+
+        let mut pools: Vec<TokenPoolInfo> = Vec::new();
+
+        while let Some(row) = rows
+            .next()
+            .map_err(|e| TokenError::Database(format!("Failed to read row: {}", e)))?
+        {
+            let sources_json: Option<String> = read_row_value(&row, 12, "sources_json")?;
+            let sources = match sources_json {
+                Some(json) if !json.is_empty() => {
+                    serde_json::from_str::<TokenPoolSources>(&json).unwrap_or_default()
+                }
+                _ => TokenPoolSources::default(),
+            };
+            let fetched_ts: i64 = read_row_value(&row, 13, "fetched_at")?;
+            let pool_address: String = read_row_value(&row, 0, "pool_address")?;
+            let dex: Option<String> = read_row_value(&row, 1, "dex")?;
+            let base_mint: String = read_row_value(&row, 2, "base_mint")?;
+            let quote_mint: String = read_row_value(&row, 3, "quote_mint")?;
+            let is_sol_pair_flag: i64 = read_row_value(&row, 4, "is_sol_pair")?;
+            let liquidity_usd: Option<f64> = read_row_value(&row, 5, "liquidity_usd")?;
+            let liquidity_token: Option<f64> = read_row_value(&row, 6, "liquidity_token")?;
+            let liquidity_sol: Option<f64> = read_row_value(&row, 7, "liquidity_sol")?;
+            let volume_h24: Option<f64> = read_row_value(&row, 8, "volume_h24")?;
+            let price_usd: Option<f64> = read_row_value(&row, 9, "price_usd")?;
+            let price_sol: Option<f64> = read_row_value(&row, 10, "price_sol")?;
+            let price_native: Option<String> = read_row_value(&row, 11, "price_native")?;
+
+            pools.push(TokenPoolInfo {
+                pool_address,
+                dex,
+                base_mint,
+                quote_mint,
+                is_sol_pair: is_sol_pair_flag != 0,
+                liquidity_usd,
+                liquidity_token,
+                liquidity_sol,
+                volume_h24,
+                price_usd,
+                price_sol,
+                price_native,
+                sources,
+                fetched_at: DateTime::from_timestamp(fetched_ts, 0).unwrap_or_else(|| Utc::now()),
+            });
+        }
+
+        if pools.is_empty() {
+            return Ok(None);
+        }
+
+        let fetched_at = pools
+            .iter()
+            .map(|p| p.fetched_at)
+            .max()
+            .unwrap_or_else(|| Utc::now());
+        let canonical_pool_address = select_canonical_pool(&pools);
+
+        Ok(Some(TokenPoolsSnapshot {
+            mint: mint.to_string(),
+            pools,
+            canonical_pool_address,
+            fetched_at,
+        }))
+    }
+
+    /// Load all token pool snapshots (used for cache warmup at startup)
+    pub fn get_all_token_pools(&self) -> TokenResult<Vec<TokenPoolsSnapshot>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT mint, pool_address, dex, base_mint, quote_mint, is_sol_pair,
+                        liquidity_usd, liquidity_token, liquidity_sol, volume_h24,
+                        price_usd, price_sol, price_native, sources_json, fetched_at
+                 FROM token_pools ORDER BY mint",
+            )
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+
+        let mut rows = stmt
+            .query([])
+            .map_err(|e| TokenError::Database(format!("Failed to query pools: {}", e)))?;
+
+        let mut snapshots: Vec<TokenPoolsSnapshot> = Vec::new();
+        let mut current_mint: Option<String> = None;
+        let mut current_pools: Vec<TokenPoolInfo> = Vec::new();
+
+        while let Some(row) = rows
+            .next()
+            .map_err(|e| TokenError::Database(format!("Failed to read row: {}", e)))?
+        {
+            let mint: String = read_row_value(&row, 0, "mint")?;
+            if current_mint.as_ref() != Some(&mint) && !current_pools.is_empty() {
+                let fetched_at = current_pools
+                    .iter()
+                    .map(|p| p.fetched_at)
+                    .max()
+                    .unwrap_or_else(|| Utc::now());
+                let canonical_pool_address = select_canonical_pool(&current_pools);
+
+                snapshots.push(TokenPoolsSnapshot {
+                    mint: current_mint.take().unwrap(),
+                    pools: std::mem::take(&mut current_pools),
+                    canonical_pool_address,
+                    fetched_at,
+                });
+            }
+
+            current_mint = Some(mint.clone());
+
+            let sources_json: Option<String> = read_row_value(&row, 13, "sources_json")?;
+            let sources = match sources_json {
+                Some(json) if !json.is_empty() => {
+                    serde_json::from_str::<TokenPoolSources>(&json).unwrap_or_default()
+                }
+                _ => TokenPoolSources::default(),
+            };
+            let fetched_ts: i64 = read_row_value(&row, 14, "fetched_at")?;
+
+            current_pools.push(TokenPoolInfo {
+                pool_address: read_row_value(&row, 1, "pool_address")?,
+                dex: read_row_value(&row, 2, "dex")?,
+                base_mint: read_row_value(&row, 3, "base_mint")?,
+                quote_mint: read_row_value(&row, 4, "quote_mint")?,
+                is_sol_pair: read_row_value::<i64>(&row, 5, "is_sol_pair")? != 0,
+                liquidity_usd: read_row_value(&row, 6, "liquidity_usd")?,
+                liquidity_token: read_row_value(&row, 7, "liquidity_token")?,
+                liquidity_sol: read_row_value(&row, 8, "liquidity_sol")?,
+                volume_h24: read_row_value(&row, 9, "volume_h24")?,
+                price_usd: read_row_value(&row, 10, "price_usd")?,
+                price_sol: read_row_value(&row, 11, "price_sol")?,
+                price_native: read_row_value(&row, 12, "price_native")?,
+                sources,
+                fetched_at: DateTime::from_timestamp(fetched_ts, 0).unwrap_or_else(|| Utc::now()),
+            });
+        }
+
+        if let Some(mint) = current_mint.take() {
+            if !current_pools.is_empty() {
+                let fetched_at = current_pools
+                    .iter()
+                    .map(|p| p.fetched_at)
+                    .max()
+                    .unwrap_or_else(|| Utc::now());
+                let canonical_pool_address = select_canonical_pool(&current_pools);
+
+                snapshots.push(TokenPoolsSnapshot {
+                    mint,
+                    pools: std::mem::take(&mut current_pools),
+                    canonical_pool_address,
+                    fetched_at,
+                });
+            }
+        }
+
+        Ok(snapshots)
     }
 
     /// Get Rugcheck security data
@@ -2374,6 +2612,44 @@ fn assemble_token(
     }
 }
 
+fn pool_metric_for_selection(pool: &TokenPoolInfo) -> f64 {
+    pool.liquidity_sol
+        .or(pool.liquidity_usd)
+        .or(pool.volume_h24)
+        .unwrap_or(0.0)
+}
+
+fn select_canonical_pool(pools: &[TokenPoolInfo]) -> Option<String> {
+    pools
+        .iter()
+        .filter(|pool| pool.is_sol_pair)
+        .max_by(|a, b| {
+            let metric_a = pool_metric_for_selection(a);
+            let metric_b = pool_metric_for_selection(b);
+            match metric_a
+                .partial_cmp(&metric_b)
+                .unwrap_or(Ordering::Equal)
+            {
+                Ordering::Equal => {
+                    let vol_a = a.volume_h24.unwrap_or(0.0);
+                    let vol_b = b.volume_h24.unwrap_or(0.0);
+                    vol_a
+                        .partial_cmp(&vol_b)
+                        .unwrap_or(Ordering::Equal)
+                }
+                ordering => ordering,
+            }
+        })
+        .map(|pool| pool.pool_address.clone())
+}
+
+fn read_row_value<T: FromSql>(row: &Row<'_>, index: usize, field: &str) -> TokenResult<T> {
+    row.get(index).map_err(|e| TokenError::Database(format!(
+        "Failed to read {}: {}",
+        field, e
+    )))
+}
+
 /// Assemble Token without market data (for tokens discovered but not yet enriched)
 fn assemble_token_without_market_data(
     metadata: TokenMetadata,
@@ -2542,6 +2818,30 @@ pub async fn get_full_token_for_source_async(
     tokio::task::spawn_blocking(move || db_clone.get_full_token_for_source(&mint, source))
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async wrapper for get_token_pools (returns aggregated pool snapshot)
+pub async fn get_token_pools_async(mint: &str) -> TokenResult<Option<TokenPoolsSnapshot>> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+
+    let mint = mint.to_string();
+    let db_clone = db.clone();
+    tokio::task::spawn_blocking(move || db_clone.get_token_pools(&mint))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async wrapper for replace_token_pools (persist aggregated pool snapshot)
+pub async fn replace_token_pools_async(snapshot: TokenPoolsSnapshot) -> TokenResult<()> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+
+    tokio::task::spawn_blocking(move || db.replace_token_pools(&snapshot))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))??;
+
+    Ok(())
 }
 
 /// Async wrapper for list_tokens (returns Vec<TokenMetadata>)

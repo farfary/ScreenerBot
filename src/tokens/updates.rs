@@ -2,6 +2,7 @@ use crate::apis::dexscreener::{
     RATE_LIMIT_LATEST_BOOSTS_PER_MINUTE as DEX_BOOSTS_PER_MINUTE,
     RATE_LIMIT_LATEST_PROFILES_PER_MINUTE as DEX_PROFILES_PER_MINUTE,
     RATE_LIMIT_TOKEN_BATCH_PER_MINUTE as DEX_BATCH_PER_MINUTE,
+    RATE_LIMIT_TOKEN_POOLS_PER_MINUTE as DEX_POOLS_PER_MINUTE,
 };
 use crate::apis::geckoterminal::RATE_LIMIT_PER_MINUTE as GECKO_DEFAULT_PER_MINUTE;
 use crate::apis::rugcheck::RATE_LIMIT_PER_MINUTE as RUG_DEFAULT_PER_MINUTE;
@@ -48,6 +49,7 @@ use tokio::time::sleep;
 /// - DexScreener token batch (market data): 300/min
 /// - DexScreener profiles (discovery): 60/min
 /// - DexScreener boosts (discovery): 60/min
+/// - DexScreener token pools (full pool fetch): 300/min
 /// - GeckoTerminal: 30/min
 /// - Rugcheck: 60/min
 pub struct RateLimitCoordinator {
@@ -55,9 +57,11 @@ pub struct RateLimitCoordinator {
     dexscreener_batch_sem: Arc<Semaphore>,
     dexscreener_profiles_sem: Arc<Semaphore>,
     dexscreener_boosts_sem: Arc<Semaphore>,
+    dexscreener_pools_sem: Arc<Semaphore>,
     dexscreener_batch_budget: usize,
     dexscreener_profiles_budget: usize,
     dexscreener_boosts_budget: usize,
+    dexscreener_pools_budget: usize,
     // Other API endpoints
     geckoterminal_sem: Arc<Semaphore>,
     rugcheck_sem: Arc<Semaphore>,
@@ -88,9 +92,11 @@ impl RateLimitCoordinator {
             dexscreener_batch_sem: Arc::new(Semaphore::new(DEX_BATCH_PER_MINUTE)),
             dexscreener_profiles_sem: Arc::new(Semaphore::new(DEX_PROFILES_PER_MINUTE)),
             dexscreener_boosts_sem: Arc::new(Semaphore::new(DEX_BOOSTS_PER_MINUTE)),
+            dexscreener_pools_sem: Arc::new(Semaphore::new(DEX_POOLS_PER_MINUTE)),
             dexscreener_batch_budget: DEX_BATCH_PER_MINUTE,
             dexscreener_profiles_budget: DEX_PROFILES_PER_MINUTE,
             dexscreener_boosts_budget: DEX_BOOSTS_PER_MINUTE,
+            dexscreener_pools_budget: DEX_POOLS_PER_MINUTE,
             // Other API endpoints
             geckoterminal_sem: Arc::new(Semaphore::new(gecko_limit)),
             rugcheck_sem: Arc::new(Semaphore::new(rug_limit)),
@@ -148,6 +154,22 @@ impl RateLimitCoordinator {
             })
     }
 
+    /// Acquire permit for DexScreener full pool fetch API call
+    /// Rate limit: 300/min
+    pub async fn acquire_dexscreener_pools(&self) -> Result<(), TokenError> {
+        self.dexscreener_pools_sem
+            .clone()
+            .acquire_owned()
+            .await
+            .map(|permit| {
+                permit.forget();
+            })
+            .map_err(|e| TokenError::RateLimit {
+                source: "DexScreener-Pools".to_string(),
+                message: format!("Failed to acquire permit: {}", e),
+            })
+    }
+
     /// Acquire permit for GeckoTerminal API call
     pub async fn acquire_geckoterminal(&self) -> Result<(), TokenError> {
         self.geckoterminal_sem
@@ -188,6 +210,10 @@ impl RateLimitCoordinator {
         if self.dexscreener_boosts_budget > 0 {
             self.dexscreener_boosts_sem
                 .add_permits(self.dexscreener_boosts_budget);
+        }
+        if self.dexscreener_pools_budget > 0 {
+            self.dexscreener_pools_sem
+                .add_permits(self.dexscreener_pools_budget);
         }
         // Other API endpoints
         if self.geckoterminal_budget > 0 {

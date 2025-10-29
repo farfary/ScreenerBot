@@ -166,6 +166,21 @@ impl OhlcvDatabase {
         Ok(())
     }
 
+    pub fn delete_pool(&self, mint: &str, pool_address: &str) -> OhlcvResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| OhlcvError::DatabaseError(format!("Lock error: {}", e)))?;
+
+        conn.execute(
+            "DELETE FROM ohlcv_pools WHERE mint = ?1 AND pool_address = ?2",
+            params![mint, pool_address],
+        )
+        .map_err(|e| OhlcvError::DatabaseError(format!("Failed to delete pool: {}", e)))?;
+
+        Ok(())
+    }
+
     pub fn get_pools(&self, mint: &str) -> OhlcvResult<Vec<PoolConfig>> {
         let conn = self
             .conn

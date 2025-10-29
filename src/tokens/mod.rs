@@ -73,8 +73,10 @@ pub use priorities::Priority;
 // Re-export store APIs
 pub use store::{
     dexscreener_cache_metrics, dexscreener_cache_size, geckoterminal_cache_metrics,
-    geckoterminal_cache_size, get_cached_token, invalidate_token_snapshot, refresh_token_snapshot,
-    rugcheck_cache_metrics, rugcheck_cache_size, store_token_snapshot, CacheMetrics,
+    geckoterminal_cache_size, get_cached_token, get_token_pools_snapshot,
+    get_token_pools_snapshot_allow_stale, invalidate_token_snapshot, prefetch_token_pools,
+    refresh_token_snapshot, rugcheck_cache_metrics, rugcheck_cache_size, store_token_snapshot,
+    CacheMetrics, clear_pool_cache,
 };
 
 // Re-export decimals API
