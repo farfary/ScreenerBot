@@ -588,6 +588,296 @@ function createLifecycle() {
     });
   };
 
+  /**
+   * Build columns array based on current view
+   * Different views show different conditional columns (Actions, reject_reason, blacklist_reason)
+   */
+  const buildColumns = () => {
+    return [
+      {
+        id: "token",
+        label: "Token",
+        sortable: true,
+        minWidth: 180,
+        wrap: false,
+        render: (_v, row) => tokenCell(row),
+      },
+      // Conditionally add Actions column for Pool view
+      ...(state.view === "pool"
+        ? [
+            {
+              id: "actions",
+              label: "Actions",
+              sortable: false,
+              minWidth: 100,
+              wrap: false,
+              render: (_v, row) => {
+                const mint = row?.mint || "";
+                const isBlacklisted = Boolean(row?.blacklisted);
+                const hasOpen = Boolean(row?.has_open_position);
+                const disabledAttr = isBlacklisted ? ' disabled aria-disabled="true"' : "";
+
+                if (!mint) return "—";
+
+                if (hasOpen) {
+                  return `
+                    <div class="row-actions">
+                      <button class="btn row-action" data-action="add" data-mint="${Utils.escapeHtml(
+                        mint
+                      )}" title="Add to position (DCA)"${disabledAttr}>Add</button>
+                      <button class="btn warning row-action" data-action="sell" data-mint="${Utils.escapeHtml(
+                        mint
+                      )}" title="Sell (full or % partial)"${disabledAttr}>Sell</button>
+                    </div>
+                  `;
+                }
+
+                return `
+                  <div class="row-actions">
+                    <button class="btn success row-action" data-action="buy" data-mint="${Utils.escapeHtml(
+                      mint
+                    )}" title="Buy position"${disabledAttr}>Buy</button>
+                  </div>
+                `;
+              },
+            },
+          ]
+        : []),
+      {
+        id: "links",
+        label: "Links",
+        sortable: false,
+        minWidth: 70,
+        wrap: false,
+        render: (_v, row) => {
+          const mint = row?.mint || "";
+          if (!mint) return "—";
+          return `
+            <button 
+              class="btn btn-sm links-dropdown-trigger" 
+              data-mint="${Utils.escapeHtml(mint)}"
+              title="External links"
+              type="button"
+            >
+              🔗
+            </button>
+          `;
+        },
+      },
+      {
+        id: "price_sol",
+        label: "Price (SOL)",
+        sortable: true,
+        minWidth: 120,
+        wrap: false,
+        render: (v) => priceCell(v),
+      },
+      {
+        id: "liquidity_usd",
+        label: "Liquidity",
+        sortable: true,
+        minWidth: 110,
+        wrap: false,
+        render: (v) => usdCell(v),
+      },
+      {
+        id: "volume_24h",
+        label: "24h Vol",
+        sortable: true,
+        minWidth: 110,
+        wrap: false,
+        render: (v) => usdCell(v),
+      },
+      {
+        id: "fdv",
+        label: "FDV",
+        sortable: true,
+        minWidth: 110,
+        wrap: false,
+        render: (v) => usdCell(v),
+      },
+      {
+        id: "market_cap",
+        label: "Mkt Cap",
+        sortable: true,
+        minWidth: 110,
+        wrap: false,
+        render: (v) => usdCell(v),
+      },
+      {
+        id: "price_change_h1",
+        label: "1h",
+        sortable: true,
+        minWidth: 90,
+        wrap: false,
+        render: (v) => percentCell(v),
+      },
+      {
+        id: "price_change_h24",
+        label: "24h",
+        sortable: true,
+        minWidth: 90,
+        wrap: false,
+        render: (v) => percentCell(v),
+      },
+      {
+        id: "txns_5m",
+        label: "Txns 5m",
+        sortable: true,
+        minWidth: 80,
+        wrap: false,
+        render: (_v, row) => {
+          const buys = row.txns_5m_buys || 0;
+          const sells = row.txns_5m_sells || 0;
+          if (buys === 0 && sells === 0) return "—";
+          return `${Utils.formatNumber(buys, 0)}/${Utils.formatNumber(sells, 0)}`;
+        },
+      },
+      {
+        id: "txns_1h",
+        label: "Txns 1h",
+        sortable: true,
+        minWidth: 80,
+        wrap: false,
+        render: (_v, row) => {
+          const buys = row.txns_1h_buys || 0;
+          const sells = row.txns_1h_sells || 0;
+          if (buys === 0 && sells === 0) return "—";
+          return `${Utils.formatNumber(buys, 0)}/${Utils.formatNumber(sells, 0)}`;
+        },
+      },
+      {
+        id: "txns_6h",
+        label: "Txns 6h",
+        sortable: true,
+        minWidth: 80,
+        wrap: false,
+        render: (_v, row) => {
+          const buys = row.txns_6h_buys || 0;
+          const sells = row.txns_6h_sells || 0;
+          if (buys === 0 && sells === 0) return "—";
+          return `${Utils.formatNumber(buys, 0)}/${Utils.formatNumber(sells, 0)}`;
+        },
+      },
+      {
+        id: "txns_24h",
+        label: "Txns 24h",
+        sortable: true,
+        minWidth: 90,
+        wrap: false,
+        render: (_v, row) => {
+          const buys = row.txns_24h_buys || 0;
+          const sells = row.txns_24h_sells || 0;
+          if (buys === 0 && sells === 0) return "—";
+          return `${Utils.formatNumber(buys, 0)}/${Utils.formatNumber(sells, 0)}`;
+        },
+      },
+      {
+        id: "risk_score",
+        label: "Risk Score",
+        sortable: true,
+        minWidth: 90,
+        wrap: false,
+        render: (v) => {
+          if (v == null) return "—";
+          // Raw rugcheck score: lower = safer, higher = more risky
+          const num = Utils.formatNumber(v, 0);
+          if (v <= 1000) return `<span style="color: var(--success)">${num}</span>`;
+          if (v <= 10000) return `<span style="color: var(--warning)">${num}</span>`;
+          return `<span style="color: var(--error)">${num}</span>`;
+        },
+      },
+      // Conditionally add reject_reason column only for rejected view
+      ...(state.view === "rejected"
+        ? [
+            {
+              id: "reject_reason",
+              label: "Reject Reason",
+              sortable: false,
+              minWidth: 220,
+              wrap: true,
+              render: (value) => {
+                if (!value) return "—";
+                return Utils.escapeHtml(String(value));
+              },
+            },
+          ]
+        : []),
+      // Conditionally add blacklist_reason column only for blacklisted view
+      ...(state.view === "blacklisted"
+        ? [
+            {
+              id: "blacklist_reason",
+              label: "Blacklist Reason",
+              sortable: false,
+              minWidth: 250,
+              wrap: true,
+              render: (_v, row) => {
+                const summary = summarizeBlacklistReasons(row.blacklist_reasons);
+                if (!summary) return "—";
+                return Utils.escapeHtml(summary);
+              },
+            },
+          ]
+        : []),
+      {
+        id: "status",
+        label: "Status",
+        sortable: false,
+        minWidth: 140,
+        wrap: false,
+        render: (_v, row) => {
+          const flags = [];
+          if (row.has_pool_price) flags.push('<span class="badge info">Price</span>');
+          if (row.has_ohlcv) flags.push('<span class="badge">OHLCV</span>');
+          if (row.has_open_position) flags.push('<span class="badge success">Position</span>');
+          if (row.blacklisted) {
+            const summary = summarizeBlacklistReasons(row.blacklist_reasons);
+            const tooltip = summary ? `Blacklisted: ${summary}` : "Blacklisted token";
+            flags.push(
+              `<span class="badge warning" title="${Utils.escapeHtml(tooltip)}">Blacklisted</span>`
+            );
+          }
+          return flags.join(" ") || "—";
+        },
+      },
+      {
+        id: "updated_at",
+        label: "Updated",
+        sortable: true,
+        minWidth: 100,
+        wrap: false,
+        render: (v, row) => {
+          const source =
+            typeof row?.data_source === "string" ? row.data_source.toLowerCase() : "";
+          if (!v || source === "unknown") {
+            return "—";
+          }
+          return timeAgoCell(v);
+        },
+      },
+      {
+        id: "token_birth_at",
+        label: "Birth",
+        sortable: true,
+        minWidth: 110,
+        wrap: false,
+        render: (_v, row) => {
+          const value = row.token_birth_at || row.first_seen_at;
+          return timeAgoCell(value);
+        },
+      },
+      {
+        id: "first_seen_at",
+        label: "First Seen",
+        sortable: true,
+        minWidth: 110,
+        wrap: false,
+        render: (v) => timeAgoCell(v),
+      },
+    ];
+  };
+
   const switchView = (view) => {
     if (!TOKEN_VIEWS.some((v) => v.id === view)) return;
     state.view = view;
@@ -600,6 +890,14 @@ function createLifecycle() {
     // Update table stateKey for per-tab state persistence
     if (table) {
       table.setStateKey(`tokens-table-v2.${view}`, { render: false }); // v2: fixed column order
+
+      // Update columns for the new view (different views have different conditional columns)
+      const newColumns = buildColumns();
+      table.setColumns(newColumns, {
+        preserveData: true,
+        preserveScroll: false, // Reset scroll when switching views
+        resetState: false, // Keep column widths/visibility preferences within each view
+      });
 
       // Read restored sort state from table and sync to state.sort
       const restoredTableState = table.getServerState();
@@ -952,291 +1250,8 @@ function createLifecycle() {
 
       const initialSortColumn = resolveSortColumn(state.sort.by);
 
-      const columns = [
-        {
-          id: "token",
-          label: "Token",
-          sortable: true,
-          minWidth: 180,
-          wrap: false,
-          render: (_v, row) => tokenCell(row),
-        },
-        // Conditionally add Actions column for Pool view
-        ...(state.view === "pool"
-          ? [
-              {
-                id: "actions",
-                label: "Actions",
-                sortable: false,
-                minWidth: 100,
-                wrap: false,
-                render: (_v, row) => {
-                  const mint = row?.mint || "";
-                  const isBlacklisted = Boolean(row?.blacklisted);
-                  const hasOpen = Boolean(row?.has_open_position);
-                  const disabledAttr = isBlacklisted ? ' disabled aria-disabled="true"' : "";
-
-                  if (!mint) return "—";
-
-                  if (hasOpen) {
-                    return `
-                      <div class="row-actions">
-                        <button class="btn row-action" data-action="add" data-mint="${Utils.escapeHtml(
-                          mint
-                        )}" title="Add to position (DCA)"${disabledAttr}>Add</button>
-                        <button class="btn warning row-action" data-action="sell" data-mint="${Utils.escapeHtml(
-                          mint
-                        )}" title="Sell (full or % partial)"${disabledAttr}>Sell</button>
-                      </div>
-                    `;
-                  }
-
-                  return `
-                    <div class="row-actions">
-                      <button class="btn success row-action" data-action="buy" data-mint="${Utils.escapeHtml(
-                        mint
-                      )}" title="Buy position"${disabledAttr}>Buy</button>
-                    </div>
-                  `;
-                },
-              },
-            ]
-          : []),
-        {
-          id: "links",
-          label: "Links",
-          sortable: false,
-          minWidth: 70,
-          wrap: false,
-          render: (_v, row) => {
-            const mint = row?.mint || "";
-            if (!mint) return "—";
-            return `
-              <button 
-                class="btn btn-sm links-dropdown-trigger" 
-                data-mint="${Utils.escapeHtml(mint)}"
-                title="External links"
-                type="button"
-              >
-                🔗
-              </button>
-            `;
-          },
-        },
-        {
-          id: "price_sol",
-          label: "Price (SOL)",
-          sortable: true,
-          minWidth: 120,
-          wrap: false,
-          render: (v) => priceCell(v),
-        },
-        {
-          id: "liquidity_usd",
-          label: "Liquidity",
-          sortable: true,
-          minWidth: 110,
-          wrap: false,
-          render: (v) => usdCell(v),
-        },
-        {
-          id: "volume_24h",
-          label: "24h Vol",
-          sortable: true,
-          minWidth: 110,
-          wrap: false,
-          render: (v) => usdCell(v),
-        },
-        {
-          id: "fdv",
-          label: "FDV",
-          sortable: true,
-          minWidth: 110,
-          wrap: false,
-          render: (v) => usdCell(v),
-        },
-        {
-          id: "market_cap",
-          label: "Mkt Cap",
-          sortable: true,
-          minWidth: 110,
-          wrap: false,
-          render: (v) => usdCell(v),
-        },
-        {
-          id: "price_change_h1",
-          label: "1h",
-          sortable: true,
-          minWidth: 90,
-          wrap: false,
-          render: (v) => percentCell(v),
-        },
-        {
-          id: "price_change_h24",
-          label: "24h",
-          sortable: true,
-          minWidth: 90,
-          wrap: false,
-          render: (v) => percentCell(v),
-        },
-        {
-          id: "txns_5m",
-          label: "Txns 5m",
-          sortable: true,
-          minWidth: 80,
-          wrap: false,
-          render: (_v, row) => {
-            const buys = row.txns_5m_buys || 0;
-            const sells = row.txns_5m_sells || 0;
-            if (buys === 0 && sells === 0) return "—";
-            return `${Utils.formatNumber(buys, 0)}/${Utils.formatNumber(sells, 0)}`;
-          },
-        },
-        {
-          id: "txns_1h",
-          label: "Txns 1h",
-          sortable: true,
-          minWidth: 80,
-          wrap: false,
-          render: (_v, row) => {
-            const buys = row.txns_1h_buys || 0;
-            const sells = row.txns_1h_sells || 0;
-            if (buys === 0 && sells === 0) return "—";
-            return `${Utils.formatNumber(buys, 0)}/${Utils.formatNumber(sells, 0)}`;
-          },
-        },
-        {
-          id: "txns_6h",
-          label: "Txns 6h",
-          sortable: true,
-          minWidth: 80,
-          wrap: false,
-          render: (_v, row) => {
-            const buys = row.txns_6h_buys || 0;
-            const sells = row.txns_6h_sells || 0;
-            if (buys === 0 && sells === 0) return "—";
-            return `${Utils.formatNumber(buys, 0)}/${Utils.formatNumber(sells, 0)}`;
-          },
-        },
-        {
-          id: "txns_24h",
-          label: "Txns 24h",
-          sortable: true,
-          minWidth: 90,
-          wrap: false,
-          render: (_v, row) => {
-            const buys = row.txns_24h_buys || 0;
-            const sells = row.txns_24h_sells || 0;
-            if (buys === 0 && sells === 0) return "—";
-            return `${Utils.formatNumber(buys, 0)}/${Utils.formatNumber(sells, 0)}`;
-          },
-        },
-        {
-          id: "risk_score",
-          label: "Risk Score",
-          sortable: true,
-          minWidth: 90,
-          wrap: false,
-          render: (v) => {
-            if (v == null) return "—";
-            // Raw rugcheck score: lower = safer, higher = more risky
-            const num = Utils.formatNumber(v, 0);
-            if (v <= 1000) return `<span style="color: var(--success)">${num}</span>`;
-            if (v <= 10000) return `<span style="color: var(--warning)">${num}</span>`;
-            return `<span style="color: var(--error)">${num}</span>`;
-          },
-        },
-        // Conditionally add reject_reason column only for rejected view
-        ...(state.view === "rejected"
-          ? [
-              {
-                id: "reject_reason",
-                label: "Reject Reason",
-                sortable: false,
-                minWidth: 220,
-                wrap: true,
-                render: (value) => {
-                  if (!value) return "—";
-                  return Utils.escapeHtml(String(value));
-                },
-              },
-            ]
-          : []),
-        // Conditionally add blacklist_reason column only for blacklisted view
-        ...(state.view === "blacklisted"
-          ? [
-              {
-                id: "blacklist_reason",
-                label: "Blacklist Reason",
-                sortable: false,
-                minWidth: 250,
-                wrap: true,
-                render: (_v, row) => {
-                  const summary = summarizeBlacklistReasons(row.blacklist_reasons);
-                  if (!summary) return "—";
-                  return Utils.escapeHtml(summary);
-                },
-              },
-            ]
-          : []),
-        {
-          id: "status",
-          label: "Status",
-          sortable: false,
-          minWidth: 140,
-          wrap: false,
-          render: (_v, row) => {
-            const flags = [];
-            if (row.has_pool_price) flags.push('<span class="badge info">Price</span>');
-            if (row.has_ohlcv) flags.push('<span class="badge">OHLCV</span>');
-            if (row.has_open_position) flags.push('<span class="badge success">Position</span>');
-            if (row.blacklisted) {
-              const summary = summarizeBlacklistReasons(row.blacklist_reasons);
-              const tooltip = summary
-                ? `Blacklisted: ${summary}`
-                : "Blacklisted token";
-              flags.push(
-                `<span class="badge warning" title="${Utils.escapeHtml(tooltip)}">Blacklisted</span>`
-              );
-            }
-            return flags.join(" ") || "—";
-          },
-        },
-        {
-          id: "updated_at",
-          label: "Updated",
-          sortable: true,
-          minWidth: 100,
-          wrap: false,
-          render: (v, row) => {
-            const source =
-              typeof row?.data_source === "string" ? row.data_source.toLowerCase() : "";
-            if (!v || source === "unknown") {
-              return "—";
-            }
-            return timeAgoCell(v);
-          },
-        },
-        {
-          id: "token_birth_at",
-          label: "Birth",
-          sortable: true,
-          minWidth: 110,
-          wrap: false,
-          render: (_v, row) => {
-            const value = row.token_birth_at || row.first_seen_at;
-            return timeAgoCell(value);
-          },
-        },
-        {
-          id: "first_seen_at",
-          label: "First Seen",
-          sortable: true,
-          minWidth: 110,
-          wrap: false,
-          render: (v) => timeAgoCell(v),
-        },
-      ];
+      // Build columns based on current view
+      const columns = buildColumns();
 
       table = new DataTable({
         container: "#tokens-root",

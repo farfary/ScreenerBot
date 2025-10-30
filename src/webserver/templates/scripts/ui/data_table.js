@@ -3150,6 +3150,97 @@ export class DataTable {
   }
 
   /**
+   * Update table columns dynamically
+   * Useful for views with conditional columns (e.g., tokens page sub-tabs)
+   * @param {Array} newColumns - Array of column configurations
+   * @param {Object} options - Options for column update
+   * @param {boolean} options.preserveData - Keep current data (default: true)
+   * @param {boolean} options.preserveScroll - Keep scroll position (default: true)
+   * @param {boolean} options.resetState - Reset column widths/visibility/order (default: false)
+   */
+  setColumns(newColumns, options = {}) {
+    if (!Array.isArray(newColumns) || newColumns.length === 0) {
+      this._log("error", "setColumns: newColumns must be a non-empty array");
+      return;
+    }
+
+    const preserveData = options.preserveData !== false;
+    const preserveScroll = options.preserveScroll !== false;
+    const resetState = options.resetState === true;
+
+    // Save current scroll position
+    const scrollPosition = preserveScroll ? this.elements.scrollContainer?.scrollTop || 0 : 0;
+
+    // Update columns
+    this.options.columns = newColumns;
+
+    if (resetState) {
+      // Reset all column-related state
+      this.state.columnWidths = {};
+      this.state.visibleColumns = {};
+      this.state.columnOrder = [];
+      this.state.userResizedColumns = {};
+      this.state.hasAutoFitted = false;
+      this._log("info", "Column state reset");
+    } else {
+      // Clean up state for columns that no longer exist
+      const validColumnIds = new Set(newColumns.map((col) => col.id));
+
+      // Remove widths for deleted columns
+      Object.keys(this.state.columnWidths).forEach((colId) => {
+        if (!validColumnIds.has(colId)) {
+          delete this.state.columnWidths[colId];
+        }
+      });
+
+      // Remove visibility for deleted columns
+      Object.keys(this.state.visibleColumns).forEach((colId) => {
+        if (!validColumnIds.has(colId)) {
+          delete this.state.visibleColumns[colId];
+        }
+      });
+
+      // Remove deleted columns from order
+      this.state.columnOrder = this.state.columnOrder.filter((colId) =>
+        validColumnIds.has(colId)
+      );
+
+      // Remove user resize flags for deleted columns
+      Object.keys(this.state.userResizedColumns).forEach((colId) => {
+        if (!validColumnIds.has(colId)) {
+          delete this.state.userResizedColumns[colId];
+        }
+      });
+    }
+
+    // Save updated state
+    this._saveState();
+
+    // Re-render table structure with new columns
+    if (preserveData && this.state.data.length > 0) {
+      // Re-apply filters with new columns (some filter functions may reference column IDs)
+      this._applyFilters();
+      // Re-render table with existing data
+      this._renderTable();
+    } else {
+      // Just re-render empty table
+      this._renderTable();
+    }
+
+    // Restore scroll position
+    if (preserveScroll && this.elements.scrollContainer) {
+      this.elements.scrollContainer.scrollTop = scrollPosition;
+    }
+
+    this._log("info", "Columns updated", {
+      columnCount: newColumns.length,
+      preserveData,
+      preserveScroll,
+      resetState,
+    });
+  }
+
+  /**
    * Refresh table (re-render)
    */
   refresh(request = {}) {

@@ -61,175 +61,180 @@ function createLifecycle() {
     return `<span class="chip ${cls}">${pct}%</span>`;
   };
 
-  const columnsOpen = [
-    {
-      id: "token",
-      label: "Token",
-      sortable: true,
-      minWidth: 180,
-      wrap: false,
-      render: (_v, r) => tokenCell(r),
-    },
-    {
-      id: "actions",
-      label: "Actions",
-      sortable: false,
-      minWidth: 180,
-      wrap: false,
-      render: (_v, row) => {
-        const mint = row?.mint || "";
-        const isOpen = !row?.transaction_exit_verified;
+  /**
+   * Build columns array based on current view (open/closed)
+   * Different views show different columns (open has unrealized PnL, closed has exit data)
+   */
+  const buildColumns = () => {
+    if (state.view === "open") {
+      return [
+        {
+          id: "token",
+          label: "Token",
+          sortable: true,
+          minWidth: 180,
+          wrap: false,
+          render: (_v, r) => tokenCell(r),
+        },
+        {
+          id: "actions",
+          label: "Actions",
+          sortable: false,
+          minWidth: 180,
+          wrap: false,
+          render: (_v, row) => {
+            const mint = row?.mint || "";
+            const isOpen = !row?.transaction_exit_verified;
 
-        if (!mint || !isOpen) return "—";
+            if (!mint || !isOpen) return "—";
 
-        return `
-          <div class="row-actions">
-            <button class="btn row-action" data-action="add" data-mint="${Utils.escapeHtml(
-              mint
-            )}" title="Add to position (DCA)">Add</button>
-            <button class="btn warning row-action" data-action="sell" data-mint="${Utils.escapeHtml(
-              mint
-            )}" title="Sell (full or % partial)">Sell</button>
-          </div>
-        `;
-      },
-    },
-    {
-      id: "entry_time",
-      label: "Entry Time",
-      sortable: true,
-      minWidth: 140,
-      render: (v) => timeCell(v),
-    },
-    {
-      id: "dca_count",
-      label: "DCA",
-      sortable: true,
-      minWidth: 80,
-      render: (v) => dcaCell(v),
-    },
-    {
-      id: "average_entry_price",
-      label: "Avg Entry (SOL)",
-      sortable: true,
-      minWidth: 140,
-      render: (v) => priceCell(v),
-    },
-    {
-      id: "current_price",
-      label: "Current (SOL)",
-      sortable: true,
-      minWidth: 140,
-      render: (v) => (v == null ? "—" : priceCell(v)),
-    },
-    {
-      id: "total_size_sol",
-      label: "Total Invested",
-      sortable: true,
-      minWidth: 120,
-      render: (v) => solCell(v),
-    },
-    {
-      id: "current_size",
-      label: "Size",
-      sortable: true,
-      minWidth: 80,
-      render: (_v, r) => currentSizeCell(r.remaining_token_amount, r.token_amount),
-    },
-    {
-      id: "partial_exit_count",
-      label: "Exits",
-      sortable: true,
-      minWidth: 90,
-      render: (v) => partialExitsCell(v),
-    },
-    {
-      id: "unrealized_pnl",
-      label: "Unrealized PnL",
-      sortable: true,
-      minWidth: 130,
-      render: (v) => pnlCell(v),
-    },
-    {
-      id: "unrealized_pnl_percent",
-      label: "Unrealized %",
-      sortable: true,
-      minWidth: 110,
-      render: (v) => percentCell(v),
-    },
-  ];
-
-  const columnsClosed = [
-    {
-      id: "token",
-      label: "Token",
-      sortable: true,
-      minWidth: 180,
-      wrap: false,
-      render: (_v, r) => tokenCell(r),
-    },
-    {
-      id: "exit_time",
-      label: "Exit Time",
-      sortable: true,
-      minWidth: 140,
-      render: (v) => (v == null ? "—" : timeCell(v)),
-    },
-    {
-      id: "dca_count",
-      label: "DCA",
-      sortable: true,
-      minWidth: 80,
-      render: (v) => dcaCell(v),
-    },
-    {
-      id: "average_entry_price",
-      label: "Avg Entry (SOL)",
-      sortable: true,
-      minWidth: 140,
-      render: (v, r) => priceCell(v || r.entry_price),
-    },
-    {
-      id: "average_exit_price",
-      label: "Avg Exit (SOL)",
-      sortable: true,
-      minWidth: 140,
-      render: (v, r) => (v == null ? priceCell(r.exit_price) : priceCell(v)),
-    },
-    {
-      id: "total_size_sol",
-      label: "Total Invested",
-      sortable: true,
-      minWidth: 120,
-      render: (v) => solCell(v),
-    },
-    {
-      id: "partial_exit_count",
-      label: "Exits",
-      sortable: true,
-      minWidth: 90,
-      render: (v) => partialExitsCell(v),
-    },
-    {
-      id: "sol_received",
-      label: "Proceeds",
-      sortable: true,
-      minWidth: 110,
-      render: (v) => (v == null ? "—" : solCell(v)),
-    },
-    { id: "pnl", label: "PnL", sortable: true, minWidth: 110, render: (v) => pnlCell(v) },
-    {
-      id: "pnl_percent",
-      label: "PnL %",
-      sortable: true,
-      minWidth: 100,
-      render: (v) => percentCell(v),
-    },
-  ];
-
-  function selectedColumns() {
-    return state.view === "open" ? columnsOpen : columnsClosed;
-  }
+            return `
+              <div class="row-actions">
+                <button class="btn row-action" data-action="add" data-mint="${Utils.escapeHtml(
+                  mint
+                )}" title="Add to position (DCA)">Add</button>
+                <button class="btn warning row-action" data-action="sell" data-mint="${Utils.escapeHtml(
+                  mint
+                )}" title="Sell (full or % partial)">Sell</button>
+              </div>
+            `;
+          },
+        },
+        {
+          id: "entry_time",
+          label: "Entry Time",
+          sortable: true,
+          minWidth: 140,
+          render: (v) => timeCell(v),
+        },
+        {
+          id: "dca_count",
+          label: "DCA",
+          sortable: true,
+          minWidth: 80,
+          render: (v) => dcaCell(v),
+        },
+        {
+          id: "average_entry_price",
+          label: "Avg Entry (SOL)",
+          sortable: true,
+          minWidth: 140,
+          render: (v) => priceCell(v),
+        },
+        {
+          id: "current_price",
+          label: "Current (SOL)",
+          sortable: true,
+          minWidth: 140,
+          render: (v) => (v == null ? "—" : priceCell(v)),
+        },
+        {
+          id: "total_size_sol",
+          label: "Total Invested",
+          sortable: true,
+          minWidth: 120,
+          render: (v) => solCell(v),
+        },
+        {
+          id: "current_size",
+          label: "Size",
+          sortable: true,
+          minWidth: 80,
+          render: (_v, r) => currentSizeCell(r.remaining_token_amount, r.token_amount),
+        },
+        {
+          id: "partial_exit_count",
+          label: "Exits",
+          sortable: true,
+          minWidth: 90,
+          render: (v) => partialExitsCell(v),
+        },
+        {
+          id: "unrealized_pnl",
+          label: "Unrealized PnL",
+          sortable: true,
+          minWidth: 130,
+          render: (v) => pnlCell(v),
+        },
+        {
+          id: "unrealized_pnl_percent",
+          label: "Unrealized %",
+          sortable: true,
+          minWidth: 110,
+          render: (v) => percentCell(v),
+        },
+      ];
+    } else {
+      // closed view
+      return [
+        {
+          id: "token",
+          label: "Token",
+          sortable: true,
+          minWidth: 180,
+          wrap: false,
+          render: (_v, r) => tokenCell(r),
+        },
+        {
+          id: "exit_time",
+          label: "Exit Time",
+          sortable: true,
+          minWidth: 140,
+          render: (v) => (v == null ? "—" : timeCell(v)),
+        },
+        {
+          id: "dca_count",
+          label: "DCA",
+          sortable: true,
+          minWidth: 80,
+          render: (v) => dcaCell(v),
+        },
+        {
+          id: "average_entry_price",
+          label: "Avg Entry (SOL)",
+          sortable: true,
+          minWidth: 140,
+          render: (v, r) => priceCell(v || r.entry_price),
+        },
+        {
+          id: "average_exit_price",
+          label: "Avg Exit (SOL)",
+          sortable: true,
+          minWidth: 140,
+          render: (v, r) => (v == null ? priceCell(r.exit_price) : priceCell(v)),
+        },
+        {
+          id: "total_size_sol",
+          label: "Total Invested",
+          sortable: true,
+          minWidth: 120,
+          render: (v) => solCell(v),
+        },
+        {
+          id: "partial_exit_count",
+          label: "Exits",
+          sortable: true,
+          minWidth: 90,
+          render: (v) => partialExitsCell(v),
+        },
+        {
+          id: "sol_received",
+          label: "Proceeds",
+          sortable: true,
+          minWidth: 110,
+          render: (v) => (v == null ? "—" : solCell(v)),
+        },
+        { id: "pnl", label: "PnL", sortable: true, minWidth: 110, render: (v) => pnlCell(v) },
+        {
+          id: "pnl_percent",
+          label: "PnL %",
+          sortable: true,
+          minWidth: 100,
+          render: (v) => percentCell(v),
+        },
+      ];
+    }
+  };
 
   const updateToolbar = () => {
     if (!table) return;
@@ -291,50 +296,29 @@ function createLifecycle() {
     if (view !== "open" && view !== "closed") return;
     state.view = view;
     if (table) {
-      // DataTable doesn't support dynamic column changes - destroy and recreate
-      table.destroy();
-
-      // Recreate table with new columns for the selected view
-      const columns = selectedColumns();
-      const viewLabel = view === "open" ? "Open" : "Closed";
-      table = new DataTable({
-        container: "#positions-root",
-        columns,
-        rowIdField: "mint",
-        stateKey: `positions-table.${view}`,
-        enableLogging: false,
-        sorting: {
-          mode: "client",
-          column: view === "open" ? "entry_time" : "exit_time",
-          direction: "desc",
-        },
-        compact: true,
-        stickyHeader: true,
-        zebra: true,
-        fitToContainer: true,
-        uniformRowHeight: 2,
-        pagination: {
-          threshold: 160,
-          maxRows: 5000,
-          loadPage: loadPositionsPage,
-          dedupeKey: (row) => row?.mint ?? null,
-          rowIdField: "mint",
-          onPageLoaded: () => updateToolbar(),
-        },
-        toolbar: {
-          title: {
-            icon: "📊",
-            text: `Positions: ${viewLabel}`,
-            meta: [{ id: "positions-last-update", lines: ["Last Update", "—"] }],
-          },
-          summary: [{ id: "positions-total", label: "Total", value: "0", variant: "secondary" }],
-          search: {
-            enabled: true,
-            mode: "client",
-            placeholder: "Search by symbol or mint...",
-          },
-        },
+      // Update columns for the new view using setColumns (systematic approach)
+      const newColumns = buildColumns();
+      table.setColumns(newColumns, {
+        preserveData: false, // Clear data to force reload
+        preserveScroll: false, // Reset scroll when switching views
+        resetState: false, // Keep column widths/visibility preferences within each view
       });
+
+      // Update stateKey for per-view persistence
+      table.setStateKey(`positions-table.${view}`, { render: false });
+
+      // Update toolbar title
+      const viewLabel = view === "open" ? "Open" : "Closed";
+      if (table.toolbarView) {
+        const titleConfig = table.options.toolbar?.title;
+        if (titleConfig) {
+          titleConfig.text = `Positions: ${viewLabel}`;
+        }
+      }
+
+      // Update sorting for the new view
+      const sortColumn = view === "open" ? "entry_time" : "exit_time";
+      table.setSort(sortColumn, "desc");
     }
     updateToolbar();
   };
@@ -360,7 +344,8 @@ function createLifecycle() {
       // Sync state.view with TabBar's restored state (from localStorage or URL)
       state.view = tabBar.getActiveTab() || state.view;
 
-      const columns = selectedColumns();
+      // Build columns based on current view
+      const columns = buildColumns();
       const viewLabel = state.view === "open" ? "Open" : "Closed";
 
       table = new DataTable({
