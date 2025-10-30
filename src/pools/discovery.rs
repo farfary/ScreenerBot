@@ -13,7 +13,9 @@ use super::utils::is_stablecoin_mint;
 use crate::config::with_config;
 use crate::events::{record_safe, Event, EventCategory};
 use crate::logger::{self, LogTag};
-use crate::pools::service::{get_debug_token_override, get_pool_analyzer, is_single_pool_mode_enabled};
+use crate::pools::service::{
+    get_debug_token_override, get_pool_analyzer, is_single_pool_mode_enabled,
+};
 use crate::pools::utils::is_sol_mint;
 use crate::tokens::{get_token_pools_snapshot, prefetch_token_pools};
 
@@ -70,9 +72,21 @@ impl PoolDiscovery {
     pub fn log_source_config() {
         let (dex_enabled, gecko_enabled, raydium_enabled) = Self::get_source_config();
         let enabled_sources: Vec<&str> = [
-            if dex_enabled { Some("DexScreener") } else { None },
-            if gecko_enabled { Some("GeckoTerminal") } else { None },
-            if raydium_enabled { Some("Raydium") } else { None },
+            if dex_enabled {
+                Some("DexScreener")
+            } else {
+                None
+            },
+            if gecko_enabled {
+                Some("GeckoTerminal")
+            } else {
+                None
+            },
+            if raydium_enabled {
+                Some("Raydium")
+            } else {
+                None
+            },
         ]
         .iter()
         .filter_map(|&s| s)
@@ -94,9 +108,21 @@ impl PoolDiscovery {
         }
 
         let disabled_sources: Vec<&str> = [
-            if !dex_enabled { Some("DexScreener") } else { None },
-            if !gecko_enabled { Some("GeckoTerminal") } else { None },
-            if !raydium_enabled { Some("Raydium") } else { None },
+            if !dex_enabled {
+                Some("DexScreener")
+            } else {
+                None
+            },
+            if !gecko_enabled {
+                Some("GeckoTerminal")
+            } else {
+                None
+            },
+            if !raydium_enabled {
+                Some("Raydium")
+            } else {
+                None
+            },
         ]
         .iter()
         .filter_map(|&s| s)
@@ -112,7 +138,6 @@ impl PoolDiscovery {
             );
         }
     }
-
 
     /// Start discovery background task
     pub async fn start_discovery_task(&self, shutdown: Arc<Notify>) {

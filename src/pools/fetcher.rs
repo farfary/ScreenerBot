@@ -13,7 +13,7 @@ use crate::rpc::{get_rpc_client, RpcClient};
 use solana_sdk::{account::Account, pubkey::Pubkey};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::sync::{mpsc, Notify};
 
 /// Constants for batch processing
@@ -21,6 +21,23 @@ const ACCOUNT_BATCH_SIZE: usize = 50;
 const FETCH_INTERVAL_MS: u64 = 500;
 const ACCOUNT_STALE_THRESHOLD_SECONDS: u64 = 30;
 const OPEN_POSITION_ACCOUNT_STALE_THRESHOLD_SECONDS: u64 = 5;
+const ACCOUNT_BLACKLIST_THRESHOLD: u32 = 3;
+const POOL_BLACKLIST_THRESHOLD: u32 = 2;
+const FAILURE_WINDOW_SECS: u64 = 300;
+
+#[derive(Debug, Clone)]
+struct MissingAccountState {
+    failures: u32,
+    last_failure: Instant,
+    blacklisted: bool,
+}
+
+#[derive(Debug, Clone)]
+struct MissingPoolState {
+    failures: u32,
+    last_failure: Instant,
+    blacklisted: bool,
+}
 
 /// Message types for fetcher communication
 #[derive(Debug, Clone)]
@@ -185,6 +202,9 @@ impl AccountFetcher {
             let mut interval =
                 tokio::time::interval(tokio::time::Duration::from_millis(FETCH_INTERVAL_MS));
             let mut pending_accounts: HashSet<Pubkey> = HashSet::new();
+            let mut account_failure_tracker: HashMap<Pubkey, MissingAccountState> =
+                HashMap::new();
+            let mut pool_failure_tracker: HashMap<Pubkey, MissingPoolState> = HashMap::new();
 
             logger::info(LogTag::PoolFetcher, "Account fetcher task started");
 
@@ -240,7 +260,9 @@ impl AccountFetcher {
                                 &pool_directory,
                                 &account_bundles,
                                 &account_last_fetch,
-                                &mut pending_accounts
+                                &mut pending_accounts,
+                                &mut account_failure_tracker,
+                                &mut pool_failure_tracker,
                             ).await;
                         }
                     }
@@ -348,6 +370,8 @@ impl AccountFetcher {
         account_bundles: &Arc<RwLock<HashMap<Pubkey, PoolAccountBundle>>>,
         account_last_fetch: &Arc<RwLock<HashMap<Pubkey, Instant>>>,
         pending_accounts: &mut HashSet<Pubkey>,
+        account_failure_tracker: &mut HashMap<Pubkey, MissingAccountState>,
+        pool_failure_tracker: &mut HashMap<Pubkey, MissingPoolState>,
     ) {
         if pending_accounts.is_empty() {
             return;
@@ -434,9 +458,8 @@ impl AccountFetcher {
                         for acc_data in &account_data_list {
                             last_fetch.insert(acc_data.pubkey, now);
                         }
-                        // Remove missing accounts from last_fetch to prevent stale logic re-adding them
                         for missing in &missing_accounts {
-                            last_fetch.remove(missing);
+                            last_fetch.insert(*missing, now);
                         }
                     }
 
@@ -444,6 +467,18 @@ impl AccountFetcher {
                     for missing in &missing_accounts {
                         pending_accounts.remove(missing);
                     }
+
+                    Self::handle_missing_accounts(
+                        &missing_accounts,
+                        pool_directory,
+                        account_failure_tracker,
+                        pool_failure_tracker,
+                    )
+                    .await;
+                    Self::cleanup_missing_failure_trackers(
+                        account_failure_tracker,
+                        pool_failure_tracker,
+                    );
 
                     // Organize accounts into pool bundles
                     Self::organize_accounts_into_bundles(
@@ -485,6 +520,184 @@ impl AccountFetcher {
             // Small delay between batches to respect rate limits
             tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
         }
+    }
+
+    async fn handle_missing_accounts(
+        missing_accounts: &[Pubkey],
+        pool_directory: &Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>,
+        account_failure_tracker: &mut HashMap<Pubkey, MissingAccountState>,
+        pool_failure_tracker: &mut HashMap<Pubkey, MissingPoolState>,
+    ) {
+        if missing_accounts.is_empty() {
+            return;
+        }
+
+        for account in missing_accounts {
+            let directory_snapshot: Vec<(Pubkey, PoolDescriptor)> = {
+                let directory_guard = pool_directory.read().unwrap();
+                directory_guard
+                    .iter()
+                    .filter(|(_, descriptor)| descriptor.reserve_accounts.contains(account))
+                    .map(|(pool_id, descriptor)| (*pool_id, descriptor.clone()))
+                    .collect()
+            };
+
+            let account_state = account_failure_tracker
+                .entry(*account)
+                .or_insert(MissingAccountState {
+                    failures: 0,
+                    last_failure: Instant::now(),
+                    blacklisted: false,
+                });
+            account_state.failures = account_state.failures.saturating_add(1);
+            account_state.last_failure = Instant::now();
+
+            if account_state.failures >= ACCOUNT_BLACKLIST_THRESHOLD && !account_state.blacklisted {
+                let (pool_id_str, token_mint_str) = directory_snapshot
+                    .get(0)
+                    .map(|(pool_id, descriptor)| {
+                        let token_mint = if is_sol_mint(&descriptor.base_mint.to_string()) {
+                            descriptor.quote_mint.to_string()
+                        } else {
+                            descriptor.base_mint.to_string()
+                        };
+                        (Some(pool_id.to_string()), Some(token_mint))
+                    })
+                    .unwrap_or((None, None));
+
+                match super::db::add_account_to_blacklist(
+                    &account.to_string(),
+                    "account_not_found_threshold",
+                    Some("rpc_fetch"),
+                    pool_id_str.as_deref(),
+                    token_mint_str.as_deref(),
+                )
+                .await
+                {
+                    Ok(()) => {
+                        account_state.blacklisted = true;
+                        logger::warning(
+                            LogTag::PoolFetcher,
+                            &format!(
+                                "Blacklisted account {} after {} consecutive misses",
+                                account,
+                                account_state.failures
+                            ),
+                        );
+                        record_safe(Event::warn(
+                            EventCategory::Pool,
+                            Some("account_blacklisted_after_threshold".to_string()),
+                            token_mint_str.clone(),
+                            pool_id_str.clone(),
+                            serde_json::json!({
+                                "account": account.to_string(),
+                                "failures": account_state.failures,
+                                "threshold": ACCOUNT_BLACKLIST_THRESHOLD,
+                                "pool_id": pool_id_str,
+                                "token_mint": token_mint_str,
+                            }),
+                        ))
+                        .await;
+                    }
+                    Err(e) => {
+                        logger::warning(
+                            LogTag::PoolFetcher,
+                            &format!(
+                                "Failed to persist account blacklist for {}: {}",
+                                account, e
+                            ),
+                        );
+                    }
+                }
+            }
+
+            for (pool_id, descriptor) in directory_snapshot.iter() {
+                let pool_state = pool_failure_tracker
+                    .entry(*pool_id)
+                    .or_insert(MissingPoolState {
+                        failures: 0,
+                        last_failure: Instant::now(),
+                        blacklisted: false,
+                    });
+                pool_state.failures = pool_state.failures.saturating_add(1);
+                pool_state.last_failure = Instant::now();
+
+                if pool_state.failures >= POOL_BLACKLIST_THRESHOLD && !pool_state.blacklisted {
+                    let token_mint = if is_sol_mint(&descriptor.base_mint.to_string()) {
+                        descriptor.quote_mint.to_string()
+                    } else {
+                        descriptor.base_mint.to_string()
+                    };
+                    let program_id = descriptor.program_kind.program_id();
+
+                    match super::db::add_pool_to_blacklist(
+                        &pool_id.to_string(),
+                        "missing_accounts",
+                        Some(&token_mint),
+                        if program_id.is_empty() {
+                            None
+                        } else {
+                            Some(program_id)
+                        },
+                    )
+                    .await
+                    {
+                        Ok(()) => {
+                            pool_state.blacklisted = true;
+                            logger::warning(
+                                LogTag::PoolFetcher,
+                                &format!(
+                                    "Blacklisted pool {} (token {}) after {} missing-account hits",
+                                    pool_id,
+                                    token_mint,
+                                    pool_state.failures
+                                ),
+                            );
+                            record_safe(Event::warn(
+                                EventCategory::Pool,
+                                Some("pool_blacklisted_missing_accounts".to_string()),
+                                Some(token_mint.clone()),
+                                Some(pool_id.to_string()),
+                                serde_json::json!({
+                                    "pool_id": pool_id.to_string(),
+                                    "program_kind": descriptor.program_kind.display_name(),
+                                    "program_id": program_id,
+                                    "failures": pool_state.failures,
+                                    "threshold": POOL_BLACKLIST_THRESHOLD,
+                                    "missing_account": account.to_string(),
+                                }),
+                            ))
+                            .await;
+                        }
+                        Err(e) => {
+                            logger::warning(
+                                LogTag::PoolFetcher,
+                                &format!(
+                                    "Failed to persist pool blacklist for {}: {}",
+                                    pool_id, e
+                                ),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    fn cleanup_missing_failure_trackers(
+        account_failure_tracker: &mut HashMap<Pubkey, MissingAccountState>,
+        pool_failure_tracker: &mut HashMap<Pubkey, MissingPoolState>,
+    ) {
+        let expiry = Duration::from_secs(FAILURE_WINDOW_SECS);
+        let now = Instant::now();
+
+        account_failure_tracker.retain(|_, state| {
+            state.blacklisted || now.duration_since(state.last_failure) <= expiry
+        });
+
+        pool_failure_tracker.retain(|_, state| {
+            state.blacklisted || now.duration_since(state.last_failure) <= expiry
+        });
     }
 
     /// Fetch a batch of accounts
@@ -571,22 +784,6 @@ impl AccountFetcher {
                     LogTag::PoolFetcher,
                     &format!("Account not found: {}", missing_key),
                 );
-
-                // Blacklist account after not found error
-                if let Err(e) = super::db::add_account_to_blacklist(
-                    &missing_key.to_string(),
-                    "account_not_found",
-                    Some("rpc_fetch"),
-                    None, // pool_id will be looked up if needed
-                    None, // token_mint will be looked up if needed
-                )
-                .await
-                {
-                    logger::warning(
-                        LogTag::PoolFetcher,
-                        &format!("Failed to blacklist account {}: {}", missing_key, e),
-                    );
-                }
             }
         }
 
@@ -600,7 +797,7 @@ impl AccountFetcher {
                     "missing_count": missing_accounts.len(),
                     "total_requested": accounts.len(),
                     "missing_accounts": missing_accounts.iter().map(|p| p.to_string()).collect::<Vec<_>>(),
-                    "action": "accounts_blacklisted"
+                    "action": "failure_recorded"
                 }),
             ))
             .await;

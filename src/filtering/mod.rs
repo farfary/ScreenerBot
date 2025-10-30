@@ -4,8 +4,9 @@ mod store;
 pub mod types;
 
 pub use types::{
-    FilteringQuery, FilteringQueryResult, FilteringSnapshot, FilteringStatsSnapshot, FilteringView,
-    PassedToken, RejectedToken, SortDirection, TokenSortKey,
+    BlacklistSourceInfo, FilteringQuery, FilteringQueryResult, FilteringSnapshot,
+    FilteringStatsSnapshot, FilteringView, PassedToken, RejectedToken, SortDirection,
+    TokenSortKey,
 };
 
 /// Obtain filtered token mint list for trading and pool services

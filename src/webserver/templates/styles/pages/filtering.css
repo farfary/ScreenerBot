@@ -242,6 +242,12 @@
   pointer-events: none;
 }
 
+/* Disable card body (fields) but keep header interactive for toggles */
+.card-body.disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 .card-header {
   display: flex;
   justify-content: space-between;

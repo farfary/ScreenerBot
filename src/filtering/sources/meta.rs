@@ -11,7 +11,8 @@ pub async fn evaluate(
     token: &Token,
     config: &FilteringConfig,
 ) -> Result<(), FilterRejectionReason> {
-    if config.require_decimals_in_db && !has_cached_decimals(&token.mint) {
+    // ALWAYS check decimals - this is a fundamental requirement
+    if !has_cached_decimals(&token.mint) {
         if get_decimals(&token.mint).await.is_none() {
             return Err(FilterRejectionReason::NoDecimalsInDatabase);
         }

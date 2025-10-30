@@ -833,38 +833,7 @@ config_struct! {
 config_struct! {
     /// Main filtering configuration - orchestrates all sources
     pub struct FilteringConfig {
-        // Processing limits
-        #[metadata(field_metadata! {
-            label: "Max Tokens to Process",
-            hint: "Total tokens to evaluate per cycle (10000 = all)",
-            min: 100,
-            max: 100000,
-            step: 100,
-            unit: "tokens",
-            impact: "low",
-            category: "Processing",
-        })]
-        max_tokens_to_process: usize = 10000,
-        #[metadata(field_metadata! {
-            label: "Target Filtered Tokens",
-            hint: "Stop after N tokens pass (500 = good pool, 0 = no limit)",
-            min: 0,
-            max: 10000,
-            step: 10,
-            unit: "tokens",
-            impact: "medium",
-            category: "Processing",
-        })]
-        target_filtered_tokens: usize = 500,
-
         // Meta requirements (apply across all sources)
-        #[metadata(field_metadata! {
-            label: "Require Decimals in Database",
-            hint: "Skip tokens without cached decimal data",
-            impact: "high",
-            category: "Meta Requirements",
-        })]
-        require_decimals_in_db: bool = true,
         #[metadata(field_metadata! {
             label: "Check Cooldown",
             hint: "Skip tokens in cooldown period after exit",

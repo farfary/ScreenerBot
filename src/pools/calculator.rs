@@ -475,13 +475,11 @@ impl PriceCalculator {
         }
 
         // Select highest liquidity pool for this mint
-        candidates
-            .into_iter()
-            .max_by(|a, b| {
-                a.liquidity_usd
-                    .partial_cmp(&b.liquidity_usd)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
+        candidates.into_iter().max_by(|a, b| {
+            a.liquidity_usd
+                .partial_cmp(&b.liquidity_usd)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
     }
 }
 

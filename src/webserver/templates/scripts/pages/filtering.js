@@ -48,54 +48,9 @@ let tabBar = null;
 // ============================================================================
 
 const CONFIG_CATEGORIES = {
-  Performance: {
-    source: "meta",
-    fields: [
-      {
-        key: "filter_cache_ttl_secs",
-        label: "Cache TTL",
-        type: "number",
-        unit: "seconds",
-        min: 5,
-        max: 300,
-        step: 5,
-        hint: "How long to cache filter results (lower = more current)",
-        impact: "critical",
-      },
-      {
-        key: "target_filtered_tokens",
-        label: "Target Filtered Tokens",
-        type: "number",
-        unit: "tokens",
-        min: 10,
-        max: 10000,
-        step: 100,
-        hint: "Bot processes up to this many qualified tokens",
-        impact: "medium",
-      },
-      {
-        key: "max_tokens_to_process",
-        label: "Max Tokens to Process",
-        type: "number",
-        unit: "tokens",
-        min: 100,
-        max: 100000,
-        step: 100,
-        hint: "Max tokens to evaluate before filtering",
-        impact: "medium",
-      },
-    ],
-  },
   "Meta Requirements": {
     source: "meta",
     fields: [
-      {
-        key: "require_decimals_in_db",
-        label: "Require Decimals in Database",
-        type: "boolean",
-        hint: "Skip tokens without cached decimal data",
-        impact: "high",
-      },
       {
         key: "check_cooldown",
         label: "Check Cooldown",
@@ -1027,6 +982,8 @@ function renderConfigCategory(categoryName, categoryData) {
   const { source, enableKey, fields } = categoryData;
   const sourceEnabled = getSourceEnabled(state.draft, source);
   const categoryEnabled = getCategoryEnabled(state.draft, source, enableKey);
+  // Only disable the card body (fields) if source is disabled OR category is disabled
+  // Keep header interactive so users can toggle categories on/off
   const isDisabled = (source !== "meta" && !sourceEnabled) || (enableKey && !categoryEnabled);
   const matchesSearch = (field) =>
     !state.searchQuery ||
@@ -1041,12 +998,12 @@ function renderConfigCategory(categoryName, categoryData) {
   }
 
   return `
-    <div class="filter-card ${disabledClass}" data-source="${source}" data-category="${Utils.escapeHtml(categoryName)}">
+    <div class="filter-card" data-source="${source}" data-category="${Utils.escapeHtml(categoryName)}">
       <div class="card-header">
         <h3>${Utils.escapeHtml(categoryName)}</h3>
         ${renderCategoryToggle(source, enableKey, categoryName)}
       </div>
-      <div class="card-body">
+      <div class="card-body ${disabledClass}">
         ${
           visibleFields.map((field) => renderConfigField(field, source)).join("") ||
           '<div class="no-matches">No fields match</div>'

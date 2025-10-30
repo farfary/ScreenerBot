@@ -12,7 +12,8 @@ use std::sync::Arc;
 
 use crate::{
     filtering::{
-        self, FilteringQuery, FilteringQueryResult, FilteringView, SortDirection, TokenSortKey,
+        self, BlacklistSourceInfo, FilteringQuery, FilteringQueryResult, FilteringView,
+        SortDirection, TokenSortKey,
     },
     logger::{self, LogTag},
     pools, positions,
@@ -53,6 +54,8 @@ pub struct TokenListResponse {
     pub rejection_reasons: HashMap<String, String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub available_rejection_reasons: Vec<String>,
+    #[serde(default, skip_serializing_if = "HashMap::is_empty")]
+    pub blacklist_sources: HashMap<String, Vec<BlacklistSourceInfo>>,
 }
 
 /// Period-based numeric metrics helper
@@ -408,15 +411,23 @@ fn build_token_list_response(
                     let new_price = price_result.price_sol;
                     // Overlay pool price (real-time chain data) over database price
                     token.price_sol = new_price;
+                    
+                    // Update timestamp to reflect pool price freshness
+                    let age = price_result.timestamp.elapsed();
+                    if let Ok(duration) = chrono::Duration::from_std(age) {
+                        token.updated_at = chrono::Utc::now() - duration;
+                    }
+                    
                     logger::debug(
                         LogTag::Webserver,
                         &format!(
-                            "Pool price overlay: mint={} symbol={} old_price={:.12} new_price={:.12} diff={:.12}",
+                            "Pool price overlay: mint={} symbol={} old_price={:.12} new_price={:.12} diff={:.12} age={:.1}s",
                             token.mint,
                             token.symbol,
                             old_price,
                             new_price,
-                            (new_price - old_price).abs()
+                            (new_price - old_price).abs(),
+                            age.as_secs_f64()
                         ),
                     );
                 }
@@ -443,6 +454,7 @@ fn build_token_list_response(
         blacklisted_total: result.blacklisted_total,
         rejection_reasons: result.rejection_reasons,
         available_rejection_reasons: result.available_rejection_reasons,
+        blacklist_sources: result.blacklist_sources,
     }
 }
 
@@ -572,6 +584,7 @@ pub(crate) async fn get_tokens_list(
                 blacklisted_total: 0,
                 rejection_reasons: HashMap::new(),
                 available_rejection_reasons: Vec::new(),
+                blacklist_sources: HashMap::new(),
             })
         }
     }

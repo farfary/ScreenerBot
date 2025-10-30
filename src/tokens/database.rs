@@ -34,6 +34,15 @@ pub struct TokenDatabase {
     conn: Arc<Mutex<Connection>>,
 }
 
+/// Token-level blacklist entry with metadata for diagnostics and UI
+#[derive(Debug, Clone)]
+pub struct TokenBlacklistRecord {
+    pub mint: String,
+    pub reason: String,
+    pub source: String,
+    pub added_at: i64,
+}
+
 impl TokenDatabase {
     /// Create new database instance
     pub fn new(path: &str) -> TokenResult<Self> {
@@ -1405,6 +1414,40 @@ impl TokenDatabase {
         .map_err(|e| TokenError::Database(format!("Failed to add to blacklist: {}", e)))?;
 
         Ok(())
+    }
+
+    /// List all blacklist entries with metadata for diagnostics/analytics
+    pub fn list_blacklisted_tokens(&self) -> TokenResult<Vec<TokenBlacklistRecord>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT mint, reason, source, added_at \
+                 FROM blacklist \
+                 ORDER BY added_at DESC",
+            )
+            .map_err(|e| TokenError::Database(format!("Failed to prepare blacklist query: {}", e)))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(TokenBlacklistRecord {
+                    mint: row.get(0)?,
+                    reason: row.get(1)?,
+                    source: row.get(2)?,
+                    added_at: row.get(3)?,
+                })
+            })
+            .map_err(|e| TokenError::Database(format!("Failed to query blacklist: {}", e)))?;
+
+        let mut records = Vec::new();
+        for row in rows {
+            records.push(row.map_err(|e| TokenError::Database(format!("Failed to read blacklist row: {}", e)))?);
+        }
+
+        Ok(records)
     }
 
     /// Check if token is blacklisted
@@ -2820,6 +2863,16 @@ pub async fn list_tokens_async(limit: usize) -> TokenResult<Vec<TokenMetadata>> 
         .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
 
     tokio::task::spawn_blocking(move || db.list_tokens(limit))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async wrapper for listing all token blacklist entries
+pub async fn list_blacklisted_tokens_async() -> TokenResult<Vec<TokenBlacklistRecord>> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+
+    tokio::task::spawn_blocking(move || db.list_blacklisted_tokens())
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
 }

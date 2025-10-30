@@ -15,7 +15,6 @@
 /// - prefetch(): Background prefetch for multiple tokens
 /// - clear_cache(): Clear pool cache
 /// - Utility functions for pool metrics and selection
-
 mod api;
 mod cache;
 mod conversion;

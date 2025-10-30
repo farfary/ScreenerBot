@@ -122,7 +122,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         ("positions", POSITIONS_PAGE_STYLES),
         ("filtering", FILTERING_PAGE_STYLES),
         ("config", CONFIG_PAGE_STYLES),
-        ("strategies", STRATEGIES_PAGE_STYLES),
+    ("strategies", STRATEGIES_PAGE_STYLES),
     ] {
         if styles.trim().is_empty() {
             continue;
@@ -146,7 +146,7 @@ fn nav_tabs(active: &str) -> String {
         ("positions", "📊 Positions"),
         ("tokens", "🪙 Tokens"),
         ("filtering", "🔍 Filtering"),
-        ("strategies", "🎯 Strategies"),
+    ("strategies", "🎯 Strategies"),
         ("transactions", "💱 Transactions"),
         ("services", "🔧 Services"),
         ("config", "⚙️ Config"),

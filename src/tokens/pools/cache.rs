@@ -1,4 +1,5 @@
 /// Caching layer for pool snapshots with TTL and stale fallback
+use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::tokens::database;
 use crate::tokens::service::get_rate_coordinator;
@@ -14,6 +15,7 @@ use tokio::sync::{Mutex as AsyncMutex, Notify};
 use super::api;
 use super::operations::{choose_canonical_pool, sort_pools_for_snapshot};
 use super::utils::calculate_pool_metric;
+use serde_json::json;
 
 const TOKEN_POOLS_TTL_SECS: u64 = 60;
 const POOL_PREFETCH_DEBOUNCE_SECS: u64 = 20;
@@ -124,29 +126,62 @@ async fn refresh_token_pools_and_cache(
         TokenError::Database("Rate limit coordinator not initialized".to_string())
     })?;
 
-    let (pools_map, success_sources) = match api::fetch_from_sources(mint_trimmed, coordinator).await
+    let (pools_map, success_sources) = match api::fetch_from_sources(mint_trimmed, coordinator)
+        .await
     {
         Ok(result) => result,
         Err(err) => {
+            let message = err.to_string();
             if allow_stale {
-                if let Some(snapshot) = persisted_snapshot {
+                if let Some(snapshot) = persisted_snapshot.as_ref() {
                     logger::warning(
                         LogTag::Tokens,
                         &format!(
                             "[TOKEN_POOLS] Falling back to stale snapshot for mint={} due to error: {}",
-                            mint_trimmed, err
+                            mint_trimmed, message
                         ),
                     );
+                    let age_secs = Utc::now()
+                        .signed_duration_since(snapshot.fetched_at)
+                        .num_seconds()
+                        .max(0);
+                    record_token_event(
+                        mint_trimmed,
+                        "pool_snapshot_fallback",
+                        Severity::Warn,
+                        json!({
+                            "reason": "fetch_error",
+                            "error": message.clone(),
+                            "allow_stale": allow_stale,
+                            "snapshot_fetched_at": snapshot.fetched_at.to_rfc3339(),
+                            "snapshot_age_secs": age_secs,
+                            "pool_count": snapshot.pools.len(),
+                            "canonical_pool": snapshot.canonical_pool_address.clone(),
+                        }),
+                    )
+                    .await;
                     store_pool_snapshot(snapshot.clone());
-                    return Ok(Some(snapshot));
+                    return Ok(Some(snapshot.clone()));
                 }
             }
+
+            record_token_event(
+                mint_trimmed,
+                "pool_snapshot_fetch_error",
+                Severity::Error,
+                json!({
+                    "error": message.clone(),
+                    "allow_stale": allow_stale,
+                    "had_persisted_snapshot": persisted_snapshot.is_some(),
+                }),
+            )
+            .await;
             return Err(err);
         }
     };
 
     if pools_map.is_empty() && success_sources == 0 {
-        if let Some(snapshot) = persisted_snapshot {
+        if let Some(snapshot) = persisted_snapshot.as_ref() {
             logger::warning(
                 LogTag::Tokens,
                 &format!(
@@ -154,14 +189,43 @@ async fn refresh_token_pools_and_cache(
                     mint_trimmed
                 ),
             );
+            let age_secs = Utc::now()
+                .signed_duration_since(snapshot.fetched_at)
+                .num_seconds()
+                .max(0);
+            record_token_event(
+                mint_trimmed,
+                "pool_snapshot_fallback",
+                Severity::Warn,
+                json!({
+                    "reason": "sources_unavailable",
+                    "allow_stale": allow_stale,
+                    "snapshot_fetched_at": snapshot.fetched_at.to_rfc3339(),
+                    "snapshot_age_secs": age_secs,
+                    "pool_count": snapshot.pools.len(),
+                    "canonical_pool": snapshot.canonical_pool_address.clone(),
+                }),
+            )
+            .await;
             store_pool_snapshot(snapshot.clone());
-            return Ok(Some(snapshot));
+            return Ok(Some(snapshot.clone()));
         }
     }
 
     let mut pools: Vec<TokenPoolInfo> = pools_map.into_values().collect();
     sort_pools_for_snapshot(&mut pools);
     let canonical_pool_address = choose_canonical_pool(&pools);
+
+    let prev_pool_count = persisted_snapshot
+        .as_ref()
+        .map(|snapshot| snapshot.pools.len())
+        .unwrap_or(0);
+    let prev_canonical = persisted_snapshot
+        .as_ref()
+        .and_then(|snapshot| snapshot.canonical_pool_address.clone());
+    let prev_fetched_at = persisted_snapshot
+        .as_ref()
+        .map(|snapshot| snapshot.fetched_at.to_rfc3339());
 
     let snapshot = TokenPoolsSnapshot {
         mint: mint_trimmed.to_string(),
@@ -178,6 +242,11 @@ async fn refresh_token_pools_and_cache(
         .first()
         .map(|pool| (pool.pool_address.clone(), calculate_pool_metric(pool)))
         .unwrap_or_else(|| ("none".to_string(), 0.0));
+    let top_pool_value = if top_pool == "none" {
+        serde_json::Value::Null
+    } else {
+        serde_json::Value::String(top_pool.clone())
+    };
 
     logger::info(
         LogTag::Tokens,
@@ -193,6 +262,41 @@ async fn refresh_token_pools_and_cache(
             top_metric
         ),
     );
+
+    record_token_event(
+        mint_trimmed,
+        "pool_snapshot_updated",
+        Severity::Info,
+        json!({
+            "pool_count": snapshot.pools.len(),
+            "success_sources": success_sources,
+            "canonical_pool": snapshot.canonical_pool_address.clone(),
+            "top_pool": top_pool_value,
+            "top_metric": top_metric,
+            "previous_pool_count": prev_pool_count,
+            "previous_canonical_pool": prev_canonical.clone(),
+            "previous_snapshot_fetched_at": prev_fetched_at,
+            "current_snapshot_fetched_at": snapshot.fetched_at.to_rfc3339(),
+            "first_time": persisted_snapshot.is_none(),
+        }),
+    )
+    .await;
+
+    let canonical_changed = snapshot.canonical_pool_address.as_deref() != prev_canonical.as_deref();
+    if canonical_changed {
+        record_token_event(
+            mint_trimmed,
+            "pool_canonical_changed",
+            Severity::Info,
+            json!({
+                "previous": prev_canonical,
+                "current": snapshot.canonical_pool_address.clone(),
+                "top_metric": top_metric,
+                "pool_count": snapshot.pools.len(),
+            }),
+        )
+        .await;
+    }
 
     Ok(Some(snapshot))
 }
@@ -299,13 +403,23 @@ pub async fn prefetch(mints: &[String]) {
     for mint in schedule {
         tokio::spawn(async move {
             if let Err(err) = get_snapshot_internal(&mint, true).await {
+                let err_message = err.to_string();
                 logger::warning(
                     LogTag::Tokens,
                     &format!(
                         "[TOKEN_POOLS] Prefetch failed for mint={} error={}",
-                        mint, err
+                        mint, err_message
                     ),
                 );
+                record_token_event(
+                    &mint,
+                    "pool_prefetch_failed",
+                    Severity::Warn,
+                    json!({
+                        "error": err_message,
+                    }),
+                )
+                .await;
             }
         });
     }
@@ -333,7 +447,10 @@ pub fn metrics() -> PoolCacheMetrics {
 
     let ttl = pool_cache_ttl();
     let entries = guard.len();
-    let fresh_entries = guard.values().filter(|e| e.refreshed_at.elapsed() <= ttl).count();
+    let fresh_entries = guard
+        .values()
+        .filter(|e| e.refreshed_at.elapsed() <= ttl)
+        .count();
     let stale_entries = entries - fresh_entries;
 
     PoolCacheMetrics {

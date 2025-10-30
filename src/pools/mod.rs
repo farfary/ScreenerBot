@@ -15,8 +15,10 @@ mod analyzer;
 mod api;
 mod cache;
 mod calculator;
-mod db;
 mod discovery;
+
+// Re-export db types for blacklist API
+pub mod db;
 
 // Re-export fetcher types for debug bins
 pub mod fetcher;
@@ -31,8 +33,8 @@ pub use api::{
     get_available_tokens, get_cache_stats, get_pool_price, get_price_history, get_token_pools,
 };
 pub use discovery::{
-    is_dexscreener_discovery_enabled,
-    is_geckoterminal_discovery_enabled, is_raydium_discovery_enabled, PoolDiscovery,
+    is_dexscreener_discovery_enabled, is_geckoterminal_discovery_enabled,
+    is_raydium_discovery_enabled, PoolDiscovery,
 };
 pub use fetcher::AccountData;
 pub use service::{

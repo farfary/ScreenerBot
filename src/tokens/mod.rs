@@ -42,8 +42,10 @@ pub use database::{
     get_tokens_no_market_async,
     init_global_database,
     is_market_data_stale_async,
+    list_blacklisted_tokens_async,
     list_tokens_async,
     update_token_priority_async,
+    TokenBlacklistRecord,
     TokenDatabase,
 };
 pub use filtered::{
@@ -73,10 +75,9 @@ pub use priorities::Priority;
 
 // Re-export store APIs
 pub use store::{
-    dexscreener_cache_metrics, dexscreener_cache_size, get_cached_token,
-    geckoterminal_cache_metrics, geckoterminal_cache_size, invalidate_token_snapshot,
-    refresh_token_snapshot, rugcheck_cache_metrics, rugcheck_cache_size, store_token_snapshot,
-    CacheMetrics,
+    dexscreener_cache_metrics, dexscreener_cache_size, geckoterminal_cache_metrics,
+    geckoterminal_cache_size, get_cached_token, invalidate_token_snapshot, refresh_token_snapshot,
+    rugcheck_cache_metrics, rugcheck_cache_size, store_token_snapshot, CacheMetrics,
 };
 
 // Re-export pools APIs

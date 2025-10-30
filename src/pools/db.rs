@@ -156,6 +156,31 @@ impl DbPriceResult {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct BlacklistedAccountRecord {
+    pub account_pubkey: String,
+    pub reason: String,
+    pub source: Option<String>,
+    pub pool_id: Option<String>,
+    pub token_mint: Option<String>,
+    pub error_count: i64,
+    pub first_failed_at: i64,
+    pub last_failed_at: i64,
+    pub added_at: i64,
+}
+
+#[derive(Debug, Clone)]
+pub struct BlacklistedPoolRecord {
+    pub pool_id: String,
+    pub reason: String,
+    pub token_mint: Option<String>,
+    pub program_id: Option<String>,
+    pub error_count: i64,
+    pub first_failed_at: i64,
+    pub last_failed_at: i64,
+    pub added_at: i64,
+}
+
 // =============================================================================
 // POOLS DATABASE
 // =============================================================================
@@ -1099,6 +1124,166 @@ impl PoolsDatabase {
         let pools = self.blacklisted_pools.read().unwrap().len();
         Ok((accounts, pools))
     }
+
+    pub async fn list_blacklisted_accounts(
+        &self,
+        limit: Option<usize>,
+    ) -> Result<Vec<BlacklistedAccountRecord>, String> {
+        let conn_arc = self.connection.clone();
+        tokio::task::spawn_blocking(move || {
+            let connection_guard = conn_arc
+                .lock()
+                .map_err(|e| format!("Failed to lock connection: {}", e))?;
+
+            let conn = connection_guard
+                .as_ref()
+                .ok_or_else(|| "Database not initialized".to_string())?;
+
+            let mut records = Vec::new();
+
+            if let Some(limit_value) = limit.map(|l| l as i64) {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT account_pubkey, reason, source, pool_id, token_mint, error_count, first_failed_at, last_failed_at, added_at \
+                         FROM blacklist_accounts \
+                         ORDER BY last_failed_at DESC \
+                         LIMIT ?",
+                    )
+                    .map_err(|e| format!("Failed to prepare blacklist_accounts query: {}", e))?;
+
+                let rows = stmt
+                    .query_map(params![limit_value], |row| {
+                        Ok(BlacklistedAccountRecord {
+                            account_pubkey: row.get(0)?,
+                            reason: row.get(1)?,
+                            source: row.get(2)?,
+                            pool_id: row.get(3)?,
+                            token_mint: row.get(4)?,
+                            error_count: row.get(5)?,
+                            first_failed_at: row.get(6)?,
+                            last_failed_at: row.get(7)?,
+                            added_at: row.get(8)?,
+                        })
+                    })
+                    .map_err(|e| format!("Failed to query blacklist_accounts: {}", e))?;
+
+                for row in rows {
+                    records.push(row.map_err(|e| format!("Failed to read blacklist_accounts row: {}", e))?);
+                }
+            } else {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT account_pubkey, reason, source, pool_id, token_mint, error_count, first_failed_at, last_failed_at, added_at \
+                         FROM blacklist_accounts \
+                         ORDER BY last_failed_at DESC",
+                    )
+                    .map_err(|e| format!("Failed to prepare blacklist_accounts query: {}", e))?;
+
+                let rows = stmt
+                    .query_map([], |row| {
+                        Ok(BlacklistedAccountRecord {
+                            account_pubkey: row.get(0)?,
+                            reason: row.get(1)?,
+                            source: row.get(2)?,
+                            pool_id: row.get(3)?,
+                            token_mint: row.get(4)?,
+                            error_count: row.get(5)?,
+                            first_failed_at: row.get(6)?,
+                            last_failed_at: row.get(7)?,
+                            added_at: row.get(8)?,
+                        })
+                    })
+                    .map_err(|e| format!("Failed to query blacklist_accounts: {}", e))?;
+
+                for row in rows {
+                    records.push(row.map_err(|e| format!("Failed to read blacklist_accounts row: {}", e))?);
+                }
+            }
+
+            Ok::<_, String>(records)
+        })
+        .await
+        .map_err(|e| format!("Blocking task failed: {}", e))?
+    }
+
+    pub async fn list_blacklisted_pools(
+        &self,
+        limit: Option<usize>,
+    ) -> Result<Vec<BlacklistedPoolRecord>, String> {
+        let conn_arc = self.connection.clone();
+        tokio::task::spawn_blocking(move || {
+            let connection_guard = conn_arc
+                .lock()
+                .map_err(|e| format!("Failed to lock connection: {}", e))?;
+
+            let conn = connection_guard
+                .as_ref()
+                .ok_or_else(|| "Database not initialized".to_string())?;
+
+            let mut records = Vec::new();
+
+            if let Some(limit_value) = limit.map(|l| l as i64) {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT pool_id, reason, token_mint, program_id, error_count, first_failed_at, last_failed_at, added_at \
+                         FROM blacklist_pools \
+                         ORDER BY last_failed_at DESC \
+                         LIMIT ?",
+                    )
+                    .map_err(|e| format!("Failed to prepare blacklist_pools query: {}", e))?;
+
+                let rows = stmt
+                    .query_map(params![limit_value], |row| {
+                        Ok(BlacklistedPoolRecord {
+                            pool_id: row.get(0)?,
+                            reason: row.get(1)?,
+                            token_mint: row.get(2)?,
+                            program_id: row.get(3)?,
+                            error_count: row.get(4)?,
+                            first_failed_at: row.get(5)?,
+                            last_failed_at: row.get(6)?,
+                            added_at: row.get(7)?,
+                        })
+                    })
+                    .map_err(|e| format!("Failed to query blacklist_pools: {}", e))?;
+
+                for row in rows {
+                    records.push(row.map_err(|e| format!("Failed to read blacklist_pools row: {}", e))?);
+                }
+            } else {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT pool_id, reason, token_mint, program_id, error_count, first_failed_at, last_failed_at, added_at \
+                         FROM blacklist_pools \
+                         ORDER BY last_failed_at DESC",
+                    )
+                    .map_err(|e| format!("Failed to prepare blacklist_pools query: {}", e))?;
+
+                let rows = stmt
+                    .query_map([], |row| {
+                        Ok(BlacklistedPoolRecord {
+                            pool_id: row.get(0)?,
+                            reason: row.get(1)?,
+                            token_mint: row.get(2)?,
+                            program_id: row.get(3)?,
+                            error_count: row.get(4)?,
+                            first_failed_at: row.get(5)?,
+                            last_failed_at: row.get(6)?,
+                            added_at: row.get(7)?,
+                        })
+                    })
+                    .map_err(|e| format!("Failed to query blacklist_pools: {}", e))?;
+
+                for row in rows {
+                    records.push(row.map_err(|e| format!("Failed to read blacklist_pools row: {}", e))?);
+                }
+            }
+
+            Ok::<_, String>(records)
+        })
+        .await
+        .map_err(|e| format!("Blocking task failed: {}", e))?
+    }
 }
 
 // =============================================================================
@@ -1253,6 +1438,30 @@ pub async fn get_blacklist_stats() -> Result<(usize, usize), String> {
             db.get_blacklist_stats().await
         } else {
             Ok((0, 0))
+        }
+    }
+}
+
+pub async fn list_blacklisted_accounts(
+    limit: Option<usize>,
+) -> Result<Vec<BlacklistedAccountRecord>, String> {
+    unsafe {
+        if let Some(ref db) = GLOBAL_POOLS_DB {
+            db.list_blacklisted_accounts(limit).await
+        } else {
+            Ok(Vec::new())
+        }
+    }
+}
+
+pub async fn list_blacklisted_pools(
+    limit: Option<usize>,
+) -> Result<Vec<BlacklistedPoolRecord>, String> {
+    unsafe {
+        if let Some(ref db) = GLOBAL_POOLS_DB {
+            db.list_blacklisted_pools(limit).await
+        } else {
+            Ok(Vec::new())
         }
     }
 }

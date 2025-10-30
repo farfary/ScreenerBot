@@ -1,7 +1,5 @@
 use crate::tokens::database;
-use crate::tokens::types::{
-    DexScreenerData, GeckoTerminalData, RugcheckData, Token, TokenResult,
-};
+use crate::tokens::types::{DexScreenerData, GeckoTerminalData, RugcheckData, Token, TokenResult};
 use once_cell::sync::Lazy;
 use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
@@ -332,4 +330,3 @@ pub fn clear_all_market_caches() {
 pub fn clear_security_cache() {
     RUGCHECK_CACHE.clear();
 }
-

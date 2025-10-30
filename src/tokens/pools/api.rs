@@ -2,6 +2,7 @@
 use crate::apis::dexscreener::types::DexScreenerPool;
 use crate::apis::geckoterminal::types::GeckoTerminalPool;
 use crate::apis::manager::get_api_manager;
+use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::sol_price::get_sol_price;
 use crate::tokens::service::get_rate_coordinator;
@@ -12,6 +13,7 @@ use std::sync::Arc;
 
 use super::conversion;
 use super::operations::ingest_pool_entry;
+use serde_json::json;
 
 /// Fetch pools from all enabled sources (DexScreener + GeckoTerminal)
 pub async fn fetch_from_sources(
@@ -92,6 +94,16 @@ pub async fn fetch_from_sources(
                     mint, message
                 ),
             );
+            record_token_event(
+                mint,
+                "pool_source_fetch_failed",
+                Severity::Warn,
+                json!({
+                    "source": "dexscreener",
+                    "error": message.clone(),
+                }),
+            )
+            .await;
             failures.push(format!("DexScreener→{}", message));
         }
     }
@@ -116,6 +128,16 @@ pub async fn fetch_from_sources(
                     mint, message
                 ),
             );
+            record_token_event(
+                mint,
+                "pool_source_fetch_failed",
+                Severity::Warn,
+                json!({
+                    "source": "geckoterminal",
+                    "error": message.clone(),
+                }),
+            )
+            .await;
             failures.push(format!("GeckoTerminal→{}", message));
         }
     }
@@ -127,6 +149,16 @@ pub async fn fetch_from_sources(
         } else {
             failures.join(" | ")
         };
+        record_token_event(
+            mint,
+            "pool_sources_failed",
+            Severity::Error,
+            json!({
+                "failures": failures,
+                "combined_error": combined.clone(),
+            }),
+        )
+        .await;
         return Err(TokenError::Api {
             source: "TokenPools".to_string(),
             message: combined,
@@ -141,6 +173,16 @@ pub async fn fetch_from_sources(
                 mint
             ),
         );
+        record_token_event(
+            mint,
+            "pool_sources_unconfigured",
+            Severity::Warn,
+            json!({
+                "dexscreener_enabled": should_fetch_dex,
+                "geckoterminal_enabled": should_fetch_gecko,
+            }),
+        )
+        .await;
     }
 
     Ok((pools_map, success_sources))

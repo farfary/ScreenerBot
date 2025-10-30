@@ -93,6 +93,41 @@ function tokenCell(row) {
   return `<div class="token-cell">${logo}<div><div class="token-symbol">${sym}</div>${name}</div></div>`;
 }
 
+function normalizeBlacklistSources(mint, sourcesMap) {
+  if (!mint || typeof mint !== "string") return [];
+  if (!sourcesMap || typeof sourcesMap !== "object") return [];
+  const raw = sourcesMap[mint];
+  if (!Array.isArray(raw) || raw.length === 0) return [];
+
+  return raw
+    .filter((entry) => entry && typeof entry === "object")
+    .map((entry) => {
+      const category = typeof entry.category === "string" && entry.category.trim().length > 0
+        ? entry.category.trim()
+        : "unknown";
+      const reason = typeof entry.reason === "string" && entry.reason.trim().length > 0
+        ? entry.reason.trim()
+        : "unknown_reason";
+      const detail = typeof entry.detail === "string" && entry.detail.trim().length > 0
+        ? entry.detail.trim()
+        : null;
+      return { category, reason, detail };
+    });
+}
+
+function summarizeBlacklistSources(sourceList) {
+  if (!Array.isArray(sourceList) || sourceList.length === 0) return "";
+  return sourceList
+    .map((source) => {
+      if (!source || typeof source !== "object") return "unknown";
+      const category = source.category || "unknown";
+      const reason = source.reason || "unknown_reason";
+      const detail = source.detail ? ` (${source.detail})` : "";
+      return `${category}:${reason}${detail}`;
+    })
+    .join(", ");
+}
+
 function resolveSortColumn(sortKey) {
   if (!sortKey) {
     return null;
@@ -441,6 +476,14 @@ function createLifecycle() {
           ? data.rejection_reasons
           : null;
 
+      const blacklistSourcesMap =
+        data &&
+        typeof data === "object" &&
+        data.blacklist_sources &&
+        typeof data.blacklist_sources === "object"
+          ? data.blacklist_sources
+          : null;
+
       const normalizedItems = items.map((row) => {
         if (!row || typeof row !== "object") return row;
         const hasServerReason =
@@ -450,7 +493,12 @@ function createLifecycle() {
         const resolvedReason = hasServerReason
           ? rejectionReasons[row.mint]
           : (row.reject_reason ?? null);
-        return { ...row, reject_reason: resolvedReason ?? null };
+        const normalizedSources = normalizeBlacklistSources(row.mint, blacklistSourcesMap);
+        return {
+          ...row,
+          reject_reason: resolvedReason ?? null,
+          blacklist_sources: normalizedSources,
+        };
       });
 
       if (Array.isArray(data?.available_rejection_reasons)) {
@@ -1120,7 +1168,15 @@ function createLifecycle() {
             if (row.has_pool_price) flags.push('<span class="badge info">Price</span>');
             if (row.has_ohlcv) flags.push('<span class="badge">OHLCV</span>');
             if (row.has_open_position) flags.push('<span class="badge success">Position</span>');
-            if (row.blacklisted) flags.push('<span class="badge warning">Blacklisted</span>');
+            if (row.blacklisted) {
+              const summary = summarizeBlacklistSources(row.blacklist_sources);
+              const tooltip = summary
+                ? `Blacklisted: ${summary}`
+                : "Blacklisted token";
+              flags.push(
+                `<span class="badge warning" title="${Utils.escapeHtml(tooltip)}">Blacklisted</span>`
+              );
+            }
             return flags.join(" ") || "—";
           },
         },

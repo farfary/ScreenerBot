@@ -14,8 +14,9 @@ use crate::tokens::types::Token;
 
 use super::engine::compute_snapshot;
 use super::types::{
-    FilteringQuery, FilteringQueryResult, FilteringSnapshot, FilteringStatsSnapshot, FilteringView,
-    PassedToken, RejectedToken, SortDirection, TokenEntry, TokenSortKey,
+    BlacklistSourceInfo, FilteringQuery, FilteringQueryResult, FilteringSnapshot,
+    FilteringStatsSnapshot, FilteringView, PassedToken, RejectedToken, SortDirection, TokenEntry,
+    TokenSortKey,
 };
 
 static GLOBAL_STORE: Lazy<Arc<FilteringStore>> = Lazy::new(|| Arc::new(FilteringStore::new()));
@@ -279,6 +280,13 @@ impl FilteringStore {
             }
         }
 
+        let mut blacklist_sources: HashMap<String, Vec<BlacklistSourceInfo>> = HashMap::new();
+        for token in &items {
+            if let Some(sources) = snapshot.blacklist_sources.get(token.mint.as_str()) {
+                blacklist_sources.insert(token.mint.clone(), sources.clone());
+            }
+        }
+
         Ok(FilteringQueryResult {
             items,
             page: normalized_page,
@@ -294,6 +302,7 @@ impl FilteringStore {
             ohlcv_mints,
             rejection_reasons,
             available_rejection_reasons,
+            blacklist_sources,
         })
     }
 
@@ -391,6 +400,13 @@ impl FilteringStore {
             .count();
         let blacklisted_total = items.iter().filter(|t| t.is_blacklisted).count();
 
+        let mut blacklist_sources: HashMap<String, Vec<BlacklistSourceInfo>> = HashMap::new();
+        for token in &items {
+            if let Some(sources) = snapshot.blacklist_sources.get(token.mint.as_str()) {
+                blacklist_sources.insert(token.mint.clone(), sources.clone());
+            }
+        }
+
         Ok(FilteringQueryResult {
             items,
             page: normalized_page,
@@ -406,6 +422,7 @@ impl FilteringStore {
             ohlcv_mints,
             rejection_reasons: HashMap::new(), // Not applicable for "All" view
             available_rejection_reasons: Vec::new(), // Not applicable for "All" view
+            blacklist_sources,
         })
     }
 
@@ -469,6 +486,13 @@ impl FilteringStore {
             .count();
         let blacklisted_total = items.iter().filter(|t| t.is_blacklisted).count();
 
+        let mut blacklist_sources: HashMap<String, Vec<BlacklistSourceInfo>> = HashMap::new();
+        for token in &items {
+            if let Some(sources) = snapshot.blacklist_sources.get(token.mint.as_str()) {
+                blacklist_sources.insert(token.mint.clone(), sources.clone());
+            }
+        }
+
         Ok(FilteringQueryResult {
             items,
             page: normalized_page,
@@ -484,6 +508,7 @@ impl FilteringStore {
             ohlcv_mints: Vec::new(),
             rejection_reasons: HashMap::new(),
             available_rejection_reasons: Vec::new(),
+            blacklist_sources,
         })
     }
     pub async fn get_stats(&self) -> Result<FilteringStatsSnapshot, String> {
