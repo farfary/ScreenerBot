@@ -93,7 +93,7 @@ function tokenCell(row) {
   return `<div class="token-cell">${logo}<div><div class="token-symbol">${sym}</div>${name}</div></div>`;
 }
 
-function normalizeBlacklistSources(mint, sourcesMap) {
+function normalizeBlacklistReasons(mint, sourcesMap) {
   if (!mint || typeof mint !== "string") return [];
   if (!sourcesMap || typeof sourcesMap !== "object") return [];
   const raw = sourcesMap[mint];
@@ -115,7 +115,7 @@ function normalizeBlacklistSources(mint, sourcesMap) {
     });
 }
 
-function summarizeBlacklistSources(sourceList) {
+function summarizeBlacklistReasons(sourceList) {
   if (!Array.isArray(sourceList) || sourceList.length === 0) return "";
   return sourceList
     .map((source) => {
@@ -479,9 +479,9 @@ function createLifecycle() {
       const blacklistSourcesMap =
         data &&
         typeof data === "object" &&
-        data.blacklist_sources &&
-        typeof data.blacklist_sources === "object"
-          ? data.blacklist_sources
+        data.blacklist_reasons &&
+        typeof data.blacklist_reasons === "object"
+          ? data.blacklist_reasons
           : null;
 
       const normalizedItems = items.map((row) => {
@@ -493,11 +493,11 @@ function createLifecycle() {
         const resolvedReason = hasServerReason
           ? rejectionReasons[row.mint]
           : (row.reject_reason ?? null);
-        const normalizedSources = normalizeBlacklistSources(row.mint, blacklistSourcesMap);
+        const normalizedSources = normalizeBlacklistReasons(row.mint, blacklistSourcesMap);
         return {
           ...row,
           reject_reason: resolvedReason ?? null,
-          blacklist_sources: normalizedSources,
+          blacklist_reasons: normalizedSources,
         };
       });
 
@@ -1146,17 +1146,39 @@ function createLifecycle() {
             return `<span style="color: var(--error)">${num}</span>`;
           },
         },
-        {
-          id: "reject_reason",
-          label: "Reject Reason",
-          sortable: false,
-          minWidth: 220,
-          wrap: true,
-          render: (value) => {
-            if (!value) return "—";
-            return Utils.escapeHtml(String(value));
-          },
-        },
+        // Conditionally add reject_reason column only for rejected view
+        ...(state.view === "rejected"
+          ? [
+              {
+                id: "reject_reason",
+                label: "Reject Reason",
+                sortable: false,
+                minWidth: 220,
+                wrap: true,
+                render: (value) => {
+                  if (!value) return "—";
+                  return Utils.escapeHtml(String(value));
+                },
+              },
+            ]
+          : []),
+        // Conditionally add blacklist_reason column only for blacklisted view
+        ...(state.view === "blacklisted"
+          ? [
+              {
+                id: "blacklist_reason",
+                label: "Blacklist Reason",
+                sortable: false,
+                minWidth: 250,
+                wrap: true,
+                render: (_v, row) => {
+                  const summary = summarizeBlacklistReasons(row.blacklist_reasons);
+                  if (!summary) return "—";
+                  return Utils.escapeHtml(summary);
+                },
+              },
+            ]
+          : []),
         {
           id: "status",
           label: "Status",
@@ -1169,7 +1191,7 @@ function createLifecycle() {
             if (row.has_ohlcv) flags.push('<span class="badge">OHLCV</span>');
             if (row.has_open_position) flags.push('<span class="badge success">Position</span>');
             if (row.blacklisted) {
-              const summary = summarizeBlacklistSources(row.blacklist_sources);
+              const summary = summarizeBlacklistReasons(row.blacklist_reasons);
               const tooltip = summary
                 ? `Blacklisted: ${summary}`
                 : "Blacklisted token";

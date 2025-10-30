@@ -17,7 +17,7 @@ use crate::tokens::{
 
 use super::sources::{self, FilterRejectionReason};
 use super::types::{
-    BlacklistSourceInfo, FilteringSnapshot, PassedToken, RejectedToken, TokenEntry,
+    BlacklistReasonInfo, FilteringSnapshot, PassedToken, RejectedToken, TokenEntry,
     MAX_DECISION_HISTORY,
 };
 
@@ -36,7 +36,9 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
     )
     .await;
 
-    let metadata = list_tokens_async(usize::MAX)
+    // Use 1000000 instead of usize::MAX to avoid SQLite integer overflow
+    // SQLite INTEGER is i64, cannot hold usize::MAX on 64-bit systems
+    let metadata = list_tokens_async(1_000_000)
         .await
         .map_err(|e| format!("Failed to list tokens: {}", e))?;
 
@@ -112,12 +114,12 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
     let mut tokens: Vec<Token> = tokens_sorted.into_iter().map(|(_, token)| token).collect();
 
     // Aggregate blacklist metadata from token database and pools subsystem
-    let mut blacklist_sources_map: HashMap<String, Vec<BlacklistSourceInfo>> = HashMap::new();
+    let mut blacklist_reasons_map: HashMap<String, Vec<BlacklistReasonInfo>> = HashMap::new();
 
     match list_blacklisted_tokens_async().await {
         Ok(entries) => {
             for entry in entries {
-                let info = BlacklistSourceInfo {
+                let info = BlacklistReasonInfo {
                     category: "token".to_string(),
                     reason: entry.reason,
                     detail: if entry.source.is_empty() {
@@ -126,7 +128,7 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
                         Some(entry.source)
                     },
                 };
-                let reasons = blacklist_sources_map
+                let reasons = blacklist_reasons_map
                     .entry(entry.mint)
                     .or_insert_with(Vec::new);
                 if !reasons.contains(&info) {
@@ -164,13 +166,13 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
                     program_id.map(|id| format!("program={}", id))
                 };
 
-                let info = BlacklistSourceInfo {
+                let info = BlacklistReasonInfo {
                     category: "pool".to_string(),
                     reason,
                     detail,
                 };
 
-                let reasons = blacklist_sources_map.entry(mint).or_insert_with(Vec::new);
+                let reasons = blacklist_reasons_map.entry(mint).or_insert_with(Vec::new);
                 if !reasons.contains(&info) {
                     reasons.push(info);
                 }
@@ -207,7 +209,7 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
                     Some(account_pubkey.clone())
                 };
 
-                let info = BlacklistSourceInfo {
+                let info = BlacklistReasonInfo {
                     category: "account".to_string(),
                     reason,
                     detail: source
@@ -216,7 +218,7 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
                         .or(detail),
                 };
 
-                let reasons = blacklist_sources_map.entry(mint).or_insert_with(Vec::new);
+                let reasons = blacklist_reasons_map.entry(mint).or_insert_with(Vec::new);
                 if !reasons.contains(&info) {
                     reasons.push(info);
                 }
@@ -230,7 +232,7 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
         }
     }
 
-    let mut blacklist_set: HashSet<String> = blacklist_sources_map.keys().cloned().collect();
+    let mut blacklist_set: HashSet<String> = blacklist_reasons_map.keys().cloned().collect();
 
     for token in tokens.iter_mut() {
         if blacklist_set.contains(&token.mint) {
@@ -238,10 +240,10 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
                 token.is_blacklisted = true;
             }
         } else if token.is_blacklisted {
-            let reasons = blacklist_sources_map
+            let reasons = blacklist_reasons_map
                 .entry(token.mint.clone())
                 .or_insert_with(Vec::new);
-            let fallback = BlacklistSourceInfo {
+            let fallback = BlacklistReasonInfo {
                 category: "token".to_string(),
                 reason: "database".to_string(),
                 detail: None,
@@ -254,7 +256,7 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
     }
 
     // Refresh set in case new entries were added during normalization
-    blacklist_set = blacklist_sources_map.keys().cloned().collect();
+    blacklist_set = blacklist_reasons_map.keys().cloned().collect();
 
     let candidate_mints: Vec<String> = tokens.iter().map(|t| t.mint.clone()).collect();
 
@@ -431,7 +433,7 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
         rejected_mints,
         rejected_tokens: rejected_tokens.into_iter().collect(),
         tokens: token_entries,
-        blacklist_sources: blacklist_sources_map,
+        blacklist_reasons: blacklist_reasons_map,
     };
 
     // Store filtered results in tokens module for consumption by other services

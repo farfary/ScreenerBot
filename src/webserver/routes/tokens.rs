@@ -12,7 +12,7 @@ use std::sync::Arc;
 
 use crate::{
     filtering::{
-        self, BlacklistSourceInfo, FilteringQuery, FilteringQueryResult, FilteringView,
+        self, BlacklistReasonInfo, FilteringQuery, FilteringQueryResult, FilteringView,
         SortDirection, TokenSortKey,
     },
     logger::{self, LogTag},
@@ -55,7 +55,7 @@ pub struct TokenListResponse {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub available_rejection_reasons: Vec<String>,
     #[serde(default, skip_serializing_if = "HashMap::is_empty")]
-    pub blacklist_sources: HashMap<String, Vec<BlacklistSourceInfo>>,
+    pub blacklist_reasons: HashMap<String, Vec<BlacklistReasonInfo>>,
 }
 
 /// Period-based numeric metrics helper
@@ -454,7 +454,7 @@ fn build_token_list_response(
         blacklisted_total: result.blacklisted_total,
         rejection_reasons: result.rejection_reasons,
         available_rejection_reasons: result.available_rejection_reasons,
-        blacklist_sources: result.blacklist_sources,
+        blacklist_reasons: result.blacklist_reasons,
     }
 }
 
@@ -584,7 +584,7 @@ pub(crate) async fn get_tokens_list(
                 blacklisted_total: 0,
                 rejection_reasons: HashMap::new(),
                 available_rejection_reasons: Vec::new(),
-                blacklist_sources: HashMap::new(),
+                blacklist_reasons: HashMap::new(),
             })
         }
     }

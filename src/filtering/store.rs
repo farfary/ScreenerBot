@@ -14,7 +14,7 @@ use crate::tokens::types::Token;
 
 use super::engine::compute_snapshot;
 use super::types::{
-    BlacklistSourceInfo, FilteringQuery, FilteringQueryResult, FilteringSnapshot,
+    BlacklistReasonInfo, FilteringQuery, FilteringQueryResult, FilteringSnapshot,
     FilteringStatsSnapshot, FilteringView, PassedToken, RejectedToken, SortDirection, TokenEntry,
     TokenSortKey,
 };
@@ -280,10 +280,10 @@ impl FilteringStore {
             }
         }
 
-        let mut blacklist_sources: HashMap<String, Vec<BlacklistSourceInfo>> = HashMap::new();
+        let mut blacklist_reasons: HashMap<String, Vec<BlacklistReasonInfo>> = HashMap::new();
         for token in &items {
-            if let Some(sources) = snapshot.blacklist_sources.get(token.mint.as_str()) {
-                blacklist_sources.insert(token.mint.clone(), sources.clone());
+            if let Some(sources) = snapshot.blacklist_reasons.get(token.mint.as_str()) {
+                blacklist_reasons.insert(token.mint.clone(), sources.clone());
             }
         }
 
@@ -302,7 +302,7 @@ impl FilteringStore {
             ohlcv_mints,
             rejection_reasons,
             available_rejection_reasons,
-            blacklist_sources,
+            blacklist_reasons,
         })
     }
 
@@ -400,10 +400,10 @@ impl FilteringStore {
             .count();
         let blacklisted_total = items.iter().filter(|t| t.is_blacklisted).count();
 
-        let mut blacklist_sources: HashMap<String, Vec<BlacklistSourceInfo>> = HashMap::new();
+        let mut blacklist_reasons: HashMap<String, Vec<BlacklistReasonInfo>> = HashMap::new();
         for token in &items {
-            if let Some(sources) = snapshot.blacklist_sources.get(token.mint.as_str()) {
-                blacklist_sources.insert(token.mint.clone(), sources.clone());
+            if let Some(sources) = snapshot.blacklist_reasons.get(token.mint.as_str()) {
+                blacklist_reasons.insert(token.mint.clone(), sources.clone());
             }
         }
 
@@ -422,7 +422,7 @@ impl FilteringStore {
             ohlcv_mints,
             rejection_reasons: HashMap::new(), // Not applicable for "All" view
             available_rejection_reasons: Vec::new(), // Not applicable for "All" view
-            blacklist_sources,
+            blacklist_reasons,
         })
     }
 
@@ -486,10 +486,10 @@ impl FilteringStore {
             .count();
         let blacklisted_total = items.iter().filter(|t| t.is_blacklisted).count();
 
-        let mut blacklist_sources: HashMap<String, Vec<BlacklistSourceInfo>> = HashMap::new();
+        let mut blacklist_reasons: HashMap<String, Vec<BlacklistReasonInfo>> = HashMap::new();
         for token in &items {
-            if let Some(sources) = snapshot.blacklist_sources.get(token.mint.as_str()) {
-                blacklist_sources.insert(token.mint.clone(), sources.clone());
+            if let Some(sources) = snapshot.blacklist_reasons.get(token.mint.as_str()) {
+                blacklist_reasons.insert(token.mint.clone(), sources.clone());
             }
         }
 
@@ -508,7 +508,7 @@ impl FilteringStore {
             ohlcv_mints: Vec::new(),
             rejection_reasons: HashMap::new(),
             available_rejection_reasons: Vec::new(),
-            blacklist_sources,
+            blacklist_reasons,
         })
     }
     pub async fn get_stats(&self) -> Result<FilteringStatsSnapshot, String> {

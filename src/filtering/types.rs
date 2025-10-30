@@ -25,9 +25,9 @@ pub struct RejectedToken {
     pub rejection_time: i64,
 }
 
-/// Source metadata describing why a token was blacklisted
+/// Reason metadata describing why a token was blacklisted
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct BlacklistSourceInfo {
+pub struct BlacklistReasonInfo {
     pub category: String,
     pub reason: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -224,7 +224,7 @@ pub struct FilteringQueryResult {
     pub ohlcv_mints: Vec<String>,
     pub rejection_reasons: HashMap<String, String>,
     pub available_rejection_reasons: Vec<String>,
-    pub blacklist_sources: HashMap<String, Vec<BlacklistSourceInfo>>,
+    pub blacklist_reasons: HashMap<String, Vec<BlacklistReasonInfo>>,
 }
 
 #[derive(Debug, Clone)]
@@ -245,7 +245,7 @@ pub struct FilteringSnapshot {
     pub rejected_mints: Vec<String>,
     pub rejected_tokens: Vec<RejectedToken>,
     pub tokens: HashMap<String, TokenEntry>,
-    pub blacklist_sources: HashMap<String, Vec<BlacklistSourceInfo>>,
+    pub blacklist_reasons: HashMap<String, Vec<BlacklistReasonInfo>>,
 }
 
 impl FilteringSnapshot {
@@ -257,7 +257,7 @@ impl FilteringSnapshot {
             rejected_mints: Vec::new(),
             rejected_tokens: Vec::new(),
             tokens: HashMap::new(),
-            blacklist_sources: HashMap::new(),
+            blacklist_reasons: HashMap::new(),
         }
     }
 

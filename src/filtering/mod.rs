@@ -4,7 +4,7 @@ mod store;
 pub mod types;
 
 pub use types::{
-    BlacklistSourceInfo, FilteringQuery, FilteringQueryResult, FilteringSnapshot,
+    BlacklistReasonInfo, FilteringQuery, FilteringQueryResult, FilteringSnapshot,
     FilteringStatsSnapshot, FilteringView, PassedToken, RejectedToken, SortDirection,
     TokenSortKey,
 };
