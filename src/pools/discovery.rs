@@ -506,19 +506,3 @@ impl PoolDiscovery {
         descriptors
     }
 }
-
-/// Get canonical pool address for a mint (uses tokens/pools module directly)
-pub async fn get_canonical_pool_address(mint: &str) -> Option<String> {
-    // Simply use the tokens module which already handles caching and canonical selection
-    match get_token_pools_snapshot(mint).await {
-        Ok(Some(snapshot)) => snapshot.canonical_pool_address,
-        Ok(None) => None,
-        Err(e) => {
-            logger::debug(
-                LogTag::PoolDiscovery,
-                &format!("Failed to get canonical pool for mint={}: {}", mint, e),
-            );
-            None
-        }
-    }
-}
