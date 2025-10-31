@@ -59,7 +59,8 @@ pub fn from_dexscreener(pool: &DexScreenerPool) -> Option<TokenPoolInfo> {
         price_sol,
         price_native,
         sources,
-        fetched_at: pool.fetched_at,
+        pool_data_last_fetched_at: chrono::Utc::now(),
+        pool_data_first_seen_at: chrono::Utc::now(),
     })
 }
 
@@ -152,6 +153,7 @@ pub fn from_geckoterminal(pool: &GeckoTerminalPool, sol_price_usd: f64) -> Optio
         price_sol,
         price_native: price_native_str,
         sources,
-        fetched_at: pool.fetched_at,
+        pool_data_last_fetched_at: chrono::Utc::now(),
+        pool_data_first_seen_at: chrono::Utc::now(),
     })
 }

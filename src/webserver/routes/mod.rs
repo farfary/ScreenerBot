@@ -130,7 +130,7 @@ async fn get_page_content(axum::extract::Path(page): axum::extract::Path<String>
         "transactions" => templates::transactions_content(),
         "filtering" => templates::filtering_content(),
         "config" => templates::config_content(),
-    "strategies" => templates::strategies_content(),
+        "strategies" => templates::strategies_content(),
         _ => {
             // Escape page name to prevent XSS
             let escaped_page = page
@@ -188,7 +188,7 @@ async fn get_page_script(axum::extract::Path(file): axum::extract::Path<String>)
         "positions.js" => Some(templates::POSITIONS_PAGE_SCRIPT),
         "filtering.js" => Some(templates::FILTERING_PAGE_SCRIPT),
         "config.js" => Some(templates::CONFIG_PAGE_SCRIPT),
-    "strategies.js" => Some(templates::STRATEGIES_PAGE_SCRIPT),
+        "strategies.js" => Some(templates::STRATEGIES_PAGE_SCRIPT),
         _ => None,
     };
 

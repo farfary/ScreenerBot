@@ -98,7 +98,6 @@ function normalizeBlacklistReasons(mint, sourcesMap) {
   if (!sourcesMap || typeof sourcesMap !== "object") return [];
   const raw = sourcesMap[mint];
   if (!Array.isArray(raw) || raw.length === 0) return [];
-
   return raw
     .filter((entry) => entry && typeof entry === "object")
     .map((entry) => {
@@ -114,7 +113,6 @@ function normalizeBlacklistReasons(mint, sourcesMap) {
       return { category, reason, detail };
     });
 }
-
 function summarizeBlacklistReasons(sourceList) {
   if (!Array.isArray(sourceList) || sourceList.length === 0) return "";
   return sourceList

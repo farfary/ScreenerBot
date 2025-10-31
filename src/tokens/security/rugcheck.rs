@@ -78,7 +78,8 @@ fn convert_rugcheck_to_data(info: &RugcheckInfo) -> RugcheckData {
         risks: info.risks.clone(),
         top_holders: info.top_holders.clone(),
         markets: None,
-        fetched_at: Utc::now(),
+        security_data_last_fetched_at: Utc::now(),
+        security_data_first_fetched_at: Utc::now(),
     }
 }
 
@@ -123,7 +124,7 @@ pub async fn fetch_rugcheck_data(
     if let Some(db_data) = db.get_rugcheck_data(mint)? {
         // If data is fresh (< 30min old), use it
         let age = Utc::now()
-            .signed_duration_since(db_data.fetched_at)
+            .signed_duration_since(db_data.security_data_last_fetched_at)
             .num_seconds();
 
         if age < 1800 {

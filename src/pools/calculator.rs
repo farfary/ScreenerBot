@@ -14,6 +14,7 @@ use crate::constants::{SOL_DECIMALS, SOL_MINT};
 use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::logger::{self, LogTag};
 use crate::pools::discovery::PoolDiscovery;
+use crate::tokens::database::get_global_database;
 use crate::tokens::get_cached_decimals;
 
 use solana_sdk::pubkey::Pubkey;
@@ -136,6 +137,32 @@ impl PriceCalculator {
                                 if let Some(price_result) = result.price_result {
                                     // Update cache with calculated price
                                     cache::update_price(price_result.clone());
+
+                                    if let Some(db) = get_global_database() {
+                                        if let Err(e) = db.mark_pool_price_calculated(
+                                            &price_result.mint,
+                                            &price_result.pool_address,
+                                        ) {
+                                            logger::warning(
+                                                LogTag::PoolCalculator,
+                                                &format!(
+                                                    "Failed to persist pool price timestamp for mint={} pool={} error={}",
+                                                    price_result.mint,
+                                                    price_result.pool_address,
+                                                    e
+                                                ),
+                                            );
+                                        }
+                                    } else {
+                                        logger::warning(
+                                            LogTag::PoolCalculator,
+                                            &format!(
+                                                "Token database unavailable; skipping pool price timestamp persist for mint={} pool={}",
+                                                price_result.mint,
+                                                price_result.pool_address
+                                            ),
+                                        );
+                                    }
 
                                     record_safe(Event::info(
                                         EventCategory::Pool,

@@ -77,6 +77,31 @@ impl TokenDatabase {
 
         let rugged_flag = if data.rugged { 1 } else { 0 };
 
+        // Check if this is first insert (for first_fetched_at tracking)
+        let is_first_insert: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM security_rugcheck WHERE mint = ?1",
+                params![mint],
+                |row| {
+                    let count: i64 = row.get(0)?;
+                    Ok(count == 0)
+                },
+            )
+            .unwrap_or(true);
+
+        let now_ts = data.security_data_last_fetched_at.timestamp();
+        let first_fetched_ts = if is_first_insert {
+            now_ts
+        } else {
+            // Preserve existing first_fetched_at on updates
+            conn.query_row(
+                "SELECT security_data_first_fetched_at FROM security_rugcheck WHERE mint = ?1",
+                params![mint],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(now_ts)
+        };
+
         conn.execute(
             "INSERT INTO security_rugcheck (
                 mint,
@@ -101,10 +126,11 @@ impl TokenDatabase {
                 risks,
                 top_holders,
                 markets,
-                fetched_at
+                security_data_last_fetched_at,
+                security_data_first_fetched_at
              ) VALUES (
                 ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
-                ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23
+                ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24
              )
              ON CONFLICT(mint) DO UPDATE SET
                 token_type = excluded.token_type,
@@ -128,7 +154,7 @@ impl TokenDatabase {
                 risks = excluded.risks,
                 top_holders = excluded.top_holders,
                 markets = excluded.markets,
-                fetched_at = excluded.fetched_at",
+                security_data_last_fetched_at = excluded.security_data_last_fetched_at",
             params![
                 mint,
                 &data.token_type,
@@ -152,7 +178,8 @@ impl TokenDatabase {
                 risks_json,
                 holders_json,
                 markets_json,
-                data.fetched_at.timestamp(),
+                now_ts,
+                first_fetched_ts,
             ],
         )
         .map_err(|e| TokenError::Database(format!("Failed to upsert Rugcheck data: {}", e)))?;
@@ -201,13 +228,15 @@ impl TokenDatabase {
         // Only support sorting by metadata/security fields for this view
         let order_column = match sort_by {
             Some("symbol") => "t.symbol",
-            Some("updated_at") => "COALESCE(ut.last_market_update, t.created_at)",
-            Some("first_seen_at") => "t.created_at",
-            Some("metadata_updated_at") => "COALESCE(ut.last_decimals_update, t.updated_at)",
-            Some("token_birth_at") => "COALESCE(ut.last_decimals_update, t.created_at)",
+            Some("updated_at") => {
+                "COALESCE(ut.market_data_last_updated_at, t.metadata_last_fetched_at)"
+            }
+            Some("first_seen_at") => "t.first_discovered_at",
+            Some("metadata_updated_at") => "t.metadata_last_fetched_at",
+            Some("token_birth_at") => "COALESCE(t.blockchain_created_at, t.first_discovered_at)",
             Some("mint") => "t.mint",
             Some("risk_score") => "sr.score",
-            _ => "COALESCE(ut.last_market_update, t.created_at)",
+            _ => "COALESCE(ut.market_data_last_updated_at, t.metadata_last_fetched_at)",
         };
         let direction = match sort_direction {
             Some("asc") => "ASC",
@@ -216,12 +245,14 @@ impl TokenDatabase {
         };
 
         let base = "SELECT \
-                        t.mint, t.symbol, t.name, t.decimals, t.created_at, \
-                        COALESCE(ut.last_decimals_update, t.updated_at) AS metadata_updated_at, \
-                        ut.last_market_update, \
+                        t.mint, t.symbol, t.name, t.decimals, t.first_discovered_at, \
+                        t.metadata_last_fetched_at, \
+                        ut.market_data_last_updated_at, \
                         sr.score, sr.rugged, \
                         bl.reason as blacklist_reason, \
-                        ut.priority \
+                        ut.priority, \
+                        t.blockchain_created_at, \
+                        sr.security_data_last_fetched_at \
                     FROM tokens t \
                     LEFT JOIN security_rugcheck sr ON t.mint = sr.mint \
                     LEFT JOIN blacklist bl ON t.mint = bl.mint \
@@ -250,8 +281,8 @@ impl TokenDatabase {
                     symbol: row.get::<_, Option<String>>(1)?,
                     name: row.get::<_, Option<String>>(2)?,
                     decimals: row.get::<_, Option<i64>>(3)?.map(|v| v as u8),
-                    created_at: row.get::<_, i64>(4)?,
-                    updated_at: row.get::<_, i64>(5)?,
+                    first_discovered_at: row.get::<_, i64>(4)?,
+                    metadata_last_fetched_at: row.get::<_, i64>(5)?,
                 };
                 let last_market_update: Option<i64> = row.get(6)?;
                 let security_score: Option<i32> = row.get(7)?;
@@ -261,6 +292,8 @@ impl TokenDatabase {
                     .unwrap_or(false);
                 let is_blacklisted = row.get::<_, Option<String>>(9)?.is_some();
                 let priority_value: Option<i32> = row.get(10)?;
+                let blockchain_created_at: Option<i64> = row.get(11)?;
+                let security_data_last_fetched_at: Option<i64> = row.get(12)?;
 
                 Ok((
                     metadata,
@@ -269,6 +302,8 @@ impl TokenDatabase {
                     is_rugged,
                     is_blacklisted,
                     priority_value,
+                    blockchain_created_at,
+                    security_data_last_fetched_at,
                 ))
             })
             .map_err(|e| TokenError::Database(format!("Query no-market failed: {}", e)))?;
@@ -282,10 +317,16 @@ impl TokenDatabase {
                 is_rugged,
                 is_blacklisted,
                 priority_value,
+                blockchain_created_at,
+                security_data_last_fetched_at,
             ) = row.map_err(|e| TokenError::Database(format!("Row parse failed: {}", e)))?;
 
-            // Build a RugcheckData-lite only for values we expose directly; we can avoid it and set fields below
+            // Build a RugcheckData-lite only for values we expose directly
             let security = if security_score.is_some() || is_rugged {
+                let security_ts = security_data_last_fetched_at
+                    .and_then(|ts| DateTime::from_timestamp(ts, 0))
+                    .unwrap_or_else(|| Utc::now());
+
                 Some(RugcheckData {
                     token_type: None,
                     token_decimals: None,
@@ -308,7 +349,8 @@ impl TokenDatabase {
                     risks: vec![],
                     top_holders: vec![],
                     markets: None,
-                    fetched_at: Utc::now(),
+                    security_data_last_fetched_at: security_ts,
+                    security_data_first_fetched_at: security_ts, // Same for this fallback case
                 })
             } else {
                 None
@@ -318,6 +360,9 @@ impl TokenDatabase {
                 .map(Priority::from_value)
                 .unwrap_or(Priority::Standard);
 
+            let blockchain_created_dt =
+                blockchain_created_at.and_then(|ts| DateTime::from_timestamp(ts, 0));
+
             let token = assemble_token_without_market_data(
                 meta,
                 security,
@@ -325,7 +370,7 @@ impl TokenDatabase {
                 priority,
                 None,
                 last_market_update.and_then(|ts| DateTime::from_timestamp(ts, 0)),
-                None,
+                blockchain_created_dt,
             );
             tokens.push(token);
         }
@@ -352,13 +397,14 @@ impl TokenDatabase {
         let now = Utc::now().timestamp();
 
         conn.execute(
-            "INSERT INTO tokens (mint, symbol, name, decimals, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+            "INSERT INTO tokens (mint, symbol, name, decimals, first_discovered_at, metadata_last_fetched_at, decimals_last_fetched_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?5)
              ON CONFLICT(mint) DO UPDATE SET
                 symbol = COALESCE(?2, symbol),
                 name = COALESCE(?3, name),
                 decimals = COALESCE(?4, decimals),
-                updated_at = ?5",
+                metadata_last_fetched_at = ?5,
+                decimals_last_fetched_at = CASE WHEN ?4 IS NOT NULL THEN ?5 ELSE decimals_last_fetched_at END",
             params![mint, symbol, name, decimals.map(|d| d as i64), now],
         )
         .map_err(|e| TokenError::Database(format!("Failed to upsert token: {}", e)))?;
@@ -390,7 +436,7 @@ impl TokenDatabase {
             .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
 
         let mut stmt = conn.prepare(
-            "SELECT mint, symbol, name, decimals, created_at, updated_at FROM tokens WHERE mint = ?1"
+            "SELECT mint, symbol, name, decimals, first_discovered_at, metadata_last_fetched_at FROM tokens WHERE mint = ?1"
         ).map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
 
         let result = stmt.query_row(params![mint], |row| {
@@ -399,8 +445,8 @@ impl TokenDatabase {
                 symbol: row.get(1)?,
                 name: row.get(2)?,
                 decimals: row.get::<_, Option<i64>>(3)?.map(|d| d as u8),
-                created_at: row.get(4)?,
-                updated_at: row.get(5)?,
+                first_discovered_at: row.get(4)?,
+                metadata_last_fetched_at: row.get(5)?,
             })
         });
 
@@ -425,9 +471,9 @@ impl TokenDatabase {
 
         let mut stmt = conn
             .prepare(
-                "SELECT mint, symbol, name, decimals, created_at, updated_at 
+                "SELECT mint, symbol, name, decimals, first_discovered_at, metadata_last_fetched_at 
              FROM tokens 
-             ORDER BY updated_at DESC 
+             ORDER BY metadata_last_fetched_at DESC 
              LIMIT ?1",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
@@ -439,8 +485,8 @@ impl TokenDatabase {
                     symbol: row.get(1)?,
                     name: row.get(2)?,
                     decimals: row.get::<_, Option<i64>>(3)?.map(|d| d as u8),
-                    created_at: row.get(4)?,
-                    updated_at: row.get(5)?,
+                    first_discovered_at: row.get(4)?,
+                    metadata_last_fetched_at: row.get(5)?,
                 })
             })
             .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
@@ -515,6 +561,31 @@ impl TokenDatabase {
             .lock()
             .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
 
+        // Check if this is first insert (for first_fetched_at tracking)
+        let is_first_insert: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM market_dexscreener WHERE mint = ?1",
+                params![mint],
+                |row| {
+                    let count: i64 = row.get(0)?;
+                    Ok(count == 0)
+                },
+            )
+            .unwrap_or(true);
+
+        let now_ts = data.market_data_last_fetched_at.timestamp();
+        let first_fetched_ts = if is_first_insert {
+            now_ts
+        } else {
+            // Preserve existing first_fetched_at on updates
+            conn.query_row(
+                "SELECT market_data_first_fetched_at FROM market_dexscreener WHERE mint = ?1",
+                params![mint],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(now_ts)
+        };
+
         conn.execute(
             "INSERT INTO market_dexscreener (
                 mint, price_usd, price_sol, price_native,
@@ -523,9 +594,10 @@ impl TokenDatabase {
                 volume_5m, volume_1h, volume_6h, volume_24h,
                 txns_5m_buys, txns_5m_sells, txns_1h_buys, txns_1h_sells,
                 txns_6h_buys, txns_6h_sells, txns_24h_buys, txns_24h_sells,
-                pair_address, chain_id, dex_id, url, pair_created_at, image_url, header_image_url, fetched_at
+                pair_address, chain_id, dex_id, url, pair_blockchain_created_at, image_url, header_image_url,
+                market_data_last_fetched_at, market_data_first_fetched_at
              ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
-                       ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31)
+                       ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32)
              ON CONFLICT(mint) DO UPDATE SET
                 price_usd = ?2, price_sol = ?3, price_native = ?4,
                 price_change_5m = ?5, price_change_1h = ?6, price_change_6h = ?7, price_change_24h = ?8,
@@ -533,7 +605,8 @@ impl TokenDatabase {
                 volume_5m = ?12, volume_1h = ?13, volume_6h = ?14, volume_24h = ?15,
                 txns_5m_buys = ?16, txns_5m_sells = ?17, txns_1h_buys = ?18, txns_1h_sells = ?19,
                 txns_6h_buys = ?20, txns_6h_sells = ?21, txns_24h_buys = ?22, txns_24h_sells = ?23,
-                pair_address = ?24, chain_id = ?25, dex_id = ?26, url = ?27, pair_created_at = ?28, image_url = ?29, header_image_url = ?30, fetched_at = ?31",
+                pair_address = ?24, chain_id = ?25, dex_id = ?26, url = ?27, pair_blockchain_created_at = ?28,
+                image_url = ?29, header_image_url = ?30, market_data_last_fetched_at = ?31",
             params![
                 mint, data.price_usd, data.price_sol, &data.price_native,
                 data.price_change_5m, data.price_change_1h, data.price_change_6h, data.price_change_24h,
@@ -544,10 +617,11 @@ impl TokenDatabase {
                 data.txns_6h.map(|t| t.0 as i64), data.txns_6h.map(|t| t.1 as i64),
                 data.txns_24h.map(|t| t.0 as i64), data.txns_24h.map(|t| t.1 as i64),
                 &data.pair_address, &data.chain_id, &data.dex_id, &data.url,
-                data.pair_created_at.map(|dt| dt.timestamp()),
+                data.pair_blockchain_created_at.map(|dt| dt.timestamp()),
                 &data.image_url,
                 &data.header_image_url,
-                data.fetched_at.timestamp(),
+                now_ts,
+                first_fetched_ts,
             ],
         ).map_err(|e| TokenError::Database(format!("Failed to upsert DexScreener data: {}", e)))?;
 
@@ -569,7 +643,8 @@ impl TokenDatabase {
                     volume_5m, volume_1h, volume_6h, volume_24h,
                     txns_5m_buys, txns_5m_sells, txns_1h_buys, txns_1h_sells,
                     txns_6h_buys, txns_6h_sells, txns_24h_buys, txns_24h_sells,
-                    pair_address, chain_id, dex_id, url, pair_created_at, image_url, header_image_url, fetched_at
+                    pair_address, chain_id, dex_id, url, pair_blockchain_created_at, image_url, header_image_url,
+                    market_data_last_fetched_at, market_data_first_fetched_at
              FROM market_dexscreener WHERE mint = ?1",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
@@ -583,11 +658,11 @@ impl TokenDatabase {
             let txns_6h_sells: Option<i64> = row.get(19)?;
             let txns_24h_buys: Option<i64> = row.get(20)?;
             let txns_24h_sells: Option<i64> = row.get(21)?;
-            // fetched_at is now the 30th selected column (0-based index 29)
-            let pair_created_ts: Option<i64> = row.get(26)?;
+            let pair_blockchain_created_ts: Option<i64> = row.get(26)?;
             let image_url: Option<String> = row.get(27)?;
             let header_image_url: Option<String> = row.get(28)?;
-            let fetched_ts: i64 = row.get(29)?;
+            let last_fetched_ts: i64 = row.get(29)?;
+            let first_fetched_ts: i64 = row.get(30)?;
 
             Ok(DexScreenerData {
                 // Some historical rows may have NULLs; treat missing numeric/text values as defaults
@@ -615,10 +690,14 @@ impl TokenDatabase {
                 chain_id: row.get(23)?,
                 dex_id: row.get(24)?,
                 url: row.get(25)?,
-                pair_created_at: pair_created_ts.and_then(|ts| DateTime::from_timestamp(ts, 0)),
+                pair_blockchain_created_at: pair_blockchain_created_ts
+                    .and_then(|ts| DateTime::from_timestamp(ts, 0)),
                 image_url,
                 header_image_url,
-                fetched_at: DateTime::from_timestamp(fetched_ts, 0).unwrap_or_else(|| Utc::now()),
+                market_data_last_fetched_at: DateTime::from_timestamp(last_fetched_ts, 0)
+                    .unwrap_or_else(|| Utc::now()),
+                market_data_first_fetched_at: DateTime::from_timestamp(first_fetched_ts, 0)
+                    .unwrap_or_else(|| Utc::now()),
             })
         });
 
@@ -644,6 +723,31 @@ impl TokenDatabase {
             .lock()
             .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
 
+        // Check if this is first insert (for first_fetched_at tracking)
+        let is_first_insert: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM market_geckoterminal WHERE mint = ?1",
+                params![mint],
+                |row| {
+                    let count: i64 = row.get(0)?;
+                    Ok(count == 0)
+                },
+            )
+            .unwrap_or(true);
+
+        let now_ts = data.market_data_last_fetched_at.timestamp();
+        let first_fetched_ts = if is_first_insert {
+            now_ts
+        } else {
+            // Preserve existing first_fetched_at on updates
+            conn.query_row(
+                "SELECT market_data_first_fetched_at FROM market_geckoterminal WHERE mint = ?1",
+                params![mint],
+                |row| row.get::<_, i64>(0),
+            )
+            .unwrap_or(now_ts)
+        };
+
         // Clean schema insert (image_url column included)
         let insert_result = conn.execute(
             "INSERT INTO market_geckoterminal (
@@ -651,21 +755,22 @@ impl TokenDatabase {
                 price_change_5m, price_change_1h, price_change_6h, price_change_24h,
                 market_cap, fdv, liquidity_usd,
                 volume_5m, volume_1h, volume_6h, volume_24h,
-                pool_count, top_pool_address, reserve_in_usd, image_url, fetched_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20)
+                pool_count, top_pool_address, reserve_in_usd, image_url,
+                market_data_last_fetched_at, market_data_first_fetched_at
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)
              ON CONFLICT(mint) DO UPDATE SET
                 price_usd = ?2, price_sol = ?3, price_native = ?4,
                 price_change_5m = ?5, price_change_1h = ?6, price_change_6h = ?7, price_change_24h = ?8,
                 market_cap = ?9, fdv = ?10, liquidity_usd = ?11,
                 volume_5m = ?12, volume_1h = ?13, volume_6h = ?14, volume_24h = ?15,
-                pool_count = ?16, top_pool_address = ?17, reserve_in_usd = ?18, image_url = ?19, fetched_at = ?20",
+                pool_count = ?16, top_pool_address = ?17, reserve_in_usd = ?18, image_url = ?19, market_data_last_fetched_at = ?20",
             params![
                 mint, data.price_usd, data.price_sol, &data.price_native,
                 data.price_change_5m, data.price_change_1h, data.price_change_6h, data.price_change_24h,
                 data.market_cap, data.fdv, data.liquidity_usd,
                 data.volume_5m, data.volume_1h, data.volume_6h, data.volume_24h,
                 data.pool_count.map(|c| c as i64), &data.top_pool_address, data.reserve_in_usd,
-                &data.image_url, data.fetched_at.timestamp(),
+                &data.image_url, now_ts, first_fetched_ts,
             ],
         );
 
@@ -689,14 +794,15 @@ impl TokenDatabase {
                     price_change_5m, price_change_1h, price_change_6h, price_change_24h,
                     market_cap, fdv, liquidity_usd,
                     volume_5m, volume_1h, volume_6h, volume_24h,
-                    pool_count, top_pool_address, reserve_in_usd, image_url, fetched_at
+                    pool_count, top_pool_address, reserve_in_usd, image_url,
+                    market_data_last_fetched_at, market_data_first_fetched_at
              FROM market_geckoterminal WHERE mint = ?1",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
 
         let result = stmt.query_row(params![mint], |row| {
-            // fetched_at is the last selected column for geckoterminal (0-based index 18)
-            let fetched_ts: i64 = row.get(18)?;
+            let last_fetched_ts: i64 = row.get(18)?;
+            let first_fetched_ts: i64 = row.get(19)?;
 
             Ok(GeckoTerminalData {
                 // Some historical rows may have NULLs; treat missing numeric/text values as defaults
@@ -720,7 +826,10 @@ impl TokenDatabase {
                 top_pool_address: row.get(15)?,
                 reserve_in_usd: row.get(16)?,
                 image_url: row.get(17)?,
-                fetched_at: DateTime::from_timestamp(fetched_ts, 0).unwrap_or_else(|| Utc::now()),
+                market_data_last_fetched_at: DateTime::from_timestamp(last_fetched_ts, 0)
+                    .unwrap_or_else(|| Utc::now()),
+                market_data_first_fetched_at: DateTime::from_timestamp(first_fetched_ts, 0)
+                    .unwrap_or_else(|| Utc::now()),
             })
         });
 
@@ -757,12 +866,22 @@ impl TokenDatabase {
                 TokenError::Database(format!("Failed to serialize pool sources: {}", e))
             })?;
 
+            // Check if this pool already exists to preserve first_seen_at
+            let first_seen_ts = tx
+                .query_row(
+                    "SELECT pool_data_first_seen_at FROM token_pools WHERE mint = ?1 AND pool_address = ?2",
+                    params![&snapshot.mint, &pool.pool_address],
+                    |row| row.get::<_, i64>(0),
+                )
+                .unwrap_or_else(|_| pool.pool_data_last_fetched_at.timestamp());
+
             tx.execute(
                 "INSERT INTO token_pools (
                     mint, pool_address, dex, base_mint, quote_mint, is_sol_pair,
                     liquidity_usd, liquidity_token, liquidity_sol, volume_h24,
-                    price_usd, price_sol, price_native, sources_json, fetched_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+                    price_usd, price_sol, price_native, sources_json,
+                    pool_data_last_fetched_at, pool_data_first_seen_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
                 params![
                     &snapshot.mint,
                     &pool.pool_address,
@@ -778,7 +897,8 @@ impl TokenDatabase {
                     pool.price_sol,
                     &pool.price_native,
                     sources_json,
-                    pool.fetched_at.timestamp(),
+                    pool.pool_data_last_fetched_at.timestamp(),
+                    first_seen_ts,
                 ],
             )
             .map_err(|e| TokenError::Database(format!("Failed to insert token pool: {}", e)))?;
@@ -802,7 +922,8 @@ impl TokenDatabase {
             .prepare(
                 "SELECT pool_address, dex, base_mint, quote_mint, is_sol_pair,
                         liquidity_usd, liquidity_token, liquidity_sol, volume_h24,
-                        price_usd, price_sol, price_native, sources_json, fetched_at
+                        price_usd, price_sol, price_native, sources_json,
+                        pool_data_last_fetched_at, pool_data_first_seen_at
                  FROM token_pools WHERE mint = ?1",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
@@ -824,7 +945,8 @@ impl TokenDatabase {
                 }
                 _ => TokenPoolSources::default(),
             };
-            let fetched_ts: i64 = read_row_value(&row, 13, "fetched_at")?;
+            let last_fetched_ts: i64 = read_row_value(&row, 13, "pool_data_last_fetched_at")?;
+            let first_seen_ts: i64 = read_row_value(&row, 14, "pool_data_first_seen_at")?;
             let pool_address: String = read_row_value(&row, 0, "pool_address")?;
             let dex: Option<String> = read_row_value(&row, 1, "dex")?;
             let base_mint: String = read_row_value(&row, 2, "base_mint")?;
@@ -852,7 +974,10 @@ impl TokenDatabase {
                 price_sol,
                 price_native,
                 sources,
-                fetched_at: DateTime::from_timestamp(fetched_ts, 0).unwrap_or_else(|| Utc::now()),
+                pool_data_last_fetched_at: DateTime::from_timestamp(last_fetched_ts, 0)
+                    .unwrap_or_else(|| Utc::now()),
+                pool_data_first_seen_at: DateTime::from_timestamp(first_seen_ts, 0)
+                    .unwrap_or_else(|| Utc::now()),
             });
         }
 
@@ -860,9 +985,9 @@ impl TokenDatabase {
             return Ok(None);
         }
 
-        let fetched_at = pools
+        let pool_data_last_fetched_at = pools
             .iter()
-            .map(|p| p.fetched_at)
+            .map(|p| p.pool_data_last_fetched_at)
             .max()
             .unwrap_or_else(|| Utc::now());
         let canonical_pool_address = pools::choose_canonical_pool(&pools);
@@ -871,7 +996,7 @@ impl TokenDatabase {
             mint: mint.to_string(),
             pools,
             canonical_pool_address,
-            fetched_at,
+            pool_data_last_fetched_at,
         }))
     }
 
@@ -886,7 +1011,8 @@ impl TokenDatabase {
             .prepare(
                 "SELECT mint, pool_address, dex, base_mint, quote_mint, is_sol_pair,
                         liquidity_usd, liquidity_token, liquidity_sol, volume_h24,
-                        price_usd, price_sol, price_native, sources_json, fetched_at
+                        price_usd, price_sol, price_native, sources_json,
+                        pool_data_last_fetched_at, pool_data_first_seen_at
                  FROM token_pools ORDER BY mint",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
@@ -905,9 +1031,9 @@ impl TokenDatabase {
         {
             let mint: String = read_row_value(&row, 0, "mint")?;
             if current_mint.as_ref() != Some(&mint) && !current_pools.is_empty() {
-                let fetched_at = current_pools
+                let pool_data_last_fetched_at = current_pools
                     .iter()
-                    .map(|p| p.fetched_at)
+                    .map(|p| p.pool_data_last_fetched_at)
                     .max()
                     .unwrap_or_else(|| Utc::now());
                 let canonical_pool_address = pools::choose_canonical_pool(&current_pools);
@@ -916,7 +1042,7 @@ impl TokenDatabase {
                     mint: current_mint.take().unwrap(),
                     pools: std::mem::take(&mut current_pools),
                     canonical_pool_address,
-                    fetched_at,
+                    pool_data_last_fetched_at,
                 });
             }
 
@@ -929,7 +1055,8 @@ impl TokenDatabase {
                 }
                 _ => TokenPoolSources::default(),
             };
-            let fetched_ts: i64 = read_row_value(&row, 14, "fetched_at")?;
+            let last_fetched_ts: i64 = read_row_value(&row, 14, "pool_data_last_fetched_at")?;
+            let first_seen_ts: i64 = read_row_value(&row, 15, "pool_data_first_seen_at")?;
 
             current_pools.push(TokenPoolInfo {
                 pool_address: read_row_value(&row, 1, "pool_address")?,
@@ -945,15 +1072,18 @@ impl TokenDatabase {
                 price_sol: read_row_value(&row, 11, "price_sol")?,
                 price_native: read_row_value(&row, 12, "price_native")?,
                 sources,
-                fetched_at: DateTime::from_timestamp(fetched_ts, 0).unwrap_or_else(|| Utc::now()),
+                pool_data_last_fetched_at: DateTime::from_timestamp(last_fetched_ts, 0)
+                    .unwrap_or_else(|| Utc::now()),
+                pool_data_first_seen_at: DateTime::from_timestamp(first_seen_ts, 0)
+                    .unwrap_or_else(|| Utc::now()),
             });
         }
 
         if let Some(mint) = current_mint.take() {
             if !current_pools.is_empty() {
-                let fetched_at = current_pools
+                let pool_data_last_fetched_at = current_pools
                     .iter()
-                    .map(|p| p.fetched_at)
+                    .map(|p| p.pool_data_last_fetched_at)
                     .max()
                     .unwrap_or_else(|| Utc::now());
                 let canonical_pool_address = pools::choose_canonical_pool(&current_pools);
@@ -962,7 +1092,7 @@ impl TokenDatabase {
                     mint,
                     pools: std::mem::take(&mut current_pools),
                     canonical_pool_address,
-                    fetched_at,
+                    pool_data_last_fetched_at,
                 });
             }
         }
@@ -1001,7 +1131,8 @@ impl TokenDatabase {
                     risks,
                     top_holders,
                     markets,
-                    fetched_at
+                    security_data_last_fetched_at,
+                    security_data_first_fetched_at
                  FROM security_rugcheck WHERE mint = ?1",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
@@ -1011,6 +1142,7 @@ impl TokenDatabase {
             let holders_json: String = row.get(19)?;
             let markets_json: Option<String> = row.get(20)?;
             let fetched_ts: i64 = row.get(21)?;
+            let first_fetched_ts: i64 = row.get(22)?;
             let rugged_flag: Option<i64> = row.get(17)?;
             let is_rugged = rugged_flag.unwrap_or(0) != 0;
 
@@ -1042,7 +1174,12 @@ impl TokenDatabase {
                 risks,
                 top_holders: holders,
                 markets,
-                fetched_at: DateTime::from_timestamp(fetched_ts, 0).unwrap_or_else(|| Utc::now()),
+                security_data_last_fetched_at: DateTime::from_timestamp(fetched_ts, 0)
+                    .unwrap_or_else(|| Utc::now()),
+                security_data_first_fetched_at: DateTime::from_timestamp(first_fetched_ts, 0)
+                    .unwrap_or_else(|| {
+                        DateTime::from_timestamp(fetched_ts, 0).unwrap_or_else(|| Utc::now())
+                    }),
             })
         });
 
@@ -1069,7 +1206,7 @@ impl TokenDatabase {
                 "SELECT mint FROM update_tracking 
                  WHERE priority = ?1
                  AND (last_error_at IS NULL OR last_error_at < strftime('%s','now') - 180)
-                 ORDER BY last_market_update ASC NULLS FIRST 
+                 ORDER BY market_data_last_updated_at ASC NULLS FIRST 
                  LIMIT ?2",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
@@ -1096,7 +1233,7 @@ impl TokenDatabase {
              LEFT JOIN blacklist b ON t.mint = b.mint
              LEFT JOIN update_tracking u ON t.mint = u.mint
              WHERE b.mint IS NULL
-             ORDER BY COALESCE(u.last_market_update, 0) ASC
+             ORDER BY COALESCE(u.market_data_last_updated_at, 0) ASC
              LIMIT ?1",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
@@ -1134,7 +1271,7 @@ impl TokenDatabase {
             .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
 
         let mut stmt = conn
-            .prepare("SELECT last_market_update FROM update_tracking WHERE mint = ?1")
+            .prepare("SELECT market_data_last_updated_at FROM update_tracking WHERE mint = ?1")
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
 
         let result: Result<i64, rusqlite::Error> = stmt.query_row(params![mint], |row| row.get(0));
@@ -1208,15 +1345,15 @@ impl TokenDatabase {
         let mut stmt = conn
             .prepare(
                 "SELECT t.mint FROM tokens t
-             INNER JOIN update_tracking u ON t.mint = u.mint
-             LEFT JOIN market_dexscreener md ON t.mint = md.mint
-             LEFT JOIN market_geckoterminal mg ON t.mint = mg.mint
-             WHERE u.market_update_count = 0
-             AND md.mint IS NULL
-             AND mg.mint IS NULL
-             AND (u.last_error_at IS NULL OR u.last_error_at < strftime('%s','now') - 180)
-             ORDER BY u.priority DESC, t.created_at ASC
-             LIMIT ?1",
+                 INNER JOIN update_tracking u ON t.mint = u.mint
+                 LEFT JOIN market_dexscreener md ON t.mint = md.mint
+                 LEFT JOIN market_geckoterminal mg ON t.mint = mg.mint
+                 WHERE u.market_data_update_count = 0
+                 AND md.mint IS NULL
+                 AND mg.mint IS NULL
+                 AND (u.last_error_at IS NULL OR u.last_error_at < strftime('%s','now') - 180)
+                 ORDER BY u.priority DESC, t.first_discovered_at ASC
+                 LIMIT ?1",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
 
@@ -1261,8 +1398,8 @@ impl TokenDatabase {
              )
              ORDER BY 
                  CASE 
-                     -- Priority 1: New tokens (created in last 24h, no errors)
-                     WHEN ut.security_error_type IS NULL AND t.created_at > ?1 - 86400 THEN 1
+                     -- Priority 1: New tokens (discovered in last 24h, no errors)
+                     WHEN ut.security_error_type IS NULL AND t.first_discovered_at > ?1 - 86400 THEN 1
                      -- Priority 2: Tokens without errors
                      WHEN ut.security_error_type IS NULL THEN 2
                      -- Priority 3: Temporary errors (with backoff)
@@ -1270,7 +1407,7 @@ impl TokenDatabase {
                      -- Priority 4: Permanent errors (very rare retry)
                      ELSE 4
                  END,
-                 t.created_at ASC
+                 t.first_discovered_at ASC
              LIMIT ?2",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
@@ -1302,8 +1439,8 @@ impl TokenDatabase {
         Ok(())
     }
 
-    /// Mark token as updated
-    pub fn mark_updated(&self, mint: &str, had_errors: bool) -> TokenResult<()> {
+    /// Mark market data as updated (called after successful DexScreener or GeckoTerminal fetch)
+    pub fn mark_market_data_updated(&self, mint: &str) -> TokenResult<()> {
         let conn = self
             .conn
             .lock()
@@ -1311,35 +1448,101 @@ impl TokenDatabase {
 
         let now = Utc::now().timestamp();
 
-        if had_errors {
-            conn.execute(
-                "UPDATE update_tracking SET 
-                    last_market_update = ?1,
-                    market_update_count = market_update_count + 1,
-                    last_error_at = ?1
-                 WHERE mint = ?2",
-                params![now, mint],
-            )
-            .map_err(|e| TokenError::Database(format!("Failed to mark updated: {}", e)))?;
-        } else {
-            conn.execute(
-                "UPDATE update_tracking SET 
-                    last_market_update = ?1,
-                    market_update_count = market_update_count + 1,
-                    last_error = NULL,
-                    last_error_at = NULL
-                 WHERE mint = ?2",
-                params![now, mint],
-            )
-            .map_err(|e| TokenError::Database(format!("Failed to mark updated: {}", e)))?;
-        }
-
-        // Also update tokens table
         conn.execute(
-            "UPDATE tokens SET updated_at = ?1 WHERE mint = ?2",
+            "UPDATE update_tracking SET 
+                market_data_last_updated_at = ?1,
+                market_data_update_count = market_data_update_count + 1,
+                last_error = NULL,
+                last_error_at = NULL
+             WHERE mint = ?2",
             params![now, mint],
         )
-        .map_err(|e| TokenError::Database(format!("Failed to update tokens: {}", e)))?;
+        .map_err(|e| TokenError::Database(format!("Failed to mark market data updated: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Mark security data as updated (called after successful Rugcheck fetch)
+    pub fn mark_security_data_updated(&self, mint: &str) -> TokenResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let now = Utc::now().timestamp();
+
+        conn.execute(
+            "UPDATE update_tracking SET 
+                security_data_last_updated_at = ?1,
+                security_data_update_count = security_data_update_count + 1,
+                last_security_error = NULL,
+                last_security_error_at = NULL,
+                security_error_type = NULL
+             WHERE mint = ?2",
+            params![now, mint],
+        )
+        .map_err(|e| {
+            TokenError::Database(format!("Failed to mark security data updated: {}", e))
+        })?;
+
+        Ok(())
+    }
+
+    /// Mark metadata as updated (called after symbol/name/decimals change)
+    pub fn mark_metadata_updated(&self, mint: &str) -> TokenResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let now = Utc::now().timestamp();
+
+        conn.execute(
+            "UPDATE update_tracking SET metadata_last_updated_at = ?1 WHERE mint = ?2",
+            params![now, mint],
+        )
+        .map_err(|e| TokenError::Database(format!("Failed to mark metadata updated: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Mark decimals as updated (called after decimals fetch from chain)
+    pub fn mark_decimals_updated(&self, mint: &str) -> TokenResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let now = Utc::now().timestamp();
+
+        conn.execute(
+            "UPDATE update_tracking SET decimals_last_updated_at = ?1 WHERE mint = ?2",
+            params![now, mint],
+        )
+        .map_err(|e| TokenError::Database(format!("Failed to mark decimals updated: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Mark pool price as calculated (called after Pool Service calculation)
+    pub fn mark_pool_price_calculated(&self, mint: &str, pool_address: &str) -> TokenResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let now = Utc::now().timestamp();
+
+        conn.execute(
+            "UPDATE update_tracking SET 
+                pool_price_last_calculated_at = ?1,
+                pool_price_last_used_pool_address = ?2
+             WHERE mint = ?3",
+            params![now, pool_address, mint],
+        )
+        .map_err(|e| {
+            TokenError::Database(format!("Failed to mark pool price calculated: {}", e))
+        })?;
 
         Ok(())
     }
@@ -1429,7 +1632,9 @@ impl TokenDatabase {
                  FROM blacklist \
                  ORDER BY added_at DESC",
             )
-            .map_err(|e| TokenError::Database(format!("Failed to prepare blacklist query: {}", e)))?;
+            .map_err(|e| {
+                TokenError::Database(format!("Failed to prepare blacklist query: {}", e))
+            })?;
 
         let rows = stmt
             .query_map([], |row| {
@@ -1444,7 +1649,9 @@ impl TokenDatabase {
 
         let mut records = Vec::new();
         for row in rows {
-            records.push(row.map_err(|e| TokenError::Database(format!("Failed to read blacklist row: {}", e)))?);
+            records.push(row.map_err(|e| {
+                TokenError::Database(format!("Failed to read blacklist row: {}", e))
+            })?);
         }
 
         Ok(records)
@@ -1558,8 +1765,13 @@ impl TokenDatabase {
 
         let mut stmt = conn
             .prepare(
-                "SELECT mint, priority, last_market_update, last_security_update, last_decimals_update,
-                        market_update_count, security_update_count, last_error, last_error_at
+                "SELECT mint, priority,
+                        market_data_last_updated_at, market_data_update_count,
+                        security_data_last_updated_at, security_data_update_count,
+                        metadata_last_updated_at, decimals_last_updated_at,
+                        pool_price_last_calculated_at, pool_price_last_used_pool_address,
+                        last_error, last_error_at, market_error_count,
+                        last_security_error, last_security_error_at, security_error_count
                  FROM update_tracking
                  WHERE mint = ?1",
             )
@@ -1588,11 +1800,16 @@ impl TokenDatabase {
         let records = if let Some(priority) = priority {
             let mut stmt = conn
                 .prepare(
-                    "SELECT mint, priority, last_market_update, last_security_update, last_decimals_update,
-                            market_update_count, security_update_count, last_error, last_error_at
+                    "SELECT mint, priority,
+                            market_data_last_updated_at, market_data_update_count,
+                            security_data_last_updated_at, security_data_update_count,
+                            metadata_last_updated_at, decimals_last_updated_at,
+                            pool_price_last_calculated_at, pool_price_last_used_pool_address,
+                            last_error, last_error_at, market_error_count,
+                            last_security_error, last_security_error_at, security_error_count
                      FROM update_tracking
                      WHERE priority = ?1
-                     ORDER BY COALESCE(last_market_update, 0) ASC, mint ASC
+                     ORDER BY COALESCE(market_data_last_updated_at, 0) ASC, mint ASC
                      LIMIT ?2",
                 )
                 .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
@@ -1607,10 +1824,15 @@ impl TokenDatabase {
         } else {
             let mut stmt = conn
                 .prepare(
-                    "SELECT mint, priority, last_market_update, last_security_update, last_decimals_update,
-                            market_update_count, security_update_count, last_error, last_error_at
+                    "SELECT mint, priority,
+                            market_data_last_updated_at, market_data_update_count,
+                            security_data_last_updated_at, security_data_update_count,
+                            metadata_last_updated_at, decimals_last_updated_at,
+                            pool_price_last_calculated_at, pool_price_last_used_pool_address,
+                            last_error, last_error_at, market_error_count,
+                            last_security_error, last_security_error_at, security_error_count
                      FROM update_tracking
-                     ORDER BY priority DESC, COALESCE(last_market_update, 0) ASC, mint ASC
+                     ORDER BY priority DESC, COALESCE(market_data_last_updated_at, 0) ASC, mint ASC
                      LIMIT ?1",
                 )
                 .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
@@ -1767,10 +1989,11 @@ impl TokenDatabase {
         let order_column = match sort_by {
             Some("symbol") => "t.symbol",
             Some("updated_at") =>
-                "COALESCE(ut.last_market_update, COALESCE(d.fetched_at, g.fetched_at, t.updated_at))",
-            Some("first_seen_at") => "t.created_at",
-            Some("metadata_updated_at") => "COALESCE(ut.last_decimals_update, t.updated_at)",
-            Some("token_birth_at") => "COALESCE(d.pair_created_at, t.created_at)",
+                "COALESCE(ut.market_data_last_updated_at, d.market_data_last_fetched_at, g.market_data_last_fetched_at, t.metadata_last_fetched_at)",
+            Some("first_seen_at") => "t.first_discovered_at",
+            Some("metadata_updated_at") => "COALESCE(ut.metadata_last_updated_at, t.metadata_last_fetched_at)",
+            Some("token_birth_at") =>
+                "COALESCE(d.pair_blockchain_created_at, t.blockchain_created_at, t.first_discovered_at)",
             Some("mint") => "t.mint",
             Some("risk_score") => "sr.score",
             Some("price_sol") => "COALESCE(d.price_sol, g.price_sol)",
@@ -1780,7 +2003,8 @@ impl TokenDatabase {
             Some("market_cap") => "COALESCE(d.market_cap, g.market_cap)",
             Some("price_change_h1") => "COALESCE(d.price_change_1h, g.price_change_1h)",
             Some("price_change_h24") => "COALESCE(d.price_change_24h, g.price_change_24h)",
-            _ => "t.updated_at", // default
+            _ =>
+                "COALESCE(ut.market_data_last_updated_at, d.market_data_last_fetched_at, g.market_data_last_fetched_at, t.metadata_last_fetched_at)",
         };
 
         let direction = match sort_direction {
@@ -1792,28 +2016,28 @@ impl TokenDatabase {
         // Build query (always join market tables so we can populate Token fields consistently)
         let select_base = r#"
             SELECT
-                t.mint, t.symbol, t.name, t.decimals, t.created_at, t.updated_at,
-                sr.score, sr.rugged,
+                t.mint, t.symbol, t.name, t.decimals,
+                t.first_discovered_at, t.blockchain_created_at,
+                t.metadata_last_fetched_at, t.decimals_last_fetched_at,
+                sr.score, sr.rugged, sr.security_data_last_fetched_at,
                 bl.reason as blacklist_reason,
-                ut.priority,
+                ut.priority, ut.pool_price_last_calculated_at, ut.pool_price_last_used_pool_address,
                 d.price_usd, d.price_sol, d.price_native,
                 d.price_change_5m, d.price_change_1h, d.price_change_6h, d.price_change_24h,
                 d.market_cap, d.fdv, d.liquidity_usd,
                 d.volume_5m, d.volume_1h, d.volume_6h, d.volume_24h,
                 d.txns_5m_buys, d.txns_5m_sells, d.txns_1h_buys, d.txns_1h_sells,
                 d.txns_6h_buys, d.txns_6h_sells, d.txns_24h_buys, d.txns_24h_sells,
-                d.fetched_at as d_fetched_at,
+                d.market_data_last_fetched_at as d_market_data_last_fetched_at,
                 d.image_url as d_image_url, d.header_image_url as d_header_image_url,
+                d.pair_blockchain_created_at,
                 g.price_usd, g.price_sol, g.price_native,
                 g.price_change_5m, g.price_change_1h, g.price_change_6h, g.price_change_24h,
                 g.market_cap, g.fdv, g.liquidity_usd,
                 g.volume_5m, g.volume_1h, g.volume_6h, g.volume_24h,
                 g.pool_count, g.reserve_in_usd,
-                g.fetched_at as g_fetched_at,
-                g.image_url as g_image_url,
-                ut.last_market_update,
-                ut.last_decimals_update,
-                d.pair_created_at
+                g.market_data_last_fetched_at as g_market_data_last_fetched_at,
+                g.image_url as g_image_url
             FROM tokens t
             LEFT JOIN security_rugcheck sr ON t.mint = sr.mint
             LEFT JOIN blacklist bl ON t.mint = bl.mint
@@ -1842,85 +2066,91 @@ impl TokenDatabase {
                 let symbol: Option<String> = row.get(1)?;
                 let name: Option<String> = row.get(2)?;
                 let decimals: Option<i64> = row.get(3)?;
-                let created_at: i64 = row.get(4)?;
-                let updated_at: i64 = row.get(5)?;
+                let first_discovered_at: i64 = row.get(4)?;
+                let blockchain_created_at: Option<i64> = row.get(5)?;
+                let metadata_last_fetched_at: i64 = row.get(6)?;
+                let decimals_last_fetched_at: i64 = row.get(7)?;
 
-                // Security data (optional)
-                let security_score: Option<i32> = row.get(6)?;
+                // Security data (optional) - now includes timestamp
+                let security_score: Option<i32> = row.get(8)?;
                 let is_rugged: bool = row
-                    .get::<_, Option<i64>>(7)?
+                    .get::<_, Option<i64>>(9)?
                     .map(|v| v != 0)
                     .unwrap_or(false);
+                let security_data_last_fetched_at: Option<i64> = row.get(10)?;
 
                 // Blacklist status
-                let is_blacklisted = row.get::<_, Option<String>>(8)?.is_some();
+                let is_blacklisted = row.get::<_, Option<String>>(11)?.is_some();
 
-                // Priority
-                let priority_value: Option<i32> = row.get(9)?;
+                // Priority and pool price tracking
+                let priority_value: Option<i32> = row.get(12)?;
+                let pool_price_last_calculated_at: Option<i64> = row.get(13)?;
+                let pool_price_last_used_pool: Option<String> = row.get(14)?;
 
-                // DexScreener fields 10..=30
-                let d_price_usd: Option<f64> = row.get(10)?;
-                let d_price_sol: Option<f64> = row.get(11)?;
-                let d_price_native: Option<String> = row.get(12)?;
-                let d_change_5m: Option<f64> = row.get(13)?;
-                let d_change_1h: Option<f64> = row.get(14)?;
-                let d_change_6h: Option<f64> = row.get(15)?;
-                let d_change_24h: Option<f64> = row.get(16)?;
-                let d_market_cap: Option<f64> = row.get(17)?;
-                let d_fdv: Option<f64> = row.get(18)?;
-                let d_liquidity_usd: Option<f64> = row.get(19)?;
-                let d_vol_5m: Option<f64> = row.get(20)?;
-                let d_vol_1h: Option<f64> = row.get(21)?;
-                let d_vol_6h: Option<f64> = row.get(22)?;
-                let d_vol_24h: Option<f64> = row.get(23)?;
-                let d_txn_5m_buys: Option<i64> = row.get(24)?;
-                let d_txn_5m_sells: Option<i64> = row.get(25)?;
-                let d_txn_1h_buys: Option<i64> = row.get(26)?;
-                let d_txn_1h_sells: Option<i64> = row.get(27)?;
-                let d_txn_6h_buys: Option<i64> = row.get(28)?;
-                let d_txn_6h_sells: Option<i64> = row.get(29)?;
-                let d_txn_24h_buys: Option<i64> = row.get(30)?;
-                let d_txn_24h_sells: Option<i64> = row.get(31)?;
-                let d_fetched_at: Option<i64> = row.get(32)?;
-                let d_image_url: Option<String> = row.get(33)?;
-                let d_header_image_url: Option<String> = row.get(34)?;
+                // DexScreener fields 15..=35
+                let d_price_usd: Option<f64> = row.get(15)?;
+                let d_price_sol: Option<f64> = row.get(16)?;
+                let d_price_native: Option<String> = row.get(17)?;
+                let d_change_5m: Option<f64> = row.get(18)?;
+                let d_change_1h: Option<f64> = row.get(19)?;
+                let d_change_6h: Option<f64> = row.get(20)?;
+                let d_change_24h: Option<f64> = row.get(21)?;
+                let d_market_cap: Option<f64> = row.get(22)?;
+                let d_fdv: Option<f64> = row.get(23)?;
+                let d_liquidity_usd: Option<f64> = row.get(24)?;
+                let d_vol_5m: Option<f64> = row.get(25)?;
+                let d_vol_1h: Option<f64> = row.get(26)?;
+                let d_vol_6h: Option<f64> = row.get(27)?;
+                let d_vol_24h: Option<f64> = row.get(28)?;
+                let d_txn_5m_buys: Option<i64> = row.get(29)?;
+                let d_txn_5m_sells: Option<i64> = row.get(30)?;
+                let d_txn_1h_buys: Option<i64> = row.get(31)?;
+                let d_txn_1h_sells: Option<i64> = row.get(32)?;
+                let d_txn_6h_buys: Option<i64> = row.get(33)?;
+                let d_txn_6h_sells: Option<i64> = row.get(34)?;
+                let d_txn_24h_buys: Option<i64> = row.get(35)?;
+                let d_txn_24h_sells: Option<i64> = row.get(36)?;
+                let d_market_data_last_fetched_at: Option<i64> = row.get(37)?;
+                let d_image_url: Option<String> = row.get(38)?;
+                let d_header_image_url: Option<String> = row.get(39)?;
+                let d_pair_blockchain_created_at: Option<i64> = row.get(40)?;
 
-                // GeckoTerminal fields 35..=48
-                let g_price_usd: Option<f64> = row.get(35)?;
-                let g_price_sol: Option<f64> = row.get(36)?;
-                let g_price_native: Option<String> = row.get(37)?;
-                let g_change_5m: Option<f64> = row.get(38)?;
-                let g_change_1h: Option<f64> = row.get(39)?;
-                let g_change_6h: Option<f64> = row.get(40)?;
-                let g_change_24h: Option<f64> = row.get(41)?;
-                let g_market_cap: Option<f64> = row.get(42)?;
-                let g_fdv: Option<f64> = row.get(43)?;
-                let g_liquidity_usd: Option<f64> = row.get(44)?;
-                let g_vol_5m: Option<f64> = row.get(45)?;
-                let g_vol_1h: Option<f64> = row.get(46)?;
-                let g_vol_6h: Option<f64> = row.get(47)?;
-                let g_vol_24h: Option<f64> = row.get(48)?;
-                let g_pool_count: Option<i64> = row.get(49)?;
-                let g_reserve_in_usd: Option<f64> = row.get(50)?;
-                let g_fetched_at: Option<i64> = row.get(51)?;
-                let g_image_url: Option<String> = row.get(52)?;
-
-                // Update tracking and pair creation timestamps
-                let last_market_update_ts: Option<i64> = row.get(53)?;
-                let last_decimals_update_ts: Option<i64> = row.get(54)?;
-                let d_pair_created_at: Option<i64> = row.get(55)?;
+                // GeckoTerminal fields 41..=54
+                let g_price_usd: Option<f64> = row.get(41)?;
+                let g_price_sol: Option<f64> = row.get(42)?;
+                let g_price_native: Option<String> = row.get(43)?;
+                let g_change_5m: Option<f64> = row.get(44)?;
+                let g_change_1h: Option<f64> = row.get(45)?;
+                let g_change_6h: Option<f64> = row.get(46)?;
+                let g_change_24h: Option<f64> = row.get(47)?;
+                let g_market_cap: Option<f64> = row.get(48)?;
+                let g_fdv: Option<f64> = row.get(49)?;
+                let g_liquidity_usd: Option<f64> = row.get(50)?;
+                let g_vol_5m: Option<f64> = row.get(51)?;
+                let g_vol_1h: Option<f64> = row.get(52)?;
+                let g_vol_6h: Option<f64> = row.get(53)?;
+                let g_vol_24h: Option<f64> = row.get(54)?;
+                let g_pool_count: Option<i64> = row.get(55)?;
+                let g_reserve_in_usd: Option<f64> = row.get(56)?;
+                let g_market_data_last_fetched_at: Option<i64> = row.get(57)?;
+                let g_image_url: Option<String> = row.get(58)?;
 
                 Ok((
                     mint,
                     symbol,
                     name,
                     decimals.map(|d| d as u8),
-                    created_at,
-                    updated_at,
+                    first_discovered_at,
+                    blockchain_created_at,
+                    metadata_last_fetched_at,
+                    decimals_last_fetched_at,
                     security_score,
                     is_rugged,
+                    security_data_last_fetched_at,
                     is_blacklisted,
                     priority_value,
+                    pool_price_last_calculated_at,
+                    pool_price_last_used_pool,
                     // Dex (match SELECT order)
                     d_price_usd,
                     d_price_sol,
@@ -1944,9 +2174,10 @@ impl TokenDatabase {
                     d_txn_6h_sells,
                     d_txn_24h_buys,
                     d_txn_24h_sells,
-                    d_fetched_at,
+                    d_market_data_last_fetched_at,
                     d_image_url,
                     d_header_image_url,
+                    d_pair_blockchain_created_at,
                     // Gecko (match SELECT order)
                     g_price_usd,
                     g_price_sol,
@@ -1964,11 +2195,8 @@ impl TokenDatabase {
                     g_vol_24h,
                     g_pool_count,
                     g_reserve_in_usd,
-                    g_fetched_at,
+                    g_market_data_last_fetched_at,
                     g_image_url,
-                    last_market_update_ts,
-                    last_decimals_update_ts,
-                    d_pair_created_at,
                 ))
             })
             .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
@@ -1980,12 +2208,17 @@ impl TokenDatabase {
                 symbol,
                 name,
                 decimals,
-                created_at,
-                updated_at,
+                first_discovered_at,
+                blockchain_created_at,
+                metadata_last_fetched_at,
+                decimals_last_fetched_at,
                 security_score,
                 is_rugged,
+                security_data_last_fetched_at,
                 is_blacklisted,
                 priority_value,
+                pool_price_last_calculated_at,
+                pool_price_last_used_pool,
                 // Dex fields
                 d_price_usd,
                 d_price_sol,
@@ -2009,9 +2242,10 @@ impl TokenDatabase {
                 d_txn_6h_sells,
                 d_txn_24h_buys,
                 d_txn_24h_sells,
-                d_fetched_at,
+                d_market_data_last_fetched_at,
                 d_image_url,
                 d_header_image_url,
+                d_pair_blockchain_created_at,
                 // Gecko fields
                 g_price_usd,
                 g_price_sol,
@@ -2029,22 +2263,24 @@ impl TokenDatabase {
                 g_vol_24h,
                 g_pool_count,
                 g_reserve_in_usd,
-                g_fetched_at,
+                g_market_data_last_fetched_at,
                 g_image_url,
-                last_market_update_ts,
-                last_decimals_update_ts,
-                d_pair_created_at,
             ) = row_result.map_err(|e| TokenError::Database(format!("Row parse failed: {}", e)))?;
 
-            let created_dt = DateTime::from_timestamp(created_at, 0).unwrap_or_else(|| Utc::now());
-            let metadata_updated_dt = last_decimals_update_ts
+            // Parse all timestamps
+            let first_discovered_dt =
+                DateTime::from_timestamp(first_discovered_at, 0).unwrap_or_else(|| Utc::now());
+            let blockchain_created_dt =
+                blockchain_created_at.and_then(|ts| DateTime::from_timestamp(ts, 0));
+            let metadata_last_fetched_dt =
+                DateTime::from_timestamp(metadata_last_fetched_at, 0).unwrap_or_else(|| Utc::now());
+            let decimals_last_fetched_dt =
+                DateTime::from_timestamp(decimals_last_fetched_at, 0).unwrap_or_else(|| Utc::now());
+            let security_data_last_fetched_dt =
+                security_data_last_fetched_at.and_then(|ts| DateTime::from_timestamp(ts, 0));
+            let pool_price_last_calculated_dt = pool_price_last_calculated_at
                 .and_then(|ts| DateTime::from_timestamp(ts, 0))
-                .or_else(|| DateTime::from_timestamp(updated_at, 0));
-            let fallback_fetch_dt = metadata_updated_dt.unwrap_or(created_dt);
-            let last_market_update_dt =
-                last_market_update_ts.and_then(|ts| DateTime::from_timestamp(ts, 0));
-            let dex_pair_created_dt =
-                d_pair_created_at.and_then(|ts| DateTime::from_timestamp(ts, 0));
+                .unwrap_or(metadata_last_fetched_dt); // Fallback
 
             let priority = priority_value
                 .map(Priority::from_value)
@@ -2057,7 +2293,7 @@ impl TokenDatabase {
 
             let (
                 data_source,
-                fetched_at_dt,
+                market_data_last_fetched_dt,
                 price_usd,
                 price_sol,
                 price_native,
@@ -2084,9 +2320,9 @@ impl TokenDatabase {
                 if gecko_available {
                     (
                         DataSource::GeckoTerminal,
-                        g_fetched_at
+                        g_market_data_last_fetched_at
                             .and_then(|ts| DateTime::from_timestamp(ts, 0))
-                            .unwrap_or(fallback_fetch_dt),
+                            .unwrap_or(metadata_last_fetched_dt),
                         g_price_usd.unwrap_or(0.0),
                         g_price_sol.unwrap_or(0.0),
                         g_price_native.unwrap_or_else(|| "0".to_string()),
@@ -2113,9 +2349,9 @@ impl TokenDatabase {
                 } else if dex_available {
                     (
                         DataSource::DexScreener,
-                        d_fetched_at
+                        d_market_data_last_fetched_at
                             .and_then(|ts| DateTime::from_timestamp(ts, 0))
-                            .unwrap_or(fallback_fetch_dt),
+                            .unwrap_or(metadata_last_fetched_dt),
                         d_price_usd.unwrap_or(0.0),
                         d_price_sol.unwrap_or(0.0),
                         d_price_native.unwrap_or_else(|| "0".to_string()),
@@ -2142,7 +2378,7 @@ impl TokenDatabase {
                 } else {
                     (
                         DataSource::Unknown,
-                        fallback_fetch_dt,
+                        metadata_last_fetched_dt,
                         0.0,
                         0.0,
                         "0".to_string(),
@@ -2175,9 +2411,9 @@ impl TokenDatabase {
                 if dex_available {
                     (
                         DataSource::DexScreener,
-                        d_fetched_at
+                        d_market_data_last_fetched_at
                             .and_then(|ts| DateTime::from_timestamp(ts, 0))
-                            .unwrap_or(fallback_fetch_dt),
+                            .unwrap_or(metadata_last_fetched_dt),
                         d_price_usd.unwrap_or(0.0),
                         d_price_sol.unwrap_or(0.0),
                         d_price_native.unwrap_or_else(|| "0".to_string()),
@@ -2204,9 +2440,9 @@ impl TokenDatabase {
                 } else if gecko_available {
                     (
                         DataSource::GeckoTerminal,
-                        g_fetched_at
+                        g_market_data_last_fetched_at
                             .and_then(|ts| DateTime::from_timestamp(ts, 0))
-                            .unwrap_or(fallback_fetch_dt),
+                            .unwrap_or(metadata_last_fetched_dt),
                         g_price_usd.unwrap_or(0.0),
                         g_price_sol.unwrap_or(0.0),
                         g_price_native.unwrap_or_else(|| "0".to_string()),
@@ -2233,7 +2469,7 @@ impl TokenDatabase {
                 } else {
                     (
                         DataSource::Unknown,
-                        fallback_fetch_dt,
+                        metadata_last_fetched_dt,
                         0.0,
                         0.0,
                         "0".to_string(),
@@ -2272,8 +2508,6 @@ impl TokenDatabase {
                 None
             };
 
-            let market_updated_dt = last_market_update_dt.unwrap_or(fetched_at_dt);
-
             // Determine image_url and header_image_url based on data source
             let (resolved_image_url, resolved_header_image_url) = match data_source {
                 DataSource::DexScreener => (d_image_url, d_header_image_url),
@@ -2293,13 +2527,27 @@ impl TokenDatabase {
                 header_image_url: resolved_header_image_url,
                 supply: None,
 
-                // Data source & timestamps
+                // Data source
                 data_source,
-                fetched_at: fetched_at_dt,
-                updated_at: market_updated_dt,
-                created_at: created_dt,
-                metadata_updated_at: metadata_updated_dt,
-                token_birth_at: dex_pair_created_dt,
+
+                // Discovery & Creation timestamps
+                first_discovered_at: first_discovered_dt,
+                blockchain_created_at: d_pair_blockchain_created_at
+                    .and_then(|ts| DateTime::from_timestamp(ts, 0)),
+
+                // Metadata timestamps
+                metadata_last_fetched_at: metadata_last_fetched_dt,
+                decimals_last_fetched_at: decimals_last_fetched_dt,
+
+                // Market data timestamps
+                market_data_last_fetched_at: market_data_last_fetched_dt,
+
+                // Security data timestamp
+                security_data_last_fetched_at: security_data_last_fetched_dt,
+
+                // Pool price timestamps
+                pool_price_last_calculated_at: pool_price_last_calculated_dt,
+                pool_price_last_used_pool: pool_price_last_used_pool,
 
                 // Price Information
                 price_usd,
@@ -2358,8 +2606,6 @@ impl TokenDatabase {
                 // Bot-Specific State
                 is_blacklisted,
                 priority,
-                first_seen_at: created_dt,
-                last_price_update: fetched_at_dt,
             };
 
             tokens.push(token);
@@ -2459,8 +2705,11 @@ fn assemble_token(
     fallback_image_url: Option<String>,
     fallback_header_url: Option<String>,
 ) -> Token {
-    let created_dt = DateTime::from_timestamp(metadata.created_at, 0).unwrap_or_else(|| Utc::now());
-    let metadata_updated_dt = DateTime::from_timestamp(metadata.updated_at, 0);
+    // Extract timestamps from metadata
+    let first_discovered_dt =
+        DateTime::from_timestamp(metadata.first_discovered_at, 0).unwrap_or_else(|| Utc::now());
+    let metadata_last_fetched_dt = DateTime::from_timestamp(metadata.metadata_last_fetched_at, 0)
+        .unwrap_or_else(|| Utc::now());
 
     // Capture primary source images (DexScreener provides them) without moving market_data
     let (primary_image_url, primary_header_url) = match &market_data {
@@ -2479,9 +2728,10 @@ fn assemble_token(
         market_metrics,
         volumes,
         txns,
-        fetched_at,
-        token_birth_at,
+        market_data_last_fetched_at,
+        pair_blockchain_created_at,
         pool_metrics,
+        market_data_first_fetched_at,
     ) = match market_data {
         MarketDataType::DexScreener(data) => {
             let txns = (
@@ -2509,9 +2759,10 @@ fn assemble_token(
                     data.volume_24h,
                 ),
                 txns,
-                data.fetched_at,
-                data.pair_created_at,
+                data.market_data_last_fetched_at,
+                data.pair_blockchain_created_at,
                 (None, None),
+                data.market_data_first_fetched_at,
             )
         }
         MarketDataType::GeckoTerminal(data) => {
@@ -2535,9 +2786,10 @@ fn assemble_token(
                     data.volume_24h,
                 ),
                 txns,
-                data.fetched_at,
+                data.market_data_last_fetched_at,
                 None,
                 (data.pool_count, data.reserve_in_usd),
+                data.market_data_first_fetched_at,
             )
         }
     };
@@ -2569,13 +2821,12 @@ fn assemble_token(
         .or_else(|| security_ref.and_then(|data| data.token_decimals))
         .unwrap_or(9);
 
-    let token_birth_dt = token_birth_at
-        .or(metadata_updated_dt.clone())
-        .or(Some(created_dt));
-
     // For now, only use primary source-provided images. Fallbacks can be added upstream where DB is available.
     let resolved_image_url = primary_image_url.or(fallback_image_url);
     let resolved_header_url = primary_header_url.or(fallback_header_url);
+
+    // Security data timestamp (if available)
+    let security_data_last_fetched_dt = security_ref.map(|sec| sec.security_data_last_fetched_at);
 
     Token {
         // Core identity
@@ -2590,11 +2841,24 @@ fn assemble_token(
 
         // Data source
         data_source,
-        fetched_at,
-        updated_at: fetched_at,
-        created_at: created_dt,
-        metadata_updated_at: metadata_updated_dt.clone(),
-        token_birth_at: token_birth_dt,
+
+        // Discovery & Creation timestamps
+        first_discovered_at: first_discovered_dt,
+        blockchain_created_at: pair_blockchain_created_at,
+
+        // Metadata timestamps
+        metadata_last_fetched_at: metadata_last_fetched_dt,
+        decimals_last_fetched_at: metadata_last_fetched_dt, // Same as metadata for now
+
+        // Market data timestamps
+        market_data_last_fetched_at: market_data_last_fetched_at,
+
+        // Security data timestamp
+        security_data_last_fetched_at: security_data_last_fetched_dt,
+
+        // Pool price timestamps (defaults - will be updated by pool service)
+        pool_price_last_calculated_at: market_data_last_fetched_at, // Fallback to market fetch
+        pool_price_last_used_pool: None,
 
         // Price information
         price_usd,
@@ -2653,8 +2917,6 @@ fn assemble_token(
         // Bot-specific state
         is_blacklisted,
         priority,
-        first_seen_at: created_dt,
-        last_price_update: fetched_at,
     }
 }
 
@@ -2671,7 +2933,7 @@ fn assemble_token_without_market_data(
     priority: Priority,
     metadata_updated_at_override: Option<DateTime<Utc>>,
     last_market_update: Option<DateTime<Utc>>,
-    token_birth_at_override: Option<DateTime<Utc>>,
+    blockchain_created_at_override: Option<DateTime<Utc>>,
 ) -> Token {
     // Extract security data
     let security_ref = security.as_ref();
@@ -2695,15 +2957,20 @@ fn assemble_token_without_market_data(
     let graph_insiders_detected = security_ref.and_then(|sec| sec.graph_insiders_detected);
     let lp_provider_count = security_ref.and_then(|sec| sec.total_lp_providers);
 
-    let created_at = DateTime::from_timestamp(metadata.created_at, 0).unwrap_or_else(|| Utc::now());
-    let metadata_updated_dt =
-        metadata_updated_at_override.or_else(|| DateTime::from_timestamp(metadata.updated_at, 0));
-    let market_updated_dt = last_market_update
-        .or_else(|| metadata_updated_dt.clone())
-        .unwrap_or(created_at);
-    let token_birth_dt = token_birth_at_override
-        .or_else(|| metadata_updated_dt.clone())
-        .or(Some(created_at));
+    // Parse timestamps from metadata
+    let first_discovered_dt =
+        DateTime::from_timestamp(metadata.first_discovered_at, 0).unwrap_or_else(|| Utc::now());
+    let metadata_last_fetched_dt = DateTime::from_timestamp(metadata.metadata_last_fetched_at, 0)
+        .unwrap_or_else(|| Utc::now());
+
+    // Override if provided, otherwise use metadata timestamp
+    let final_metadata_updated = metadata_updated_at_override.unwrap_or(metadata_last_fetched_dt);
+
+    // Market data last fetched fallback
+    let market_data_last_fetched_dt = last_market_update.unwrap_or(final_metadata_updated);
+
+    // Security timestamp (if available)
+    let security_data_last_fetched_dt = security_ref.map(|sec| sec.security_data_last_fetched_at);
 
     let resolved_decimals = metadata
         .decimals
@@ -2723,11 +2990,24 @@ fn assemble_token_without_market_data(
 
         // Data source
         data_source: DataSource::Unknown,
-        fetched_at: market_updated_dt,
-        updated_at: market_updated_dt,
-        created_at,
-        metadata_updated_at: metadata_updated_dt,
-        token_birth_at: token_birth_dt,
+
+        // Discovery & Creation timestamps
+        first_discovered_at: first_discovered_dt,
+        blockchain_created_at: blockchain_created_at_override,
+
+        // Metadata timestamps
+        metadata_last_fetched_at: final_metadata_updated,
+        decimals_last_fetched_at: final_metadata_updated, // Same as metadata
+
+        // Market data timestamps (defaults since no market data)
+        market_data_last_fetched_at: market_data_last_fetched_dt,
+
+        // Security data timestamp
+        security_data_last_fetched_at: security_data_last_fetched_dt,
+
+        // Pool price timestamps (defaults)
+        pool_price_last_calculated_at: market_data_last_fetched_dt, // Fallback
+        pool_price_last_used_pool: None,
 
         // Price Information (defaults for missing market data)
         price_usd: 0.0,
@@ -2786,8 +3066,6 @@ fn assemble_token_without_market_data(
         // Bot-Specific State
         is_blacklisted,
         priority,
-        first_seen_at: created_at,
-        last_price_update: created_at,
     }
 }
 
@@ -2968,22 +3246,34 @@ pub async fn is_market_data_stale_async(mint: &str, threshold_seconds: i64) -> T
 fn map_tracking_row(row: &rusqlite::Row) -> rusqlite::Result<UpdateTrackingInfo> {
     let mint: String = row.get(0)?;
     let priority: i32 = row.get(1)?;
-    let last_market = ts_to_datetime(row.get::<_, Option<i64>>(2)?);
-    let last_security = ts_to_datetime(row.get::<_, Option<i64>>(3)?);
-    let last_decimals = ts_to_datetime(row.get::<_, Option<i64>>(4)?);
-    let market_update_count = row.get::<_, Option<i64>>(5)?.unwrap_or(0).max(0) as u64;
-    let security_update_count = row.get::<_, Option<i64>>(6)?.unwrap_or(0).max(0) as u64;
-    let last_error: Option<String> = row.get(7)?;
-    let last_error_at = ts_to_datetime(row.get::<_, Option<i64>>(8)?);
+    let market_data_last_updated = ts_to_datetime(row.get::<_, Option<i64>>(2)?);
+    let market_data_update_count = row.get::<_, Option<i64>>(3)?.unwrap_or(0).max(0) as u64;
+    let security_data_last_updated = ts_to_datetime(row.get::<_, Option<i64>>(4)?);
+    let security_data_update_count = row.get::<_, Option<i64>>(5)?.unwrap_or(0).max(0) as u64;
+    let metadata_last_updated = ts_to_datetime(row.get::<_, Option<i64>>(6)?);
+    let decimals_last_updated = ts_to_datetime(row.get::<_, Option<i64>>(7)?);
+    let pool_price_last_calculated = ts_to_datetime(row.get::<_, Option<i64>>(8)?);
+    let pool_price_last_used_pool_address: Option<String> = row.get(9)?;
+    let last_error: Option<String> = row.get(10)?;
+    let last_error_at = ts_to_datetime(row.get::<_, Option<i64>>(11)?);
+    let market_error_count = row.get::<_, Option<i64>>(12)?.unwrap_or(0).max(0) as u64;
+    let last_security_error: Option<String> = row.get(13)?;
+    let last_security_error_at = ts_to_datetime(row.get::<_, Option<i64>>(14)?);
+    let security_error_count = row.get::<_, Option<i64>>(15)?.unwrap_or(0).max(0) as u64;
 
     Ok(UpdateTrackingInfo {
         mint,
         priority,
-        last_market_update: last_market,
-        last_security_update: last_security,
-        last_decimals_update: last_decimals,
-        market_update_count,
-        security_update_count,
+        market_data_last_updated_at: market_data_last_updated,
+        market_data_update_count,
+        security_data_last_updated_at: security_data_last_updated,
+        security_data_update_count,
+        metadata_last_updated_at: metadata_last_updated,
+        decimals_last_updated_at: decimals_last_updated,
+        pool_price_last_calculated_at: pool_price_last_calculated,
+        pool_price_last_used_pool_address,
+        market_error_count,
+        security_error_count,
         last_error,
         last_error_at,
     })

@@ -120,7 +120,12 @@ impl FilteringStore {
 
     async fn try_refresh(&self) -> Result<Arc<FilteringSnapshot>, String> {
         let config = crate::config::with_config(|cfg| cfg.filtering.clone());
-        let snapshot = Arc::new(compute_snapshot(config).await?);
+        let previous_snapshot = {
+            let guard = self.snapshot.read().await;
+            guard.clone()
+        };
+
+        let snapshot = Arc::new(compute_snapshot(config, previous_snapshot.as_deref()).await?);
         let mut guard = self.snapshot.write().await;
         *guard = Some(snapshot.clone());
 
@@ -732,16 +737,18 @@ fn sort_tokens(items: &mut [Token], sort_key: TokenSortKey, direction: SortDirec
                 .security_score
                 .unwrap_or(i32::MAX)
                 .cmp(&b.security_score.unwrap_or(i32::MAX)),
-            TokenSortKey::UpdatedAt => a.updated_at.cmp(&b.updated_at),
-            TokenSortKey::FirstSeenAt => a.first_seen_at.cmp(&b.first_seen_at),
+            TokenSortKey::UpdatedAt => a
+                .market_data_last_fetched_at
+                .cmp(&b.market_data_last_fetched_at),
+            TokenSortKey::FirstSeenAt => a.first_discovered_at.cmp(&b.first_discovered_at),
             TokenSortKey::MetadataUpdatedAt => {
-                let lhs = a.metadata_updated_at.unwrap_or(a.created_at);
-                let rhs = b.metadata_updated_at.unwrap_or(b.created_at);
+                let lhs = a.metadata_last_fetched_at;
+                let rhs = b.metadata_last_fetched_at;
                 lhs.cmp(&rhs)
             }
             TokenSortKey::TokenBirthAt => {
-                let lhs = a.token_birth_at.unwrap_or(a.created_at);
-                let rhs = b.token_birth_at.unwrap_or(b.created_at);
+                let lhs = a.blockchain_created_at.unwrap_or(a.first_discovered_at);
+                let rhs = b.blockchain_created_at.unwrap_or(b.first_discovered_at);
                 lhs.cmp(&rhs)
             }
             TokenSortKey::Mint => a.mint.cmp(&b.mint),

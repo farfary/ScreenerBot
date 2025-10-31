@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::time::Instant as StdInstant;
 
 use chrono::Utc;
@@ -22,8 +22,12 @@ use super::types::{
 };
 
 const TOKEN_FETCH_CONCURRENCY: usize = 24;
+const MIN_VALID_BLOCKCHAIN_TIMESTAMP: i64 = 1; // Avoid 0/invalid timestamps from market APIs
 
-pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapshot, String> {
+pub async fn compute_snapshot(
+    config: FilteringConfig,
+    previous: Option<&FilteringSnapshot>,
+) -> Result<FilteringSnapshot, String> {
     let start = StdInstant::now();
 
     // INFO: Record snapshot computation start
@@ -155,7 +159,9 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
                     ..
                 } = record;
 
-                let Some(mut mint) = token_mint else { continue; };
+                let Some(mut mint) = token_mint else {
+                    continue;
+                };
                 if mint.is_empty() {
                     continue;
                 }
@@ -198,7 +204,9 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
                     ..
                 } = record;
 
-                let Some(mut mint) = token_mint else { continue; };
+                let Some(mut mint) = token_mint else {
+                    continue;
+                };
                 if mint.is_empty() {
                     continue;
                 }
@@ -275,10 +283,22 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
 
     let mut filtered_mints: Vec<String> = Vec::new();
     let mut rejected_mints: Vec<String> = Vec::new();
-    let mut passed_tokens: VecDeque<PassedToken> = VecDeque::new();
-    let mut rejected_tokens: VecDeque<RejectedToken> = VecDeque::new();
+    let mut passed_tokens: Vec<PassedToken> = Vec::new();
+    let mut rejected_tokens: Vec<RejectedToken> = Vec::new();
     let mut token_entries: HashMap<String, TokenEntry> = HashMap::with_capacity(tokens.len());
     let mut stats = FilteringStats::default();
+
+    let mut previous_pass_times: HashMap<String, i64> = HashMap::new();
+    let mut previous_reject_times: HashMap<String, i64> = HashMap::new();
+
+    if let Some(prev_snapshot) = previous {
+        for entry in &prev_snapshot.passed_tokens {
+            previous_pass_times.insert(entry.mint.clone(), entry.passed_time);
+        }
+        for entry in &prev_snapshot.rejected_tokens {
+            previous_reject_times.insert(entry.mint.clone(), entry.rejection_time);
+        }
+    }
 
     for token in tokens.iter() {
         stats.total_processed += 1;
@@ -287,6 +307,12 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
         let has_open_position = open_position_set.contains(&token.mint);
         let has_ohlcv = ohlcv_set.contains(&token.mint);
 
+        let creation_timestamp = token
+            .blockchain_created_at
+            .filter(|dt| dt.timestamp() >= MIN_VALID_BLOCKCHAIN_TIMESTAMP)
+            .map(|dt| dt.timestamp())
+            .unwrap_or_else(|| token.first_discovered_at.timestamp());
+
         token_entries.insert(
             token.mint.clone(),
             TokenEntry {
@@ -294,13 +320,8 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
                 has_pool_price,
                 has_open_position,
                 has_ohlcv,
-                pair_created_at: Some(
-                    token
-                        .token_birth_at
-                        .unwrap_or(token.first_seen_at)
-                        .timestamp(),
-                ),
-                last_updated: token.updated_at,
+                pair_created_at: Some(creation_timestamp),
+                last_updated: token.market_data_last_fetched_at,
             },
         );
 
@@ -309,14 +330,16 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
                 filtered_mints.push(token.mint.clone());
                 stats.passed += 1;
 
-                if passed_tokens.len() >= MAX_DECISION_HISTORY {
-                    passed_tokens.pop_front();
-                }
-                passed_tokens.push_back(PassedToken {
+                let passed_time = previous_pass_times
+                    .get(token.mint.as_str())
+                    .copied()
+                    .unwrap_or_else(|| Utc::now().timestamp());
+
+                passed_tokens.push(PassedToken {
                     mint: token.mint.clone(),
                     symbol: token.symbol.clone(),
                     name: Some(token.name.clone()),
-                    passed_time: Utc::now().timestamp(),
+                    passed_time,
                 });
 
                 // Set priority for passed tokens: FilterPassed (60)
@@ -358,15 +381,17 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
             Err(reason) => {
                 stats.record_rejection(reason);
                 rejected_mints.push(token.mint.clone());
-                if rejected_tokens.len() >= MAX_DECISION_HISTORY {
-                    rejected_tokens.pop_front();
-                }
-                rejected_tokens.push_back(RejectedToken {
+                let rejection_time = previous_reject_times
+                    .get(token.mint.as_str())
+                    .copied()
+                    .unwrap_or_else(|| Utc::now().timestamp());
+
+                rejected_tokens.push(RejectedToken {
                     mint: token.mint.clone(),
                     symbol: token.symbol.clone(),
                     name: Some(token.name.clone()),
                     reason: reason.label().to_string(),
-                    rejection_time: Utc::now().timestamp(),
+                    rejection_time,
                 });
 
                 // DEBUG: Record token rejection (sample to avoid spam)
@@ -396,12 +421,13 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
     let elapsed_ms = start.elapsed().as_millis();
 
     let rejection_summary = stats.rejection_summary();
-    logger::info(LogTag::Filtering, &format!("processed={} passed={} rejected={} duration_ms={} rejection_summary={}",
-            stats.total_processed,
-            stats.passed,
-            stats.rejected,
-            elapsed_ms,
-            rejection_summary));
+    logger::info(
+        LogTag::Filtering,
+        &format!(
+            "processed={} passed={} rejected={} duration_ms={} rejection_summary={}",
+            stats.total_processed, stats.passed, stats.rejected, elapsed_ms, rejection_summary
+        ),
+    );
 
     // INFO: Record snapshot computation complete
     let top_rejections: Vec<(String, usize)> = stats
@@ -429,9 +455,25 @@ pub async fn compute_snapshot(config: FilteringConfig) -> Result<FilteringSnapsh
     let snapshot = FilteringSnapshot {
         updated_at: Utc::now(),
         filtered_mints,
-        passed_tokens: passed_tokens.into_iter().collect(),
+        passed_tokens: {
+            passed_tokens.sort_unstable_by(|a, b| {
+                b.passed_time
+                    .cmp(&a.passed_time)
+                    .then_with(|| a.mint.cmp(&b.mint))
+            });
+            passed_tokens.truncate(MAX_DECISION_HISTORY);
+            passed_tokens
+        },
         rejected_mints,
-        rejected_tokens: rejected_tokens.into_iter().collect(),
+        rejected_tokens: {
+            rejected_tokens.sort_unstable_by(|a, b| {
+                b.rejection_time
+                    .cmp(&a.rejection_time)
+                    .then_with(|| a.mint.cmp(&b.mint))
+            });
+            rejected_tokens.truncate(MAX_DECISION_HISTORY);
+            rejected_tokens
+        },
         tokens: token_entries,
         blacklist_reasons: blacklist_reasons_map,
     };

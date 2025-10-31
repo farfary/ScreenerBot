@@ -237,8 +237,8 @@ async fn handle_list(db: &Arc<TokenDatabase>, args: ListArgs) -> Result<(), Stri
             entry.mint,
             symbol,
             entry.priority,
-            fmt_datetime(entry.last_market_update),
-            fmt_datetime(entry.last_security_update),
+            fmt_datetime(entry.market_data_last_updated_at),
+            fmt_datetime(entry.security_data_last_updated_at),
         );
     }
 
@@ -336,10 +336,11 @@ async fn handle_update(
                 .map_err(|e| e.to_string())?
             {
                 Some(data) => println!(
-                    "DexScreener → price_sol={} liquidity_usd={:?} fetched_at={}",
+                    "DexScreener → price_sol={} liquidity_usd={:?} last_fetch={}",
                     fmt_price(data.price_sol),
                     data.liquidity_usd,
-                    data.fetched_at.to_rfc3339_opts(SecondsFormat::Secs, true)
+                    data.market_data_last_fetched_at
+                        .to_rfc3339_opts(SecondsFormat::Secs, true)
                 ),
                 None => println!("DexScreener returned no market data for {mint}"),
             }
@@ -350,10 +351,11 @@ async fn handle_update(
                 .map_err(|e| e.to_string())?
             {
                 Some(data) => println!(
-                    "GeckoTerminal → price_sol={} liquidity_usd={:?} fetched_at={}",
+                    "GeckoTerminal → price_sol={} liquidity_usd={:?} last_fetch={}",
                     fmt_price(data.price_sol),
                     data.liquidity_usd,
-                    data.fetched_at.to_rfc3339_opts(SecondsFormat::Secs, true)
+                    data.market_data_last_fetched_at
+                        .to_rfc3339_opts(SecondsFormat::Secs, true)
                 ),
                 None => println!("GeckoTerminal returned no market data for {mint}"),
             }
@@ -363,10 +365,11 @@ async fn handle_update(
             .map_err(|e| e.to_string())?
         {
             Some(data) => println!(
-                "Rugcheck → score={:?} top_10_pct={:?} fetched_at={}",
+                "Rugcheck → score={:?} top_10_pct={:?} last_fetch={}",
                 data.score,
                 data.top_10_holders_pct,
-                data.fetched_at.to_rfc3339_opts(SecondsFormat::Secs, true)
+                data.security_data_last_fetched_at
+                    .to_rfc3339_opts(SecondsFormat::Secs, true)
             ),
             None => println!("Rugcheck has no report for {mint}"),
         },
@@ -483,13 +486,15 @@ fn print_token_snapshot(token: &Token) {
         token.priority.to_value()
     );
     println!(
-        "Fetched at: {}",
-        token.fetched_at.to_rfc3339_opts(SecondsFormat::Secs, true)
+        "Market data last fetched: {}",
+        token
+            .market_data_last_fetched_at
+            .to_rfc3339_opts(SecondsFormat::Secs, true)
     );
     println!(
-        "Last price update: {}",
+        "Pool price last calculated: {}",
         token
-            .last_price_update
+            .pool_price_last_calculated_at
             .to_rfc3339_opts(SecondsFormat::Secs, true)
     );
 }
@@ -501,20 +506,22 @@ fn print_market_data(db: &Arc<TokenDatabase>, mint: &str) -> Result<(), String> 
     println!("--- Market Data (database) ---");
     match dex {
         Some(data) => println!(
-            "DexScreener → price_sol={} liquidity_usd={:?} fetched_at={}",
+            "DexScreener → price_sol={} liquidity_usd={:?} last_fetch={}",
             fmt_price(data.price_sol),
             data.liquidity_usd,
-            data.fetched_at.to_rfc3339_opts(SecondsFormat::Secs, true)
+            data.market_data_last_fetched_at
+                .to_rfc3339_opts(SecondsFormat::Secs, true)
         ),
         None => println!("DexScreener → no record"),
     }
 
     match gecko {
         Some(data) => println!(
-            "GeckoTerminal → price_sol={} liquidity_usd={:?} fetched_at={}",
+            "GeckoTerminal → price_sol={} liquidity_usd={:?} last_fetch={}",
             fmt_price(data.price_sol),
             data.liquidity_usd,
-            data.fetched_at.to_rfc3339_opts(SecondsFormat::Secs, true)
+            data.market_data_last_fetched_at
+                .to_rfc3339_opts(SecondsFormat::Secs, true)
         ),
         None => println!("GeckoTerminal → no record"),
     }
@@ -532,7 +539,8 @@ fn print_security_data(db: &Arc<TokenDatabase>, mint: &str) -> Result<(), String
             println!("Top 10 holders %: {:?}", data.top_10_holders_pct);
             println!(
                 "Fetched at: {}",
-                data.fetched_at.to_rfc3339_opts(SecondsFormat::Secs, true)
+                data.security_data_last_fetched_at
+                    .to_rfc3339_opts(SecondsFormat::Secs, true)
             );
             println!("Mint authority: {:?}", data.mint_authority);
             println!("Freeze authority: {:?}", data.freeze_authority);
@@ -573,19 +581,19 @@ fn print_tracking_entry(db: &Arc<TokenDatabase>, info: &UpdateTrackingInfo) -> R
     println!("Mint: {}", info.mint);
     println!("Symbol: {}", symbol);
     println!("Priority: {}", info.priority);
-    println!("Market updates: {}", info.market_update_count);
-    println!("Security updates: {}", info.security_update_count);
+    println!("Market updates: {}", info.market_data_update_count);
+    println!("Security updates: {}", info.security_data_update_count);
     println!(
         "Last market update: {}",
-        fmt_datetime(info.last_market_update)
+        fmt_datetime(info.market_data_last_updated_at)
     );
     println!(
         "Last security update: {}",
-        fmt_datetime(info.last_security_update)
+        fmt_datetime(info.security_data_last_updated_at)
     );
     println!(
         "Last decimals update: {}",
-        fmt_datetime(info.last_decimals_update)
+        fmt_datetime(info.decimals_last_updated_at)
     );
     if let Some(err) = &info.last_error {
         println!("Last error: {err}");

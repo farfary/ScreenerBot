@@ -83,10 +83,11 @@ fn convert_pool_to_data(pool: &DexScreenerPool, is_sol_pair: bool) -> DexScreene
         url: pool.url.clone(),
         image_url: pool.info_image_url.clone(),
         header_image_url: pool.info_header.clone(),
-        pair_created_at: pool
+        pair_blockchain_created_at: pool
             .pair_created_at
             .and_then(|ts| DateTime::from_timestamp(ts, 0)),
-        fetched_at: Utc::now(),
+        market_data_last_fetched_at: Utc::now(),
+        market_data_first_fetched_at: Utc::now(),
     }
 }
 
@@ -142,11 +143,11 @@ pub async fn fetch_dexscreener_data_batch(
 
         // 2. Check database (if fresh < 30s)
         if let Some(db_data) = db.get_dexscreener_data(mint)? {
-            let age = Utc::now()
-                .signed_duration_since(db_data.fetched_at)
+            let age_secs = Utc::now()
+                .signed_duration_since(db_data.market_data_last_fetched_at)
                 .num_seconds();
 
-            if age < 30 {
+            if age_secs >= 0 && age_secs <= 30 {
                 store::store_dexscreener(mint, &db_data);
                 if let Err(err) = store::refresh_token_snapshot(mint).await {
                     logger::error(

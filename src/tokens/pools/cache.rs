@@ -49,7 +49,7 @@ fn pool_cache_ttl() -> Duration {
 fn refreshed_at_from_snapshot(snapshot: &TokenPoolsSnapshot) -> Instant {
     let now = Instant::now();
     let age_secs = Utc::now()
-        .signed_duration_since(snapshot.fetched_at)
+        .signed_duration_since(snapshot.pool_data_last_fetched_at)
         .num_seconds()
         .max(0) as u64;
     now.checked_sub(Duration::from_secs(age_secs))
@@ -90,7 +90,7 @@ fn store_pool_snapshot(snapshot: TokenPoolsSnapshot) {
 
 fn is_snapshot_fresh(snapshot: &TokenPoolsSnapshot) -> bool {
     let age = Utc::now()
-        .signed_duration_since(snapshot.fetched_at)
+        .signed_duration_since(snapshot.pool_data_last_fetched_at)
         .num_seconds();
     age >= 0 && age <= TOKEN_POOLS_TTL_SECS as i64
 }
@@ -142,7 +142,7 @@ async fn refresh_token_pools_and_cache(
                         ),
                     );
                     let age_secs = Utc::now()
-                        .signed_duration_since(snapshot.fetched_at)
+                        .signed_duration_since(snapshot.pool_data_last_fetched_at)
                         .num_seconds()
                         .max(0);
                     record_token_event(
@@ -153,7 +153,7 @@ async fn refresh_token_pools_and_cache(
                             "reason": "fetch_error",
                             "error": message.clone(),
                             "allow_stale": allow_stale,
-                            "snapshot_fetched_at": snapshot.fetched_at.to_rfc3339(),
+                            "snapshot_fetched_at": snapshot.pool_data_last_fetched_at.to_rfc3339(),
                             "snapshot_age_secs": age_secs,
                             "pool_count": snapshot.pools.len(),
                             "canonical_pool": snapshot.canonical_pool_address.clone(),
@@ -190,7 +190,7 @@ async fn refresh_token_pools_and_cache(
                 ),
             );
             let age_secs = Utc::now()
-                .signed_duration_since(snapshot.fetched_at)
+                .signed_duration_since(snapshot.pool_data_last_fetched_at)
                 .num_seconds()
                 .max(0);
             record_token_event(
@@ -200,7 +200,7 @@ async fn refresh_token_pools_and_cache(
                 json!({
                     "reason": "sources_unavailable",
                     "allow_stale": allow_stale,
-                    "snapshot_fetched_at": snapshot.fetched_at.to_rfc3339(),
+                    "snapshot_fetched_at": snapshot.pool_data_last_fetched_at.to_rfc3339(),
                     "snapshot_age_secs": age_secs,
                     "pool_count": snapshot.pools.len(),
                     "canonical_pool": snapshot.canonical_pool_address.clone(),
@@ -225,13 +225,13 @@ async fn refresh_token_pools_and_cache(
         .and_then(|snapshot| snapshot.canonical_pool_address.clone());
     let prev_fetched_at = persisted_snapshot
         .as_ref()
-        .map(|snapshot| snapshot.fetched_at.to_rfc3339());
+        .map(|snapshot| snapshot.pool_data_last_fetched_at.to_rfc3339());
 
     let snapshot = TokenPoolsSnapshot {
         mint: mint_trimmed.to_string(),
         pools,
         canonical_pool_address,
-        fetched_at: Utc::now(),
+        pool_data_last_fetched_at: Utc::now(),
     };
 
     database::replace_token_pools_async(snapshot.clone()).await?;
@@ -276,7 +276,7 @@ async fn refresh_token_pools_and_cache(
             "previous_pool_count": prev_pool_count,
             "previous_canonical_pool": prev_canonical.clone(),
             "previous_snapshot_fetched_at": prev_fetched_at,
-            "current_snapshot_fetched_at": snapshot.fetched_at.to_rfc3339(),
+            "current_snapshot_fetched_at": snapshot.pool_data_last_fetched_at.to_rfc3339(),
             "first_time": persisted_snapshot.is_none(),
         }),
     )

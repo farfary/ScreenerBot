@@ -202,8 +202,7 @@ impl AccountFetcher {
             let mut interval =
                 tokio::time::interval(tokio::time::Duration::from_millis(FETCH_INTERVAL_MS));
             let mut pending_accounts: HashSet<Pubkey> = HashSet::new();
-            let mut account_failure_tracker: HashMap<Pubkey, MissingAccountState> =
-                HashMap::new();
+            let mut account_failure_tracker: HashMap<Pubkey, MissingAccountState> = HashMap::new();
             let mut pool_failure_tracker: HashMap<Pubkey, MissingPoolState> = HashMap::new();
 
             logger::info(LogTag::PoolFetcher, "Account fetcher task started");
@@ -542,13 +541,14 @@ impl AccountFetcher {
                     .collect()
             };
 
-            let account_state = account_failure_tracker
-                .entry(*account)
-                .or_insert(MissingAccountState {
-                    failures: 0,
-                    last_failure: Instant::now(),
-                    blacklisted: false,
-                });
+            let account_state =
+                account_failure_tracker
+                    .entry(*account)
+                    .or_insert(MissingAccountState {
+                        failures: 0,
+                        last_failure: Instant::now(),
+                        blacklisted: false,
+                    });
             account_state.failures = account_state.failures.saturating_add(1);
             account_state.last_failure = Instant::now();
 
@@ -580,8 +580,7 @@ impl AccountFetcher {
                             LogTag::PoolFetcher,
                             &format!(
                                 "Blacklisted account {} after {} consecutive misses",
-                                account,
-                                account_state.failures
+                                account, account_state.failures
                             ),
                         );
                         record_safe(Event::warn(
@@ -602,10 +601,7 @@ impl AccountFetcher {
                     Err(e) => {
                         logger::warning(
                             LogTag::PoolFetcher,
-                            &format!(
-                                "Failed to persist account blacklist for {}: {}",
-                                account, e
-                            ),
+                            &format!("Failed to persist account blacklist for {}: {}", account, e),
                         );
                     }
                 }
@@ -648,9 +644,7 @@ impl AccountFetcher {
                                 LogTag::PoolFetcher,
                                 &format!(
                                     "Blacklisted pool {} (token {}) after {} missing-account hits",
-                                    pool_id,
-                                    token_mint,
-                                    pool_state.failures
+                                    pool_id, token_mint, pool_state.failures
                                 ),
                             );
                             record_safe(Event::warn(
@@ -672,10 +666,7 @@ impl AccountFetcher {
                         Err(e) => {
                             logger::warning(
                                 LogTag::PoolFetcher,
-                                &format!(
-                                    "Failed to persist pool blacklist for {}: {}",
-                                    pool_id, e
-                                ),
+                                &format!("Failed to persist pool blacklist for {}: {}", pool_id, e),
                             );
                         }
                     }

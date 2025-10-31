@@ -1411,11 +1411,14 @@ async fn attempt_single_sell(account: &TokenAccountInfo) -> Result<String, Strin
 
         // Data source configuration
         data_source: screenerbot::tokens::types::DataSource::Unknown,
-        fetched_at: now,
-        updated_at: now,
-        created_at: now,
-        metadata_updated_at: None,
-        token_birth_at: None,
+        first_discovered_at: now,
+        blockchain_created_at: None,
+        metadata_last_fetched_at: now,
+        decimals_last_fetched_at: now,
+        market_data_last_fetched_at: now,
+        security_data_last_fetched_at: None,
+        pool_price_last_calculated_at: now,
+        pool_price_last_used_pool: None,
 
         // Price information (zeros for liquidation)
         price_usd: 0.0,
@@ -1472,8 +1475,6 @@ async fn attempt_single_sell(account: &TokenAccountInfo) -> Result<String, Strin
         // Bot-specific state
         is_blacklisted: false,
         priority: screenerbot::tokens::priorities::Priority::Background,
-        first_seen_at: now,
-        last_price_update: now,
     };
 
     // Get quote and execute swap

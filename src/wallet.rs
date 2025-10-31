@@ -884,7 +884,7 @@ async fn enrich_token_overview(
                 };
                 let liquidity_usd = meta.liquidity_usd;
                 let volume_24h = meta.volume_h24;
-                let last_updated = Some(meta.updated_at.to_rfc3339());
+                let last_updated = Some(meta.market_data_last_fetched_at.to_rfc3339());
                 let dex_id = Some(meta.data_source.as_str().to_string());
 
                 let symbol = if meta.symbol.trim().is_empty() {

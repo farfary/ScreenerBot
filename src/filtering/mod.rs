@@ -5,8 +5,7 @@ pub mod types;
 
 pub use types::{
     BlacklistReasonInfo, FilteringQuery, FilteringQueryResult, FilteringSnapshot,
-    FilteringStatsSnapshot, FilteringView, PassedToken, RejectedToken, SortDirection,
-    TokenSortKey,
+    FilteringStatsSnapshot, FilteringView, PassedToken, RejectedToken, SortDirection, TokenSortKey,
 };
 
 /// Obtain filtered token mint list for trading and pool services

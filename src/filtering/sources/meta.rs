@@ -31,7 +31,7 @@ pub async fn evaluate(
 
 fn is_too_new(token: &Token, config: &FilteringConfig) -> bool {
     let age_minutes = Utc::now()
-        .signed_duration_since(token.first_seen_at)
+        .signed_duration_since(token.first_discovered_at)
         .num_minutes()
         .max(0);
 

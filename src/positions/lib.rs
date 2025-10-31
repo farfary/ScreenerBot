@@ -379,7 +379,7 @@ async fn fetch_and_create_token_snapshot(
 
     // Compute freshness based on last price update vs now
     let now = Utc::now();
-    let last_update = token.last_price_update;
+    let last_update = token.pool_price_last_calculated_at;
     let age_ms = now.signed_duration_since(last_update).num_milliseconds();
     let freshness_score = if age_ms < 30_000 {
         100 // < 30s
@@ -482,7 +482,7 @@ async fn fetch_and_create_token_snapshot(
         token_twitter,
         token_telegram,
         snapshot_time: now,
-        api_fetch_time: token.updated_at,
+        api_fetch_time: token.market_data_last_fetched_at,
         data_freshness_score: freshness_score,
     };
 

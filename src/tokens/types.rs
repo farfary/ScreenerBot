@@ -37,8 +37,8 @@ pub struct TokenMetadata {
     pub symbol: Option<String>,
     pub name: Option<String>,
     pub decimals: Option<u8>,
-    pub created_at: i64,
-    pub updated_at: i64,
+    pub first_discovered_at: i64,
+    pub metadata_last_fetched_at: i64,
 }
 
 // ============================================================================
@@ -56,6 +56,16 @@ pub struct TokenMetadata {
 ///
 /// The `data_source` field indicates which API was used for market data.
 /// Rugcheck is always fetched separately for security information.
+///
+/// **TIMESTAMP FIELDS:**
+/// All timestamp fields follow the pattern: {what}_{when}_{action}_at
+/// - first_discovered_at: When bot first saw this token (immutable)
+/// - blockchain_created_at: When token was created on-chain (if known)
+/// - metadata_last_fetched_at: When symbol/name/decimals last fetched
+/// - decimals_last_fetched_at: When decimals specifically fetched
+/// - market_data_last_fetched_at: When market API data last fetched
+/// - security_data_last_fetched_at: When Rugcheck data last fetched
+/// - pool_price_last_calculated_at: When pool service last calculated price
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Token {
     // ========================================================================
@@ -78,22 +88,47 @@ pub struct Token {
     /// Which API was used to populate price/volume/pool data (DexScreener or GeckoTerminal)
     pub data_source: DataSource,
 
-    /// When this token data was fetched
-    pub fetched_at: DateTime<Utc>,
+    // ========================================================================
+    // Discovery & Creation Timestamps
+    // ========================================================================
+    /// When bot first discovered this token (immutable after first insert)
+    pub first_discovered_at: DateTime<Utc>,
 
-    /// When this token data was last updated
-    pub updated_at: DateTime<Utc>,
-
-    /// When this token was first created in our cache (first discovery)
-    pub created_at: DateTime<Utc>,
-
-    /// When we last refreshed metadata for this token (symbol/name/decimals)
+    /// When this token/pair was created on blockchain (if known from APIs)
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub metadata_updated_at: Option<DateTime<Utc>>,
+    pub blockchain_created_at: Option<DateTime<Utc>>,
 
-    /// When this token/pair was first created on-chain (if known)
+    // ========================================================================
+    // Metadata Timestamps
+    // ========================================================================
+    /// When symbol/name/decimals metadata was last fetched
+    pub metadata_last_fetched_at: DateTime<Utc>,
+
+    /// When decimals specifically was last fetched (can differ from metadata)
+    pub decimals_last_fetched_at: DateTime<Utc>,
+
+    // ========================================================================
+    // Market Data Timestamps
+    // ========================================================================
+    /// When market API data (price/volume/liquidity) was last fetched from data_source
+    pub market_data_last_fetched_at: DateTime<Utc>,
+
+    // ========================================================================
+    // Security Data Timestamps
+    // ========================================================================
+    /// When security data (Rugcheck) was last fetched
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub token_birth_at: Option<DateTime<Utc>>,
+    pub security_data_last_fetched_at: Option<DateTime<Utc>>,
+
+    // ========================================================================
+    // Pool Price Timestamps
+    // ========================================================================
+    /// When pool service last calculated price from on-chain data
+    pub pool_price_last_calculated_at: DateTime<Utc>,
+
+    /// Which pool address was used for the last price calculation
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pool_price_last_used_pool: Option<String>,
 
     // ========================================================================
     // Price Information (from chosen source)
@@ -189,8 +224,6 @@ pub struct Token {
     // ========================================================================
     pub is_blacklisted: bool,
     pub priority: Priority,
-    pub first_seen_at: DateTime<Utc>,
-    pub last_price_update: DateTime<Utc>,
 }
 
 impl Token {
@@ -343,8 +376,9 @@ pub struct DexScreenerData {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub header_image_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub pair_created_at: Option<DateTime<Utc>>,
-    pub fetched_at: DateTime<Utc>,
+    pub pair_blockchain_created_at: Option<DateTime<Utc>>,
+    pub market_data_last_fetched_at: DateTime<Utc>,
+    pub market_data_first_fetched_at: DateTime<Utc>,
 }
 
 /// GeckoTerminal market data for a token
@@ -369,7 +403,8 @@ pub struct GeckoTerminalData {
     pub reserve_in_usd: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub image_url: Option<String>,
-    pub fetched_at: DateTime<Utc>,
+    pub market_data_last_fetched_at: DateTime<Utc>,
+    pub market_data_first_fetched_at: DateTime<Utc>,
 }
 
 /// Bundle of market data from all sources
@@ -425,11 +460,13 @@ pub struct TokenPoolInfo {
     pub price_native: Option<String>,
     #[serde(default)]
     pub sources: TokenPoolSources,
-    pub fetched_at: DateTime<Utc>,
+    pub pool_data_last_fetched_at: DateTime<Utc>,
+    pub pool_data_first_seen_at: DateTime<Utc>,
 }
 
 impl Default for TokenPoolInfo {
     fn default() -> Self {
+        let now = Utc::now();
         Self {
             pool_address: String::new(),
             dex: None,
@@ -444,7 +481,8 @@ impl Default for TokenPoolInfo {
             price_sol: None,
             price_native: None,
             sources: TokenPoolSources::default(),
-            fetched_at: Utc::now(),
+            pool_data_last_fetched_at: now,
+            pool_data_first_seen_at: now,
         }
     }
 }
@@ -456,7 +494,7 @@ pub struct TokenPoolsSnapshot {
     pub pools: Vec<TokenPoolInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub canonical_pool_address: Option<String>,
-    pub fetched_at: DateTime<Utc>,
+    pub pool_data_last_fetched_at: DateTime<Utc>,
 }
 
 // ============================================================================
@@ -487,7 +525,8 @@ pub struct RugcheckData {
     pub risks: Vec<SecurityRisk>,
     pub top_holders: Vec<TokenHolder>,
     pub markets: Option<serde_json::Value>, // Raw market data from rugcheck
-    pub fetched_at: DateTime<Utc>,
+    pub security_data_last_fetched_at: DateTime<Utc>,
+    pub security_data_first_fetched_at: DateTime<Utc>,
 }
 
 /// On-chain security verification (future)
@@ -533,13 +572,18 @@ pub enum SecurityLevel {
 pub struct UpdateTrackingInfo {
     pub mint: String,
     pub priority: i32,
-    pub last_market_update: Option<DateTime<Utc>>,
-    pub last_security_update: Option<DateTime<Utc>>,
-    pub last_decimals_update: Option<DateTime<Utc>>,
-    pub market_update_count: u64,
-    pub security_update_count: u64,
+    pub market_data_last_updated_at: Option<DateTime<Utc>>,
+    pub market_data_update_count: u64,
+    pub security_data_last_updated_at: Option<DateTime<Utc>>,
+    pub security_data_update_count: u64,
+    pub metadata_last_updated_at: Option<DateTime<Utc>>,
+    pub decimals_last_updated_at: Option<DateTime<Utc>>,
+    pub pool_price_last_calculated_at: Option<DateTime<Utc>>,
+    pub pool_price_last_used_pool_address: Option<String>,
     pub last_error: Option<String>,
     pub last_error_at: Option<DateTime<Utc>>,
+    pub market_error_count: u64,
+    pub security_error_count: u64,
 }
 
 // ============================================================================

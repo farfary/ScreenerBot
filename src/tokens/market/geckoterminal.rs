@@ -55,11 +55,11 @@ pub async fn fetch_geckoterminal_data_batch(
 
         // 2. Check database (if fresh < 60s)
         if let Some(db_data) = db.get_geckoterminal_data(mint)? {
-            let age = Utc::now()
-                .signed_duration_since(db_data.fetched_at)
+            let age_secs = Utc::now()
+                .signed_duration_since(db_data.market_data_last_fetched_at)
                 .num_seconds();
 
-            if age < 60 {
+            if age_secs >= 0 && age_secs <= 60 {
                 store::store_geckoterminal(mint, &db_data);
                 if let Err(err) = store::refresh_token_snapshot(mint).await {
                     logger::error(
@@ -140,7 +140,8 @@ pub async fn fetch_geckoterminal_data_batch(
                 .as_ref()
                 .and_then(|s| s.parse().ok()),
             image_url: None,
-            fetched_at: Utc::now(),
+            market_data_last_fetched_at: Utc::now(),
+            market_data_first_fetched_at: Utc::now(),
         };
 
         // Store market data in database

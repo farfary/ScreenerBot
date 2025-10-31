@@ -1,9 +1,15 @@
 /// Database schema for tokens system
 /// Clean slate implementation (no migrations/ALTER fallbacks)
+///
+/// TIMESTAMP NAMING CONVENTION: {what}_{when}_{action}_at
+/// - {what}: Specific data type (market_data, security_data, metadata, pool_price, etc.)
+/// - {when}: last / first / blockchain
+/// - {action}: fetched / calculated / updated / created / discovered
+/// - _at: Suffix for all timestamps (consistent)
 use rusqlite::Connection;
 use std::time::Duration;
 
-pub const SCHEMA_VERSION: i32 = 1;
+pub const SCHEMA_VERSION: i32 = 2;
 
 /// All CREATE TABLE statements
 pub const CREATE_TABLES: &[&str] = &[
@@ -14,8 +20,10 @@ pub const CREATE_TABLES: &[&str] = &[
         symbol TEXT,
         name TEXT,
         decimals INTEGER,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
+        first_discovered_at INTEGER NOT NULL,
+        blockchain_created_at INTEGER,
+        metadata_last_fetched_at INTEGER NOT NULL,
+        decimals_last_fetched_at INTEGER NOT NULL
     )
     "#,
     // DexScreener market data (per token, per source)
@@ -48,10 +56,11 @@ pub const CREATE_TABLES: &[&str] = &[
         chain_id TEXT,
         dex_id TEXT,
         url TEXT,
-        pair_created_at INTEGER,
+        pair_blockchain_created_at INTEGER,
         image_url TEXT,
         header_image_url TEXT,
-        fetched_at INTEGER NOT NULL,
+        market_data_last_fetched_at INTEGER NOT NULL,
+        market_data_first_fetched_at INTEGER NOT NULL,
         FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE RESTRICT
     )
     "#,
@@ -77,7 +86,8 @@ pub const CREATE_TABLES: &[&str] = &[
         top_pool_address TEXT,
         reserve_in_usd REAL,
         image_url TEXT,
-        fetched_at INTEGER NOT NULL,
+        market_data_last_fetched_at INTEGER NOT NULL,
+        market_data_first_fetched_at INTEGER NOT NULL,
         FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE RESTRICT
     )
     "#,
@@ -98,7 +108,8 @@ pub const CREATE_TABLES: &[&str] = &[
         price_sol REAL,
         price_native TEXT,
         sources_json TEXT,
-        fetched_at INTEGER NOT NULL,
+        pool_data_last_fetched_at INTEGER NOT NULL,
+        pool_data_first_seen_at INTEGER NOT NULL,
         PRIMARY KEY (mint, pool_address),
         FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE CASCADE
     )
@@ -128,7 +139,8 @@ pub const CREATE_TABLES: &[&str] = &[
         risks TEXT,
         top_holders TEXT,
         markets TEXT,
-        fetched_at INTEGER NOT NULL,
+        security_data_last_fetched_at INTEGER NOT NULL,
+        security_data_first_fetched_at INTEGER NOT NULL,
         FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE RESTRICT
     )
     "#,
@@ -146,13 +158,17 @@ pub const CREATE_TABLES: &[&str] = &[
     CREATE TABLE IF NOT EXISTS update_tracking (
         mint TEXT PRIMARY KEY,
         priority INTEGER NOT NULL DEFAULT 10,
-        last_market_update INTEGER,
-        last_security_update INTEGER,
-        last_decimals_update INTEGER,
-        market_update_count INTEGER DEFAULT 0,
-        security_update_count INTEGER DEFAULT 0,
+        market_data_last_updated_at INTEGER,
+        market_data_update_count INTEGER DEFAULT 0,
+        security_data_last_updated_at INTEGER,
+        security_data_update_count INTEGER DEFAULT 0,
+        metadata_last_updated_at INTEGER,
+        decimals_last_updated_at INTEGER,
+        pool_price_last_calculated_at INTEGER,
+        pool_price_last_used_pool_address TEXT,
         last_error TEXT,
         last_error_at INTEGER,
+        market_error_count INTEGER DEFAULT 0,
         security_error_count INTEGER DEFAULT 0,
         last_security_error TEXT,
         last_security_error_at INTEGER,
@@ -164,35 +180,50 @@ pub const CREATE_TABLES: &[&str] = &[
 
 /// All CREATE INDEX statements
 pub const CREATE_INDEXES: &[&str] = &[
-    "CREATE INDEX IF NOT EXISTS idx_tokens_updated ON tokens(updated_at DESC)",
+    // Core token metadata indexes
+    "CREATE INDEX IF NOT EXISTS idx_tokens_discovered ON tokens(first_discovered_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_tokens_blockchain_created ON tokens(blockchain_created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_tokens_metadata_fetched ON tokens(metadata_last_fetched_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_tokens_symbol ON tokens(symbol)",
 
-    "CREATE INDEX IF NOT EXISTS idx_market_dex_fetched ON market_dexscreener(fetched_at DESC)",
+    // DexScreener market data indexes
+    "CREATE INDEX IF NOT EXISTS idx_market_dex_last_fetch ON market_dexscreener(market_data_last_fetched_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_market_dex_first_fetch ON market_dexscreener(market_data_first_fetched_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_market_dex_liquidity ON market_dexscreener(liquidity_usd DESC)",
 
-    "CREATE INDEX IF NOT EXISTS idx_market_gecko_fetched ON market_geckoterminal(fetched_at DESC)",
+    // GeckoTerminal market data indexes
+    "CREATE INDEX IF NOT EXISTS idx_market_gecko_last_fetch ON market_geckoterminal(market_data_last_fetched_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_market_gecko_first_fetch ON market_geckoterminal(market_data_first_fetched_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_market_gecko_liquidity ON market_geckoterminal(liquidity_usd DESC)",
 
+    // Token pools indexes
     "CREATE INDEX IF NOT EXISTS idx_token_pools_mint ON token_pools(mint)",
-    "CREATE INDEX IF NOT EXISTS idx_token_pools_fetched ON token_pools(fetched_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_token_pools_last_fetch ON token_pools(pool_data_last_fetched_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_token_pools_first_seen ON token_pools(pool_data_first_seen_at DESC)",
 
-    "CREATE INDEX IF NOT EXISTS idx_security_rug_fetched ON security_rugcheck(fetched_at DESC)",
+    // Security data indexes
+    "CREATE INDEX IF NOT EXISTS idx_security_rug_last_fetch ON security_rugcheck(security_data_last_fetched_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_security_rug_first_fetch ON security_rugcheck(security_data_first_fetched_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_security_rug_score ON security_rugcheck(score DESC)",
 
+    // Blacklist indexes
     "CREATE INDEX IF NOT EXISTS idx_blacklist_added ON blacklist(added_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_blacklist_source ON blacklist(source)",
 
-    "CREATE INDEX IF NOT EXISTS idx_tracking_priority ON update_tracking(priority DESC, last_market_update ASC)",
-    "CREATE INDEX IF NOT EXISTS idx_tracking_market_update ON update_tracking(last_market_update ASC)",
+    // Update tracking indexes (for priority queries and sorting)
+    "CREATE INDEX IF NOT EXISTS idx_tracking_market_update ON update_tracking(market_data_last_updated_at ASC)",
+    "CREATE INDEX IF NOT EXISTS idx_tracking_security_update ON update_tracking(security_data_last_updated_at ASC)",
+    "CREATE INDEX IF NOT EXISTS idx_tracking_pool_calc ON update_tracking(pool_price_last_calculated_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_tracking_priority_market ON update_tracking(priority DESC, market_data_last_updated_at ASC)",
+    "CREATE INDEX IF NOT EXISTS idx_tracking_priority_calc ON update_tracking(priority DESC, pool_price_last_calculated_at DESC)",
+
+    // Composite indexes for common sorting patterns
+    "CREATE INDEX IF NOT EXISTS idx_tokens_discovery_mint ON tokens(first_discovered_at DESC, mint)",
 ];
 
-/// ALTER TABLE statements for adding new columns to existing databases
-pub const ALTER_STATEMENTS: &[&str] = &[
-    "ALTER TABLE update_tracking ADD COLUMN security_error_count INTEGER DEFAULT 0",
-    "ALTER TABLE update_tracking ADD COLUMN last_security_error TEXT",
-    "ALTER TABLE update_tracking ADD COLUMN last_security_error_at INTEGER",
-    "ALTER TABLE update_tracking ADD COLUMN security_error_type TEXT",
-];
+/// ALTER TABLE statements - DEPRECATED (clean slate rebuild strategy)
+/// Kept for reference only; schema v2 requires full database recreation
+pub const ALTER_STATEMENTS: &[&str] = &[];
 
 /// Performance PRAGMAs
 // Kept for reference; we now set PRAGMAs via rusqlite APIs to avoid "Execute returned results" errors

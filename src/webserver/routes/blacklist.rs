@@ -107,7 +107,9 @@ async fn get_blacklist_stats() -> Json<BlacklistStatsResponse> {
 
 async fn get_blacklist_details() -> Json<BlacklistDetailsResponse> {
     let pool_records = list_blacklisted_pools(Some(200)).await.unwrap_or_default();
-    let account_records = list_blacklisted_accounts(Some(200)).await.unwrap_or_default();
+    let account_records = list_blacklisted_accounts(Some(200))
+        .await
+        .unwrap_or_default();
 
     Json(BlacklistDetailsResponse {
         pools: pool_records.into_iter().map(map_pool_record).collect(),

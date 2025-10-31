@@ -453,8 +453,7 @@ pub async fn update_token(
     let market_data_updated = !successes.is_empty();
 
     if market_data_updated {
-        let had_errors = !failures.is_empty();
-        let _ = db.mark_updated(mint, had_errors);
+        let _ = db.mark_market_data_updated(mint);
 
         // Record market data update event (sampled - every 50th token to avoid spam)
         let hash = mint.chars().fold(0u32, |acc, c| acc.wrapping_add(c as u32));
@@ -598,8 +597,7 @@ pub async fn update_tokens_batch(
         let market_data_updated = !successes.is_empty();
 
         if market_data_updated {
-            let had_errors = !failures.is_empty();
-            let _ = db.mark_updated(mint, had_errors);
+            let _ = db.mark_market_data_updated(mint);
         }
 
         results.push(UpdateResult {

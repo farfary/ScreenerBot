@@ -178,7 +178,9 @@ async fn get_current_price(mint: &str) -> Option<(f64, PriceSource)> {
         Ok(Some(token)) => {
             // Check if price is recent (within last 5 seconds)
             let now = chrono::Utc::now();
-            let age_secs = now.signed_duration_since(token.updated_at).num_seconds();
+            let age_secs = now
+                .signed_duration_since(token.market_data_last_fetched_at)
+                .num_seconds();
 
             if age_secs <= API_PRICE_MAX_AGE_SECS {
                 if token.price_sol > 0.0 && token.price_sol.is_finite() {

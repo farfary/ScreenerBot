@@ -379,7 +379,7 @@ impl PoolManager {
                     None,
                     json!({
                         "mint": mint,
-                        "fetched_at": snapshot.fetched_at,
+                        "fetched_at": snapshot.pool_data_last_fetched_at,
                     }),
                 )
                 .await;
@@ -388,7 +388,7 @@ impl PoolManager {
                     LogTag::Ohlcv,
                     &format!(
                         "Using stale pool snapshot for mint={} fetched_at={}",
-                        mint, snapshot.fetched_at
+                        mint, snapshot.pool_data_last_fetched_at
                     ),
                 );
 

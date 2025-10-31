@@ -411,13 +411,13 @@ fn build_token_list_response(
                     let new_price = price_result.price_sol;
                     // Overlay pool price (real-time chain data) over database price
                     token.price_sol = new_price;
-                    
+
                     // Update timestamp to reflect pool price freshness
                     let age = price_result.timestamp.elapsed();
                     if let Ok(duration) = chrono::Duration::from_std(age) {
-                        token.updated_at = chrono::Utc::now() - duration;
+                        token.pool_price_last_calculated_at = chrono::Utc::now() - duration;
                     }
-                    
+
                     logger::debug(
                         LogTag::Webserver,
                         &format!(
@@ -985,9 +985,9 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         ),
     );
 
-    let created_at_ts = Some(token.first_seen_at.timestamp());
-    let token_birth_ts = token.token_birth_at.map(|dt| dt.timestamp());
-    let last_updated_ts = Some(token.updated_at.timestamp());
+    let created_at_ts = Some(token.first_discovered_at.timestamp());
+    let token_birth_ts = token.blockchain_created_at.map(|dt| dt.timestamp());
+    let last_updated_ts = Some(token.market_data_last_fetched_at.timestamp());
     let pair_created_at = token_birth_ts.or(created_at_ts);
 
     // Prefer pool price (real-time on-chain) over token cached price
@@ -1332,7 +1332,9 @@ async fn get_token_dexscreener(
                     dexscreener_data
                         .liquidity_usd
                         .map_or("N/A".to_string(), |v| format!("{:.2}", v)),
-                    dexscreener_data.fetched_at.format("%Y-%m-%d %H:%M:%S")
+                    dexscreener_data
+                        .market_data_last_fetched_at
+                        .format("%Y-%m-%d %H:%M:%S")
                 ),
             );
             Ok(Json(dexscreener_data))

@@ -65,7 +65,12 @@ pub fn merge_pool_info(target: &mut TokenPoolInfo, incoming: TokenPoolInfo) {
         target.price_native = incoming.price_native.clone();
     }
 
-    target.fetched_at = target.fetched_at.max(incoming.fetched_at);
+    target.pool_data_last_fetched_at = target
+        .pool_data_last_fetched_at
+        .max(incoming.pool_data_last_fetched_at);
+    target.pool_data_first_seen_at = target
+        .pool_data_first_seen_at
+        .min(incoming.pool_data_first_seen_at);
     merge_pool_sources(&mut target.sources, incoming.sources);
 }
 

@@ -110,7 +110,7 @@ CREATE TABLE IF NOT EXISTS position_states (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     position_id INTEGER NOT NULL,
     state TEXT NOT NULL, -- 'Open', 'Closing', 'Closed', 'ExitPending', 'ExitFailed', 'Phantom', 'Reconciling'
-    changed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    changed_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
     reason TEXT, -- Optional reason for state change
     FOREIGN KEY (position_id) REFERENCES positions(id) ON DELETE CASCADE
 );
@@ -592,6 +592,39 @@ impl PositionsDatabase {
                         crate::logger::LogTag::Positions,
                         &format!(
                             "Position migration skipped (expected on fresh install): {}",
+                            e
+                        ),
+                    );
+                }
+            }
+        }
+
+        // Migration: Normalize position_states.changed_at to RFC3339 format for old rows
+        // Only touch legacy entries that still use the "YYYY-MM-DD HH:MM:SS" style emitted by sqlite's datetime('now')
+        match conn.execute(
+            r#"
+            UPDATE position_states
+            SET changed_at = strftime('%Y-%m-%dT%H:%M:%SZ', datetime(changed_at))
+            WHERE changed_at NOT LIKE '%T%'
+            "#,
+            [],
+        ) {
+            Ok(rows) if rows > 0 && log => {
+                crate::logger::info(
+                    crate::logger::LogTag::Positions,
+                    &format!(
+                        "Normalized {} legacy position state timestamps to RFC3339",
+                        rows
+                    ),
+                );
+            }
+            Ok(_) => {}
+            Err(e) => {
+                if log {
+                    crate::logger::warning(
+                        crate::logger::LogTag::Positions,
+                        &format!(
+                            "Failed to normalize legacy position state timestamps: {}",
                             e
                         ),
                     );
@@ -1226,12 +1259,16 @@ impl PositionsDatabase {
                    p.remaining_token_amount, p.total_exited_amount, p.average_exit_price, p.partial_exit_count,
                    p.dca_count, p.average_entry_price, p.last_dca_time
             FROM positions p
-            INNER JOIN (
-                SELECT position_id, state, MAX(changed_at) as latest_change
-                FROM position_states
-                GROUP BY position_id
-            ) latest_state ON p.id = latest_state.position_id
-            WHERE latest_state.state = ?1
+            WHERE EXISTS (
+                SELECT 1 FROM position_states ps
+                WHERE ps.position_id = p.id
+                  AND ps.state = ?1
+                  AND ps.changed_at = (
+                      SELECT MAX(ps2.changed_at)
+                      FROM position_states ps2
+                      WHERE ps2.position_id = p.id
+                  )
+            )
             ORDER BY p.entry_time DESC
             "#
             )
@@ -1330,21 +1367,24 @@ impl PositionsDatabase {
         state: PositionState,
         reason: Option<&str>,
     ) -> Result<(), String> {
+        let changed_at = Utc::now().to_rfc3339();
+
         logger::debug(
             LogTag::Positions,
             &format!(
-                "Recording state change for position ID {}: {} (reason: {})",
+                "Recording state change for position ID {}: {} (reason: {}) at {}",
                 position_id,
                 state,
-                reason.unwrap_or("None")
+                reason.unwrap_or("None"),
+                changed_at
             ),
         );
 
         let conn = self.get_connection()?;
 
         conn.execute(
-            "INSERT INTO position_states (position_id, state, reason) VALUES (?1, ?2, ?3)",
-            params![position_id, state.to_string(), reason],
+            "INSERT INTO position_states (position_id, state, changed_at, reason) VALUES (?1, ?2, ?3, ?4)",
+            params![position_id, state.to_string(), changed_at, reason],
         )
         .map_err(|e| format!("Failed to record state change: {}", e))?;
 
