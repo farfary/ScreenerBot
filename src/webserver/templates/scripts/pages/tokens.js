@@ -50,9 +50,26 @@ const COLUMN_TO_SORT_KEY = {
   txns_6h: "txns_6h",
   txns_24h: "txns_24h",
   risk_score: "risk_score",
-  updated_at: "updated_at",
-  first_seen_at: "first_seen_at",
-  token_birth_at: "token_birth_at",
+  updated_at: "market_data_last_fetched_at",
+  first_seen_at: "first_discovered_at",
+  token_birth_at: "blockchain_created_at",
+};
+
+// View-aware sort key resolver for "updated_at" column
+const getServerSortKey = (columnId, currentView) => {
+  if (columnId === "updated_at") {
+    // Different views show different timestamps in "Updated" column
+    if (currentView === "pool" || currentView === "positions") {
+      return "pool_price_last_calculated_at";
+    } else if (currentView === "no_market") {
+      return "metadata_last_fetched_at";
+    } else {
+      return "market_data_last_fetched_at";
+    }
+  }
+  
+  // Use mapping for other columns
+  return COLUMN_TO_SORT_KEY[columnId] || columnId;
 };
 
 const SORT_KEY_TO_COLUMN = Object.entries(COLUMN_TO_SORT_KEY).reduce((acc, [columnId, sortKey]) => {
@@ -353,7 +370,9 @@ function createLifecycle() {
     const sort = state.sort ?? DEFAULT_SERVER_SORT;
     const sortBy = sort?.by ?? DEFAULT_SERVER_SORT.by;
     const sortDir = sort?.direction ?? DEFAULT_SERVER_SORT.direction;
-    params.set("sort_by", sortBy);
+    // Use view-aware sort key resolver
+    const serverSortKey = getServerSortKey(sortBy, state.view);
+    params.set("sort_by", serverSortKey);
     params.set("sort_dir", sortDir);
     if (state.filters.pool_price) {
       params.set("has_pool_price", "true");
@@ -845,13 +864,31 @@ function createLifecycle() {
         sortable: true,
         minWidth: 100,
         wrap: false,
-        render: (v, row) => {
-          const source =
-            typeof row?.data_source === "string" ? row.data_source.toLowerCase() : "";
-          if (!v || source === "unknown") {
+        render: (_v, row) => {
+          // Select timestamp based on current view
+          let timestamp;
+          
+          if (state.view === "pool" || state.view === "positions") {
+            // Pool/Positions: show pool price calculation time
+            timestamp = row.pool_price_last_calculated_at;
+          } else if (state.view === "no_market") {
+            // No Market: show metadata fetch time
+            timestamp = row.metadata_last_fetched_at;
+          } else {
+            // All others: show market data fetch time
+            timestamp = row.market_data_last_fetched_at;
+          }
+          
+          if (!timestamp) {
             return "—";
           }
-          return timeAgoCell(v);
+          
+          // timestamp is DateTime<Utc> serialized, convert to seconds
+          const timestampSeconds = typeof timestamp === "string" 
+            ? Math.floor(new Date(timestamp).getTime() / 1000)
+            : timestamp;
+            
+          return timeAgoCell(timestampSeconds);
         },
       },
       {
@@ -861,8 +898,15 @@ function createLifecycle() {
         minWidth: 110,
         wrap: false,
         render: (_v, row) => {
-          const value = row.token_birth_at || row.first_seen_at;
-          return timeAgoCell(value);
+          // Blockchain creation time, fallback to bot discovery
+          const timestamp = row.blockchain_created_at || row.first_discovered_at;
+          if (!timestamp) return "—";
+          
+          const timestampSeconds = typeof timestamp === "string"
+            ? Math.floor(new Date(timestamp).getTime() / 1000)
+            : timestamp;
+            
+          return timeAgoCell(timestampSeconds);
         },
       },
       {
@@ -871,7 +915,16 @@ function createLifecycle() {
         sortable: true,
         minWidth: 110,
         wrap: false,
-        render: (v) => timeAgoCell(v),
+        render: (_v, row) => {
+          const timestamp = row.first_discovered_at;
+          if (!timestamp) return "—";
+          
+          const timestampSeconds = typeof timestamp === "string"
+            ? Math.floor(new Date(timestamp).getTime() / 1000)
+            : timestamp;
+            
+          return timeAgoCell(timestampSeconds);
+        },
       },
     ];
   };
@@ -1086,8 +1139,11 @@ function createLifecycle() {
         const tableData = table.getData();
         const rowData = tableData.find((row) => row.mint === mint);
         if (rowData) {
-          const ageSeconds = rowData.token_birth_at || rowData.first_seen_at;
-          if (ageSeconds !== null && ageSeconds !== undefined) {
+          const timestamp = rowData.blockchain_created_at || rowData.first_discovered_at;
+          if (timestamp) {
+            const ageSeconds = typeof timestamp === "string"
+              ? Math.floor(new Date(timestamp).getTime() / 1000)
+              : timestamp;
             ageText = Utils.formatTimeAgo(ageSeconds, { fallback: "Unknown" });
           }
         }

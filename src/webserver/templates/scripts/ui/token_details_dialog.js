@@ -642,8 +642,11 @@ export class TokenDetailsDialog {
     if (token.price_confidence) {
       rows.push(this._buildDataRow("Price Confidence", token.price_confidence));
     }
-    if (token.price_updated_at) {
-      const priceAge = Math.floor(Date.now() / 1000) - token.price_updated_at;
+    if (token.pool_price_last_calculated_at) {
+      const timestamp = typeof token.pool_price_last_calculated_at === "string"
+        ? Math.floor(new Date(token.pool_price_last_calculated_at).getTime() / 1000)
+        : token.pool_price_last_calculated_at;
+      const priceAge = Math.floor(Date.now() / 1000) - timestamp;
       rows.push(this._buildDataRow("Price Age", Utils.formatTimeAgo(priceAge)));
     }
 

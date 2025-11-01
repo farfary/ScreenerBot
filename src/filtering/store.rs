@@ -349,10 +349,11 @@ impl FilteringStore {
             TokenSortKey::PriceChangeH1 => Some("price_change_h1".to_string()),
             TokenSortKey::PriceChangeH24 => Some("price_change_h24".to_string()),
             TokenSortKey::RiskScore => Some("risk_score".to_string()),
-            TokenSortKey::UpdatedAt => Some("updated_at".to_string()),
-            TokenSortKey::FirstSeenAt => Some("first_seen_at".to_string()),
-            TokenSortKey::MetadataUpdatedAt => Some("metadata_updated_at".to_string()),
-            TokenSortKey::TokenBirthAt => Some("token_birth_at".to_string()),
+            TokenSortKey::MarketDataLastFetchedAt => Some("market_data_last_fetched_at".to_string()),
+            TokenSortKey::FirstDiscoveredAt => Some("first_discovered_at".to_string()),
+            TokenSortKey::MetadataLastFetchedAt => Some("metadata_last_fetched_at".to_string()),
+            TokenSortKey::BlockchainCreatedAt => Some("blockchain_created_at".to_string()),
+            TokenSortKey::PoolPriceLastCalculatedAt => Some("pool_price_last_calculated_at".to_string()),
             TokenSortKey::Mint => Some("mint".to_string()),
             // Transaction sorts require in-memory sorting (need sum of buys+sells)
             TokenSortKey::Txns5m
@@ -459,12 +460,13 @@ impl FilteringStore {
         let sort_by = match query.sort_key {
             TokenSortKey::Symbol => Some("symbol".to_string()),
             TokenSortKey::RiskScore => Some("risk_score".to_string()),
-            TokenSortKey::UpdatedAt => Some("updated_at".to_string()),
-            TokenSortKey::FirstSeenAt => Some("first_seen_at".to_string()),
-            TokenSortKey::MetadataUpdatedAt => Some("metadata_updated_at".to_string()),
-            TokenSortKey::TokenBirthAt => Some("token_birth_at".to_string()),
+            TokenSortKey::MarketDataLastFetchedAt => Some("market_data_last_fetched_at".to_string()),
+            TokenSortKey::FirstDiscoveredAt => Some("first_discovered_at".to_string()),
+            TokenSortKey::MetadataLastFetchedAt => Some("metadata_last_fetched_at".to_string()),
+            TokenSortKey::BlockchainCreatedAt => Some("blockchain_created_at".to_string()),
+            TokenSortKey::PoolPriceLastCalculatedAt => Some("pool_price_last_calculated_at".to_string()),
             TokenSortKey::Mint => Some("mint".to_string()),
-            _ => Some("updated_at".to_string()),
+            _ => Some("metadata_last_fetched_at".to_string()),
         };
         let sort_direction = match query.sort_direction {
             SortDirection::Asc => Some("asc".to_string()),
@@ -737,20 +739,23 @@ fn sort_tokens(items: &mut [Token], sort_key: TokenSortKey, direction: SortDirec
                 .security_score
                 .unwrap_or(i32::MAX)
                 .cmp(&b.security_score.unwrap_or(i32::MAX)),
-            TokenSortKey::UpdatedAt => a
+            TokenSortKey::MarketDataLastFetchedAt => a
                 .market_data_last_fetched_at
                 .cmp(&b.market_data_last_fetched_at),
-            TokenSortKey::FirstSeenAt => a.first_discovered_at.cmp(&b.first_discovered_at),
-            TokenSortKey::MetadataUpdatedAt => {
+            TokenSortKey::FirstDiscoveredAt => a.first_discovered_at.cmp(&b.first_discovered_at),
+            TokenSortKey::MetadataLastFetchedAt => {
                 let lhs = a.metadata_last_fetched_at;
                 let rhs = b.metadata_last_fetched_at;
                 lhs.cmp(&rhs)
             }
-            TokenSortKey::TokenBirthAt => {
+            TokenSortKey::BlockchainCreatedAt => {
                 let lhs = a.blockchain_created_at.unwrap_or(a.first_discovered_at);
                 let rhs = b.blockchain_created_at.unwrap_or(b.first_discovered_at);
                 lhs.cmp(&rhs)
             }
+            TokenSortKey::PoolPriceLastCalculatedAt => a
+                .pool_price_last_calculated_at
+                .cmp(&b.pool_price_last_calculated_at),
             TokenSortKey::Mint => a.mint.cmp(&b.mint),
             TokenSortKey::Txns5m => {
                 let a_total = a.txns_5m_total();

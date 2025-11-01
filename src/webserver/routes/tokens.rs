@@ -141,7 +141,8 @@ pub struct TokenDetailResponse {
 
     // Timestamps
     pub created_at: Option<i64>,
-    pub last_updated: Option<i64>,
+    pub market_data_last_fetched_at: Option<i64>,
+    pub pool_price_last_calculated_at: Option<i64>,
     pub pair_created_at: Option<i64>,
     pub pair_url: Option<String>,
     pub boosts_active: Option<i64>,
@@ -150,7 +151,6 @@ pub struct TokenDetailResponse {
     pub price_sol: Option<f64>,
     pub price_usd: Option<f64>,
     pub price_confidence: Option<String>,
-    pub price_updated_at: Option<i64>,
     pub price_change_h1: Option<f64>,
     pub price_change_h24: Option<f64>,
     pub price_change_periods: PeriodStats<f64>,
@@ -693,14 +693,14 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
                 pair_labels: vec![],
                 decimals: None,
                 created_at: None,
-                last_updated: None,
+                market_data_last_fetched_at: None,
+                pool_price_last_calculated_at: None,
                 pair_created_at: None,
                 pair_url: None,
                 boosts_active: None,
                 price_sol: None,
                 price_usd: None,
                 price_confidence: None,
-                price_updated_at: None,
                 price_change_h1: None,
                 price_change_h24: None,
                 price_change_periods: PeriodStats::empty(),
@@ -987,7 +987,8 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
 
     let created_at_ts = Some(token.first_discovered_at.timestamp());
     let token_birth_ts = token.blockchain_created_at.map(|dt| dt.timestamp());
-    let last_updated_ts = Some(token.market_data_last_fetched_at.timestamp());
+    let market_data_last_fetched_at_ts = Some(token.market_data_last_fetched_at.timestamp());
+    let pool_price_last_calculated_at_ts = Some(token.pool_price_last_calculated_at.timestamp());
     let pair_created_at = token_birth_ts.or(created_at_ts);
 
     // Prefer pool price (real-time on-chain) over token cached price
@@ -1117,14 +1118,14 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         pair_labels: Vec::new(), // Not available in unified Token
         decimals: Some(token.decimals),
         created_at: created_at_ts,
-        last_updated: last_updated_ts,
+        market_data_last_fetched_at: market_data_last_fetched_at_ts,
+        pool_price_last_calculated_at: pool_price_last_calculated_at_ts,
         pair_created_at,
         pair_url: None,      // Not available in unified Token
         boosts_active: None, // Not available in unified Token
         price_sol,
         price_usd,
         price_confidence,
-        price_updated_at,
         price_change_h1: token.price_change_h1,
         price_change_h24: token.price_change_h24,
         price_change_periods,
