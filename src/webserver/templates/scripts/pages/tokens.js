@@ -78,9 +78,55 @@ const SORT_KEY_TO_COLUMN = Object.entries(COLUMN_TO_SORT_KEY).reduce((acc, [colu
 }, {});
 
 const PAGE_LIMIT = 100; // chunked fetch size for incremental scrolling
+const PRICE_HIGHLIGHT_DURATION_MS = 10_000;
 
-function priceCell(value) {
-  return Utils.formatPriceSol(value, { fallback: "—", decimals: 12 });
+function findFirstDifferenceIndex(a, b) {
+  if (typeof a !== "string" || typeof b !== "string") {
+    return -1;
+  }
+
+  const minLength = Math.min(a.length, b.length);
+  for (let i = 0; i < minLength; i += 1) {
+    if (a[i] !== b[i]) {
+      return i;
+    }
+  }
+
+  if (a.length !== b.length) {
+    return minLength;
+  }
+
+  return -1;
+}
+
+function priceCell(value, row = null) {
+  const formatted = Utils.formatPriceSol(value, { fallback: "—", decimals: 12 });
+  const baseValue = Utils.escapeHtml(formatted);
+
+  let directionClass = "price-change--neutral";
+  let arrowSymbol = "▲";
+  let arrowClass = "price-change-arrow price-change-arrow--placeholder";
+  let valueHtml = baseValue;
+
+  if (row && row.price_change_meta) {
+    const { direction, currentFormatted, changeStartIndex } = row.price_change_meta;
+    if (
+      direction &&
+      typeof changeStartIndex === "number" &&
+      currentFormatted &&
+      formatted !== "—"
+    ) {
+      const boundedIndex = Math.max(0, Math.min(changeStartIndex, currentFormatted.length));
+      const leadingPart = Utils.escapeHtml(currentFormatted.slice(0, boundedIndex));
+      const changedPart = Utils.escapeHtml(currentFormatted.slice(boundedIndex));
+      valueHtml = `${leadingPart}<span class="price-change-diff">${changedPart}</span>`;
+      directionClass = direction === "up" ? "price-change--up" : "price-change--down";
+      arrowSymbol = direction === "up" ? "▲" : "▼";
+      arrowClass = "price-change-arrow";
+    }
+  }
+
+  return `<span class="price-change ${directionClass}"><span class="${arrowClass}" aria-hidden="true">${arrowSymbol}</span><span class="price-change-value">${valueHtml}</span></span>`;
 }
 
 function usdCell(value) {
@@ -169,6 +215,8 @@ function createLifecycle() {
   let tokenDetailsDialog = null;
   let walletBalance = 0;
   let lastUpdateInterval = null; // Track interval for updating "Last Update" display
+  const priceHistory = new Map();
+  let priceBaselineReady = false;
 
   const state = {
     view: DEFAULT_VIEW,
@@ -179,6 +227,94 @@ function createLifecycle() {
     filters: getDefaultFiltersForView(DEFAULT_VIEW),
     summary: { ...DEFAULT_SUMMARY },
     availableRejectionReasons: [],
+  };
+
+  const resetPriceTracking = () => {
+    priceHistory.clear();
+    priceBaselineReady = false;
+    if (table?.getData) {
+      const currentRows = table.getData();
+      if (Array.isArray(currentRows)) {
+        currentRows.forEach((row) => {
+          if (row && typeof row === "object" && Object.prototype.hasOwnProperty.call(row, "price_change_meta")) {
+            row.price_change_meta = null;
+          }
+        });
+      }
+    }
+  };
+
+  const annotatePriceChange = (row) => {
+    if (!row || typeof row !== "object" || state.view !== "pool") {
+      return row;
+    }
+
+    const mint = row.mint;
+    if (!mint) {
+      row.price_change_meta = null;
+      return row;
+    }
+
+    const numericPrice = Number(row.price_sol);
+    if (!Number.isFinite(numericPrice)) {
+      priceHistory.delete(mint);
+      row.price_change_meta = null;
+      return row;
+    }
+
+    const formattedCurrent = Utils.formatPriceSol(numericPrice, { fallback: "", decimals: 12 });
+    const now = Date.now();
+    const record = priceHistory.get(mint);
+
+    if (
+      priceBaselineReady &&
+      record &&
+      Number.isFinite(record.lastPrice) &&
+      numericPrice !== record.lastPrice
+    ) {
+      const direction = numericPrice > record.lastPrice ? "up" : "down";
+      const previousFormatted = record.lastFormatted ?? "";
+      const changeStartIndex = findFirstDifferenceIndex(previousFormatted, formattedCurrent);
+      if (direction && changeStartIndex !== -1) {
+        const meta = {
+          direction,
+          currentFormatted: formattedCurrent,
+          changeStartIndex,
+        };
+        priceHistory.set(mint, {
+          lastPrice: numericPrice,
+          lastFormatted: formattedCurrent,
+          highlightUntil: now + PRICE_HIGHLIGHT_DURATION_MS,
+          meta,
+        });
+        row.price_change_meta = meta;
+        return row;
+      }
+    }
+
+    if (record && record.highlightUntil > now && record.meta) {
+      const refreshedMeta = {
+        ...record.meta,
+        currentFormatted: formattedCurrent,
+      };
+      priceHistory.set(mint, {
+        lastPrice: numericPrice,
+        lastFormatted: formattedCurrent,
+        highlightUntil: record.highlightUntil,
+        meta: refreshedMeta,
+      });
+      row.price_change_meta = refreshedMeta;
+      return row;
+    }
+
+    priceHistory.set(mint, {
+      lastPrice: numericPrice,
+      lastFormatted: formattedCurrent,
+      highlightUntil: 0,
+      meta: null,
+    });
+    row.price_change_meta = null;
+    return row;
   };
 
   const parseToggleValue = (value, fallback = false) => {
@@ -519,6 +655,16 @@ function createLifecycle() {
         };
       });
 
+      let rowsWithPriceMeta = normalizedItems;
+      if (state.view === "pool") {
+        rowsWithPriceMeta = normalizedItems.map((row) => annotatePriceChange(row));
+        if (!priceBaselineReady) {
+          priceBaselineReady = true;
+        }
+      } else if (priceHistory.size > 0) {
+        resetPriceTracking();
+      }
+
       if (Array.isArray(data?.available_rejection_reasons)) {
         state.availableRejectionReasons = data.available_rejection_reasons.filter(
           (reason) => typeof reason === "string" && reason.trim().length > 0
@@ -560,19 +706,19 @@ function createLifecycle() {
         priced:
           pricedTotal !== null
             ? pricedTotal
-            : normalizedItems.filter((row) => row.has_pool_price).length,
+            : rowsWithPriceMeta.filter((row) => row.has_pool_price).length,
         positions:
           positionsTotal !== null
             ? positionsTotal
-            : normalizedItems.filter((row) => row.has_open_position).length,
+            : rowsWithPriceMeta.filter((row) => row.has_open_position).length,
         blacklisted:
           blacklistedTotal !== null
             ? blacklistedTotal
-            : normalizedItems.filter((row) => row.blacklisted).length,
+            : rowsWithPriceMeta.filter((row) => row.blacklisted).length,
       };
 
       return {
-        rows: normalizedItems,
+        rows: rowsWithPriceMeta,
         cursorNext: data?.next_cursor ?? null,
         cursorPrev: null,
         hasMoreNext: Boolean(data?.next_cursor),
@@ -688,7 +834,7 @@ function createLifecycle() {
         sortable: true,
         minWidth: 120,
         wrap: false,
-        render: (v) => priceCell(v),
+        render: (v, row) => priceCell(v, row),
       },
       {
         id: "liquidity_usd",
@@ -932,12 +1078,19 @@ function createLifecycle() {
 
   const switchView = (view) => {
     if (!TOKEN_VIEWS.some((v) => v.id === view)) return;
+    const previousView = state.view;
     state.view = view;
     state.totalCount = null;
     state.lastUpdate = null;
     state.filters = getDefaultFiltersForView(view);
     state.summary = { ...DEFAULT_SUMMARY };
     state.availableRejectionReasons = [];
+
+    if (view === "pool" && previousView !== "pool") {
+      resetPriceTracking();
+    } else if (previousView === "pool" && view !== "pool") {
+      resetPriceTracking();
+    }
 
     // Update table stateKey for per-tab state persistence
     if (table) {
@@ -1674,6 +1827,7 @@ function createLifecycle() {
       poller = null;
       tabBar = null; // Cleaned up automatically by manageTabBar
       TabBarManager.unregister("tokens");
+      resetPriceTracking();
       state.view = DEFAULT_VIEW;
       state.search = "";
       state.totalCount = null;

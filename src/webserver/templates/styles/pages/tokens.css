@@ -62,3 +62,67 @@
   color: var(--text-secondary);
   font-size: 0.85rem;
 }
+
+.price-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+.price-change--up {
+  color: var(--badge-online);
+}
+
+.price-change--down {
+  color: var(--badge-error);
+}
+
+.price-change--neutral {
+  color: inherit;
+}
+
+.price-change-arrow {
+  font-size: 0.75rem;
+  line-height: 1;
+  width: 1.1em;
+  display: inline-flex;
+  justify-content: center;
+}
+
+.price-change-arrow--placeholder {
+  visibility: hidden;
+}
+
+.price-change-value {
+  display: inline-flex;
+  align-items: center;
+  font-family: var(--font-mono, "SFMono-Regular", "JetBrains Mono", Consolas, "Liberation Mono", Menlo, monospace);
+}
+
+.price-change-diff {
+  font-weight: 700;
+}
+
+.value-positive,
+.value-negative {
+  font-family: var(--font-mono, "SFMono-Regular", "JetBrains Mono", Consolas, "Liberation Mono", Menlo, monospace);
+}
+
+.tokens-page td[data-column-id="price_sol"],
+.tokens-page td[data-column-id="liquidity_usd"],
+.tokens-page td[data-column-id="volume_24h"],
+.tokens-page td[data-column-id="fdv"],
+.tokens-page td[data-column-id="market_cap"],
+.tokens-page td[data-column-id="price_change_h1"],
+.tokens-page td[data-column-id="price_change_h24"],
+.tokens-page td[data-column-id="txns_5m"],
+.tokens-page td[data-column-id="txns_1h"],
+.tokens-page td[data-column-id="txns_6h"],
+.tokens-page td[data-column-id="txns_24h"],
+.tokens-page td[data-column-id="risk_score"],
+.tokens-page td[data-column-id="updated_at"],
+.tokens-page td[data-column-id="token_birth_at"],
+.tokens-page td[data-column-id="first_seen_at"] {
+  font-family: var(--font-mono, "SFMono-Regular", "JetBrains Mono", Consolas, "Liberation Mono", Menlo, monospace);
+}
