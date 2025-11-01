@@ -367,11 +367,12 @@ function createLifecycle() {
     const params = new URLSearchParams();
     params.set("view", state.view);
     if (state.search) params.set("search", state.search);
-    const sort = state.sort ?? DEFAULT_SERVER_SORT;
-    const sortBy = sort?.by ?? DEFAULT_SERVER_SORT.by;
+  const sort = state.sort ?? DEFAULT_SERVER_SORT;
+  const sortBy = sort?.by ?? DEFAULT_SERVER_SORT.by;
     const sortDir = sort?.direction ?? DEFAULT_SERVER_SORT.direction;
-    // Use view-aware sort key resolver
-    const serverSortKey = getServerSortKey(sortBy, state.view);
+  const sortColumnId = resolveSortColumn(sortBy) ?? sortBy;
+  // Use view-aware sort key resolver with column identifier
+  const serverSortKey = getServerSortKey(sortColumnId, state.view);
     params.set("sort_by", serverSortKey);
     params.set("sort_dir", sortDir);
     if (state.filters.pool_price) {

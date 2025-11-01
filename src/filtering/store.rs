@@ -10,6 +10,7 @@ use tokio::sync::RwLock;
 
 use crate::events::{record_filtering_event, Severity};
 use crate::logger::{self, LogTag};
+use crate::pools;
 use crate::tokens::types::Token;
 
 use super::engine::compute_snapshot;
@@ -206,6 +207,9 @@ impl FilteringStore {
             .collect();
 
         apply_filters(&mut tokens, &query, snapshot.as_ref());
+        if matches!(query.view, FilteringView::Pool) {
+            overlay_pool_price_data(&mut tokens);
+        }
         sort_tokens(&mut tokens, query.sort_key, query.sort_direction);
 
         let total = tokens.len();
@@ -791,6 +795,35 @@ fn cmp_f64(lhs: Option<f64>, rhs: Option<f64>) -> Ordering {
     let left = lhs.unwrap_or(0.0);
     let right = rhs.unwrap_or(0.0);
     left.partial_cmp(&right).unwrap_or(Ordering::Equal)
+}
+
+fn overlay_pool_price_data(tokens: &mut [Token]) {
+    for token in tokens.iter_mut() {
+        if let Some(price_result) = pools::get_pool_price(&token.mint) {
+            let old_price = token.price_sol;
+            let new_price = price_result.price_sol;
+            token.price_sol = new_price;
+
+            let age_duration = price_result.timestamp.elapsed();
+            let updated_at = ChronoDuration::from_std(age_duration)
+                .map(|duration| Utc::now() - duration)
+                .unwrap_or_else(|_| Utc::now());
+            token.pool_price_last_calculated_at = updated_at;
+
+            logger::debug(
+                LogTag::Filtering,
+                &format!(
+                    "pool_overlay mint={} symbol={} old_price={:.12} new_price={:.12} diff={:.12} age={:.1}s",
+                    token.mint,
+                    token.symbol,
+                    old_price,
+                    new_price,
+                    (new_price - old_price).abs(),
+                    age_duration.as_secs_f64(),
+                ),
+            );
+        }
+    }
 }
 
 fn build_stats(snapshot: &FilteringSnapshot) -> FilteringStatsSnapshot {

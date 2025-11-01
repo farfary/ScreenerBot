@@ -401,43 +401,7 @@ fn build_token_list_response(
     };
 
     // For Pool Service view, overlay real-time pool prices from pools module
-    let items = if matches!(view, FilteringView::Pool) {
-        result
-            .items
-            .into_iter()
-            .map(|mut token| {
-                if let Some(price_result) = pools::get_pool_price(&token.mint) {
-                    let old_price = token.price_sol;
-                    let new_price = price_result.price_sol;
-                    // Overlay pool price (real-time chain data) over database price
-                    token.price_sol = new_price;
-
-                    // Update timestamp to reflect pool price freshness
-                    let age = price_result.timestamp.elapsed();
-                    if let Ok(duration) = chrono::Duration::from_std(age) {
-                        token.pool_price_last_calculated_at = chrono::Utc::now() - duration;
-                    }
-
-                    logger::debug(
-                        LogTag::Webserver,
-                        &format!(
-                            "Pool price overlay: mint={} symbol={} old_price={:.12} new_price={:.12} diff={:.12} age={:.1}s",
-                            token.mint,
-                            token.symbol,
-                            old_price,
-                            new_price,
-                            (new_price - old_price).abs(),
-                            age.as_secs_f64()
-                        ),
-                    );
-                }
-                token
-            })
-            .collect()
-    } else {
-        // For other views, use database prices as-is
-        result.items
-    };
+    let items = result.items;
 
     TokenListResponse {
         items,
