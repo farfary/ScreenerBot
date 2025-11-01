@@ -182,18 +182,26 @@
   text-overflow: ellipsis;
 }
 
+
 .table-settings-column-actions {
-  display: inline-grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.table-settings-move-group {
+  display: flex;
+  flex-direction: column;
   gap: 6px;
 }
 
 .table-settings-btn-move {
-  min-width: 68px;
-  padding-block: 6px;
-  padding-inline: 8px;
-  font-size: 0.8rem;
-  border-radius: 8px;
+  width: 38px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
   border: 1px solid rgb(82, 90, 130, 0.3);
   background: rgb(18, 22, 35, 0.95);
   color: var(--text-secondary, #c3caef);
@@ -201,7 +209,8 @@
   transition:
     background 120ms ease,
     border-color 120ms ease,
-    color 120ms ease;
+    color 120ms ease,
+    transform 120ms ease;
 }
 
 .table-settings-btn-move:hover:not(:disabled),
@@ -209,11 +218,29 @@
   background: rgb(36, 44, 68, 0.95);
   border-color: rgb(108, 125, 255, 0.55);
   color: var(--text-primary, #f5f7ff);
+  transform: translateY(-1px);
 }
 
 .table-settings-btn-move:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.table-settings-btn-move .icon {
+  font-size: 1.05rem;
+  line-height: 1;
+}
+
+.table-settings-btn-move .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .table-settings-empty {

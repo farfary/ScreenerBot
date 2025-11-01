@@ -1135,7 +1135,7 @@ function createLifecycle() {
       dexscreener: `https://dexscreener.com/solana/${mint}`,
       gmgn: `https://gmgn.ai/sol/token/${mint}`,
       solscan: `https://solscan.io/token/${mint}`,
-      birdeye: `https://birdeye.so/token/${mint}`,
+      birdeye: `https://birdeye.so/solana/token/${mint}`,
       rugcheck: `https://rugcheck.xyz/tokens/${mint}`,
       pumpfun: `https://pump.fun/${mint}`,
     };

@@ -316,10 +316,26 @@ export class TableSettingsDialog {
               <span class="column-name">${Utils.escapeHtml(column.label)}${visibilityLabel}</span>
             </label>
             <div class="table-settings-column-actions" aria-label="Ordering controls">
-              <button type="button" class="table-settings-btn-move" data-action="move-top" data-column-id="${column.id}" ${moveTopDisabled ? "disabled" : ""} title="Move to top">Top</button>
-              <button type="button" class="table-settings-btn-move" data-action="move-up" data-column-id="${column.id}" ${moveUpDisabled ? "disabled" : ""} title="Move up">Up</button>
-              <button type="button" class="table-settings-btn-move" data-action="move-down" data-column-id="${column.id}" ${moveDownDisabled ? "disabled" : ""} title="Move down">Down</button>
-              <button type="button" class="table-settings-btn-move" data-action="move-bottom" data-column-id="${column.id}" ${moveBottomDisabled ? "disabled" : ""} title="Move to bottom">Bottom</button>
+              <div class="table-settings-move-group" role="group" aria-label="Move up or down">
+                <button type="button" class="table-settings-btn-move" data-action="move-up" data-column-id="${column.id}" ${moveUpDisabled ? "disabled" : ""} title="Move up">
+                  <span class="icon" aria-hidden="true">↑</span>
+                  <span class="sr-only">Move up</span>
+                </button>
+                <button type="button" class="table-settings-btn-move" data-action="move-down" data-column-id="${column.id}" ${moveDownDisabled ? "disabled" : ""} title="Move down">
+                  <span class="icon" aria-hidden="true">↓</span>
+                  <span class="sr-only">Move down</span>
+                </button>
+              </div>
+              <div class="table-settings-move-group" role="group" aria-label="Move to extremes">
+                <button type="button" class="table-settings-btn-move" data-action="move-top" data-column-id="${column.id}" ${moveTopDisabled ? "disabled" : ""} title="Move to top">
+                  <span class="icon" aria-hidden="true">⇡</span>
+                  <span class="sr-only">Move to top</span>
+                </button>
+                <button type="button" class="table-settings-btn-move" data-action="move-bottom" data-column-id="${column.id}" ${moveBottomDisabled ? "disabled" : ""} title="Move to bottom">
+                  <span class="icon" aria-hidden="true">⇣</span>
+                  <span class="sr-only">Move to bottom</span>
+                </button>
+              </div>
             </div>
           </div>
         `;
