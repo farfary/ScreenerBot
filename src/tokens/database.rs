@@ -228,12 +228,13 @@ impl TokenDatabase {
         // Only support sorting by metadata/security fields for this view
         let order_column = match sort_by {
             Some("symbol") => "t.symbol",
-            Some("updated_at") => {
+            Some("market_data_last_fetched_at") => {
                 "COALESCE(ut.market_data_last_updated_at, t.metadata_last_fetched_at)"
             }
-            Some("first_seen_at") => "t.first_discovered_at",
-            Some("metadata_updated_at") => "t.metadata_last_fetched_at",
-            Some("token_birth_at") => "COALESCE(t.blockchain_created_at, t.first_discovered_at)",
+            Some("first_discovered_at") => "t.first_discovered_at",
+            Some("metadata_last_fetched_at") => "t.metadata_last_fetched_at",
+            Some("blockchain_created_at") => "COALESCE(t.blockchain_created_at, t.first_discovered_at)",
+            Some("pool_price_last_calculated_at") => "COALESCE(ut.pool_price_last_calculated_at, t.metadata_last_fetched_at)",
             Some("mint") => "t.mint",
             Some("risk_score") => "sr.score",
             _ => "COALESCE(ut.market_data_last_updated_at, t.metadata_last_fetched_at)",
@@ -1988,12 +1989,14 @@ impl TokenDatabase {
         // Map sort_by to SQL column with table prefix
         let order_column = match sort_by {
             Some("symbol") => "t.symbol",
-            Some("updated_at") =>
+            Some("market_data_last_fetched_at") =>
                 "COALESCE(ut.market_data_last_updated_at, d.market_data_last_fetched_at, g.market_data_last_fetched_at, t.metadata_last_fetched_at)",
-            Some("first_seen_at") => "t.first_discovered_at",
-            Some("metadata_updated_at") => "COALESCE(ut.metadata_last_updated_at, t.metadata_last_fetched_at)",
-            Some("token_birth_at") =>
+            Some("first_discovered_at") => "t.first_discovered_at",
+            Some("metadata_last_fetched_at") => "COALESCE(ut.metadata_last_updated_at, t.metadata_last_fetched_at)",
+            Some("blockchain_created_at") =>
                 "COALESCE(d.pair_blockchain_created_at, t.blockchain_created_at, t.first_discovered_at)",
+            Some("pool_price_last_calculated_at") =>
+                "COALESCE(ut.pool_price_last_calculated_at, t.first_discovered_at)",
             Some("mint") => "t.mint",
             Some("risk_score") => "sr.score",
             Some("price_sol") => "COALESCE(d.price_sol, g.price_sol)",
