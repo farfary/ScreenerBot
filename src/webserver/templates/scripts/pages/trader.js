@@ -85,6 +85,11 @@ function createLifecycle() {
       }
     }
 
+    // Load preview when switching to trailing stop tab (Phase 2)
+    if (tabId === "trailing-stop") {
+      loadTrailingStopPreview();
+    }
+
     // Update tab-specific data
     if (tabId === "time-rules") {
       updateTimeRulesStatus();
@@ -252,6 +257,99 @@ function createLifecycle() {
       if (winRate) winRate.textContent = "—";
       if (totalTrades) totalTrades.textContent = "—";
       if (avgHoldTime) avgHoldTime.textContent = "—";
+    }
+  }
+
+  /**
+   * Load trailing stop preview (Phase 2 Feature)
+   */
+  async function loadTrailingStopPreview(positionId = null) {
+    const activation = parseFloat($("#trail-activation")?.value) || 10;
+    const distance = parseFloat($("#trail-distance")?.value) || 5;
+
+    try {
+      const params = new URLSearchParams();
+      if (positionId) params.append("position_id", positionId);
+      params.append("activation_pct", activation);
+      params.append("distance_pct", distance);
+
+      const response = await fetch(`/api/trader/preview-trailing-stop?${params}`);
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = await response.json();
+
+      if (data.success) {
+        updatePreviewPanel(data.data);
+      } else {
+        console.error("[Trader] Preview failed:", data.error);
+      }
+    } catch (error) {
+      console.error("[Trader] Failed to load preview:", error);
+    }
+  }
+
+  /**
+   * Update preview panel with data (Phase 2 Feature)
+   */
+  function updatePreviewPanel(preview) {
+    // Update position state
+    const symbol = $("#preview-symbol");
+    const entryPrice = $("#preview-entry-price");
+    const currentPrice = $("#preview-current-price");
+    const peakPrice = $("#preview-peak-price");
+    const currentProfit = $("#preview-current-profit");
+
+    if (symbol) symbol.textContent = preview.symbol;
+    if (entryPrice) entryPrice.textContent = Utils.formatPrice(preview.entry_price);
+    if (currentPrice) currentPrice.textContent = Utils.formatPrice(preview.current_price);
+    if (peakPrice) peakPrice.textContent = Utils.formatPrice(preview.peak_price);
+    if (currentProfit) {
+      currentProfit.textContent = Utils.formatPercent(preview.current_profit_pct);
+      currentProfit.className = `profit-value ${preview.current_profit_pct >= 0 ? "positive" : "negative"}`;
+    }
+
+    // Update trail status
+    const trailStatus = $("#preview-trail-status");
+    const trailPrice = $("#preview-trail-price");
+    const distanceToExit = $("#preview-distance-to-exit");
+    const estimatedExit = $("#preview-estimated-exit");
+    const estimatedProfit = $("#preview-estimated-profit");
+
+    if (trailStatus) {
+      trailStatus.textContent = preview.trail_active ? "✅ ACTIVE" : "⏸️ INACTIVE";
+      trailStatus.className = preview.trail_active ? "status-active" : "status-inactive";
+    }
+    if (trailPrice) {
+      trailPrice.textContent = preview.trail_stop_price ? Utils.formatPrice(preview.trail_stop_price) : "—";
+    }
+    if (distanceToExit) {
+      distanceToExit.textContent = preview.distance_to_exit_pct ? Utils.formatPercent(preview.distance_to_exit_pct) : "—";
+    }
+    if (estimatedExit) {
+      estimatedExit.textContent = Utils.formatPrice(preview.estimated_exit_price);
+    }
+    if (estimatedProfit) {
+      estimatedProfit.textContent = Utils.formatPercent(preview.estimated_exit_profit_pct);
+      estimatedProfit.className = `profit-value ${preview.estimated_exit_profit_pct >= 0 ? "positive" : "negative"}`;
+    }
+
+    // Update what-if scenarios
+    const scenariosContainer = $("#preview-what-if-scenarios");
+    if (scenariosContainer && preview.what_if_scenarios) {
+      scenariosContainer.innerHTML = "";
+      preview.what_if_scenarios.forEach((scenario) => {
+        const scenarioDiv = document.createElement("div");
+        scenarioDiv.className = "what-if-scenario";
+        scenarioDiv.innerHTML = `
+          <div class="scenario-description">${scenario.description}</div>
+          <div class="scenario-result">
+            ${scenario.trail_active ? "✅" : "⏸️"} Exit: ${Utils.formatPrice(scenario.exit_price)} 
+            (${Utils.formatPercent(scenario.exit_profit_pct)} profit)
+          </div>
+        `;
+        scenariosContainer.appendChild(scenarioDiv);
+      });
     }
   }
 
@@ -550,6 +648,36 @@ function createLifecycle() {
   }
 
   /**
+   * Setup preview event listeners (Phase 2)
+   */
+  function setupPreviewListeners() {
+    // Debounced preview update on config change
+    const debouncedPreview = Utils.debounce(() => {
+      const positionSelect = $("#preview-position-select");
+      const positionId = positionSelect?.value === "simulate" ? null : positionSelect?.value;
+      loadTrailingStopPreview(positionId);
+    }, 500);
+
+    // Trail activation input
+    const trailActivation = $("#trail-activation");
+    if (trailActivation) {
+      trailActivation.addEventListener("input", debouncedPreview);
+    }
+
+    // Trail distance input
+    const trailDistance = $("#trail-distance");
+    if (trailDistance) {
+      trailDistance.addEventListener("input", debouncedPreview);
+    }
+
+    // Position selector (if exists)
+    const positionSelect = $("#preview-position-select");
+    if (positionSelect) {
+      positionSelect.addEventListener("change", debouncedPreview);
+    }
+  }
+
+  /**
    * Save configuration updates
    */
   async function saveConfig(updates) {
@@ -693,6 +821,9 @@ function createLifecycle() {
 
       // Setup form handlers
       setupFormHandlers();
+
+      // Setup preview listeners (Phase 2)
+      setupPreviewListeners();
 
       // Setup navigation links
       setupNavigation();

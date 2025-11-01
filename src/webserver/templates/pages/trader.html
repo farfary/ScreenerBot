@@ -74,73 +74,148 @@
 
       <!-- Trailing Stop Tab -->
       <div id="trailing-stop-tab" class="trader-tab-content" style="display: none">
-        <div class="config-form">
-          <h3>📈 Trailing Stop Configuration</h3>
+        <div class="two-column-layout">
+          <!-- Left Column: Configuration -->
+          <div class="config-column">
+            <div class="config-form">
+              <h3>📈 Trailing Stop Configuration</h3>
 
-          <div class="form-section">
-            <h4>⚙️ Basic Settings</h4>
-            <div class="form-group">
-              <label for="trailing-enabled">
-                <input type="checkbox" id="trailing-enabled" />
-                Enable Trailing Stop
-              </label>
-            </div>
-          </div>
+              <div class="form-section">
+                <h4>⚙️ Basic Settings</h4>
+                <div class="form-group">
+                  <label for="trailing-enabled">
+                    <input type="checkbox" id="trailing-enabled" />
+                    Enable Trailing Stop
+                  </label>
+                </div>
+              </div>
 
-          <div class="form-section">
-            <h4>📊 Single Level (Current)</h4>
-            <div class="form-group">
-              <label for="trail-activation">
-                Activation Threshold
-                <span class="hint">Start trailing when position is up by this %</span>
-              </label>
-              <div class="input-with-unit">
-                <input
-                  type="number"
-                  id="trail-activation"
-                  min="0"
-                  max="100"
-                  step="1"
-                  value="10"
-                />
-                <span class="unit">%</span>
+              <div class="form-section">
+                <h4>📊 Single Level (Current)</h4>
+                <div class="form-group">
+                  <label for="trail-activation">
+                    Activation Threshold
+                    <span class="hint">Start trailing when position is up by this %</span>
+                  </label>
+                  <div class="input-with-unit">
+                    <input
+                      type="number"
+                      id="trail-activation"
+                      min="0"
+                      max="100"
+                      step="1"
+                      value="10"
+                    />
+                    <span class="unit">%</span>
+                  </div>
+                </div>
+
+                <div class="form-group">
+                  <label for="trail-distance">
+                    Trail Distance
+                    <span class="hint">Exit if price drops by this % from peak</span>
+                  </label>
+                  <div class="input-with-unit">
+                    <input
+                      type="number"
+                      id="trail-distance"
+                      min="0"
+                      max="50"
+                      step="1"
+                      value="5"
+                    />
+                    <span class="unit">%</span>
+                  </div>
+                </div>
+
+                <div class="example-box">
+                  <strong>💡 Example:</strong> Buy at 0.001 SOL → Peak at 0.0011 SOL (+10%) → Trail
+                  starts → Exit at 0.001045 SOL (-5% from peak)
+                </div>
+              </div>
+
+              <div class="form-section disabled">
+                <h4>🎯 Multi-Level (Advanced - Future) <span class="badge warning">UPGRADE</span></h4>
+                <div class="info-message">
+                  Multi-level trailing stops require backend changes. Coming in Phase 3.
+                </div>
+              </div>
+
+              <div class="form-actions">
+                <button class="btn primary" id="save-trailing">Save Changes</button>
+                <button class="btn secondary" id="reset-trailing">Reset to Defaults</button>
               </div>
             </div>
+          </div>
 
-            <div class="form-group">
-              <label for="trail-distance">
-                Trail Distance
-                <span class="hint">Exit if price drops by this % from peak</span>
-              </label>
-              <div class="input-with-unit">
-                <input
-                  type="number"
-                  id="trail-distance"
-                  min="0"
-                  max="50"
-                  step="1"
-                  value="5"
-                />
-                <span class="unit">%</span>
+          <!-- Right Column: Live Preview (Phase 2) -->
+          <div class="preview-column">
+            <div class="preview-panel">
+              <h3>📊 Live Preview</h3>
+              
+              <div class="position-selector">
+                <label for="preview-position-select">Position:</label>
+                <select id="preview-position-select">
+                  <option value="simulate">Simulate Random</option>
+                  <!-- Will be populated dynamically with open positions -->
+                </select>
+              </div>
+
+              <div class="preview-section">
+                <h4>Position State</h4>
+                <div class="preview-row">
+                  <span>Symbol:</span>
+                  <span id="preview-symbol">—</span>
+                </div>
+                <div class="preview-row">
+                  <span>Entry Price:</span>
+                  <span id="preview-entry-price">—</span>
+                </div>
+                <div class="preview-row">
+                  <span>Current Price:</span>
+                  <span id="preview-current-price">—</span>
+                </div>
+                <div class="preview-row">
+                  <span>Peak Price:</span>
+                  <span id="preview-peak-price">—</span>
+                </div>
+                <div class="preview-row">
+                  <span>Current Profit:</span>
+                  <span id="preview-current-profit" class="profit-value">—</span>
+                </div>
+              </div>
+
+              <div class="preview-section">
+                <h4>Trailing Stop Status</h4>
+                <div class="preview-row">
+                  <span>Trail Active:</span>
+                  <span id="preview-trail-status">—</span>
+                </div>
+                <div class="preview-row">
+                  <span>Stop Price:</span>
+                  <span id="preview-trail-price">—</span>
+                </div>
+                <div class="preview-row">
+                  <span>Distance to Exit:</span>
+                  <span id="preview-distance-to-exit">—</span>
+                </div>
+                <div class="preview-row">
+                  <span>Estimated Exit:</span>
+                  <span id="preview-estimated-exit">—</span>
+                </div>
+                <div class="preview-row">
+                  <span>Estimated Profit:</span>
+                  <span id="preview-estimated-profit" class="profit-value">—</span>
+                </div>
+              </div>
+
+              <div class="preview-section">
+                <h4>What-If Analysis</h4>
+                <div id="preview-what-if-scenarios">
+                  <!-- Populated dynamically -->
+                </div>
               </div>
             </div>
-
-            <div class="example-box">
-              <strong>💡 Example:</strong> Buy at 0.001 SOL → Peak at 0.0011 SOL (+10%) → Trail
-              starts → Exit at 0.001045 SOL (-5% from peak)
-            </div>
-          </div>
-
-          <div class="form-section disabled">
-            <h4>🎯 Multi-Level (Advanced - Future) <span class="badge warning">UPGRADE</span></h4>
-            <div class="info-message">
-              Multi-level trailing stops require backend changes. Coming in Phase 3.
-            </div>
-          </div>
-
-          <div class="form-actions">
-            <button class="btn primary" id="save-trailing">Save Changes</button>
-            <button class="btn secondary" id="reset-trailing">Reset to Defaults</button>
           </div>
         </div>
       </div>
