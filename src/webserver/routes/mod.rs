@@ -35,6 +35,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/filtering", axum::routing::get(filtering_page))
         .route("/config", axum::routing::get(config_page))
         .route("/strategies", axum::routing::get(strategies_page))
+        .route("/trader", axum::routing::get(trader_page))
         .route("/scripts/core/:file", axum::routing::get(get_core_script))
         .route("/scripts/pages/:file", axum::routing::get(get_page_script))
         .route("/scripts/ui/:file", axum::routing::get(get_ui_script))
@@ -98,6 +99,12 @@ async fn strategies_page() -> Html<String> {
     ))
 }
 
+/// Trader page handler
+async fn trader_page() -> Html<String> {
+    let content = templates::trader_content();
+    Html(templates::base_template("Trader", "trader", &content))
+}
+
 fn api_routes() -> Router<Arc<AppState>> {
     Router::new()
         .merge(status::routes())
@@ -131,6 +138,7 @@ async fn get_page_content(axum::extract::Path(page): axum::extract::Path<String>
         "filtering" => templates::filtering_content(),
         "config" => templates::config_content(),
         "strategies" => templates::strategies_content(),
+        "trader" => templates::trader_content(),
         _ => {
             // Escape page name to prevent XSS
             let escaped_page = page
@@ -189,6 +197,7 @@ async fn get_page_script(axum::extract::Path(file): axum::extract::Path<String>)
         "filtering.js" => Some(templates::FILTERING_PAGE_SCRIPT),
         "config.js" => Some(templates::CONFIG_PAGE_SCRIPT),
         "strategies.js" => Some(templates::STRATEGIES_PAGE_SCRIPT),
+        "trader.js" => Some(templates::TRADER_PAGE_SCRIPT),
         _ => None,
     };
 

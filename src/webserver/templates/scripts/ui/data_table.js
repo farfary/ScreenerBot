@@ -3201,9 +3201,7 @@ export class DataTable {
       });
 
       // Remove deleted columns from order
-      this.state.columnOrder = this.state.columnOrder.filter((colId) =>
-        validColumnIds.has(colId)
-      );
+      this.state.columnOrder = this.state.columnOrder.filter((colId) => validColumnIds.has(colId));
 
       // Remove user resize flags for deleted columns
       Object.keys(this.state.userResizedColumns).forEach((colId) => {

@@ -86,6 +86,24 @@ struct ManualTradeSuccess {
     timestamp: String,
 }
 
+#[derive(Debug, Serialize)]
+struct TraderStatsResponse {
+    open_positions_count: usize,
+    locked_sol: f64,
+    win_rate_pct: f64,
+    total_trades: usize,
+    avg_hold_time_hours: f64,
+    best_trade_pct: f64,
+    exit_breakdown: Vec<ExitBreakdown>,
+}
+
+#[derive(Debug, Serialize)]
+struct ExitBreakdown {
+    exit_type: String,
+    count: usize,
+    avg_profit_pct: f64,
+}
+
 // =============================================================================
 // ROUTE HANDLERS
 // =============================================================================
@@ -187,6 +205,125 @@ async fn stop_trader_handler() -> Response {
     }
 }
 
+/// GET /api/trader/stats - Get trader performance statistics
+async fn get_trader_stats() -> Response {
+    // Get open positions
+    let open_positions = positions::get_open_positions().await;
+    let open_positions_count = open_positions.len();
+    
+    // Calculate locked SOL (use total_size_sol for DCA support)
+    let locked_sol: f64 = open_positions.iter().map(|p| p.total_size_sol).sum();
+    
+    // Query closed positions from database for statistics
+    let closed_positions = {
+        let db_ref = positions::db::get_positions_database().await.ok();
+        if let Some(db_arc) = db_ref {
+            let db_guard = db_arc.lock().await;
+            if let Some(db) = db_guard.as_ref() {
+                db.get_closed_positions().await.unwrap_or_else(|_| Vec::new())
+            } else {
+                Vec::new()
+            }
+        } else {
+            Vec::new()
+        }
+    };
+    
+    // Filter to last 30 days
+    let thirty_days_ago = chrono::Utc::now() - chrono::Duration::days(30);
+    let recent_closed: Vec<_> = closed_positions
+        .into_iter()
+        .filter(|p| {
+            if let Some(exit_time) = p.exit_time {
+                exit_time >= thirty_days_ago
+            } else {
+                false
+            }
+        })
+        .collect();
+    
+    let total_trades = recent_closed.len();
+    
+    // Calculate win rate (using pnl_percent for closed positions)
+    let winners = recent_closed.iter().filter(|p| p.pnl_percent.unwrap_or(0.0) > 0.0).count();
+    let win_rate_pct = if total_trades > 0 {
+        (winners as f64 / total_trades as f64) * 100.0
+    } else {
+        0.0
+    };
+    
+    // Calculate average hold time
+    let total_hold_seconds: i64 = recent_closed
+        .iter()
+        .filter_map(|p| {
+            p.exit_time.and_then(|exit_time| {
+                Some((exit_time - p.entry_time).num_seconds())
+            })
+        })
+        .sum();
+    
+    let avg_hold_time_hours = if total_trades > 0 {
+        (total_hold_seconds as f64 / total_trades as f64) / 3600.0
+    } else {
+        0.0
+    };
+    
+    // Find best trade (using pnl_percent)
+    let best_trade_pct = recent_closed
+        .iter()
+        .filter_map(|p| p.pnl_percent)
+        .fold(f64::NEG_INFINITY, f64::max);
+    
+    let best_trade_pct = if best_trade_pct == f64::NEG_INFINITY {
+        0.0
+    } else {
+        best_trade_pct
+    };
+    
+    // Build exit breakdown from closed_reason in closed positions
+    use std::collections::HashMap;
+    let mut exit_stats: HashMap<String, (usize, Vec<f64>)> = HashMap::new();
+    
+    for pos in &recent_closed {
+        let exit_type = pos.closed_reason.clone().unwrap_or_else(|| "unknown".to_string());
+        let entry = exit_stats.entry(exit_type).or_insert((0, Vec::new()));
+        entry.0 += 1;
+        if let Some(pnl_pct) = pos.pnl_percent {
+            entry.1.push(pnl_pct);
+        }
+    }
+    
+    let mut exit_breakdown = Vec::new();
+    for (exit_type, (count, profits)) in exit_stats {
+        let avg_profit_pct = if !profits.is_empty() {
+            profits.iter().sum::<f64>() / profits.len() as f64
+        } else {
+            0.0
+        };
+        
+        exit_breakdown.push(ExitBreakdown {
+            exit_type,
+            count,
+            avg_profit_pct,
+        });
+    }
+    
+    // Sort by count descending
+    exit_breakdown.sort_by(|a, b| b.count.cmp(&a.count));
+    
+    let stats = TraderStatsResponse {
+        open_positions_count,
+        locked_sol,
+        win_rate_pct,
+        total_trades,
+        avg_hold_time_hours,
+        best_trade_pct,
+        exit_breakdown,
+    };
+    
+    success_response(stats)
+}
+
 // =============================================================================
 // ROUTER
 // =============================================================================
@@ -194,6 +331,7 @@ async fn stop_trader_handler() -> Response {
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/status", get(get_trader_status))
+        .route("/stats", get(get_trader_stats))
         .route("/start", post(start_trader_handler))
         .route("/stop", post(stop_trader_handler))
         // Manual trading endpoints (for dashboard actions)

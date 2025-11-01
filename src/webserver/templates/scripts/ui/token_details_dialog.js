@@ -40,7 +40,7 @@ export class TokenDetailsDialog {
       console.log("Closing existing dialog to open new token");
       this.close();
       // Wait for close animation
-      await new Promise(resolve => setTimeout(resolve, 350));
+      await new Promise((resolve) => setTimeout(resolve, 350));
     }
 
     // If dialog is open with same token, ignore
@@ -53,7 +53,7 @@ export class TokenDetailsDialog {
 
     try {
       this.tokenData = tokenData;
-      
+
       // Create and show dialog IMMEDIATELY with available data
       this._createDialog();
       this._attachEventHandlers();
@@ -69,22 +69,21 @@ export class TokenDetailsDialog {
       });
 
       // Start background refresh (non-blocking)
-      this._triggerTokenRefresh().catch(err => {
+      this._triggerTokenRefresh().catch((err) => {
         console.warn("Token refresh failed:", err);
       });
-      
-      this._triggerOhlcvRefresh().catch(err => {
+
+      this._triggerOhlcvRefresh().catch((err) => {
         // Silent - expected for new tokens
       });
 
       // Fetch full token details (non-blocking)
-      this._fetchTokenData().catch(err => {
+      this._fetchTokenData().catch((err) => {
         console.error("Failed to fetch token data:", err);
       });
 
       // Start polling for updates
       this._startPolling();
-
     } finally {
       this.isOpening = false;
     }
@@ -96,14 +95,14 @@ export class TokenDetailsDialog {
   async _triggerTokenRefresh() {
     try {
       const response = await fetch(`/api/tokens/${this.tokenData.mint}/refresh`, {
-        method: 'POST'
+        method: "POST",
       });
       if (response.ok) {
         const result = await response.json();
-        console.log('Token data refresh triggered:', result);
+        console.log("Token data refresh triggered:", result);
       }
     } catch (error) {
-      console.warn('Failed to trigger token refresh:', error);
+      console.warn("Failed to trigger token refresh:", error);
     }
   }
 
@@ -113,11 +112,11 @@ export class TokenDetailsDialog {
   async _triggerOhlcvRefresh() {
     try {
       const response = await fetch(`/api/tokens/${this.tokenData.mint}/ohlcv/refresh`, {
-        method: 'POST'
+        method: "POST",
       });
       if (response.ok) {
         const result = await response.json();
-        console.log('OHLCV data refresh triggered:', result);
+        console.log("OHLCV data refresh triggered:", result);
       }
     } catch (error) {
       // Silently ignore - OHLCV may not be available for new tokens
@@ -222,7 +221,7 @@ export class TokenDetailsDialog {
       const response = await fetch(
         `/api/tokens/${this.tokenData.mint}/ohlcv?timeframe=${this.currentTimeframe}&limit=200`
       );
-      
+
       if (!response.ok) return;
 
       const data = await response.json();
@@ -255,7 +254,7 @@ export class TokenDetailsDialog {
     if (content.dataset.loaded !== "true") return;
 
     // Find the overview table and update only its content
-    const overviewTable = content.querySelector('.overview-left');
+    const overviewTable = content.querySelector(".overview-left");
     if (overviewTable) {
       // Update only the data table, not the entire layout
       overviewTable.innerHTML = this._buildOverviewTable(this.fullTokenData);
@@ -277,7 +276,7 @@ export class TokenDetailsDialog {
 
     // Animate out
     this.dialogEl.classList.remove("active");
-    
+
     // Clean up after animation
     setTimeout(() => {
       // Remove event listeners
@@ -643,9 +642,10 @@ export class TokenDetailsDialog {
       rows.push(this._buildDataRow("Price Confidence", token.price_confidence));
     }
     if (token.pool_price_last_calculated_at) {
-      const timestamp = typeof token.pool_price_last_calculated_at === "string"
-        ? Math.floor(new Date(token.pool_price_last_calculated_at).getTime() / 1000)
-        : token.pool_price_last_calculated_at;
+      const timestamp =
+        typeof token.pool_price_last_calculated_at === "string"
+          ? Math.floor(new Date(token.pool_price_last_calculated_at).getTime() / 1000)
+          : token.pool_price_last_calculated_at;
       const priceAge = Math.floor(Date.now() / 1000) - timestamp;
       rows.push(this._buildDataRow("Price Age", Utils.formatTimeAgo(priceAge)));
     }
@@ -1065,16 +1065,16 @@ export class TokenDetailsDialog {
     // Handle timeframe changes
     timeframeSelect.addEventListener("change", async (e) => {
       this.currentTimeframe = e.target.value;
-      
+
       // Trigger immediate OHLCV refresh for new timeframe
       await this._triggerOhlcvRefresh();
-      
+
       // Small delay to let backend fetch fresh data
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
       // Load chart data
       await this._loadChartData(mint, this.currentTimeframe);
-      
+
       // Chart polling will continue with new timeframe
     });
 

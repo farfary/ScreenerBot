@@ -1,0 +1,489 @@
+<div class="page-table trader-page">
+  <div id="trader-root">
+    <!-- Tab Content Area -->
+    <div id="trader-content">
+      <!-- Stats Tab -->
+      <div id="stats-tab" class="trader-tab-content" style="display: none">
+        <div class="stats-grid">
+          <!-- Performance Metrics Row -->
+          <div class="stats-section">
+            <h3>📊 Performance Metrics</h3>
+            <div class="metrics-row">
+              <div class="metric-card">
+                <div class="metric-label">Win Rate</div>
+                <div class="metric-value" id="win-rate">—</div>
+                <div class="metric-change" id="win-rate-change"></div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">Total Trades</div>
+                <div class="metric-value" id="total-trades">—</div>
+                <div class="metric-change" id="total-trades-change"></div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">Avg Hold Time</div>
+                <div class="metric-value" id="avg-hold-time">—</div>
+                <div class="metric-change" id="avg-hold-time-change"></div>
+              </div>
+              <div class="metric-card">
+                <div class="metric-label">Best Trade</div>
+                <div class="metric-value" id="best-trade">—</div>
+                <div class="metric-change" id="best-trade-token"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Exit Reason Breakdown -->
+          <div class="stats-section">
+            <h3>📈 Exit Strategy Performance (Last 30 days)</h3>
+            <div id="exit-breakdown" class="exit-breakdown">
+              <div class="loading">Loading exit data...</div>
+            </div>
+          </div>
+
+          <!-- Current Positions Risk Analysis -->
+          <div class="stats-section">
+            <h3>🎯 Active Positions Risk Matrix</h3>
+            <div id="positions-risk" class="positions-risk">
+              <div class="info-message">No open positions</div>
+            </div>
+          </div>
+
+          <!-- System Health -->
+          <div class="stats-section">
+            <h3>🤖 System Health & Activity</h3>
+            <div class="health-grid">
+              <div class="health-card">
+                <div class="health-label">Trader Status</div>
+                <div class="health-value" id="trader-status">—</div>
+                <div class="health-detail" id="trader-detail"></div>
+              </div>
+              <div class="health-card">
+                <div class="health-label">Entry Monitor</div>
+                <div class="health-value" id="entry-monitor">—</div>
+                <div class="health-detail" id="entry-detail"></div>
+              </div>
+              <div class="health-card">
+                <div class="health-label">Exit Monitor</div>
+                <div class="health-value" id="exit-monitor">—</div>
+                <div class="health-detail" id="exit-detail"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trailing Stop Tab -->
+      <div id="trailing-stop-tab" class="trader-tab-content" style="display: none">
+        <div class="config-form">
+          <h3>📈 Trailing Stop Configuration</h3>
+
+          <div class="form-section">
+            <h4>⚙️ Basic Settings</h4>
+            <div class="form-group">
+              <label for="trailing-enabled">
+                <input type="checkbox" id="trailing-enabled" />
+                Enable Trailing Stop
+              </label>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h4>📊 Single Level (Current)</h4>
+            <div class="form-group">
+              <label for="trail-activation">
+                Activation Threshold
+                <span class="hint">Start trailing when position is up by this %</span>
+              </label>
+              <div class="input-with-unit">
+                <input
+                  type="number"
+                  id="trail-activation"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value="10"
+                />
+                <span class="unit">%</span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="trail-distance">
+                Trail Distance
+                <span class="hint">Exit if price drops by this % from peak</span>
+              </label>
+              <div class="input-with-unit">
+                <input
+                  type="number"
+                  id="trail-distance"
+                  min="0"
+                  max="50"
+                  step="1"
+                  value="5"
+                />
+                <span class="unit">%</span>
+              </div>
+            </div>
+
+            <div class="example-box">
+              <strong>💡 Example:</strong> Buy at 0.001 SOL → Peak at 0.0011 SOL (+10%) → Trail
+              starts → Exit at 0.001045 SOL (-5% from peak)
+            </div>
+          </div>
+
+          <div class="form-section disabled">
+            <h4>🎯 Multi-Level (Advanced - Future) <span class="badge warning">UPGRADE</span></h4>
+            <div class="info-message">
+              Multi-level trailing stops require backend changes. Coming in Phase 3.
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button class="btn primary" id="save-trailing">Save Changes</button>
+            <button class="btn secondary" id="reset-trailing">Reset to Defaults</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Take Profit (ROI) Tab -->
+      <div id="roi-tab" class="trader-tab-content" style="display: none">
+        <div class="config-form">
+          <h3>🎯 Take Profit (ROI) Configuration</h3>
+
+          <div class="form-section">
+            <h4>⚙️ Basic Settings</h4>
+            <div class="form-group">
+              <label for="roi-enabled">
+                <input type="checkbox" id="roi-enabled" />
+                Enable Take Profit
+              </label>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h4>🎯 Single Target (Current)</h4>
+            <div class="form-group">
+              <label for="roi-target">
+                Target Profit
+                <span class="hint">Sell entire position when profit reaches this %</span>
+              </label>
+              <div class="input-with-unit">
+                <input type="number" id="roi-target" min="0" max="1000" step="0.1" value="2.0" />
+                <span class="unit">%</span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Exit Amount</label>
+              <div class="info-text">100% (full position)</div>
+            </div>
+
+            <div class="example-box">
+              <strong>💡</strong> Sell entire position when profit reaches +2%
+            </div>
+          </div>
+
+          <div class="form-section disabled">
+            <h4>🎯 Ladder Targets (Advanced - Future) <span class="badge warning">UPGRADE</span></h4>
+            <div class="info-message">
+              Multi-level profit targets require backend changes. Coming in Phase 3.
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button class="btn primary" id="save-roi">Save Changes</button>
+            <button class="btn secondary" id="reset-roi">Reset to Defaults</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Time Rules Tab -->
+      <div id="time-rules-tab" class="trader-tab-content" style="display: none">
+        <div class="config-form">
+          <h3>⏱️ Time-Based Exit Rules</h3>
+
+          <div class="form-section">
+            <h4>⚙️ Basic Time Override (Current)</h4>
+            <div class="form-group">
+              <label for="time-max-hold">
+                Max Hold Duration
+                <span class="hint">Force exit after this many hours</span>
+              </label>
+              <div class="input-with-unit">
+                <input
+                  type="number"
+                  id="time-max-hold"
+                  min="1"
+                  max="720"
+                  step="1"
+                  value="168"
+                />
+                <span class="unit">hours</span>
+              </div>
+              <div class="hint-text">168 hours = 7 days</div>
+            </div>
+
+            <div class="form-group">
+              <label for="time-loss-threshold">
+                Loss Threshold
+                <span class="hint">Exit if position is down by this % (use negative values)</span>
+              </label>
+              <div class="input-with-unit">
+                <input
+                  type="number"
+                  id="time-loss-threshold"
+                  min="-100"
+                  max="0"
+                  step="1"
+                  value="-40"
+                />
+                <span class="unit">%</span>
+              </div>
+            </div>
+
+            <div class="example-box">
+              <strong>💡 Example:</strong> After 168h, exit if position is down 40% or more
+            </div>
+
+            <div class="form-group">
+              <label>Current Positions Status:</label>
+              <div id="time-positions-status" class="status-list">
+                <div class="loading">Loading positions...</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section disabled">
+            <h4>🎯 Escalation Rules (Advanced - Future) <span class="badge warning">UPGRADE</span></h4>
+            <div class="info-message">
+              Time-based rule escalation requires backend changes. Coming in Phase 3.
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button class="btn primary" id="save-time-rules">Save Changes</button>
+            <button class="btn secondary" id="reset-time-rules">Reset to Defaults</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Strategy Control Tab -->
+      <div id="strategy-control-tab" class="trader-tab-content" style="display: none">
+        <div class="config-form">
+          <h3>🧩 Strategy Integration Control</h3>
+
+          <div class="info-box">
+            <strong>💡</strong> Manage which strategies the trader uses for entry/exit decisions.
+            Create/edit strategies in the
+            <a href="#" data-page="strategies" class="link">Strategies tab</a>.
+          </div>
+
+          <div class="form-section">
+            <h4>🎯 Entry Strategies</h4>
+            <div id="entry-strategies" class="strategies-list">
+              <div class="loading">Loading strategies...</div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h4>🚪 Exit Strategies</h4>
+            <div id="exit-strategies" class="strategies-list">
+              <div class="loading">Loading strategies...</div>
+            </div>
+          </div>
+
+          <div class="form-section disabled">
+            <h4>⚙️ Strategy Voting Mode (Advanced - Future) <span class="badge warning">UPGRADE</span></h4>
+            <div class="info-message">
+              Strategy voting modes require backend changes. Coming in Phase 3.
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button class="btn primary" id="save-strategies">Save Changes</button>
+            <button class="btn secondary" id="refresh-strategies">Refresh List</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- General Settings Tab -->
+      <div id="general-settings-tab" class="trader-tab-content" style="display: none">
+        <div class="config-form">
+          <h3>⚙️ General Trader Settings</h3>
+
+          <div class="form-section">
+            <h4>🎯 Position Sizing</h4>
+            <div class="form-group">
+              <label for="max-positions">
+                Max Open Positions
+                <span class="hint">1-100, conservative: 2-5</span>
+              </label>
+              <input type="number" id="max-positions" min="1" max="100" step="1" value="2" />
+            </div>
+
+            <div class="form-group">
+              <label for="trade-size">
+                Default Trade Size
+                <span class="hint">SOL per position</span>
+              </label>
+              <div class="input-with-unit">
+                <input
+                  type="number"
+                  id="trade-size"
+                  min="0.001"
+                  max="10"
+                  step="0.001"
+                  value="0.005"
+                />
+                <span class="unit">SOL</span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="entry-sizes">
+                Preset Entry Sizes
+                <span class="hint">Comma-separated SOL amounts (e.g., 0.005, 0.01, 0.02)</span>
+              </label>
+              <input
+                type="text"
+                id="entry-sizes"
+                placeholder="0.005, 0.01, 0.02, 0.05"
+                value="0.005, 0.01, 0.02, 0.05"
+              />
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h4>💰 DCA (Dollar Cost Averaging)</h4>
+            <div class="form-group">
+              <label for="dca-enabled">
+                <input type="checkbox" id="dca-enabled" />
+                Enable DCA
+              </label>
+            </div>
+
+            <div class="form-group">
+              <label for="dca-threshold">
+                DCA Threshold
+                <span class="hint">Enter DCA when position is down by this %</span>
+              </label>
+              <div class="input-with-unit">
+                <input
+                  type="number"
+                  id="dca-threshold"
+                  min="-100"
+                  max="0"
+                  step="1"
+                  value="-10"
+                />
+                <span class="unit">%</span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="dca-max-count">
+                Max DCA Count
+                <span class="hint">Maximum additional entries per position</span>
+              </label>
+              <input type="number" id="dca-max-count" min="1" max="5" step="1" value="2" />
+            </div>
+
+            <div class="form-group">
+              <label for="dca-size">
+                DCA Size
+                <span class="hint">% of initial position size for each DCA</span>
+              </label>
+              <div class="input-with-unit">
+                <input type="number" id="dca-size" min="10" max="200" step="10" value="50" />
+                <span class="unit">%</span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="dca-cooldown">
+                DCA Cooldown
+                <span class="hint">Minutes between DCA entries</span>
+              </label>
+              <div class="input-with-unit">
+                <input type="number" id="dca-cooldown" min="1" max="1440" step="5" value="30" />
+                <span class="unit">minutes</span>
+              </div>
+            </div>
+
+            <div class="example-box">
+              <strong>💡 Example:</strong> 0.01 SOL initial → DCA #1: 0.005 SOL @ -10% → DCA #2:
+              0.005 SOL @ -10% more
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h4>⏱️ Timing & Cooldowns</h4>
+            <div class="form-group">
+              <label for="close-cooldown">
+                Position Close Cooldown
+                <span class="hint">Minutes before reopening same token</span>
+              </label>
+              <div class="input-with-unit">
+                <input
+                  type="number"
+                  id="close-cooldown"
+                  min="0"
+                  max="1440"
+                  step="5"
+                  value="15"
+                />
+                <span class="unit">minutes</span>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="entry-concurrency">
+                Entry Check Concurrency
+                <span class="hint">Tokens to check at once (higher = faster but more CPU)</span>
+              </label>
+              <input type="number" id="entry-concurrency" min="1" max="50" step="1" value="10" />
+            </div>
+
+            <div class="form-group readonly">
+              <label>
+                Entry Monitor Interval
+                <span class="hint">Configured in code (not editable)</span>
+              </label>
+              <div class="readonly-value">30s</div>
+            </div>
+
+            <div class="form-group readonly">
+              <label>
+                Exit Monitor Interval
+                <span class="hint">Configured in code (not editable)</span>
+              </label>
+              <div class="readonly-value">5s</div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h4>🧪 Testing & Debug</h4>
+            <div class="form-group">
+              <label for="dry-run">
+                <input type="checkbox" id="dry-run" />
+                Dry Run Mode
+                <span class="hint">Simulate trades without executing</span>
+              </label>
+            </div>
+
+            <div id="dry-run-warning" class="warning-box" style="display: none">
+              ⚠️ <strong>LIVE TRADING MODE:</strong> Real transactions will execute!
+            </div>
+          </div>
+
+          <div class="form-actions">
+            <button class="btn primary" id="save-general">Save Changes</button>
+            <button class="btn secondary" id="reset-general">Reset to Defaults</button>
+            <button class="btn secondary" id="export-config">Export Config</button>
+            <button class="btn secondary" id="import-config">Import Config</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
