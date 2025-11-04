@@ -10,6 +10,7 @@ pub mod errors;
 pub mod events;
 pub mod filtering;
 pub mod global;
+pub mod license;
 pub mod logger;
 pub mod ohlcvs;
 pub mod pools;

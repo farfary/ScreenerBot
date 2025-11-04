@@ -52,6 +52,10 @@ path = "src/bin/debug_decimals.rs"
 name = "verify_transactions_from_csv"
 path = "src/bin/verify_transactions_from_csv.rs"
 
+[[bin]]
+name = "test_license_verification"
+path = "src/bin/test_license_verification.rs"
+
 [dependencies]
 # Core async runtime with minimal features for faster builds
 # Added tracing for tokio-console support
@@ -70,7 +74,7 @@ blake3 = "1.5"
 flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }
 
 # HTTP client and websockets
-reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+reqwest = { version = "0.11", features = ["json", "rustls-tls", "blocking"] }
 tokio-tungstenite = { version = "0.21", features = ["connect", "rustls-tls-native-roots"] }
 
 # Database with bundled sqlite for faster builds
@@ -110,6 +114,7 @@ solana-sdk = { version = "2.3.1", features = ["full"] }
 solana-client = { version = "2.1.0" }
 solana-program = { version = "2.3.0" }
 solana-transaction-status = { version = "2.3.3" }
+solana-account-decoder = { version = "2.3.1" }
 
 # SPL Token dependencies - minimal features
 spl-token-2022 = { version = "8.0.1", default-features = false, features = ["no-entrypoint"] }

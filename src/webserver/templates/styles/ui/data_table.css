@@ -433,6 +433,16 @@ body.dt-column-resizing * {
   display: inline;
 }
 
+.data-table td a.mono-text {
+  color: var(--link-color);
+  text-decoration: none;
+}
+
+.data-table td a.mono-text:hover {
+  color: var(--link-hover);
+  text-decoration: underline;
+}
+
 .data-table td.dt-empty {
   text-align: center;
   padding: 48px 32px;
