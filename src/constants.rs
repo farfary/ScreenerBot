@@ -13,7 +13,7 @@ pub const METAPLEX_PROGRAM_ID: &str = "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x
 
 /// ScreenerBot license issuer (creator/authority for all licenses)
 /// This wallet from config.toml mints and verifies all licenses
-pub const LICENSE_ISSUER_PUBKEY: &str = "5A6EqAjSJem9quXhh7cVZUp51d3VQvzMMiR3gyjffCmt";
+pub const LICENSE_ISSUER_PUBKEY: &str = "8o8yXpESV1JKdZGtWqSRCWownK3RSCUK76LvA3uwC6CZ";
 
 // ============================================================================
 // SOLANA BLOCKCHAIN & TOKEN CONSTANTS
@@ -68,5 +68,3 @@ pub const PUMP_FUN_AMM_PROGRAM_ID: &str = "pAMMBay6oceH9fJKBRHGP5D4bD4sWpmSwMn52
 pub const PUMP_FUN_LEGACY_PROGRAM_ID: &str = "6EF8rrecthR5Dkzon8Nwu78hRvfCKubJ14M5uBEwF6P";
 pub const MOONIT_AMM_PROGRAM_ID: &str = "MoonCVVNZFSYkqNXP6bxHLPL6QQJiMagDL3qcqUQTrG";
 pub const FLUXBEAM_AMM_PROGRAM_ID: &str = "FLUXubRmkEi2q6K3Y9kBPg9248ggaZVsoSFhtJHSrm1X";
-
-

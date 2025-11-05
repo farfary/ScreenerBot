@@ -153,6 +153,20 @@ pub fn log_service_startup_phase(phase: &str, details: Option<&str>) {
     logger::info(LogTag::System, &message);
 }
 
+pub struct ServiceStartupFailure {
+    pub name: &'static str,
+    pub error: String,
+}
+
+pub struct ServiceStartupReport {
+    pub attempted: Vec<&'static str>,
+    pub started: Vec<&'static str>,
+    pub failures: Vec<ServiceStartupFailure>,
+    pub already_running: usize,
+    pub total_enabled: usize,
+    pub duration_ms: u128,
+}
+
 pub struct ServiceManager {
     services: HashMap<&'static str, Box<dyn Service>>,
     handles: HashMap<&'static str, Vec<JoinHandle<()>>>,
@@ -195,13 +209,17 @@ impl ServiceManager {
     pub async fn start_all(&mut self) -> Result<(), String> {
         let total_registered = self.services.len();
 
-        // Filter enabled services
-        let enabled_services: Vec<&'static str> = self
-            .services
-            .iter()
-            .filter(|(_, service)| service.is_enabled())
-            .map(|(name, _)| *name)
-            .collect();
+        // Filter enabled services with debug logging
+        let mut enabled_services: Vec<&'static str> = Vec::new();
+        for (name, service) in self.services.iter() {
+            logger::debug(
+                LogTag::System,
+                &format!("Checking is_enabled() for service: {}", name),
+            );
+            if service.is_enabled() {
+                enabled_services.push(*name);
+            }
+        }
 
         let debug_flag = "on"; // Debug system always logs when logger::debug is called
         let disabled = total_registered.saturating_sub(enabled_services.len());
@@ -322,6 +340,197 @@ impl ServiceManager {
             &format!("service_startup status=ready {}", completion),
         );
         Ok(())
+    }
+
+    /// Start services that are now enabled (after initialization)
+    /// This method is idempotent - skips services that are already running
+    /// Handles topological sorting and collects partial failures
+    pub async fn start_newly_enabled(&mut self) -> Result<ServiceStartupReport, String> {
+        logger::info(
+            LogTag::System,
+            "Starting newly enabled services after initialization",
+        );
+
+        // Get all enabled services
+        let all_enabled: Vec<&'static str> = self
+            .services
+            .iter()
+            .filter(|(_, service)| service.is_enabled())
+            .map(|(name, _)| *name)
+            .collect();
+
+        // Filter out services that are already running
+        let to_start: Vec<&'static str> = all_enabled
+            .iter()
+            .filter(|name| !self.handles.contains_key(**name))
+            .copied()
+            .collect();
+
+        let already_running = all_enabled.len() - to_start.len();
+
+        if to_start.is_empty() {
+            logger::info(
+                LogTag::System,
+                "No new services to start - all enabled services are already running",
+            );
+            return Ok(ServiceStartupReport {
+                attempted: Vec::new(),
+                started: Vec::new(),
+                failures: Vec::new(),
+                already_running,
+                total_enabled: all_enabled.len(),
+                duration_ms: 0,
+            });
+        }
+        logger::info(
+            LogTag::System,
+            &format!(
+                "Starting {} new services (skipping {} already running)",
+                to_start.len(),
+                already_running
+            ),
+        );
+
+        // Resolve dependencies and order by priority (includes dependency checking)
+        let ordered = match self.resolve_startup_order(&to_start) {
+            Ok(order) => order,
+            Err(e) => {
+                logger::error(
+                    LogTag::System,
+                    &format!("Failed to resolve service startup order: {}", e),
+                );
+                return Err(e);
+            }
+        };
+
+        logger::info(
+            LogTag::System,
+            &format!("Service startup order: {}", ordered.join(", ")),
+        );
+
+        let startup_timer = Instant::now();
+        let mut successful_starts = Vec::new();
+        let mut failed_starts: Vec<ServiceStartupFailure> = Vec::new();
+
+        // Initialize and start each service
+        for &service_name in ordered.iter() {
+            let service_timer = Instant::now();
+
+            // Get TaskMonitor FIRST (before any mutable borrow)
+            let monitor = self.get_task_monitor(service_name);
+
+            if let Some(service) = self.services.get_mut(service_name) {
+                // Initialize
+                log_service_event(service_name, ServiceLogEvent::InitializeStart, None, true);
+                match service.initialize().await {
+                    Ok(_) => {
+                        log_service_event(
+                            service_name,
+                            ServiceLogEvent::InitializeSuccess,
+                            None,
+                            true,
+                        );
+                    }
+                    Err(e) => {
+                        logger::error(
+                            LogTag::System,
+                            &format!("Failed to initialize service '{}': {}", service_name, e),
+                        );
+                        failed_starts.push(ServiceStartupFailure {
+                            name: service_name,
+                            error: format!("Initialize failed: {}", e),
+                        });
+                        continue; // Skip starting this service
+                    }
+                }
+
+                // Start
+                log_service_event(service_name, ServiceLogEvent::StartStart, None, true);
+                match service.start(self.shutdown.clone(), monitor.clone()).await {
+                    Ok(handles) => {
+                        let handle_count = handles.len();
+                        let elapsed = service_timer.elapsed().as_millis();
+
+                        logger::info(
+                            LogTag::System,
+                            &format!(
+                                "Service '{}' started successfully ({}ms, {} handles)",
+                                service_name, elapsed, handle_count
+                            ),
+                        );
+
+                        log_service_event(
+                            service_name,
+                            ServiceLogEvent::StartSuccess,
+                            Some(&format!("handles={}", handle_count)),
+                            true,
+                        );
+
+                        self.handles.insert(service_name, handles);
+                        successful_starts.push(service_name);
+
+                        // Register monitor with metrics collector
+                        self.metrics_collector
+                            .start_monitoring(service_name, monitor, self.shutdown.clone())
+                            .await;
+                    }
+                    Err(e) => {
+                        logger::error(
+                            LogTag::System,
+                            &format!("Failed to start service '{}': {}", service_name, e),
+                        );
+                        failed_starts.push(ServiceStartupFailure {
+                            name: service_name,
+                            error: format!("Start failed: {}", e),
+                        });
+                    }
+                }
+            }
+        }
+
+        let total_elapsed = startup_timer.elapsed().as_millis();
+
+        if failed_starts.is_empty() {
+            logger::info(
+                LogTag::System,
+                &format!(
+                    "All {} newly enabled services started successfully (duration_ms={})",
+                    successful_starts.len(),
+                    total_elapsed
+                ),
+            );
+        } else {
+            logger::warning(
+                LogTag::System,
+                &format!(
+                    "Service startup completed with partial failures: successful={} failed={} duration_ms={}",
+                    successful_starts.len(),
+                    failed_starts.len(),
+                    total_elapsed
+                ),
+            );
+
+            for failure in &failed_starts {
+                logger::error(
+                    LogTag::System,
+                    &format!("  ❌ {}: {}", failure.name, failure.error),
+                );
+            }
+        }
+
+        Ok(ServiceStartupReport {
+            attempted: ordered,
+            started: successful_starts,
+            failures: failed_starts,
+            already_running,
+            total_enabled: all_enabled.len(),
+            duration_ms: total_elapsed,
+        })
+    }
+
+    /// Check if services can be started (initialization complete)
+    pub fn can_start_services(&self) -> bool {
+        crate::global::is_initialization_complete()
     }
 
     /// Stop all services in reverse priority order
@@ -561,6 +770,16 @@ impl ServiceManager {
             .get(name)
             .map(|s| s.is_enabled())
             .unwrap_or(false)
+    }
+
+    /// Get the names of services that currently have running handles
+    pub fn get_running_service_names(&self) -> Vec<&'static str> {
+        self.handles.keys().copied().collect()
+    }
+
+    /// Get the number of services that currently have running handles
+    pub fn get_running_service_count(&self) -> usize {
+        self.handles.len()
     }
 }
 

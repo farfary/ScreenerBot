@@ -32,6 +32,10 @@ impl Service for TraderService {
         ]
     }
 
+    fn is_enabled(&self) -> bool {
+        crate::global::is_initialization_complete()
+    }
+
     async fn initialize(&mut self) -> Result<(), String> {
         Ok(())
     }

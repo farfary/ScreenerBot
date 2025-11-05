@@ -332,6 +332,82 @@ pub fn save_config(path: Option<&str>) -> Result<(), String> {
     Ok(())
 }
 
+/// Save a specific configuration to disk and optionally load it into global CONFIG
+///
+/// This is used during initialization to create the initial config.toml file
+/// with user-provided credentials before loading it into the global state.
+///
+/// # Arguments
+/// * `config` - Configuration to save
+/// * `path` - Path where to save the configuration file
+/// * `set_global` - If true, also loads this config into the global CONFIG
+///
+/// # Returns
+/// - `Ok(())` - Configuration saved successfully
+/// - `Err(String)` - Error message if saving failed
+///
+/// # Example
+/// ```
+/// use screenerbot::config::{save_config_to_file, schemas::Config};
+///
+/// let config = Config {
+///     main_wallet_private: "base58_key_here".to_string(),
+///     ..Default::default()
+/// };
+/// save_config_to_file(&config, "data/config.toml", true)?;
+/// ```
+pub fn save_config_to_file(config: &Config, path: &str, set_global: bool) -> Result<(), String> {
+    // Validate configuration before saving
+    validate_config(config)?;
+
+    // Serialize to TOML
+    let config_str =
+        toml::to_string_pretty(config).map_err(|e| format!("Failed to serialize config: {}", e))?;
+
+    // Ensure parent directory exists
+    if let Some(parent) = std::path::Path::new(path).parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("Failed to create config directory: {}", e))?;
+    }
+
+    // Write to file
+    std::fs::write(path, config_str)
+        .map_err(|e| format!("Failed to write config file '{}': {}", path, e))?;
+
+    // Set restrictive permissions on Unix systems (owner read/write only)
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mut perms = std::fs::metadata(path)
+            .map_err(|e| format!("Failed to get file metadata: {}", e))?
+            .permissions();
+        perms.set_mode(0o600); // rw------- (owner read/write only)
+        std::fs::set_permissions(path, perms)
+            .map_err(|e| format!("Failed to set file permissions: {}", e))?;
+    }
+
+    logger::info(
+        LogTag::System,
+        &format!("Config saved to '{}' with secure permissions", path),
+    );
+
+    // Optionally set as global config
+    if set_global {
+        if CONFIG.get().is_some() {
+            // Config already initialized, reload it
+            reload_config_from_path(path)?;
+        } else {
+            // First-time initialization
+            CONFIG
+                .set(RwLock::new(config.clone()))
+                .map_err(|_| "Config already initialized".to_string())?;
+        }
+        logger::info(LogTag::System, "Config loaded into global state");
+    }
+
+    Ok(())
+}
+
 /// Check if configuration has been initialized
 ///
 /// # Returns

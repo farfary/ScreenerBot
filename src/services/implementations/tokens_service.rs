@@ -30,6 +30,10 @@ impl Service for TokensService {
         vec!["events", "transactions", "pools"]
     }
 
+    fn is_enabled(&self) -> bool {
+        crate::global::is_initialization_complete()
+    }
+
     async fn initialize(&mut self) -> Result<(), String> {
         let mut service = crate::tokens::service::TokensServiceNew::default();
         service.initialize().await?;

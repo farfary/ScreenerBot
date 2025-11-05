@@ -233,8 +233,12 @@ impl TokenDatabase {
             }
             Some("first_discovered_at") => "t.first_discovered_at",
             Some("metadata_last_fetched_at") => "t.metadata_last_fetched_at",
-            Some("blockchain_created_at") => "COALESCE(t.blockchain_created_at, t.first_discovered_at)",
-            Some("pool_price_last_calculated_at") => "COALESCE(ut.pool_price_last_calculated_at, t.metadata_last_fetched_at)",
+            Some("blockchain_created_at") => {
+                "COALESCE(t.blockchain_created_at, t.first_discovered_at)"
+            }
+            Some("pool_price_last_calculated_at") => {
+                "COALESCE(ut.pool_price_last_calculated_at, t.metadata_last_fetched_at)"
+            }
             Some("mint") => "t.mint",
             Some("risk_score") => "sr.score",
             _ => "COALESCE(ut.market_data_last_updated_at, t.metadata_last_fetched_at)",

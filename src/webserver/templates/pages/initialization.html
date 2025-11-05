@@ -1,0 +1,190 @@
+<!-- Initialization Page Content -->
+<div class="init-overlay" id="init-overlay">
+  <div class="init-dialog">
+    <!-- Header -->
+    <div class="init-header">
+      <div class="init-logo">ScreenerBot</div>
+      <h2 class="init-title">Initial Setup</h2>
+      <p class="init-subtitle">Configure your trading bot credentials</p>
+    </div>
+
+    <!-- Progress Indicator -->
+    <div class="init-progress">
+      <div class="init-step active" data-step="1">
+        <div class="init-step-number">1</div>
+        <div class="init-step-label">Credentials</div>
+      </div>
+      <div class="init-step" data-step="2">
+        <div class="init-step-number">2</div>
+        <div class="init-step-label">Verification</div>
+      </div>
+      <div class="init-step" data-step="3">
+        <div class="init-step-number">3</div>
+        <div class="init-step-label">Complete</div>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="init-body">
+      <!-- Step 1: Credentials Input -->
+      <div class="init-step-content active" data-step="1">
+        <!-- Wallet Private Key Field -->
+        <div class="init-field">
+          <label class="init-label">
+            <span class="init-label-text">Wallet Private Key</span>
+            <span class="init-label-required">*</span>
+          </label>
+          <div class="init-input-wrapper">
+            <textarea 
+              class="init-input" 
+              id="wallet-private-key" 
+              placeholder="Enter base58 string or JSON array format"
+              rows="3"
+              spellcheck="false"
+              autocomplete="off"
+            ></textarea>
+            <button class="init-input-toggle" type="button" data-toggle="wallet-private-key" title="Toggle visibility">
+              <span class="toggle-icon">👁️</span>
+            </button>
+          </div>
+          <div class="init-hint">
+            Base58 format: 5Jv8...xyz or JSON array: [1,2,3,...]
+          </div>
+          <div class="init-validation" id="wallet-validation"></div>
+        </div>
+
+        <!-- RPC URLs Field -->
+        <div class="init-field">
+          <label class="init-label">
+            <span class="init-label-text">RPC Endpoints</span>
+            <span class="init-label-required">*</span>
+          </label>
+          <textarea 
+            class="init-input" 
+            id="rpc-urls" 
+            placeholder="Enter RPC URLs (one per line)"
+            rows="4"
+          ></textarea>
+          <div class="init-hint">
+            One URL per line. Multiple endpoints will be used with round-robin.
+          </div>
+          <div class="init-validation" id="rpc-validation"></div>
+        </div>
+
+        <!-- RPC Warning Box -->
+        <div class="init-warning">
+          <div class="init-warning-icon">⚠️</div>
+          <div class="init-warning-content">
+            <h4 class="init-warning-title">Premium RPC Required</h4>
+            <p class="init-warning-text">
+              The default Solana mainnet RPC (api.mainnet-beta.solana.com) 
+              <strong>WILL NOT WORK</strong> and will cause failures.
+            </p>
+            <p class="init-warning-text">
+              You <strong>MUST</strong> use a premium RPC provider for proper operation.
+            </p>
+            <div class="init-warning-providers">
+              <h5>Recommended Providers:</h5>
+              <ul>
+                <li>
+                  <a href="https://www.helius.dev" target="_blank" rel="noopener noreferrer">
+                    Helius → helius.dev
+                  </a>
+                  <span class="provider-badge">Recommended for DeFi</span>
+                </li>
+                <li>
+                  <a href="https://www.quicknode.com" target="_blank" rel="noopener noreferrer">
+                    QuickNode → quicknode.com
+                  </a>
+                  <span class="provider-badge">High Performance</span>
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 2: Verification -->
+      <div class="init-step-content" data-step="2">
+        <div class="init-verification">
+          <div class="init-verification-item">
+            <div class="init-verification-icon">🔑</div>
+            <div class="init-verification-content">
+              <h4>Wallet Validation</h4>
+              <div class="init-verification-status" id="wallet-status">
+                <span class="init-spinner"></span>
+                <span>Validating private key...</span>
+              </div>
+              <div class="init-verification-details" id="wallet-details"></div>
+            </div>
+          </div>
+
+          <div class="init-verification-item">
+            <div class="init-verification-icon">🌐</div>
+            <div class="init-verification-content">
+              <h4>RPC Connection</h4>
+              <div class="init-verification-status" id="rpc-status">
+                <span class="init-spinner"></span>
+                <span>Testing RPC endpoints...</span>
+              </div>
+              <div class="init-verification-details" id="rpc-details"></div>
+            </div>
+          </div>
+
+          <div class="init-verification-item">
+            <div class="init-verification-icon">🎫</div>
+            <div class="init-verification-content">
+              <h4>License Verification</h4>
+              <div class="init-verification-status" id="license-status">
+                <span class="init-spinner"></span>
+                <span>Verifying ScreenerBot license...</span>
+              </div>
+              <div class="init-verification-details" id="license-details"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: Complete -->
+      <div class="init-step-content" data-step="3">
+        <div class="init-complete">
+          <div class="init-complete-icon">✅</div>
+          <h3 class="init-complete-title">Setup Complete!</h3>
+          <p class="init-complete-text">
+            Starting ScreenerBot services...
+          </p>
+          <div class="init-complete-progress">
+            <div class="progress-bar">
+              <div class="progress-fill" id="services-progress"></div>
+            </div>
+            <div class="progress-text" id="services-status">
+              Initializing services (0/20)...
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="init-footer">
+      <button class="init-btn init-btn-secondary" id="init-back" disabled>
+        ← Back
+      </button>
+      <button class="init-btn init-btn-primary" id="init-next">
+        Next →
+      </button>
+    </div>
+
+    <!-- Error Display -->
+    <div class="init-error" id="init-error" style="display: none;">
+      <div class="init-error-icon">❌</div>
+      <div class="init-error-content">
+        <h4 class="init-error-title">Initialization Failed</h4>
+        <div class="init-error-messages" id="init-error-messages"></div>
+        <button class="init-btn init-btn-secondary" id="init-retry">
+          Try Again
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -297,6 +297,11 @@ impl Service for ConnectivityService {
     }
 
     fn is_enabled(&self) -> bool {
+        // During pre-initialization (no config loaded), connectivity service should not start
+        if !crate::global::is_initialization_complete() {
+            return false;
+        }
+        
         let cfg = get_config_clone();
         cfg.connectivity.enabled
     }
@@ -401,7 +406,11 @@ impl Service for ConnectivityService {
     }
 
     async fn health(&self) -> ServiceHealth {
-        // Service is healthy if enabled or if all critical endpoints are healthy
+        // Service is healthy if not initialized yet or if enabled
+        if !crate::global::is_initialization_complete() {
+            return ServiceHealth::Healthy; // Not started yet, so healthy
+        }
+        
         let cfg = get_config_clone();
 
         if !cfg.connectivity.enabled {

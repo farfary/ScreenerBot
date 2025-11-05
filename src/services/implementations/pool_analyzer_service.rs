@@ -21,6 +21,10 @@ impl Service for PoolAnalyzerService {
         vec!["pool_helpers", "pool_fetcher", "filtering"]
     }
 
+    fn is_enabled(&self) -> bool {
+        crate::global::is_initialization_complete()
+    }
+
     async fn initialize(&mut self) -> Result<(), String> {
         logger::info(
             LogTag::PoolService,

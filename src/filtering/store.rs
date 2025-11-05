@@ -353,11 +353,15 @@ impl FilteringStore {
             TokenSortKey::PriceChangeH1 => Some("price_change_h1".to_string()),
             TokenSortKey::PriceChangeH24 => Some("price_change_h24".to_string()),
             TokenSortKey::RiskScore => Some("risk_score".to_string()),
-            TokenSortKey::MarketDataLastFetchedAt => Some("market_data_last_fetched_at".to_string()),
+            TokenSortKey::MarketDataLastFetchedAt => {
+                Some("market_data_last_fetched_at".to_string())
+            }
             TokenSortKey::FirstDiscoveredAt => Some("first_discovered_at".to_string()),
             TokenSortKey::MetadataLastFetchedAt => Some("metadata_last_fetched_at".to_string()),
             TokenSortKey::BlockchainCreatedAt => Some("blockchain_created_at".to_string()),
-            TokenSortKey::PoolPriceLastCalculatedAt => Some("pool_price_last_calculated_at".to_string()),
+            TokenSortKey::PoolPriceLastCalculatedAt => {
+                Some("pool_price_last_calculated_at".to_string())
+            }
             TokenSortKey::Mint => Some("mint".to_string()),
             // Transaction sorts require in-memory sorting (need sum of buys+sells)
             TokenSortKey::Txns5m
@@ -464,11 +468,15 @@ impl FilteringStore {
         let sort_by = match query.sort_key {
             TokenSortKey::Symbol => Some("symbol".to_string()),
             TokenSortKey::RiskScore => Some("risk_score".to_string()),
-            TokenSortKey::MarketDataLastFetchedAt => Some("market_data_last_fetched_at".to_string()),
+            TokenSortKey::MarketDataLastFetchedAt => {
+                Some("market_data_last_fetched_at".to_string())
+            }
             TokenSortKey::FirstDiscoveredAt => Some("first_discovered_at".to_string()),
             TokenSortKey::MetadataLastFetchedAt => Some("metadata_last_fetched_at".to_string()),
             TokenSortKey::BlockchainCreatedAt => Some("blockchain_created_at".to_string()),
-            TokenSortKey::PoolPriceLastCalculatedAt => Some("pool_price_last_calculated_at".to_string()),
+            TokenSortKey::PoolPriceLastCalculatedAt => {
+                Some("pool_price_last_calculated_at".to_string())
+            }
             TokenSortKey::Mint => Some("mint".to_string()),
             _ => Some("metadata_last_fetched_at".to_string()),
         };

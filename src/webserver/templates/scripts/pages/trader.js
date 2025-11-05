@@ -321,10 +321,14 @@ function createLifecycle() {
       trailStatus.className = preview.trail_active ? "status-active" : "status-inactive";
     }
     if (trailPrice) {
-      trailPrice.textContent = preview.trail_stop_price ? Utils.formatPrice(preview.trail_stop_price) : "—";
+      trailPrice.textContent = preview.trail_stop_price
+        ? Utils.formatPrice(preview.trail_stop_price)
+        : "—";
     }
     if (distanceToExit) {
-      distanceToExit.textContent = preview.distance_to_exit_pct ? Utils.formatPercent(preview.distance_to_exit_pct) : "—";
+      distanceToExit.textContent = preview.distance_to_exit_pct
+        ? Utils.formatPercent(preview.distance_to_exit_pct)
+        : "—";
     }
     if (estimatedExit) {
       estimatedExit.textContent = Utils.formatPrice(preview.estimated_exit_price);

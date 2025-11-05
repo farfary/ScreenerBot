@@ -1,5 +1,6 @@
 mod server;
 
+pub mod middleware;
 pub mod routes;
 pub mod snapshot;
 pub mod state;

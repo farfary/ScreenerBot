@@ -12,6 +12,7 @@ pub mod connectivity;
 pub mod dashboard;
 pub mod events;
 pub mod filtering_api;
+pub mod initialization;
 pub mod ohlcv;
 pub mod positions;
 pub mod services;
@@ -36,6 +37,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/config", axum::routing::get(config_page))
         .route("/strategies", axum::routing::get(strategies_page))
         .route("/trader", axum::routing::get(trader_page))
+        .route("/initialization", axum::routing::get(initialization_page))
         .route("/scripts/core/:file", axum::routing::get(get_core_script))
         .route("/scripts/pages/:file", axum::routing::get(get_page_script))
         .route("/scripts/ui/:file", axum::routing::get(get_ui_script))
@@ -105,6 +107,16 @@ async fn trader_page() -> Html<String> {
     Html(templates::base_template("Trader", "trader", &content))
 }
 
+/// Initialization page handler
+async fn initialization_page() -> Html<String> {
+    let content = templates::initialization_content();
+    Html(templates::base_template(
+        "Initialization",
+        "initialization",
+        &content,
+    ))
+}
+
 fn api_routes() -> Router<Arc<AppState>> {
     Router::new()
         .merge(status::routes())
@@ -119,6 +131,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .merge(services::routes())
         .merge(ohlcv::ohlcv_routes())
         .nest("/connectivity", connectivity::routes())
+        .nest("/initialization", initialization::routes())
         .nest("/trading", trading::routes())
         .nest("/trader", trader::routes())
         .nest("/system", system::routes())
@@ -139,6 +152,7 @@ async fn get_page_content(axum::extract::Path(page): axum::extract::Path<String>
         "config" => templates::config_content(),
         "strategies" => templates::strategies_content(),
         "trader" => templates::trader_content(),
+        "initialization" => templates::initialization_content(),
         _ => {
             // Escape page name to prevent XSS
             let escaped_page = page
@@ -198,6 +212,7 @@ async fn get_page_script(axum::extract::Path(file): axum::extract::Path<String>)
         "config.js" => Some(templates::CONFIG_PAGE_SCRIPT),
         "strategies.js" => Some(templates::STRATEGIES_PAGE_SCRIPT),
         "trader.js" => Some(templates::TRADER_PAGE_SCRIPT),
+        "initialization.js" => Some(templates::INITIALIZATION_PAGE_SCRIPT),
         _ => None,
     };
 

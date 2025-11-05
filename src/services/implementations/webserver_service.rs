@@ -18,10 +18,14 @@ impl Service for WebserverService {
     }
 
     fn dependencies(&self) -> Vec<&'static str> {
-        vec!["filtering"]
+        // Webserver MUST have no dependencies so it can start during pre-initialization
+        // (before credentials/license validation when INITIALIZATION_COMPLETE is false)
+        vec![]
     }
 
     fn is_enabled(&self) -> bool {
+        // Webserver is ALWAYS enabled (even before initialization)
+        // This allows users to access the initialization dialog
         true
     }
 

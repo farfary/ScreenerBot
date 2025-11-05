@@ -18,6 +18,29 @@ pub static STARTUP_TIME: Lazy<DateTime<Utc>> = Lazy::new(|| Utc::now());
 // 🚀 STARTUP COORDINATION SYSTEM - ENSURES PROPER SERVICE INITIALIZATION ORDER
 // ================================================================================================
 
+// ──────────────────────────────────────────────────────────────────────────────────────────────
+// 🔐 LICENSE-GATED INITIALIZATION FLAGS
+// ──────────────────────────────────────────────────────────────────────────────────────────────
+
+/// Master initialization gate - all services (except webserver) wait for this flag
+/// Set to true only after: credentials validated + RPC tested + license verified + config saved
+pub static INITIALIZATION_COMPLETE: AtomicBool = AtomicBool::new(false);
+
+/// Optional health monitoring flags (for UI/observability, not for gating service startup)
+pub static CREDENTIALS_VALID: AtomicBool = AtomicBool::new(false);
+pub static RPC_VALID: AtomicBool = AtomicBool::new(false);
+pub static LICENSE_VALID: AtomicBool = AtomicBool::new(false);
+
+/// Check if initialization is complete and services can start
+/// This is the single source of truth for service enablement (except webserver)
+pub fn is_initialization_complete() -> bool {
+    INITIALIZATION_COMPLETE.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+// ──────────────────────────────────────────────────────────────────────────────────────────────
+// 🎯 CORE SERVICES READINESS FLAGS (Post-Initialization)
+// ──────────────────────────────────────────────────────────────────────────────────────────────
+
 /// Core services readiness flags - prevents trading until all critical services are ready
 pub static CONNECTIVITY_SYSTEM_READY: AtomicBool = AtomicBool::new(false);
 pub static TOKENS_SYSTEM_READY: AtomicBool = AtomicBool::new(false);

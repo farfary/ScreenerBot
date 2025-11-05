@@ -58,6 +58,10 @@ impl Service for FilteringService {
         ]
     }
 
+    fn is_enabled(&self) -> bool {
+        crate::global::is_initialization_complete()
+    }
+
     async fn initialize(&mut self) -> Result<(), String> {
         // Don't refresh during init - it blocks startup for 20+ seconds with 11k tokens
         // The background task will do the first refresh immediately after start

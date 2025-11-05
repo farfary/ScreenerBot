@@ -1,10 +1,9 @@
+use screenerbot::config;
 /// Test license verification with mainnet NFT
-/// 
+///
 /// This binary tests the license verification system by reading the wallet from config.toml
-
 use screenerbot::license::verify_license_for_wallet;
 use screenerbot::logger;
-use screenerbot::config;
 use screenerbot::utils::get_wallet_address;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
@@ -13,7 +12,7 @@ use std::str::FromStr;
 async fn main() {
     // Initialize logger
     logger::init();
-    
+
     // Load config
     if let Err(e) = config::load_config() {
         eprintln!("❌ Failed to load config: {}", e);
@@ -33,7 +32,7 @@ async fn main() {
             return;
         }
     };
-    
+
     println!("📋 Test Configuration:");
     println!("   Wallet: {}", test_wallet);
     println!();
@@ -75,7 +74,10 @@ async fn main() {
     match verify_license_for_wallet(&wallet_pubkey).await {
         Ok(status) => {
             let duration = start.elapsed();
-            println!("   Duration: {:.3}s (should be < 0.001s)", duration.as_secs_f64());
+            println!(
+                "   Duration: {:.3}s (should be < 0.001s)",
+                duration.as_secs_f64()
+            );
             println!();
             if duration.as_millis() < 10 {
                 println!("   ✅ Cache working correctly!");
@@ -99,30 +101,33 @@ async fn main() {
 
 fn print_license_status(status: &screenerbot::license::LicenseStatus) {
     println!("📊 License Status:");
-    println!("   Valid: {}", if status.valid { "✅ Yes" } else { "❌ No" });
-    
+    println!(
+        "   Valid: {}",
+        if status.valid { "✅ Yes" } else { "❌ No" }
+    );
+
     if let Some(tier) = &status.tier {
         println!("   Tier: {}", tier);
     }
-    
+
     if let Some(mint) = &status.mint {
         println!("   NFT Mint: {}", mint);
         println!("   Solscan: https://solscan.io/token/{}", mint);
     }
-    
+
     if let Some(start_ts) = status.start_ts {
         let start_time = chrono::DateTime::from_timestamp(start_ts as i64, 0)
             .map(|dt| dt.format("%Y-%m-%d %H:%M:%S UTC").to_string())
             .unwrap_or_else(|| format!("{}", start_ts));
         println!("   Start: {}", start_time);
     }
-    
+
     if let Some(expiry_ts) = status.expiry_ts {
         let expiry_time = chrono::DateTime::from_timestamp(expiry_ts as i64, 0)
             .map(|dt| dt.format("%Y-%m-%d %H:%M:%S UTC").to_string())
             .unwrap_or_else(|| format!("{}", expiry_ts));
         println!("   Expiry: {}", expiry_time);
-        
+
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .unwrap()
@@ -131,7 +136,7 @@ fn print_license_status(status: &screenerbot::license::LicenseStatus) {
         let days_remaining = remaining / 86400;
         println!("   Remaining: {} days", days_remaining);
     }
-    
+
     if let Some(reason) = &status.reason {
         println!("   Reason: {}", reason);
     }

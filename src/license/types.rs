@@ -72,7 +72,7 @@ impl MetadataJson {
     pub fn is_screenerbot_license(&self) -> bool {
         self.name.contains("ScreenerBot") && self.name.contains("License")
     }
-    
+
     pub fn get_issuer_address(&self) -> Option<String> {
         self.properties
             .as_ref()?

@@ -3267,7 +3267,10 @@ impl RpcClient {
                                         &format!(
                                             "RPC error for {} NFT check: {}",
                                             token_type,
-                                            error.get("message").and_then(|m| m.as_str()).unwrap_or("unknown")
+                                            error
+                                                .get("message")
+                                                .and_then(|m| m.as_str())
+                                                .unwrap_or("unknown")
                                         ),
                                     );
                                 }
@@ -5522,6 +5525,263 @@ pub fn parse_pubkey(address: &str) -> Result<Pubkey, String> {
     crate::utils::parse_pubkey_safe(address)
 }
 
+// ================================================================================================
+// 🔍 EPHEMERAL RPC PROBES - FOR PRE-INITIALIZATION VALIDATION
+// ================================================================================================
+
+/// RPC endpoint test result with detailed metrics
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RpcEndpointTestResult {
+    pub url: String,
+    pub success: bool,
+    pub latency_ms: u64,
+    pub error: Option<String>,
+    pub is_mainnet: Option<bool>,
+    pub version: Option<String>,
+    pub is_premium: bool, // Heuristic based on domain
+}
+
+/// Test a single RPC endpoint without using the global RPC client
+/// Uses jsonParsed encoding and short timeouts (3s)
+/// Returns detailed test result including latency and mainnet validation
+pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
+    use crate::logger::{self, LogTag};
+    
+    logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: START for {}", url));
+    
+    // Heuristic: Check if URL contains known premium RPC provider domains
+    let is_premium = url.contains("helius")
+        || url.contains("quicknode")
+        || url.contains("alchemy")
+        || url.contains("triton")
+        || url.contains("rpcpool")
+        || url.contains("getblock")
+        || url.contains("ankr");
+
+    logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: Validating URL format"));
+    
+    // Validate URL format (non-blocking)
+    match Url::parse(url) {
+        Err(e) => {
+            logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: URL parse failed: {}", e));
+            return RpcEndpointTestResult {
+                url: url.to_string(),
+                success: false,
+                latency_ms: 0,
+                error: Some(format!("Invalid URL format: {}", e)),
+                is_mainnet: None,
+                version: None,
+                is_premium,
+            };
+        }
+        Ok(parsed_url) => {
+            logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: URL parsed, checking scheme"));
+            if parsed_url.scheme() != "https" {
+                logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: Non-HTTPS scheme rejected"));
+                return RpcEndpointTestResult {
+                    url: url.to_string(),
+                    success: false,
+                    latency_ms: 0,
+                    error: Some("URL must use HTTPS".to_string()),
+                    is_mainnet: None,
+                    version: None,
+                    is_premium,
+                };
+            }
+        }
+    }
+
+    let url_owned = url.to_string();
+    let premium_flag = is_premium;
+
+    logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: Creating async HTTP client"));
+
+    // Use async HTTP client instead of blocking
+    let start = Instant::now();
+    
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+        .unwrap();
+
+    logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: Testing get_version"));
+    
+    // Test 1: Get version
+    let version_request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getVersion"
+    });
+    
+    let version_result = client
+        .post(&url_owned)
+        .json(&version_request)
+        .send()
+        .await;
+    
+    let version = match version_result {
+        Ok(response) => {
+            match response.json::<serde_json::Value>().await {
+                Ok(json) => {
+                    if let Some(result) = json.get("result") {
+                        if let Some(solana_core) = result.get("solana-core") {
+                            solana_core.as_str().map(|s| s.to_string())
+                        } else {
+                            None
+                        }
+                    } else {
+                        logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: get_version failed - no result in response"));
+                        return RpcEndpointTestResult {
+                            url: url_owned,
+                            success: false,
+                            latency_ms: start.elapsed().as_millis() as u64,
+                            error: Some("getVersion returned no result".to_string()),
+                            is_mainnet: None,
+                            version: None,
+                            is_premium: premium_flag,
+                        };
+                    }
+                }
+                Err(e) => {
+                    logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: get_version failed - JSON parse error: {}", e));
+                    return RpcEndpointTestResult {
+                        url: url_owned,
+                        success: false,
+                        latency_ms: start.elapsed().as_millis() as u64,
+                        error: Some(format!("getVersion JSON parse error: {}", e)),
+                        is_mainnet: None,
+                        version: None,
+                        is_premium: premium_flag,
+                    };
+                }
+            }
+        }
+        Err(e) => {
+            logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: get_version HTTP failed: {}", e));
+            return RpcEndpointTestResult {
+                url: url_owned,
+                success: false,
+                latency_ms: start.elapsed().as_millis() as u64,
+                error: Some(format!("getVersion HTTP error: {}", e)),
+                is_mainnet: None,
+                version: None,
+                is_premium: premium_flag,
+            };
+        }
+    };
+
+    logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: Testing get_genesis_hash"));
+    
+    // Test 2: Get genesis hash
+    let genesis_request = serde_json::json!({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getGenesisHash"
+    });
+    
+    let genesis_result = client
+        .post(&url_owned)
+        .json(&genesis_request)
+        .send()
+        .await;
+    
+    let genesis_hash = match genesis_result {
+        Ok(response) => {
+            match response.json::<serde_json::Value>().await {
+                Ok(json) => {
+                    if let Some(result) = json.get("result") {
+                        if let Some(hash_str) = result.as_str() {
+                            hash_str.to_string()
+                        } else {
+                            logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: get_genesis_hash failed - result not a string"));
+                            return RpcEndpointTestResult {
+                                url: url_owned,
+                                success: false,
+                                latency_ms: start.elapsed().as_millis() as u64,
+                                error: Some("getGenesisHash returned non-string result".to_string()),
+                                is_mainnet: None,
+                                version,
+                                is_premium: premium_flag,
+                            };
+                        }
+                    } else {
+                        logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: get_genesis_hash failed - no result"));
+                        return RpcEndpointTestResult {
+                            url: url_owned,
+                            success: false,
+                            latency_ms: start.elapsed().as_millis() as u64,
+                            error: Some("getGenesisHash returned no result".to_string()),
+                            is_mainnet: None,
+                            version,
+                            is_premium: premium_flag,
+                        };
+                    }
+                }
+                Err(e) => {
+                    logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: get_genesis_hash JSON parse error: {}", e));
+                    return RpcEndpointTestResult {
+                        url: url_owned,
+                        success: false,
+                        latency_ms: start.elapsed().as_millis() as u64,
+                        error: Some(format!("getGenesisHash JSON parse error: {}", e)),
+                        is_mainnet: None,
+                        version,
+                        is_premium: premium_flag,
+                    };
+                }
+            }
+        }
+        Err(e) => {
+            logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: get_genesis_hash HTTP failed: {}", e));
+            return RpcEndpointTestResult {
+                url: url_owned,
+                success: false,
+                latency_ms: start.elapsed().as_millis() as u64,
+                error: Some(format!("getGenesisHash HTTP error: {}", e)),
+                is_mainnet: None,
+                version,
+                is_premium: premium_flag,
+            };
+        }
+    };
+
+    let latency_ms = start.elapsed().as_millis() as u64;
+
+    logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: Checking mainnet"));
+    // Mainnet genesis hash: 5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d
+    let mainnet_genesis = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
+    let is_mainnet = genesis_hash == mainnet_genesis;
+
+    logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: DONE, success=true"));
+    
+    RpcEndpointTestResult {
+        url: url_owned,
+        success: true,
+        latency_ms,
+        error: None,
+        is_mainnet: Some(is_mainnet),
+        version,
+        is_premium: premium_flag,
+    }
+}
+
+/// Test multiple RPC endpoints concurrently
+/// Returns results for all endpoints (both successes and failures)
+pub async fn test_rpc_endpoints(urls: &[String]) -> Vec<RpcEndpointTestResult> {
+    logger::debug(LogTag::Rpc, &format!("test_rpc_endpoints: START with {} URLs", urls.len()));
+
+    let mut results = Vec::new();
+    for url in urls {
+        logger::debug(LogTag::Rpc, &format!("test_rpc_endpoints: Testing {}", url));
+        let result = test_rpc_endpoint(url).await;
+        logger::debug(LogTag::Rpc, &format!("test_rpc_endpoints: Result for {}: success={}", url, result.success));
+        results.push(result);
+    }
+    
+    logger::debug(LogTag::Rpc, &format!("test_rpc_endpoints: DONE with {} results", results.len()));
+    results
+}
+
 /// Backward compatibility structure for old config access patterns
 #[derive(Debug, Clone)]
 pub struct BackwardCompatibleConfig {
@@ -5563,13 +5823,13 @@ fn extract_nft_mint_if_valid(account: &serde_json::Value) -> Option<String> {
 
     let mint = info.get("mint")?.as_str()?;
     let token_amount = info.get("tokenAmount")?;
-    
+
     // Check decimals = 0
     let decimals = token_amount.get("decimals")?.as_u64()?;
     if decimals != 0 {
         return None;
     }
-    
+
     // Check amount = 1 (use uiAmount which is already adjusted for decimals)
     let ui_amount = token_amount.get("uiAmount")?.as_f64()?;
     if (ui_amount - 1.0).abs() > 0.0001 {

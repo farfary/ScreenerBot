@@ -17,6 +17,41 @@
   </head>
 
   <body>
+    <!-- Initialization Check - Auto-redirect to setup if required -->
+    <script>
+      (async function checkInitialization() {
+        try {
+          const response = await fetch('/api/initialization/status');
+          if (!response.ok) {
+            console.warn('Failed to fetch initialization status:', response.status);
+            return;
+          }
+
+          let result;
+          try {
+            result = await response.json();
+          } catch (jsonError) {
+            console.error('Failed to parse initialization status JSON:', jsonError);
+            return;
+          }
+
+          // Check if initialization is required (new API format without wrapper)
+          if (result && result.required) {
+            // Initialization is required - redirect to initialization page
+            // But only if we're not already on the initialization page
+            if (!window.location.pathname.includes('/initialization') && 
+                !window.location.hash.includes('initialization')) {
+              console.log('Initialization required - redirecting to setup page');
+              window.location.href = '/initialization';
+            }
+          }
+        } catch (error) {
+          console.error('Failed to check initialization status:', error);
+          // If we can't check, don't redirect - might be a temporary network issue
+        }
+      })();
+    </script>
+
     <div class="header">
       <h1>ScreenerBot</h1>
       <div class="header-controls">

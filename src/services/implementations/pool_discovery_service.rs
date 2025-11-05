@@ -21,6 +21,10 @@ impl Service for PoolDiscoveryService {
         vec!["transactions", "pool_helpers", "filtering"]
     }
 
+    fn is_enabled(&self) -> bool {
+        crate::global::is_initialization_complete()
+    }
+
     async fn initialize(&mut self) -> Result<(), String> {
         logger::debug(
             LogTag::PoolService,

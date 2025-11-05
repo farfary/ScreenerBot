@@ -9,6 +9,7 @@ use crate::{
     logger::{self, LogTag},
     services::ServiceManager,
 };
+use solana_sdk::signature::Signer;
 
 /// Main bot execution function - handles the full bot lifecycle with ServiceManager
 pub async fn run_bot() -> Result<(), String> {
@@ -20,52 +21,162 @@ pub async fn run_bot() -> Result<(), String> {
 
     logger::info(LogTag::System, "🚀 ScreenerBot starting up...");
 
-    // 3. Load configuration
-    crate::config::load_config().map_err(|e| format!("Failed to load config: {}", e))?;
+    // 2. Check if config.toml exists (determines initialization mode)
+    let config_path = std::path::Path::new("data/config.toml");
+    let config_exists = config_path.exists();
 
-    logger::info(LogTag::System, "Configuration loaded successfully");
+    if !config_exists {
+        logger::info(
+            LogTag::System,
+            "📋 No config.toml found - starting in initialization mode",
+        );
+        logger::info(
+            LogTag::System,
+            "🌐 Webserver will start on http://localhost:8080 for initial setup",
+        );
 
-    // 4. Initialize strategy system
-    crate::strategies::init_strategy_system(crate::strategies::engine::EngineConfig::default())
-        .await
-        .map_err(|e| format!("Failed to initialize strategy system: {}", e))?;
+        // Set initialization flag to false (services will be gated)
+        global::INITIALIZATION_COMPLETE.store(false, std::sync::atomic::Ordering::SeqCst);
 
-    logger::info(LogTag::System, "Strategy system initialized successfully");
+        // Create service manager with only webserver enabled
+        let mut service_manager = ServiceManager::new().await?;
+        logger::info(LogTag::System, "Service manager initialized");
 
-    // 5. Create service manager
-    let mut service_manager = ServiceManager::new().await?;
+        // Register all services (but only webserver will be enabled)
+        register_all_services(&mut service_manager);
 
-    logger::info(LogTag::System, "Service manager initialized");
+        // Initialize global ServiceManager for webserver access
+        crate::services::init_global_service_manager(service_manager).await;
 
-    // 6. Register all services
-    register_all_services(&mut service_manager);
+        // Get mutable reference to continue
+        let manager_ref = crate::services::get_service_manager()
+            .await
+            .ok_or("Failed to get ServiceManager reference")?;
 
-    // 7. Initialize global ServiceManager for webserver access
-    crate::services::init_global_service_manager(service_manager).await;
+        let mut service_manager = {
+            let mut guard = manager_ref.write().await;
+            guard.take().ok_or("ServiceManager was already taken")?
+        };
 
-    // 8. Get mutable reference to continue
-    let manager_ref = crate::services::get_service_manager()
-        .await
-        .ok_or("Failed to get ServiceManager reference")?;
+        // Start only enabled services (webserver only in pre-init mode)
+        service_manager.start_all().await?;
 
-    let mut service_manager = {
-        let mut guard = manager_ref.write().await;
-        guard.take().ok_or("ServiceManager was already taken")?
-    };
+        // Put it back for webserver access
+        {
+            let mut guard = manager_ref.write().await;
+            *guard = Some(service_manager);
+        }
 
-    // 9. Start all enabled services
-    service_manager.start_all().await?;
+        logger::info(
+            LogTag::System,
+            "✅ Webserver started - complete initialization at http://localhost:8080",
+        );
+        logger::info(
+            LogTag::System,
+            "⏳ Waiting for initialization to complete...",
+        );
 
-    // 10. Put it back for webserver access
-    {
-        let mut guard = manager_ref.write().await;
-        *guard = Some(service_manager);
+        // Wait for initialization to complete or shutdown signal
+        wait_for_initialization_or_shutdown().await?;
+
+        logger::info(
+            LogTag::System,
+            "✅ Initialization complete - all services running",
+        );
+    } else {
+        logger::info(
+            LogTag::System,
+            "📋 Config.toml found - starting in normal mode",
+        );
+
+        // 3. Load configuration
+        crate::config::load_config().map_err(|e| format!("Failed to load config: {}", e))?;
+
+        logger::info(LogTag::System, "Configuration loaded successfully");
+
+        // 3.5. Verify license
+        logger::info(LogTag::System, "🔐 Verifying ScreenerBot license...");
+        
+        let wallet_keypair = crate::config::utils::get_wallet_keypair()
+            .map_err(|e| format!("Failed to get wallet keypair: {}", e))?;
+        let wallet_pubkey = wallet_keypair.pubkey();
+
+        let license_status = crate::license::verify_license_for_wallet(&wallet_pubkey)
+            .await
+            .map_err(|e| format!("License verification failed: {}", e))?;
+
+        if !license_status.valid {
+            let reason = license_status.reason.as_deref().unwrap_or("Unknown reason");
+            logger::error(
+                LogTag::System,
+                &format!("❌ Invalid license for wallet {}: {}", wallet_pubkey, reason)
+            );
+            return Err(format!(
+                "Cannot start bot: Invalid license ({}). Visit https://screenerbot.com to purchase or renew your license.",
+                reason
+            ));
+        }
+
+        logger::info(
+            LogTag::System,
+            &format!(
+                "✅ License verified successfully: tier={}, expiry={}",
+                license_status.tier.as_deref().unwrap_or("Unknown"),
+                license_status.expiry_ts.map(|ts| {
+                    use chrono::{DateTime, Utc, TimeZone};
+                    let dt = Utc.timestamp_opt(ts as i64, 0).single()
+                        .map(|dt| dt.format("%Y-%m-%d").to_string())
+                        .unwrap_or_else(|| "N/A".to_string());
+                    dt
+                }).unwrap_or_else(|| "N/A".to_string())
+            ),
+        );
+
+        // Set initialization flag to true (all services enabled)
+        global::INITIALIZATION_COMPLETE.store(true, std::sync::atomic::Ordering::SeqCst);
+
+        // 4. Initialize strategy system
+        crate::strategies::init_strategy_system(crate::strategies::engine::EngineConfig::default())
+            .await
+            .map_err(|e| format!("Failed to initialize strategy system: {}", e))?;
+
+        logger::info(LogTag::System, "Strategy system initialized successfully");
+
+        // 5. Create service manager
+        let mut service_manager = ServiceManager::new().await?;
+
+        logger::info(LogTag::System, "Service manager initialized");
+
+        // 6. Register all services
+        register_all_services(&mut service_manager);
+
+        // 7. Initialize global ServiceManager for webserver access
+        crate::services::init_global_service_manager(service_manager).await;
+
+        // 8. Get mutable reference to continue
+        let manager_ref = crate::services::get_service_manager()
+            .await
+            .ok_or("Failed to get ServiceManager reference")?;
+
+        let mut service_manager = {
+            let mut guard = manager_ref.write().await;
+            guard.take().ok_or("ServiceManager was already taken")?
+        };
+
+        // 9. Start all enabled services
+        service_manager.start_all().await?;
+
+        // 10. Put it back for webserver access
+        {
+            let mut guard = manager_ref.write().await;
+            *guard = Some(service_manager);
+        }
+
+        logger::info(
+            LogTag::System,
+            "✅ All services started - ScreenerBot is running",
+        );
     }
-
-    logger::info(
-        LogTag::System,
-        "✅ All services started - ScreenerBot is running",
-    );
 
     // 11. Wait for shutdown signal
     wait_for_shutdown_signal().await?;
@@ -162,6 +273,70 @@ async fn wait_for_shutdown_signal() -> Result<(), String> {
     });
 
     Ok(())
+}
+
+/// Wait for initialization to complete or shutdown signal during pre-init mode
+async fn wait_for_initialization_or_shutdown() -> Result<(), String> {
+    use tokio::time::{sleep, Duration, Instant};
+
+    const MAX_WAIT_DURATION: Duration = Duration::from_secs(30 * 60); // 30 minutes
+    const WARNING_INTERVAL: Duration = Duration::from_secs(5 * 60); // Warn every 5 minutes
+
+    let start = Instant::now();
+    let mut last_warning = start;
+
+    loop {
+        // Check if initialization is complete
+        if global::is_initialization_complete() {
+            logger::info(
+                LogTag::System,
+                "✅ Initialization complete - services started successfully",
+            );
+            return Ok(());
+        }
+
+        // Check elapsed time
+        let elapsed = start.elapsed();
+        if elapsed >= MAX_WAIT_DURATION {
+            logger::error(
+                LogTag::System,
+                &format!(
+                    "⏱️ Initialization timeout after {} minutes - initialization never completed",
+                    MAX_WAIT_DURATION.as_secs() / 60
+                ),
+            );
+            return Err(format!(
+                "Initialization timeout after {} minutes",
+                MAX_WAIT_DURATION.as_secs() / 60
+            ));
+        }
+
+        // Periodic warning logs
+        if elapsed - (last_warning - start) >= WARNING_INTERVAL {
+            logger::warning(
+                LogTag::System,
+                &format!(
+                    "⏳ Still waiting for initialization... ({} minutes elapsed)",
+                    elapsed.as_secs() / 60
+                ),
+            );
+            last_warning = Instant::now();
+        }
+
+        // Check for Ctrl+C (non-blocking)
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {
+                logger::warning(
+                    LogTag::System,
+                    "Shutdown signal received during initialization",
+                );
+                return Err("Shutdown during initialization".to_string());
+            }
+            _ = sleep(Duration::from_millis(500)) => {
+                // Continue polling
+            }
+        }
+    }
 }
 
 /// Initialize CPU profiling based on command-line flags

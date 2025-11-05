@@ -114,8 +114,12 @@ fn build_app(state: Arc<AppState>) -> Router {
     // Create main router
     let app = routes::create_router(state);
 
-    // Add middleware layers (future)
-    let app = app.layer(CompressionLayer::new());
+    // Add middleware layers
+    let app = app
+        .layer(axum::middleware::from_fn(
+            crate::webserver::middleware::initialization_gate,
+        ))
+        .layer(CompressionLayer::new());
 
     app
 }

@@ -20,6 +20,10 @@ impl Service for PositionsService {
         vec![]
     }
 
+    fn is_enabled(&self) -> bool {
+        crate::global::is_initialization_complete()
+    }
+
     async fn initialize(&mut self) -> Result<(), String> {
         // Positions system initialization happens in start
         Ok(())

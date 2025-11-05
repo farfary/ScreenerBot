@@ -37,7 +37,7 @@ pub enum LogTag {
     Tokens,
     Transactions,
     Websocket,
-        Positions,
+    Positions,
     License,
     Unknown,
     Security,

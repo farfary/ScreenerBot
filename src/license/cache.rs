@@ -24,7 +24,7 @@ impl LicenseCache {
 
     pub fn get(&self, wallet: &str) -> Option<LicenseStatus> {
         let mut entries = self.entries.lock().unwrap();
-        
+
         if let Some(entry) = entries.get(wallet) {
             if Instant::now() < entry.expires_at {
                 return Some(entry.status.clone());
@@ -33,7 +33,7 @@ impl LicenseCache {
                 entries.remove(wallet);
             }
         }
-        
+
         None
     }
 

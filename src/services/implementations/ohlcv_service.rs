@@ -27,6 +27,10 @@ impl Service for OhlcvService {
         vec!["tokens", "positions"]
     }
 
+    fn is_enabled(&self) -> bool {
+        crate::global::is_initialization_complete()
+    }
+
     async fn initialize(&mut self) -> Result<(), String> {
         crate::ohlcvs::OhlcvService::initialize()
             .await

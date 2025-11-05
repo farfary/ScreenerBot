@@ -20,6 +20,10 @@ impl Service for EventsService {
         vec![] // No dependencies
     }
 
+    fn is_enabled(&self) -> bool {
+        crate::global::is_initialization_complete()
+    }
+
     async fn initialize(&mut self) -> Result<(), String> {
         // Initialize events database and system
         crate::events::init()
