@@ -20,6 +20,7 @@ const FILTERING_PAGE_STYLES: &str = include_str!("templates/styles/pages/filteri
 const CONFIG_PAGE_STYLES: &str = include_str!("templates/styles/pages/config.css");
 const STRATEGIES_PAGE_STYLES: &str = include_str!("templates/styles/pages/strategies.css");
 const TRADER_PAGE_STYLES: &str = include_str!("templates/styles/pages/trader.css");
+const WALLET_PAGE_STYLES: &str = include_str!("templates/styles/pages/wallet.css");
 const INITIALIZATION_PAGE_STYLES: &str = include_str!("templates/styles/pages/initialization.css");
 const DATA_TABLE_STYLES: &str = include_str!("templates/styles/ui/data_table.css");
 const TABLE_TOOLBAR_STYLES: &str = include_str!("templates/styles/ui/table_toolbar.css");
@@ -62,6 +63,7 @@ pub const FILTERING_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/fi
 pub const CONFIG_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/config.js");
 pub const STRATEGIES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/strategies.js");
 pub const TRADER_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/trader.js");
+pub const WALLET_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/wallet.js");
 pub const INITIALIZATION_PAGE_SCRIPT: &str =
     include_str!("templates/scripts/pages/initialization.js");
 
@@ -74,6 +76,7 @@ const FILTERING_PAGE: &str = include_str!("templates/pages/filtering.html");
 const CONFIG_PAGE: &str = include_str!("templates/pages/config.html");
 const STRATEGIES_PAGE: &str = include_str!("templates/pages/strategies.html");
 const TRADER_PAGE: &str = include_str!("templates/pages/trader.html");
+const WALLET_PAGE: &str = include_str!("templates/pages/wallet.html");
 const INITIALIZATION_PAGE: &str = include_str!("templates/pages/initialization.html");
 
 /// Render the base layout with shared chrome and inject the requested content.
@@ -122,6 +125,9 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     if active_tab == "trader" {
         combined_styles.push(TRADER_PAGE_STYLES);
     }
+    if active_tab == "wallet" {
+        combined_styles.push(WALLET_PAGE_STYLES);
+    }
     if active_tab == "initialization" {
         combined_styles.push(INITIALIZATION_PAGE_STYLES);
     }
@@ -137,6 +143,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         ("config", CONFIG_PAGE_STYLES),
         ("strategies", STRATEGIES_PAGE_STYLES),
         ("trader", TRADER_PAGE_STYLES),
+        ("wallet", WALLET_PAGE_STYLES),
         ("initialization", INITIALIZATION_PAGE_STYLES),
     ] {
         if styles.trim().is_empty() {
@@ -161,6 +168,7 @@ fn nav_tabs(active: &str) -> String {
         ("positions", "📊 Positions"),
         ("tokens", "🪙 Tokens"),
         ("filtering", "🔍 Filtering"),
+        ("wallet", "💰 Wallet"),
         ("trader", "🤖 Trader"),
         ("strategies", "🎯 Strategies"),
         ("transactions", "💱 Transactions"),
@@ -220,6 +228,10 @@ pub fn strategies_content() -> String {
 
 pub fn trader_content() -> String {
     render_page(TRADER_PAGE)
+}
+
+pub fn wallet_content() -> String {
+    render_page(WALLET_PAGE)
 }
 
 pub fn initialization_content() -> String {

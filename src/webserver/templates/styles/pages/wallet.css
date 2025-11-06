@@ -1,0 +1,268 @@
+/* Wallet page-specific styles */
+
+.wallet-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+#wallet-root {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+/* Overview section */
+.wallet-overview {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.summary-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.summary-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.summary-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.summary-hint {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+/* Window selector */
+.window-selector {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.window-btn {
+  padding: 6px 12px;
+  font-size: 0.85rem;
+}
+
+.window-btn.active {
+  background: var(--color-primary);
+  color: white;
+  border-color: var(--color-primary);
+}
+
+/* Chart container */
+.chart-container {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.chart-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* Actions bar */
+.actions-bar {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-start;
+}
+
+/* Flows section */
+.wallet-flows {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.flow-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.flow-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.flow-card.inflow {
+  border-left: 3px solid #26a69a;
+}
+
+.flow-card.outflow {
+  border-left: 3px solid #ef5350;
+}
+
+.flow-card.net {
+  border-left: 3px solid var(--color-primary);
+}
+
+.flow-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.flow-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+/* Holdings section */
+.wallet-holdings {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+}
+
+.holdings-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.holdings-info {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+#holdingsTableContainer {
+  flex: 1;
+  min-height: 0;
+}
+
+/* History section */
+.wallet-history {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+}
+
+.history-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.history-info {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+#historyTableContainer {
+  flex: 1;
+  min-height: 0;
+}
+
+/* Token cell in holdings table */
+.position-token {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.position-token .token-logo {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-secondary);
+  display: inline-block;
+  font-size: 9px;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 28px;
+  font-weight: 600;
+}
+
+.position-token .token-symbol {
+  font-weight: 600;
+}
+
+.position-token .token-name {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+/* Row actions */
+.row-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.row-action {
+  padding: 4px 10px;
+  font-size: 0.8rem;
+}
+
+/* Value coloring */
+.value-positive {
+  color: var(--color-success);
+}
+
+.value-negative {
+  color: var(--color-danger);
+}
+
+/* Empty state */
+.empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 200px;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+}

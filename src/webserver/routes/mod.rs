@@ -34,6 +34,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/events", axum::routing::get(events_page))
         .route("/transactions", axum::routing::get(transactions_page))
         .route("/filtering", axum::routing::get(filtering_page))
+        .route("/wallet", axum::routing::get(wallet_page))
         .route("/config", axum::routing::get(config_page))
         .route("/strategies", axum::routing::get(strategies_page))
         .route("/trader", axum::routing::get(trader_page))
@@ -107,6 +108,12 @@ async fn trader_page() -> Html<String> {
     Html(templates::base_template("Trader", "trader", &content))
 }
 
+/// Wallet page handler
+async fn wallet_page() -> Html<String> {
+    let content = templates::wallet_content();
+    Html(templates::base_template("Wallet", "wallet", &content))
+}
+
 /// Initialization page handler
 async fn initialization_page() -> Html<String> {
     let content = templates::initialization_content();
@@ -149,6 +156,7 @@ async fn get_page_content(axum::extract::Path(page): axum::extract::Path<String>
         "services" => templates::services_content(),
         "transactions" => templates::transactions_content(),
         "filtering" => templates::filtering_content(),
+        "wallet" => templates::wallet_content(),
         "config" => templates::config_content(),
         "strategies" => templates::strategies_content(),
         "trader" => templates::trader_content(),
@@ -209,6 +217,7 @@ async fn get_page_script(axum::extract::Path(file): axum::extract::Path<String>)
         "tokens.js" => Some(templates::TOKENS_PAGE_SCRIPT),
         "positions.js" => Some(templates::POSITIONS_PAGE_SCRIPT),
         "filtering.js" => Some(templates::FILTERING_PAGE_SCRIPT),
+        "wallet.js" => Some(templates::WALLET_PAGE_SCRIPT),
         "config.js" => Some(templates::CONFIG_PAGE_SCRIPT),
         "strategies.js" => Some(templates::STRATEGIES_PAGE_SCRIPT),
         "trader.js" => Some(templates::TRADER_PAGE_SCRIPT),
