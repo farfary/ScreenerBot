@@ -48,6 +48,7 @@ const POSITION_SELECT_COLUMNS: &str = r#"
 const SCHEMA_POSITIONS: &str = r#"
 CREATE TABLE IF NOT EXISTS positions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    wallet_address TEXT NOT NULL,
     mint TEXT NOT NULL,
     symbol TEXT NOT NULL,
     name TEXT NOT NULL,
@@ -120,6 +121,7 @@ const SCHEMA_POSITION_EXITS: &str = r#"
 CREATE TABLE IF NOT EXISTS position_exits (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     position_id INTEGER NOT NULL,
+    wallet_address TEXT NOT NULL,
     timestamp TEXT NOT NULL,
     amount INTEGER NOT NULL, -- Tokens sold
     price REAL NOT NULL, -- Exit price per token
@@ -136,6 +138,7 @@ const SCHEMA_POSITION_ENTRIES: &str = r#"
 CREATE TABLE IF NOT EXISTS position_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     position_id INTEGER NOT NULL,
+    wallet_address TEXT NOT NULL,
     timestamp TEXT NOT NULL,
     amount INTEGER NOT NULL, -- Tokens bought
     price REAL NOT NULL, -- Entry price per token
@@ -235,6 +238,7 @@ ALTER TABLE positions ADD COLUMN unrealized_pnl_percent REAL;
 
 // Performance indexes
 const POSITIONS_INDEXES: &[&str] = &[
+    "CREATE INDEX IF NOT EXISTS idx_positions_wallet ON positions(wallet_address);",
     "CREATE INDEX IF NOT EXISTS idx_positions_mint ON positions(mint);",
     "CREATE INDEX IF NOT EXISTS idx_positions_entry_time ON positions(entry_time DESC);",
     "CREATE INDEX IF NOT EXISTS idx_positions_exit_time ON positions(exit_time DESC);",
@@ -250,8 +254,10 @@ const POSITIONS_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_token_snapshots_mint ON token_snapshots(mint, snapshot_time DESC);",
     "CREATE INDEX IF NOT EXISTS idx_token_snapshots_type ON token_snapshots(snapshot_type, snapshot_time DESC);",
     // New indexes for partial exit and DCA tracking
+    "CREATE INDEX IF NOT EXISTS idx_position_exits_wallet ON position_exits(wallet_address);",
     "CREATE INDEX IF NOT EXISTS idx_position_exits_position_id ON position_exits(position_id, timestamp DESC);",
     "CREATE INDEX IF NOT EXISTS idx_position_exits_timestamp ON position_exits(timestamp DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_position_entries_wallet ON position_entries(wallet_address);",
     "CREATE INDEX IF NOT EXISTS idx_position_entries_position_id ON position_entries(position_id, timestamp DESC);",
     "CREATE INDEX IF NOT EXISTS idx_position_entries_timestamp ON position_entries(timestamp DESC);",
 ];
@@ -542,6 +548,15 @@ impl PositionsDatabase {
         )
         .map_err(|e| format!("Failed to set positions schema version: {}", e))?;
 
+        // Store current wallet address in metadata
+        let wallet_address = crate::utils::get_wallet_address()
+            .map_err(|e| format!("Failed to get wallet address: {}", e))?;
+        conn.execute(
+            "INSERT OR REPLACE INTO position_metadata (key, value) VALUES ('current_wallet', ?1)",
+            params![wallet_address],
+        )
+        .map_err(|e| format!("Failed to set current_wallet in metadata: {}", e))?;
+
         // Run migrations for existing positions (one-time data migration)
         self.run_data_migrations(&conn, log_initialization)?;
 
@@ -663,12 +678,13 @@ impl PositionsDatabase {
         );
 
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let position_id = conn
             .query_row(
                 r#"
             INSERT INTO positions (
-                mint, symbol, name, entry_price, entry_time, exit_price, exit_time,
+                wallet_address, mint, symbol, name, entry_price, entry_time, exit_price, exit_time,
                 position_type, entry_size_sol, total_size_sol, price_highest, price_lowest,
                 entry_transaction_signature, exit_transaction_signature, token_amount,
                 effective_entry_price, effective_exit_price, sol_received,
@@ -680,12 +696,13 @@ impl PositionsDatabase {
                 remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
                 dca_count, average_entry_price, last_dca_time
             ) VALUES (
-                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
-                ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31,
-                ?32, ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16,
+                ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31, ?32,
+                ?33, ?34, ?35, ?36, ?37, ?38, ?39, ?40, ?41, ?42, ?43
             ) RETURNING id
             "#,
                 params![
+                    wallet_address,
                     position.mint,
                     position.symbol,
                     position.name,
@@ -976,13 +993,14 @@ impl PositionsDatabase {
     /// Get position by ID
     pub async fn get_position_by_id(&self, id: i64) -> Result<Option<Position>, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let query = format!(
-            "SELECT {} FROM positions WHERE id = ?1",
+            "SELECT {} FROM positions WHERE id = ?1 AND wallet_address = ?2",
             POSITION_SELECT_COLUMNS
         );
         let result = conn
-            .query_row(&query, params![id], |row| self.row_to_position(row))
+            .query_row(&query, params![id, wallet_address], |row| self.row_to_position(row))
             .optional()
             .map_err(|e| format!("Failed to get position by ID: {}", e))?;
 
@@ -992,13 +1010,14 @@ impl PositionsDatabase {
     /// Get position by mint
     pub async fn get_position_by_mint(&self, mint: &str) -> Result<Option<Position>, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let query = format!(
-            "SELECT {} FROM positions WHERE mint = ?1 ORDER BY entry_time DESC LIMIT 1",
+            "SELECT {} FROM positions WHERE mint = ?1 AND wallet_address = ?2 ORDER BY entry_time DESC LIMIT 1",
             POSITION_SELECT_COLUMNS
         );
         let result = conn
-            .query_row(&query, params![mint], |row| self.row_to_position(row))
+            .query_row(&query, params![mint, wallet_address], |row| self.row_to_position(row))
             .optional()
             .map_err(|e| format!("Failed to get position by mint: {}", e))?;
 
@@ -1011,6 +1030,7 @@ impl PositionsDatabase {
         signature: &str,
     ) -> Result<Option<Position>, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let result = conn
             .query_row(
@@ -1025,9 +1045,9 @@ impl PositionsDatabase {
                    phantom_confirmations, phantom_first_seen, synthetic_exit, closed_reason,
                    remaining_token_amount, total_exited_amount, average_exit_price, partial_exit_count,
                    dca_count, average_entry_price, last_dca_time
-            FROM positions WHERE entry_transaction_signature = ?1
+            FROM positions WHERE entry_transaction_signature = ?1 AND wallet_address = ?2
             "#,
-                params![signature],
+                params![signature, wallet_address],
                 |row| self.row_to_position(row),
             )
             .optional()
@@ -1042,14 +1062,15 @@ impl PositionsDatabase {
         signature: &str,
     ) -> Result<Option<Position>, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let query = format!(
-            "SELECT {} FROM positions WHERE exit_transaction_signature = ?1",
+            "SELECT {} FROM positions WHERE exit_transaction_signature = ?1 AND wallet_address = ?2",
             POSITION_SELECT_COLUMNS
         );
 
         let result = conn
-            .query_row(&query, params![signature], |row| self.row_to_position(row))
+            .query_row(&query, params![signature, wallet_address], |row| self.row_to_position(row))
             .optional()
             .map_err(|e| format!("Failed to get position by exit signature: {}", e))?;
 
@@ -1096,9 +1117,10 @@ impl PositionsDatabase {
     /// Get open positions (no exit_time)
     pub async fn get_open_positions(&self) -> Result<Vec<Position>, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let query = format!(
-            "SELECT {} FROM positions WHERE transaction_exit_verified = 0 ORDER BY entry_time DESC",
+            "SELECT {} FROM positions WHERE wallet_address = ?1 AND transaction_exit_verified = 0 ORDER BY entry_time DESC",
             POSITION_SELECT_COLUMNS
         );
 
@@ -1107,7 +1129,7 @@ impl PositionsDatabase {
             .map_err(|e| format!("Failed to prepare open positions query: {}", e))?;
 
         let position_iter = stmt
-            .query_map([], |row| self.row_to_position(row))
+            .query_map(params![wallet_address], |row| self.row_to_position(row))
             .map_err(|e| format!("Failed to execute open positions query: {}", e))?;
 
         let mut positions = Vec::new();
@@ -1122,9 +1144,10 @@ impl PositionsDatabase {
     /// Get closed positions (have exit_time)
     pub async fn get_closed_positions(&self) -> Result<Vec<Position>, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let query = format!(
-            "SELECT {} FROM positions WHERE transaction_exit_verified = 1 ORDER BY exit_time DESC",
+            "SELECT {} FROM positions WHERE wallet_address = ?1 AND transaction_exit_verified = 1 ORDER BY exit_time DESC",
             POSITION_SELECT_COLUMNS
         );
 
@@ -1133,7 +1156,7 @@ impl PositionsDatabase {
             .map_err(|e| format!("Failed to prepare closed positions query: {}", e))?;
 
         let position_iter = stmt
-            .query_map([], |row| self.row_to_position(row))
+            .query_map(params![wallet_address], |row| self.row_to_position(row))
             .map_err(|e| format!("Failed to execute closed positions query: {}", e))?;
 
         let mut positions = Vec::new();
@@ -1148,22 +1171,24 @@ impl PositionsDatabase {
     /// Count closed positions since the provided timestamp
     pub async fn count_closed_positions_since(&self, since: DateTime<Utc>) -> Result<i64, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let mut stmt = conn
             .prepare(
                 r#"
             SELECT COUNT(1)
             FROM positions
-            WHERE transaction_exit_verified = 1
+            WHERE wallet_address = ?1
+              AND transaction_exit_verified = 1
               AND exit_time IS NOT NULL
-              AND datetime(exit_time) >= datetime(?1)
+              AND datetime(exit_time) >= datetime(?2)
             "#,
             )
             .map_err(|e| format!("Failed to prepare closed position count query: {}", e))?;
 
         let since_str = since.to_rfc3339();
         let count: i64 = stmt
-            .query_row(params![since_str], |row| row.get(0))
+            .query_row(params![wallet_address, since_str], |row| row.get(0))
             .map_err(|e| format!("Failed to execute closed position count query: {}", e))?;
 
         Ok(count)
@@ -1177,9 +1202,10 @@ impl PositionsDatabase {
         limit: usize,
     ) -> Result<Vec<Position>, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let query = format!(
-            "SELECT {} FROM positions WHERE mint = ?1 AND transaction_exit_verified = 1 AND exit_price IS NOT NULL AND exit_time IS NOT NULL ORDER BY exit_time DESC LIMIT ?2",
+            "SELECT {} FROM positions WHERE wallet_address = ?1 AND mint = ?2 AND transaction_exit_verified = 1 AND exit_price IS NOT NULL AND exit_time IS NOT NULL ORDER BY exit_time DESC LIMIT ?3",
             POSITION_SELECT_COLUMNS
         );
 
@@ -1188,7 +1214,7 @@ impl PositionsDatabase {
             .map_err(|e| format!("Failed to prepare recent closed positions query: {}", e))?;
 
         let rows = stmt
-            .query_map(params![mint, limit as i64], |row| self.row_to_position(row))
+            .query_map(params![wallet_address, mint, limit as i64], |row| self.row_to_position(row))
             .map_err(|e| format!("Failed to execute recent closed positions query: {}", e))?;
 
         let mut positions = Vec::new();
@@ -1208,22 +1234,24 @@ impl PositionsDatabase {
         limit: usize,
     ) -> Result<Vec<(Option<f64>, Option<f64>)>, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        
         let mut stmt = conn
             .prepare(
                 r#"
             SELECT exit_price, effective_exit_price
             FROM positions
-            WHERE mint = ?1 AND transaction_exit_verified = 1
+            WHERE wallet_address = ?1 AND mint = ?2 AND transaction_exit_verified = 1
               AND exit_price IS NOT NULL AND exit_time IS NOT NULL
             ORDER BY datetime(exit_time) DESC
-            LIMIT ?2
+            LIMIT ?3
             "#,
             )
             .map_err(|e| format!("Failed to prepare recent closed exit prices query: {}", e))?;
 
         let mut out: Vec<(Option<f64>, Option<f64>)> = Vec::new();
         let rows = stmt
-            .query_map(params![mint, limit as i64], |row| {
+            .query_map(params![wallet_address, mint, limit as i64], |row| {
                 let exit_p: Option<f64> = row.get(0).ok();
                 let eff_exit_p: Option<f64> = row.get(1).ok();
                 Ok((exit_p, eff_exit_p))
@@ -1538,41 +1566,42 @@ impl PositionsDatabase {
     /// Get database statistics
     pub async fn get_database_stats(&self) -> Result<PositionsDatabaseStats, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let total_positions: i64 = conn
-            .query_row("SELECT COUNT(*) FROM positions", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM positions WHERE wallet_address = ?1", params![wallet_address], |row| row.get(0))
             .map_err(|e| format!("Failed to count total positions: {}", e))?;
 
         let open_positions: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM positions WHERE transaction_exit_verified = 0",
-                [],
+                "SELECT COUNT(*) FROM positions WHERE wallet_address = ?1 AND transaction_exit_verified = 0",
+                params![wallet_address],
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to count open positions: {}", e))?;
 
         let closed_positions: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM positions WHERE transaction_exit_verified = 1",
-                [],
+                "SELECT COUNT(*) FROM positions WHERE wallet_address = ?1 AND transaction_exit_verified = 1",
+                params![wallet_address],
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to count closed positions: {}", e))?;
 
         let phantom_positions: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM positions WHERE phantom_confirmations > 0",
-                [],
+                "SELECT COUNT(*) FROM positions WHERE wallet_address = ?1 AND phantom_confirmations > 0",
+                params![wallet_address],
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to count phantom positions: {}", e))?;
 
         let total_state_history: i64 = conn
-            .query_row("SELECT COUNT(*) FROM position_states", [], |row| row.get(0))
+            .query_row("SELECT COUNT(*) FROM position_states WHERE wallet_address = ?1", params![wallet_address], |row| row.get(0))
             .map_err(|e| format!("Failed to count state history: {}", e))?;
 
         let total_tracking_records: i64 = conn
-            .query_row("SELECT COUNT(*) FROM position_tracking", [], |row| {
+            .query_row("SELECT COUNT(*) FROM position_tracking WHERE wallet_address = ?1", params![wallet_address], |row| {
                 row.get(0)
             })
             .map_err(|e| format!("Failed to count tracking records: {}", e))?;
@@ -2369,12 +2398,15 @@ pub async fn save_exit_record(
         .get()
         .map_err(|e| format!("Failed to get connection: {}", e))?;
 
+    let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+
     conn.execute(
-        "INSERT INTO position_exits (position_id, timestamp, amount, price, sol_received, 
+        "INSERT INTO position_exits (position_id, wallet_address, timestamp, amount, price, sol_received, 
          transaction_signature, is_partial, percentage, fees_lamports) 
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
         params![
             position_id,
+            wallet_address,
             timestamp.to_rfc3339(),
             amount as i64,
             price,
@@ -2410,16 +2442,18 @@ pub async fn get_exit_history(position_id: i64) -> Result<Vec<ExitRecord>, Strin
         .get()
         .map_err(|e| format!("Failed to get connection: {}", e))?;
 
+    let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+
     let mut stmt = conn
         .prepare(
             "SELECT id, position_id, timestamp, amount, price, sol_received, 
              transaction_signature, is_partial, percentage, fees_lamports 
-             FROM position_exits WHERE position_id = ?1 ORDER BY timestamp DESC",
+             FROM position_exits WHERE position_id = ?1 AND wallet_address = ?2 ORDER BY timestamp DESC",
         )
         .map_err(|e| format!("Failed to prepare statement: {}", e))?;
 
     let records = stmt
-        .query_map(params![position_id], |row| {
+        .query_map(params![position_id, wallet_address], |row| {
             Ok(ExitRecord {
                 id: row.get(0)?,
                 position_id: row.get(1)?,
@@ -2463,12 +2497,15 @@ pub async fn save_entry_record(
         .get()
         .map_err(|e| format!("Failed to get connection: {}", e))?;
 
+    let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+
     conn.execute(
-        "INSERT INTO position_entries (position_id, timestamp, amount, price, sol_spent, 
+        "INSERT INTO position_entries (position_id, wallet_address, timestamp, amount, price, sol_spent, 
          transaction_signature, is_dca, fees_lamports) 
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
             position_id,
+            wallet_address,
             timestamp.to_rfc3339(),
             amount as i64,
             price,
@@ -2503,16 +2540,18 @@ pub async fn get_entry_history(position_id: i64) -> Result<Vec<EntryRecord>, Str
         .get()
         .map_err(|e| format!("Failed to get connection: {}", e))?;
 
+    let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+
     let mut stmt = conn
         .prepare(
             "SELECT id, position_id, timestamp, amount, price, sol_spent, 
              transaction_signature, is_dca, fees_lamports 
-             FROM position_entries WHERE position_id = ?1 ORDER BY timestamp ASC",
+             FROM position_entries WHERE position_id = ?1 AND wallet_address = ?2 ORDER BY timestamp ASC",
         )
         .map_err(|e| format!("Failed to prepare statement: {}", e))?;
 
     let records = stmt
-        .query_map(params![position_id], |row| {
+        .query_map(params![position_id, wallet_address], |row| {
             Ok(EntryRecord {
                 id: row.get(0)?,
                 position_id: row.get(1)?,

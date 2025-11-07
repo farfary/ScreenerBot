@@ -1412,6 +1412,15 @@ impl WalletDatabase {
         )
         .map_err(|e| format!("Failed to set wallet schema version: {}", e))?;
 
+        // Store current wallet address in metadata
+        let wallet_address = crate::utils::get_wallet_address()
+            .map_err(|e| format!("Failed to get wallet address: {}", e))?;
+        conn.execute(
+            "INSERT OR REPLACE INTO wallet_metadata (key, value) VALUES ('current_wallet', ?1)",
+            params![wallet_address],
+        )
+        .map_err(|e| format!("Failed to set current_wallet in metadata: {}", e))?;
+
         logger::debug(
             LogTag::Wallet,
             "Wallet database schema initialized with all tables and indexes",

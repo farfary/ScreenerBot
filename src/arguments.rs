@@ -113,6 +113,12 @@ pub fn is_force_refresh_enabled() -> bool {
     has_arg("--force-refresh")
 }
 
+/// Clean wallet data - delete all wallet-specific databases
+/// Use when switching to a different wallet
+pub fn is_clean_wallet_data_enabled() -> bool {
+    has_arg("--clean-wallet-data")
+}
+
 // =============================================================================
 // PROFILING FLAGS
 // =============================================================================
@@ -153,25 +159,26 @@ pub fn print_help() {
     println!("    screenerbot <MODE> [MODIFIERS] [DEBUG_FLAGS]");
     println!();
     println!("EXECUTION MODES (choose one):");
-    println!("    --run                     Start the trading bot");
-    println!("    --reset                   Reset pending verifications and delete database files");
-    println!("    --help, -h                Show this help message");
+    println!("    --run                       Start the trading bot");
+    println!("    --reset                     Reset pending verifications and delete database files");
+    println!("    --clean-wallet-data         Clean all wallet-specific databases (use when switching wallets)");
+    println!("    --help, -h                  Show this help message");
     println!();
     println!("MODIFIERS (combine with modes above):");
-    println!("    --dry-run                 Simulate trading without executing transactions (with --run)");
-    println!("    --force                   Skip confirmation prompts (with --reset)");
-    println!("    --cache-only              Use cached data only, no RPC calls (debug tools)");
-    println!("    --force-refresh           Force refresh from RPC even if cached (debug tools)");
+    println!("    --dry-run                   Simulate trading without executing transactions (with --run)");
+    println!("    --force                     Skip confirmation prompts (with --reset)");
+    println!("    --cache-only                Use cached data only, no RPC calls (debug tools)");
+    println!("    --force-refresh             Force refresh from RPC even if cached (debug tools)");
     println!();
     println!("PROFILING FLAGS (performance analysis):");
-    println!("    --profile-cpu             Enable CPU profiling with flamegraph generation");
-    println!("    --profile-tokio-console   Enable tokio-console for async task profiling");
-    println!("    --profile-tracing         Enable detailed tracing for performance analysis");
-    println!("    --profile-duration <n>    Set profiling duration in seconds (default: 60)");
+    println!("    --profile-cpu               Enable CPU profiling with flamegraph generation");
+    println!("    --profile-tokio-console     Enable tokio-console for async task profiling");
+    println!("    --profile-tracing           Enable detailed tracing for performance analysis");
+    println!("    --profile-duration <n>      Set profiling duration in seconds (default: 60)");
     println!();
     println!("DEBUG FLAGS (enable detailed logging per module):");
-    println!("    --debug-<module>          Enable debug logging for specific module");
-    println!("    --verbose-<module>        Enable verbose logging for specific module");
+    println!("    --debug-<module>            Enable debug logging for specific module");
+    println!("    --verbose-<module>          Enable verbose logging for specific module");
     println!();
     println!("    Available modules:");
     println!("      api, blacklist, decimals, discovery, entry, filtering, monitor, ohlcv,");
@@ -180,16 +187,15 @@ pub fn print_help() {
     println!("      security, trader, transactions, webserver, websocket, wallet");
     println!();
     println!("EXAMPLES:");
-    println!("    screenerbot --run                              # Start bot in live trading mode");
-    println!("    screenerbot --run --dry-run                    # Start bot in simulation mode");
+    println!("    screenerbot --run                                # Start bot in live trading mode");
+    println!("    screenerbot --run --dry-run                      # Start bot in simulation mode");
     println!(
-        "    screenerbot --run --dry-run --debug-trader     # Simulate with trader debug logs"
+        "    screenerbot --run --dry-run --debug-trader       # Simulate with trader debug logs"
     );
-    println!("    screenerbot --reset                            # Reset with confirmation prompt");
-    println!("    screenerbot --reset --force                    # Reset without confirmation");
-    println!("    screenerbot --help                             # Show this help message");
-    println!();
-    println!("For more information, visit: https://github.com/farfary/ScreenerBot");
+    println!("    screenerbot --reset                              # Reset with confirmation prompt");
+    println!("    screenerbot --reset --force                      # Reset without confirmation");
+    println!("    screenerbot --clean-wallet-data                  # Clean databases when switching wallets");
+    println!("    screenerbot --help                               # Show this help message");
 }
 
 // =============================================================================

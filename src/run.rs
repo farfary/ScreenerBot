@@ -132,6 +132,46 @@ pub async fn run_bot() -> Result<(), String> {
             ),
         );
 
+        // 3.6. Validate wallet consistency
+        logger::info(LogTag::System, "🔍 Validating wallet consistency...");
+
+        match crate::wallet_validation::WalletValidator::validate_wallet_consistency().await? {
+            crate::wallet_validation::WalletValidationResult::Valid => {
+                logger::info(LogTag::System, "✅ Wallet validation passed");
+            }
+            crate::wallet_validation::WalletValidationResult::FirstRun => {
+                logger::info(LogTag::System, "✅ First run - no existing data");
+            }
+            crate::wallet_validation::WalletValidationResult::Mismatch {
+                current,
+                stored,
+                affected_systems,
+            } => {
+                logger::error(
+                    LogTag::System,
+                    &format!(
+                        "❌ WALLET MISMATCH DETECTED!\n\
+                         \n\
+                         Current wallet: {}\n\
+                         Stored wallet:  {}\n\
+                         Affected systems: {}\n\
+                         \n\
+                         ⚠️  You MUST clean existing data before starting with a new wallet.\n\
+                         Run: cargo run --bin screenerbot -- --clean-wallet-data\n\
+                         Or manually delete: data/transactions.db data/positions.db data/wallet.db",
+                        current,
+                        stored,
+                        affected_systems.join(", ")
+                    )
+                );
+
+                return Err(format!(
+                    "Wallet mismatch detected - current wallet {} does not match stored wallet {}. Clean data before proceeding.",
+                    current, stored
+                ));
+            }
+        }
+
         // Set initialization flag to true (all services enabled)
         global::INITIALIZATION_COMPLETE.store(true, std::sync::atomic::Ordering::SeqCst);
 

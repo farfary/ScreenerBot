@@ -105,6 +105,7 @@ static DATABASE_INITIALIZED: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(fal
 const SCHEMA_RAW_TRANSACTIONS: &str = r#"
 CREATE TABLE IF NOT EXISTS raw_transactions (
     signature TEXT PRIMARY KEY,
+    wallet_address TEXT NOT NULL,
     slot INTEGER,
     block_time INTEGER,
     timestamp TEXT NOT NULL,
@@ -125,6 +126,7 @@ CREATE TABLE IF NOT EXISTS raw_transactions (
 const SCHEMA_PROCESSED_TRANSACTIONS: &str = r#"
 CREATE TABLE IF NOT EXISTS processed_transactions (
     signature TEXT PRIMARY KEY,
+    wallet_address TEXT NOT NULL,
     transaction_type TEXT NOT NULL, -- Serialized TransactionType enum
     direction TEXT NOT NULL, -- 'Incoming', 'Outgoing', 'Internal', 'Unknown'
     
@@ -165,6 +167,7 @@ CREATE TABLE IF NOT EXISTS processed_transactions (
 const SCHEMA_KNOWN_SIGNATURES: &str = r#"
 CREATE TABLE IF NOT EXISTS known_signatures (
     signature TEXT PRIMARY KEY,
+    wallet_address TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'known',
     added_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -187,6 +190,7 @@ CREATE TABLE IF NOT EXISTS deferred_retries (
 const SCHEMA_PENDING_TRANSACTIONS: &str = r#"
 CREATE TABLE IF NOT EXISTS pending_transactions (
     signature TEXT PRIMARY KEY,
+    wallet_address TEXT NOT NULL,
     added_at TEXT NOT NULL DEFAULT (datetime('now')),
     last_checked_at TEXT,
     check_count INTEGER NOT NULL DEFAULT 0
@@ -214,15 +218,19 @@ CREATE TABLE IF NOT EXISTS bootstrap_state (
 
 /// Performance indexes for efficient queries
 const INDEXES: &[&str] = &[
+    "CREATE INDEX IF NOT EXISTS idx_raw_transactions_wallet ON raw_transactions(wallet_address);",
     "CREATE INDEX IF NOT EXISTS idx_raw_transactions_timestamp ON raw_transactions(timestamp DESC);",
     "CREATE INDEX IF NOT EXISTS idx_raw_transactions_status ON raw_transactions(status);",
     "CREATE INDEX IF NOT EXISTS idx_raw_transactions_slot ON raw_transactions(slot DESC);",
     "CREATE INDEX IF NOT EXISTS idx_raw_transactions_success ON raw_transactions(success);",
+    "CREATE INDEX IF NOT EXISTS idx_processed_transactions_wallet ON processed_transactions(wallet_address);",
     "CREATE INDEX IF NOT EXISTS idx_processed_transactions_type ON processed_transactions(transaction_type);",
     "CREATE INDEX IF NOT EXISTS idx_processed_transactions_direction ON processed_transactions(direction);",
     "CREATE INDEX IF NOT EXISTS idx_processed_transactions_analysis_version ON processed_transactions(analysis_version);",
     "CREATE INDEX IF NOT EXISTS idx_deferred_retries_next_retry ON deferred_retries(next_retry_at);",
+    "CREATE INDEX IF NOT EXISTS idx_known_signatures_wallet ON known_signatures(wallet_address);",
     "CREATE INDEX IF NOT EXISTS idx_known_signatures_added_at ON known_signatures(added_at DESC);",
+    "CREATE INDEX IF NOT EXISTS idx_pending_transactions_wallet ON pending_transactions(wallet_address);",
     "CREATE INDEX IF NOT EXISTS idx_pending_transactions_added_at ON pending_transactions(added_at DESC);",
 ];
 
@@ -395,6 +403,15 @@ impl TransactionDatabase {
         )
         .map_err(|e| format!("Failed to set schema version: {}", e))?;
 
+        // Store current wallet address in metadata
+        let wallet_address = crate::utils::get_wallet_address()
+            .map_err(|e| format!("Failed to get wallet address: {}", e))?;
+        conn.execute(
+            "INSERT OR REPLACE INTO db_metadata (key, value) VALUES (?1, ?2)",
+            params!["current_wallet", wallet_address],
+        )
+        .map_err(|e| format!("Failed to set current_wallet in metadata: {}", e))?;
+
         Ok(())
     }
 
@@ -455,16 +472,19 @@ impl TransactionDatabase {
     fn backfill_processed_sol_delta(&self, conn: &mut Connection) -> Result<(), String> {
         const BATCH_SIZE: i64 = 1000;
         let mut total_updated = 0usize;
+        
+        // Get wallet address for filtering (this is a migration function, so it operates on current wallet data only)
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| format!("Failed to get wallet address for sol_delta backfill: {}", e))?;
 
         loop {
             let mut stmt = conn
                 .prepare(
-                    "SELECT signature, sol_balance_change FROM processed_transactions WHERE sol_delta IS NULL LIMIT ?1",
+                    "SELECT signature, sol_balance_change FROM processed_transactions WHERE wallet_address = ?1 AND sol_delta IS NULL LIMIT ?2",
                 )
                 .map_err(|e| format!("Failed to prepare sol_delta backfill query: {}", e))?;
 
             let rows = stmt
-                .query_map([BATCH_SIZE], |row| {
+                .query_map(params![wallet_address, BATCH_SIZE], |row| {
                     let signature: String = row.get(0)?;
                     let change_json: Option<String> = row.get(1)?;
                     Ok((signature, change_json))
@@ -491,8 +511,8 @@ impl TransactionDatabase {
             for (signature, change_json) in batch.into_iter() {
                 let delta = Self::compute_sol_delta_from_json(change_json.as_deref());
                 tx.execute(
-                    "UPDATE processed_transactions SET sol_delta = ?1 WHERE signature = ?2",
-                    params![delta, signature],
+                    "UPDATE processed_transactions SET sol_delta = ?1 WHERE signature = ?2 AND wallet_address = ?3",
+                    params![delta, signature, wallet_address],
                 )
                 .map_err(|e| format!("Failed to update sol_delta: {}", e))?;
                 total_updated += 1;
@@ -572,11 +592,12 @@ impl TransactionDatabase {
     /// Check if signature is known in database
     pub async fn is_signature_known(&self, signature: &str) -> Result<bool, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let exists: bool = conn
             .query_row(
-                "SELECT EXISTS(SELECT 1 FROM known_signatures WHERE signature = ?1)",
-                params![signature],
+                "SELECT EXISTS(SELECT 1 FROM known_signatures WHERE signature = ?1 AND wallet_address = ?2)",
+                params![signature, wallet_address],
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to check known signature: {}", e))?;
@@ -587,10 +608,11 @@ impl TransactionDatabase {
     /// Add signature to known signatures
     pub async fn add_known_signature(&self, signature: &str) -> Result<(), String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         conn.execute(
-            "INSERT OR IGNORE INTO known_signatures (signature) VALUES (?1)",
-            params![signature],
+            "INSERT OR IGNORE INTO known_signatures (signature, wallet_address) VALUES (?1, ?2)",
+            params![signature, wallet_address],
         )
         .map_err(|e| format!("Failed to add known signature: {}", e))?;
 
@@ -600,9 +622,10 @@ impl TransactionDatabase {
     /// Get count of known signatures
     pub async fn get_known_signatures_count(&self) -> Result<u64, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM known_signatures", [], |row| {
+            .query_row("SELECT COUNT(*) FROM known_signatures WHERE wallet_address = ?1", params![wallet_address], |row| {
                 row.get(0)
             })
             .map_err(|e| format!("Failed to get known signatures count: {}", e))?;
@@ -613,11 +636,12 @@ impl TransactionDatabase {
     /// Get the newest known signature (most recently added)
     pub async fn get_newest_known_signature(&self) -> Result<Option<String>, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let result: Option<String> = conn
             .query_row(
-                "SELECT signature FROM known_signatures ORDER BY added_at DESC LIMIT 1",
-                [],
+                "SELECT signature FROM known_signatures WHERE wallet_address = ?1 ORDER BY added_at DESC LIMIT 1",
+                params![wallet_address],
                 |row| row.get(0),
             )
             .optional()
@@ -633,11 +657,12 @@ impl TransactionDatabase {
     /// the oldest signature we already have, ensuring we only fetch missing history.
     pub async fn get_oldest_known_signature(&self) -> Result<Option<String>, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let result: Option<String> = conn
             .query_row(
-                "SELECT signature FROM known_signatures ORDER BY added_at ASC LIMIT 1",
-                [],
+                "SELECT signature FROM known_signatures WHERE wallet_address = ?1 ORDER BY added_at ASC LIMIT 1",
+                params![wallet_address],
                 |row| row.get(0),
             )
             .optional()
@@ -672,6 +697,7 @@ impl TransactionDatabase {
         pending: &HashMap<String, DateTime<Utc>>,
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let tx = conn
             .unchecked_transaction()
@@ -679,8 +705,8 @@ impl TransactionDatabase {
 
         for (signature, timestamp) in pending {
             tx.execute(
-                "INSERT OR REPLACE INTO pending_transactions (signature, added_at) VALUES (?1, ?2)",
-                params![signature, timestamp.to_rfc3339()],
+                "INSERT OR REPLACE INTO pending_transactions (signature, wallet_address, added_at) VALUES (?1, ?2, ?3)",
+                params![signature, wallet_address, timestamp.to_rfc3339()],
             )
             .map_err(|e| format!("Failed to save pending transaction: {}", e))?;
         }
@@ -694,13 +720,14 @@ impl TransactionDatabase {
     /// Load pending transactions from database
     pub async fn get_pending_transactions(&self) -> Result<HashMap<String, DateTime<Utc>>, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let mut stmt = conn
-            .prepare("SELECT signature, added_at FROM pending_transactions")
+            .prepare("SELECT signature, added_at FROM pending_transactions WHERE wallet_address = ?1")
             .map_err(|e| format!("Failed to prepare pending transactions query: {}", e))?;
 
         let rows = stmt
-            .query_map([], |row| {
+            .query_map(params![wallet_address], |row| {
                 let signature: String = row.get(0)?;
                 let timestamp_str: String = row.get(1)?;
                 let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
@@ -729,11 +756,12 @@ impl TransactionDatabase {
     /// Remove pending transaction
     pub async fn remove_pending_transaction(&self, signature: &str) -> Result<bool, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let affected = conn
             .execute(
-                "DELETE FROM pending_transactions WHERE signature = ?1",
-                params![signature],
+                "DELETE FROM pending_transactions WHERE signature = ?1 AND wallet_address = ?2",
+                params![signature, wallet_address],
             )
             .map_err(|e| format!("Failed to remove pending transaction: {}", e))?;
 
@@ -743,9 +771,10 @@ impl TransactionDatabase {
     /// Get count of pending transactions
     pub async fn get_pending_transactions_count(&self) -> Result<u64, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM pending_transactions", [], |row| {
+            .query_row("SELECT COUNT(*) FROM pending_transactions WHERE wallet_address = ?1", params![wallet_address], |row| {
                 row.get(0)
             })
             .map_err(|e| format!("Failed to get pending transactions count: {}", e))?;
@@ -765,11 +794,12 @@ impl TransactionDatabase {
         signature: &str,
     ) -> Result<Option<crate::rpc::TransactionDetails>, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let result: rusqlite::Result<Option<String>> = conn
             .query_row(
-                "SELECT raw_transaction_data FROM raw_transactions WHERE signature = ?1",
-                params![signature],
+                "SELECT raw_transaction_data FROM raw_transactions WHERE signature = ?1 AND wallet_address = ?2",
+                params![signature, wallet_address],
                 |row| row.get(0),
             )
             .optional();
@@ -795,6 +825,7 @@ impl TransactionDatabase {
     /// Store raw transaction data
     pub async fn store_raw_transaction(&self, transaction: &Transaction) -> Result<(), String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let status_str = match &transaction.status {
             TransactionStatus::Pending => "Pending",
@@ -811,11 +842,12 @@ impl TransactionDatabase {
         conn
             .execute(
                 r#"INSERT OR REPLACE INTO raw_transactions 
-               (signature, slot, block_time, timestamp, status, success, error_message, 
+               (signature, wallet_address, slot, block_time, timestamp, status, success, error_message, 
                 fee_lamports, compute_units_consumed, instructions_count, accounts_count, raw_transaction_data, updated_at)
-               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, datetime('now'))"#,
+               VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, datetime('now'))"#,
                 params![
                     transaction.signature,
+                    wallet_address,
                     transaction.slot,
                     transaction.block_time,
                     transaction.timestamp.to_rfc3339(),
@@ -840,6 +872,7 @@ impl TransactionDatabase {
         transaction: &Transaction,
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         // Serialize complex fields as JSON strings
         let sol_balance_change_json = serde_json::to_string(&transaction.sol_balance_changes)
@@ -875,13 +908,14 @@ impl TransactionDatabase {
         conn
             .execute(
                 r#"INSERT OR REPLACE INTO processed_transactions
-                   (signature, transaction_type, direction, sol_balance_change, token_balance_changes,
+                   (signature, wallet_address, transaction_type, direction, sol_balance_change, token_balance_changes,
                     token_swap_info, swap_pnl_info, ata_operations, token_transfers, instruction_info,
                     analysis_duration_ms, cached_analysis, analysis_version, fee_sol, sol_delta, updated_at)
                  VALUES
-                   (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, datetime('now'))"#,
+                   (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, datetime('now'))"#,
                 params![
                     transaction.signature,
+                    wallet_address,
                     tx_type,
                     dir,
                     sol_balance_change_json,
@@ -919,11 +953,12 @@ impl TransactionDatabase {
         error_message: Option<&str>,
     ) -> Result<(), String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         conn
             .execute(
-                "UPDATE raw_transactions SET status = ?1, success = ?2, error_message = ?3, updated_at = datetime('now') WHERE signature = ?4",
-                params![status, success, error_message, signature]
+                "UPDATE raw_transactions SET status = ?1, success = ?2, error_message = ?3, updated_at = datetime('now') WHERE signature = ?4 AND wallet_address = ?5",
+                params![status, success, error_message, signature, wallet_address]
             )
             .map_err(|e| format!("Failed to update transaction status: {}", e))?;
 
@@ -933,12 +968,13 @@ impl TransactionDatabase {
     /// Get transaction by signature
     pub async fn get_transaction(&self, signature: &str) -> Result<Option<Transaction>, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let result = conn.query_row(
             r#"SELECT signature, slot, block_time, timestamp, status, success, error_message,
                           fee_lamports, compute_units_consumed, instructions_count, accounts_count
-                   FROM raw_transactions WHERE signature = ?1"#,
-            params![signature],
+                   FROM raw_transactions WHERE signature = ?1 AND wallet_address = ?2"#,
+            params![signature, wallet_address],
             |row| {
                 let timestamp_str: String = row.get(3)?;
                 let timestamp = DateTime::parse_from_rfc3339(&timestamp_str)
@@ -988,11 +1024,12 @@ impl TransactionDatabase {
     /// Get successful transactions count
     pub async fn get_successful_transactions_count(&self) -> Result<u64, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM raw_transactions WHERE success = true AND status != 'Failed'",
-                [],
+                "SELECT COUNT(*) FROM raw_transactions WHERE wallet_address = ?1 AND success = true AND status != 'Failed'",
+                params![wallet_address],
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to get successful transactions count: {}", e))?;
@@ -1003,11 +1040,12 @@ impl TransactionDatabase {
     /// Get failed transactions count
     pub async fn get_failed_transactions_count(&self) -> Result<u64, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let count: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM raw_transactions WHERE success = false OR status = 'Failed'",
-                [],
+                "SELECT COUNT(*) FROM raw_transactions WHERE wallet_address = ?1 AND (success = false OR status = 'Failed')",
+                params![wallet_address],
                 |row| row.get(0),
             )
             .map_err(|e| format!("Failed to get failed transactions count: {}", e))?;
@@ -1024,21 +1062,22 @@ impl TransactionDatabase {
     /// Get comprehensive database statistics
     pub async fn get_stats(&self) -> Result<DatabaseStats, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let raw_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM raw_transactions", [], |row| {
+            .query_row("SELECT COUNT(*) FROM raw_transactions WHERE wallet_address = ?1", params![wallet_address], |row| {
                 row.get(0)
             })
             .unwrap_or(0);
 
         let processed_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM processed_transactions", [], |row| {
+            .query_row("SELECT COUNT(*) FROM processed_transactions WHERE wallet_address = ?1", params![wallet_address], |row| {
                 row.get(0)
             })
             .unwrap_or(0);
 
         let known_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM known_signatures", [], |row| {
+            .query_row("SELECT COUNT(*) FROM known_signatures WHERE wallet_address = ?1", params![wallet_address], |row| {
                 row.get(0)
             })
             .unwrap_or(0);
@@ -1050,7 +1089,7 @@ impl TransactionDatabase {
             .unwrap_or(0);
 
         let pending_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM pending_transactions", [], |row| {
+            .query_row("SELECT COUNT(*) FROM pending_transactions WHERE wallet_address = ?1", params![wallet_address], |row| {
                 row.get(0)
             })
             .unwrap_or(0);
@@ -1116,23 +1155,24 @@ impl TransactionDatabase {
     /// Get integrity report
     pub async fn get_integrity_report(&self) -> Result<IntegrityReport, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let raw_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM raw_transactions", [], |row| {
+            .query_row("SELECT COUNT(*) FROM raw_transactions WHERE wallet_address = ?1", params![wallet_address], |row| {
                 row.get(0)
             })
             .unwrap_or(0);
 
         let processed_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM processed_transactions", [], |row| {
+            .query_row("SELECT COUNT(*) FROM processed_transactions WHERE wallet_address = ?1", params![wallet_address], |row| {
                 row.get(0)
             })
             .unwrap_or(0);
 
         let orphaned: i64 = conn
             .query_row(
-                "SELECT COUNT(*) FROM processed_transactions WHERE signature NOT IN (SELECT signature FROM raw_transactions)",
-                [],
+                "SELECT COUNT(*) FROM processed_transactions WHERE wallet_address = ?1 AND signature NOT IN (SELECT signature FROM raw_transactions WHERE wallet_address = ?1)",
+                params![wallet_address],
                 |row| row.get(0)
             )
             .unwrap_or(0);
@@ -1140,7 +1180,7 @@ impl TransactionDatabase {
         let missing: i64 = raw_count - processed_count;
 
         let pending_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM pending_transactions", [], |row| {
+            .query_row("SELECT COUNT(*) FROM pending_transactions WHERE wallet_address = ?1", params![wallet_address], |row| {
                 row.get(0)
             })
             .unwrap_or(0);
@@ -1269,6 +1309,7 @@ impl TransactionDatabase {
         limit: usize,
     ) -> Result<TransactionListResult, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         // Limit page size to max 200 for performance
         let effective_limit = limit.min(200);
@@ -1282,15 +1323,16 @@ impl TransactionDatabase {
                 p.token_transfers, p.ata_operations,
                 p.fee_sol, p.sol_delta
             FROM raw_transactions r
-            LEFT JOIN processed_transactions p ON r.signature = p.signature
-            WHERE 1=1",
+            LEFT JOIN processed_transactions p ON r.signature = p.signature AND p.wallet_address = ?1
+            WHERE r.wallet_address = ?1",
         );
 
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        params_vec.push(Box::new(wallet_address));
 
         // Apply cursor for pagination (timestamp desc, signature desc)
         if let Some(cursor) = cursor {
-            query.push_str(" AND (r.timestamp < ?1 OR (r.timestamp = ?1 AND r.signature < ?2))");
+            query.push_str(&format!(" AND (r.timestamp < ?{} OR (r.timestamp = ?{} AND r.signature < ?{}))", params_vec.len() + 1, params_vec.len() + 1, params_vec.len() + 2));
             params_vec.push(Box::new(cursor.timestamp.clone()));
             params_vec.push(Box::new(cursor.signature.clone()));
         }
@@ -1568,6 +1610,7 @@ impl TransactionDatabase {
         to: Option<DateTime<Utc>>,
     ) -> Result<(f64, f64, usize), String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         // Check if this is "all time" query (from epoch = no time filter)
         let epoch = DateTime::<Utc>::from(std::time::UNIX_EPOCH);
@@ -1579,11 +1622,12 @@ impl TransactionDatabase {
                 COALESCE(SUM(CASE WHEN COALESCE(p.sol_delta, 0) < 0 THEN -p.sol_delta ELSE 0 END), 0), \
                 COUNT(r.signature) \
              FROM raw_transactions r \
-             LEFT JOIN processed_transactions p ON r.signature = p.signature \
-             WHERE r.status IN ('Confirmed', 'Finalized')",
+             LEFT JOIN processed_transactions p ON r.signature = p.signature AND p.wallet_address = ?1 \
+             WHERE r.wallet_address = ?1 AND r.status IN ('Confirmed', 'Finalized')",
         );
 
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![];
+        params_vec.push(Box::new(wallet_address.clone()));
 
         // Only add timestamp filter if NOT all-time query
         if !is_all_time {
@@ -1598,10 +1642,6 @@ impl TransactionDatabase {
 
         let params_refs: Vec<&dyn rusqlite::ToSql> =
             params_vec.iter().map(|value| value.as_ref()).collect();
-
-        // Need to get wallet address for filtering
-        let wallet_address = crate::utils::get_wallet_address()
-            .map_err(|e| format!("Failed to get wallet address: {}", e))?;
 
         logger::info(
             LogTag::Transactions,
@@ -1735,14 +1775,11 @@ impl TransactionDatabase {
         to: Option<DateTime<Utc>>,
     ) -> Result<Vec<(String, f64, f64, usize)>, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         // Check if this is "all time" query
         let epoch = DateTime::<Utc>::from(std::time::UNIX_EPOCH);
         let is_all_time = from == epoch;
-
-        // Get wallet address for filtering
-        let wallet_address = crate::utils::get_wallet_address()
-            .map_err(|e| format!("Failed to get wallet address: {}", e))?;
 
         // Query to get daily aggregated flows
         let mut query = String::from(
@@ -1751,11 +1788,12 @@ impl TransactionDatabase {
                 r.signature, \
                 p.sol_balance_change \
              FROM raw_transactions r \
-             LEFT JOIN processed_transactions p ON r.signature = p.signature \
-             WHERE r.status IN ('Confirmed', 'Finalized')",
+             LEFT JOIN processed_transactions p ON r.signature = p.signature AND p.wallet_address = ?1 \
+             WHERE r.wallet_address = ?1 AND r.status IN ('Confirmed', 'Finalized')",
         );
 
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = vec![];
+        params_vec.push(Box::new(wallet_address.clone()));
 
         if !is_all_time {
             query.push_str(&format!(" AND r.timestamp >= ?{}", params_vec.len() + 1));
@@ -1833,19 +1871,21 @@ impl TransactionDatabase {
         limit: usize,
     ) -> Result<Vec<WalletFlowExportRow>, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+        
         let mut stmt = conn
             .prepare(
                 "SELECT r.signature, r.timestamp, COALESCE(p.sol_delta, 0) as sol_delta \
                  FROM raw_transactions r \
-                 LEFT JOIN processed_transactions p ON r.signature = p.signature \
-                 WHERE r.timestamp >= ?1 AND r.status IN ('Confirmed', 'Finalized') \
+                 LEFT JOIN processed_transactions p ON r.signature = p.signature AND p.wallet_address = ?1 \
+                 WHERE r.wallet_address = ?1 AND r.timestamp >= ?2 AND r.status IN ('Confirmed', 'Finalized') \
                  ORDER BY r.timestamp ASC, r.signature ASC \
-                 LIMIT ?2",
+                 LIMIT ?3",
             )
             .map_err(|e| format!("Failed to prepare wallet flow export: {}", e))?;
 
         let mut rows = stmt
-            .query(params![from.to_rfc3339(), (limit as i64).max(1)])
+            .query(params![wallet_address, from.to_rfc3339(), (limit as i64).max(1)])
             .map_err(|e| format!("Failed to query wallet flow export: {}", e))?;
 
         let mut results = Vec::new();
@@ -1881,10 +1921,12 @@ impl TransactionDatabase {
         filters: &TransactionListFilters,
     ) -> Result<u64, String> {
         let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
-        let mut query = String::from("SELECT COUNT(*) FROM raw_transactions r WHERE 1=1");
+        let mut query = String::from("SELECT COUNT(*) FROM raw_transactions r WHERE r.wallet_address = ?1");
 
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
+        params_vec.push(Box::new(wallet_address));
 
         // Apply coarse filters (can't filter by JSON columns efficiently)
         if let Some(ref from) = filters.time_from {

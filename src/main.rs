@@ -1,7 +1,7 @@
 use screenerbot::{
     arguments::{
-        is_dry_run_enabled, is_force_enabled, is_reset_enabled, is_run_enabled, patterns,
-        print_debug_info, print_help,
+        is_clean_wallet_data_enabled, is_dry_run_enabled, is_force_enabled, is_reset_enabled,
+        is_run_enabled, patterns, print_debug_info, print_help,
     },
     logger::{self as logger, LogTag},
 };
@@ -11,6 +11,7 @@ use screenerbot::{
 /// Routes execution based on command-line arguments:
 /// - `--help`: Display help information and exit
 /// - `--reset [--force]`: Reset database state and exit
+/// - `--clean-wallet-data`: Clean all wallet-specific databases and exit
 /// - `--run [--dry-run]`: Start the trading bot
 #[tokio::main]
 async fn main() {
@@ -28,6 +29,43 @@ async fn main() {
 
     // Print debug information if any debug modes are enabled
     print_debug_info();
+
+    // Clean wallet data mode - execute and exit
+    if is_clean_wallet_data_enabled() {
+        logger::info(LogTag::System, "🧹 Clean wallet data mode enabled");
+
+        println!("\n⚠️  WARNING: This will DELETE all stored data:");
+        println!("   - Transaction history (data/transactions.db)");
+        println!("   - Position history (data/positions.db)");
+        println!("   - Wallet snapshots (data/wallet.db)");
+        println!("\nThis action is required when switching to a different wallet.");
+        print!("\nType 'yes' to confirm: ");
+
+        use std::io::{self, Write};
+        io::stdout().flush().unwrap();
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).unwrap();
+
+        if input.trim().to_lowercase() == "yes" {
+            match screenerbot::wallet_validation::WalletValidator::clean_all_databases().await {
+                Ok(_) => {
+                    logger::info(
+                        LogTag::System,
+                        "✅ All databases cleaned successfully. You can now start the bot.",
+                    );
+                    std::process::exit(0);
+                }
+                Err(e) => {
+                    logger::error(LogTag::System, &format!("❌ Cleanup failed: {}", e));
+                    std::process::exit(1);
+                }
+            }
+        } else {
+            logger::info(LogTag::System, "❌ Cleanup cancelled");
+            std::process::exit(0);
+        }
+    }
 
     // Reset mode - execute and exit
     if is_reset_enabled() {

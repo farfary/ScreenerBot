@@ -28,4 +28,5 @@ pub mod trader;
 pub mod transactions;
 pub mod utils;
 pub mod wallet;
+pub mod wallet_validation;
 pub mod webserver;
