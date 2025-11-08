@@ -5546,9 +5546,12 @@ pub struct RpcEndpointTestResult {
 /// Returns detailed test result including latency and mainnet validation
 pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
     use crate::logger::{self, LogTag};
-    
-    logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: START for {}", url));
-    
+
+    logger::debug(
+        LogTag::Rpc,
+        &format!("test_rpc_endpoint: START for {}", url),
+    );
+
     // Heuristic: Check if URL contains known premium RPC provider domains
     let is_premium = url.contains("helius")
         || url.contains("quicknode")
@@ -5558,12 +5561,18 @@ pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
         || url.contains("getblock")
         || url.contains("ankr");
 
-    logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: Validating URL format"));
-    
+    logger::debug(
+        LogTag::Rpc,
+        &format!("test_rpc_endpoint: Validating URL format"),
+    );
+
     // Validate URL format (non-blocking)
     match Url::parse(url) {
         Err(e) => {
-            logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: URL parse failed: {}", e));
+            logger::debug(
+                LogTag::Rpc,
+                &format!("test_rpc_endpoint: URL parse failed: {}", e),
+            );
             return RpcEndpointTestResult {
                 url: url.to_string(),
                 success: false,
@@ -5575,9 +5584,15 @@ pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
             };
         }
         Ok(parsed_url) => {
-            logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: URL parsed, checking scheme"));
+            logger::debug(
+                LogTag::Rpc,
+                &format!("test_rpc_endpoint: URL parsed, checking scheme"),
+            );
             if parsed_url.scheme() != "https" {
-                logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: Non-HTTPS scheme rejected"));
+                logger::debug(
+                    LogTag::Rpc,
+                    &format!("test_rpc_endpoint: Non-HTTPS scheme rejected"),
+                );
                 return RpcEndpointTestResult {
                     url: url.to_string(),
                     success: false,
@@ -5594,70 +5609,82 @@ pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
     let url_owned = url.to_string();
     let premium_flag = is_premium;
 
-    logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: Creating async HTTP client"));
+    logger::debug(
+        LogTag::Rpc,
+        &format!("test_rpc_endpoint: Creating async HTTP client"),
+    );
 
     // Use async HTTP client instead of blocking
     let start = Instant::now();
-    
+
     let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(5))
         .build()
         .unwrap();
 
-    logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: Testing get_version"));
-    
+    logger::debug(
+        LogTag::Rpc,
+        &format!("test_rpc_endpoint: Testing get_version"),
+    );
+
     // Test 1: Get version
     let version_request = serde_json::json!({
         "jsonrpc": "2.0",
         "id": 1,
         "method": "getVersion"
     });
-    
-    let version_result = client
-        .post(&url_owned)
-        .json(&version_request)
-        .send()
-        .await;
-    
+
+    let version_result = client.post(&url_owned).json(&version_request).send().await;
+
     let version = match version_result {
-        Ok(response) => {
-            match response.json::<serde_json::Value>().await {
-                Ok(json) => {
-                    if let Some(result) = json.get("result") {
-                        if let Some(solana_core) = result.get("solana-core") {
-                            solana_core.as_str().map(|s| s.to_string())
-                        } else {
-                            None
-                        }
+        Ok(response) => match response.json::<serde_json::Value>().await {
+            Ok(json) => {
+                if let Some(result) = json.get("result") {
+                    if let Some(solana_core) = result.get("solana-core") {
+                        solana_core.as_str().map(|s| s.to_string())
                     } else {
-                        logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: get_version failed - no result in response"));
-                        return RpcEndpointTestResult {
-                            url: url_owned,
-                            success: false,
-                            latency_ms: start.elapsed().as_millis() as u64,
-                            error: Some("getVersion returned no result".to_string()),
-                            is_mainnet: None,
-                            version: None,
-                            is_premium: premium_flag,
-                        };
+                        None
                     }
-                }
-                Err(e) => {
-                    logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: get_version failed - JSON parse error: {}", e));
+                } else {
+                    logger::debug(
+                        LogTag::Rpc,
+                        &format!("test_rpc_endpoint: get_version failed - no result in response"),
+                    );
                     return RpcEndpointTestResult {
                         url: url_owned,
                         success: false,
                         latency_ms: start.elapsed().as_millis() as u64,
-                        error: Some(format!("getVersion JSON parse error: {}", e)),
+                        error: Some("getVersion returned no result".to_string()),
                         is_mainnet: None,
                         version: None,
                         is_premium: premium_flag,
                     };
                 }
             }
-        }
+            Err(e) => {
+                logger::debug(
+                    LogTag::Rpc,
+                    &format!(
+                        "test_rpc_endpoint: get_version failed - JSON parse error: {}",
+                        e
+                    ),
+                );
+                return RpcEndpointTestResult {
+                    url: url_owned,
+                    success: false,
+                    latency_ms: start.elapsed().as_millis() as u64,
+                    error: Some(format!("getVersion JSON parse error: {}", e)),
+                    is_mainnet: None,
+                    version: None,
+                    is_premium: premium_flag,
+                };
+            }
+        },
         Err(e) => {
-            logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: get_version HTTP failed: {}", e));
+            logger::debug(
+                LogTag::Rpc,
+                &format!("test_rpc_endpoint: get_version HTTP failed: {}", e),
+            );
             return RpcEndpointTestResult {
                 url: url_owned,
                 success: false,
@@ -5670,21 +5697,20 @@ pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
         }
     };
 
-    logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: Testing get_genesis_hash"));
-    
+    logger::debug(
+        LogTag::Rpc,
+        &format!("test_rpc_endpoint: Testing get_genesis_hash"),
+    );
+
     // Test 2: Get genesis hash
     let genesis_request = serde_json::json!({
         "jsonrpc": "2.0",
         "id": 1,
         "method": "getGenesisHash"
     });
-    
-    let genesis_result = client
-        .post(&url_owned)
-        .json(&genesis_request)
-        .send()
-        .await;
-    
+
+    let genesis_result = client.post(&url_owned).json(&genesis_request).send().await;
+
     let genesis_hash = match genesis_result {
         Ok(response) => {
             match response.json::<serde_json::Value>().await {
@@ -5698,14 +5724,19 @@ pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
                                 url: url_owned,
                                 success: false,
                                 latency_ms: start.elapsed().as_millis() as u64,
-                                error: Some("getGenesisHash returned non-string result".to_string()),
+                                error: Some(
+                                    "getGenesisHash returned non-string result".to_string(),
+                                ),
                                 is_mainnet: None,
                                 version,
                                 is_premium: premium_flag,
                             };
                         }
                     } else {
-                        logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: get_genesis_hash failed - no result"));
+                        logger::debug(
+                            LogTag::Rpc,
+                            &format!("test_rpc_endpoint: get_genesis_hash failed - no result"),
+                        );
                         return RpcEndpointTestResult {
                             url: url_owned,
                             success: false,
@@ -5718,7 +5749,13 @@ pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
                     }
                 }
                 Err(e) => {
-                    logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: get_genesis_hash JSON parse error: {}", e));
+                    logger::debug(
+                        LogTag::Rpc,
+                        &format!(
+                            "test_rpc_endpoint: get_genesis_hash JSON parse error: {}",
+                            e
+                        ),
+                    );
                     return RpcEndpointTestResult {
                         url: url_owned,
                         success: false,
@@ -5732,7 +5769,10 @@ pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
             }
         }
         Err(e) => {
-            logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: get_genesis_hash HTTP failed: {}", e));
+            logger::debug(
+                LogTag::Rpc,
+                &format!("test_rpc_endpoint: get_genesis_hash HTTP failed: {}", e),
+            );
             return RpcEndpointTestResult {
                 url: url_owned,
                 success: false,
@@ -5752,8 +5792,11 @@ pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
     let mainnet_genesis = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
     let is_mainnet = genesis_hash == mainnet_genesis;
 
-    logger::debug(LogTag::Rpc, &format!("test_rpc_endpoint: DONE, success=true"));
-    
+    logger::debug(
+        LogTag::Rpc,
+        &format!("test_rpc_endpoint: DONE, success=true"),
+    );
+
     RpcEndpointTestResult {
         url: url_owned,
         success: true,
@@ -5768,17 +5811,29 @@ pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
 /// Test multiple RPC endpoints concurrently
 /// Returns results for all endpoints (both successes and failures)
 pub async fn test_rpc_endpoints(urls: &[String]) -> Vec<RpcEndpointTestResult> {
-    logger::debug(LogTag::Rpc, &format!("test_rpc_endpoints: START with {} URLs", urls.len()));
+    logger::debug(
+        LogTag::Rpc,
+        &format!("test_rpc_endpoints: START with {} URLs", urls.len()),
+    );
 
     let mut results = Vec::new();
     for url in urls {
         logger::debug(LogTag::Rpc, &format!("test_rpc_endpoints: Testing {}", url));
         let result = test_rpc_endpoint(url).await;
-        logger::debug(LogTag::Rpc, &format!("test_rpc_endpoints: Result for {}: success={}", url, result.success));
+        logger::debug(
+            LogTag::Rpc,
+            &format!(
+                "test_rpc_endpoints: Result for {}: success={}",
+                url, result.success
+            ),
+        );
         results.push(result);
     }
-    
-    logger::debug(LogTag::Rpc, &format!("test_rpc_endpoints: DONE with {} results", results.len()));
+
+    logger::debug(
+        LogTag::Rpc,
+        &format!("test_rpc_endpoints: DONE with {} results", results.len()),
+    );
     results
 }
 

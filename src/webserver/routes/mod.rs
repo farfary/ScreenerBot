@@ -27,7 +27,8 @@ pub mod wallet;
 
 pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
-        .route("/", axum::routing::get(services_page))
+        .route("/", axum::routing::get(home_page))
+        .route("/home", axum::routing::get(home_page))
         .route("/services", axum::routing::get(services_page))
         .route("/tokens", axum::routing::get(tokens_page))
         .route("/positions", axum::routing::get(positions_page))
@@ -44,6 +45,12 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/scripts/ui/:file", axum::routing::get(get_ui_script))
         .nest("/api", api_routes())
         .with_state(state)
+}
+
+/// Home page handler
+async fn home_page() -> Html<String> {
+    let content = templates::home_content();
+    Html(templates::base_template("Home", "home", &content))
 }
 
 /// Tokens page handler
@@ -150,6 +157,7 @@ fn api_routes() -> Router<Arc<AppState>> {
 /// SPA page content handler - returns just the content HTML (not full template)
 async fn get_page_content(axum::extract::Path(page): axum::extract::Path<String>) -> Html<String> {
     let content = match page.as_str() {
+        "home" => templates::home_content(),
         "tokens" => templates::tokens_content(),
         "positions" => templates::positions_content(),
         "events" => templates::events_content(),
@@ -211,16 +219,17 @@ async fn get_core_script(axum::extract::Path(file): axum::extract::Path<String>)
 /// Serve page JavaScript modules
 async fn get_page_script(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
     let content = match file.as_str() {
+        "home.js" => Some(templates::HOME_PAGE_SCRIPT),
         "services.js" => Some(templates::SERVICES_PAGE_SCRIPT),
         "transactions.js" => Some(templates::TRANSACTIONS_PAGE_SCRIPT),
         "events.js" => Some(templates::EVENTS_PAGE_SCRIPT),
         "tokens.js" => Some(templates::TOKENS_PAGE_SCRIPT),
         "positions.js" => Some(templates::POSITIONS_PAGE_SCRIPT),
         "filtering.js" => Some(templates::FILTERING_PAGE_SCRIPT),
-        "wallet.js" => Some(templates::WALLET_PAGE_SCRIPT),
         "config.js" => Some(templates::CONFIG_PAGE_SCRIPT),
         "strategies.js" => Some(templates::STRATEGIES_PAGE_SCRIPT),
         "trader.js" => Some(templates::TRADER_PAGE_SCRIPT),
+        "wallet.js" => Some(templates::WALLET_PAGE_SCRIPT),
         "initialization.js" => Some(templates::INITIALIZATION_PAGE_SCRIPT),
         _ => None,
     };

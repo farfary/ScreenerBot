@@ -96,7 +96,7 @@ pub async fn run_bot() -> Result<(), String> {
 
         // 3.5. Verify license
         logger::info(LogTag::System, "🔐 Verifying ScreenerBot license...");
-        
+
         let wallet_keypair = crate::config::utils::get_wallet_keypair()
             .map_err(|e| format!("Failed to get wallet keypair: {}", e))?;
         let wallet_pubkey = wallet_keypair.pubkey();
@@ -109,7 +109,10 @@ pub async fn run_bot() -> Result<(), String> {
             let reason = license_status.reason.as_deref().unwrap_or("Unknown reason");
             logger::error(
                 LogTag::System,
-                &format!("❌ Invalid license for wallet {}: {}", wallet_pubkey, reason)
+                &format!(
+                    "❌ Invalid license for wallet {}: {}",
+                    wallet_pubkey, reason
+                ),
             );
             return Err(format!(
                 "Cannot start bot: Invalid license ({}). Visit https://screenerbot.com to purchase or renew your license.",
@@ -122,13 +125,18 @@ pub async fn run_bot() -> Result<(), String> {
             &format!(
                 "✅ License verified successfully: tier={}, expiry={}",
                 license_status.tier.as_deref().unwrap_or("Unknown"),
-                license_status.expiry_ts.map(|ts| {
-                    use chrono::{DateTime, Utc, TimeZone};
-                    let dt = Utc.timestamp_opt(ts as i64, 0).single()
-                        .map(|dt| dt.format("%Y-%m-%d").to_string())
-                        .unwrap_or_else(|| "N/A".to_string());
-                    dt
-                }).unwrap_or_else(|| "N/A".to_string())
+                license_status
+                    .expiry_ts
+                    .map(|ts| {
+                        use chrono::{DateTime, TimeZone, Utc};
+                        let dt = Utc
+                            .timestamp_opt(ts as i64, 0)
+                            .single()
+                            .map(|dt| dt.format("%Y-%m-%d").to_string())
+                            .unwrap_or_else(|| "N/A".to_string());
+                        dt
+                    })
+                    .unwrap_or_else(|| "N/A".to_string())
             ),
         );
 
@@ -162,7 +170,7 @@ pub async fn run_bot() -> Result<(), String> {
                         current,
                         stored,
                         affected_systems.join(", ")
-                    )
+                    ),
                 );
 
                 return Err(format!(

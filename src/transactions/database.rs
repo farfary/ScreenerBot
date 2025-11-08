@@ -472,9 +472,10 @@ impl TransactionDatabase {
     fn backfill_processed_sol_delta(&self, conn: &mut Connection) -> Result<(), String> {
         const BATCH_SIZE: i64 = 1000;
         let mut total_updated = 0usize;
-        
+
         // Get wallet address for filtering (this is a migration function, so it operates on current wallet data only)
-        let wallet_address = crate::utils::get_wallet_address().map_err(|e| format!("Failed to get wallet address for sol_delta backfill: {}", e))?;
+        let wallet_address = crate::utils::get_wallet_address()
+            .map_err(|e| format!("Failed to get wallet address for sol_delta backfill: {}", e))?;
 
         loop {
             let mut stmt = conn
@@ -625,9 +626,11 @@ impl TransactionDatabase {
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM known_signatures WHERE wallet_address = ?1", params![wallet_address], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM known_signatures WHERE wallet_address = ?1",
+                params![wallet_address],
+                |row| row.get(0),
+            )
             .map_err(|e| format!("Failed to get known signatures count: {}", e))?;
 
         Ok(count as u64)
@@ -723,7 +726,9 @@ impl TransactionDatabase {
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let mut stmt = conn
-            .prepare("SELECT signature, added_at FROM pending_transactions WHERE wallet_address = ?1")
+            .prepare(
+                "SELECT signature, added_at FROM pending_transactions WHERE wallet_address = ?1",
+            )
             .map_err(|e| format!("Failed to prepare pending transactions query: {}", e))?;
 
         let rows = stmt
@@ -774,9 +779,11 @@ impl TransactionDatabase {
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM pending_transactions WHERE wallet_address = ?1", params![wallet_address], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM pending_transactions WHERE wallet_address = ?1",
+                params![wallet_address],
+                |row| row.get(0),
+            )
             .map_err(|e| format!("Failed to get pending transactions count: {}", e))?;
 
         Ok(count as u64)
@@ -1065,21 +1072,27 @@ impl TransactionDatabase {
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let raw_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM raw_transactions WHERE wallet_address = ?1", params![wallet_address], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM raw_transactions WHERE wallet_address = ?1",
+                params![wallet_address],
+                |row| row.get(0),
+            )
             .unwrap_or(0);
 
         let processed_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM processed_transactions WHERE wallet_address = ?1", params![wallet_address], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM processed_transactions WHERE wallet_address = ?1",
+                params![wallet_address],
+                |row| row.get(0),
+            )
             .unwrap_or(0);
 
         let known_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM known_signatures WHERE wallet_address = ?1", params![wallet_address], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM known_signatures WHERE wallet_address = ?1",
+                params![wallet_address],
+                |row| row.get(0),
+            )
             .unwrap_or(0);
 
         let retries_count: i64 = conn
@@ -1089,9 +1102,11 @@ impl TransactionDatabase {
             .unwrap_or(0);
 
         let pending_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM pending_transactions WHERE wallet_address = ?1", params![wallet_address], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM pending_transactions WHERE wallet_address = ?1",
+                params![wallet_address],
+                |row| row.get(0),
+            )
             .unwrap_or(0);
 
         // Get database file size
@@ -1158,15 +1173,19 @@ impl TransactionDatabase {
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let raw_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM raw_transactions WHERE wallet_address = ?1", params![wallet_address], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM raw_transactions WHERE wallet_address = ?1",
+                params![wallet_address],
+                |row| row.get(0),
+            )
             .unwrap_or(0);
 
         let processed_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM processed_transactions WHERE wallet_address = ?1", params![wallet_address], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM processed_transactions WHERE wallet_address = ?1",
+                params![wallet_address],
+                |row| row.get(0),
+            )
             .unwrap_or(0);
 
         let orphaned: i64 = conn
@@ -1180,9 +1199,11 @@ impl TransactionDatabase {
         let missing: i64 = raw_count - processed_count;
 
         let pending_count: i64 = conn
-            .query_row("SELECT COUNT(*) FROM pending_transactions WHERE wallet_address = ?1", params![wallet_address], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM pending_transactions WHERE wallet_address = ?1",
+                params![wallet_address],
+                |row| row.get(0),
+            )
             .unwrap_or(0);
 
         // Check schema version
@@ -1332,7 +1353,12 @@ impl TransactionDatabase {
 
         // Apply cursor for pagination (timestamp desc, signature desc)
         if let Some(cursor) = cursor {
-            query.push_str(&format!(" AND (r.timestamp < ?{} OR (r.timestamp = ?{} AND r.signature < ?{}))", params_vec.len() + 1, params_vec.len() + 1, params_vec.len() + 2));
+            query.push_str(&format!(
+                " AND (r.timestamp < ?{} OR (r.timestamp = ?{} AND r.signature < ?{}))",
+                params_vec.len() + 1,
+                params_vec.len() + 1,
+                params_vec.len() + 2
+            ));
             params_vec.push(Box::new(cursor.timestamp.clone()));
             params_vec.push(Box::new(cursor.signature.clone()));
         }
@@ -1872,7 +1898,7 @@ impl TransactionDatabase {
     ) -> Result<Vec<WalletFlowExportRow>, String> {
         let conn = self.get_connection()?;
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
-        
+
         let mut stmt = conn
             .prepare(
                 "SELECT r.signature, r.timestamp, COALESCE(p.sol_delta, 0) as sol_delta \
@@ -1885,7 +1911,11 @@ impl TransactionDatabase {
             .map_err(|e| format!("Failed to prepare wallet flow export: {}", e))?;
 
         let mut rows = stmt
-            .query(params![wallet_address, from.to_rfc3339(), (limit as i64).max(1)])
+            .query(params![
+                wallet_address,
+                from.to_rfc3339(),
+                (limit as i64).max(1)
+            ])
             .map_err(|e| format!("Failed to query wallet flow export: {}", e))?;
 
         let mut results = Vec::new();
@@ -1923,7 +1953,8 @@ impl TransactionDatabase {
         let conn = self.get_connection()?;
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
-        let mut query = String::from("SELECT COUNT(*) FROM raw_transactions r WHERE r.wallet_address = ?1");
+        let mut query =
+            String::from("SELECT COUNT(*) FROM raw_transactions r WHERE r.wallet_address = ?1");
 
         let mut params_vec: Vec<Box<dyn rusqlite::ToSql>> = Vec::new();
         params_vec.push(Box::new(wallet_address));

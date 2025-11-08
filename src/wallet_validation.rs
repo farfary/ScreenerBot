@@ -34,7 +34,9 @@ impl WalletValidator {
 
         // Check transactions DB
         if Path::new("data/transactions.db").exists() {
-            if let Some(stored_wallet) = Self::get_stored_wallet("data/transactions.db", "db_metadata")? {
+            if let Some(stored_wallet) =
+                Self::get_stored_wallet("data/transactions.db", "db_metadata")?
+            {
                 if stored_wallet != current_wallet {
                     mismatches.push(("Transactions".to_string(), stored_wallet));
                 }
@@ -43,7 +45,9 @@ impl WalletValidator {
 
         // Check positions DB
         if Path::new("data/positions.db").exists() {
-            if let Some(stored_wallet) = Self::get_stored_wallet("data/positions.db", "position_metadata")? {
+            if let Some(stored_wallet) =
+                Self::get_stored_wallet("data/positions.db", "position_metadata")?
+            {
                 if stored_wallet != current_wallet {
                     mismatches.push(("Positions".to_string(), stored_wallet));
                 }
@@ -52,7 +56,9 @@ impl WalletValidator {
 
         // Check wallet DB
         if Path::new("data/wallet.db").exists() {
-            if let Some(stored_wallet) = Self::get_stored_wallet("data/wallet.db", "wallet_metadata")? {
+            if let Some(stored_wallet) =
+                Self::get_stored_wallet("data/wallet.db", "wallet_metadata")?
+            {
                 if stored_wallet != current_wallet {
                     mismatches.push(("Wallet History".to_string(), stored_wallet));
                 }
@@ -79,8 +85,8 @@ impl WalletValidator {
 
     /// Get stored wallet address from database metadata table
     fn get_stored_wallet(db_path: &str, metadata_table: &str) -> Result<Option<String>, String> {
-        let conn = Connection::open(db_path)
-            .map_err(|e| format!("Failed to open {}: {}", db_path, e))?;
+        let conn =
+            Connection::open(db_path).map_err(|e| format!("Failed to open {}: {}", db_path, e))?;
 
         let query = format!(
             "SELECT value FROM {} WHERE key = 'current_wallet'",

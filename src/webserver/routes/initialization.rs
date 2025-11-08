@@ -163,9 +163,21 @@ async fn validate_credentials(Json(request): Json<ValidateCredentialsRequest>) -
     // Test RPC endpoints concurrently
     let rpc_test_results = if !request.rpc_urls.is_empty() && errors.is_empty() {
         logger::info(LogTag::Webserver, "Testing RPC endpoints...");
-        logger::info(LogTag::Webserver, &format!("BEFORE rpc::test_rpc_endpoints() call with {} URLs", request.rpc_urls.len()));
+        logger::info(
+            LogTag::Webserver,
+            &format!(
+                "BEFORE rpc::test_rpc_endpoints() call with {} URLs",
+                request.rpc_urls.len()
+            ),
+        );
         let results = rpc::test_rpc_endpoints(&request.rpc_urls).await;
-        logger::info(LogTag::Webserver, &format!("AFTER rpc::test_rpc_endpoints() call, got {} results", results.len()));
+        logger::info(
+            LogTag::Webserver,
+            &format!(
+                "AFTER rpc::test_rpc_endpoints() call, got {} results",
+                results.len()
+            ),
+        );
         results
     } else {
         vec![]
@@ -175,9 +187,22 @@ async fn validate_credentials(Json(request): Json<ValidateCredentialsRequest>) -
     let successful_rpcs: Vec<_> = rpc_test_results.iter().filter(|r| r.success).collect();
     let failed_rpcs: Vec<_> = rpc_test_results.iter().filter(|r| !r.success).collect();
 
-    logger::info(LogTag::Webserver, &format!("RPC test results: {} successful, {} failed", successful_rpcs.len(), failed_rpcs.len()));
+    logger::info(
+        LogTag::Webserver,
+        &format!(
+            "RPC test results: {} successful, {} failed",
+            successful_rpcs.len(),
+            failed_rpcs.len()
+        ),
+    );
     for result in &rpc_test_results {
-        logger::info(LogTag::Webserver, &format!("  - {}: success={}, error={:?}", result.url, result.success, result.error));
+        logger::info(
+            LogTag::Webserver,
+            &format!(
+                "  - {}: success={}, error={:?}",
+                result.url, result.success, result.error
+            ),
+        );
     }
 
     if successful_rpcs.is_empty() && !rpc_test_results.is_empty() {
@@ -376,7 +401,10 @@ async fn complete_initialization(Json(request): Json<CompleteInitializationReque
     // Step 6: Set initialization complete flag BEFORE starting services
     // (services check this flag in their is_enabled() method)
     global::INITIALIZATION_COMPLETE.store(true, Ordering::SeqCst);
-    logger::info(LogTag::Webserver, "Initialization complete flag set - services can now start");
+    logger::info(
+        LogTag::Webserver,
+        "Initialization complete flag set - services can now start",
+    );
 
     // Step 7: Start remaining services
     logger::info(LogTag::Webserver, "Starting services...");

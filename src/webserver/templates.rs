@@ -22,6 +22,7 @@ const STRATEGIES_PAGE_STYLES: &str = include_str!("templates/styles/pages/strate
 const TRADER_PAGE_STYLES: &str = include_str!("templates/styles/pages/trader.css");
 const WALLET_PAGE_STYLES: &str = include_str!("templates/styles/pages/wallet.css");
 const INITIALIZATION_PAGE_STYLES: &str = include_str!("templates/styles/pages/initialization.css");
+const HOME_PAGE_STYLES: &str = include_str!("templates/styles/pages/home.css");
 const DATA_TABLE_STYLES: &str = include_str!("templates/styles/ui/data_table.css");
 const TABLE_TOOLBAR_STYLES: &str = include_str!("templates/styles/ui/table_toolbar.css");
 const EVENTS_DIALOG_STYLES: &str = include_str!("templates/styles/ui/events_dialog.css");
@@ -66,6 +67,7 @@ pub const TRADER_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/trade
 pub const WALLET_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/wallet.js");
 pub const INITIALIZATION_PAGE_SCRIPT: &str =
     include_str!("templates/scripts/pages/initialization.js");
+pub const HOME_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/home.js");
 
 const TOKENS_PAGE: &str = include_str!("templates/pages/tokens.html");
 const EVENTS_PAGE: &str = include_str!("templates/pages/events.html");
@@ -78,6 +80,7 @@ const STRATEGIES_PAGE: &str = include_str!("templates/pages/strategies.html");
 const TRADER_PAGE: &str = include_str!("templates/pages/trader.html");
 const WALLET_PAGE: &str = include_str!("templates/pages/wallet.html");
 const INITIALIZATION_PAGE: &str = include_str!("templates/pages/initialization.html");
+const HOME_PAGE: &str = include_str!("templates/pages/home.html");
 
 /// Render the base layout with shared chrome and inject the requested content.
 pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
@@ -131,6 +134,9 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     if active_tab == "initialization" {
         combined_styles.push(INITIALIZATION_PAGE_STYLES);
     }
+    if active_tab == "home" {
+        combined_styles.push(HOME_PAGE_STYLES);
+    }
     html = html.replace("/*__INJECTED_STYLES__*/", &combined_styles.join("\n"));
     let mut page_style_injections = String::new();
     for (page, styles) in [
@@ -145,6 +151,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         ("trader", TRADER_PAGE_STYLES),
         ("wallet", WALLET_PAGE_STYLES),
         ("initialization", INITIALIZATION_PAGE_STYLES),
+        ("home", HOME_PAGE_STYLES),
     ] {
         if styles.trim().is_empty() {
             continue;
@@ -165,6 +172,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
 
 fn nav_tabs(active: &str) -> String {
     let tabs = vec![
+        ("home", "🏠 Home"),
         ("positions", "📊 Positions"),
         ("tokens", "🪙 Tokens"),
         ("filtering", "🔍 Filtering"),
@@ -236,4 +244,8 @@ pub fn wallet_content() -> String {
 
 pub fn initialization_content() -> String {
     render_page(INITIALIZATION_PAGE)
+}
+
+pub fn home_content() -> String {
+    render_page(HOME_PAGE)
 }

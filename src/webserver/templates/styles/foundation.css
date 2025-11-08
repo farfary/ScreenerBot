@@ -59,6 +59,16 @@
     border-color 0.3s ease;
 }
 
+/* Remove default focus outline on mouse click, keep for keyboard navigation */
+*:focus {
+  outline: none;
+}
+
+*:focus-visible {
+  outline: 2px solid var(--link-color);
+  outline-offset: 2px;
+}
+
 html {
   height: 100%;
 }

@@ -160,7 +160,9 @@ pub fn print_help() {
     println!();
     println!("EXECUTION MODES (choose one):");
     println!("    --run                       Start the trading bot");
-    println!("    --reset                     Reset pending verifications and delete database files");
+    println!(
+        "    --reset                     Reset pending verifications and delete database files"
+    );
     println!("    --clean-wallet-data         Clean all wallet-specific databases (use when switching wallets)");
     println!("    --help, -h                  Show this help message");
     println!();
@@ -187,12 +189,16 @@ pub fn print_help() {
     println!("      security, trader, transactions, webserver, websocket, wallet");
     println!();
     println!("EXAMPLES:");
-    println!("    screenerbot --run                                # Start bot in live trading mode");
+    println!(
+        "    screenerbot --run                                # Start bot in live trading mode"
+    );
     println!("    screenerbot --run --dry-run                      # Start bot in simulation mode");
     println!(
         "    screenerbot --run --dry-run --debug-trader       # Simulate with trader debug logs"
     );
-    println!("    screenerbot --reset                              # Reset with confirmation prompt");
+    println!(
+        "    screenerbot --reset                              # Reset with confirmation prompt"
+    );
     println!("    screenerbot --reset --force                      # Reset without confirmation");
     println!("    screenerbot --clean-wallet-data                  # Clean databases when switching wallets");
     println!("    screenerbot --help                               # Show this help message");

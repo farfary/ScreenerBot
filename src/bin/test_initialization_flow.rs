@@ -2,7 +2,6 @@
 ///
 /// This tests the complete validation + license verification flow that happens
 /// during bot initialization via the web UI.
-
 use screenerbot::license;
 use screenerbot::logger;
 use screenerbot::rpc;
@@ -19,11 +18,18 @@ async fn main() {
     println!();
 
     // Test credentials (same as provided by user)
-    let private_key_str = "REDACTED_PRIVATE_KEY";
-    let rpc_urls = vec!["https://mainnet.helius-rpc.com/?api-key=REDACTED_API_KEY_1".to_string()];
+    let private_key_str =
+        "REDACTED_PRIVATE_KEY";
+    let rpc_urls = vec![
+        "https://mainnet.helius-rpc.com/?api-key=REDACTED_API_KEY_1".to_string(),
+    ];
 
     println!("📋 Test Configuration:");
-    println!("   Private Key: {}...{}", &private_key_str[..10], &private_key_str[private_key_str.len()-10..]);
+    println!(
+        "   Private Key: {}...{}",
+        &private_key_str[..10],
+        &private_key_str[private_key_str.len() - 10..]
+    );
     println!("   RPC URLs: {} endpoint(s)", rpc_urls.len());
     for (i, url) in rpc_urls.iter().enumerate() {
         let safe_url = if url.contains("api-key=") {
@@ -85,13 +91,30 @@ async fn main() {
             result.url.clone()
         };
         println!("   URL: {}", safe_url);
-        println!("   Status: {}", if result.success { "✅ Success" } else { "❌ Failed" });
-        
+        println!(
+            "   Status: {}",
+            if result.success {
+                "✅ Success"
+            } else {
+                "❌ Failed"
+            }
+        );
+
         if result.success {
             println!("   Latency: {:.0}ms", result.latency_ms);
-            println!("   Premium: {}", if result.is_premium { "✅ Yes" } else { "⚠️  No" });
+            println!(
+                "   Premium: {}",
+                if result.is_premium {
+                    "✅ Yes"
+                } else {
+                    "⚠️  No"
+                }
+            );
             if let Some(is_mainnet) = result.is_mainnet {
-                println!("   Mainnet: {}", if is_mainnet { "✅ Yes" } else { "⚠️  No" });
+                println!(
+                    "   Mainnet: {}",
+                    if is_mainnet { "✅ Yes" } else { "⚠️  No" }
+                );
             }
         } else {
             if let Some(error) = &result.error {
@@ -114,7 +137,11 @@ async fn main() {
         return;
     }
 
-    println!("✅ {} of {} RPC endpoint(s) working", working_endpoints.len(), rpc_urls.len());
+    println!(
+        "✅ {} of {} RPC endpoint(s) working",
+        working_endpoints.len(),
+        rpc_urls.len()
+    );
     println!();
 
     // ============================================================================
@@ -125,8 +152,14 @@ async fn main() {
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!();
 
-    println!("🎫 Verifying ScreenerBot license for wallet: {}", wallet_address);
-    println!("   Using {} working RPC endpoint(s)", working_endpoints.len());
+    println!(
+        "🎫 Verifying ScreenerBot license for wallet: {}",
+        wallet_address
+    );
+    println!(
+        "   Using {} working RPC endpoint(s)",
+        working_endpoints.len()
+    );
     println!();
 
     let start = std::time::Instant::now();
@@ -138,7 +171,10 @@ async fn main() {
     {
         Ok(status) => {
             let duration = start.elapsed();
-            println!("⏱️  License verification completed in {:.2}s", duration.as_secs_f64());
+            println!(
+                "⏱️  License verification completed in {:.2}s",
+                duration.as_secs_f64()
+            );
             println!();
             status
         }
@@ -150,7 +186,14 @@ async fn main() {
 
     // Print license status
     println!("📊 License Status:");
-    println!("   Valid: {}", if license_status.valid { "✅ Yes" } else { "❌ No" });
+    println!(
+        "   Valid: {}",
+        if license_status.valid {
+            "✅ Yes"
+        } else {
+            "❌ No"
+        }
+    );
 
     if let Some(tier) = &license_status.tier {
         println!("   Tier: {}", tier);
@@ -193,7 +236,7 @@ async fn main() {
     // FINAL RESULT
     // ============================================================================
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    
+
     if license_status.valid {
         println!("✅ INITIALIZATION WOULD SUCCEED");
         println!();
@@ -202,12 +245,17 @@ async fn main() {
     } else {
         println!("❌ INITIALIZATION WOULD FAIL");
         println!();
-        println!("   Reason: {}", license_status.reason.unwrap_or_else(|| "Unknown".to_string()));
+        println!(
+            "   Reason: {}",
+            license_status
+                .reason
+                .unwrap_or_else(|| "Unknown".to_string())
+        );
         println!();
         println!("   The bot cannot start without a valid license.");
         println!("   Visit https://screenerbot.io to purchase a license.");
     }
-    
+
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 }
 

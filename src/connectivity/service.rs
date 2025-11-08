@@ -301,7 +301,7 @@ impl Service for ConnectivityService {
         if !crate::global::is_initialization_complete() {
             return false;
         }
-        
+
         let cfg = get_config_clone();
         cfg.connectivity.enabled
     }
@@ -410,7 +410,7 @@ impl Service for ConnectivityService {
         if !crate::global::is_initialization_complete() {
             return ServiceHealth::Healthy; // Not started yet, so healthy
         }
-        
+
         let cfg = get_config_clone();
 
         if !cfg.connectivity.enabled {

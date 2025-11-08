@@ -1000,7 +1000,9 @@ impl PositionsDatabase {
             POSITION_SELECT_COLUMNS
         );
         let result = conn
-            .query_row(&query, params![id, wallet_address], |row| self.row_to_position(row))
+            .query_row(&query, params![id, wallet_address], |row| {
+                self.row_to_position(row)
+            })
             .optional()
             .map_err(|e| format!("Failed to get position by ID: {}", e))?;
 
@@ -1017,7 +1019,9 @@ impl PositionsDatabase {
             POSITION_SELECT_COLUMNS
         );
         let result = conn
-            .query_row(&query, params![mint, wallet_address], |row| self.row_to_position(row))
+            .query_row(&query, params![mint, wallet_address], |row| {
+                self.row_to_position(row)
+            })
             .optional()
             .map_err(|e| format!("Failed to get position by mint: {}", e))?;
 
@@ -1070,7 +1074,9 @@ impl PositionsDatabase {
         );
 
         let result = conn
-            .query_row(&query, params![signature, wallet_address], |row| self.row_to_position(row))
+            .query_row(&query, params![signature, wallet_address], |row| {
+                self.row_to_position(row)
+            })
             .optional()
             .map_err(|e| format!("Failed to get position by exit signature: {}", e))?;
 
@@ -1214,7 +1220,9 @@ impl PositionsDatabase {
             .map_err(|e| format!("Failed to prepare recent closed positions query: {}", e))?;
 
         let rows = stmt
-            .query_map(params![wallet_address, mint, limit as i64], |row| self.row_to_position(row))
+            .query_map(params![wallet_address, mint, limit as i64], |row| {
+                self.row_to_position(row)
+            })
             .map_err(|e| format!("Failed to execute recent closed positions query: {}", e))?;
 
         let mut positions = Vec::new();
@@ -1235,7 +1243,7 @@ impl PositionsDatabase {
     ) -> Result<Vec<(Option<f64>, Option<f64>)>, String> {
         let conn = self.get_connection()?;
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
-        
+
         let mut stmt = conn
             .prepare(
                 r#"
@@ -1569,7 +1577,11 @@ impl PositionsDatabase {
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
         let total_positions: i64 = conn
-            .query_row("SELECT COUNT(*) FROM positions WHERE wallet_address = ?1", params![wallet_address], |row| row.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM positions WHERE wallet_address = ?1",
+                params![wallet_address],
+                |row| row.get(0),
+            )
             .map_err(|e| format!("Failed to count total positions: {}", e))?;
 
         let open_positions: i64 = conn
@@ -1597,13 +1609,19 @@ impl PositionsDatabase {
             .map_err(|e| format!("Failed to count phantom positions: {}", e))?;
 
         let total_state_history: i64 = conn
-            .query_row("SELECT COUNT(*) FROM position_states WHERE wallet_address = ?1", params![wallet_address], |row| row.get(0))
+            .query_row(
+                "SELECT COUNT(*) FROM position_states WHERE wallet_address = ?1",
+                params![wallet_address],
+                |row| row.get(0),
+            )
             .map_err(|e| format!("Failed to count state history: {}", e))?;
 
         let total_tracking_records: i64 = conn
-            .query_row("SELECT COUNT(*) FROM position_tracking WHERE wallet_address = ?1", params![wallet_address], |row| {
-                row.get(0)
-            })
+            .query_row(
+                "SELECT COUNT(*) FROM position_tracking WHERE wallet_address = ?1",
+                params![wallet_address],
+                |row| row.get(0),
+            )
             .map_err(|e| format!("Failed to count tracking records: {}", e))?;
 
         // Get database file size

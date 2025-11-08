@@ -183,12 +183,7 @@
    Accessibility Enhancements
    ============================================================================ */
 
-/* Focus indicator for keyboard navigation */
-.tabs [role="tab"]:focus,
-.sub-tabs-container [role="tab"]:focus {
-  outline: 2px solid var(--tab-bar-active-border);
-  outline-offset: -2px;
-}
+/* Focus styles handled by :focus-visible above for keyboard navigation only */
 
 /* Reduced motion support */
 @media (prefers-reduced-motion: reduce) {

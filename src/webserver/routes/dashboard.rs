@@ -93,7 +93,9 @@ pub struct MonitoringInfo {
 
 /// Create dashboard routes
 pub fn routes() -> Router<Arc<AppState>> {
-    Router::new().route("/dashboard/overview", get(get_dashboard_overview))
+    Router::new()
+        .route("/dashboard/overview", get(get_dashboard_overview))
+        .route("/dashboard/home", get(get_home_dashboard))
 }
 
 /// Get comprehensive dashboard overview
@@ -313,4 +315,412 @@ fn format_uptime(seconds: u64) -> String {
     } else {
         format!("{}s", secs)
     }
+}
+
+// ============================================================================
+// HOME DASHBOARD - Comprehensive Analytics
+// ============================================================================
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct HomeDashboardResponse {
+    pub trader: TraderAnalytics,
+    pub wallet: WalletAnalytics,
+    pub positions: PositionsSnapshot,
+    pub system: SystemMetrics,
+    pub tokens: TokenStatistics,
+    pub license: LicenseInfo,
+    pub timestamp: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TraderAnalytics {
+    pub today: TradingPeriodStats,
+    pub yesterday: TradingPeriodStats,
+    pub this_week: TradingPeriodStats,
+    pub this_month: TradingPeriodStats,
+    pub all_time: TradingPeriodStats,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TradingPeriodStats {
+    pub buys: i64,
+    pub sells: i64,
+    pub profit_sol: f64,
+    pub loss_sol: f64,
+    pub net_pnl_sol: f64,
+    pub drawdown_percent: f64,
+    pub win_rate: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WalletAnalytics {
+    pub current_balance_sol: f64,
+    pub token_count: usize,
+    pub tokens_worth_sol: f64,
+    pub start_of_day_balance_sol: f64,
+    pub change_sol: f64,
+    pub change_percent: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PositionsSnapshot {
+    pub open_count: i64,
+    pub total_invested_sol: f64,
+    pub unrealized_pnl_sol: f64,
+    pub unrealized_pnl_percent: f64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SystemMetrics {
+    pub uptime_seconds: u64,
+    pub uptime_formatted: String,
+    pub memory_mb: f64,
+    pub memory_percent: f64,
+    pub cpu_percent: f64,
+    pub cpu_history: Vec<f64>,
+    pub memory_history: Vec<f64>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TokenStatistics {
+    pub total_in_database: usize,
+    pub with_prices: usize,
+    pub passed_filters: usize,
+    pub rejected_filters: usize,
+    pub found_today: usize,
+    pub found_this_week: usize,
+    pub found_this_month: usize,
+    pub found_all_time: usize,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct LicenseInfo {
+    pub valid: bool,
+    pub tier: Option<String>,
+    pub start_ts: Option<u64>,
+    pub expiry_ts: Option<u64>,
+    pub mint: Option<String>,
+    pub days_remaining: Option<i64>,
+}
+
+/// GET /api/dashboard/home
+/// Comprehensive home dashboard with all analytics
+async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<HomeDashboardResponse> {
+    use chrono::{DateTime, Duration, TimeZone};
+
+    let now = chrono::Utc::now();
+    let today_start = now.date_naive().and_hms_opt(0, 0, 0).unwrap();
+    let today_start = chrono::Utc.from_utc_datetime(&today_start);
+    let yesterday_start = today_start - Duration::days(1);
+    let week_start = today_start - Duration::days(7);
+    let month_start = today_start - Duration::days(30);
+    let epoch_start = chrono::Utc.timestamp_opt(0, 0).unwrap();
+
+    struct PeriodRange {
+        start: DateTime<chrono::Utc>,
+        end: Option<DateTime<chrono::Utc>>,
+    }
+
+    // Get all closed positions for analysis
+    let closed_positions = positions::get_db_closed_positions()
+        .await
+        .unwrap_or_default();
+
+    // Helper to calculate stats for a time period
+    let calculate_period_stats = |range: &PeriodRange| {
+        let period_positions: Vec<_> = closed_positions
+            .iter()
+            .filter(|position| {
+                position
+                    .exit_time
+                    .filter(|exit| *exit >= range.start)
+                    .filter(|exit| match range.end {
+                        Some(end) => *exit < end,
+                        None => true,
+                    })
+                    .is_some()
+            })
+            .collect();
+
+        let mut profit_sol = 0.0;
+        let mut loss_sol = 0.0;
+        let mut total_pnl = 0.0;
+        let mut winning_trades = 0;
+        let mut max_drawdown: f64 = 0.0;
+        let mut total_buys = 0i64;
+        let mut total_sells = 0i64;
+
+        for position in period_positions.iter() {
+            total_buys += 1 + position.dca_count as i64;
+            let sells_for_position = if position.partial_exit_count > 0 {
+                position.partial_exit_count as i64 + 1
+            } else {
+                1
+            };
+            total_sells += sells_for_position;
+
+            if let Some(pnl) = position.pnl.or_else(|| {
+                position
+                    .sol_received
+                    .map(|sol| sol - position.total_size_sol)
+            }) {
+                total_pnl += pnl;
+                if pnl > 0.0 {
+                    profit_sol += pnl;
+                    winning_trades += 1;
+                } else if pnl < 0.0 {
+                    loss_sol += pnl.abs();
+                }
+            }
+
+            if let Some(pct) = position.pnl_percent {
+                if pct < 0.0 {
+                    max_drawdown = max_drawdown.max(pct.abs());
+                }
+            }
+        }
+
+        let trade_count = period_positions.len() as i64;
+        let win_rate = if trade_count > 0 {
+            (winning_trades as f64 / trade_count as f64) * 100.0
+        } else {
+            0.0
+        };
+
+        TradingPeriodStats {
+            buys: total_buys,
+            sells: total_sells,
+            profit_sol,
+            loss_sol,
+            net_pnl_sol: total_pnl,
+            drawdown_percent: max_drawdown,
+            win_rate,
+        }
+    };
+
+    // Calculate trader analytics
+    let trader = TraderAnalytics {
+        today: calculate_period_stats(&PeriodRange {
+            start: today_start,
+            end: Some(now),
+        }),
+        yesterday: calculate_period_stats(&PeriodRange {
+            start: yesterday_start,
+            end: Some(today_start),
+        }),
+        this_week: calculate_period_stats(&PeriodRange {
+            start: week_start,
+            end: Some(now),
+        }),
+        this_month: calculate_period_stats(&PeriodRange {
+            start: month_start,
+            end: Some(now),
+        }),
+        all_time: calculate_period_stats(&PeriodRange {
+            start: epoch_start,
+            end: Some(now),
+        }),
+    };
+
+    // Get wallet analytics
+    let current_wallet = get_current_wallet_status().await.ok().flatten();
+
+    // For start of day, we'll use recent snapshots and find the closest one
+    let start_of_day_balance_sol =
+        if let Ok(snapshots) = crate::wallet::get_recent_wallet_snapshots(100).await {
+            snapshots
+                .iter()
+                .find(|s| s.snapshot_time < today_start)
+                .map(|s| s.sol_balance)
+                .unwrap_or_else(|| {
+                    current_wallet
+                        .as_ref()
+                        .map(|w| w.sol_balance)
+                        .unwrap_or(0.0)
+                })
+        } else {
+            current_wallet
+                .as_ref()
+                .map(|w| w.sol_balance)
+                .unwrap_or(0.0)
+        };
+
+    let current_balance_sol = current_wallet
+        .as_ref()
+        .map(|w| w.sol_balance)
+        .unwrap_or(0.0);
+    let change_sol = current_balance_sol - start_of_day_balance_sol;
+    let change_percent = if start_of_day_balance_sol > 0.0 {
+        (change_sol / start_of_day_balance_sol) * 100.0
+    } else {
+        0.0
+    };
+
+    // Calculate token worth (simplified - would need prices)
+    let token_count = current_wallet
+        .as_ref()
+        .map(|w| w.total_tokens_count as usize)
+        .unwrap_or(0);
+
+    let wallet = WalletAnalytics {
+        current_balance_sol,
+        token_count,
+        tokens_worth_sol: 0.0, // TODO: Calculate from token balances with prices
+        start_of_day_balance_sol,
+        change_sol,
+        change_percent,
+    };
+
+    // Get positions snapshot
+    let open_positions = positions::get_db_open_positions().await.unwrap_or_default();
+    let total_invested_sol: f64 = open_positions.iter().map(|p| p.entry_size_sol).sum();
+    let unrealized_pnl_sol: f64 = open_positions
+        .iter()
+        .filter_map(|p| {
+            if let (Some(current), entry) = (p.current_price, p.entry_price) {
+                Some((current - entry) * entry * p.entry_size_sol / entry)
+            } else {
+                None
+            }
+        })
+        .sum();
+    let unrealized_pnl_percent = if total_invested_sol > 0.0 {
+        (unrealized_pnl_sol / total_invested_sol) * 100.0
+    } else {
+        0.0
+    };
+
+    let positions_snapshot = PositionsSnapshot {
+        open_count: open_positions.len() as i64,
+        total_invested_sol,
+        unrealized_pnl_sol,
+        unrealized_pnl_percent,
+    };
+
+    // Get system metrics
+    let uptime_seconds = state.uptime_seconds();
+    let uptime_formatted = format_uptime(uptime_seconds);
+
+    let mut sys = sysinfo::System::new_all();
+    sys.refresh_all();
+
+    let memory_mb = (sys.used_memory() as f64) / 1024.0 / 1024.0;
+    let memory_total_mb = (sys.total_memory() as f64) / 1024.0 / 1024.0;
+    let memory_percent = (memory_mb / memory_total_mb) * 100.0;
+    let cpu_percent = sys.global_cpu_info().cpu_usage() as f64;
+
+    // Generate simple history for charts (last 20 data points)
+    let cpu_history = vec![cpu_percent; 20];
+    let memory_history = vec![memory_percent; 20];
+
+    let system = SystemMetrics {
+        uptime_seconds,
+        uptime_formatted,
+        memory_mb,
+        memory_percent,
+        cpu_percent,
+        cpu_history,
+        memory_history,
+    };
+
+    // Get token statistics
+    let db = crate::tokens::database::get_global_database();
+    let total_in_database = db.as_ref().and_then(|d| d.count_tokens().ok()).unwrap_or(0) as usize;
+
+    // Get filtering stats
+    let passed_filters = match crate::filtering::fetch_stats().await {
+        Ok(stats) => stats.passed_filtering,
+        Err(_) => 0,
+    };
+    let rejected_filters = 0; // TODO: Calculate rejected count
+
+    // TODO: Implement time-based token discovery counts
+    let tokens = TokenStatistics {
+        total_in_database,
+        with_prices: 0, // TODO: Count tokens with prices
+        passed_filters,
+        rejected_filters,
+        found_today: 0,      // TODO: Implement
+        found_this_week: 0,  // TODO: Implement
+        found_this_month: 0, // TODO: Implement
+        found_all_time: total_in_database,
+    };
+
+    // Get license info
+    let wallet_address = match crate::utils::get_wallet_address() {
+        Ok(addr) => addr,
+        Err(_) => {
+            // Return default invalid license if wallet address cannot be retrieved
+            return Json(HomeDashboardResponse {
+                trader,
+                wallet,
+                positions: positions_snapshot,
+                system,
+                tokens,
+                license: LicenseInfo {
+                    valid: false,
+                    tier: None,
+                    start_ts: None,
+                    expiry_ts: None,
+                    mint: None,
+                    days_remaining: None,
+                },
+                timestamp: now.to_rfc3339(),
+            });
+        }
+    };
+
+    let wallet_pubkey = match crate::utils::parse_pubkey_safe(&wallet_address) {
+        Ok(pk) => pk,
+        Err(_) => {
+            return Json(HomeDashboardResponse {
+                trader,
+                wallet,
+                positions: positions_snapshot,
+                system,
+                tokens,
+                license: LicenseInfo {
+                    valid: false,
+                    tier: None,
+                    start_ts: None,
+                    expiry_ts: None,
+                    mint: None,
+                    days_remaining: None,
+                },
+                timestamp: now.to_rfc3339(),
+            });
+        }
+    };
+
+    let license_status = crate::license::verify_license_for_wallet(&wallet_pubkey)
+        .await
+        .unwrap_or_else(|_| crate::license::LicenseStatus::invalid("Failed to verify license"));
+
+    let days_remaining =
+        if let (Some(expiry), true) = (license_status.expiry_ts, license_status.valid) {
+            let expiry_dt = chrono::Utc.timestamp_opt(expiry as i64, 0).unwrap();
+            let remaining = expiry_dt.signed_duration_since(now).num_days();
+            Some(remaining)
+        } else {
+            None
+        };
+
+    let license = LicenseInfo {
+        valid: license_status.valid,
+        tier: license_status.tier,
+        start_ts: license_status.start_ts,
+        expiry_ts: license_status.expiry_ts,
+        mint: license_status.mint,
+        days_remaining,
+    };
+
+    Json(HomeDashboardResponse {
+        trader,
+        wallet,
+        positions: positions_snapshot,
+        system,
+        tokens,
+        license,
+        timestamp: now.to_rfc3339(),
+    })
 }
