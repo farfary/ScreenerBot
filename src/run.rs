@@ -1,12 +1,9 @@
 // New simplified run implementation using ServiceManager
 
 use crate::{
-    arguments::{
-        get_profile_duration, is_profile_cpu_enabled, is_profile_tokio_console_enabled,
-        is_profile_tracing_enabled,
-    },
     global,
     logger::{self, LogTag},
+    profiling,
     services::ServiceManager,
 };
 use solana_sdk::signature::Signer;
@@ -14,7 +11,7 @@ use solana_sdk::signature::Signer;
 /// Main bot execution function - handles the full bot lifecycle with ServiceManager
 pub async fn run_bot() -> Result<(), String> {
     // 0. Initialize profiling if requested (must be done before any tokio tasks)
-    init_profiling();
+    profiling::init_profiling();
 
     // 1. Ensure all required directories exist (safety backup, already done in main.rs)
     crate::paths::ensure_all_directories()
@@ -389,109 +386,4 @@ async fn wait_for_initialization_or_shutdown() -> Result<(), String> {
             }
         }
     }
-}
-
-/// Initialize CPU profiling based on command-line flags
-fn init_profiling() {
-    // Tokio console profiling (async task inspector)
-    #[cfg(feature = "console")]
-    if is_profile_tokio_console_enabled() {
-        console_subscriber::init();
-        crate::logger::info(
-            crate::logger::LogTag::System,
-            &"🔍 Tokio console enabled - connect with: tokio-console".to_string(),
-        );
-        crate::logger::info(
-            crate::logger::LogTag::System,
-            &"   Install: cargo install tokio-console".to_string(),
-        );
-        crate::logger::info(
-            crate::logger::LogTag::System,
-            &"   Connect: tokio-console".to_string(),
-        );
-        return;
-    }
-
-    // Tracing-based profiling
-    if is_profile_tracing_enabled() {
-        use tracing_subscriber::{fmt, EnvFilter};
-
-        tracing_subscriber::fmt()
-            .with_env_filter(
-                EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info")),
-            )
-            .with_thread_ids(true)
-            .with_thread_names(true)
-            .with_target(true)
-            .with_line_number(true)
-            .init();
-
-        crate::logger::info(
-            crate::logger::LogTag::System,
-            &"🔍 Tracing profiling enabled".to_string(),
-        );
-        crate::logger::info(
-            crate::logger::LogTag::System,
-            &"   View detailed traces with thread IDs and timing".to_string(),
-        );
-        return;
-    }
-
-    // CPU profiling with pprof (will generate flamegraph on exit)
-    #[cfg(feature = "flamegraph")]
-    if is_profile_cpu_enabled() {
-        let duration = get_profile_duration();
-        crate::logger::info(
-            crate::logger::LogTag::System,
-            &"🔥 CPU profiling enabled with pprof".to_string(),
-        );
-        crate::logger::info(
-            crate::logger::LogTag::System,
-            &format!("   Duration: {} seconds", duration),
-        );
-        crate::logger::info(
-            crate::logger::LogTag::System,
-            &"   Flamegraph will be generated on exit".to_string(),
-        );
-        crate::logger::info(
-            crate::logger::LogTag::System,
-            &"   Press Ctrl+C to stop and generate flamegraph".to_string(),
-        );
-
-        // Note: pprof profiling is initialized later in the async context
-        // This is just a notification
-        return;
-    }
-}
-
-/// Start CPU profiling guard (pprof-based)
-/// Returns a guard that will generate flamegraph when dropped
-#[cfg(feature = "flamegraph")]
-pub fn start_cpu_profiling() -> Option<pprof::ProfilerGuard<'static>> {
-    if !is_profile_cpu_enabled() {
-        return None;
-    }
-
-    match pprof::ProfilerGuardBuilder::default()
-        .frequency(997) // Sample at ~1000 Hz
-        .blocklist(&["libc", "libgcc", "pthread", "vdso"])
-        .build()
-    {
-        Ok(guard) => {
-            logger::info(LogTag::System, "🔥 CPU profiling started (pprof)");
-            Some(guard)
-        }
-        Err(e) => {
-            logger::error(
-                LogTag::System,
-                &format!("Failed to start CPU profiling: {}", e),
-            );
-            None
-        }
-    }
-}
-
-#[cfg(not(feature = "flamegraph"))]
-pub fn start_cpu_profiling() -> Option<()> {
-    None
 }

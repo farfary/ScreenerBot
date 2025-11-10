@@ -17,6 +17,7 @@ pub mod paths;
 pub mod pools;
 pub mod positions;
 pub mod process_lock;
+pub mod profiling;
 pub mod reset;
 pub mod rpc;
 pub mod run;
