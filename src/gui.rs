@@ -67,8 +67,7 @@ pub async fn run_gui_mode() -> Result<(), String> {
 ///
 /// Polls the dashboard endpoint until HTML content is returned, then:
 /// 1. Navigates the window to ensure fresh content
-/// 2. Applies zoom correction for retina displays
-/// 3. Shows the window
+/// 2. Shows the window
 fn wait_for_dashboard_and_show_window(app_handle: tauri::AppHandle) {
     logger::info(
         LogTag::System,
@@ -139,8 +138,6 @@ fn wait_for_dashboard_and_show_window(app_handle: tauri::AppHandle) {
 }
 
 /// Navigate the window to the dashboard URL and show it
-///
-/// Applies zoom correction for retina displays before showing the window.
 fn navigate_and_show_window(window: tauri::WebviewWindow) {
     logger::info(LogTag::System, "🔄 Navigating window to dashboard URL...");
 
@@ -156,9 +153,6 @@ fn navigate_and_show_window(window: tauri::WebviewWindow) {
 
     logger::info(LogTag::System, "✅ Window navigation triggered");
 
-    // Apply zoom correction for retina displays
-    apply_zoom_correction(&window);
-
     // Small delay to let navigation start before showing
     std::thread::sleep(Duration::from_millis(200));
 
@@ -169,51 +163,6 @@ fn navigate_and_show_window(window: tauri::WebviewWindow) {
         }
         Err(e) => {
             logger::error(LogTag::System, &format!("❌ Failed to show window: {}", e));
-        }
-    }
-}
-
-/// Apply zoom correction based on monitor scale factor
-///
-/// Retina displays have scale factors > 1.0, which can cause UI rendering issues.
-/// This function applies a zoom correction to ensure proper rendering.
-fn apply_zoom_correction(window: &tauri::WebviewWindow) {
-    match window.scale_factor() {
-        Ok(scale_factor) => {
-            if (scale_factor - 1.0).abs() > f64::EPSILON {
-                let zoom = 1.0 / scale_factor;
-                match window.set_zoom(zoom) {
-                    Ok(_) => {
-                        logger::info(
-                            LogTag::System,
-                            &format!(
-                                "Applied zoom correction for scale factor {:.2} (zoom={:.4})",
-                                scale_factor, zoom
-                            ),
-                        );
-                    }
-                    Err(e) => {
-                        logger::warning(
-                            LogTag::System,
-                            &format!(
-                                "Failed to apply zoom correction (scale factor {:.2}): {}",
-                                scale_factor, e
-                            ),
-                        );
-                    }
-                }
-            } else {
-                logger::debug(
-                    LogTag::System,
-                    "Scale factor is 1.0 - no zoom correction needed",
-                );
-            }
-        }
-        Err(e) => {
-            logger::warning(
-                LogTag::System,
-                &format!("Failed to read scale factor for zoom calibration: {}", e),
-            );
         }
     }
 }
