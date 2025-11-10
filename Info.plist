@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- macOS 26 Tahoe Liquid Glass icon support -->
+    <key>CFBundleIconFile</key>
+    <string>icon.icns</string>
+    
+    <!-- Icon name for Assets.car (macOS 26+) -->
+    <key>CFBundleIconName</key>
+    <string>Icon</string>
+    
+    <!-- High Resolution Capable -->
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    
+    <!-- Principal Class -->
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
+    
+    <!-- Human-readable copyright -->
+    <key>NSHumanReadableCopyright</key>
+    <string>Copyright © 2025. All rights reserved.</string>
+    
+    <!-- Category -->
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.developer-tools</string>
+    
+    <!-- Requires Aqua (macOS GUI) -->
+    <key>LSRequiresNativeExecution</key>
+    <true/>
+</dict>
+</plist>

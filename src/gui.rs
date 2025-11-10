@@ -130,28 +130,62 @@ fn wait_for_dashboard_and_show_window(app_handle: tauri::AppHandle) {
     }
 
     // Get the window and navigate it to ensure fresh content
-    if let Some(window) = app_handle.get_webview_window("main") {
-        navigate_and_show_window(window);
-    } else {
-        logger::error(LogTag::System, "❌ Failed to find main window");
+    logger::info(
+        LogTag::System,
+        "🔍 Looking for main window to show...",
+    );
+
+    match app_handle.get_webview_window("main") {
+        Some(window) => {
+            logger::info(LogTag::System, "✅ Found main window, showing it now");
+            navigate_and_show_window(window);
+        }
+        None => {
+            logger::error(
+                LogTag::System,
+                "❌ Failed to find main window with label 'main'",
+            );
+
+            // Try to get all windows and show the first one
+            let webview_windows = app_handle.webview_windows();
+            logger::info(
+                LogTag::System,
+                &format!("Available windows: {:?}", webview_windows.keys().collect::<Vec<_>>()),
+            );
+
+            if let Some((label, window)) = webview_windows.iter().next() {
+                logger::info(
+                    LogTag::System,
+                    &format!("Showing window with label: {}", label),
+                );
+                navigate_and_show_window(window.clone());
+            } else {
+                logger::error(LogTag::System, "❌ No windows available at all");
+            }
+        }
     }
 }
 
 /// Navigate the window to the dashboard URL and show it
 fn navigate_and_show_window(window: tauri::WebviewWindow) {
-    logger::info(LogTag::System, "🔄 Navigating window to dashboard URL...");
+    logger::info(
+        LogTag::System,
+        &format!("🔄 Navigating window '{}' to dashboard URL...", window.label()),
+    );
 
     // Use Tauri's native navigation instead of JavaScript reload
     // This ensures the webview actually loads the URL with fresh content
-    if let Err(e) = window.navigate("http://localhost:8080/".parse().unwrap()) {
-        logger::error(
-            LogTag::System,
-            &format!("❌ Failed to navigate window: {}", e),
-        );
-        return;
+    match window.navigate("http://localhost:8080/".parse().unwrap()) {
+        Ok(_) => {
+            logger::info(LogTag::System, "✅ Window navigation triggered");
+        }
+        Err(e) => {
+            logger::warning(
+                LogTag::System,
+                &format!("⚠️  Navigation failed (may already be at URL): {}", e),
+            );
+        }
     }
-
-    logger::info(LogTag::System, "✅ Window navigation triggered");
 
     // Small delay to let navigation start before showing
     std::thread::sleep(Duration::from_millis(200));
@@ -160,6 +194,16 @@ fn navigate_and_show_window(window: tauri::WebviewWindow) {
     match window.show() {
         Ok(_) => {
             logger::info(LogTag::System, "✅ GUI window shown with dashboard loaded");
+            
+            // Also try to focus/raise the window
+            if let Err(e) = window.set_focus() {
+                logger::warning(
+                    LogTag::System,
+                    &format!("⚠️  Could not focus window: {}", e),
+                );
+            } else {
+                logger::info(LogTag::System, "✅ Window focused and brought to front");
+            }
         }
         Err(e) => {
             logger::error(LogTag::System, &format!("❌ Failed to show window: {}", e));

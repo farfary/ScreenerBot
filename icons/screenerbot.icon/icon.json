@@ -1,0 +1,46 @@
+{
+  "fill-specializations" : [
+    {
+      "value" : "system-dark"
+    },
+    {
+      "appearance" : "dark",
+      "value" : {
+        "automatic-gradient" : "srgb:0.00000,0.00000,0.00000,1.00000"
+      }
+    }
+  ],
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "blend-mode" : "normal",
+          "glass" : false,
+          "image-name" : "logo_clean.svg",
+          "name" : "logo_clean",
+          "position" : {
+            "scale" : 1.6,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}
