@@ -12,7 +12,7 @@ import { Poller } from "../core/poller.js";
 import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
-import { TabBar } from "../ui/tab_bar.js";
+import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 
 // ============================================================================
 // STATE
@@ -1104,7 +1104,6 @@ function renderShell() {
         <header class="filtering-top">
           <h1>🎯 Filtering Configuration</h1>
         </header>
-        <div id="filtering-tab-bar" class="filtering-tab-bar"></div>
         <div id="filtering-info-bar">${renderInfoBar()}</div>
         <div id="filtering-search-bar">${renderSearchBar()}</div>
         <div class="filtering-content" id="filtering-config-panels">
@@ -1125,38 +1124,6 @@ function renderShell() {
       </div>
     </div>
   `;
-}
-
-function initializeTabBar() {
-  const container = $("#filtering-tab-bar");
-  if (!container) return;
-
-  if (tabBar) {
-    tabBar.destroy();
-    tabBar = null;
-  }
-
-  tabBar = new TabBar({
-    container,
-    tabs: FILTER_TABS,
-    defaultTab: state.activeTab,
-    stateKey: TABBAR_STATE_KEY,
-    pageName: "filtering",
-    onChange: (tabId) => {
-      state.activeTab = tabId;
-      AppState.save("filtering_activeTab", tabId);
-      updateSearchBar();
-      updateConfigPanels({ scrollTop: 0 });
-    },
-  });
-
-  const active = tabBar.getActiveTab();
-  if (active && active !== state.activeTab) {
-    state.activeTab = active;
-    AppState.save("filtering_activeTab", active);
-  } else if (!active && state.activeTab) {
-    tabBar.setActive(state.activeTab, { silent: true, skipValidation: true });
-  }
 }
 
 let globalHandlersBound = false;
@@ -1257,7 +1224,6 @@ function render() {
   if (!state.initialized) {
     root.innerHTML = renderShell();
     state.initialized = true;
-    initializeTabBar();
     bindGlobalHandlers();
   }
 
@@ -1477,6 +1443,33 @@ export function createLifecycle() {
     activate(ctx) {
       console.log("[Filtering] Activating");
 
+      // Initialize tab bar with global container
+      if (!tabBar) {
+        tabBar = new TabBar({
+          container: "#subTabsContainer",
+          tabs: FILTER_TABS,
+          defaultTab: state.activeTab,
+          stateKey: TABBAR_STATE_KEY,
+          pageName: "filtering",
+          onChange: (tabId) => {
+            state.activeTab = tabId;
+            AppState.save("filtering_activeTab", tabId);
+            updateSearchBar();
+            updateConfigPanels({ scrollTop: 0 });
+          },
+        });
+        TabBarManager.register("filtering", tabBar);
+        ctx.manageTabBar(tabBar);
+        tabBar.show();
+
+        // Sync state.activeTab with TabBar's restored state (from localStorage or URL)
+        const active = tabBar.getActiveTab();
+        if (active && active !== state.activeTab) {
+          state.activeTab = active;
+          AppState.save("filtering_activeTab", active);
+        }
+      }
+
       if (!poller) {
         poller = ctx.managePoller(
           new Poller(
@@ -1505,10 +1498,8 @@ export function createLifecycle() {
         poller.stop();
         poller = null;
       }
-      if (tabBar) {
-        tabBar.destroy();
-        tabBar = null;
-      }
+      tabBar = null; // Cleaned up automatically by ctx.manageTabBar
+      TabBarManager.unregister("filtering");
       state.initialized = false;
       globalHandlersBound = false;
     },
