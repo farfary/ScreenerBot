@@ -45,10 +45,7 @@ pub fn init_profiling() {
             LogTag::System,
             &"   Install: cargo install tokio-console".to_string(),
         );
-        logger::info(
-            LogTag::System,
-            &"   Connect: tokio-console".to_string(),
-        );
+        logger::info(LogTag::System, &"   Connect: tokio-console".to_string());
         return;
     }
 
@@ -66,10 +63,7 @@ pub fn init_profiling() {
             .with_line_number(true)
             .init();
 
-        logger::info(
-            LogTag::System,
-            &"🔍 Tracing profiling enabled".to_string(),
-        );
+        logger::info(LogTag::System, &"🔍 Tracing profiling enabled".to_string());
         logger::info(
             LogTag::System,
             &"   View detailed traces with thread IDs and timing".to_string(),

@@ -87,10 +87,7 @@ pub fn execute_reset(config: ResetConfig) -> Result<(), String> {
         match remove_file_or_dir(target) {
             Ok(_) => {
                 removed_count += 1;
-                logger::info(
-                    LogTag::System,
-                    &format!("✅ Removed: {}", target.display()),
-                );
+                logger::info(LogTag::System, &format!("✅ Removed: {}", target.display()));
             }
             Err(e) => {
                 error_count += 1;
@@ -191,7 +188,10 @@ pub fn clear_pending_verifications() -> Result<(), String> {
     if !db_path.exists() {
         logger::info(
             LogTag::System,
-            &format!("⏭️  Positions database does not exist: {}", db_path.display()),
+            &format!(
+                "⏭️  Positions database does not exist: {}",
+                db_path.display()
+            ),
         );
         return Ok(());
     }

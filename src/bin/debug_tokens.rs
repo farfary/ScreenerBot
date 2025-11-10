@@ -132,7 +132,8 @@ async fn main() {
 }
 
 async fn execute(cli: Cli) -> Result<(), String> {
-    paths::ensure_all_directories().map_err(|e| format!("Failed to prepare data directories: {e}"))?;
+    paths::ensure_all_directories()
+        .map_err(|e| format!("Failed to prepare data directories: {e}"))?;
     load_config()?;
 
     // Initialize SOL price cache (needed for price_sol calculations)

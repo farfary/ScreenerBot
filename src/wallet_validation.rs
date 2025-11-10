@@ -36,10 +36,9 @@ impl WalletValidator {
         // Check transactions DB
         let transactions_db_path = paths::get_transactions_db_path();
         if transactions_db_path.exists() {
-            if let Some(stored_wallet) = Self::get_stored_wallet(
-                &transactions_db_path.to_string_lossy(),
-                "db_metadata",
-            )? {
+            if let Some(stored_wallet) =
+                Self::get_stored_wallet(&transactions_db_path.to_string_lossy(), "db_metadata")?
+            {
                 if stored_wallet != current_wallet {
                     mismatches.push(("Transactions".to_string(), stored_wallet));
                 }
@@ -49,10 +48,9 @@ impl WalletValidator {
         // Check positions DB
         let positions_db_path = paths::get_positions_db_path();
         if positions_db_path.exists() {
-            if let Some(stored_wallet) = Self::get_stored_wallet(
-                &positions_db_path.to_string_lossy(),
-                "position_metadata",
-            )? {
+            if let Some(stored_wallet) =
+                Self::get_stored_wallet(&positions_db_path.to_string_lossy(), "position_metadata")?
+            {
                 if stored_wallet != current_wallet {
                     mismatches.push(("Positions".to_string(), stored_wallet));
                 }

@@ -54,19 +54,19 @@ static BASE_DIRECTORY: Lazy<PathBuf> = Lazy::new(|| {
 /// - Linux: ~/.screenerbot
 fn resolve_base_directory() -> PathBuf {
     let home = dirs::home_dir().expect("Failed to determine home directory");
-    
+
     #[cfg(target_os = "macos")]
     let base = home.join("ScreenerBot");
-    
+
     #[cfg(target_os = "windows")]
     let base = home.join("ScreenerBot");
-    
+
     #[cfg(target_os = "linux")]
     let base = home.join(".screenerbot");
-    
+
     #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
     let base = home.join("ScreenerBot");
-    
+
     base
 }
 
@@ -246,7 +246,7 @@ pub fn ensure_all_directories() -> Result<(), String> {
     if !is_initialized() {
         eprintln!("📁 Base directory: {}", get_base_directory().display());
     }
-    
+
     let dirs_to_create = vec![
         ("base", get_base_directory()),
         ("data", get_data_directory()),
@@ -254,16 +254,22 @@ pub fn ensure_all_directories() -> Result<(), String> {
         ("cache_pool", get_cache_pool_directory()),
         ("analysis-exports", get_analysis_exports_directory()),
     ];
-    
+
     for (name, dir) in dirs_to_create {
         if !dir.exists() {
-            std::fs::create_dir_all(&dir)
-                .map_err(|e| format!("Failed to create {} directory at {}: {}", name, dir.display(), e))?;
-            
+            std::fs::create_dir_all(&dir).map_err(|e| {
+                format!(
+                    "Failed to create {} directory at {}: {}",
+                    name,
+                    dir.display(),
+                    e
+                )
+            })?;
+
             eprintln!("✅ Created directory: {}", dir.display());
         }
     }
-    
+
     Ok(())
 }
 
@@ -312,7 +318,7 @@ mod tests {
     #[test]
     fn test_database_paths_in_data_dir() {
         let data = get_data_directory();
-        
+
         assert!(get_tokens_db_path().starts_with(&data));
         assert!(get_transactions_db_path().starts_with(&data));
         assert!(get_positions_db_path().starts_with(&data));

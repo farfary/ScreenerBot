@@ -164,7 +164,7 @@ static FILE_LOGGER: Lazy<Arc<Mutex<Option<FileLogger>>>> = Lazy::new(|| {
 fn get_log_directory() -> Result<PathBuf, Box<dyn std::error::Error>> {
     // Primary: Use centralized paths module (works for both terminal and bundle)
     let log_dir = crate::paths::get_logs_directory();
-    
+
     if log_dir.exists() || fs::create_dir_all(&log_dir).is_ok() {
         return Ok(log_dir);
     }

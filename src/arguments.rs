@@ -167,13 +167,17 @@ pub fn print_help() {
     println!("    By default, ScreenerBot starts the trading bot with webserver on http://localhost:8080");
     println!();
     println!("SPECIAL MODES (execute and exit):");
-    println!("    --reset                     Reset pending verifications and delete database files");
+    println!(
+        "    --reset                     Reset pending verifications and delete database files"
+    );
     println!("    --clean-wallet-data         Clean all wallet-specific databases (use when switching wallets)");
     println!("    --help, -h                  Show this help message");
     println!();
     println!("DISPLAY OPTIONS:");
     println!("    --gui                       Launch with desktop GUI window");
-    println!("                                Without --gui, runs headless with webserver on port 8080");
+    println!(
+        "                                Without --gui, runs headless with webserver on port 8080"
+    );
     println!();
     println!("MODIFIERS:");
     println!("    --force                     Skip confirmation prompts (with --reset)");
@@ -198,11 +202,15 @@ pub fn print_help() {
     println!();
     println!("EXAMPLES:");
     println!("    screenerbot                                  # Start bot (headless, webserver on :8080)");
-    println!("    screenerbot --gui                            # Start bot with desktop GUI window");
+    println!(
+        "    screenerbot --gui                            # Start bot with desktop GUI window"
+    );
     println!("    screenerbot --debug-trader                   # Start bot with trader debug logs");
     println!("    screenerbot --reset                          # Reset with confirmation prompt");
     println!("    screenerbot --reset --force                  # Reset without confirmation");
-    println!("    screenerbot --clean-wallet-data              # Clean databases when switching wallets");
+    println!(
+        "    screenerbot --clean-wallet-data              # Clean databases when switching wallets"
+    );
     println!();
     println!("BUILDING:");
     println!("    cargo build                                  # Build complete binary (GUI always included)");
