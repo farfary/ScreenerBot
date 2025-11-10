@@ -414,16 +414,7 @@ pub struct PositionsDatabase {
 impl PositionsDatabase {
     /// Create new PositionsDatabase with connection pooling
     pub async fn new() -> Result<Self, String> {
-        // Database should be at data/positions.db
-        let data_dir = std::path::PathBuf::from("data");
-
-        // Ensure data directory exists
-        if !data_dir.exists() {
-            std::fs::create_dir_all(&data_dir)
-                .map_err(|e| format!("Failed to create data directory: {}", e))?;
-        }
-
-        let database_path = data_dir.join("positions.db");
+        let database_path = crate::paths::get_positions_db_path();
         let database_path_str = database_path.to_string_lossy().to_string();
 
         // Only log detailed initialization on first database creation

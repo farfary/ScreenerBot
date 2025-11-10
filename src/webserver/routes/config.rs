@@ -538,7 +538,8 @@ async fn get_config_diff() -> Response {
     let memory_config = config::get_config_clone();
 
     // Try to load disk config
-    let disk_result = std::fs::read_to_string(config::CONFIG_FILE_PATH);
+    let config_path = crate::paths::get_config_path();
+    let disk_result = std::fs::read_to_string(&config_path);
 
     match disk_result {
         Ok(contents) => {
@@ -576,7 +577,7 @@ async fn get_config_diff() -> Response {
                         memory: memory_json,
                         disk: disk_json,
                         memory_timestamp: chrono::Utc::now().to_rfc3339(),
-                        disk_file: config::CONFIG_FILE_PATH.to_string(),
+                        disk_file: config_path.to_string_lossy().to_string(),
                         message: if has_changes {
                             "In-memory configuration differs from disk version".to_string()
                         } else {

@@ -1,15 +1,7 @@
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::Path;
 use std::sync::atomic::AtomicBool;
-
-// Re-export essential argument handling from the arguments module for backwards compatibility
-pub use crate::arguments::{
-    get_arg_value, get_cmd_args, get_enabled_debug_modes, has_arg, is_dry_run_enabled,
-    print_debug_info, set_cmd_args, CMD_ARGS,
-};
 
 // Startup timestamp to track when the bot started for trading logic
 pub static STARTUP_TIME: Lazy<DateTime<Utc>> = Lazy::new(|| Utc::now());
@@ -78,54 +70,4 @@ pub fn get_pending_services() -> Vec<&'static str> {
     }
 
     pending
-}
-
-// ================================================================================================
-// 📁 CENTRALIZED DATA PATHS - ALL FILE AND FOLDER PATHS IN ONE PLACE
-// ================================================================================================
-
-/// Data directory for all bot-generated files
-pub const DATA_DIR: &str = "data";
-
-/// Configuration files
-pub const CONFIG_FILE: &str = "data/config.toml";
-
-/// Database files
-pub const TOKENS_DATABASE: &str = "data/tokens.db";
-
-/// Cache files
-pub const ATA_FAILED_CACHE: &str = "data/ata_failed_cache.json";
-
-pub const TOKEN_BLACKLIST: &str = "data/token_blacklist.json";
-pub const RPC_STATS: &str = "data/rpc_stats.json";
-
-/// Position and trading data
-pub const ENTRY_ANALYSIS: &str = "data/entry_analysis.json";
-
-/// Cache directories
-pub const CACHE_POOL_DIR: &str = "data/cache_pool";
-
-/// Log directory
-pub const LOGS_DIR: &str = "logs";
-
-/// Test output file
-pub const TEST_OUTPUT: &str = "data/test_output.log";
-
-/// Function to ensure data directory and subdirectories exist
-pub fn ensure_data_directories() -> Result<(), Box<dyn std::error::Error>> {
-    // Create main data directory
-    fs::create_dir_all(DATA_DIR)?;
-
-    // Create cache subdirectories
-    fs::create_dir_all(CACHE_POOL_DIR)?;
-
-    // Create logs directory
-    fs::create_dir_all(LOGS_DIR)?;
-
-    Ok(())
-}
-
-/// Get the full path for a data file (convenience function)
-pub fn get_data_path(filename: &str) -> String {
-    format!("{}/{}", DATA_DIR, filename)
 }

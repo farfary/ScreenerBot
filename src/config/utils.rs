@@ -18,9 +18,6 @@ use std::sync::RwLock;
 /// Access it using the helper functions below.
 pub static CONFIG: OnceCell<RwLock<Config>> = OnceCell::new();
 
-/// Default configuration file path
-pub const CONFIG_FILE_PATH: &str = "data/config.toml";
-
 /// Load configuration from disk and initialize the global CONFIG
 ///
 /// This should be called once at startup. If the config file doesn't exist,
@@ -41,7 +38,8 @@ pub const CONFIG_FILE_PATH: &str = "data/config.toml";
 /// }
 /// ```
 pub fn load_config() -> Result<(), String> {
-    load_config_from_path(CONFIG_FILE_PATH)
+    let config_path = crate::paths::get_config_path();
+    load_config_from_path(&config_path.to_string_lossy())
 }
 
 /// Load configuration from a specific file path
@@ -94,7 +92,8 @@ pub fn load_config_from_path(path: &str) -> Result<(), String> {
 /// // New values are now active
 /// ```
 pub fn reload_config() -> Result<(), String> {
-    reload_config_from_path(CONFIG_FILE_PATH)
+    let config_path = crate::paths::get_config_path();
+    reload_config_from_path(&config_path.to_string_lossy())
 }
 
 /// Validate configuration values before applying
@@ -314,13 +313,15 @@ pub fn get_config_clone() -> Config {
 /// Useful for persisting runtime changes.
 ///
 /// # Arguments
-/// * `path` - Path where to save the configuration (default: CONFIG_FILE_PATH)
+/// * `path` - Path where to save the configuration (defaults to config path from paths module)
 ///
 /// # Returns
 /// - `Ok(())` - Configuration saved successfully
 /// - `Err(String)` - Error message if saving failed
 pub fn save_config(path: Option<&str>) -> Result<(), String> {
-    let path = path.unwrap_or(CONFIG_FILE_PATH);
+    let default_path = crate::paths::get_config_path();
+    let default_path_str = default_path.to_string_lossy();
+    let path = path.unwrap_or(&default_path_str);
 
     let config_str = with_config(|cfg| {
         toml::to_string_pretty(cfg).map_err(|e| format!("Failed to serialize config: {}", e))

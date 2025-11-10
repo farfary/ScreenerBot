@@ -15,6 +15,12 @@ struct MismatchRecord {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Get default export path from paths module
+    let default_export_path = screenerbot::paths::get_analysis_exports_directory()
+        .join("verification_results.csv")
+        .to_string_lossy()
+        .to_string();
+
     let matches = Command::new("Mismatch Pattern Analyzer")
         .about("Analyzes CSV verification mismatches and identifies patterns")
         .arg(
@@ -22,7 +28,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .long("csv-file")
                 .value_name("FILE")
                 .help("Path to the CSV verification results file")
-                .default_value("analysis-exports/verification_results.csv"),
+                .default_value(&default_export_path),
         )
         .arg(
             Arg::new("threshold")

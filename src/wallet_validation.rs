@@ -4,6 +4,7 @@
 // prevent data mixing from different wallets.
 
 use crate::logger::{self, LogTag};
+use crate::paths;
 use crate::utils::get_wallet_address;
 use rusqlite::{Connection, OptionalExtension};
 use std::path::Path;
@@ -33,10 +34,12 @@ impl WalletValidator {
         let mut mismatches: Vec<(String, String)> = Vec::new();
 
         // Check transactions DB
-        if Path::new("data/transactions.db").exists() {
-            if let Some(stored_wallet) =
-                Self::get_stored_wallet("data/transactions.db", "db_metadata")?
-            {
+        let transactions_db_path = paths::get_transactions_db_path();
+        if transactions_db_path.exists() {
+            if let Some(stored_wallet) = Self::get_stored_wallet(
+                &transactions_db_path.to_string_lossy(),
+                "db_metadata",
+            )? {
                 if stored_wallet != current_wallet {
                     mismatches.push(("Transactions".to_string(), stored_wallet));
                 }
@@ -44,10 +47,12 @@ impl WalletValidator {
         }
 
         // Check positions DB
-        if Path::new("data/positions.db").exists() {
-            if let Some(stored_wallet) =
-                Self::get_stored_wallet("data/positions.db", "position_metadata")?
-            {
+        let positions_db_path = paths::get_positions_db_path();
+        if positions_db_path.exists() {
+            if let Some(stored_wallet) = Self::get_stored_wallet(
+                &positions_db_path.to_string_lossy(),
+                "position_metadata",
+            )? {
                 if stored_wallet != current_wallet {
                     mismatches.push(("Positions".to_string(), stored_wallet));
                 }
@@ -55,9 +60,10 @@ impl WalletValidator {
         }
 
         // Check wallet DB
-        if Path::new("data/wallet.db").exists() {
+        let wallet_db_path = paths::get_wallet_db_path();
+        if wallet_db_path.exists() {
             if let Some(stored_wallet) =
-                Self::get_stored_wallet("data/wallet.db", "wallet_metadata")?
+                Self::get_stored_wallet(&wallet_db_path.to_string_lossy(), "wallet_metadata")?
             {
                 if stored_wallet != current_wallet {
                     mismatches.push(("Wallet History".to_string(), stored_wallet));
@@ -103,31 +109,30 @@ impl WalletValidator {
 
     /// Check if any database exists
     fn any_database_exists() -> bool {
-        Path::new("data/transactions.db").exists()
-            || Path::new("data/positions.db").exists()
-            || Path::new("data/wallet.db").exists()
+        paths::get_transactions_db_path().exists()
+            || paths::get_positions_db_path().exists()
+            || paths::get_wallet_db_path().exists()
     }
 
     /// Clean all databases (delete files)
     pub async fn clean_all_databases() -> Result<(), String> {
-        let dbs = [
-            "data/transactions.db",
-            "data/transactions.db-shm",
-            "data/transactions.db-wal",
-            "data/positions.db",
-            "data/positions.db-shm",
-            "data/positions.db-wal",
-            "data/wallet.db",
-            "data/wallet.db-shm",
-            "data/wallet.db-wal",
-        ];
+        // Get all database paths with their WAL and SHM files
+        let mut dbs = Vec::new();
+        dbs.extend(paths::get_db_with_wal_files(
+            paths::get_transactions_db_path(),
+        ));
+        dbs.extend(paths::get_db_with_wal_files(paths::get_positions_db_path()));
+        dbs.extend(paths::get_db_with_wal_files(paths::get_wallet_db_path()));
 
         let mut deleted_count = 0;
         for db_path in &dbs {
-            if Path::new(db_path).exists() {
+            if db_path.exists() {
                 std::fs::remove_file(db_path)
-                    .map_err(|e| format!("Failed to remove {}: {}", db_path, e))?;
-                logger::info(LogTag::System, &format!("🗑️  Deleted {}", db_path));
+                    .map_err(|e| format!("Failed to remove {}: {}", db_path.display(), e))?;
+                logger::info(
+                    LogTag::System,
+                    &format!("🗑️  Deleted {}", db_path.display()),
+                );
                 deleted_count += 1;
             }
         }

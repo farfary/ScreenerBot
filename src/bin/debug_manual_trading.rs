@@ -293,7 +293,7 @@ async fn initialize_system() -> Result<(), String> {
     );
 
     // 1. Ensure data directories exist
-    screenerbot::global::ensure_data_directories()
+    screenerbot::paths::ensure_all_directories()
         .map_err(|e| format!("Failed to create data directories: {}", e))?;
 
     // 2. Load configuration

@@ -290,42 +290,29 @@ fn print_help() {
     logger::info(LogTag::System, "");
 }
 
-/// Data files to be removed during reset
-const DATA_FILES_TO_REMOVE: &[&str] = &[
-    // JSON cache files
-    "data/rpc_stats.json",
-    "data/ata_failed_cache.json",
-    // Database files - state and cache
-    "data/positions.db",
-    "data/positions.db-shm",
-    "data/positions.db-wal",
-    "data/events.db",
-    "data/events.db-shm",
-    "data/events.db-wal",
-    // "data/transactions.db",
-    // "data/transactions.db-shm",
-    // "data/transactions.db-wal",
+/// Get list of data files to be removed during reset
+fn get_data_files_to_remove() -> Vec<std::path::PathBuf> {
+    use screenerbot::paths;
 
-    // "data/wallet.db",
-    // "data/wallet.db-shm",
-    // "data/wallet.db-wal",
+    let mut files = Vec::new();
 
-    // "data/ohlcvs.db",
-    // "data/ohlcvs.db-shm",
-    // "data/ohlcvs.db-wal",
+    // Cache files
+    files.push(paths::get_rpc_stats_path());
+    files.push(paths::get_ata_failed_cache_path());
 
-    // "data/pools.db",
-    // "data/pools.db-shm",
-    // "data/pools.db-wal",
+    // Database files with WAL and SHM
+    files.extend(paths::get_db_with_wal_files(paths::get_positions_db_path()));
+    files.extend(paths::get_db_with_wal_files(paths::get_events_db_path()));
 
-    // "data/filtering_decisions.db",
-    // "data/filtering_decisions.db-shm",
-    // "data/filtering_decisions.db-wal",
+    // Uncomment to also remove:
+    // files.extend(paths::get_db_with_wal_files(paths::get_transactions_db_path()));
+    // files.extend(paths::get_db_with_wal_files(paths::get_wallet_db_path()));
+    // files.extend(paths::get_db_with_wal_files(paths::get_ohlcvs_db_path()));
+    // files.extend(paths::get_db_with_wal_files(paths::get_pools_db_path()));
+    // files.extend(paths::get_db_with_wal_files(paths::get_strategies_db_path()));
 
-    // "data/strategies.db",
-    // "data/strategies.db-shm",
-    // "data/strategies.db-wal",
-];
+    files
+}
 
 /// Configuration for retry logic
 const MAX_SELL_RETRIES: u32 = 3;
@@ -824,32 +811,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut files_not_found = 0;
     let mut files_failed = 0;
 
-    for file_path in DATA_FILES_TO_REMOVE {
+    let data_files = get_data_files_to_remove();
+    for file_path in &data_files {
         if dry_run {
-            if Path::new(file_path).exists() {
-                logger::info(LogTag::System, &format!("Would remove file: {}", file_path));
+            if file_path.exists() {
+                logger::info(
+                    LogTag::System,
+                    &format!("Would remove file: {}", file_path.display()),
+                );
                 files_removed += 1;
             } else {
                 logger::info(
                     LogTag::System,
-                    &format!("File not found (would skip): {}", file_path),
+                    &format!("File not found (would skip): {}", file_path.display()),
                 );
                 files_not_found += 1;
             }
         } else {
-            if Path::new(file_path).exists() {
+            if file_path.exists() {
                 match fs::remove_file(file_path) {
                     Ok(()) => {
                         logger::info(
                             LogTag::System,
-                            &format!("Successfully removed file: {}", file_path),
+                            &format!("Successfully removed file: {}", file_path.display()),
                         );
                         files_removed += 1;
                     }
                     Err(e) => {
                         logger::info(
                             LogTag::System,
-                            &format!("Failed to remove file {}: {}", file_path, e),
+                            &format!("Failed to remove file {}: {}", file_path.display(), e),
                         );
                         files_failed += 1;
                     }
@@ -857,7 +848,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             } else {
                 logger::info(
                     LogTag::System,
-                    &format!("File not found (skipping): {}", file_path),
+                    &format!("File not found (skipping): {}", file_path.display()),
                 );
                 files_not_found += 1;
             }
@@ -1170,7 +1161,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         &format!(
             "Tool execution finished: {} token accounts processed, {} data files processed",
             token_accounts.len(),
-            DATA_FILES_TO_REMOVE.len()
+            get_data_files_to_remove().len()
         ),
     );
 

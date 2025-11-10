@@ -16,7 +16,10 @@ async fn main() {
     // Load config
     if let Err(e) = config::load_config() {
         eprintln!("❌ Failed to load config: {}", e);
-        eprintln!("💡 Make sure data/config.toml exists");
+        eprintln!(
+            "💡 Make sure {} exists",
+            screenerbot::paths::get_config_path().display()
+        );
         return;
     }
 

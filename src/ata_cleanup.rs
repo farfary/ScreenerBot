@@ -1,4 +1,3 @@
-use crate::global::ATA_FAILED_CACHE;
 /// Background ATA Cleanup Service
 ///
 /// This service runs independently from the trading logic and periodically
@@ -18,7 +17,6 @@ use tokio::time::{interval, sleep, Duration, MissedTickBehavior};
 /// Configuration constants for ATA cleanup service
 const ATA_CLEANUP_INTERVAL_MINUTES: u64 = 5; // Check every 5 minutes
 const ATA_CLEANUP_STARTUP_DELAY_SECONDS: u64 = 30; // Wait 30 seconds before first cleanup
-const ATA_FAILED_CACHE_FILE: &str = ATA_FAILED_CACHE; // Cache file for failed ATA closures
 
 /// Global statistics for ATA cleanup operations
 static ATA_STATS: LazyLock<Mutex<AtaCleanupStats>> = LazyLock::new(|| {
@@ -359,8 +357,9 @@ pub async fn clear_failed_ata_cache() -> Result<(), Box<dyn std::error::Error + 
 
 /// Load failed ATA cache from disk
 async fn load_failed_ata_cache() {
-    if Path::new(ATA_FAILED_CACHE_FILE).exists() {
-        match tokio::fs::read_to_string(ATA_FAILED_CACHE_FILE).await {
+    let cache_path = crate::paths::get_ata_failed_cache_path();
+    if cache_path.exists() {
+        match tokio::fs::read_to_string(&cache_path).await {
             Ok(content) => match serde_json::from_str::<FailedAtaCache>(&content) {
                 Ok(cache_data) => match FAILED_ATA_CACHE.lock() {
                     Ok(mut cache) => {
@@ -413,7 +412,8 @@ async fn save_failed_ata_cache() {
 
     match serde_json::to_string_pretty(&cache_data) {
         Ok(json) => {
-            if let Err(e) = tokio::fs::write(ATA_FAILED_CACHE_FILE, json).await {
+            let cache_path = crate::paths::get_ata_failed_cache_path();
+            if let Err(e) = tokio::fs::write(&cache_path, json).await {
                 logger::error(
                     LogTag::Wallet,
                     &format!("Failed to save ATA cache file: {}", e),

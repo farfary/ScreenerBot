@@ -1,5 +1,4 @@
 use clap::Parser;
-use screenerbot::global::TOKENS_DATABASE;
 use screenerbot::logger::{self as logger, LogTag};
 use screenerbot::tokens::database::{init_global_database, TokenDatabase};
 use screenerbot::tokens::decimals::{get as get_decimals_async, get_cached as get_cached_decimals};
@@ -32,7 +31,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     // Initialise token database so shared helpers work in this standalone binary.
-    let db = Arc::new(TokenDatabase::new(TOKENS_DATABASE)?);
+    let db_path = screenerbot::paths::get_tokens_db_path();
+    let db = Arc::new(TokenDatabase::new(&db_path.to_string_lossy())?);
     if let Err(err) = init_global_database(db.clone()) {
         logger::info(
             LogTag::Tokens,

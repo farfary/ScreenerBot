@@ -162,21 +162,14 @@ static FILE_LOGGER: Lazy<Arc<Mutex<Option<FileLogger>>>> = Lazy::new(|| {
 
 /// Get the log directory path
 fn get_log_directory() -> Result<PathBuf, Box<dyn std::error::Error>> {
-    let current_dir = std::env::current_dir()?;
-    let log_dir = current_dir.join("logs");
-
+    // Primary: Use centralized paths module (works for both terminal and bundle)
+    let log_dir = crate::paths::get_logs_directory();
+    
     if log_dir.exists() || fs::create_dir_all(&log_dir).is_ok() {
         return Ok(log_dir);
     }
 
-    // Fallback to user data directory
-    if let Some(data_dir) = dirs::data_dir() {
-        let app_log_dir = data_dir.join("screenerbot").join("logs");
-        fs::create_dir_all(&app_log_dir)?;
-        return Ok(app_log_dir);
-    }
-
-    // Final fallback to temp directory
+    // Final fallback to temp directory only if paths module fails
     let temp_log_dir = std::env::temp_dir().join("screenerbot_logs");
     fs::create_dir_all(&temp_log_dir)?;
     Ok(temp_log_dir)

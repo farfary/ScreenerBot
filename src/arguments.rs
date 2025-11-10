@@ -5,13 +5,15 @@
 /// ## Argument Types
 ///
 /// **Execution Modes** (mutually exclusive - choose one):
-/// - `--run`: Start the trading bot
 /// - `--reset`: Reset database state
+/// - `--clean-wallet-data`: Clean all wallet-specific databases
 /// - `--help`: Show help information
 ///
-/// **Modifiers** (combine with modes):
+/// **Display Modes**:
+/// - `--gui`: Launch with desktop GUI window (requires 'gui' feature)
+///
+/// **Modifiers**:
 /// - `--force`: Skip confirmation prompts (works with: --reset)
-/// - `--dry-run`: Simulate without executing trades (works with: --run)
 /// - `--cache-only`: Use cached data only (works with debug tools)
 /// - `--force-refresh`: Force refresh from RPC (works with debug tools)
 ///
@@ -75,9 +77,9 @@ pub fn get_arg_value(flag: &str) -> Option<String> {
 // EXECUTION MODES
 // =============================================================================
 
-/// Run mode - enables actual bot execution (required to start services)
-pub fn is_run_enabled() -> bool {
-    has_arg("--run")
+/// GUI mode - launch with desktop window (requires 'gui' feature at compile time)
+pub fn is_gui_enabled() -> bool {
+    has_arg("--gui")
 }
 
 /// Reset mode - clears pending verifications and database files
@@ -89,16 +91,20 @@ pub fn is_reset_enabled() -> bool {
 // MODIFIER FLAGS
 // =============================================================================
 
-/// Dry-run mode - simulates trading without executing actual transactions
-/// Works with: --run
-pub fn is_dry_run_enabled() -> bool {
-    has_arg("--dry-run")
-}
-
 /// Force mode - skip confirmation prompts
 /// Works with: --reset
 pub fn is_force_enabled() -> bool {
     has_arg("--force")
+}
+
+/// Dry-run mode - DEPRECATED: Use config setting trader.enabled instead
+/// This function is kept for backward compatibility but always returns false
+/// Dry-run behavior should be controlled via configuration, not command-line
+#[deprecated(note = "Use config setting trader.enabled instead of --dry-run flag")]
+pub fn is_dry_run_enabled() -> bool {
+    // Always return false - dry-run should be controlled via config
+    // If you need to disable trading, set trader.enabled = false in config.toml
+    false
 }
 
 /// Cache-only mode - read from local DB only, never call RPC
@@ -124,7 +130,7 @@ pub fn is_clean_wallet_data_enabled() -> bool {
 // =============================================================================
 
 /// Enable tokio-console for async task profiling
-/// Requires console-subscriber feature: cargo run --features console --bin screenerbot -- --run --profile-tokio-console
+/// Requires console-subscriber feature: cargo run --features console --bin screenerbot -- --profile-tokio-console
 pub fn is_profile_tokio_console_enabled() -> bool {
     has_arg("--profile-tokio-console")
 }
@@ -135,7 +141,7 @@ pub fn is_profile_tracing_enabled() -> bool {
 }
 
 /// Enable CPU profiling with pprof and flamegraph generation
-/// Requires flamegraph feature: cargo run --features flamegraph --bin screenerbot -- --run --profile-cpu
+/// Requires flamegraph feature: cargo run --features flamegraph --bin screenerbot -- --profile-cpu
 pub fn is_profile_cpu_enabled() -> bool {
     has_arg("--profile-cpu")
 }
@@ -156,18 +162,20 @@ pub fn print_help() {
     println!("ScreenerBot - Advanced Solana DeFi Trading Bot");
     println!();
     println!("USAGE:");
-    println!("    screenerbot <MODE> [MODIFIERS] [DEBUG_FLAGS]");
+    println!("    screenerbot [OPTIONS]");
     println!();
-    println!("EXECUTION MODES (choose one):");
-    println!("    --run                       Start the trading bot");
-    println!(
-        "    --reset                     Reset pending verifications and delete database files"
-    );
+    println!("    By default, ScreenerBot starts the trading bot with webserver on http://localhost:8080");
+    println!();
+    println!("SPECIAL MODES (execute and exit):");
+    println!("    --reset                     Reset pending verifications and delete database files");
     println!("    --clean-wallet-data         Clean all wallet-specific databases (use when switching wallets)");
     println!("    --help, -h                  Show this help message");
     println!();
-    println!("MODIFIERS (combine with modes above):");
-    println!("    --dry-run                   Simulate trading without executing transactions (with --run)");
+    println!("DISPLAY OPTIONS:");
+    println!("    --gui                       Launch with desktop GUI window");
+    println!("                                Without --gui, runs headless with webserver on port 8080");
+    println!();
+    println!("MODIFIERS:");
     println!("    --force                     Skip confirmation prompts (with --reset)");
     println!("    --cache-only                Use cached data only, no RPC calls (debug tools)");
     println!("    --force-refresh             Force refresh from RPC even if cached (debug tools)");
@@ -189,19 +197,16 @@ pub fn print_help() {
     println!("      security, trader, transactions, webserver, websocket, wallet");
     println!();
     println!("EXAMPLES:");
-    println!(
-        "    screenerbot --run                                # Start bot in live trading mode"
-    );
-    println!("    screenerbot --run --dry-run                      # Start bot in simulation mode");
-    println!(
-        "    screenerbot --run --dry-run --debug-trader       # Simulate with trader debug logs"
-    );
-    println!(
-        "    screenerbot --reset                              # Reset with confirmation prompt"
-    );
-    println!("    screenerbot --reset --force                      # Reset without confirmation");
-    println!("    screenerbot --clean-wallet-data                  # Clean databases when switching wallets");
-    println!("    screenerbot --help                               # Show this help message");
+    println!("    screenerbot                                  # Start bot (headless, webserver on :8080)");
+    println!("    screenerbot --gui                            # Start bot with desktop GUI window");
+    println!("    screenerbot --debug-trader                   # Start bot with trader debug logs");
+    println!("    screenerbot --reset                          # Reset with confirmation prompt");
+    println!("    screenerbot --reset --force                  # Reset without confirmation");
+    println!("    screenerbot --clean-wallet-data              # Clean databases when switching wallets");
+    println!();
+    println!("BUILDING:");
+    println!("    cargo build                                  # Build complete binary (GUI always included)");
+    println!("    cargo build --release                        # Build optimized release version");
 }
 
 // =============================================================================
@@ -224,17 +229,14 @@ pub fn get_enabled_debug_modes() -> Vec<String> {
     }
 
     // Include execution mode
-    if is_run_enabled() {
-        modes.push("run".to_string());
-    }
     if is_reset_enabled() {
         modes.push("reset".to_string());
     }
+    if is_gui_enabled() {
+        modes.push("gui".to_string());
+    }
 
     // Include active modifiers
-    if is_dry_run_enabled() {
-        modes.push("dry-run".to_string());
-    }
     if is_force_enabled() {
         modes.push("force".to_string());
     }

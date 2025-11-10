@@ -823,8 +823,8 @@ async fn list_templates() -> Response {
     // Attempt to query templates table
     let result: Result<Vec<StrategyTemplateItem>, String> = (|| {
         // Open a read-only connection to strategies DB directly for listing templates
-        let db_path = "data/strategies.db";
-        let conn = rusqlite::Connection::open(db_path)
+        let db_path = crate::paths::get_strategies_db_path();
+        let conn = rusqlite::Connection::open(&db_path)
             .map_err(|e| format!("Failed to open strategies db: {}", e))?;
         let mut stmt = conn
             .prepare(

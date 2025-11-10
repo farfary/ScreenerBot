@@ -13,6 +13,7 @@ pub mod global;
 pub mod license;
 pub mod logger;
 pub mod ohlcvs;
+pub mod paths;
 pub mod pools;
 pub mod positions;
 pub mod process_lock;

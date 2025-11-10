@@ -96,7 +96,8 @@ pub fn routes() -> Router<Arc<AppState>> {
 async fn initialization_status() -> Response {
     logger::debug(LogTag::Webserver, "Checking initialization status");
 
-    let config_exists = std::path::Path::new(config::utils::CONFIG_FILE_PATH).exists();
+    let config_path = crate::paths::get_config_path();
+    let config_exists = config_path.exists();
     let initialization_complete = global::is_initialization_complete();
 
     let (required, reason) = if !config_exists {
@@ -377,8 +378,9 @@ async fn complete_initialization(Json(request): Json<CompleteInitializationReque
         ..Default::default()
     };
 
+    let config_path = crate::paths::get_config_path();
     if let Err(e) =
-        config::utils::save_config_to_file(&config, config::utils::CONFIG_FILE_PATH, true)
+        config::utils::save_config_to_file(&config, &config_path.to_string_lossy(), true)
     {
         errors.push(format!("Failed to save configuration: {}", e));
         return error_response(

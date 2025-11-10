@@ -5,6 +5,7 @@ edition = "2021"
 
 # Workspace optimization for faster builds
 [workspace]
+members = ["."]
 resolver = "2"
 
 # Dev profile — fastest possible compile + good debugging
@@ -47,14 +48,132 @@ path = "src/main.rs"
 [[bin]]
 name = "debug_decimals"
 path = "src/bin/debug_decimals.rs"
+required-features = ["debug-tools"]
 
 [[bin]]
 name = "verify_transactions_from_csv"
 path = "src/bin/verify_transactions_from_csv.rs"
+required-features = ["debug-tools"]
 
 [[bin]]
 name = "test_license_verification"
 path = "src/bin/test_license_verification.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "analyze_mismatch_patterns"
+path = "src/bin/analyze_mismatch_patterns.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "analyze_transaction_patterns"
+path = "src/bin/analyze_transaction_patterns.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "debug_coingecko"
+path = "src/bin/debug_coingecko.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "debug_defillama"
+path = "src/bin/debug_defillama.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "debug_dexscreener"
+path = "src/bin/debug_dexscreener.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "debug_events"
+path = "src/bin/debug_events.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "debug_geckoterminal"
+path = "src/bin/debug_geckoterminal.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "debug_jupiter"
+path = "src/bin/debug_jupiter.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "debug_manual_trading"
+path = "src/bin/debug_manual_trading.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "debug_ohlcv"
+path = "src/bin/debug_ohlcv.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "debug_pool_decoders"
+path = "src/bin/debug_pool_decoders.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "debug_positions_semaphore"
+path = "src/bin/debug_positions_semaphore.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "debug_pumpfun_pool"
+path = "src/bin/debug_pumpfun_pool.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "debug_pumpfun_structure"
+path = "src/bin/debug_pumpfun_structure.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "debug_rugcheck"
+path = "src/bin/debug_rugcheck.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "debug_strategies"
+path = "src/bin/debug_strategies.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "debug_tokens"
+path = "src/bin/debug_tokens.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "debug_websocket"
+path = "src/bin/debug_websocket.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "main_sell_all_and_reset"
+path = "src/bin/main_sell_all_and_reset.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "test_bonding_curve_decoder"
+path = "src/bin/test_bonding_curve_decoder.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "test_initialization_flow"
+path = "src/bin/test_initialization_flow.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "test_webserver"
+path = "src/bin/test_webserver.rs"
+required-features = ["debug-tools"]
+
+[[bin]]
+name = "trace_filtering"
+path = "src/bin/trace_filtering.rs"
+required-features = ["debug-tools"]
 
 [dependencies]
 # Core async runtime with minimal features for faster builds
@@ -139,9 +258,17 @@ tower-http = { version = "0.5", features = ["cors", "trace", "compression-full"]
 hyper = "1.0"
 sysinfo = "0.30"
 
+# GUI - always compiled, use --gui flag at runtime to enable window
+tauri = { version = "2.1", features = ["devtools"] }
+tauri-plugin-shell = "2.0"
+
+[build-dependencies]
+tauri-build = { version = "2.1", features = [] }
+
 # Features — keep placeholders but no dependencies by default
 [features]
 default = []
+debug-tools = []  # Enable all debug/test binaries
 web = []
 telegram = []
 # Profiling features that can be enabled with --features

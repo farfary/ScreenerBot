@@ -120,8 +120,8 @@ CREATE TABLE IF NOT EXISTS schema_version (
 // =============================================================================
 
 static DB_POOL: Lazy<Pool<SqliteConnectionManager>> = Lazy::new(|| {
-    let db_path = "data/strategies.db";
-    let manager = SqliteConnectionManager::file(db_path);
+    let db_path = crate::paths::get_strategies_db_path();
+    let manager = SqliteConnectionManager::file(&db_path);
     Pool::builder()
         .max_size(10)
         .build(manager)

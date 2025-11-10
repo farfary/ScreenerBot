@@ -1321,16 +1321,7 @@ pub struct WalletDatabase {
 impl WalletDatabase {
     /// Create new WalletDatabase with connection pooling
     pub async fn new() -> Result<Self, String> {
-        // Database should be at data/wallet.db
-        let data_dir = std::path::PathBuf::from("data");
-
-        // Ensure data directory exists
-        if !data_dir.exists() {
-            std::fs::create_dir_all(&data_dir)
-                .map_err(|e| format!("Failed to create data directory: {}", e))?;
-        }
-
-        let database_path = data_dir.join("wallet.db");
+        let database_path = crate::paths::get_wallet_db_path();
         let database_path_str = database_path.to_string_lossy().to_string();
 
         logger::debug(

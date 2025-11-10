@@ -37,26 +37,18 @@ impl ProcessLock {
     /// - Another instance is running (lock is held)
     /// - Cannot create lock file (permission/path issues)
     pub fn acquire() -> Result<Self, String> {
-        let lock_path = PathBuf::from("data/.screenerbot.lock");
+        let lock_path = crate::paths::get_process_lock_path();
 
         logger::info(
             LogTag::System,
             &format!("🔒 Acquiring process lock: {:?}", lock_path),
         );
 
-        // Create parent directory if it doesn't exist
-        if let Some(parent) = lock_path.parent() {
-            if !parent.exists() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| format!("Failed to create lock file directory: {}", e))?;
-            }
-        }
-
-        // Open lock file
+        // Open lock file (directory creation handled by paths module)
         let mut lock = LockFile::open(&lock_path).map_err(|e| {
             format!(
                 "Failed to open lock file {:?}: {}\n\
-                 Hint: Check directory permissions for 'data/' folder",
+                 Hint: Check directory permissions",
                 lock_path, e
             )
         })?;

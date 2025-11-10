@@ -294,14 +294,7 @@ pub struct WalletFlowExportRow {
 impl TransactionDatabase {
     /// Create new TransactionDatabase with connection pooling
     pub async fn new() -> Result<Self, String> {
-        let data_dir = PathBuf::from("data");
-
-        if !data_dir.exists() {
-            std::fs::create_dir_all(&data_dir)
-                .map_err(|e| format!("Failed to create data directory: {}", e))?;
-        }
-
-        let database_path = data_dir.join("transactions.db");
+        let database_path = crate::paths::get_transactions_db_path();
         let is_first_init = !DATABASE_INITIALIZED.load(Ordering::Relaxed);
         let db = Self::create_database(database_path, is_first_init).await?;
 

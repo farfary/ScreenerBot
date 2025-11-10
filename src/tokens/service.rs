@@ -7,7 +7,7 @@
 /// - Cleanup tasks
 ///
 /// This service coordinates the new architecture with proper lifecycle management.
-use crate::global::{TOKENS_DATABASE, TOKENS_SYSTEM_READY};
+use crate::global::TOKENS_SYSTEM_READY;
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use crate::tokens::cleanup;
@@ -57,7 +57,8 @@ impl Service for TokensServiceNew {
 
     async fn initialize(&mut self) -> Result<(), String> {
         // Initialize database (schema initialized automatically in new())
-        let db = TokenDatabase::new(TOKENS_DATABASE)
+        let db_path = crate::paths::get_tokens_db_path();
+        let db = TokenDatabase::new(&db_path.to_string_lossy())
             .map_err(|e| format!("Failed to create database: {}", e))?;
 
         let db_arc = Arc::new(db);
@@ -96,7 +97,7 @@ impl Service for TokensServiceNew {
 
         logger::info(
             LogTag::Tokens,
-            &format!("Service initialized with database at {}", TOKENS_DATABASE),
+            &format!("Service initialized with database at {}", db_path.display()),
         );
         // Mark tokens system ready after successful initialization
         TOKENS_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);

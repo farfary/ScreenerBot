@@ -4,7 +4,7 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use clap::{Args, Parser, Subcommand, ValueEnum};
 
 use screenerbot::config::{load_config, with_config};
-use screenerbot::global::{ensure_data_directories, TOKENS_DATABASE};
+use screenerbot::paths;
 use screenerbot::tokens::database::{get_global_database, init_global_database, TokenDatabase};
 use screenerbot::tokens::market::{dexscreener, geckoterminal};
 use screenerbot::tokens::security::rugcheck;
@@ -132,7 +132,7 @@ async fn main() {
 }
 
 async fn execute(cli: Cli) -> Result<(), String> {
-    ensure_data_directories().map_err(|e| format!("Failed to prepare data directories: {e}"))?;
+    paths::ensure_all_directories().map_err(|e| format!("Failed to prepare data directories: {e}"))?;
     load_config()?;
 
     // Initialize SOL price cache (needed for price_sol calculations)
@@ -159,7 +159,8 @@ fn ensure_database() -> Result<Arc<TokenDatabase>, String> {
         return Ok(existing);
     }
 
-    let db = Arc::new(TokenDatabase::new(TOKENS_DATABASE).map_err(|e| e.to_string())?);
+    let db_path = screenerbot::paths::get_tokens_db_path();
+    let db = Arc::new(TokenDatabase::new(&db_path.to_string_lossy()).map_err(|e| e.to_string())?);
     if let Err(e) = init_global_database(db.clone()) {
         if get_global_database().is_none() {
             return Err(e);
@@ -176,7 +177,8 @@ async fn handle_status(db: &Arc<TokenDatabase>) -> Result<(), String> {
     let priority_summary = db.summarize_priorities().map_err(|e| e.to_string())?;
     let preferred_source = with_config(|cfg| cfg.tokens.preferred_market_data_source.clone());
 
-    println!("Tokens database: {TOKENS_DATABASE}");
+    let db_path = screenerbot::paths::get_tokens_db_path();
+    println!("Tokens database: {}", db_path.display());
     println!("Total tokens: {total_tokens}");
     println!("Tracked tokens: {tracked}");
     println!("Blacklisted tokens: {blacklisted}");

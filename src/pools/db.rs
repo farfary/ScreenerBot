@@ -18,9 +18,6 @@ use std::sync::RwLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc;
 
-/// Database file path
-const POOLS_DB_PATH: &str = "data/pools.db";
-
 /// Maximum age for price history entries (7 days)
 const MAX_PRICE_HISTORY_AGE_DAYS: i64 = 7;
 
@@ -206,7 +203,9 @@ impl PoolsDatabase {
     /// Create new pools database instance
     pub fn new() -> Self {
         Self {
-            db_path: POOLS_DB_PATH.to_string(),
+            db_path: crate::paths::get_pools_db_path()
+                .to_string_lossy()
+                .to_string(),
             connection: Arc::new(Mutex::new(None)),
             write_queue: None,
             blacklisted_accounts: Arc::new(RwLock::new(HashSet::new())),
@@ -216,12 +215,6 @@ impl PoolsDatabase {
 
     /// Initialize database and create tables
     pub async fn initialize(&mut self) -> Result<(), String> {
-        // Ensure data directory exists
-        if let Some(parent) = Path::new(&self.db_path).parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create data directory: {}", e))?;
-        }
-
         // Create database connection
         let conn = Connection::open(&self.db_path)
             .map_err(|e| format!("Failed to open pools database: {}", e))?;

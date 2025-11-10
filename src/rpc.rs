@@ -32,7 +32,6 @@ use crate::constants::{LAMPORTS_PER_SOL, SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRA
 use crate::errors::blockchain::CommitmentLevel;
 use crate::errors::{parse_solana_error, BlockchainError, ScreenerBotError};
 use crate::errors::{ConfigurationError, DataError, NetworkError, RpcProviderError};
-use crate::global::RPC_STATS;
 use crate::logger::{self as logger, LogTag};
 use crate::utils::lamports_to_sol;
 use base64::Engine as _;
@@ -616,7 +615,8 @@ impl RpcStats {
         let json_data = serde_json::to_string_pretty(self)
             .map_err(|e| format!("Failed to serialize RPC stats: {}", e))?;
 
-        std::fs::write(RPC_STATS, json_data)
+        let stats_path = crate::paths::get_rpc_stats_path();
+        std::fs::write(&stats_path, json_data)
             .map_err(|e| format!("Failed to write RPC stats file: {}", e))?;
 
         Ok(())
@@ -624,7 +624,8 @@ impl RpcStats {
 
     /// Load stats from disk, merging with current stats
     pub fn load_from_disk(&mut self) -> Result<(), String> {
-        match std::fs::read_to_string(RPC_STATS) {
+        let stats_path = crate::paths::get_rpc_stats_path();
+        match std::fs::read_to_string(&stats_path) {
             Ok(data) => {
                 match serde_json::from_str::<RpcStats>(&data) {
                     Ok(loaded_stats) => {

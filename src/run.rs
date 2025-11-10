@@ -16,13 +16,17 @@ pub async fn run_bot() -> Result<(), String> {
     // 0. Initialize profiling if requested (must be done before any tokio tasks)
     init_profiling();
 
-    // 1. Acquire process lock to prevent multiple instances
+    // 1. Ensure all required directories exist (safety backup, already done in main.rs)
+    crate::paths::ensure_all_directories()
+        .map_err(|e| format!("Failed to create required directories: {}", e))?;
+
+    // 2. Acquire process lock to prevent multiple instances
     let _process_lock = crate::process_lock::ProcessLock::acquire()?;
 
     logger::info(LogTag::System, "🚀 ScreenerBot starting up...");
 
-    // 2. Check if config.toml exists (determines initialization mode)
-    let config_path = std::path::Path::new("data/config.toml");
+    // 3. Check if config.toml exists (determines initialization mode)
+    let config_path = crate::paths::get_config_path();
     let config_exists = config_path.exists();
 
     if !config_exists {
@@ -89,12 +93,12 @@ pub async fn run_bot() -> Result<(), String> {
             "📋 Config.toml found - starting in normal mode",
         );
 
-        // 3. Load configuration
+        // 4. Load configuration
         crate::config::load_config().map_err(|e| format!("Failed to load config: {}", e))?;
 
         logger::info(LogTag::System, "Configuration loaded successfully");
 
-        // 3.5. Verify license
+        // 5. Verify license
         logger::info(LogTag::System, "🔐 Verifying ScreenerBot license...");
 
         let wallet_keypair = crate::config::utils::get_wallet_keypair()
@@ -140,7 +144,7 @@ pub async fn run_bot() -> Result<(), String> {
             ),
         );
 
-        // 3.6. Validate wallet consistency
+        // 6. Validate wallet consistency
         logger::info(LogTag::System, "🔍 Validating wallet consistency...");
 
         match crate::wallet_validation::WalletValidator::validate_wallet_consistency().await? {
@@ -183,25 +187,25 @@ pub async fn run_bot() -> Result<(), String> {
         // Set initialization flag to true (all services enabled)
         global::INITIALIZATION_COMPLETE.store(true, std::sync::atomic::Ordering::SeqCst);
 
-        // 4. Initialize strategy system
+        // 7. Initialize strategy system
         crate::strategies::init_strategy_system(crate::strategies::engine::EngineConfig::default())
             .await
             .map_err(|e| format!("Failed to initialize strategy system: {}", e))?;
 
         logger::info(LogTag::System, "Strategy system initialized successfully");
 
-        // 5. Create service manager
+        // 8. Create service manager
         let mut service_manager = ServiceManager::new().await?;
 
         logger::info(LogTag::System, "Service manager initialized");
 
-        // 6. Register all services
+        // 9. Register all services
         register_all_services(&mut service_manager);
 
-        // 7. Initialize global ServiceManager for webserver access
+        // 10. Initialize global ServiceManager for webserver access
         crate::services::init_global_service_manager(service_manager).await;
 
-        // 8. Get mutable reference to continue
+        // 11. Get mutable reference to continue
         let manager_ref = crate::services::get_service_manager()
             .await
             .ok_or("Failed to get ServiceManager reference")?;
@@ -211,10 +215,10 @@ pub async fn run_bot() -> Result<(), String> {
             guard.take().ok_or("ServiceManager was already taken")?
         };
 
-        // 9. Start all enabled services
+        // 12. Start all enabled services
         service_manager.start_all().await?;
 
-        // 10. Put it back for webserver access
+        // 13. Put it back for webserver access
         {
             let mut guard = manager_ref.write().await;
             *guard = Some(service_manager);
@@ -226,10 +230,10 @@ pub async fn run_bot() -> Result<(), String> {
         );
     }
 
-    // 11. Wait for shutdown signal
+    // 14. Wait for shutdown signal
     wait_for_shutdown_signal().await?;
 
-    // 12. Stop all services gracefully
+    // 15. Stop all services gracefully
     logger::info(LogTag::System, "🛑 Initiating graceful shutdown...");
 
     let manager_ref = crate::services::get_service_manager()

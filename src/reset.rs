@@ -8,34 +8,38 @@
 //   cargo run --bin screenerbot -- --reset --force  # Force mode (no confirmation)
 
 use crate::logger::{self, LogTag};
+use crate::paths;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 
-/// Files and directories to be removed during reset
-const RESET_TARGETS: &[&str] = &[
-    "data/positions.db",
-    "data/positions.db-shm",
-    "data/positions.db-wal",
-    "data/events.db",
-    "data/events.db-shm",
-    "data/events.db-wal",
-    "data/rpc_stats.json",
-    "data/ata_failed_cache.json",
-];
+/// Get list of files and directories to be removed during reset
+fn get_reset_targets() -> Vec<PathBuf> {
+    let mut targets = Vec::new();
+
+    // Database files with WAL and SHM
+    targets.extend(paths::get_db_with_wal_files(paths::get_positions_db_path()));
+    targets.extend(paths::get_db_with_wal_files(paths::get_events_db_path()));
+
+    // Cache files
+    targets.push(paths::get_rpc_stats_path());
+    targets.push(paths::get_ata_failed_cache_path());
+
+    targets
+}
 
 /// Configuration for reset operation
 #[derive(Debug, Clone)]
 pub struct ResetConfig {
     pub force: bool,
-    pub targets: Vec<String>,
+    pub targets: Vec<PathBuf>,
 }
 
 impl Default for ResetConfig {
     fn default() -> Self {
         Self {
             force: false,
-            targets: RESET_TARGETS.iter().map(|s| s.to_string()).collect(),
+            targets: get_reset_targets(),
         }
     }
 }
@@ -66,32 +70,33 @@ pub fn execute_reset(config: ResetConfig) -> Result<(), String> {
     let mut total_size = 0u64;
 
     for target in &config.targets {
-        let path = PathBuf::from(target);
-
-        if !path.exists() {
+        if !target.exists() {
             logger::info(
                 LogTag::System,
-                &format!("⏭️  Skipping (does not exist): {}", target),
+                &format!("⏭️  Skipping (does not exist): {}", target.display()),
             );
             continue;
         }
 
         // Get file size before removal
-        if let Ok(metadata) = fs::metadata(&path) {
+        if let Ok(metadata) = fs::metadata(target) {
             total_size += metadata.len();
         }
 
         // Remove file
-        match remove_file_or_dir(&path) {
+        match remove_file_or_dir(target) {
             Ok(_) => {
                 removed_count += 1;
-                logger::info(LogTag::System, &format!("✅ Removed: {}", target));
+                logger::info(
+                    LogTag::System,
+                    &format!("✅ Removed: {}", target.display()),
+                );
             }
             Err(e) => {
                 error_count += 1;
                 logger::error(
                     LogTag::System,
-                    &format!("❌ Failed to remove {}: {}", target, e),
+                    &format!("❌ Failed to remove {}: {}", target.display(), e),
                 );
             }
         }
@@ -126,7 +131,7 @@ pub fn execute_reset(config: ResetConfig) -> Result<(), String> {
 }
 
 /// Print list of targets that will be reset
-fn print_reset_targets(targets: &[String]) {
+fn print_reset_targets(targets: &[PathBuf]) {
     logger::warning(
         LogTag::System,
         "⚠️  The following files/directories will be DELETED:",
@@ -134,17 +139,19 @@ fn print_reset_targets(targets: &[String]) {
     logger::info(LogTag::System, "");
 
     for target in targets {
-        let path = PathBuf::from(target);
-        let exists = path.exists();
+        let exists = target.exists();
         let size = if exists {
-            fs::metadata(&path)
+            fs::metadata(target)
                 .map(|m| format!(" ({:.2} MB)", m.len() as f64 / 1_048_576.0))
                 .unwrap_or_default()
         } else {
             String::from(" (does not exist)")
         };
 
-        logger::info(LogTag::System, &format!("   • {}{}", target, size));
+        logger::info(
+            LogTag::System,
+            &format!("   • {}{}", target.display(), size),
+        );
     }
 
     logger::info(LogTag::System, "");
@@ -180,11 +187,11 @@ fn remove_file_or_dir(path: &Path) -> Result<(), String> {
 pub fn clear_pending_verifications() -> Result<(), String> {
     use rusqlite::Connection;
 
-    let db_path = "data/positions.db";
-    if !Path::new(db_path).exists() {
+    let db_path = paths::get_positions_db_path();
+    if !db_path.exists() {
         logger::info(
             LogTag::System,
-            &format!("⏭️  Positions database does not exist: {}", db_path),
+            &format!("⏭️  Positions database does not exist: {}", db_path.display()),
         );
         return Ok(());
     }
@@ -194,7 +201,7 @@ pub fn clear_pending_verifications() -> Result<(), String> {
         "🧹 Clearing pending verification metadata...",
     );
 
-    let conn = Connection::open(db_path)
+    let conn = Connection::open(&db_path)
         .map_err(|e| format!("Failed to open positions database: {}", e))?;
 
     // Clear pending DCA swaps metadata
@@ -271,8 +278,9 @@ mod tests {
 
     #[test]
     fn test_reset_targets_defined() {
-        assert!(RESET_TARGETS.len() > 0);
-        assert!(RESET_TARGETS.contains(&"data/positions.db"));
-        assert!(RESET_TARGETS.contains(&"data/events.db"));
+        let targets = get_reset_targets();
+        assert!(!targets.is_empty());
+        assert!(targets.iter().any(|p| p.ends_with("positions.db")));
+        assert!(targets.iter().any(|p| p.ends_with("events.db")));
     }
 }
