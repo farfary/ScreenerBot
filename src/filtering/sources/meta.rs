@@ -18,11 +18,14 @@ pub async fn evaluate(
         }
     }
 
-    if is_too_new(token, config) {
+    if config.age_enabled && is_too_new(token, config) {
         return Err(FilterRejectionReason::TokenTooNew);
     }
 
-    if config.check_cooldown && positions::is_token_in_cooldown(&token.mint).await {
+    if config.cooldown_enabled
+        && config.check_cooldown
+        && positions::is_token_in_cooldown(&token.mint).await
+    {
         return Err(FilterRejectionReason::CooldownFiltered);
     }
 

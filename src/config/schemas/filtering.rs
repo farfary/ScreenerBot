@@ -721,6 +721,13 @@ config_struct! {
 
         // Rugged token check
         #[metadata(field_metadata! {
+            label: "Enable Rugged Token Check",
+            hint: "Master switch for rugged token filtering",
+            impact: "critical",
+            category: "Security Flags",
+        })]
+        rugged_check_enabled: bool = true,
+        #[metadata(field_metadata! {
             label: "Block Rugged Tokens",
             hint: "Reject tokens flagged as rugged by RugCheck",
             impact: "critical",
@@ -730,8 +737,15 @@ config_struct! {
 
         // Insider detection
         #[metadata(field_metadata! {
+            label: "Enable Graph Insiders Check",
+            hint: "Master switch for graph-detected insider filtering",
+            impact: "high",
+            category: "Insider Detection",
+        })]
+        graph_insiders_enabled: bool = true,
+        #[metadata(field_metadata! {
             label: "Max Graph Insiders",
-            hint: "Maximum detected insider wallets (0 = no limit)",
+            hint: "Maximum detected insider wallets",
             min: 0,
             max: 20,
             step: 1,
@@ -773,8 +787,15 @@ config_struct! {
 
         // Creator balance check
         #[metadata(field_metadata! {
+            label: "Enable Creator Balance Check",
+            hint: "Master switch for creator balance filtering",
+            impact: "medium",
+            category: "Creator Checks",
+        })]
+        creator_balance_enabled: bool = true,
+        #[metadata(field_metadata! {
             label: "Max Creator Balance %",
-            hint: "Maximum % creator can hold (0 = no limit)",
+            hint: "Maximum % creator can hold",
             min: 0,
             max: 100,
             step: 5,
@@ -786,8 +807,15 @@ config_struct! {
 
         // LP provider check
         #[metadata(field_metadata! {
+            label: "Enable LP Providers Check",
+            hint: "Master switch for LP provider count filtering",
+            impact: "medium",
+            category: "LP Providers",
+        })]
+        lp_providers_enabled: bool = true,
+        #[metadata(field_metadata! {
             label: "Min LP Providers",
-            hint: "Minimum LP providers required (0 = no limit)",
+            hint: "Minimum LP providers required",
             min: 0,
             max: 100,
             step: 1,
@@ -835,6 +863,13 @@ config_struct! {
     pub struct FilteringConfig {
         // Meta requirements (apply across all sources)
         #[metadata(field_metadata! {
+            label: "Enable Cooldown Check",
+            hint: "Master switch for cooldown period filtering",
+            impact: "high",
+            category: "Meta Requirements",
+        })]
+        cooldown_enabled: bool = true,
+        #[metadata(field_metadata! {
             label: "Check Cooldown",
             hint: "Skip tokens in cooldown period after exit",
             impact: "high",
@@ -843,6 +878,13 @@ config_struct! {
         check_cooldown: bool = true,
 
         // Token age
+        #[metadata(field_metadata! {
+            label: "Enable Age Check",
+            hint: "Master switch for token age filtering",
+            impact: "critical",
+            category: "Age",
+        })]
+        age_enabled: bool = true,
         #[metadata(field_metadata! {
             label: "Min Token Age",
             hint: "60min avoids brand new tokens, lower for sniping",

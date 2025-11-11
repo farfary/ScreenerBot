@@ -48,8 +48,9 @@ let tabBar = null;
 // ============================================================================
 
 const CONFIG_CATEGORIES = {
-  "Meta Requirements": {
+  "Meta Requirements - Cooldown": {
     source: "meta",
+    enableKey: "cooldown_enabled",
     fields: [
       {
         key: "check_cooldown",
@@ -58,6 +59,12 @@ const CONFIG_CATEGORIES = {
         hint: "Skip tokens in cooldown period after exit",
         impact: "high",
       },
+    ],
+  },
+  "Meta Requirements - Age": {
+    source: "meta",
+    enableKey: "age_enabled",
+    fields: [
       {
         key: "min_token_age_minutes",
         label: "Min Token Age",
@@ -559,6 +566,7 @@ const CONFIG_CATEGORIES = {
   },
   "RugCheck - Security Flags": {
     source: "rugcheck",
+    enableKey: "rugged_check_enabled",
     fields: [
       {
         key: "block_rugged_tokens",
@@ -571,7 +579,7 @@ const CONFIG_CATEGORIES = {
   },
   "RugCheck - Insider Detection": {
     source: "rugcheck",
-    enableKey: "insider_holder_checks_enabled",
+    enableKey: "graph_insiders_enabled",
     fields: [
       {
         key: "max_graph_insiders",
@@ -581,9 +589,15 @@ const CONFIG_CATEGORIES = {
         min: 0,
         max: 20,
         step: 1,
-        hint: "Maximum detected insider wallets (0 = no limit)",
+        hint: "Maximum detected insider wallets",
         impact: "high",
       },
+    ],
+  },
+  "RugCheck - Insider Holder Checks": {
+    source: "rugcheck",
+    enableKey: "insider_holder_checks_enabled",
+    fields: [
       {
         key: "max_insider_holders_in_top_10",
         label: "Max Insider Holders in Top 10",
@@ -610,6 +624,7 @@ const CONFIG_CATEGORIES = {
   },
   "RugCheck - Creator Checks": {
     source: "rugcheck",
+    enableKey: "creator_balance_enabled",
     fields: [
       {
         key: "max_creator_balance_pct",
@@ -619,13 +634,14 @@ const CONFIG_CATEGORIES = {
         min: 0,
         max: 100,
         step: 5,
-        hint: "Maximum % creator can hold (0 = no limit)",
+        hint: "Maximum % creator can hold",
         impact: "medium",
       },
     ],
   },
   "RugCheck - LP Providers": {
     source: "rugcheck",
+    enableKey: "lp_providers_enabled",
     fields: [
       {
         key: "min_lp_providers",
@@ -635,7 +651,7 @@ const CONFIG_CATEGORIES = {
         min: 0,
         max: 100,
         step: 1,
-        hint: "Minimum LP providers required (0 = no limit)",
+        hint: "Minimum LP providers required",
         impact: "medium",
       },
     ],
@@ -708,13 +724,19 @@ function setSourceEnabled(config, source, enabled) {
 // Get category enable status (for categories with enableKey)
 function getCategoryEnabled(config, source, enableKey) {
   if (!enableKey) return true; // No enable key means always enabled
-  if (source === "meta") return true;
+  if (source === "meta") {
+    return config[enableKey] !== false;
+  }
   return config[source]?.[enableKey] !== false;
 }
 
 // Set category enable status
 function setCategoryEnabled(config, source, enableKey, enabled) {
-  if (!enableKey || source === "meta") return;
+  if (!enableKey) return;
+  if (source === "meta") {
+    config[enableKey] = enabled;
+    return;
+  }
   if (!config[source]) {
     config[source] = {};
   }
@@ -959,7 +981,7 @@ function renderConfigField(field, source) {
 }
 
 function renderCategoryToggle(source, enableKey, _categoryName) {
-  if (!enableKey || source === "meta") return "";
+  if (!enableKey) return "";
 
   const enabled = getCategoryEnabled(state.draft, source, enableKey);
   const toggleId = `category-toggle-${source}-${enableKey}`;

@@ -9,7 +9,7 @@ pub fn evaluate(token: &Token, config: &RugCheckFilters) -> Result<(), FilterRej
         return Ok(());
     }
 
-    if config.block_rugged_tokens && token.is_rugged {
+    if config.rugged_check_enabled && config.block_rugged_tokens && token.is_rugged {
         return Err(FilterRejectionReason::RugcheckRuggedToken);
     }
 
@@ -67,7 +67,7 @@ pub fn evaluate(token: &Token, config: &RugCheckFilters) -> Result<(), FilterRej
         }
     }
 
-    if config.max_graph_insiders > 0 {
+    if config.graph_insiders_enabled {
         if let Some(count) = token.graph_insiders_detected {
             if count as i32 > config.max_graph_insiders {
                 return Err(FilterRejectionReason::RugcheckGraphInsidersTooHigh);
@@ -75,7 +75,7 @@ pub fn evaluate(token: &Token, config: &RugCheckFilters) -> Result<(), FilterRej
         }
     }
 
-    if config.max_creator_balance_pct > 0.0 {
+    if config.creator_balance_enabled {
         if let Some(creator_pct) = token.creator_balance_pct {
             if creator_pct > config.max_creator_balance_pct {
                 return Err(FilterRejectionReason::RugcheckCreatorBalanceTooHigh);
@@ -102,7 +102,7 @@ pub fn evaluate(token: &Token, config: &RugCheckFilters) -> Result<(), FilterRej
         }
     }
 
-    if config.min_lp_providers > 0 {
+    if config.lp_providers_enabled {
         match token.lp_provider_count {
             Some(count) => {
                 if count < config.min_lp_providers as i64 {
