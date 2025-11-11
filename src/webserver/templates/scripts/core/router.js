@@ -271,8 +271,17 @@ export function initRouter() {
     }
   });
 
-  // Detect initial page from URL/tab state
-  const initialPage = getPageFromPath() || "services";
+  // Detect initial page with priority: URL → server-rendered active tab → stored preference → home
+  const pathPage = getPageFromPath();
+  const serverActiveTab = document
+    .querySelector("nav .tab.active")
+    ?.getAttribute("data-page");
+  const storedPage = AppState.load("lastTab", null);
+  const isStoredPageValid = storedPage
+    ? Boolean(document.querySelector(`nav .tab[data-page="${storedPage}"]`))
+    : false;
+  const initialPage = pathPage || serverActiveTab || (isStoredPageValid ? storedPage : null) || "home";
+
   _state.currentPage = initialPage;
   setActiveTab(initialPage);
 
@@ -317,7 +326,9 @@ export function initRouter() {
 
 function getPageFromPath() {
   const path = window.location.pathname;
-  if (path === "/" || path === "") return "services";
+  if (path === "/" || path === "") {
+    return null;
+  }
   return path.slice(1);
 }
 

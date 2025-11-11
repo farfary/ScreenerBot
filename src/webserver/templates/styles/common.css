@@ -9,12 +9,16 @@
   height: 100%;
   padding: 10px;
   gap: 8px;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 /* Content Page Pattern: Standard scrolling content */
 .page-content {
   padding: 10px;
   flex: 1 1 auto;
-  overflow: auto;
+  overflow-y: auto;
+  overflow-x: hidden;
   min-height: 0;
+  min-width: 0;
 }

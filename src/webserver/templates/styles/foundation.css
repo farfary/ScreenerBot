@@ -71,6 +71,7 @@
 
 html {
   height: 100%;
+  overflow: hidden;
 }
 
 /* CLEAN FOUNDATION - Single viewport scroll model */
