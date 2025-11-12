@@ -75,16 +75,18 @@
         </button>
 
         <!-- Notifications -->
-        <button
-          class="control-btn notification-btn"
-          id="notificationBtn"
-          aria-label="Notifications"
-        >
-          <span style="position: relative">
-            🔔
-            <span id="notificationBadge" class="notification-badge" style="display: none">0</span>
-          </span>
-        </button>
+        <div class="notification-trigger">
+          <button
+            class="control-btn notification-btn"
+            id="notificationBtn"
+            aria-label="Notifications"
+          >
+            <span class="notification-icon-wrapper">
+              🔔
+              <span id="notificationBadge" class="notification-badge" style="display: none">0</span>
+            </span>
+          </button>
+        </div>
 
         <!-- Refresh Interval -->
         <button
@@ -122,6 +124,140 @@
     </div>
 
     <nav class="tabs">{{NAV_TABS}}</nav>
+
+    <div
+      id="notificationDrawer"
+      class="notification-drawer"
+      data-state="closed"
+      aria-hidden="true"
+    >
+      <div class="notification-drawer__backdrop" data-role="dismiss"></div>
+      <section
+        class="notification-drawer__panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="notificationDrawerTitle"
+      >
+        <header class="notification-panel-header">
+          <div class="notification-panel-heading">
+            <p class="notification-eyebrow">Action Center</p>
+            <h3 id="notificationDrawerTitle">Live Operations</h3>
+          </div>
+          <div class="notification-panel-header-actions">
+            <div class="notification-connection" id="notificationConnection">
+              <span class="notification-connection__dot" id="notificationConnectionDot"></span>
+              <span class="notification-connection__text" id="notificationConnectionText">
+                Connecting...
+              </span>
+            </div>
+            <div class="notification-panel-actions">
+              <button
+                id="markAllReadBtn"
+                class="panel-action-btn"
+                title="Mark all as read"
+              >
+                ✓
+              </button>
+              <button id="clearAllBtn" class="panel-action-btn" title="Clear all">
+                🗑️
+              </button>
+              <button
+                id="notificationDrawerClose"
+                class="panel-close-btn"
+                aria-label="Close notifications"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <div class="notification-summary">
+          <div class="summary-card live">
+            <span class="summary-label">Live</span>
+            <span class="summary-value" id="drawerActiveCount">0</span>
+            <span class="summary-sub" id="drawerActiveSub">In progress</span>
+          </div>
+          <div class="summary-card success">
+            <span class="summary-label">Completed</span>
+            <span class="summary-value" id="drawerCompletedCount">0</span>
+            <span class="summary-sub">Last 24h</span>
+          </div>
+          <div class="summary-card danger">
+            <span class="summary-label">Failed</span>
+            <span class="summary-value" id="drawerFailedCount">0</span>
+            <span class="summary-sub">Needs review</span>
+          </div>
+        </div>
+
+        <div class="notification-tabs">
+          <button class="notification-tab active" data-tab="all">
+            All <span class="tab-count" id="allCount">0</span>
+          </button>
+          <button class="notification-tab" data-tab="active">
+            Active <span class="tab-count" id="activeCount">0</span>
+          </button>
+          <button class="notification-tab" data-tab="completed">
+            Completed <span class="tab-count" id="completedCount">0</span>
+          </button>
+          <button class="notification-tab" data-tab="failed">
+            Failed <span class="tab-count" id="failedCount">0</span>
+          </button>
+        </div>
+
+        <div class="notification-filters" id="notificationFilters" style="display: none; padding: 12px; background: var(--surface-elevated); border-bottom: 1px solid var(--border-subtle);">
+          <div class="filter-row" style="display: flex; gap: 8px; align-items: center;">
+            <select id="filterActionType" class="filter-select" style="flex: 1; padding: 6px 10px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--surface); color: var(--text-primary); font-size: 13px;">
+              <option value="">All Types</option>
+              <option value="swapbuy">Swap Buy</option>
+              <option value="swapsell">Swap Sell</option>
+              <option value="positionopen">Position Open</option>
+              <option value="positionclose">Position Close</option>
+              <option value="positiondca">Position DCA</option>
+              <option value="positionpartialexit">Partial Exit</option>
+              <option value="manualorder">Manual Order</option>
+            </select>
+            
+            <select id="filterState" class="filter-select" style="flex: 1; padding: 6px 10px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--surface); color: var(--text-primary); font-size: 13px;">
+              <option value="">All States</option>
+              <option value="in_progress">In Progress</option>
+              <option value="completed">Completed</option>
+              <option value="failed">Failed</option>
+              <option value="cancelled">Cancelled</option>
+            </select>
+            
+            <button id="clearFiltersBtn" class="filter-clear-btn" style="padding: 6px 12px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--surface); color: var(--text-secondary); font-size: 13px; cursor: pointer;">Clear</button>
+          </div>
+        </div>
+
+        <div class="notification-list" id="notificationList">
+          <div class="notification-empty">
+            <span>📭</span>
+            <p>No notifications</p>
+          </div>
+        </div>
+
+        <div class="notification-pagination" id="notificationPagination" style="display: none; padding: 12px; background: var(--surface-elevated); border-top: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; gap: 12px;">
+          <button id="prevPageBtn" class="pagination-btn" disabled style="padding: 6px 14px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--surface); color: var(--text-primary); font-size: 13px; cursor: pointer;">← Previous</button>
+          <span class="pagination-info" id="paginationInfo" style="font-size: 13px; color: var(--text-secondary);">Page 1</span>
+          <button id="nextPageBtn" class="pagination-btn" disabled style="padding: 6px 14px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--surface); color: var(--text-primary); font-size: 13px; cursor: pointer;">Next →</button>
+        </div>
+
+        <footer class="notification-panel-footer">
+          <div class="notification-footer-meta">
+            <span id="notificationFooterActive">0 live</span>
+            <span>Auto-dismiss after completion</span>
+          </div>
+          <button
+            id="notificationOpenHistory"
+            type="button"
+            class="panel-secondary-btn"
+          >
+            View full activity
+          </button>
+        </footer>
+      </section>
+    </div>
 
     <!-- Sub-tabs container (populated dynamically per page) -->
     <div id="subTabsContainer" class="sub-tabs-container" style="display: none">

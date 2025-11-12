@@ -11,6 +11,7 @@ const LAYOUT_STYLES: &str = include_str!("templates/styles/layout.css");
 const COMPONENT_STYLES: &str = include_str!("templates/styles/components.css");
 const DROPDOWN_STYLES: &str = include_str!("templates/styles/dropdown.css");
 const COMMON_STYLES: &str = include_str!("templates/styles/common.css");
+const NOTIFICATION_STYLES: &str = include_str!("templates/styles/components/notifications.css");
 const SERVICES_PAGE_STYLES: &str = include_str!("templates/styles/pages/services.css");
 const TRANSACTIONS_PAGE_STYLES: &str = include_str!("templates/styles/pages/transactions.css");
 const EVENTS_PAGE_STYLES: &str = include_str!("templates/styles/pages/events.css");
@@ -40,6 +41,7 @@ pub const CORE_DOM: &str = include_str!("templates/scripts/core/dom.js");
 pub const CORE_UTILS: &str = include_str!("templates/scripts/core/utils.js");
 pub const CORE_ROUTER: &str = include_str!("templates/scripts/core/router.js");
 pub const CORE_HEADER: &str = include_str!("templates/scripts/core/header.js");
+pub const CORE_NOTIFICATIONS: &str = include_str!("templates/scripts/core/notifications.js");
 
 const THEME_SCRIPTS: &str = include_str!("templates/scripts/theme.js");
 
@@ -54,6 +56,7 @@ pub const TABLE_SETTINGS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/table_settings_dialog.js");
 pub const TOKEN_DETAILS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/token_details_dialog.js");
+pub const NOTIFICATION_PANEL_UI: &str = include_str!("templates/scripts/ui/notification_panel.js");
 
 pub const SERVICES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/services.js");
 pub const TRANSACTIONS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/transactions.js");
@@ -93,6 +96,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         COMPONENT_STYLES,
         DROPDOWN_STYLES,
         COMMON_STYLES,
+        NOTIFICATION_STYLES,
         DATA_TABLE_STYLES,
         TABLE_TOOLBAR_STYLES,
         EVENTS_DIALOG_STYLES,

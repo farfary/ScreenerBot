@@ -3,6 +3,7 @@
 .config-page {
   --config-sidebar-width: clamp(220px, 24vw, 320px);
   --config-field-control-width: clamp(240px, 32vw, 420px);
+
   display: grid;
   grid-template-columns: var(--config-sidebar-width) minmax(0, 1fr);
   gap: 16px;
@@ -513,7 +514,7 @@
 }
 
 .config-category-body
-  .config-field:nth-child(even):not(.config-field--changed):not(.config-field--match):not(.config-field--error) {
+  .config-field:nth-child(even):not(.config-field--changed, .config-field--match, .config-field--error) {
   background: rgb(15 23 42 / 0.24);
 }
 
@@ -806,6 +807,7 @@
   .config-page {
     --config-sidebar-width: clamp(208px, 30vw, 276px);
     --config-field-control-width: clamp(230px, 42vw, 360px);
+
     padding: 6px;
   }
 }

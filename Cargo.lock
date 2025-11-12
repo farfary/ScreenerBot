@@ -5646,6 +5646,7 @@ name = "screenerbot"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-stream",
  "async-trait",
  "axum 0.7.9",
  "axum-macros",
@@ -5692,6 +5693,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tokio-metrics",
+ "tokio-stream",
  "tokio-tungstenite 0.21.0",
  "toml 0.8.23",
  "tower 0.4.13",
@@ -5700,6 +5702,7 @@ dependencies = [
  "tracing-subscriber",
  "unicode-width 0.1.14",
  "url",
+ "uuid",
 ]
 
 [[package]]

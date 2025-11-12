@@ -130,10 +130,7 @@ fn wait_for_dashboard_and_show_window(app_handle: tauri::AppHandle) {
     }
 
     // Get the window and navigate it to ensure fresh content
-    logger::info(
-        LogTag::System,
-        "🔍 Looking for main window to show...",
-    );
+    logger::info(LogTag::System, "🔍 Looking for main window to show...");
 
     match app_handle.get_webview_window("main") {
         Some(window) => {
@@ -150,7 +147,10 @@ fn wait_for_dashboard_and_show_window(app_handle: tauri::AppHandle) {
             let webview_windows = app_handle.webview_windows();
             logger::info(
                 LogTag::System,
-                &format!("Available windows: {:?}", webview_windows.keys().collect::<Vec<_>>()),
+                &format!(
+                    "Available windows: {:?}",
+                    webview_windows.keys().collect::<Vec<_>>()
+                ),
             );
 
             if let Some((label, window)) = webview_windows.iter().next() {
@@ -170,7 +170,10 @@ fn wait_for_dashboard_and_show_window(app_handle: tauri::AppHandle) {
 fn navigate_and_show_window(window: tauri::WebviewWindow) {
     logger::info(
         LogTag::System,
-        &format!("🔄 Navigating window '{}' to dashboard URL...", window.label()),
+        &format!(
+            "🔄 Navigating window '{}' to dashboard URL...",
+            window.label()
+        ),
     );
 
     // Use Tauri's native navigation instead of JavaScript reload
@@ -194,7 +197,7 @@ fn navigate_and_show_window(window: tauri::WebviewWindow) {
     match window.show() {
         Ok(_) => {
             logger::info(LogTag::System, "✅ GUI window shown with dashboard loaded");
-            
+
             // Also try to focus/raise the window
             if let Err(e) = window.set_focus() {
                 logger::warning(

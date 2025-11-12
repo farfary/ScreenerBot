@@ -191,18 +191,30 @@ pub async fn run_bot() -> Result<(), String> {
 
         logger::info(LogTag::System, "Strategy system initialized successfully");
 
-        // 8. Create service manager
+        // 8. Initialize actions database
+        crate::actions::init_database()
+            .await
+            .map_err(|e| format!("Failed to initialize actions database: {}", e))?;
+
+        logger::info(LogTag::System, "Actions database initialized successfully");
+
+        // Sync recent incomplete actions from database to memory
+        crate::actions::sync_from_db()
+            .await
+            .map_err(|e| format!("Failed to sync actions from database: {}", e))?;
+
+        // 9. Create service manager
         let mut service_manager = ServiceManager::new().await?;
 
         logger::info(LogTag::System, "Service manager initialized");
 
-        // 9. Register all services
+        // 10. Register all services
         register_all_services(&mut service_manager);
 
-        // 10. Initialize global ServiceManager for webserver access
+        // 11. Initialize global ServiceManager for webserver access
         crate::services::init_global_service_manager(service_manager).await;
 
-        // 11. Get mutable reference to continue
+        // 12. Get mutable reference to continue
         let manager_ref = crate::services::get_service_manager()
             .await
             .ok_or("Failed to get ServiceManager reference")?;
@@ -212,10 +224,10 @@ pub async fn run_bot() -> Result<(), String> {
             guard.take().ok_or("ServiceManager was already taken")?
         };
 
-        // 12. Start all enabled services
+        // 13. Start all enabled services
         service_manager.start_all().await?;
 
-        // 13. Put it back for webserver access
+        // 14. Put it back for webserver access
         {
             let mut guard = manager_ref.write().await;
             *guard = Some(service_manager);
@@ -227,10 +239,10 @@ pub async fn run_bot() -> Result<(), String> {
         );
     }
 
-    // 14. Wait for shutdown signal
+    // 15. Wait for shutdown signal
     wait_for_shutdown_signal().await?;
 
-    // 15. Stop all services gracefully
+    // 16. Stop all services gracefully
     logger::info(LogTag::System, "🛑 Initiating graceful shutdown...");
 
     let manager_ref = crate::services::get_service_manager()

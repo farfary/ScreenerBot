@@ -3,10 +3,7 @@
 /* Full-screen overlay */
 .init-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   background: linear-gradient(135deg, #0f4c81 0%, #1565c0 50%, #0d324d 100%);
   display: flex;
   align-items: center;
@@ -24,6 +21,7 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -33,7 +31,7 @@
 .init-dialog {
   background: var(--bg-card);
   border-radius: 16px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 20px 60px rgb(0, 0, 0, 0.3);
   max-width: 700px;
   width: 100%;
   max-height: 90vh;
@@ -46,6 +44,7 @@
     transform: translateY(30px);
     opacity: 0;
   }
+
   to {
     transform: translateY(0);
     opacity: 1;
@@ -60,7 +59,7 @@
 }
 
 .init-logo {
-  font-family: 'Orbitron', monospace;
+  font-family: Orbitron, monospace;
   font-size: 2.5rem;
   font-weight: 900;
   margin-bottom: 1rem;
@@ -171,6 +170,7 @@
     opacity: 0;
     transform: translateX(10px);
   }
+
   to {
     opacity: 1;
     transform: translateX(0);
@@ -220,7 +220,7 @@
 .init-input:focus {
   outline: none;
   border-color: #0f4c81;
-  box-shadow: 0 0 0 3px rgba(15, 76, 129, 0.1);
+  box-shadow: 0 0 0 3px rgb(15, 76, 129, 0.1);
 }
 
 .init-input.error {
@@ -270,7 +270,7 @@
 }
 
 [data-theme="dark"] .init-validation.error {
-  background: rgba(239, 68, 68, 0.1);
+  background: rgb(239, 68, 68, 0.1);
   color: #fca5a5;
 }
 
@@ -282,7 +282,7 @@
 }
 
 [data-theme="dark"] .init-validation.success {
-  background: rgba(16, 185, 129, 0.1);
+  background: rgb(16, 185, 129, 0.1);
   color: #6ee7b7;
 }
 
@@ -298,7 +298,7 @@
 }
 
 [data-theme="dark"] .init-warning {
-  background: rgba(245, 158, 11, 0.1);
+  background: rgb(245, 158, 11, 0.1);
   border-color: #d97706;
 }
 
@@ -482,6 +482,7 @@
   from {
     transform: scale(0);
   }
+
   to {
     transform: scale(1);
   }
@@ -565,7 +566,7 @@
 .init-btn-primary:hover:not(:disabled) {
   background: #1565c0;
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(15, 76, 129, 0.3);
+  box-shadow: 0 4px 12px rgb(15, 76, 129, 0.3);
 }
 
 .init-btn-secondary {
@@ -590,7 +591,7 @@
 }
 
 [data-theme="dark"] .init-error {
-  background: rgba(239, 68, 68, 0.1);
+  background: rgb(239, 68, 68, 0.1);
   border-color: #b91c1c;
 }
 
@@ -599,9 +600,11 @@
   100% {
     transform: translateX(0);
   }
+
   25% {
     transform: translateX(-5px);
   }
+
   75% {
     transform: translateX(5px);
   }
@@ -643,7 +646,7 @@
 }
 
 /* Responsive */
-@media (max-width: 640px) {
+@media (width <= 640px) {
   .init-overlay {
     padding: 1rem;
   }

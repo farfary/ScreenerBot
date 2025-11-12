@@ -6,6 +6,7 @@ use axum::{
 };
 use std::sync::Arc;
 
+pub mod actions;
 pub mod blacklist;
 pub mod config;
 pub mod connectivity;
@@ -144,6 +145,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .merge(config::routes())
         .merge(services::routes())
         .merge(ohlcv::ohlcv_routes())
+        .merge(actions::routes())
         .nest("/connectivity", connectivity::routes())
         .nest("/initialization", initialization::routes())
         .nest("/trading", trading::routes())
@@ -199,6 +201,7 @@ async fn get_core_script(axum::extract::Path(file): axum::extract::Path<String>)
         "utils.js" => Some(templates::CORE_UTILS),
         "router.js" => Some(templates::CORE_ROUTER),
         "header.js" => Some(templates::CORE_HEADER),
+        "notifications.js" => Some(templates::CORE_NOTIFICATIONS),
         _ => None,
     };
 
@@ -259,6 +262,7 @@ async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String>) -
         "tab_bar.js" => Some(templates::TAB_BAR_UI),
         "table_settings_dialog.js" => Some(templates::TABLE_SETTINGS_DIALOG_UI),
         "token_details_dialog.js" => Some(templates::TOKEN_DETAILS_DIALOG_UI),
+        "notification_panel.js" => Some(templates::NOTIFICATION_PANEL_UI),
         _ => None,
     };
 

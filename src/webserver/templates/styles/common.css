@@ -17,8 +17,7 @@
 .page-content {
   padding: 10px;
   flex: 1 1 auto;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden auto;
   min-height: 0;
   min-width: 0;
 }

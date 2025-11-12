@@ -383,10 +383,50 @@ pub async fn execute_best_swap(
     input_amount: u64,
     quote: UnifiedQuote,
 ) -> Result<SwapResult, ScreenerBotError> {
+    // Create action for progress tracking
+    let action_id = uuid::Uuid::new_v4().to_string();
+    let action_type = if input_mint == SOL_MINT {
+        crate::actions::ActionType::SwapBuy
+    } else {
+        crate::actions::ActionType::SwapSell
+    };
+
+    let mint = if input_mint == SOL_MINT {
+        output_mint
+    } else {
+        input_mint
+    };
+
+    let action = crate::actions::Action::new(
+        action_id.clone(),
+        action_type,
+        mint.to_string(),
+        vec![
+            "Validating quote".to_string(),
+            "Building transaction".to_string(),
+            "Signing transaction".to_string(),
+            "Submitting to blockchain".to_string(),
+            "Confirming transaction".to_string(),
+        ],
+        serde_json::json!({
+            "symbol": token.symbol,
+            "router": format!("{:?}", quote.router),
+            "input_amount": input_amount,
+            "expected_output": quote.output_amount,
+        }),
+    );
+
+    if let Err(e) = crate::actions::register_action(action).await {
+        logger::error(
+            LogTag::Swap,
+            &format!("Failed to register swap action: {} - continuing anyway", e),
+        );
+    }
+
     logger::info(
         LogTag::Swap,
         &format!(
-            "🚀 Executing swap via {:?}: {} -> {} (amount: {})",
+            "🚀 Executing swap via {:?}: {} -> {} (amount: {}) | Action: {}",
             quote.router,
             if input_mint == SOL_MINT {
                 "SOL"
@@ -398,9 +438,56 @@ pub async fn execute_best_swap(
             } else {
                 &output_mint[..8]
             },
-            input_amount
+            input_amount,
+            &action_id[..8]
         ),
     );
+
+    // Step 1: Validating quote
+    crate::actions::update_step(
+        &action_id,
+        0,
+        crate::actions::StepStatus::InProgress,
+        None,
+        None,
+    )
+    .await;
+    crate::actions::update_step(
+        &action_id,
+        0,
+        crate::actions::StepStatus::Completed,
+        None,
+        None,
+    )
+    .await;
+
+    // Step 1: Validating quote
+    crate::actions::update_step(
+        &action_id,
+        0,
+        crate::actions::StepStatus::InProgress,
+        None,
+        None,
+    )
+    .await;
+    crate::actions::update_step(
+        &action_id,
+        0,
+        crate::actions::StepStatus::Completed,
+        None,
+        None,
+    )
+    .await;
+
+    // Step 2: Building transaction (starts in router execution)
+    crate::actions::update_step(
+        &action_id,
+        1,
+        crate::actions::StepStatus::InProgress,
+        None,
+        None,
+    )
+    .await;
 
     // Try primary router first
     let primary_result = match quote.execution_data {
@@ -414,20 +501,99 @@ pub async fn execute_best_swap(
             )
             .await
             {
-                Ok(result) => Ok(SwapResult {
-                    success: result.success,
-                    router_used: Some(RouterType::GMGN),
-                    transaction_signature: result.transaction_signature,
-                    input_amount: result.input_amount,
-                    output_amount: result.output_amount,
-                    price_impact: result.price_impact,
-                    fee_lamports: result.fee_lamports,
-                    execution_time: result.execution_time,
-                    effective_price: result.effective_price,
-                    swap_data: result.swap_data,
-                    error: result.error,
-                }),
-                Err(e) => Err(e),
+                Ok(result) => {
+                    crate::actions::update_step(
+                        &action_id,
+                        1,
+                        crate::actions::StepStatus::Completed,
+                        None,
+                        None,
+                    )
+                    .await;
+                    crate::actions::update_step(
+                        &action_id,
+                        2,
+                        crate::actions::StepStatus::Completed,
+                        None,
+                        None,
+                    )
+                    .await;
+                    crate::actions::update_step(
+                        &action_id,
+                        3,
+                        crate::actions::StepStatus::Completed,
+                        None,
+                        None,
+                    )
+                    .await;
+                    crate::actions::update_step(
+                        &action_id,
+                        4,
+                        crate::actions::StepStatus::InProgress,
+                        None,
+                        None,
+                    )
+                    .await;
+
+                    let swap_result = SwapResult {
+                        success: result.success,
+                        router_used: Some(RouterType::GMGN),
+                        transaction_signature: result.transaction_signature.clone(),
+                        input_amount: result.input_amount,
+                        output_amount: result.output_amount,
+                        price_impact: result.price_impact,
+                        fee_lamports: result.fee_lamports,
+                        execution_time: result.execution_time,
+                        effective_price: result.effective_price,
+                        swap_data: result.swap_data,
+                        error: result.error,
+                    };
+
+                    if result.success {
+                        crate::actions::update_step(
+                            &action_id,
+                            4,
+                            crate::actions::StepStatus::Completed,
+                            None,
+                            Some(serde_json::json!({"tx": result.transaction_signature})),
+                        )
+                        .await;
+                        crate::actions::complete_action_success(&action_id).await;
+                    } else {
+                        crate::actions::update_step(
+                            &action_id,
+                            4,
+                            crate::actions::StepStatus::Failed,
+                            result
+                                .transaction_signature
+                                .clone()
+                                .map(|s| format!("Confirmation failed: TX {}", s)),
+                            None,
+                        )
+                        .await;
+                        crate::actions::complete_action_failed(
+                            &action_id,
+                            swap_result
+                                .error
+                                .clone()
+                                .unwrap_or_else(|| "Unknown error".to_string()),
+                        )
+                        .await;
+                    }
+
+                    Ok(swap_result)
+                }
+                Err(e) => {
+                    crate::actions::update_step(
+                        &action_id,
+                        1,
+                        crate::actions::StepStatus::Failed,
+                        Some(e.to_string()),
+                        None,
+                    )
+                    .await;
+                    Err(e)
+                }
             }
         }
         QuoteExecutionData::Jupiter(ref jupiter_data) => {
@@ -439,20 +605,99 @@ pub async fn execute_best_swap(
             )
             .await
             {
-                Ok(result) => Ok(SwapResult {
-                    success: result.success,
-                    router_used: Some(RouterType::Jupiter),
-                    transaction_signature: result.transaction_signature,
-                    input_amount: result.input_amount,
-                    output_amount: result.output_amount,
-                    price_impact: result.price_impact,
-                    fee_lamports: result.fee_lamports,
-                    execution_time: result.execution_time,
-                    effective_price: result.effective_price,
-                    swap_data: result.swap_data,
-                    error: result.error,
-                }),
-                Err(e) => Err(e),
+                Ok(result) => {
+                    crate::actions::update_step(
+                        &action_id,
+                        1,
+                        crate::actions::StepStatus::Completed,
+                        None,
+                        None,
+                    )
+                    .await;
+                    crate::actions::update_step(
+                        &action_id,
+                        2,
+                        crate::actions::StepStatus::Completed,
+                        None,
+                        None,
+                    )
+                    .await;
+                    crate::actions::update_step(
+                        &action_id,
+                        3,
+                        crate::actions::StepStatus::Completed,
+                        None,
+                        None,
+                    )
+                    .await;
+                    crate::actions::update_step(
+                        &action_id,
+                        4,
+                        crate::actions::StepStatus::InProgress,
+                        None,
+                        None,
+                    )
+                    .await;
+
+                    let swap_result = SwapResult {
+                        success: result.success,
+                        router_used: Some(RouterType::Jupiter),
+                        transaction_signature: result.transaction_signature.clone(),
+                        input_amount: result.input_amount,
+                        output_amount: result.output_amount,
+                        price_impact: result.price_impact,
+                        fee_lamports: result.fee_lamports,
+                        execution_time: result.execution_time,
+                        effective_price: result.effective_price,
+                        swap_data: result.swap_data,
+                        error: result.error,
+                    };
+
+                    if result.success {
+                        crate::actions::update_step(
+                            &action_id,
+                            4,
+                            crate::actions::StepStatus::Completed,
+                            None,
+                            Some(serde_json::json!({"tx": result.transaction_signature})),
+                        )
+                        .await;
+                        crate::actions::complete_action_success(&action_id).await;
+                    } else {
+                        crate::actions::update_step(
+                            &action_id,
+                            4,
+                            crate::actions::StepStatus::Failed,
+                            result
+                                .transaction_signature
+                                .clone()
+                                .map(|s| format!("Confirmation failed: TX {}", s)),
+                            None,
+                        )
+                        .await;
+                        crate::actions::complete_action_failed(
+                            &action_id,
+                            swap_result
+                                .error
+                                .clone()
+                                .unwrap_or_else(|| "Unknown error".to_string()),
+                        )
+                        .await;
+                    }
+
+                    Ok(swap_result)
+                }
+                Err(e) => {
+                    crate::actions::update_step(
+                        &action_id,
+                        1,
+                        crate::actions::StepStatus::Failed,
+                        Some(e.to_string()),
+                        None,
+                    )
+                    .await;
+                    Err(e)
+                }
             }
         }
     };
@@ -466,6 +711,9 @@ pub async fn execute_best_swap(
                 quote.router, primary_error
             ),
         );
+
+        // Mark action as failed for now (will update if fallback succeeds)
+        crate::actions::complete_action_failed(&action_id, primary_error.to_string()).await;
 
         // Only try fallback for certain error types (propagation failures, transaction errors)
         let should_fallback = match primary_error {

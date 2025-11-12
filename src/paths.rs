@@ -162,6 +162,11 @@ pub fn get_ohlcvs_db_path() -> PathBuf {
     get_data_directory().join("ohlcvs.db")
 }
 
+/// Returns the actions database path
+pub fn get_actions_db_path() -> PathBuf {
+    get_data_directory().join("actions.db")
+}
+
 // =============================================================================
 // CACHE AND DATA FILE PATHS
 // =============================================================================

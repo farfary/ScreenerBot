@@ -6,6 +6,8 @@ import {
 } from "./poller.js";
 import * as Utils from "./utils.js";
 import { Dropdown } from "../ui/dropdown.js";
+import { notificationManager } from "./notifications.js";
+import * as NotificationPanel from "../ui/notification_panel.js";
 
 const MIN_STATUS_POLL_INTERVAL = 5000;
 
@@ -24,8 +26,6 @@ let currentController = null;
 let powerDropdown = null;
 let refreshDropdown = null;
 let traderDropdown = null;
-let notificationCount = 0;
-let connectionCheckInterval = null;
 
 function getElements() {
   return {
@@ -37,6 +37,7 @@ function getElements() {
     badgeText: document.getElementById("botStatusText"),
     connectionStatus: document.getElementById("connectionStatus"),
     connectionIcon: document.getElementById("connectionIcon"),
+    notificationBadge: document.getElementById("notificationBadge"),
   };
 }
 
@@ -338,6 +339,9 @@ function initTraderControls() {
   // Initialize notifications
   initNotifications();
 
+  // Initialize notification panel UI
+  NotificationPanel.init();
+
   fetchTraderStatus({ silent: true, showLoading: true }).finally(() => {
     startStatusPolling();
   });
@@ -459,25 +463,74 @@ function initTraderDropdown() {
   // Will add: Start, Stop, Restart, View Logs options
 }
 
+let notificationsInitialized = false;
+
 function initNotifications() {
+  if (notificationsInitialized) {
+    console.warn("[Header] Notifications already initialized, skipping");
+    return;
+  }
+
   const notifBtn = document.getElementById("notificationBtn");
 
   if (!notifBtn) return;
 
-  notifBtn.addEventListener("click", () => {
-    // Placeholder - will show notifications panel in future
-    Utils.showToast("📬 Notifications panel coming soon", "info");
+  // Subscribe to notification updates
+  notificationManager.subscribe((event) => {
+    if (event.type === "summary" && event.summary) {
+      updateNotificationBadge(event.summary.unread);
+    }
+
+    // Show toast for new notifications
+    if (event.type === "added" && event.notification) {
+      const action = event.notification;
+      const actionType = formatActionType(action.action_type);
+      Utils.showToast(`🔔 ${actionType} started`, "info");
+    } else if (event.type === "updated" && event.notification) {
+      const action = event.notification;
+      const status = notificationManager.getStatus(action);
+      
+      if (status === "completed") {
+        const actionType = formatActionType(action.action_type);
+        Utils.showToast(`✅ ${actionType} completed`, "success");
+      } else if (status === "failed") {
+        const actionType = formatActionType(action.action_type);
+        Utils.showToast(`❌ ${actionType} failed`, "error");
+      }
+    }
   });
 
-  // Update badge count (placeholder)
-  updateNotificationBadge(0);
+  // Initial badge update
+  updateNotificationBadge(notificationManager.getUnreadCount());
+
+  // Toggle drawer on button click
+  notifBtn.addEventListener("click", () => {
+    NotificationPanel.toggle();
+  });
+
+  notificationsInitialized = true;
+}
+
+function formatActionType(actionType) {
+  if (!actionType) return "Action";
+
+  const typeMap = {
+    SwapBuy: "Buy Swap",
+    SwapSell: "Sell Swap",
+    PositionOpen: "Open Position",
+    PositionClose: "Close Position",
+    PositionDca: "DCA",
+    PositionPartialExit: "Partial Exit",
+    ManualOrder: "Manual Order",
+  };
+
+  return typeMap[actionType] || actionType;
 }
 
 function updateNotificationBadge(count) {
   const badge = document.getElementById("notificationBadge");
   if (!badge) return;
 
-  notificationCount = count;
   badge.textContent = count > 99 ? "99+" : count.toString();
   badge.style.display = count > 0 ? "flex" : "none";
 }
