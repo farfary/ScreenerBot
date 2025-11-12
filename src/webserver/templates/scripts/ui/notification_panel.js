@@ -1,7 +1,8 @@
 // Notification drawer UI manager
-/* global confirm */
 import { notificationManager } from "../core/notifications.js";
+import { toastManager } from "../core/toast.js";
 import * as Utils from "../core/utils.js";
+import { ConfirmationDialog } from "./confirmation_dialog.js";
 
 let currentTab = "all";
 let isInitialized = false;
@@ -55,6 +56,9 @@ export function open() {
   drawer.setAttribute("aria-hidden", "false");
   document.body.classList.add("notification-drawer-open");
 
+  // Notify toast manager about drawer state
+  toastManager.onDrawerStateChange(true);
+
   // Mark all as read after short delay
   setTimeout(() => {
     notificationManager.markAllAsRead();
@@ -72,6 +76,9 @@ export function close() {
   drawer.setAttribute("data-state", "closed");
   drawer.setAttribute("aria-hidden", "true");
   document.body.classList.remove("notification-drawer-open");
+
+  // Notify toast manager about drawer state
+  toastManager.onDrawerStateChange(false);
 }
 
 /**
@@ -264,8 +271,16 @@ function setupActions() {
   }
 
   if (clearAllBtn) {
-    clearAllBtn.addEventListener("click", () => {
-      if (confirm("Clear all notifications?")) {
+    clearAllBtn.addEventListener("click", async () => {
+      const { confirmed } = await ConfirmationDialog.show({
+        title: "Clear All Notifications",
+        message: "This will remove all notifications from the panel. This action cannot be undone.",
+        confirmLabel: "Clear All",
+        cancelLabel: "Cancel",
+        variant: "warning",
+      });
+
+      if (confirmed) {
         notificationManager.clearAll();
         Utils.showToast("🗑️ All notifications cleared", "info");
       }
@@ -717,29 +732,23 @@ function attachNotificationListeners() {
 /**
  * Format action type for display
  */
-function formatActionType(actionType) {
-  if (!actionType) return "Action";
+  function formatActionType(actionType) {
+    if (!actionType) return "Action";
 
-  const typeMap = {
-    swap_buy: "Buying",
-    swap_sell: "Selling",
-    position_open: "Opening Position",
-    position_close: "Closing Position",
-    position_dca: "Adding to Position",
-    position_partial_exit: "Partial Exit",
-    manual_order: "Manual Order",
-    // Legacy support (PascalCase)
-    SwapBuy: "Buying",
-    SwapSell: "Selling",
-    PositionOpen: "Opening Position",
-    PositionClose: "Closing Position",
-    PositionDca: "Adding to Position",
-    PositionPartialExit: "Partial Exit",
-    ManualOrder: "Manual Order",
-  };
+    // Backend sends snake_case format via Serde JSON serialization
+    // #[serde(rename_all = "snake_case")] in src/actions/types.rs line 177
+    const typeMap = {
+      swap_buy: "Buying",
+      swap_sell: "Selling",
+      position_open: "Opening Position",
+      position_close: "Closing Position",
+      position_dca: "DCA",
+      position_partial_exit: "Partial Exit",
+      manual_order: "Manual Order",
+    };
 
-  return typeMap[actionType] || actionType;
-}
+    return typeMap[actionType] || actionType;
+  }
 
 /**
  * Format time for display

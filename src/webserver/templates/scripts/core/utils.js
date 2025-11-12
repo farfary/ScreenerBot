@@ -1,6 +1,12 @@
 (function () {
   const global = window;
 
+  // Import toast manager for new toast system
+  let toastManager = null;
+  import("./toast.js").then((module) => {
+    toastManager = module.toastManager;
+  });
+
   function coerceNumber(value) {
     if (value === null || value === undefined || value === "") {
       return Number.NaN;
@@ -471,31 +477,70 @@
     return result;
   }
 
-  function ensureToastContainer() {
-    let container = document.getElementById("toastContainer");
-    if (!container) {
-      container = document.createElement("div");
-      container.id = "toastContainer";
-      container.className = "toast-container";
-      document.body.appendChild(container);
+  /**
+   * Show a toast notification (NEW SYSTEM with backwards compatibility)
+   * 
+   * @param {string|Object} messageOrConfig - Message string (legacy) or config object (new)
+   * @param {string} type - Toast type (legacy, only used if first param is string)
+   * @returns {Object} Toast instance with control methods
+   * 
+   * @example
+   * // Legacy usage (backwards compatible)
+   * showToast("Configuration saved", "success");
+   * showToast("Failed to load data", "error");
+   * 
+   * // New usage (recommended)
+   * showToast({
+   *   type: 'success',
+   *   title: 'Configuration Saved',
+   *   message: 'Your changes have been applied successfully',
+   *   duration: 4000
+   * });
+   * 
+   * // With actions
+   * showToast({
+   *   type: 'action',
+   *   title: 'Unsaved Changes',
+   *   message: 'You have modified the configuration',
+   *   actions: [
+   *     { label: 'Save', callback: () => saveConfig() },
+   *     { label: 'Discard', callback: () => discardChanges(), style: 'secondary' }
+   *   ]
+   * });
+   */
+  function showToast(messageOrConfig, type = "success") {
+    // Wait for toast manager to load
+    if (!toastManager) {
+      console.warn("[Utils] Toast manager not loaded yet, falling back to console");
+      console.log(`[Toast ${type}]`, messageOrConfig);
+      return null;
     }
-    return container;
+
+    // Backwards compatibility: showToast("message", "type")
+    if (typeof messageOrConfig === "string") {
+      // Deprecation warning (only in development)
+      if (typeof console !== "undefined" && console.warn) {
+        console.warn(
+          "[DEPRECATED] showToast(message, type) is deprecated. Use showToast(config) instead.",
+        );
+      }
+      return toastManager.show({
+        type: type,
+        title: messageOrConfig,
+        message: null,
+        duration: type === "error" ? 8000 : type === "warning" ? 6000 : 4000,
+      });
+    }
+
+    // New usage: showToast({ type, title, message, ... })
+    return toastManager.show(messageOrConfig);
   }
 
-  function showToast(message, type = "success") {
-    const container = ensureToastContainer();
-    const toast = document.createElement("div");
-    toast.className = "toast" + (type === "error" ? " error" : type === "info" ? " info" : "");
-    toast.innerHTML = `<div class="toast-message">${message}</div>`;
-    container.appendChild(toast);
-    setTimeout(() => {
-      toast.style.opacity = "0";
-      setTimeout(() => toast.remove(), 300);
-    }, 3000);
-  }
-
+  /**
+   * @deprecated Use showToast() instead
+   */
   function showNotification(message, type = "info") {
-    showToast(message, type);
+    return showToast(message, type);
   }
 
   function copyToClipboard(value) {

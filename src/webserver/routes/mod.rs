@@ -202,6 +202,7 @@ async fn get_core_script(axum::extract::Path(file): axum::extract::Path<String>)
         "router.js" => Some(templates::CORE_ROUTER),
         "header.js" => Some(templates::CORE_HEADER),
         "notifications.js" => Some(templates::CORE_NOTIFICATIONS),
+        "toast.js" => Some(templates::CORE_TOAST),
         _ => None,
     };
 
@@ -257,7 +258,9 @@ async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String>) -
         "data_table.js" => Some(templates::DATA_TABLE_UI),
         "dropdown.js" => Some(templates::DROPDOWN_UI),
         "table_toolbar.js" => Some(templates::TABLE_TOOLBAR_UI),
+        "toast.js" => Some(templates::TOAST_UI),
         "events_dialog.js" => Some(templates::EVENTS_DIALOG_UI),
+        "confirmation_dialog.js" => Some(templates::CONFIRMATION_DIALOG_UI),
         "trade_action_dialog.js" => Some(templates::TRADE_ACTION_DIALOG_UI),
         "tab_bar.js" => Some(templates::TAB_BAR_UI),
         "table_settings_dialog.js" => Some(templates::TABLE_SETTINGS_DIALOG_UI),

@@ -8,6 +8,7 @@ import * as Utils from "./utils.js";
 import { Dropdown } from "../ui/dropdown.js";
 import { notificationManager } from "./notifications.js";
 import * as NotificationPanel from "../ui/notification_panel.js";
+import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 
 const MIN_STATUS_POLL_INTERVAL = 5000;
 
@@ -514,14 +515,16 @@ function initNotifications() {
 function formatActionType(actionType) {
   if (!actionType) return "Action";
 
+  // Backend sends snake_case format via Serde JSON serialization
+  // #[serde(rename_all = "snake_case")] in src/actions/types.rs line 177
   const typeMap = {
-    SwapBuy: "Buy Swap",
-    SwapSell: "Sell Swap",
-    PositionOpen: "Open Position",
-    PositionClose: "Close Position",
-    PositionDca: "DCA",
-    PositionPartialExit: "Partial Exit",
-    ManualOrder: "Manual Order",
+    swap_buy: "Buying",
+    swap_sell: "Selling",
+    position_open: "Opening Position",
+    position_close: "Closing Position",
+    position_dca: "DCA",
+    position_partial_exit: "Partial Exit",
+    manual_order: "Manual Order",
   };
 
   return typeMap[actionType] || actionType;
@@ -553,9 +556,14 @@ async function handlePowerMenuAction(action) {
 }
 
 async function handleRestart() {
-  const confirmed = window.confirm(
-    "Are you sure you want to restart the bot?\n\nThis will:\n• Stop all services\n• Restart the process\n• Take ~10-15 seconds"
-  );
+  const { confirmed } = await ConfirmationDialog.show({
+    title: "Restart Bot",
+    message:
+      "Are you sure you want to restart the bot?\n\nThis will:\n• Stop all services\n• Restart the process\n• Take ~10-15 seconds\n\nAll active operations will be interrupted.",
+    confirmLabel: "Restart",
+    cancelLabel: "Cancel",
+    variant: "warning",
+  });
 
   if (!confirmed) return;
 

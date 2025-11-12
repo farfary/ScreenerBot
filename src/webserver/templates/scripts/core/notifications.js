@@ -1,6 +1,8 @@
 // Real-time notification manager for action progress tracking
 /* global EventSource */
 
+import { toastManager } from "./toast.js";
+
 const AUTO_DISMISS_COMPLETED_MS = 10000; // 10 seconds
 const AUTO_DISMISS_FAILED_MS = 30000; // 30 seconds
 const RECONNECT_DELAY_MS = 3000;
@@ -717,6 +719,55 @@ class NotificationManager {
       console.error(`[NotificationManager] Failed to fetch action ${actionId}:`, error);
       throw error;
     }
+  }
+
+  /**
+   * Show a toast notification (bridge to toast manager)
+   * @param {Object|string} config - Toast configuration or message string
+   * @returns {Object} Toast instance with control methods
+   */
+  showToast(config) {
+    const toast = toastManager.show(config);
+
+    // If persistent, also add to notification panel as frontend-only notification
+    if (typeof config === "object" && config.persistent) {
+      this.addFrontendNotification({
+        id: toast.id,
+        type: "frontend_toast",
+        title: config.title,
+        message: config.message || null,
+        timestamp: new Date().toISOString(),
+        read: false,
+        dismissed: false,
+        metadata: {
+          toastType: config.type,
+          icon: config.icon,
+        },
+      });
+    }
+
+    return toast;
+  }
+
+  /**
+   * Add a frontend-only notification to the panel
+   * @param {Object} notification - Notification data
+   */
+  addFrontendNotification(notification) {
+    this.notifications.set(notification.id, notification);
+    this.notifySubscribers({
+      type: "added",
+      notification,
+    });
+    this.emitSummary();
+  }
+
+  /**
+   * Get persistent toasts from toast manager (for panel integration)
+   * @returns {Array} Array of persistent toast data
+   */
+  getPersistentToasts() {
+    return toastManager.getPersistentToasts();
   }
 }
 

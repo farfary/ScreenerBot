@@ -2,6 +2,7 @@ import { registerPage } from "../core/lifecycle.js";
 import { $, on, off, create, show, hide } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
+import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 
 const CONFIG_STATE_KEY = "config.page";
 const DEFAULT_SECTION = "trader";
@@ -407,7 +408,11 @@ const FIELD_RENDERERS = {
         const lastToastAt = Number(event.target.dataset.arrayInvalidToastTs || 0);
         const now = Date.now();
         if (Number.isNaN(lastToastAt) || now - lastToastAt > 1500) {
-          Utils.showToast(message, "error");
+          Utils.showToast({
+            type: "error",
+            title: "Invalid Array Entry",
+            message: message,
+          });
           event.target.dataset.arrayInvalidToastTs = String(now);
         }
         event.target.setAttribute("title", message);
@@ -459,7 +464,11 @@ const FIELD_RENDERERS = {
         textarea.classList.remove("config-field-error-input");
       } catch (error) {
         textarea.classList.add("config-field-error-input");
-        Utils.showToast(`Invalid JSON: ${error.message}`, "error");
+        Utils.showToast({
+          type: "error",
+          title: "Invalid JSON",
+          message: error.message,
+        });
       }
     });
     return textarea;
@@ -1259,11 +1268,19 @@ async function handleSaveAll() {
       }
     }
 
-    Utils.showToast("Configuration updated", "success");
+    Utils.showToast({
+      type: "success",
+      title: "Configuration Updated",
+      message: "Settings saved successfully",
+    });
     await loadConfig();
   } catch (error) {
     console.error("[Config] Save failed", error);
-    Utils.showToast(error.message || "Failed to save configuration", "error");
+    Utils.showToast({
+      type: "error",
+      title: "Save Failed",
+      message: error.message || "Failed to save configuration",
+    });
   } finally {
     setState({ saving: false });
   }
@@ -1279,11 +1296,19 @@ async function handleReload() {
     if (!response.ok) {
       throw new Error(`Reload failed: HTTP ${response.status}`);
     }
-    Utils.showToast("Config reloaded from disk", "success");
+    Utils.showToast({
+      type: "success",
+      title: "Configuration Reloaded",
+      message: "Settings reloaded from disk successfully",
+    });
     await loadConfig();
   } catch (error) {
     console.error("[Config] Reload failed", error);
-    Utils.showToast(error.message || "Reload failed", "error");
+    Utils.showToast({
+      type: "error",
+      title: "Reload Failed",
+      message: error.message || "Failed to reload configuration",
+    });
   } finally {
     setState({ loading: false });
   }
@@ -1297,16 +1322,33 @@ async function handleDiff() {
     }
     const payload = await response.json();
     const message = payload?.message ?? payload?.error?.message;
-    Utils.showToast(message || "Diff ready", "info");
+    Utils.showToast({
+      type: "info",
+      title: "Configuration Diff",
+      message: message || "Diff calculation complete",
+    });
     console.info("Config diff:", payload);
   } catch (error) {
     console.error("[Config] Diff failed", error);
-    Utils.showToast(error.message || "Diff failed", "error");
+    Utils.showToast({
+      type: "error",
+      title: "Diff Failed",
+      message: error.message || "Failed to calculate diff",
+    });
   }
 }
 
 async function handleResetToDefaults() {
-  if (!window.confirm("Reset full config to embedded defaults?")) {
+  const { confirmed } = await ConfirmationDialog.show({
+    title: "Reset Configuration",
+    message:
+      "This will reset the entire configuration to embedded default values. All current settings will be lost.\n\nThis action cannot be undone.",
+    confirmLabel: "Reset to Defaults",
+    cancelLabel: "Cancel",
+    variant: "danger",
+  });
+
+  if (!confirmed) {
     return;
   }
   try {
@@ -1314,11 +1356,19 @@ async function handleResetToDefaults() {
     if (!response.ok) {
       throw new Error(`Reset failed: HTTP ${response.status}`);
     }
-    Utils.showToast("Config reset to defaults", "warning");
+    Utils.showToast({
+      type: "warning",
+      title: "Configuration Reset",
+      message: "All settings restored to default values",
+    });
     await loadConfig();
   } catch (error) {
     console.error("[Config] Reset failed", error);
-    Utils.showToast(error.message || "Reset failed", "error");
+    Utils.showToast({
+      type: "error",
+      title: "Reset Failed",
+      message: error.message || "Failed to reset configuration",
+    });
   }
 }
 
@@ -1354,7 +1404,11 @@ async function loadConfig() {
     render();
   } catch (error) {
     console.error("[Config] Load failed", error);
-    Utils.showToast(error.message || "Failed to load configuration", "error");
+    Utils.showToast({
+      type: "error",
+      title: "Load Failed",
+      message: error.message || "Failed to load configuration from server",
+    });
   } finally {
     setState({ loading: false });
   }
@@ -1425,7 +1479,11 @@ async function init(ctx) {
       await loadMetadata();
     } catch (error) {
       console.error("[Config] Metadata load failed", error);
-      Utils.showToast(error.message || "Failed to load metadata", "error");
+      Utils.showToast({
+        type: "error",
+        title: "Metadata Load Failed",
+        message: error.message || "Failed to load configuration metadata",
+      });
       return;
     }
   }

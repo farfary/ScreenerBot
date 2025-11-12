@@ -1340,10 +1340,18 @@ async function handleSaveConfig() {
     state.config = JSON.parse(JSON.stringify(state.draft)); // Deep clone
     state.hasChanges = false;
     state.lastSaved = new Date();
-    Utils.showToast("Configuration saved successfully", "success");
+    Utils.showToast({
+      type: "success",
+      title: "Configuration Saved",
+      message: "Filtering settings saved successfully",
+    });
   } catch (error) {
     console.error("Failed to save config:", error);
-    Utils.showToast(`Failed to save: ${error.message}`, "error");
+    Utils.showToast({
+      type: "error",
+      title: "Save Failed",
+      message: error.message || "Failed to save filtering configuration",
+    });
   } finally {
     state.isSaving = false;
     updateActionButtons();
@@ -1357,7 +1365,11 @@ function handleResetConfig() {
   state.draft = JSON.parse(JSON.stringify(state.config)); // Deep clone
   state.hasChanges = false;
   render(); // Need full render to restore original values
-  Utils.showToast("Changes reset", "info");
+  Utils.showToast({
+    type: "info",
+    title: "Changes Reset",
+    message: "Configuration restored to last saved state",
+  });
 }
 
 async function handleRefreshSnapshot() {
@@ -1374,7 +1386,11 @@ async function handleRefreshSnapshot() {
     setTimeout(() => loadStats(), 1000);
   } catch (error) {
     console.error("Failed to refresh snapshot:", error);
-    Utils.showToast(`Failed to refresh: ${error.message}`, "error");
+    Utils.showToast({
+      type: "error",
+      title: "Refresh Failed",
+      message: error.message || "Failed to refresh filtering snapshot",
+    });
   } finally {
     state.isRefreshing = false;
     updateActionButtons();
@@ -1391,7 +1407,11 @@ function handleExportConfig() {
   a.download = `filtering-config-${Date.now()}.json`;
   a.click();
   URL.revokeObjectURL(url);
-  Utils.showToast("Configuration exported", "success");
+  Utils.showToast({
+    type: "success",
+    title: "Configuration Exported",
+    message: "Filtering settings saved to file",
+  });
 }
 
 function handleImportConfig() {
@@ -1409,10 +1429,18 @@ function handleImportConfig() {
       state.draft = deepMerge(current, imported);
       checkForChanges();
       render();
-      Utils.showToast("Configuration imported", "success");
+      Utils.showToast({
+        type: "success",
+        title: "Configuration Imported",
+        message: "Filtering settings loaded from file",
+      });
     } catch (error) {
       console.error("Failed to import config:", error);
-      Utils.showToast(`Failed to import: ${error.message}`, "error");
+      Utils.showToast({
+        type: "error",
+        title: "Import Failed",
+        message: error.message || "Failed to import configuration - invalid file format",
+      });
     }
   });
   input.click();
@@ -1430,7 +1458,11 @@ async function loadConfig() {
     state.hasChanges = false;
   } catch (error) {
     console.error("Failed to load config:", error);
-    Utils.showToast(`Failed to load config: ${error.message}`, "error");
+    Utils.showToast({
+      type: "error",
+      title: "Load Failed",
+      message: error.message || "Failed to load filtering configuration",
+    });
   }
 }
 

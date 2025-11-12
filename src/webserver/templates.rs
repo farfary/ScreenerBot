@@ -12,6 +12,7 @@ const COMPONENT_STYLES: &str = include_str!("templates/styles/components.css");
 const DROPDOWN_STYLES: &str = include_str!("templates/styles/dropdown.css");
 const COMMON_STYLES: &str = include_str!("templates/styles/common.css");
 const NOTIFICATION_STYLES: &str = include_str!("templates/styles/components/notifications.css");
+const TOAST_STYLES: &str = include_str!("templates/styles/components/toast.css");
 const SERVICES_PAGE_STYLES: &str = include_str!("templates/styles/pages/services.css");
 const TRANSACTIONS_PAGE_STYLES: &str = include_str!("templates/styles/pages/transactions.css");
 const EVENTS_PAGE_STYLES: &str = include_str!("templates/styles/pages/events.css");
@@ -32,6 +33,8 @@ const TRADE_ACTION_DIALOG_STYLES: &str =
 const TAB_BAR_STYLES: &str = include_str!("templates/styles/ui/tab_bar.css");
 const TABLE_SETTINGS_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/table_settings_dialog.css");
+const CONFIRMATION_DIALOG_STYLES: &str =
+    include_str!("templates/styles/ui/confirmation_dialog.css");
 const TOKEN_DETAILS_DIALOG_STYLES: &str = include_str!("templates/styles/token_details_dialog.css");
 
 pub const CORE_LIFECYCLE: &str = include_str!("templates/scripts/core/lifecycle.js");
@@ -42,13 +45,17 @@ pub const CORE_UTILS: &str = include_str!("templates/scripts/core/utils.js");
 pub const CORE_ROUTER: &str = include_str!("templates/scripts/core/router.js");
 pub const CORE_HEADER: &str = include_str!("templates/scripts/core/header.js");
 pub const CORE_NOTIFICATIONS: &str = include_str!("templates/scripts/core/notifications.js");
+pub const CORE_TOAST: &str = include_str!("templates/scripts/core/toast.js");
 
 const THEME_SCRIPTS: &str = include_str!("templates/scripts/theme.js");
 
 pub const DATA_TABLE_UI: &str = include_str!("templates/scripts/ui/data_table.js");
 pub const DROPDOWN_UI: &str = include_str!("templates/scripts/ui/dropdown.js");
 pub const TABLE_TOOLBAR_UI: &str = include_str!("templates/scripts/ui/table_toolbar.js");
+pub const TOAST_UI: &str = include_str!("templates/scripts/ui/toast.js");
 pub const EVENTS_DIALOG_UI: &str = include_str!("templates/scripts/ui/events_dialog.js");
+pub const CONFIRMATION_DIALOG_UI: &str =
+    include_str!("templates/scripts/ui/confirmation_dialog.js");
 pub const TRADE_ACTION_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/trade_action_dialog.js");
 pub const TAB_BAR_UI: &str = include_str!("templates/scripts/ui/tab_bar.js");
@@ -97,12 +104,14 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         DROPDOWN_STYLES,
         COMMON_STYLES,
         NOTIFICATION_STYLES,
+        TOAST_STYLES,
         DATA_TABLE_STYLES,
         TABLE_TOOLBAR_STYLES,
         EVENTS_DIALOG_STYLES,
         TRADE_ACTION_DIALOG_STYLES,
         TAB_BAR_STYLES,
         TABLE_SETTINGS_DIALOG_STYLES,
+        CONFIRMATION_DIALOG_STYLES,
         TOKEN_DETAILS_DIALOG_STYLES,
     ];
     if active_tab == "services" {

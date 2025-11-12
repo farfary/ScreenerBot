@@ -3,6 +3,7 @@ import { Poller } from "../core/poller.js";
 import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
+import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 
 // Sub-tabs configuration
 const SUB_TABS = [
@@ -112,7 +113,11 @@ function createLifecycle() {
       updateFormFields();
     } catch (error) {
       console.error("[Trader] Failed to load config:", error);
-      Utils.showToast("Failed to load configuration", "error");
+      Utils.showToast({
+        type: "error",
+        title: "Load Failed",
+        message: "Failed to load trader configuration",
+      });
     }
   }
 
@@ -452,11 +457,19 @@ function createLifecycle() {
         throw new Error(`HTTP ${response.status}`);
       }
 
-      Utils.showToast(`Strategy ${enabled ? "enabled" : "disabled"}`, "success");
+      Utils.showToast({
+        type: "success",
+        title: enabled ? "Strategy Enabled" : "Strategy Disabled",
+        message: enabled ? "Now monitoring for entry signals" : "Entry monitoring stopped",
+      });
       await loadStrategies();
     } catch (error) {
       console.error("[Trader] Failed to update strategy status:", error);
-      Utils.showToast("Failed to update strategy", "error");
+      Utils.showToast({
+        type: "error",
+        title: "Update Failed",
+        message: "Failed to update strategy status",
+      });
       await loadStrategies(); // Reload to reset checkbox
     }
   }
@@ -542,7 +555,16 @@ function createLifecycle() {
     if (resetTrailing) {
       resetTrailing.addEventListener("click", async (e) => {
         e.preventDefault();
-        if (window.confirm("Reset trailing stop to defaults?")) {
+        const { confirmed } = await ConfirmationDialog.show({
+          title: "Reset Trailing Stop",
+          message:
+            "This will reset trailing stop settings to default values:\n• Disabled\n• Activation: 10%\n• Distance: 5%",
+          confirmLabel: "Reset",
+          cancelLabel: "Cancel",
+          variant: "warning",
+        });
+
+        if (confirmed) {
           await saveConfig({
             positions: {
               trailing_stop_enabled: false,
@@ -696,11 +718,19 @@ function createLifecycle() {
         throw new Error(`HTTP ${response.status}`);
       }
 
-      Utils.showToast("Configuration saved", "success");
+      Utils.showToast({
+        type: "success",
+        title: "Configuration Saved",
+        message: "Trader settings updated successfully",
+      });
       await loadConfig(); // Reload to reflect changes
     } catch (error) {
       console.error("[Trader] Failed to save config:", error);
-      Utils.showToast("Failed to save configuration", "error");
+      Utils.showToast({
+        type: "error",
+        title: "Save Failed",
+        message: "Failed to save trader configuration",
+      });
     }
   }
 
@@ -709,7 +739,11 @@ function createLifecycle() {
    */
   function exportConfig() {
     if (!state.config) {
-      Utils.showToast("No configuration loaded", "error");
+      Utils.showToast({
+        type: "error",
+        title: "Export Failed",
+        message: "No configuration loaded",
+      });
       return;
     }
 
@@ -724,7 +758,11 @@ function createLifecycle() {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
 
-    Utils.showToast("Configuration exported", "success");
+    Utils.showToast({
+      type: "success",
+      title: "Configuration Exported",
+      message: "Trader settings saved to file",
+    });
   }
 
   /**
@@ -743,10 +781,18 @@ function createLifecycle() {
         const imported = JSON.parse(text);
 
         await saveConfig({ trader: imported });
-        Utils.showToast("Configuration imported", "success");
+        Utils.showToast({
+          type: "success",
+          title: "Configuration Imported",
+          message: "Trader settings loaded from file",
+        });
       } catch (error) {
         console.error("[Trader] Failed to import config:", error);
-        Utils.showToast("Failed to import configuration", "error");
+        Utils.showToast({
+          type: "error",
+          title: "Import Failed",
+          message: "Failed to import configuration - invalid file format",
+        });
       }
     };
     input.click();

@@ -2,6 +2,7 @@ import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
+import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 
 export function createLifecycle() {
   // State
@@ -360,7 +361,11 @@ export function createLifecycle() {
       renderStrategies();
     } catch (error) {
       console.error("Failed to load strategies:", error);
-      Utils.showToast("Failed to load strategies", "error");
+      Utils.showToast({
+        type: "error",
+        title: "Load Failed",
+        message: "Failed to load strategies from server",
+      });
     }
   }
 
@@ -689,7 +694,12 @@ export function createLifecycle() {
   // Condition Management
   function addCondition(conditionType) {
     const schema = conditionSchemas?.[conditionType];
-    if (!schema) return Utils.showToast("Unknown condition type", "error");
+    if (!schema)
+      return Utils.showToast({
+        type: "error",
+        title: "Unknown Condition",
+        message: "Condition type not found",
+      });
     const params = {};
     Object.entries(schema.parameters || {}).forEach(([k, p]) => {
       params[k] = p.default ?? null;
@@ -703,7 +713,11 @@ export function createLifecycle() {
     });
     renderConditionsList();
     updateRuleTreeFromEditor();
-    Utils.showToast(`Added ${schema.name || conditionType}`, "success");
+    Utils.showToast({
+      type: "success",
+      title: "Condition Added",
+      message: `${schema.name || conditionType} added to strategy`,
+    });
   }
 
   // Removed createDefaultParameters (unused)
@@ -1344,10 +1358,18 @@ export function createLifecycle() {
       }
 
       await loadStrategies();
-      Utils.showToast("Strategy saved successfully", "success");
+      Utils.showToast({
+        type: "success",
+        title: "Strategy Saved",
+        message: `"${currentStrategy.name}" saved successfully`,
+      });
     } catch (error) {
       console.error("Failed to save strategy:", error);
-      Utils.showToast("Failed to save strategy", "error");
+      Utils.showToast({
+        type: "error",
+        title: "Save Failed",
+        message: "Failed to save strategy to database",
+      });
     }
   }
 
@@ -1443,10 +1465,14 @@ export function createLifecycle() {
       return;
     }
 
-    // eslint-disable-next-line no-undef
-    const confirmed = confirm(
-      `Deploy strategy "${currentStrategy.name}"? This will enable it for live trading.`
-    );
+    const { confirmed } = await ConfirmationDialog.show({
+      title: "Deploy Strategy",
+      message: `Deploy strategy "${currentStrategy.name}"? This will enable it for live trading.`,
+      confirmLabel: "Deploy",
+      cancelLabel: "Cancel",
+      variant: "warning",
+    });
+
     if (!confirmed) return;
 
     try {
@@ -1504,8 +1530,14 @@ export function createLifecycle() {
     const strategy = strategies.find((s) => s.id === strategyId);
     if (!strategy) return;
 
-    // eslint-disable-next-line no-undef
-    const confirmed = confirm(`Delete strategy "${strategy.name}"? This action cannot be undone.`);
+    const { confirmed } = await ConfirmationDialog.show({
+      title: "Delete Strategy",
+      message: `Delete strategy "${strategy.name}"? This action cannot be undone.`,
+      confirmLabel: "Delete",
+      cancelLabel: "Cancel",
+      variant: "danger",
+    });
+
     if (!confirmed) return;
 
     try {
@@ -1521,10 +1553,18 @@ export function createLifecycle() {
       }
 
       await loadStrategies();
-      Utils.showToast("Strategy deleted", "success");
+      Utils.showToast({
+        type: "success",
+        title: "Strategy Deleted",
+        message: `"${strategy.name}" removed successfully`,
+      });
     } catch (error) {
       console.error("Failed to delete strategy:", error);
-      Utils.showToast("Failed to delete strategy", "error");
+      Utils.showToast({
+        type: "error",
+        title: "Delete Failed",
+        message: "Failed to delete strategy from database",
+      });
     }
   }
 
