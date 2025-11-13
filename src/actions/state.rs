@@ -80,7 +80,8 @@ pub async fn register_action(action: Action) -> Result<(), String> {
         let db_lock = db_arc.read().await;
         if let Some(db) = db_lock.as_ref() {
             if let Err(e) = db.insert_action(&action).await {
-                let error_msg = format!("Failed to insert action {} into database: {}", action_id, e);
+                let error_msg =
+                    format!("Failed to insert action {} into database: {}", action_id, e);
                 logger::error(LogTag::System, &error_msg);
                 // Return error - don't proceed if DB write fails
                 return Err(error_msg);
@@ -151,7 +152,13 @@ pub async fn update_step(
         let db_lock = db_arc.read().await;
         if let Some(db) = db_lock.as_ref() {
             if let Err(e) = db
-                .update_step(action_id, step_index, status, error.clone(), metadata.clone())
+                .update_step(
+                    action_id,
+                    step_index,
+                    status,
+                    error.clone(),
+                    metadata.clone(),
+                )
                 .await
             {
                 logger::error(
@@ -315,7 +322,10 @@ pub async fn complete_action_failed(action_id: &str, error: String) -> bool {
                 Err(e) => {
                     logger::error(
                         LogTag::System,
-                        &format!("Failed to mark action {} as failed in database: {}", action_id, e),
+                        &format!(
+                            "Failed to mark action {} as failed in database: {}",
+                            action_id, e
+                        ),
                     );
                     false
                 }

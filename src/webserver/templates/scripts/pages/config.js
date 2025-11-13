@@ -8,19 +8,19 @@ const CONFIG_STATE_KEY = "config.page";
 const DEFAULT_SECTION = "trader";
 
 const SECTION_ICONS = {
-  rpc: "🛰️",
-  trader: "💼",
-  positions: "📊",
-  filtering: "🎯",
-  swaps: "🔁",
-  tokens: "🪙",
-  sol_price: "🌞",
-  events: "📡",
-  webserver: "🕸️",
-  services: "🔧",
-  monitoring: "📈",
-  ohlcv: "🕒",
-  summary: "🧾",
+  rpc: "icon-satellite",
+  trader: "icon-briefcase",
+  positions: "icon-bar-chart-2",
+  filtering: "icon-target",
+  swaps: "icon-repeat",
+  tokens: "icon-coins",
+  sol_price: "icon-sun",
+  events: "icon-radio",
+  webserver: "icon-network",
+  services: "icon-tool",
+  monitoring: "icon-trending-up",
+  ohlcv: "icon-clock",
+  summary: "icon-file-text",
 };
 
 const SECTION_LABEL_OVERRIDES = {
@@ -809,7 +809,7 @@ function renderSidebar() {
     const summary = metadata.summary ?? {};
     const label = metadata.label ?? formatSectionLabel(sectionId);
     const sectionPending = countPendingChanges(sectionId);
-    const icon = SECTION_ICONS[sectionId] || "⚙️";
+    const icon = SECTION_ICONS[sectionId] || "icon-settings";
     const button = create("button", {
       type: "button",
       className: "config-section-item" + (state.activeSection === sectionId ? " active" : ""),
@@ -830,7 +830,7 @@ function renderSidebar() {
     const labelEl = create("div", { className: "config-section-label" });
     const metaEl = create("div", { className: "config-section-meta" });
 
-    labelEl.innerHTML = `<span class="icon">${icon}</span><span>${Utils.escapeHtml(label)}</span>`;
+    labelEl.innerHTML = `<i class="${icon}"></i><span>${Utils.escapeHtml(label)}</span>`;
     const totalFields = summary.total ?? Object.keys(metadata.fields || {}).length;
     const metaParts = [`<span class="config-section-count">${totalFields}</span>`];
     if (sectionPending > 0) {
@@ -920,8 +920,9 @@ function renderHeader(sectionId) {
 
   const title = create("div", { className: "config-section-title" });
 
+  const iconClass = SECTION_ICONS[sectionId] || "icon-settings";
   title.innerHTML = `
-    <div class="config-section-icon">${SECTION_ICONS[sectionId] || "⚙️"}</div>
+    <div class="config-section-icon"><i class="${iconClass}"></i></div>
     <div class="config-section-text">
       <h2 class="config-section-name">${Utils.escapeHtml(metadata.label ?? sectionId)}</h2>
       <div class="config-section-summary">${renderSectionSummary(metadata)}</div>

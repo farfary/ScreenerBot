@@ -7,10 +7,10 @@ import { TradeActionDialog } from "../ui/trade_action_dialog.js";
 import { TokenDetailsDialog } from "../ui/token_details_dialog.js";
 
 const SUB_TABS = [
-  { id: "overview", label: "📊 Overview" },
-  { id: "flows", label: "💸 Flows" },
-  { id: "holdings", label: "🪙 Holdings" },
-  { id: "history", label: "📜 History" },
+  { id: "overview", label: '<i class="icon-bar-chart-2"></i> Overview' },
+  { id: "flows", label: '<i class="icon-arrow-right-left"></i> Flows' },
+  { id: "holdings", label: '<i class="icon-coins"></i> Holdings' },
+  { id: "history", label: '<i class="icon-history"></i> History' },
 ];
 
 const WINDOW_OPTIONS = [
@@ -55,15 +55,14 @@ function createLifecycle() {
     const name = row.name || "";
     const logoHtml = logo
       ? `<img class="token-logo" src="${escapeHtml(logo)}" alt="${escapeHtml(symbol)}"/>`
-      : '<span class="token-logo">🪙</span>';
+      : '<i class="token-logo icon-coins"></i>';
     return `<div class="position-token">${logoHtml}<div>
       <div class="token-symbol">${escapeHtml(symbol)}</div>
       <div class="token-name">${escapeHtml(name)}</div>
     </div></div>`;
   };
 
-  const priceCell = (value) =>
-    Utils.formatPriceSol(value, { fallback: "—", decimals: 12 });
+  const priceCell = (value) => Utils.formatPriceSol(value, { fallback: "—", decimals: 12 });
 
   // ============================================================================
   // DATA FETCHING
@@ -186,7 +185,7 @@ function createLifecycle() {
         </div>
 
         <div class="actions-bar">
-          <button class="btn" id="refreshCacheBtn">🔄 Refresh Cache</button>
+          <button class="btn" id="refreshCacheBtn"><i class="icon-refresh-cw"></i> Refresh Cache</button>
         </div>
       </div>
     `;
@@ -214,14 +213,14 @@ function createLifecycle() {
     if (refreshBtn) {
       refreshBtn.addEventListener("click", async () => {
         refreshBtn.disabled = true;
-        refreshBtn.textContent = "⏳ Refreshing...";
+        refreshBtn.innerHTML = '<i class="icon-loader"></i> Refreshing...';
         await refreshDashboardCache(state.window);
         const newData = await fetchDashboardData(state.window);
         if (newData) {
           renderOverview(container, newData);
         }
         refreshBtn.disabled = false;
-        refreshBtn.textContent = "🔄 Refresh Cache";
+        refreshBtn.innerHTML = '<i class="icon-refresh-cw"></i> Refresh Cache';
       });
     }
 
@@ -299,7 +298,8 @@ function createLifecycle() {
 
     const { flows, daily_flows } = data;
 
-    const netClass = flows.net_sol > 0 ? "value-positive" : flows.net_sol < 0 ? "value-negative" : "";
+    const netClass =
+      flows.net_sol > 0 ? "value-positive" : flows.net_sol < 0 ? "value-negative" : "";
 
     container.innerHTML = `
       <div class="wallet-flows">
@@ -543,7 +543,8 @@ function createLifecycle() {
         label: "Updated",
         sortable: true,
         minWidth: 100,
-        render: (v) => (v ? formatTimeAgo(Math.floor((Date.now() - new Date(v).getTime()) / 1000)) : "—"),
+        render: (v) =>
+          v ? formatTimeAgo(Math.floor((Date.now() - new Date(v).getTime()) / 1000)) : "—",
       },
       {
         id: "actions",
@@ -653,7 +654,8 @@ function createLifecycle() {
       const snapshots = state.dashboardData.balance_trend.map((point, idx, arr) => {
         const prev = idx > 0 ? arr[idx - 1] : null;
         const change = prev ? point.sol_balance - prev.sol_balance : 0;
-        const changePercent = prev && prev.sol_balance > 0 ? (change / prev.sol_balance) * 100 : null;
+        const changePercent =
+          prev && prev.sol_balance > 0 ? (change / prev.sol_balance) * 100 : null;
 
         return {
           timestamp: point.timestamp,

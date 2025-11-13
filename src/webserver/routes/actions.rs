@@ -158,7 +158,7 @@ async fn get_action_history(
     let mut filters = crate::actions::ActionFilters::default();
     filters.limit = Some(query.limit);
     filters.offset = Some(query.offset);
-    
+
     // Parse action type
     if let Some(action_type_str) = query.action_type {
         filters.action_type = match action_type_str.to_lowercase().as_str() {
@@ -172,14 +172,14 @@ async fn get_action_history(
             _ => None,
         };
     }
-    
+
     filters.entity_id = query.entity_id;
-    
+
     // Parse state filters
     if let Some(state) = query.state {
         filters.state = Some(vec![state]);
     }
-    
+
     // Parse datetime filters if provided
     if let Some(after) = query.started_after {
         if let Ok(dt) = DateTime::parse_from_rfc3339(&after) {
@@ -194,14 +194,12 @@ async fn get_action_history(
 
     // Fetch from database using helper function
     match crate::actions::query_action_history(filters).await {
-        Ok((actions, total)) => {
-            Json(ActionHistoryResponse {
-                actions,
-                total,
-                limit: query.limit,
-                offset: query.offset,
-            })
-        }
+        Ok((actions, total)) => Json(ActionHistoryResponse {
+            actions,
+            total,
+            limit: query.limit,
+            offset: query.offset,
+        }),
         Err(e) => {
             crate::logger::error(
                 crate::logger::LogTag::System,

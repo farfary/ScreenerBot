@@ -235,7 +235,7 @@ export async function loadPage(pageName) {
 
     loadingEl.innerHTML = `
       <div style="padding: 2rem; text-align: center;">
-        <h2 style="color: #ef4444;">⚠️ Failed to Load Page</h2>
+        <h2 style="color: #ef4444;"><i class="icon-alert-triangle"></i> Failed to Load Page</h2>
         <p style="color: #9ca3af; margin-top: 1rem;">
           ${error.message}
         </p>
@@ -273,14 +273,13 @@ export function initRouter() {
 
   // Detect initial page with priority: URL → server-rendered active tab → stored preference → home
   const pathPage = getPageFromPath();
-  const serverActiveTab = document
-    .querySelector("nav .tab.active")
-    ?.getAttribute("data-page");
+  const serverActiveTab = document.querySelector("nav .tab.active")?.getAttribute("data-page");
   const storedPage = AppState.load("lastTab", null);
   const isStoredPageValid = storedPage
     ? Boolean(document.querySelector(`nav .tab[data-page="${storedPage}"]`))
     : false;
-  const initialPage = pathPage || serverActiveTab || (isStoredPageValid ? storedPage : null) || "home";
+  const initialPage =
+    pathPage || serverActiveTab || (isStoredPageValid ? storedPage : null) || "home";
 
   _state.currentPage = initialPage;
   setActiveTab(initialPage);

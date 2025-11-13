@@ -7,12 +7,12 @@ import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 
 // Sub-tabs configuration
 const SUB_TABS = [
-  { id: "stats", label: "📊 Stats" },
-  { id: "trailing-stop", label: "📈 Trailing Stop" },
-  { id: "roi", label: "🎯 Take Profit" },
-  { id: "time-rules", label: "⏱️ Time Rules" },
-  { id: "strategy-control", label: "🧩 Strategy Control" },
-  { id: "general-settings", label: "⚙️ Settings" },
+  { id: "stats", label: '<i class="icon-bar-chart-2"></i> Stats' },
+  { id: "trailing-stop", label: '<i class="icon-trending-up"></i> Trailing Stop' },
+  { id: "roi", label: '<i class="icon-target"></i> Take Profit' },
+  { id: "time-rules", label: '<i class="icon-timer"></i> Time Rules' },
+  { id: "strategy-control", label: '<i class="icon-puzzle"></i> Strategy Control' },
+  { id: "general-settings", label: '<i class="icon-settings"></i> Settings' },
 ];
 
 // Constants
@@ -322,7 +322,10 @@ function createLifecycle() {
     const estimatedProfit = $("#preview-estimated-profit");
 
     if (trailStatus) {
-      trailStatus.textContent = preview.trail_active ? "✅ ACTIVE" : "⏸️ INACTIVE";
+      const statusIcon = preview.trail_active
+        ? '<i class="icon-check"></i>'
+        : '<i class="icon-pause"></i>';
+      trailStatus.innerHTML = `${statusIcon} ${preview.trail_active ? "ACTIVE" : "INACTIVE"}`;
       trailStatus.className = preview.trail_active ? "status-active" : "status-inactive";
     }
     if (trailPrice) {
@@ -350,10 +353,13 @@ function createLifecycle() {
       preview.what_if_scenarios.forEach((scenario) => {
         const scenarioDiv = document.createElement("div");
         scenarioDiv.className = "what-if-scenario";
+        const statusIcon = scenario.trail_active
+          ? '<i class="icon-check"></i>'
+          : '<i class="icon-pause"></i>';
         scenarioDiv.innerHTML = `
           <div class="scenario-description">${scenario.description}</div>
           <div class="scenario-result">
-            ${scenario.trail_active ? "✅" : "⏸️"} Exit: ${Utils.formatPrice(scenario.exit_price)} 
+            ${statusIcon} Exit: ${Utils.formatPrice(scenario.exit_price)} 
             (${Utils.formatPercent(scenario.exit_profit_pct)} profit)
           </div>
         `;

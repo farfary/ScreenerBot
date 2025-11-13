@@ -134,7 +134,7 @@ function renderSearch(searchConfig = {}, state = {}) {
         autocomplete="off"
         spellcheck="false"
       />
-      <span class="table-toolbar-search__icon" aria-hidden="true">🔍</span>
+      <span class="table-toolbar-search__icon" aria-hidden="true"><i class="icon-search"></i></span>
       <button type="button" class="table-toolbar-search__clear" aria-label="Clear search" hidden>
         ✕
       </button>
@@ -303,7 +303,7 @@ export class TableToolbarView {
             (this.config.settings && this.config.settings.tooltip) || "Table settings"
           )}" aria-label="Table settings">
             <span class="dt-btn-icon">${escapeHtml(
-              (this.config.settings && this.config.settings.icon) || "⚙️"
+              (this.config.settings && this.config.settings.icon) || "icon-settings"
             )}</span>
           </button>
           <div class="dt-column-menu" style="display:none;"></div>

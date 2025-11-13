@@ -14,7 +14,7 @@ import * as Utils from "../core/utils.js";
 
 const ACTION_CONFIG = {
   buy: {
-    title: "🛒 Buy Token",
+    title: "<i class='icon-shopping-cart'></i> Buy Token",
     confirmLabel: "Confirm Buy",
     inputLabel: "Or Custom Amount (SOL):",
     inputHint: "Leave empty for config default",
@@ -25,7 +25,7 @@ const ACTION_CONFIG = {
     ],
   },
   sell: {
-    title: "💰 Sell Position",
+    title: '<i class="icon-dollar-sign"></i> Sell Position',
     confirmLabel: "Confirm Sell",
     inputLabel: "Or Custom Percentage:",
     inputHint: "Enter value between 1-100",
@@ -37,7 +37,7 @@ const ACTION_CONFIG = {
     ],
   },
   add: {
-    title: "➕ Add to Position",
+    title: "<i class='icon-plus-circle'></i> Add to Position",
     confirmLabel: "Confirm Add",
     inputLabel: "Or Custom Amount (SOL):",
     inputHint: "Leave empty for default (50%)",

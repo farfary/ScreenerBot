@@ -61,69 +61,121 @@
       })();
     </script>
 
-    <div class="header">
-      <h1>ScreenerBot</h1>
-      <div class="header-controls">
-        <!-- Trader Control with Status -->
-        <button class="control-btn trader-btn" id="traderToggle" aria-label="Toggle trader">
-          <span id="traderIcon">⏸️</span>
-          <span id="traderText">Stop Trader</span>
-          <span id="botBadge" class="badge loading" title="Bot Status">
-            <span id="botStatusIcon">🤖</span>
-            <span id="botStatusText">LOADING</span>
-          </span>
-        </button>
+    <!-- THREE-ROW HEADER: Main Control + Tabs + Live Ticker -->
+    <header class="modern-header">
+      <!-- Row 1: Main Control Bar -->
+      <div class="header-row header-row-1">
+        <!-- Logo & Brand -->
+        <div class="header-brand" id="headerBrand">
+          <img src="/assets/logo.svg" alt="ScreenerBot" class="brand-logo" />
+          <span class="brand-text">ScreenerBot</span>
+        </div>
 
-        <!-- Notifications -->
-        <div class="notification-trigger">
-          <button
-            class="control-btn notification-btn"
-            id="notificationBtn"
-            aria-label="Notifications"
-          >
-            <span class="notification-icon-wrapper">
-              🔔
-              <span id="notificationBadge" class="notification-badge" style="display: none">0</span>
-            </span>
+        <!-- Bot Status Card -->
+        <div class="header-card bot-card" id="botCard" data-status="loading">
+          <div class="card-content">
+            <div class="card-top">
+              <i class="card-icon icon-bot" id="botIcon"></i>
+              <span class="card-status" id="botStatus">LOADING</span>
+            </div>
+            <div class="card-bottom">
+              <span class="card-value" id="botPnL">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Wallet Card -->
+        <div class="header-card wallet-card" id="walletCard">
+          <div class="card-content">
+            <div class="card-top">
+              <span class="card-label">SOL</span>
+              <span class="card-value" id="walletSol">—</span>
+              <span class="card-change" id="walletChange">—</span>
+            </div>
+            <div class="card-bottom">
+              <span class="card-sub">TKN</span>
+              <span class="card-sub-value" id="walletTokenCount">—</span>
+              <span class="card-sub">Worth</span>
+              <span class="card-sub-value" id="walletTokenWorth">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Positions Card -->
+        <div class="header-card positions-card" id="positionsCard">
+          <div class="card-content">
+            <div class="card-top">
+              <span class="card-label">POS</span>
+              <span class="card-value" id="positionsCount">—</span>
+              <span class="card-change" id="positionsPnL">—</span>
+            </div>
+            <div class="card-bottom">
+              <span class="card-sub">RPC</span>
+              <span class="card-sub-value" id="rpcSuccess">—</span>
+              <span class="card-sub" id="rpcLatency">—</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="header-actions">
+          <!-- Notifications -->
+          <button class="header-action-btn" id="notificationBtn" aria-label="Notifications">
+            <i class="action-icon icon-bell"></i>
+            <span class="action-badge" id="notificationBadge" style="display: none">0</span>
+          </button>
+
+          <!-- Refresh Interval -->
+          <button class="header-action-btn" id="refreshIntervalBtn" aria-label="Refresh interval">
+            <i class="action-icon icon-timer"></i>
+            <span class="action-text" id="refreshIntervalText">5s</span>
+          </button>
+
+          <!-- Theme Toggle -->
+          <button class="header-action-btn" id="themeToggle" aria-label="Toggle theme">
+            <i class="action-icon icon-moon" id="themeIcon"></i>
+          </button>
+
+          <!-- Settings -->
+          <button class="header-action-btn" id="settingsBtn" aria-label="Settings">
+            <i class="action-icon icon-settings"></i>
           </button>
         </div>
+      </div>
 
-        <!-- Refresh Interval -->
-        <button
-          class="control-btn refresh-btn"
-          id="refreshIntervalBtn"
-          aria-label="Refresh interval"
-        >
-          <span>⏱️</span>
-          <span id="refreshIntervalText">5s</span>
-          <span class="dropdown-arrow">▾</span>
-        </button>
+      <!-- Row 2: Navigation Tabs -->
+      <nav class="header-row header-row-2">
+        <div class="nav-tabs" id="navTabs">{{NAV_TABS}}</div>
+      </nav>
 
-        <!-- Theme Toggle -->
-        <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme">
-          <span id="themeIcon">🌙</span>
-          <span id="themeText">Dark</span>
-        </button>
-
-        <!-- Power Menu -->
-        <button class="control-btn power-btn" id="powerMenuBtn" aria-label="Power menu">
-          <span>⚡</span>
-          <span>Power</span>
-          <span class="dropdown-arrow">▾</span>
-        </button>
-
-        <!-- Connection Status -->
-        <div
-          class="connection-status disconnected"
-          id="connectionStatus"
-          title="Backend Connection"
-        >
-          <span id="connectionIcon">🔴</span>
+      <!-- Row 3: Live Metrics Ticker -->
+      <div class="header-row header-row-3">
+        <div class="ticker-container">
+          <div class="ticker-scroll" id="tickerScroll">
+            <div class="ticker-segment" id="tickerMonitoring">
+              <i class="ticker-icon icon-scan"></i>
+              <span class="ticker-text">Monitoring: <strong id="tickerMonitoringCount">—</strong></span>
+            </div>
+            <div class="ticker-segment" id="tickerFiltering">
+              <i class="ticker-icon icon-list-filter"></i>
+              <span class="ticker-text">Passed: <strong id="tickerPassedCount">—</strong> • Rejected: <strong id="tickerRejectedCount">—</strong></span>
+            </div>
+            <div class="ticker-segment" id="tickerPnL">
+              <i class="ticker-icon icon-trending-up"></i>
+              <span class="ticker-text">Today P&L: <strong id="tickerTodayPnL">—</strong></span>
+            </div>
+            <div class="ticker-segment" id="tickerRPC">
+              <i class="ticker-icon icon-zap"></i>
+              <span class="ticker-text">RPC: <strong id="tickerRPCCalls">—</strong>/min • <strong id="tickerRPCSuccess">—</strong>%</span>
+            </div>
+            <div class="ticker-segment" id="tickerServices">
+              <i class="ticker-icon icon-link"></i>
+              <span class="ticker-text" id="tickerServicesText">Services: Loading...</span>
+            </div>
+          </div>
         </div>
       </div>
-    </div>
-
-    <nav class="tabs">{{NAV_TABS}}</nav>
+    </header>
 
     <div
       id="notificationDrawer"
@@ -159,7 +211,7 @@
                 ✓
               </button>
               <button id="clearAllBtn" class="panel-action-btn" title="Clear all">
-                🗑️
+                <i class="icon-trash-2"></i>
               </button>
               <button
                 id="notificationDrawerClose"
@@ -232,7 +284,7 @@
 
         <div class="notification-list" id="notificationList">
           <div class="notification-empty">
-            <span>📭</span>
+            <span><i class="icon-inbox"></i></span>
             <p>No notifications</p>
           </div>
         </div>

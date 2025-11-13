@@ -1,6 +1,6 @@
 use crate::webserver::{state::AppState, templates};
 use axum::{
-    http::{header, StatusCode},
+    http::{header as http_header, StatusCode},
     response::{Html, IntoResponse, Response},
     Router,
 };
@@ -13,6 +13,7 @@ pub mod connectivity;
 pub mod dashboard;
 pub mod events;
 pub mod filtering_api;
+pub mod header;
 pub mod initialization;
 pub mod ohlcv;
 pub mod positions;
@@ -44,6 +45,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/scripts/core/:file", axum::routing::get(get_core_script))
         .route("/scripts/pages/:file", axum::routing::get(get_page_script))
         .route("/scripts/ui/:file", axum::routing::get(get_ui_script))
+        .route("/assets/:file", axum::routing::get(get_asset))
+        .route("/assets/fonts/:file", axum::routing::get(get_font))
         .nest("/api", api_routes())
         .with_state(state)
 }
@@ -146,6 +149,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .merge(services::routes())
         .merge(ohlcv::ohlcv_routes())
         .merge(actions::routes())
+        .merge(header::routes())
         .nest("/connectivity", connectivity::routes())
         .nest("/initialization", initialization::routes())
         .nest("/trading", trading::routes())
@@ -210,7 +214,7 @@ async fn get_core_script(axum::extract::Path(file): axum::extract::Path<String>)
         Some(js) => (
             StatusCode::OK,
             [(
-                header::CONTENT_TYPE,
+                http_header::CONTENT_TYPE,
                 "application/javascript; charset=utf-8",
             )],
             js,
@@ -242,7 +246,7 @@ async fn get_page_script(axum::extract::Path(file): axum::extract::Path<String>)
         Some(js) => (
             StatusCode::OK,
             [(
-                header::CONTENT_TYPE,
+                http_header::CONTENT_TYPE,
                 "application/javascript; charset=utf-8",
             )],
             js,
@@ -273,12 +277,68 @@ async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String>) -
         Some(js) => (
             StatusCode::OK,
             [(
-                header::CONTENT_TYPE,
+                http_header::CONTENT_TYPE,
                 "application/javascript; charset=utf-8",
             )],
             js,
         )
             .into_response(),
         None => (StatusCode::NOT_FOUND, "Script not found").into_response(),
+    }
+}
+
+/// Serve static assets (logos, icons)
+async fn get_asset(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
+    match file.as_str() {
+        "logo.svg" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "image/svg+xml; charset=utf-8")],
+            templates::LOGO_SVG,
+        )
+            .into_response(),
+        "logo.png" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "image/png")],
+            templates::LOGO_PNG,
+        )
+            .into_response(),
+        _ => (StatusCode::NOT_FOUND, "Asset not found").into_response(),
+    }
+}
+
+/// Serve Lucide icon fonts
+async fn get_font(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
+    match file.as_str() {
+        "lucide.woff2" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "font/woff2")],
+            templates::LUCIDE_FONT_WOFF2,
+        )
+            .into_response(),
+        "lucide.woff" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "font/woff")],
+            templates::LUCIDE_FONT_WOFF,
+        )
+            .into_response(),
+        "lucide.ttf" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "font/ttf")],
+            templates::LUCIDE_FONT_TTF,
+        )
+            .into_response(),
+        "lucide.eot" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "application/vnd.ms-fontobject")],
+            templates::LUCIDE_FONT_EOT,
+        )
+            .into_response(),
+        "lucide.svg" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "image/svg+xml; charset=utf-8")],
+            templates::LUCIDE_FONT_SVG,
+        )
+            .into_response(),
+        _ => (StatusCode::NOT_FOUND, "Font not found").into_response(),
     }
 }

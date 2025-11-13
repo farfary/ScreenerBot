@@ -147,7 +147,7 @@ export class TabBar {
             tabindex="${active ? "0" : "-1"}"
             type="button"
           >
-            ${this._escapeHtml(tab.label)}
+            ${tab.label}
           </button>
         `;
       })
@@ -351,7 +351,7 @@ export class TabBar {
             tabindex="${active ? "0" : "-1"}"
             type="button"
           >
-            ${this._escapeHtml(tab.label)}
+            ${tab.label}
           </button>
         `;
       })

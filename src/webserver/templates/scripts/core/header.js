@@ -1,4 +1,4 @@
-// Header controls for global dashboard interactions (trader toggle)
+// Header controls for global dashboard interactions (trader toggle + metrics)
 import {
   Poller,
   getInterval as getGlobalPollingInterval,
@@ -11,6 +11,7 @@ import * as NotificationPanel from "../ui/notification_panel.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 
 const MIN_STATUS_POLL_INTERVAL = 5000;
+const METRICS_POLL_INTERVAL = 5000; // Header metrics update every 5s
 
 const state = {
   enabled: false,
@@ -22,6 +23,7 @@ const state = {
 };
 
 let statusPoller = null;
+let metricsPoller = null;
 let currentStatusPromise = null;
 let currentController = null;
 let powerDropdown = null;
@@ -51,25 +53,25 @@ function updateBadge({ badge, badgeIcon, badgeText }) {
 
   if (state.loading) {
     badge.classList.add("loading");
-    badgeIcon.textContent = "🤖";
+    badgeIcon.className = "icon-bot";
     badgeText.textContent = "LOADING";
     return;
   }
 
   if (!state.available) {
     badge.classList.add("warning");
-    badgeIcon.textContent = "⚠️";
+    badgeIcon.className = "icon-triangle-alert";
     badgeText.textContent = "UNKNOWN";
     return;
   }
 
   if (state.running) {
     badge.classList.add("success");
-    badgeIcon.textContent = "✅";
+    badgeIcon.className = "icon-circle-check";
     badgeText.textContent = "RUNNING";
   } else {
     badge.classList.add("warning");
-    badgeIcon.textContent = "🛑";
+    badgeIcon.className = "icon-circle-pause";
     badgeText.textContent = "STOPPED";
   }
 }
@@ -92,22 +94,22 @@ function updateToggle({ toggle, icon, text }) {
   }
 
   if (state.loading) {
-    icon.textContent = "⏳";
+    icon.innerHTML = '<i class="icon-loader"></i>';
     text.textContent = "Updating...";
     return;
   }
 
   if (!state.available) {
-    icon.textContent = "⚠️";
+    icon.className = "icon-triangle-alert";
     text.textContent = "Status unavailable";
     return;
   }
 
   if (state.running) {
-    icon.textContent = "⏸️";
+    icon.className = "icon-pause";
     text.textContent = "Stop Trader";
   } else {
-    icon.textContent = "▶️";
+    icon.className = "icon-play";
     text.textContent = "Start Trader";
   }
 }
@@ -149,11 +151,11 @@ function updateConnectionStatus(isConnected) {
 
   if (isConnected) {
     elements.connectionStatus.classList.add("connected");
-    elements.connectionIcon.textContent = "🟢";
+    elements.connectionIcon.className = "icon-circle-check";
     elements.connectionStatus.title = "Backend Connected";
   } else {
     elements.connectionStatus.classList.add("disconnected");
-    elements.connectionIcon.textContent = "🔴";
+    elements.connectionIcon.className = "icon-circle-x";
     elements.connectionStatus.title = "Backend Disconnected";
   }
 }
@@ -164,6 +166,210 @@ function setLoading(isLoading) {
   updateToggle(elements);
   updateBadge(elements);
 }
+
+// ============================================================================
+// HEADER METRICS (New Advanced Header Design)
+// ============================================================================
+
+async function fetchHeaderMetrics() {
+  try {
+    const res = await fetch("/api/header/metrics", {
+      method: "GET",
+      headers: { "X-Requested-With": "fetch" },
+      cache: "no-store",
+    });
+
+    if (!res.ok) {
+      console.warn(`[Header] Metrics fetch failed: ${res.status}`);
+      return null;
+    }
+
+    const data = await res.json();
+    updateHeaderMetrics(data);
+    return data;
+  } catch (err) {
+    if (err?.name !== "AbortError") {
+      console.error("[Header] Failed to fetch metrics:", err);
+    }
+    return null;
+  }
+}
+
+function updateHeaderMetrics(metrics) {
+  if (!metrics) return;
+
+  // Update Bot Card
+  updateBotCard(metrics.trader);
+
+  // Update Wallet Card
+  updateWalletCard(metrics.wallet);
+
+  // Update Positions Card
+  updatePositionsCard(metrics.positions, metrics.rpc);
+
+  // Update Ticker
+  updateTicker(metrics);
+}
+
+function updateBotCard(trader) {
+  const card = document.getElementById("botCard");
+  const icon = document.getElementById("botIcon");
+  const status = document.getElementById("botStatus");
+  const pnl = document.getElementById("botPnL");
+
+  if (!card || !status || !pnl) return;
+
+  // Update status
+  const statusText = trader.running ? "RUNNING" : "STOPPED";
+  const statusAttr = trader.running ? "running" : "stopped";
+
+  card.setAttribute("data-status", statusAttr);
+  status.textContent = statusText;
+
+  // Update P&L
+  const pnlText =
+    trader.today_pnl_sol >= 0
+      ? `+${trader.today_pnl_sol.toFixed(3)} SOL`
+      : `${trader.today_pnl_sol.toFixed(3)} SOL`;
+
+  pnl.textContent = pnlText;
+  pnl.className = `card-value ${trader.today_pnl_sol >= 0 ? "positive" : "negative"}`;
+}
+
+function updateWalletCard(wallet) {
+  const sol = document.getElementById("walletSol");
+  const change = document.getElementById("walletChange");
+  const tokenCount = document.getElementById("walletTokenCount");
+  const tokenWorth = document.getElementById("walletTokenWorth");
+
+  if (!sol) return;
+
+  // Update SOL balance
+  sol.textContent = wallet.sol_balance.toFixed(3);
+
+  // Update 24h change
+  if (change) {
+    const changeText =
+      wallet.change_24h_percent >= 0
+        ? `↑${Math.abs(wallet.change_24h_percent).toFixed(1)}%`
+        : `↓${Math.abs(wallet.change_24h_percent).toFixed(1)}%`;
+
+    change.textContent = changeText;
+    change.className = `card-change ${wallet.change_24h_percent >= 0 ? "positive" : "negative"}`;
+  }
+
+  // Update token count
+  if (tokenCount) {
+    tokenCount.textContent = wallet.token_count.toString();
+  }
+
+  // Update token worth
+  if (tokenWorth) {
+    tokenWorth.textContent = `${wallet.tokens_worth_sol.toFixed(2)} SOL`;
+  }
+}
+
+function updatePositionsCard(positions, rpc) {
+  const count = document.getElementById("positionsCount");
+  const pnl = document.getElementById("positionsPnL");
+  const rpcSuccess = document.getElementById("rpcSuccess");
+  const rpcLatency = document.getElementById("rpcLatency");
+
+  if (!count) return;
+
+  // Update positions count
+  count.textContent = positions.open_count.toString();
+
+  // Update unrealized P&L
+  if (pnl) {
+    const pnlText =
+      positions.unrealized_pnl_sol >= 0
+        ? `+${positions.unrealized_pnl_sol.toFixed(3)}`
+        : `${positions.unrealized_pnl_sol.toFixed(3)}`;
+
+    pnl.textContent = pnlText;
+    pnl.className = `card-change ${positions.unrealized_pnl_sol >= 0 ? "positive" : "negative"}`;
+  }
+
+  // Update RPC stats
+  if (rpcSuccess) {
+    rpcSuccess.textContent = `${rpc.success_rate_percent.toFixed(0)}%`;
+  }
+
+  if (rpcLatency) {
+    rpcLatency.textContent = `${rpc.avg_latency_ms}ms`;
+  }
+}
+
+function updateTicker(metrics) {
+  // Update monitoring count
+  const monitoringCount = document.getElementById("tickerMonitoringCount");
+  if (monitoringCount) {
+    monitoringCount.textContent = metrics.filtering.monitoring_count.toString();
+  }
+
+  // Update passed/rejected counts
+  const passedCount = document.getElementById("tickerPassedCount");
+  const rejectedCount = document.getElementById("tickerRejectedCount");
+  if (passedCount) {
+    passedCount.textContent = metrics.filtering.passed_count.toString();
+  }
+  if (rejectedCount) {
+    rejectedCount.textContent = metrics.filtering.rejected_count.toString();
+  }
+
+  // Update today P&L
+  const todayPnL = document.getElementById("tickerTodayPnL");
+  if (todayPnL) {
+    const pnlText =
+      metrics.trader.today_pnl_sol >= 0
+        ? `+${metrics.trader.today_pnl_sol.toFixed(3)} SOL (↑${metrics.trader.today_pnl_percent.toFixed(1)}%)`
+        : `${metrics.trader.today_pnl_sol.toFixed(3)} SOL (↓${Math.abs(metrics.trader.today_pnl_percent).toFixed(1)}%)`;
+
+    todayPnL.textContent = pnlText;
+    todayPnL.style.color = metrics.trader.today_pnl_sol >= 0 ? "#10b981" : "#ef4444";
+  }
+
+  // Update RPC calls
+  const rpcCalls = document.getElementById("tickerRPCCalls");
+  const rpcSuccess = document.getElementById("tickerRPCSuccess");
+  if (rpcCalls) {
+    rpcCalls.textContent = metrics.rpc.calls_per_minute.toFixed(1);
+  }
+  if (rpcSuccess) {
+    rpcSuccess.textContent = metrics.rpc.success_rate_percent.toFixed(0);
+  }
+
+  // Update services status
+  const servicesText = document.getElementById("tickerServicesText");
+  if (servicesText) {
+    if (metrics.system.all_services_healthy) {
+      servicesText.textContent = "Services: All Healthy ✓";
+      servicesText.style.color = "#10b981";
+    } else {
+      const unhealthyCount = metrics.system.unhealthy_services.length;
+      servicesText.innerHTML = `Services: ${unhealthyCount} Issues <i class="icon-alert-triangle"></i>`;
+      servicesText.style.color = metrics.system.critical_degraded ? "#ef4444" : "#fbbf24";
+    }
+  }
+}
+
+function startMetricsPolling() {
+  if (metricsPoller) {
+    metricsPoller.cleanup();
+  }
+
+  metricsPoller = new Poller(() => fetchHeaderMetrics(), {
+    label: "HeaderMetrics",
+    interval: METRICS_POLL_INTERVAL,
+  });
+
+  metricsPoller.start({ silent: true });
+}
+
+// ============================================================================
+// END HEADER METRICS
+// ============================================================================
 
 async function fetchTraderStatus({ silent = false, showLoading = false } = {}) {
   if (state.fetching && currentStatusPromise) {
@@ -208,7 +414,10 @@ async function fetchTraderStatus({ silent = false, showLoading = false } = {}) {
       console.error("[TraderHeader] Failed to fetch status", err);
       setAvailability(false);
       if (!silent) {
-        Utils.showToast("⚠️ Failed to refresh trader status", "warning");
+        Utils.showToast(
+          '<i class="icon-alert-triangle"></i> Failed to refresh trader status',
+          "warning"
+        );
       }
       return null;
     })
@@ -261,10 +470,11 @@ async function controlTrader(action) {
       applyStatus(payload.status);
     }
 
-    Utils.showToast(action === "start" ? "✅ Trader started" : "✅ Trader stopped", "success");
+    const icon = action === "start" ? '<i class="icon-check"></i>' : '<i class="icon-check"></i>';
+    Utils.showToast(`${icon} Trader ${action === "start" ? "started" : "stopped"}`, "success");
   } catch (err) {
     console.error("[TraderHeader] Control action failed", err);
-    Utils.showToast(`❌ ${err.message || "Trader control failed"}`, "error");
+    Utils.showToast(`<i class="icon-x"></i> ${err.message || "Trader control failed"}`, "error");
     setAvailability(false);
   } finally {
     setLoading(false);
@@ -316,17 +526,20 @@ function startStatusPolling() {
 function initTraderControls() {
   const elements = getElements();
   if (!elements.toggle) {
-    return;
+    console.warn("[Header] Toggle element not found, skipping initialization");
+  } else {
+    attachToggleHandler(elements.toggle);
   }
 
   // Initialize connection status as connecting
   if (elements.connectionStatus && elements.connectionIcon) {
     elements.connectionStatus.classList.add("connecting");
-    elements.connectionIcon.textContent = "🟡";
+    elements.connectionIcon.className = "icon-circle-dot";
     elements.connectionStatus.title = "Connecting to Backend...";
   }
 
-  attachToggleHandler(elements.toggle);
+  // Initialize card click handlers
+  initCardHandlers();
 
   // Initialize power menu dropdown
   initPowerMenu();
@@ -343,9 +556,75 @@ function initTraderControls() {
   // Initialize notification panel UI
   NotificationPanel.init();
 
+  // Fetch initial data
   fetchTraderStatus({ silent: true, showLoading: true }).finally(() => {
     startStatusPolling();
   });
+
+  // Start metrics polling for new header
+  fetchHeaderMetrics().finally(() => {
+    startMetricsPolling();
+  });
+}
+
+function initCardHandlers() {
+  // Bot card - toggle trader
+  const botCard = document.getElementById("botCard");
+  if (botCard) {
+    botCard.addEventListener("click", () => {
+      if (!state.available || state.loading) return;
+      const action = state.running ? "stop" : "start";
+      controlTrader(action);
+    });
+    botCard.style.cursor = "pointer";
+  }
+
+  // Wallet card - navigate to wallet page
+  const walletCard = document.getElementById("walletCard");
+  if (walletCard) {
+    walletCard.addEventListener("click", () => {
+      window.location.hash = "#wallet";
+    });
+    walletCard.style.cursor = "pointer";
+  }
+
+  // Positions card - navigate to positions page
+  const positionsCard = document.getElementById("positionsCard");
+  if (positionsCard) {
+    positionsCard.addEventListener("click", () => {
+      window.location.hash = "#positions";
+    });
+    positionsCard.style.cursor = "pointer";
+  }
+
+  // Ticker segments - navigate to relevant pages
+  const tickerMonitoring = document.getElementById("tickerMonitoring");
+  if (tickerMonitoring) {
+    tickerMonitoring.addEventListener("click", () => {
+      window.location.hash = "#tokens";
+    });
+  }
+
+  const tickerFiltering = document.getElementById("tickerFiltering");
+  if (tickerFiltering) {
+    tickerFiltering.addEventListener("click", () => {
+      window.location.hash = "#filtering";
+    });
+  }
+
+  const tickerPnL = document.getElementById("tickerPnL");
+  if (tickerPnL) {
+    tickerPnL.addEventListener("click", () => {
+      window.location.hash = "#positions";
+    });
+  }
+
+  const tickerServices = document.getElementById("tickerServices");
+  if (tickerServices) {
+    tickerServices.addEventListener("click", () => {
+      window.location.hash = "#services";
+    });
+  }
 }
 
 function initPowerMenu() {
@@ -358,12 +637,12 @@ function initPowerMenu() {
     items: [
       {
         id: "restart",
-        icon: "🔄",
+        icon: "<i class='icon-refresh-cw'></i>",
         label: "Restart Bot",
       },
       {
         id: "pause-services",
-        icon: "⏸️",
+        icon: "<i class='icon-pause'></i>",
         label: "Pause Services",
         badge: "Soon",
         disabled: true,
@@ -371,7 +650,7 @@ function initPowerMenu() {
       { divider: true },
       {
         id: "shutdown",
-        icon: "🛑",
+        icon: "<i class='icon-power'></i>",
         label: "Shutdown",
         danger: true,
         disabled: true,
@@ -380,7 +659,7 @@ function initPowerMenu() {
       { divider: true },
       {
         id: "system-info",
-        icon: "ℹ️",
+        icon: "<i class='icon-info'></i>",
         label: "System Info",
         disabled: true,
       },
@@ -435,7 +714,10 @@ function initRefreshInterval() {
       if (selected) {
         setGlobalPollingInterval(selected.ms);
         refreshText.textContent = selected.display;
-        Utils.showToast(`⏱️ Refresh interval: ${selected.display}`, "success");
+        Utils.showToast(
+          `<i class="icon-timer"></i> Refresh interval: ${selected.display}`,
+          "success"
+        );
 
         // Recreate dropdown with updated checkmarks
         if (refreshDropdown) {
@@ -486,17 +768,17 @@ function initNotifications() {
     if (event.type === "added" && event.notification) {
       const action = event.notification;
       const actionType = formatActionType(action.action_type);
-      Utils.showToast(`🔔 ${actionType} started`, "info");
+      Utils.showToast(`<i class="icon-bell"></i> ${actionType} started`, "info");
     } else if (event.type === "updated" && event.notification) {
       const action = event.notification;
       const status = notificationManager.getStatus(action);
-      
+
       if (status === "completed") {
         const actionType = formatActionType(action.action_type);
-        Utils.showToast(`✅ ${actionType} completed`, "success");
+        Utils.showToast(`<i class="icon-check"></i> ${actionType} completed`, "success");
       } else if (status === "failed") {
         const actionType = formatActionType(action.action_type);
-        Utils.showToast(`❌ ${actionType} failed`, "error");
+        Utils.showToast(`<i class="icon-x"></i> ${actionType} failed`, "error");
       }
     }
   });
@@ -544,13 +826,13 @@ async function handlePowerMenuAction(action) {
       await handleRestart();
       break;
     case "pause-services":
-      Utils.showToast("⏸️ Pause Services feature coming soon", "info");
+      Utils.showToast('<i class="icon-pause"></i> Pause Services feature coming soon', "info");
       break;
     case "shutdown":
-      Utils.showToast("🛑 Shutdown feature coming soon", "info");
+      Utils.showToast('<i class="icon-power"></i> Shutdown feature coming soon', "info");
       break;
     case "system-info":
-      Utils.showToast("ℹ️ System Info panel coming soon", "info");
+      Utils.showToast('<i class="icon-info"></i> System Info panel coming soon', "info");
       break;
   }
 }
@@ -568,7 +850,7 @@ async function handleRestart() {
   if (!confirmed) return;
 
   try {
-    Utils.showToast("🔄 Restarting bot...", "info");
+    Utils.showToast('<i class="icon-refresh-cw"></i> Restarting bot...', "info");
 
     const res = await fetch("/api/system/reboot", {
       method: "POST",
@@ -579,7 +861,7 @@ async function handleRestart() {
       throw new Error(`Restart failed: ${res.status}`);
     }
 
-    Utils.showToast("✅ Bot restarting... Please wait.", "success");
+    Utils.showToast('<i class="icon-check"></i> Bot restarting... Please wait.', "success");
 
     // Poll for reconnection
     setTimeout(() => {
@@ -590,20 +872,23 @@ async function handleRestart() {
           const ping = await fetch("/api/trader/status", { cache: "no-store" });
           if (ping.ok) {
             clearInterval(checkConnection);
-            Utils.showToast("✅ Bot restarted successfully!", "success");
+            Utils.showToast('<i class="icon-check"></i> Bot restarted successfully!', "success");
             window.location.reload();
           }
         } catch {
           if (attempts > 30) {
             clearInterval(checkConnection);
-            Utils.showToast("⚠️ Restart taking longer than expected", "warning");
+            Utils.showToast(
+              '<i class="icon-alert-triangle"></i> Restart taking longer than expected',
+              "warning"
+            );
           }
         }
       }, 1000);
     }, 2000);
   } catch (err) {
     console.error("[Header] Restart failed:", err);
-    Utils.showToast(`❌ ${err.message}`, "error");
+    Utils.showToast(`<i class="icon-x"></i> ${err.message}`, "error");
   }
 }
 

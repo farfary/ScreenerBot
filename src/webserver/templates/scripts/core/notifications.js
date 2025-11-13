@@ -59,7 +59,7 @@ class NotificationManager {
       this.syncActiveActions({ reason: isReconnect ? "reconnect" : "initial_connect" }).catch(
         (error) => {
           console.error("[NotificationManager] Active sync on connect failed", error);
-        },
+        }
       );
     };
 
@@ -144,10 +144,7 @@ class NotificationManager {
       case "step_completed":
       case "step_failed":
         if (!action) {
-          console.warn(
-            "[NotificationManager] Missing action payload for step update",
-            update,
-          );
+          console.warn("[NotificationManager] Missing action payload for step update", update);
           break;
         }
         this.updateNotification(action_id, action);
@@ -155,10 +152,7 @@ class NotificationManager {
 
       case "action_completed":
         if (!action) {
-          console.warn(
-            "[NotificationManager] Missing action payload for action_completed",
-            update,
-          );
+          console.warn("[NotificationManager] Missing action payload for action_completed", update);
           break;
         }
         this.completeNotification(action_id, action);
@@ -167,10 +161,7 @@ class NotificationManager {
 
       case "action_failed":
         if (!action) {
-          console.warn(
-            "[NotificationManager] Missing action payload for action_failed",
-            update,
-          );
+          console.warn("[NotificationManager] Missing action payload for action_failed", update);
           break;
         }
         this.failNotification(action_id, action);
@@ -179,10 +170,7 @@ class NotificationManager {
 
       case "action_cancelled":
         if (!action) {
-          console.warn(
-            "[NotificationManager] Missing action payload for action_cancelled",
-            update,
-          );
+          console.warn("[NotificationManager] Missing action payload for action_cancelled", update);
           break;
         }
         this.updateNotification(action_id, action);
@@ -500,8 +488,8 @@ class NotificationManager {
   buildNotificationRecord(action, existing = null, options = {}) {
     const { resetRead = false, resetDismissed = false } = options;
 
-    const read = resetRead ? false : existing?.read ?? false;
-    const dismissed = resetDismissed ? false : existing?.dismissed ?? false;
+    const read = resetRead ? false : (existing?.read ?? false);
+    const dismissed = resetDismissed ? false : (existing?.dismissed ?? false);
 
     const timestamp =
       existing?.timestamp ||
@@ -618,12 +606,7 @@ class NotificationManager {
       return "";
     }
 
-    return (
-      notification.completed_at ||
-      notification.timestamp ||
-      notification.started_at ||
-      ""
-    );
+    return notification.completed_at || notification.timestamp || notification.started_at || "";
   }
 
   /**
@@ -665,7 +648,7 @@ class NotificationManager {
   async fetchHistory(options = {}) {
     try {
       const params = new URLSearchParams();
-      
+
       if (options.limit !== undefined) params.append("limit", options.limit.toString());
       if (options.offset !== undefined) params.append("offset", options.offset.toString());
       if (options.action_type) params.append("action_type", options.action_type);
@@ -681,7 +664,7 @@ class NotificationManager {
         },
         cache: "no-store",
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }
@@ -708,7 +691,7 @@ class NotificationManager {
         },
         cache: "no-store",
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`);
       }

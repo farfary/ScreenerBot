@@ -479,16 +479,16 @@
 
   /**
    * Show a toast notification (NEW SYSTEM with backwards compatibility)
-   * 
+   *
    * @param {string|Object} messageOrConfig - Message string (legacy) or config object (new)
    * @param {string} type - Toast type (legacy, only used if first param is string)
    * @returns {Object} Toast instance with control methods
-   * 
+   *
    * @example
    * // Legacy usage (backwards compatible)
    * showToast("Configuration saved", "success");
    * showToast("Failed to load data", "error");
-   * 
+   *
    * // New usage (recommended)
    * showToast({
    *   type: 'success',
@@ -496,7 +496,7 @@
    *   message: 'Your changes have been applied successfully',
    *   duration: 4000
    * });
-   * 
+   *
    * // With actions
    * showToast({
    *   type: 'action',
@@ -521,7 +521,7 @@
       // Deprecation warning (only in development)
       if (typeof console !== "undefined" && console.warn) {
         console.warn(
-          "[DEPRECATED] showToast(message, type) is deprecated. Use showToast(config) instead.",
+          "[DEPRECATED] showToast(message, type) is deprecated. Use showToast(config) instead."
         );
       }
       return toastManager.show({

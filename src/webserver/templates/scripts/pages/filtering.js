@@ -32,11 +32,11 @@ const state = {
 };
 
 const FILTER_TABS = [
-  { id: "status", label: "📊 Status" },
-  { id: "meta", label: "⚙️ Core" },
-  { id: "dexscreener", label: "📈 DexScreener" },
-  { id: "geckoterminal", label: "🦎 GeckoTerminal" },
-  { id: "rugcheck", label: "🛡️ RugCheck" },
+  { id: "status", label: '<i class="icon-bar-chart-2"></i> Status' },
+  { id: "meta", label: '<i class="icon-settings"></i> Core' },
+  { id: "dexscreener", label: '<i class="icon-trending-up"></i> DexScreener' },
+  { id: "geckoterminal", label: '<i class="icon-trending-up"></i> GeckoTerminal' },
+  { id: "rugcheck", label: '<i class="icon-shield"></i> RugCheck' },
 ];
 
 const TABBAR_STATE_KEY = "filtering.tab";
@@ -1124,7 +1124,7 @@ function renderShell() {
     <div class="filtering-page">
       <div class="filtering-shell">
         <header class="filtering-top">
-          <h1>🎯 Filtering Configuration</h1>
+          <h1><i class="icon-target"></i> Filtering Configuration</h1>
         </header>
         <div id="filtering-info-bar">${renderInfoBar()}</div>
         <div id="filtering-search-bar">${renderSearchBar()}</div>
@@ -1136,11 +1136,11 @@ function renderShell() {
             <span id="filtering-status-message">${Utils.escapeHtml(getStatusMessage())}</span>
           </div>
           <div class="footer-actions">
-            <button class="ghost" id="reset-config-btn">↩️ Reset</button>
-            <button class="ghost" id="refresh-snapshot-btn">🔄 Refresh</button>
-            <button class="ghost" id="export-config-btn">📤 Export</button>
-            <button class="ghost" id="import-config-btn">📥 Import</button>
-            <button class="primary" id="save-config-btn">💾 Save</button>
+            <button class="ghost" id="reset-config-btn"><i class="icon-rotate-ccw"></i> Reset</button>
+            <button class="ghost" id="refresh-snapshot-btn"><i class="icon-refresh-cw"></i> Refresh</button>
+            <button class="ghost" id="export-config-btn"><i class="icon-download"></i> Export</button>
+            <button class="ghost" id="import-config-btn"><i class="icon-upload"></i> Import</button>
+            <button class="primary" id="save-config-btn"><i class="icon-save"></i> Save</button>
           </div>
         </footer>
       </div>

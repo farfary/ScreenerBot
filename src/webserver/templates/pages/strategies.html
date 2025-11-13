@@ -9,15 +9,15 @@
       <!-- Tab Navigation -->
       <div class="sidebar-tabs">
         <button class="tab-btn active" data-tab="strategies">
-          <span class="icon">📋</span>
+          <i class="icon-list"></i>
           Strategies
         </button>
         <button class="tab-btn" data-tab="templates">
-          <span class="icon">📦</span>
+          <i class="icon icon-package"></i>
           Templates
         </button>
         <button class="tab-btn" data-tab="properties">
-          <span class="icon">⚙️</span>
+          <i class="icon icon-settings"></i>
           Properties
         </button>
       </div>
@@ -27,7 +27,7 @@
         <div class="sidebar-section">
           <div class="section-header">
             <h3>My Strategies</h3>
-            <button class="btn-icon" id="refresh-strategies" title="Refresh">🔄</button>
+            <button class="btn-icon" id="refresh-strategies" title="Refresh"><i class="icon-refresh-cw"></i></button>
           </div>
 
           <div class="strategy-filters">
@@ -38,7 +38,7 @@
 
           <div class="strategy-list" id="strategy-list">
             <div class="empty-state">
-              <span class="icon">📝</span>
+              <i class="icon-file-edit"></i>
               <p>No strategies yet</p>
               <small>Create your first strategy</small>
             </div>
@@ -47,11 +47,11 @@
 
         <div class="sidebar-actions">
           <button class="btn primary" id="create-strategy">
-            <span class="icon">➕</span>
+            <span class="icon"><i class="icon-plus"></i></span>
             New Strategy
           </button>
           <button class="btn" id="import-strategy">
-            <span class="icon">📥</span>
+            <i class="icon-download"></i>
             Import
           </button>
         </div>
@@ -82,7 +82,7 @@
 
           <div class="template-list" id="template-list">
             <div class="empty-state">
-              <span class="icon">📦</span>
+              <i class="icon-package"></i>
               <p>Loading templates...</p>
             </div>
           </div>
@@ -98,7 +98,7 @@
 
           <div class="property-editor" id="property-editor">
             <div class="empty-state">
-              <span class="icon">🎯</span>
+              <i class="icon-target"></i>
               <p>No selection</p>
               <small>Select a node or strategy to edit properties</small>
             </div>
@@ -124,15 +124,15 @@
         </select>
       </div>
       <div class="editor-actions">
-        <button class="btn" id="add-condition"><span class="icon">➕</span>Add Condition</button>
-        <button class="btn" id="load-template"><span class="icon">📦</span>Load Template</button>
+        <button class="btn" id="add-condition"><span class="icon"><i class="icon-plus"></i></span>Add Condition</button>
+        <button class="btn" id="load-template"><i class="icon-package"></i>Load Template</button>
       </div>
     </div>
 
     <div class="editor-content">
       <div class="conditions-list" id="conditions-list">
         <div class="empty-state">
-          <span class="icon">🧩</span>
+          <i class="icon-puzzle"></i>
           <p>No conditions yet</p>
           <small>Use "Add Condition" to start building</small>
         </div>
@@ -145,7 +145,7 @@
     <div class="condition-catalog-content">
       <div class="condition-catalog-header">
         <div class="condition-catalog-title">
-          <span class="icon">🧩</span>
+          <i class="icon-puzzle"></i>
           <h3>Add Condition</h3>
         </div>
         <button class="condition-catalog-close" id="close-condition-catalog">✕</button>
@@ -171,15 +171,15 @@
   <footer class="strategy-toolbar">
     <div class="toolbar-section left">
       <button class="btn primary" id="save-strategy">
-        <span class="icon">💾</span>
+        <i class="icon-save"></i>
         Save
       </button>
       <button class="btn" id="save-as-strategy">
-        <span class="icon">📋</span>
+        <i class="icon-copy"></i>
         Save As
       </button>
       <button class="btn" id="duplicate-strategy">
-        <span class="icon">📄</span>
+        <i class="icon-file-plus"></i>
         Duplicate
       </button>
     </div>
@@ -193,15 +193,15 @@
 
     <div class="toolbar-section right">
       <button class="btn" id="validate-strategy">
-        <span class="icon">🔍</span>
+        <i class="icon-search"></i>
         Validate
       </button>
       <button class="btn" id="test-strategy">
-        <span class="icon">🧪</span>
+        <i class="icon-flask-conical"></i>
         Test
       </button>
       <button class="btn success" id="deploy-strategy">
-        <span class="icon">🚀</span>
+        <i class="icon-rocket"></i>
         Deploy
       </button>
     </div>
@@ -212,7 +212,7 @@
     <div class="parameter-editor-content">
       <div class="parameter-editor-header">
         <div class="parameter-editor-title">
-          <span class="icon">⚙️</span>
+          <i class="icon-settings"></i>
           <h3>Edit Parameters</h3>
         </div>
         <button class="parameter-editor-close" id="close-parameter-editor">✕</button>

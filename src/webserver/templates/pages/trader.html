@@ -7,7 +7,7 @@
         <div class="stats-grid">
           <!-- Performance Metrics Row -->
           <div class="stats-section">
-            <h3>📊 Performance Metrics</h3>
+            <h3><i class="icon-bar-chart-2"></i> Performance Metrics</h3>
             <div class="metrics-row">
               <div class="metric-card">
                 <div class="metric-label">Win Rate</div>
@@ -34,7 +34,7 @@
 
           <!-- Exit Reason Breakdown -->
           <div class="stats-section">
-            <h3>📈 Exit Strategy Performance (Last 30 days)</h3>
+            <h3><i class="icon-trending-up"></i> Exit Strategy Performance (Last 30 days)</h3>
             <div id="exit-breakdown" class="exit-breakdown">
               <div class="loading">Loading exit data...</div>
             </div>
@@ -42,7 +42,7 @@
 
           <!-- Current Positions Risk Analysis -->
           <div class="stats-section">
-            <h3>🎯 Active Positions Risk Matrix</h3>
+            <h3><i class="icon-target"></i> Active Positions Risk Matrix</h3>
             <div id="positions-risk" class="positions-risk">
               <div class="info-message">No open positions</div>
             </div>
@@ -50,7 +50,7 @@
 
           <!-- System Health -->
           <div class="stats-section">
-            <h3>🤖 System Health & Activity</h3>
+            <h3><i class="icon-cpu"></i> System Health & Activity</h3>
             <div class="health-grid">
               <div class="health-card">
                 <div class="health-label">Trader Status</div>
@@ -78,10 +78,10 @@
           <!-- Left Column: Configuration -->
           <div class="config-column">
             <div class="config-form">
-              <h3>📈 Trailing Stop Configuration</h3>
+              <h3><i class="icon-trending-up"></i> Trailing Stop Configuration</h3>
 
               <div class="form-section">
-                <h4>⚙️ Basic Settings</h4>
+                <h4><i class="icon-settings"></i> Basic Settings</h4>
                 <div class="form-group">
                   <label for="trailing-enabled">
                     <input type="checkbox" id="trailing-enabled" />
@@ -91,7 +91,7 @@
               </div>
 
               <div class="form-section">
-                <h4>📊 Single Level (Current)</h4>
+                <h4><i class="icon-bar-chart-2"></i> Single Level (Current)</h4>
                 <div class="form-group">
                   <label for="trail-activation">
                     Activation Threshold
@@ -129,13 +129,13 @@
                 </div>
 
                 <div class="example-box">
-                  <strong>💡 Example:</strong> Buy at 0.001 SOL → Peak at 0.0011 SOL (+10%) → Trail
+                  <strong><i class="icon-lightbulb"></i> Example:</strong> Buy at 0.001 SOL → Peak at 0.0011 SOL (+10%) → Trail
                   starts → Exit at 0.001045 SOL (-5% from peak)
                 </div>
               </div>
 
               <div class="form-section disabled">
-                <h4>🎯 Multi-Level (Advanced - Future) <span class="badge warning">UPGRADE</span></h4>
+                <h4><i class="icon-target"></i> Multi-Level (Advanced - Future) <span class="badge warning">UPGRADE</span></h4>
                 <div class="info-message">
                   Multi-level trailing stops require backend changes. Coming in Phase 3.
                 </div>
@@ -151,7 +151,7 @@
           <!-- Right Column: Live Preview (Phase 2) -->
           <div class="preview-column">
             <div class="preview-panel">
-              <h3>📊 Live Preview</h3>
+              <h3><i class="icon-bar-chart-2"></i> Live Preview</h3>
               
               <div class="position-selector">
                 <label for="preview-position-select">Position:</label>
@@ -223,10 +223,10 @@
       <!-- Take Profit (ROI) Tab -->
       <div id="roi-tab" class="trader-tab-content" style="display: none">
         <div class="config-form">
-          <h3>🎯 Take Profit (ROI) Configuration</h3>
+          <h3><i class="icon-target"></i> Take Profit (ROI) Configuration</h3>
 
           <div class="form-section">
-            <h4>⚙️ Basic Settings</h4>
+            <h4><i class="icon-settings"></i> Basic Settings</h4>
             <div class="form-group">
               <label for="roi-enabled">
                 <input type="checkbox" id="roi-enabled" />
@@ -236,7 +236,7 @@
           </div>
 
           <div class="form-section">
-            <h4>🎯 Single Target (Current)</h4>
+            <h4><i class="icon-target"></i> Single Target (Current)</h4>
             <div class="form-group">
               <label for="roi-target">
                 Target Profit
@@ -254,12 +254,12 @@
             </div>
 
             <div class="example-box">
-              <strong>💡</strong> Sell entire position when profit reaches +2%
+              <strong><i class="icon-lightbulb"></i></strong> Sell entire position when profit reaches +2%
             </div>
           </div>
 
           <div class="form-section disabled">
-            <h4>🎯 Ladder Targets (Advanced - Future) <span class="badge warning">UPGRADE</span></h4>
+            <h4><i class="icon-target"></i> Ladder Targets (Advanced - Future) <span class="badge warning">UPGRADE</span></h4>
             <div class="info-message">
               Multi-level profit targets require backend changes. Coming in Phase 3.
             </div>
@@ -275,10 +275,10 @@
       <!-- Time Rules Tab -->
       <div id="time-rules-tab" class="trader-tab-content" style="display: none">
         <div class="config-form">
-          <h3>⏱️ Time-Based Exit Rules</h3>
+          <h3><i class="icon-clock"></i> Time-Based Exit Rules</h3>
 
           <div class="form-section">
-            <h4>⚙️ Basic Time Override (Current)</h4>
+            <h4><i class="icon-settings"></i> Basic Time Override (Current)</h4>
             <div class="form-group">
               <label for="time-max-hold">
                 Max Hold Duration
@@ -317,7 +317,7 @@
             </div>
 
             <div class="example-box">
-              <strong>💡 Example:</strong> After 168h, exit if position is down 40% or more
+              <strong><i class="icon-lightbulb"></i> Example:</strong> After 168h, exit if position is down 40% or more
             </div>
 
             <div class="form-group">
@@ -329,7 +329,7 @@
           </div>
 
           <div class="form-section disabled">
-            <h4>🎯 Escalation Rules (Advanced - Future) <span class="badge warning">UPGRADE</span></h4>
+            <h4><i class="icon-target"></i> Escalation Rules (Advanced - Future) <span class="badge warning">UPGRADE</span></h4>
             <div class="info-message">
               Time-based rule escalation requires backend changes. Coming in Phase 3.
             </div>
@@ -345,30 +345,30 @@
       <!-- Strategy Control Tab -->
       <div id="strategy-control-tab" class="trader-tab-content" style="display: none">
         <div class="config-form">
-          <h3>🧩 Strategy Integration Control</h3>
+          <h3><i class="icon-puzzle"></i> Strategy Integration Control</h3>
 
           <div class="info-box">
-            <strong>💡</strong> Manage which strategies the trader uses for entry/exit decisions.
+            <strong><i class="icon-lightbulb"></i></strong> Manage which strategies the trader uses for entry/exit decisions.
             Create/edit strategies in the
             <a href="#" data-page="strategies" class="link">Strategies tab</a>.
           </div>
 
           <div class="form-section">
-            <h4>🎯 Entry Strategies</h4>
+            <h4><i class="icon-target"></i> Entry Strategies</h4>
             <div id="entry-strategies" class="strategies-list">
               <div class="loading">Loading strategies...</div>
             </div>
           </div>
 
           <div class="form-section">
-            <h4>🚪 Exit Strategies</h4>
+            <h4><i class="icon-log-out"></i> Exit Strategies</h4>
             <div id="exit-strategies" class="strategies-list">
               <div class="loading">Loading strategies...</div>
             </div>
           </div>
 
           <div class="form-section disabled">
-            <h4>⚙️ Strategy Voting Mode (Advanced - Future) <span class="badge warning">UPGRADE</span></h4>
+            <h4><i class="icon-settings"></i> Strategy Voting Mode (Advanced - Future) <span class="badge warning">UPGRADE</span></h4>
             <div class="info-message">
               Strategy voting modes require backend changes. Coming in Phase 3.
             </div>
@@ -384,10 +384,10 @@
       <!-- General Settings Tab -->
       <div id="general-settings-tab" class="trader-tab-content" style="display: none">
         <div class="config-form">
-          <h3>⚙️ General Trader Settings</h3>
+          <h3><i class="icon-settings"></i> General Trader Settings</h3>
 
           <div class="form-section">
-            <h4>🎯 Position Sizing</h4>
+            <h4><i class="icon-target"></i> Position Sizing</h4>
             <div class="form-group">
               <label for="max-positions">
                 Max Open Positions
@@ -429,7 +429,7 @@
           </div>
 
           <div class="form-section">
-            <h4>💰 DCA (Dollar Cost Averaging)</h4>
+            <h4><i class="icon-dollar-sign"></i> DCA (Dollar Cost Averaging)</h4>
             <div class="form-group">
               <label for="dca-enabled">
                 <input type="checkbox" id="dca-enabled" />
@@ -486,13 +486,13 @@
             </div>
 
             <div class="example-box">
-              <strong>💡 Example:</strong> 0.01 SOL initial → DCA #1: 0.005 SOL @ -10% → DCA #2:
+              <strong><i class="icon-lightbulb"></i> Example:</strong> 0.01 SOL initial → DCA #1: 0.005 SOL @ -10% → DCA #2:
               0.005 SOL @ -10% more
             </div>
           </div>
 
           <div class="form-section">
-            <h4>⏱️ Timing & Cooldowns</h4>
+            <h4><i class="icon-clock"></i> Timing & Cooldowns</h4>
             <div class="form-group">
               <label for="close-cooldown">
                 Position Close Cooldown
@@ -537,7 +537,7 @@
           </div>
 
           <div class="form-section">
-            <h4>🧪 Testing & Debug</h4>
+            <h4><i class="icon-flask-conical"></i> Testing & Debug</h4>
             <div class="form-group">
               <label for="dry-run">
                 <input type="checkbox" id="dry-run" />
@@ -547,7 +547,7 @@
             </div>
 
             <div id="dry-run-warning" class="warning-box" style="display: none">
-              ⚠️ <strong>LIVE TRADING MODE:</strong> Real transactions will execute!
+              <i class="icon-alert-triangle"></i> <strong>LIVE TRADING MODE:</strong> Real transactions will execute!
             </div>
           </div>
 

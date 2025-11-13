@@ -12,12 +12,14 @@ function healthRank(status) {
 function getHealthBadge(health) {
   const status = health?.status || "unknown";
   const badges = {
-    healthy: '<span class="badge success">✅ Healthy</span>',
-    starting: '<span class="badge warning">⏳ Starting</span>',
-    degraded: '<span class="badge warning">⚠️ Degraded</span>',
-    unhealthy: '<span class="badge error">❌ Unhealthy</span>',
+    healthy: '<span class="badge success"><i class="icon-check"></i> Healthy</span>',
+    starting: '<span class="badge warning"><i class="icon-loader"></i> Starting</span>',
+    degraded: '<span class="badge warning"><i class="icon-alert-triangle"></i> Degraded</span>',
+    unhealthy: '<span class="badge error"><i class="icon-x"></i> Unhealthy</span>',
   };
-  return badges[status] || `<span class="badge secondary">⏸️ ${status}</span>`;
+  return (
+    badges[status] || `<span class="badge secondary"><i class="icon-pause"></i> ${status}</span>`
+  );
 }
 
 function getActivityBar(metrics) {
@@ -136,7 +138,7 @@ function createLifecycle() {
       }
       console.error("[Services] Failed to fetch:", error);
       if (reason !== "poll") {
-        Utils.showToast("⚠️ Failed to refresh services", "warning");
+        Utils.showToast("Failed to refresh services", "warning");
       }
       throw error;
     }
@@ -331,7 +333,7 @@ function createLifecycle() {
         },
         toolbar: {
           title: {
-            icon: "🔧",
+            icon: "icon-settings",
             text: "Services",
             meta: [{ id: "services-last-update", text: "Last update —" }],
           },

@@ -621,9 +621,9 @@ export class TokenDetailsDialog {
     // Status flags
     const badges = [];
     if (token.verified) badges.push('<span class="badge-success">✓ Verified</span>');
-    if (token.has_open_position) badges.push('<span class="badge-info">📊 Position Open</span>');
-    if (token.blacklisted) badges.push('<span class="badge-danger">🚫 Blacklisted</span>');
-    if (token.has_ohlcv) badges.push('<span class="badge-success">📈 Chart Data</span>');
+    if (token.has_open_position) badges.push('<span class="badge-info"><i class="icon-bar-chart-2"></i> Position Open</span>');
+    if (token.blacklisted) badges.push('<span class="badge-danger"><i class="icon-ban"></i> Blacklisted</span>');
+    if (token.has_ohlcv) badges.push('<span class="badge-success"><i class="icon-trending-up"></i> Chart Data</span>');
     if (badges.length > 0) {
       rows.push(this._buildDataRow("Status", badges.join(" ")));
     }
@@ -845,7 +845,7 @@ export class TokenDetailsDialog {
     }
     if (token.rugged) {
       rows.push(
-        this._buildDataRow("Status", '<span class="badge-danger">⚠️ Flagged as Rugged</span>')
+        this._buildDataRow("Status", '<span class="badge-danger"><i class="icon-alert-triangle"></i> Flagged as Rugged</span>')
       );
     }
     if (token.security_summary) {
@@ -877,7 +877,7 @@ export class TokenDetailsDialog {
         const links = token.websites
           .map(
             (site) =>
-              `<a href="${this._escapeHtml(site.url)}" target="_blank" rel="noopener noreferrer" class="data-link">🌐 ${this._escapeHtml(site.label || "Website")}</a>`
+              `<a href="${this._escapeHtml(site.url)}" target="_blank" rel="noopener noreferrer" class="data-link"><i class="icon-globe"></i> ${this._escapeHtml(site.label || "Website")}</a>`
           )
           .join(" ");
         rows.push(this._buildDataRow("Websites", links));
@@ -964,12 +964,12 @@ export class TokenDetailsDialog {
    */
   _getSocialIcon(platform) {
     const icons = {
-      twitter: "🐦",
-      telegram: "✈️",
-      discord: "💬",
-      website: "🌐",
+      twitter: '<i class="icon-twitter"></i>',
+      telegram: '<i class="icon-send"></i>',
+      discord: '<i class="icon-message-circle"></i>',
+      website: '<i class="icon-globe"></i>',
     };
-    return icons[platform.toLowerCase()] || "🔗";
+    return icons[platform.toLowerCase()] || '<i class="icon-link"></i>';
   }
 
   /**
@@ -1166,7 +1166,7 @@ export class TokenDetailsDialog {
         if (response.status === 404) {
           content.innerHTML = `
             <div class="tab-placeholder">
-              <div class="placeholder-icon">📊</div>
+              <div class="placeholder-icon"><i class="icon-bar-chart-2"></i></div>
               <div>No DexScreener data available for this token</div>
               <div class="placeholder-hint">Data may not be synced yet</div>
             </div>
@@ -1184,7 +1184,7 @@ export class TokenDetailsDialog {
       console.error("Error loading DexScreener data:", error);
       content.innerHTML = `
         <div class="tab-placeholder error">
-          <div class="placeholder-icon">⚠️</div>
+          <div class="placeholder-icon"><i class="icon-alert-triangle"></i></div>
           <div>Failed to load DexScreener data</div>
           <div class="placeholder-hint">${this._escapeHtml(error.message)}</div>
         </div>
@@ -1202,7 +1202,7 @@ export class TokenDetailsDialog {
     // Price Section
     sections.push(`
       <div class="dex-section">
-        <h3 class="dex-section-title">💰 Price Information</h3>
+        <h3 class="dex-section-title"><i class="icon-dollar-sign"></i> Price Information</h3>
         <div class="dex-grid">
           <div class="dex-item">
             <div class="dex-label">USD Price</div>
@@ -1229,7 +1229,7 @@ export class TokenDetailsDialog {
     if (hasChanges) {
       sections.push(`
         <div class="dex-section">
-          <h3 class="dex-section-title">📈 Price Changes</h3>
+          <h3 class="dex-section-title"><i class="icon-trending-up"></i> Price Changes</h3>
           <div class="dex-grid">
             ${
               data.price_change_5m !== null
@@ -1289,7 +1289,7 @@ export class TokenDetailsDialog {
     if (hasMarket) {
       sections.push(`
         <div class="dex-section">
-          <h3 class="dex-section-title">💎 Market Metrics</h3>
+          <h3 class="dex-section-title"><i class="icon-gem"></i> Market Metrics</h3>
           <div class="dex-grid">
             ${
               data.market_cap !== null
@@ -1335,7 +1335,7 @@ export class TokenDetailsDialog {
     if (hasVolume) {
       sections.push(`
         <div class="dex-section">
-          <h3 class="dex-section-title">📊 Volume</h3>
+          <h3 class="dex-section-title"><i class="icon-bar-chart-2"></i> Volume</h3>
           <div class="dex-grid">
             ${
               data.volume_5m !== null
@@ -1391,7 +1391,7 @@ export class TokenDetailsDialog {
     if (hasTxns) {
       sections.push(`
         <div class="dex-section">
-          <h3 class="dex-section-title">🔄 Transactions (Buys / Sells)</h3>
+          <h3 class="dex-section-title"><i class="icon-repeat"></i> Transactions (Buys / Sells)</h3>
           <div class="dex-grid">
             ${
               data.txns_5m !== null
@@ -1455,7 +1455,7 @@ export class TokenDetailsDialog {
     if (hasPool) {
       sections.push(`
         <div class="dex-section">
-          <h3 class="dex-section-title">🏊 Pool Information</h3>
+          <h3 class="dex-section-title"><i class="icon-droplet"></i> Pool Information</h3>
           <div class="dex-grid">
             ${
               data.dex_id
@@ -1507,7 +1507,7 @@ export class TokenDetailsDialog {
     if (hasLinks) {
       sections.push(`
         <div class="dex-section">
-          <h3 class="dex-section-title">🔗 Links & Images</h3>
+          <h3 class="dex-section-title"><i class="icon-link"></i> Links & Images</h3>
           <div class="dex-grid">
             ${
               data.url
@@ -1556,7 +1556,7 @@ export class TokenDetailsDialog {
     sections.push(`
       <div class="dex-footer">
         <div class="dex-timestamp">
-          📅 Data fetched: ${this._formatDate(data.fetched_at)}
+          <i class="icon-calendar"></i> Data fetched: ${this._formatDate(data.fetched_at)}
         </div>
       </div>
     `);

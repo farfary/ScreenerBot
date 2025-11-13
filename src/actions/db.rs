@@ -207,7 +207,8 @@ impl ActionsDatabase {
     pub async fn insert_action(&self, action: &Action) -> Result<(), String> {
         let mut conn = self.get_write_connection()?;
 
-        let wallet_address = get_wallet_address().map_err(|e| format!("Failed to get wallet address: {}", e))?;
+        let wallet_address =
+            get_wallet_address().map_err(|e| format!("Failed to get wallet address: {}", e))?;
         let action_type_str = format!("{:?}", action.action_type).to_lowercase();
         let state_str = match &action.state {
             ActionState::InProgress { .. } => "in_progress",
@@ -222,7 +223,8 @@ impl ActionsDatabase {
         let now = Utc::now().to_rfc3339();
 
         // Use transaction to ensure atomicity of action + steps insertion
-        let tx = conn.transaction()
+        let tx = conn
+            .transaction()
             .map_err(|e| format!("Failed to begin transaction: {}", e))?;
 
         tx.execute(
@@ -289,8 +291,9 @@ impl ActionsDatabase {
                 status_str,
                 step.started_at.map(|dt| dt.to_rfc3339()),
                 step.completed_at.map(|dt| dt.to_rfc3339()),
-                step.completed_at
-                    .and_then(|end| step.started_at.map(|start| (end - start).num_milliseconds())),
+                step.completed_at.and_then(|end| step
+                    .started_at
+                    .map(|start| (end - start).num_milliseconds())),
                 step.error,
                 metadata,
             ],
@@ -327,8 +330,9 @@ impl ActionsDatabase {
                 status_str,
                 step.started_at.map(|dt| dt.to_rfc3339()),
                 step.completed_at.map(|dt| dt.to_rfc3339()),
-                step.completed_at
-                    .and_then(|end| step.started_at.map(|start| (end - start).num_milliseconds())),
+                step.completed_at.and_then(|end| step
+                    .started_at
+                    .map(|start| (end - start).num_milliseconds())),
                 step.error,
                 metadata,
             ],
@@ -393,9 +397,7 @@ impl ActionsDatabase {
         let status_str = format!("{:?}", status).to_lowercase();
         let now = Utc::now().to_rfc3339();
 
-        let metadata_str = metadata
-            .map(|m| serde_json::to_string(&m).ok())
-            .flatten();
+        let metadata_str = metadata.map(|m| serde_json::to_string(&m).ok()).flatten();
 
         // Atomic UPDATE using COALESCE to prevent race conditions
         // - Set started_at if transitioning to InProgress and not already set
@@ -573,8 +575,7 @@ impl ActionsDatabase {
 
         let current_step_index = match &state {
             ActionState::InProgress {
-                current_step_index,
-                ..
+                current_step_index, ..
             } => *current_step_index,
             _ => 0,
         };
@@ -656,7 +657,16 @@ impl ActionsDatabase {
             params.iter().map(|p| p as &dyn rusqlite::ToSql).collect();
 
         // Fetch all actions in one query
-        let actions_data: Vec<(String, String, String, String, String, String, Option<String>, String)> = stmt
+        let actions_data: Vec<(
+            String,
+            String,
+            String,
+            String,
+            String,
+            String,
+            Option<String>,
+            String,
+        )> = stmt
             .query_map(&params_refs[..], |row| {
                 Ok((
                     row.get(0)?, // id
@@ -697,8 +707,10 @@ impl ActionsDatabase {
             .prepare(&steps_query)
             .map_err(|e| format!("Failed to prepare steps query: {}", e))?;
 
-        let action_id_refs: Vec<&dyn rusqlite::ToSql> =
-            action_ids.iter().map(|id| id as &dyn rusqlite::ToSql).collect();
+        let action_id_refs: Vec<&dyn rusqlite::ToSql> = action_ids
+            .iter()
+            .map(|id| id as &dyn rusqlite::ToSql)
+            .collect();
 
         let steps_rows = steps_stmt
             .query_map(&action_id_refs[..], |row| {
@@ -741,12 +753,25 @@ impl ActionsDatabase {
         // Build a map of action_id -> Vec<ActionStep>
         let mut steps_map: HashMap<String, Vec<ActionStep>> = HashMap::new();
         for (action_id, step) in steps_rows {
-            steps_map.entry(action_id).or_insert_with(Vec::new).push(step);
+            steps_map
+                .entry(action_id)
+                .or_insert_with(Vec::new)
+                .push(step);
         }
 
         // Assemble actions with their steps
         let mut actions = Vec::new();
-        for (id, action_type_str, entity_id, _state_str, state_data, started_at_str, completed_at_str, metadata_str) in actions_data {
+        for (
+            id,
+            action_type_str,
+            entity_id,
+            _state_str,
+            state_data,
+            started_at_str,
+            completed_at_str,
+            metadata_str,
+        ) in actions_data
+        {
             let action_type = self.parse_action_type(&action_type_str)?;
 
             let state: ActionState = serde_json::from_str(&state_data)
@@ -771,8 +796,7 @@ impl ActionsDatabase {
 
             let current_step_index = match &state {
                 ActionState::InProgress {
-                    current_step_index,
-                    ..
+                    current_step_index, ..
                 } => *current_step_index,
                 _ => 0,
             };
@@ -865,7 +889,8 @@ impl ActionsDatabase {
         let cutoff_str = cutoff.to_rfc3339();
 
         // Use transaction to ensure both deletes succeed or both roll back
-        let tx = conn.transaction()
+        let tx = conn
+            .transaction()
             .map_err(|e| format!("Failed to begin transaction: {}", e))?;
 
         let deleted = tx
@@ -888,7 +913,10 @@ impl ActionsDatabase {
         if deleted > 0 {
             logger::info(
                 LogTag::System,
-                &format!("Cleaned up {} old actions (older than {} days)", deleted, days),
+                &format!(
+                    "Cleaned up {} old actions (older than {} days)",
+                    deleted, days
+                ),
             );
         }
 

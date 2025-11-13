@@ -46,10 +46,7 @@ pub async fn run_gui_mode() -> Result<(), String> {
 
     // Start with default zoom (config will be loaded later by backend)
     let initial_zoom = 1.0;
-    logger::info(
-        LogTag::System,
-        "Starting with default zoom level: 100%",
-    );
+    logger::info(LogTag::System, "Starting with default zoom level: 100%");
 
     // Shared zoom level state (used by keyboard shortcuts)
     let zoom_level = Arc::new(Mutex::new(initial_zoom));
@@ -370,7 +367,10 @@ fn navigate_and_show_window(window: tauri::WebviewWindow, zoom_level: Arc<Mutex<
             *zoom_level.lock().unwrap() = zoom;
             logger::info(
                 LogTag::System,
-                &format!("📋 Loaded saved zoom level from config: {:.0}%", zoom * 100.0),
+                &format!(
+                    "📋 Loaded saved zoom level from config: {:.0}%",
+                    zoom * 100.0
+                ),
             );
         }
     }
@@ -385,10 +385,7 @@ fn navigate_and_show_window(window: tauri::WebviewWindow, zoom_level: Arc<Mutex<
                 );
             }
             Err(e) => {
-                logger::warning(
-                    LogTag::System,
-                    &format!("⚠️  Failed to apply zoom: {}", e),
-                );
+                logger::warning(LogTag::System, &format!("⚠️  Failed to apply zoom: {}", e));
             }
         }
     }

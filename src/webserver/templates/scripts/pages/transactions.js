@@ -60,7 +60,7 @@ function formatDirectionBadge(value) {
 function formatStatusBadge(status, success) {
   if (!status) return "—";
   const map = {
-    Pending: { text: "⏳ Pending", variant: "warning" },
+    Pending: { text: '<i class="icon-loader"></i> Pending', variant: "warning" },
     Confirmed: { text: "✓ Confirmed", variant: "success" },
     Finalized: { text: "✓✓ Finalized", variant: "success" },
     Failed: { text: "✗ Failed", variant: "error" },
@@ -344,7 +344,7 @@ function createLifecycle() {
       }
       console.error("[Transactions] Failed to fetch:", error);
       if (reason !== "scroll") {
-        Utils.showToast("⚠️ Failed to refresh transactions", "warning");
+        Utils.showToast("Failed to refresh transactions", "warning");
       }
       throw error;
     }
@@ -479,7 +479,7 @@ function createLifecycle() {
         },
         toolbar: {
           title: {
-            icon: "💸",
+            icon: "icon-arrow-right-left",
             text: "Transactions",
             meta: [{ id: "tx-last-update", text: "Last update —" }],
           },

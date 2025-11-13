@@ -53,14 +53,13 @@ pub use types::{
 
 // Re-export state functions
 pub use state::{
-    cancel_action, complete_action_failed, complete_action_success, get_action,
-    get_action_counts, get_active_actions, get_all_actions, init_database, query_action_history,
-    register_action, sync_from_db, update_step,
+    cancel_action, complete_action_failed, complete_action_success, get_action, get_action_counts,
+    get_active_actions, get_all_actions, init_database, query_action_history, register_action,
+    sync_from_db, update_step,
 };
 
 // Re-export broadcast functions
 pub use broadcast::{broadcast_update, subscribe, subscriber_count};
 
 // Re-export database types
-pub use db::{ActionsDatabase, ActionFilters};
-
+pub use db::{ActionFilters, ActionsDatabase};

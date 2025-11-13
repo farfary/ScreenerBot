@@ -14,12 +14,12 @@ const PAGE_LIMIT = 100;
 function formatSeverityBadge(value) {
   const key = (value || "").toLowerCase();
   const badges = {
-    info: '<span class="badge">ℹ️ Info</span>',
-    warn: '<span class="badge warning">⚠️ Warning</span>',
-    warning: '<span class="badge warning">⚠️ Warning</span>',
-    error: '<span class="badge error">❌ Error</span>',
-    critical: '<span class="badge error">🔴 Critical</span>',
-    debug: '<span class="badge secondary">🐞 Debug</span>',
+    info: '<span class="badge"><i class="icon-info"></i> Info</span>',
+    warn: '<span class="badge warning"><i class="icon-alert-triangle"></i> Warning</span>',
+    warning: '<span class="badge warning"><i class="icon-alert-triangle"></i> Warning</span>',
+    error: '<span class="badge error"><i class="icon-x"></i> Error</span>',
+    critical: '<span class="badge error"><i class="icon-alert-circle"></i> Critical</span>',
+    debug: '<span class="badge secondary"><i class="icon-bug"></i> Debug</span>',
   };
   if (badges[key]) {
     return badges[key];
@@ -365,7 +365,7 @@ function createLifecycle() {
         },
         toolbar: {
           title: {
-            icon: "📡",
+            icon: "icon-radio",
             text: "Events",
             meta: [{ id: "events-last-update", text: "Last update —" }],
           },

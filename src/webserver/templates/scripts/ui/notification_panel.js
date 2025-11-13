@@ -40,7 +40,7 @@ export function init() {
   setupPagination();
   subscribeToUpdates();
   renderNotifications();
-  
+
   isInitialized = true;
 }
 
@@ -129,7 +129,7 @@ function setupTabs() {
       currentPage = 1; // Reset pagination when switching tabs
       setActiveTab(tab);
       renderNotifications();
-      
+
       // Show filters and pagination only for completed/failed tabs
       toggleHistoryControls(currentTab === "completed" || currentTab === "failed");
     });
@@ -212,7 +212,7 @@ function toggleHistoryControls(show) {
   if (paginationEl) {
     paginationEl.style.display = show ? "flex" : "none";
   }
-  
+
   // Disable state filter on completed/failed tabs (they have implicit state filter)
   if (stateFilterEl) {
     if (show) {
@@ -282,7 +282,7 @@ function setupActions() {
 
       if (confirmed) {
         notificationManager.clearAll();
-        Utils.showToast("🗑️ All notifications cleared", "info");
+        Utils.showToast("All notifications cleared", "info");
       }
     });
   }
@@ -291,7 +291,7 @@ function setupActions() {
     openHistoryBtn.addEventListener("click", () => {
       close();
       // TODO: Navigate to dedicated actions/history page when implemented
-      Utils.showToast("📊 Full activity history coming soon", "info");
+      Utils.showToast("Full activity history coming soon", "info");
     });
   }
 }
@@ -326,16 +326,16 @@ function subscribeToUpdates() {
       const skipped = event.payload?.skipped || 0;
       Utils.showToast(
         skipped > 0
-          ? `⚠️ Missed ${skipped} action updates — refreshing…`
-          : "⚠️ Action stream fell behind — refreshing…",
-        "warning",
+          ? `Missed ${skipped} action updates — refreshing…`
+          : "Action stream fell behind — refreshing…",
+        "warning"
       );
     }
 
     if (event.type === "sync_error") {
       Utils.showToast(
-        `⚠️ Failed to refresh live actions (${event.error || "unknown error"})`,
-        "warning",
+        `Failed to refresh live actions (${event.error || "unknown error"})`,
+        "warning"
       );
     }
   });
@@ -482,7 +482,7 @@ async function renderNotifications() {
       isLoadingHistory = false;
       list.innerHTML = `
         <div class="notification-empty">
-          <span>⚠️</span>
+          <span><i class="icon-alert-triangle"></i></span>
           <p>Failed to load history</p>
           <small>${error.message}</small>
         </div>
@@ -494,14 +494,10 @@ async function renderNotifications() {
     // For active/all tabs, use in-memory data
     switch (currentTab) {
       case "active":
-        notifications = notificationManager
-          .getActive()
-          .map((n) => ({ ...n }));
+        notifications = notificationManager.getActive().map((n) => ({ ...n }));
         break;
       default:
-        notifications = notificationManager
-          .getAll()
-          .map((n) => ({ ...n }));
+        notifications = notificationManager.getAll().map((n) => ({ ...n }));
     }
   }
 
@@ -524,7 +520,7 @@ async function renderNotifications() {
   if (notifications.length === 0) {
     list.innerHTML = `
       <div class="notification-empty">
-        <span>📭</span>
+        <span><i class="icon-inbox"></i></span>
         <p>No ${currentTab === "all" ? "" : currentTab + " "}notifications</p>
       </div>
     `;
@@ -577,16 +573,7 @@ function mergeWithStoredState(notification) {
  * Render single notification
  */
 function renderNotification(notification) {
-  const {
-    id,
-    action_type,
-    state,
-    steps,
-    metadata,
-    completed_at,
-    started_at,
-    read,
-  } = notification;
+  const { id, action_type, state, steps, metadata, completed_at, started_at, read } = notification;
 
   const status = notificationManager.getStatus(notification);
   const isInProgress = status === "in_progress";
@@ -598,27 +585,25 @@ function renderNotification(notification) {
     ? "in-progress"
     : isCompleted
       ? "completed"
-    : isFailed
-    ? "failed"
-    : isCancelled
-    ? "cancelled"
-    : "";
+      : isFailed
+        ? "failed"
+        : isCancelled
+          ? "cancelled"
+          : "";
 
   const statusIcon = isInProgress
-    ? "⏳"
+    ? '<i class="icon-loader"></i>'
     : isCompleted
-    ? "✅"
-    : isFailed
-    ? "❌"
-    : isCancelled
-    ? "🚫"
-    : "";
+      ? "✅"
+      : isFailed
+        ? "❌"
+        : isCancelled
+          ? '<i class="icon-ban"></i>'
+          : "";
 
   const actionTypeLabel = escapeText(formatActionType(action_type));
   const rawSymbol =
-    metadata && typeof metadata === "object" && metadata !== null
-      ? metadata.symbol
-      : "";
+    metadata && typeof metadata === "object" && metadata !== null ? metadata.symbol : "";
   const symbol = rawSymbol ? escapeText(rawSymbol) : "";
 
   let descriptionHtml = "";
@@ -636,22 +621,17 @@ function renderNotification(notification) {
     }
   }
 
-  const timeLabel = escapeText(
-    formatTime(completed_at || notification.timestamp || started_at),
-  );
+  const timeLabel = escapeText(formatTime(completed_at || notification.timestamp || started_at));
 
   const progressInfo = isInProgress ? state : null;
   const totalSteps = progressInfo?.total_steps ?? steps?.length ?? 0;
   const currentIndex = progressInfo?.current_step_index ?? notification.current_step_index ?? 0;
   const progressPctRaw = progressInfo?.progress_pct ?? 0;
   const boundedProgressPct = Math.max(0, Math.min(100, Number(progressPctRaw) || 0));
-  const currentStepName = progressInfo?.current_step
-    || steps?.[currentIndex]?.name
-    || "Processing";
+  const currentStepName = progressInfo?.current_step || steps?.[currentIndex]?.name || "Processing";
   const safeStepName = escapeText(currentStepName);
-  const stepPosition = totalSteps > 0
-    ? `${Math.min(currentIndex + 1, totalSteps)}/${totalSteps}`
-    : "";
+  const stepPosition =
+    totalSteps > 0 ? `${Math.min(currentIndex + 1, totalSteps)}/${totalSteps}` : "";
   const safeStepPosition = stepPosition ? escapeText(stepPosition) : "";
 
   let progressHtml = "";
@@ -671,8 +651,7 @@ function renderNotification(notification) {
   let errorHtml = "";
   if (isFailed) {
     const failedStep = steps?.find((step) => step.status === "failed");
-    const errorMsg =
-      state?.error || failedStep?.error || notification.error || "Unknown error";
+    const errorMsg = state?.error || failedStep?.error || notification.error || "Unknown error";
     errorHtml = `
       <div class="notification-error">
         ${escapeText(errorMsg)}
@@ -732,23 +711,23 @@ function attachNotificationListeners() {
 /**
  * Format action type for display
  */
-  function formatActionType(actionType) {
-    if (!actionType) return "Action";
+function formatActionType(actionType) {
+  if (!actionType) return "Action";
 
-    // Backend sends snake_case format via Serde JSON serialization
-    // #[serde(rename_all = "snake_case")] in src/actions/types.rs line 177
-    const typeMap = {
-      swap_buy: "Buying",
-      swap_sell: "Selling",
-      position_open: "Opening Position",
-      position_close: "Closing Position",
-      position_dca: "DCA",
-      position_partial_exit: "Partial Exit",
-      manual_order: "Manual Order",
-    };
+  // Backend sends snake_case format via Serde JSON serialization
+  // #[serde(rename_all = "snake_case")] in src/actions/types.rs line 177
+  const typeMap = {
+    swap_buy: "Buying",
+    swap_sell: "Selling",
+    position_open: "Opening Position",
+    position_close: "Closing Position",
+    position_dca: "DCA",
+    position_partial_exit: "Partial Exit",
+    manual_order: "Manual Order",
+  };
 
-    return typeMap[actionType] || actionType;
-  }
+  return typeMap[actionType] || actionType;
+}
 
 /**
  * Format time for display
@@ -757,7 +736,7 @@ function formatTime(timestamp) {
   if (!timestamp) return "";
 
   const date = new Date(timestamp);
-  
+
   // Validate date
   if (isNaN(date.getTime())) {
     console.warn("[NotificationPanel] Invalid timestamp:", timestamp);
@@ -780,12 +759,7 @@ function formatTime(timestamp) {
 }
 
 function resolveTimestamp(notification) {
-  return (
-    notification?.completed_at ||
-    notification?.timestamp ||
-    notification?.started_at ||
-    ""
-  );
+  return notification?.completed_at || notification?.timestamp || notification?.started_at || "";
 }
 
 /**

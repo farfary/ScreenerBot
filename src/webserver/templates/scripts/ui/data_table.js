@@ -710,7 +710,7 @@ export class DataTable {
     // Image configuration
     const size = config.size || 32;
     const shape = config.shape || "rounded"; // 'circle', 'square', 'rounded'
-    const fallback = config.fallback || "🖼️";
+    const fallback = config.fallback || '<i class="icon-image"></i>';
     const lazyLoad = config.lazyLoad !== false;
     const withText = config.withText || false;
     const textField = config.textField || col.id;
@@ -849,7 +849,7 @@ export class DataTable {
 
     // Dropdown menu style
     if (config.dropdown && config.items) {
-      const icon = config.icon || "⋮";
+      const icon = config.icon || '<i class="icon-more-vertical"></i>';
       const menuPosition = config.menuPosition || "right";
       const menuClass = menuPosition === "left" ? "menu-left" : "";
 

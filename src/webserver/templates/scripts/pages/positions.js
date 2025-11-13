@@ -6,8 +6,8 @@ import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { TradeActionDialog } from "../ui/trade_action_dialog.js";
 
 const SUB_TABS = [
-  { id: "open", label: "📈 Open" },
-  { id: "closed", label: "📉 Closed" },
+  { id: "open", label: '<i class="icon-trending-up"></i> Open' },
+  { id: "closed", label: '<i class="icon-trending-down"></i> Closed' },
 ];
 
 function createLifecycle() {
@@ -31,7 +31,7 @@ function createLifecycle() {
       ? `<img class="token-logo" src="${Utils.escapeHtml(logo)}" alt="${Utils.escapeHtml(
           symbol
         )}"/>`
-      : '<span class="token-logo">🪙</span>';
+      : '<i class="token-logo icon-coins"></i>';
     return `<div class="position-token">${logoHtml}<div>
       <div class="token-symbol">${Utils.escapeHtml(symbol)}</div>
       <div class="token-name">${Utils.escapeHtml(name)}</div>
@@ -285,7 +285,7 @@ function createLifecycle() {
       if (err?.name !== "AbortError") {
         console.error("[Positions] fetch failed:", err);
         if (reason !== "poll") {
-          Utils.showToast("⚠️ Failed to refresh positions", "warning");
+          Utils.showToast("Failed to refresh positions", "warning");
         }
       }
       throw err;
@@ -374,7 +374,7 @@ function createLifecycle() {
         },
         toolbar: {
           title: {
-            icon: "📊",
+            icon: "icon-bar-chart-2",
             text: `Positions: ${viewLabel}`,
             meta: [{ id: "positions-last-update", lines: ["Last Update", "—"] }],
           },
@@ -449,7 +449,7 @@ function createLifecycle() {
             const data = await res.json();
             btn.disabled = false;
             if (!res.ok) throw new Error(data?.error?.message || "Add failed");
-            Utils.showToast("✅ Added to position", "success");
+            Utils.showToast("Added to position", "success");
             table.refresh({ reason: "manual", preserveScroll: true });
           } else if (action === "sell") {
             // Open dialog
@@ -479,7 +479,7 @@ function createLifecycle() {
             const data = await res.json();
             btn.disabled = false;
             if (!res.ok) throw new Error(data?.error?.message || "Sell failed");
-            Utils.showToast("✅ Sell placed", "success");
+            Utils.showToast("Sell placed", "success");
             table.refresh({ reason: "manual", preserveScroll: true });
           }
         } catch (err) {

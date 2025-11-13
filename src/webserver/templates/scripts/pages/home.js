@@ -183,13 +183,13 @@ function createLifecycle() {
       const changeClass = wallet.change_sol >= 0 ? "profit" : "loss";
       changeEl.innerHTML = `
         <span class="hero-change-value change-value ${changeClass}">${changeSign}${Utils.formatSol(
-        wallet.change_sol,
-        { decimals: 4 }
-      )}</span>
+          wallet.change_sol,
+          { decimals: 4 }
+        )}</span>
         <span class="change-percent ${changeClass}">(${changeSign}${Utils.formatNumber(
-        wallet.change_percent,
-        2
-      )}%)</span>
+          wallet.change_percent,
+          2
+        )}%)</span>
       `;
     }
 
@@ -289,10 +289,12 @@ function createLifecycle() {
 
     if (statusEl) {
       if (license.valid) {
-        statusEl.innerHTML = '<span class="license-badge valid">✅ VALID</span>';
+        statusEl.innerHTML =
+          '<span class="license-badge valid"><i class="icon-check"></i> VALID</span>';
         if (cardEl) cardEl.classList.add("valid");
       } else {
-        statusEl.innerHTML = '<span class="license-badge invalid">❌ INVALID</span>';
+        statusEl.innerHTML =
+          '<span class="license-badge invalid"><i class="icon-x"></i> INVALID</span>';
         if (cardEl) cardEl.classList.add("invalid");
       }
     }

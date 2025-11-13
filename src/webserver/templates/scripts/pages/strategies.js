@@ -405,7 +405,7 @@ export function createLifecycle() {
     if (strategies.length === 0) {
       listContainer.innerHTML = `
         <div class="empty-state">
-          <span class="icon">📝</span>
+          <span class="icon"><i class="icon-file-text"></i></span>
           <p>No strategies yet</p>
           <small>Create your first strategy</small>
         </div>
@@ -420,15 +420,15 @@ export function createLifecycle() {
            data-strategy-id="${strategy.id}">
         <div class="strategy-item-header">
           <div class="strategy-item-title">
-            <span class="icon">${strategy.type === "ENTRY" ? "📈" : "📉"}</span>
+            <i class="${strategy.type === "ENTRY" ? "icon-trending-up" : "icon-trending-down"}"></i>
             ${Utils.escapeHtml(strategy.name)}
           </div>
           <div class="strategy-item-actions">
-            <button class="btn-icon" data-action="edit" title="Edit">✏️</button>
+            <button class="btn-icon" data-action="edit" title="Edit"><i class="icon-edit"></i></button>
             <button class="btn-icon" data-action="toggle" title="${strategy.enabled ? "Disable" : "Enable"}">
               ${strategy.enabled ? "✓" : "○"}
             </button>
-            <button class="btn-icon" data-action="delete" title="Delete">🗑️</button>
+            <button class="btn-icon" data-action="delete" title="Delete"><i class="icon-trash-2"></i></button>
           </div>
         </div>
         <div class="strategy-item-meta">
@@ -488,7 +488,7 @@ export function createLifecycle() {
     if (templates.length === 0) {
       listContainer.innerHTML = `
         <div class="empty-state">
-          <span class="icon">📦</span>
+          <span class="icon"><i class="icon-package"></i></span>
           <p>No templates available</p>
         </div>
       `;
@@ -603,10 +603,11 @@ export function createLifecycle() {
   }
 
   function renderConditionItem(condition) {
+    const iconClass = condition.icon || getConditionIcon(condition.type);
     return `
       <div class="condition-item" draggable="true" data-condition-type="${condition.type}">
         <div class="condition-item-header">
-          <span class="condition-icon">${condition.icon || getConditionIcon(condition.type)}</span>
+          <i class="${iconClass}"></i>
           <span class="condition-name">${Utils.escapeHtml(condition.name || condition.type)}</span>
         </div>
         <div class="condition-description">
@@ -619,23 +620,23 @@ export function createLifecycle() {
   // Helper Functions
   function getCategoryIcon(category) {
     const icons = {
-      "Price Patterns": "💰",
-      "Technical Indicators": "📊",
-      "Market Context": "🌐",
-      "Position & Performance": "📈",
+      "Price Patterns": "icon-dollar-sign",
+      "Technical Indicators": "icon-bar-chart-2",
+      "Market Context": "icon-globe",
+      "Position & Performance": "icon-trending-up",
     };
-    return icons[category] || "📌";
+    return icons[category] || "icon-bookmark";
   }
 
   function getConditionIcon(type) {
     const icons = {
-      PriceThreshold: "🎯",
-      PriceMovement: "📈",
-      RelativeToMA: "📉",
-      LiquidityDepth: "💧",
-      PositionAge: "⏱️",
+      PriceThreshold: "icon-target",
+      PriceMovement: "icon-trending-up",
+      RelativeToMA: "icon-trending-down",
+      LiquidityDepth: "icon-droplet",
+      PositionAge: "icon-timer",
     };
-    return icons[type] || "🔹";
+    return icons[type] || "icon-circle";
   }
 
   function filterStrategies(filter) {
@@ -726,7 +727,7 @@ export function createLifecycle() {
     const list = $("#conditions-list");
     if (!list) return;
     if (!conditions.length) {
-      list.innerHTML = `<div class="empty-state"><span class="icon">🧩</span><p>No conditions yet</p><small>Use "Add Condition" to start building</small></div>`;
+      list.innerHTML = `<div class="empty-state"><i class="icon-puzzle"></i><p>No conditions yet</p><small>Use "Add Condition" to start building</small></div>`;
       return;
     }
 
@@ -790,7 +791,7 @@ export function createLifecycle() {
 
   function renderConditionCard(c, idx) {
     const schema = conditionSchemas?.[c.type] || {};
-    const icon = schema.icon || getConditionIcon(c.type);
+    const iconClass = schema.icon || getConditionIcon(c.type);
     const badges = [schema.category || "General"]
       .map((b) => `<span class="condition-badge">${Utils.escapeHtml(b)}</span>`)
       .join("");
@@ -799,7 +800,7 @@ export function createLifecycle() {
     return `
       <div class="condition-card" data-index="${idx}">
         <div class="card-header">
-          <div class="card-title"><span class="icon">${icon}</span>${Utils.escapeHtml(c.name || c.type)}</div>
+          <div class="card-title"><i class="${iconClass}"></i>${Utils.escapeHtml(c.name || c.type)}</div>
           <div class="card-meta">
             ${badges}
             <label><input type="checkbox" class="toggle-enabled" ${c.enabled ? "checked" : ""}/> Enabled</label>
@@ -807,8 +808,8 @@ export function createLifecycle() {
             <div class="condition-actions">
               <button class="btn-icon" data-action="move-up" title="Move up">▲</button>
               <button class="btn-icon" data-action="move-down" title="Move down">▼</button>
-              <button class="btn-icon" data-action="duplicate" title="Duplicate">📄</button>
-              <button class="btn-icon" data-action="delete" title="Delete">🗑️</button>
+              <button class="btn-icon" data-action="duplicate" title="Duplicate"><i class="icon-copy"></i></button>
+              <button class="btn-icon" data-action="delete" title="Delete"><i class="icon-trash-2"></i></button>
               <button class="btn-icon" data-action="toggle-expand" title="More">⋯</button>
             </div>
           </div>
@@ -938,7 +939,7 @@ export function createLifecycle() {
     if (!node) {
       editor.innerHTML = `
         <div class="empty-state">
-          <span class="icon">🎯</span>
+          <span class="icon"><i class="icon-target"></i></span>
           <p>No selection</p>
           <small>Select a node to edit properties</small>
         </div>
@@ -950,7 +951,7 @@ export function createLifecycle() {
     if (!schema) {
       editor.innerHTML = `
         <div class="empty-state">
-          <span class="icon">⚠️</span>
+          <i class="icon-alert-triangle"></i>
           <p>Unknown condition type</p>
         </div>
       `;

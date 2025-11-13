@@ -8,14 +8,14 @@ import { TokenDetailsDialog } from "../ui/token_details_dialog.js";
 
 // Sub-tabs (views) configuration
 const TOKEN_VIEWS = [
-  { id: "pool", label: "💧 Pool Service" },
-  { id: "no_market", label: "📉 No Market Data" },
-  { id: "all", label: "📋 All Tokens" },
-  { id: "passed", label: "✅ Passed" },
-  { id: "rejected", label: "⛔ Rejected" },
-  { id: "blacklisted", label: "🚫 Blacklisted" },
-  { id: "positions", label: "📊 Positions" },
-  { id: "recent", label: "🆕 Recent" },
+  { id: "pool", label: '<i class="icon-droplet"></i> Pool Service' },
+  { id: "no_market", label: '<i class="icon-trending-down"></i> No Market Data' },
+  { id: "all", label: '<i class="icon-list"></i> All Tokens' },
+  { id: "passed", label: '<i class="icon-check"></i> Passed' },
+  { id: "rejected", label: '<i class="icon-x-circle"></i> Rejected' },
+  { id: "blacklisted", label: '<i class="icon-ban"></i> Blacklisted' },
+  { id: "positions", label: '<i class="icon-bar-chart-2"></i> Positions' },
+  { id: "recent", label: '<i class="icon-clock"></i> Recent' },
 ];
 
 // Constants
@@ -740,7 +740,7 @@ function createLifecycle() {
       }
       console.error("[Tokens] Failed to load tokens list:", error);
       if (reason !== "poll") {
-        Utils.showToast("⚠️ Failed to load tokens", "warning");
+        Utils.showToast("Failed to load tokens", "warning");
       }
       throw error;
     }
@@ -830,7 +830,7 @@ function createLifecycle() {
               title="External links"
               type="button"
             >
-              🔗
+              <i class="icon-external-link"></i>
             </button>
           `;
         },
@@ -1154,11 +1154,11 @@ function createLifecycle() {
       navigator.clipboard
         .writeText(mint)
         .then(() => {
-          Utils.showToast("📋 Mint address copied", "success");
+          Utils.showToast("Mint address copied", "success");
         })
         .catch((err) => {
           console.error("Failed to copy mint:", err);
-          Utils.showToast("⚠️ Failed to copy mint", "warning");
+          Utils.showToast("Failed to copy mint", "warning");
         });
     } else if (urlMap[actionId]) {
       window.open(urlMap[actionId], "_blank", "noopener,noreferrer");
@@ -1199,32 +1199,32 @@ function createLifecycle() {
       menu.setAttribute("data-align", "left");
       menu.innerHTML = `
         <button class="dropdown-item" data-action="dexscreener" type="button">
-          <span class="icon">📊</span>
+          <i class="icon-bar-chart-2"></i>
           <span class="label">DexScreener</span>
         </button>
         <button class="dropdown-item" data-action="gmgn" type="button">
-          <span class="icon">📈</span>
+          <i class="icon-trending-up"></i>
           <span class="label">GMGN</span>
         </button>
         <button class="dropdown-item" data-action="solscan" type="button">
-          <span class="icon">🔍</span>
+          <i class="icon-search"></i>
           <span class="label">Solscan</span>
         </button>
         <button class="dropdown-item" data-action="birdeye" type="button">
-          <span class="icon">🦅</span>
+          <span class="icon"><i class="icon-bar-chart-2"></i></span>
           <span class="label">Birdeye</span>
         </button>
         <button class="dropdown-item" data-action="rugcheck" type="button">
-          <span class="icon">🛡️</span>
+          <span class="icon"><i class="icon-shield"></i></span>
           <span class="label">RugCheck</span>
         </button>
         <button class="dropdown-item" data-action="pumpfun" type="button">
-          <span class="icon">🚀</span>
+          <span class="icon"><i class="icon-rocket"></i></span>
           <span class="label">Pump.fun</span>
         </button>
         <div class="dropdown-divider"></div>
         <button class="dropdown-item" data-action="copy" type="button">
-          <span class="icon">📋</span>
+          <span class="icon"><i class="icon-copy"></i></span>
           <span class="label">Copy Mint</span>
         </button>
       `;
@@ -1505,7 +1505,7 @@ function createLifecycle() {
         },
         toolbar: {
           title: {
-            icon: "🪙",
+            icon: "icon-coins",
             text: "Tokens",
             meta: [
               {
@@ -1610,7 +1610,7 @@ function createLifecycle() {
             const data = await res.json();
             btn.disabled = false;
             if (!res.ok) throw new Error(data?.error?.message || "Buy failed");
-            Utils.showToast("✅ Buy placed", "success");
+            Utils.showToast("Buy placed", "success");
             requestReload("manual", { silent: false, preserveScroll: true }).catch(() => {});
           } else if (action === "add") {
             // Fetch config for entry sizes
@@ -1654,7 +1654,7 @@ function createLifecycle() {
             const data = await res.json();
             btn.disabled = false;
             if (!res.ok) throw new Error(data?.error?.message || "Add failed");
-            Utils.showToast("✅ Added to position", "success");
+            Utils.showToast("Added to position", "success");
             requestReload("manual", { silent: false, preserveScroll: true }).catch(() => {});
           } else if (action === "sell") {
             // Open dialog
@@ -1684,7 +1684,7 @@ function createLifecycle() {
             const data = await res.json();
             btn.disabled = false;
             if (!res.ok) throw new Error(data?.error?.message || "Sell failed");
-            Utils.showToast("✅ Sell placed", "success");
+            Utils.showToast("Sell placed", "success");
             requestReload("manual", { silent: false, preserveScroll: true }).catch(() => {});
           }
         } catch (err) {

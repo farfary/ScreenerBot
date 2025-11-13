@@ -176,7 +176,7 @@ const validateRpcUrls = debounce(async () => {
     showValidation(
       "rpc",
       "error",
-      "⚠️ Default Solana RPC will not work. Please use a premium provider."
+      '<i class="icon-alert-triangle"></i> Default Solana RPC will not work. Please use a premium provider.'
     );
     return;
   }
@@ -197,11 +197,11 @@ function setupToggle() {
     if (input.style.webkitTextSecurity === "none" || input.style.textSecurity === "none") {
       input.style.webkitTextSecurity = "disc";
       input.style.textSecurity = "disc";
-      icon.textContent = "👁️";
+      icon.className = "toggle-icon icon-eye";
     } else {
       input.style.webkitTextSecurity = "none";
       input.style.textSecurity = "none";
-      icon.textContent = "🙈";
+      icon.className = "toggle-icon icon-eye-off";
     }
   });
 
@@ -300,9 +300,7 @@ async function runVerification() {
 
     // API returns ValidationResult directly with 'valid' field
     if (!result || !result.valid) {
-      const errorMsg = result?.errors?.length > 0 
-        ? result.errors.join("; ") 
-        : "Validation failed";
+      const errorMsg = result?.errors?.length > 0 ? result.errors.join("; ") : "Validation failed";
       throw new Error(errorMsg);
     }
 
@@ -345,9 +343,10 @@ async function runVerification() {
 
     // Backend returns flat structure with success at top level
     if (!completeResult.success) {
-      const errorMsg = completeResult.errors?.length > 0 
-        ? completeResult.errors.join("; ") 
-        : "License verification failed";
+      const errorMsg =
+        completeResult.errors?.length > 0
+          ? completeResult.errors.join("; ")
+          : "License verification failed";
       throw new Error(errorMsg);
     }
 
@@ -362,8 +361,8 @@ async function runVerification() {
         licenseDetails.classList.add("show");
         const tier = licenseData.tier || "Unknown";
         // Backend uses expiry_ts (UNIX timestamp), format it
-        const expiryDate = licenseData.expiry_ts 
-          ? new Date(licenseData.expiry_ts * 1000).toLocaleDateString() 
+        const expiryDate = licenseData.expiry_ts
+          ? new Date(licenseData.expiry_ts * 1000).toLocaleDateString()
           : "N/A";
         licenseDetails.textContent = `Tier: ${tier} | Expires: ${expiryDate}`;
       }
@@ -484,7 +483,7 @@ function resetVerificationStates() {
   const toggleBtn = $('[data-toggle="wallet-private-key"]');
   if (toggleBtn) {
     const icon = toggleBtn.querySelector(".toggle-icon");
-    if (icon) icon.textContent = "👁️";
+    if (icon) icon.className = "toggle-icon icon-eye";
   }
 }
 
