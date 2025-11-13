@@ -5,6 +5,7 @@ use crate::config_struct;
 mod connectivity;
 mod events;
 mod filtering;
+mod gui;
 mod monitoring;
 mod ohlcv;
 mod pools;
@@ -21,6 +22,7 @@ mod wallet;
 pub use connectivity::*;
 pub use events::*;
 pub use filtering::*;
+pub use gui::*;
 pub use monitoring::*;
 pub use ohlcv::*;
 pub use pools::*;
@@ -88,5 +90,8 @@ config_struct! {
 
         /// Strategies configuration
         strategies: StrategiesConfig = StrategiesConfig::default(),
+
+        /// GUI/Desktop application configuration
+        gui: GuiConfig = GuiConfig::default(),
     }
 }
