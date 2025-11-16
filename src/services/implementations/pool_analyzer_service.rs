@@ -7,6 +7,12 @@ use tokio::task::JoinHandle;
 
 pub struct PoolAnalyzerService;
 
+impl Default for PoolAnalyzerService {
+    fn default() -> Self {
+        Self
+    }
+}
+
 #[async_trait]
 impl Service for PoolAnalyzerService {
     fn name(&self) -> &'static str {
@@ -74,5 +80,22 @@ impl Service for PoolAnalyzerService {
         } else {
             ServiceHealth::Unhealthy("PoolAnalyzer component not available".to_string())
         }
+    }
+
+    async fn metrics(&self) -> ServiceMetrics {
+        let mut metrics = ServiceMetrics::default();
+        
+        // Get metrics from the component if available
+        if let Some(analyzer) = crate::pools::get_pool_analyzer() {
+            let (operations, errors, pools_analyzed) = analyzer.get_metrics();
+            metrics.operations_total = operations;
+            metrics.errors_total = errors;
+            metrics.custom_metrics.insert("pools_analyzed".to_string(), pools_analyzed as f64);
+            if operations > 0 {
+                metrics.custom_metrics.insert("success_rate".to_string(), (pools_analyzed as f64 / operations as f64) * 100.0);
+            }
+        }
+        
+        metrics
     }
 }

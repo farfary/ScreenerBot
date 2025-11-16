@@ -52,6 +52,13 @@ pub struct TransactionsManager {
     // Service control
     pub is_running: bool,
     pub shutdown_notify: Arc<Notify>,
+
+    // Metrics
+    pub operations: Arc<std::sync::atomic::AtomicU64>,
+    pub errors: Arc<std::sync::atomic::AtomicU64>,
+    pub websocket_received: Arc<std::sync::atomic::AtomicU64>,
+    pub bootstrap_fetched: Arc<std::sync::atomic::AtomicU64>,
+    pub rpc_fallback_fetched: Arc<std::sync::atomic::AtomicU64>,
 }
 
 // =============================================================================
@@ -102,6 +109,11 @@ impl TransactionsManager {
             pending_transactions: HashMap::new(),
             is_running: false,
             shutdown_notify: Arc::new(Notify::new()),
+            operations: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            errors: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            websocket_received: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            bootstrap_fetched: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            rpc_fallback_fetched: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         })
     }
 
@@ -260,6 +272,35 @@ impl TransactionsManager {
         }
 
         stats
+    }
+
+    /// Get service metrics for ServiceManager integration
+    pub fn metrics(&self) -> crate::services::ServiceMetrics {
+        use std::sync::atomic::Ordering;
+
+        let operations = self.operations.load(Ordering::Relaxed);
+        let errors = self.errors.load(Ordering::Relaxed);
+        let ws = self.websocket_received.load(Ordering::Relaxed);
+        let bootstrap = self.bootstrap_fetched.load(Ordering::Relaxed);
+        let fallback = self.rpc_fallback_fetched.load(Ordering::Relaxed);
+
+        let mut custom = std::collections::HashMap::new();
+        custom.insert("websocket_received".to_string(), ws as f64);
+        custom.insert("bootstrap_fetched".to_string(), bootstrap as f64);
+        custom.insert("rpc_fallback_fetched".to_string(), fallback as f64);
+        custom.insert("known_signatures".to_string(), self.known_signatures.len() as f64);
+        custom.insert(
+            "pending_transactions".to_string(),
+            self.pending_transactions.len() as f64,
+        );
+
+        crate::services::ServiceMetrics {
+            operations_total: operations,
+            errors_total: errors,
+            operations_per_second: 0.0,
+            custom_metrics: custom,
+            ..Default::default()
+        }
     }
 
     /// Check if signature is known using database (if available) or fallback to HashSet

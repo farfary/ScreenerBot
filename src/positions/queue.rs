@@ -359,6 +359,14 @@ pub async fn get_queue_status() -> (usize, Vec<String>) {
     (size, signatures)
 }
 
+/// Get queue status synchronously (for metrics access)
+pub fn get_queue_status_sync() -> (usize, Vec<String>) {
+    let queue = VERIFICATION_QUEUE.blocking_read();
+    let size = queue.len();
+    let signatures: Vec<String> = queue.items.iter().map(|i| i.signature.clone()).collect();
+    (size, signatures)
+}
+
 /// Check if queue has items with expiry height
 pub async fn queue_has_items_with_expiry() -> bool {
     let queue = VERIFICATION_QUEUE.read().await;

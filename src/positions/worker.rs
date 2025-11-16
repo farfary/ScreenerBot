@@ -471,6 +471,40 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                     Ok(effects) => {
                                         remove_verification(&item.signature).await;
 
+                                        // Update verification metrics
+                                        {
+                                            use crate::positions::metrics::VERIFICATION_METRICS;
+                                            use std::sync::atomic::Ordering;
+
+                                            VERIFICATION_METRICS
+                                                .operations
+                                                .fetch_add(1, Ordering::Relaxed);
+
+                                            // Increment type-specific counter
+                                            if item.is_dca {
+                                                VERIFICATION_METRICS
+                                                    .dca_verified
+                                                    .fetch_add(1, Ordering::Relaxed);
+                                            } else if item.is_partial_exit {
+                                                VERIFICATION_METRICS
+                                                    .partial_exit_verified
+                                                    .fetch_add(1, Ordering::Relaxed);
+                                            } else {
+                                                match item.kind {
+                                                    VerificationKind::Entry => {
+                                                        VERIFICATION_METRICS
+                                                            .entry_verified
+                                                            .fetch_add(1, Ordering::Relaxed);
+                                                    }
+                                                    VerificationKind::Exit => {
+                                                        VERIFICATION_METRICS
+                                                            .exit_verified
+                                                            .fetch_add(1, Ordering::Relaxed);
+                                                    }
+                                                }
+                                            }
+                                        }
+
                                         // Emit verification_finished (success/transition)
                                         crate::events::record_safe(
                                             crate::events::Event::new(
@@ -505,6 +539,16 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                         );
                                     }
                                     Err(e) => {
+                                        // Update error metrics
+                                        {
+                                            use crate::positions::metrics::VERIFICATION_METRICS;
+                                            use std::sync::atomic::Ordering;
+
+                                            VERIFICATION_METRICS
+                                                .errors
+                                                .fetch_add(1, Ordering::Relaxed);
+                                        }
+
                                         logger::error(
                                             LogTag::Positions,
                                             &format!(
@@ -541,6 +585,19 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                     VerificationOutcome::RetryTransient(reason) => {
                                 // Check if we should give up on this verification
                                     if let Some(give_up_reason) = item.should_give_up() {
+                                    // Update abandoned + error metrics
+                                    {
+                                        use crate::positions::metrics::VERIFICATION_METRICS;
+                                        use std::sync::atomic::Ordering;
+
+                                        VERIFICATION_METRICS
+                                            .abandoned
+                                            .fetch_add(1, Ordering::Relaxed);
+                                        VERIFICATION_METRICS
+                                            .errors
+                                            .fetch_add(1, Ordering::Relaxed);
+                                    }
+
                                     logger::error(
                                         LogTag::Positions,
                                         &format!(
@@ -625,6 +682,9 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                     continue;
                                 }
 
+                                // Increment retry metrics
+                                crate::positions::metrics::VERIFICATION_METRICS.retries.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
                                 logger::debug(
                                     LogTag::Positions,
                                     &format!(
@@ -659,6 +719,10 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                 requeue_verification(item).await;
                             }
                             VerificationOutcome::PermanentFailure(transition) => {
+                                // Increment permanent failure metrics
+                                crate::positions::metrics::VERIFICATION_METRICS.permanent_failures.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                crate::positions::metrics::VERIFICATION_METRICS.errors.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
                                 logger::warning(
                                     LogTag::Positions,
                                     &format!(

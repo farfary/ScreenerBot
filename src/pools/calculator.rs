@@ -55,6 +55,10 @@ pub struct PriceCalculator {
     calculator_tx: mpsc::UnboundedSender<CalculatorMessage>,
     /// SOL price reference (assuming 1 SOL = X USD, but we only use SOL prices)
     sol_reference_price: Arc<RwLock<f64>>,
+    /// Metrics
+    operations: Arc<std::sync::atomic::AtomicU64>,
+    errors: Arc<std::sync::atomic::AtomicU64>,
+    prices_calculated: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl PriceCalculator {
@@ -67,7 +71,19 @@ impl PriceCalculator {
             calculator_rx: Arc::new(RwLock::new(Some(calculator_rx))),
             calculator_tx,
             sol_reference_price: Arc::new(RwLock::new(100.0)),
+            operations: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            errors: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            prices_calculated: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
+    }
+
+    /// Get metrics for this calculator instance
+    pub fn get_metrics(&self) -> (u64, u64, u64) {
+        (
+            self.operations.load(std::sync::atomic::Ordering::Relaxed),
+            self.errors.load(std::sync::atomic::Ordering::Relaxed),
+            self.prices_calculated.load(std::sync::atomic::Ordering::Relaxed),
+        )
     }
 
     /// Get sender for sending calculation requests
@@ -81,6 +97,11 @@ impl PriceCalculator {
 
         let pool_directory = self.pool_directory.clone();
         let sol_reference_price = self.sol_reference_price.clone();
+        
+        // Clone metrics for tracking in background task
+        let operations = Arc::clone(&self.operations);
+        let errors = Arc::clone(&self.errors);
+        let prices_calculated = Arc::clone(&self.prices_calculated);
 
         // Take the receiver from the Arc<RwLock>
         let mut calculator_rx = {
@@ -135,6 +156,10 @@ impl PriceCalculator {
                                 let calculation_duration = calculation_start.elapsed();
 
                                 if let Some(price_result) = result.price_result {
+                                    // Track metrics
+                                    operations.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                    prices_calculated.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                    
                                     // Update cache with calculated price
                                     cache::update_price(price_result.clone());
 
@@ -190,6 +215,9 @@ impl PriceCalculator {
                                         ),
                                     );
                                 } else if let Some(error) = result.error {
+                                    // Track error
+                                    errors.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                    
                                     record_safe(Event::error(
                                         EventCategory::Pool,
                                         Some("price_calculation_failed".to_string()),

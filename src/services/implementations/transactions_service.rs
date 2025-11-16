@@ -55,4 +55,17 @@ impl Service for TransactionsService {
             ServiceHealth::Starting
         }
     }
+
+    async fn metrics(&self) -> ServiceMetrics {
+        // Get global transaction manager
+        if let Some(manager_arc) = crate::transactions::get_global_transaction_manager().await {
+            // Try to lock and get metrics (non-blocking)
+            if let Ok(manager) = manager_arc.try_lock() {
+                return manager.metrics();
+            }
+        }
+
+        // Return default if manager not available or locked
+        ServiceMetrics::default()
+    }
 }

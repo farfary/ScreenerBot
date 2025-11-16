@@ -2127,6 +2127,26 @@ impl WalletDatabase {
 pub(crate) static GLOBAL_WALLET_DB: Lazy<Arc<Mutex<Option<WalletDatabase>>>> =
     Lazy::new(|| Arc::new(Mutex::new(None)));
 
+/// Global wallet service metrics
+static WALLET_METRICS_OPERATIONS: Lazy<Arc<std::sync::atomic::AtomicU64>> =
+    Lazy::new(|| Arc::new(std::sync::atomic::AtomicU64::new(0)));
+static WALLET_METRICS_ERRORS: Lazy<Arc<std::sync::atomic::AtomicU64>> =
+    Lazy::new(|| Arc::new(std::sync::atomic::AtomicU64::new(0)));
+static WALLET_METRICS_SNAPSHOTS_TAKEN: Lazy<Arc<std::sync::atomic::AtomicU64>> =
+    Lazy::new(|| Arc::new(std::sync::atomic::AtomicU64::new(0)));
+static WALLET_METRICS_FLOW_SYNCS: Lazy<Arc<std::sync::atomic::AtomicU64>> =
+    Lazy::new(|| Arc::new(std::sync::atomic::AtomicU64::new(0)));
+
+/// Get wallet service metrics
+pub fn get_wallet_service_metrics() -> (u64, u64, u64, u64) {
+    (
+        WALLET_METRICS_OPERATIONS.load(std::sync::atomic::Ordering::Relaxed),
+        WALLET_METRICS_ERRORS.load(std::sync::atomic::Ordering::Relaxed),
+        WALLET_METRICS_SNAPSHOTS_TAKEN.load(std::sync::atomic::Ordering::Relaxed),
+        WALLET_METRICS_FLOW_SYNCS.load(std::sync::atomic::Ordering::Relaxed),
+    )
+}
+
 /// Initialize the global wallet database
 pub async fn initialize_wallet_database() -> Result<(), String> {
     let mut db_lock = GLOBAL_WALLET_DB.lock().await;
@@ -2282,6 +2302,10 @@ pub async fn start_wallet_monitoring_service(
                     // Collect wallet snapshot
                     match collect_wallet_snapshot().await {
                         Ok(snapshot) => {
+                            // Track metrics
+                            WALLET_METRICS_OPERATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            WALLET_METRICS_SNAPSHOTS_TAKEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            
                             // Save to database
                             let db_guard = GLOBAL_WALLET_DB.lock().await;
                             match db_guard.as_ref() {
@@ -2309,6 +2333,7 @@ pub async fn start_wallet_monitoring_service(
                             }
                         }
                         Err(e) => {
+                            WALLET_METRICS_ERRORS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             logger::error(LogTag::Wallet, &format!("Failed to collect wallet snapshot: {}", e));
                         }
                     }
@@ -2376,8 +2401,10 @@ pub async fn start_wallet_monitoring_service(
                     let db_guard = GLOBAL_WALLET_DB.lock().await;
                     if let Some(wallet_db) = db_guard.as_ref() {
                         if let Err(e) = wallet_db.upsert_flow_rows_sync(&mapped) {
+                            WALLET_METRICS_ERRORS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             logger::error(LogTag::Wallet, &format!("Failed to upsert flow cache rows: {}", e));
                         } else {
+                            WALLET_METRICS_FLOW_SYNCS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             logger::debug(LogTag::Wallet, &format!("Upserted {} flow cache rows", mapped.len()));
                         }
                     }

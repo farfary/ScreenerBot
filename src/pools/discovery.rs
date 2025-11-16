@@ -48,6 +48,9 @@ pub fn is_raydium_discovery_enabled() -> bool {
 pub struct PoolDiscovery {
     known_pools: HashMap<Pubkey, PoolDescriptor>,
     watched_tokens: Vec<String>,
+    operations: Arc<std::sync::atomic::AtomicU64>,
+    errors: Arc<std::sync::atomic::AtomicU64>,
+    pools_discovered: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl PoolDiscovery {
@@ -56,7 +59,19 @@ impl PoolDiscovery {
         Self {
             known_pools: HashMap::new(),
             watched_tokens: Vec::new(),
+            operations: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            errors: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            pools_discovered: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
+    }
+
+    /// Get metrics for this discovery instance
+    pub fn get_metrics(&self) -> (u64, u64, u64) {
+        (
+            self.operations.load(std::sync::atomic::Ordering::Relaxed),
+            self.errors.load(std::sync::atomic::Ordering::Relaxed),
+            self.pools_discovered.load(std::sync::atomic::Ordering::Relaxed),
+        )
     }
 
     /// Get current discovery source configuration
@@ -146,6 +161,10 @@ impl PoolDiscovery {
         Self::log_source_config();
 
         let interval_seed = DISCOVERY_TICK_INTERVAL_SECS;
+        
+        let operations = Arc::clone(&self.operations);
+        let errors = Arc::clone(&self.errors);
+        let pools_discovered = Arc::clone(&self.pools_discovered);
 
         tokio::spawn(async move {
             let mut current_interval = interval_seed;
@@ -159,7 +178,15 @@ impl PoolDiscovery {
                         break;
                     }
                     _ = interval.tick() => {
-                        Self::batched_discovery_tick().await;
+                        match Self::batched_discovery_tick_with_metrics(&operations, &errors, &pools_discovered).await {
+                            Ok(discovered) => {
+                                operations.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                pools_discovered.fetch_add(discovered as u64, std::sync::atomic::Ordering::Relaxed);
+                            }
+                            Err(_) => {
+                                errors.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            }
+                        }
 
                         let updated_interval = DISCOVERY_TICK_INTERVAL_SECS;
                         if updated_interval != current_interval {
@@ -173,7 +200,11 @@ impl PoolDiscovery {
     }
 
     /// Execute one batched discovery tick: fetch canonical pools from tokens module and stream to analyzer
-    async fn batched_discovery_tick() {
+    async fn batched_discovery_tick_with_metrics(
+        _operations: &Arc<std::sync::atomic::AtomicU64>,
+        _errors: &Arc<std::sync::atomic::AtomicU64>,
+        _pools_discovered: &Arc<std::sync::atomic::AtomicU64>,
+    ) -> Result<usize, String> {
         let tick_start = Instant::now();
 
         let (dex_enabled, gecko_enabled, raydium_enabled) = with_config(|cfg| {
@@ -203,7 +234,7 @@ impl PoolDiscovery {
                 LogTag::PoolDiscovery,
                 "All pool discovery sources disabled - skipping tick",
             );
-            return;
+            return Ok(0);
         }
 
         // Build token list (respect debug override and global filtering)
@@ -239,7 +270,7 @@ impl PoolDiscovery {
 
         if tokens.is_empty() {
             logger::debug(LogTag::PoolDiscovery, "No tokens to discover this tick");
-            return;
+            return Ok(0);
         }
 
         // Early stablecoin filtering
@@ -444,11 +475,14 @@ impl PoolDiscovery {
                 }),
             ))
             .await;
+            
+            Ok(sent_count)
         } else {
             logger::warning(
                 LogTag::PoolDiscovery,
                 "Analyzer not initialized; cannot stream discovered pools",
             );
+            Err("Analyzer not initialized".to_string())
         }
     }
 

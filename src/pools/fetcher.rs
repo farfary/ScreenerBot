@@ -153,6 +153,11 @@ pub struct AccountFetcher {
     fetcher_rx: Arc<RwLock<Option<mpsc::UnboundedReceiver<FetcherMessage>>>>,
     /// Channel sender for sending fetch requests
     fetcher_tx: mpsc::UnboundedSender<FetcherMessage>,
+    /// Metrics
+    operations: Arc<std::sync::atomic::AtomicU64>,
+    errors: Arc<std::sync::atomic::AtomicU64>,
+    accounts_fetched: Arc<std::sync::atomic::AtomicU64>,
+    rpc_batches: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl AccountFetcher {
@@ -170,7 +175,21 @@ impl AccountFetcher {
             account_last_fetch: Arc::new(RwLock::new(HashMap::new())),
             fetcher_rx: Arc::new(RwLock::new(Some(fetcher_rx))),
             fetcher_tx,
+            operations: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            errors: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            accounts_fetched: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            rpc_batches: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
+    }
+
+    /// Get metrics for this fetcher instance
+    pub fn get_metrics(&self) -> (u64, u64, u64, u64) {
+        (
+            self.operations.load(std::sync::atomic::Ordering::Relaxed),
+            self.errors.load(std::sync::atomic::Ordering::Relaxed),
+            self.accounts_fetched.load(std::sync::atomic::Ordering::Relaxed),
+            self.rpc_batches.load(std::sync::atomic::Ordering::Relaxed),
+        )
     }
 
     /// Get sender for sending fetch requests
@@ -191,6 +210,12 @@ impl AccountFetcher {
         let pool_directory = self.pool_directory.clone();
         let account_bundles = self.account_bundles.clone();
         let account_last_fetch = self.account_last_fetch.clone();
+        
+        // Clone metrics for tracking in background task
+        let operations = Arc::clone(&self.operations);
+        let errors = Arc::clone(&self.errors);
+        let accounts_fetched = Arc::clone(&self.accounts_fetched);
+        let rpc_batches = Arc::clone(&self.rpc_batches);
 
         // Take the receiver from the Arc<RwLock>
         let mut fetcher_rx = {
@@ -262,6 +287,10 @@ impl AccountFetcher {
                                 &mut pending_accounts,
                                 &mut account_failure_tracker,
                                 &mut pool_failure_tracker,
+                                &operations,
+                                &errors,
+                                &accounts_fetched,
+                                &rpc_batches,
                             ).await;
                         }
                     }
@@ -371,6 +400,10 @@ impl AccountFetcher {
         pending_accounts: &mut HashSet<Pubkey>,
         account_failure_tracker: &mut HashMap<Pubkey, MissingAccountState>,
         pool_failure_tracker: &mut HashMap<Pubkey, MissingPoolState>,
+        operations: &Arc<std::sync::atomic::AtomicU64>,
+        errors: &Arc<std::sync::atomic::AtomicU64>,
+        accounts_fetched: &Arc<std::sync::atomic::AtomicU64>,
+        rpc_batches: &Arc<std::sync::atomic::AtomicU64>,
     ) {
         if pending_accounts.is_empty() {
             return;
@@ -436,6 +469,11 @@ impl AccountFetcher {
                 Ok((account_data_list, missing_accounts)) => {
                     let batch_duration = batch_start.elapsed();
 
+                    // Track metrics
+                    operations.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    accounts_fetched.fetch_add(account_data_list.len() as u64, std::sync::atomic::Ordering::Relaxed);
+                    rpc_batches.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
                     record_safe(Event::info(
                         EventCategory::Pool,
                         Some("rpc_batch_completed".to_string()),
@@ -494,6 +532,10 @@ impl AccountFetcher {
                 }
                 Err(e) => {
                     let batch_duration = batch_start.elapsed();
+
+                    // Track error
+                    errors.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    rpc_batches.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
                     logger::error(
                         LogTag::PoolFetcher,

@@ -6,6 +6,12 @@ use tokio::task::JoinHandle;
 
 pub struct WalletService;
 
+impl Default for WalletService {
+    fn default() -> Self {
+        Self
+    }
+}
+
 #[async_trait]
 impl Service for WalletService {
     fn name(&self) -> &'static str {
@@ -40,5 +46,17 @@ impl Service for WalletService {
 
     async fn health(&self) -> ServiceHealth {
         ServiceHealth::Healthy
+    }
+
+    async fn metrics(&self) -> ServiceMetrics {
+        let mut metrics = ServiceMetrics::default();
+        
+        let (operations, errors, snapshots_taken, flow_syncs) = crate::wallet::get_wallet_service_metrics();
+        metrics.operations_total = operations;
+        metrics.errors_total = errors;
+        metrics.custom_metrics.insert("snapshots_taken".to_string(), snapshots_taken as f64);
+        metrics.custom_metrics.insert("flow_syncs".to_string(), flow_syncs as f64);
+        
+        metrics
     }
 }

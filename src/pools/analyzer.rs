@@ -53,6 +53,10 @@ pub struct PoolAnalyzer {
     analyzer_rx: Arc<RwLock<Option<mpsc::UnboundedReceiver<AnalyzerMessage>>>>,
     /// Channel sender for sending analysis requests
     analyzer_tx: mpsc::UnboundedSender<AnalyzerMessage>,
+    /// Metrics
+    operations: Arc<std::sync::atomic::AtomicU64>,
+    errors: Arc<std::sync::atomic::AtomicU64>,
+    pools_analyzed: Arc<std::sync::atomic::AtomicU64>,
 }
 
 impl PoolAnalyzer {
@@ -68,7 +72,19 @@ impl PoolAnalyzer {
             rpc_client,
             analyzer_rx: Arc::new(RwLock::new(Some(analyzer_rx))),
             analyzer_tx,
+            operations: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            errors: Arc::new(std::sync::atomic::AtomicU64::new(0)),
+            pools_analyzed: Arc::new(std::sync::atomic::AtomicU64::new(0)),
         }
+    }
+
+    /// Get metrics for this analyzer instance
+    pub fn get_metrics(&self) -> (u64, u64, u64) {
+        (
+            self.operations.load(std::sync::atomic::Ordering::Relaxed),
+            self.errors.load(std::sync::atomic::Ordering::Relaxed),
+            self.pools_analyzed.load(std::sync::atomic::Ordering::Relaxed),
+        )
     }
 
     /// Get sender for sending analysis requests
@@ -87,6 +103,11 @@ impl PoolAnalyzer {
 
         let pool_directory = self.pool_directory.clone();
         let rpc_client = self.rpc_client.clone();
+        
+        // Clone metrics for tracking in background task
+        let operations = Arc::clone(&self.operations);
+        let errors = Arc::clone(&self.errors);
+        let pools_analyzed = Arc::clone(&self.pools_analyzed);
 
         // Take the receiver from the Arc<RwLock>
         let mut analyzer_rx = {
@@ -137,6 +158,10 @@ impl PoolAnalyzer {
                                         volume_h24_usd,
                                         &rpc_client
                                     ).await {
+                                        // Track metrics
+                                        operations.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                        pools_analyzed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                        
                                         // Store analyzed pool in directory
                                         let mut directory = pool_directory.write().unwrap();
                                         directory.insert(pool_id, descriptor.clone());
@@ -164,6 +189,9 @@ impl PoolAnalyzer {
                                             ),
                                         );
                                     } else {
+                                        // Track error
+                                        errors.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                        
                                         // Blacklist pool in database to prevent future attempts
                                         if let Err(e) = super::db::add_pool_to_blacklist(
                                             &pool_id.to_string(),

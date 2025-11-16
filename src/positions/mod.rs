@@ -29,6 +29,8 @@ pub use state::{
 
 pub use tracking::update_position_tracking;
 
+pub use metrics::get_verification_metrics;
+
 pub use metrics::get_proceeds_metrics_snapshot;
 
 pub use worker::{initialize_positions_system, start_positions_manager_service};

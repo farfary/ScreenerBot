@@ -837,10 +837,20 @@ async fn perform_initial_transaction_bootstrap(
                             if let Ok(mut mgr) = manager_arc.try_lock() {
                                 mgr.known_signatures.insert(signature.clone());
                                 mgr.total_transactions += 1;
+                                // Update metrics
+                                mgr.operations
+                                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                                mgr.bootstrap_fetched
+                                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             }
                             retry_successful += 1;
                         }
                         Err(e) => {
+                            // Update error metrics
+                            if let Ok(mgr) = manager_arc.try_lock() {
+                                mgr.errors
+                                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            }
                             still_failed.push((signature.clone(), e));
                         }
                     }
@@ -1350,9 +1360,27 @@ async fn perform_fallback_transaction_check(
                         }
                     }
 
+                    // Update metrics for fallback transaction
+                    if let Some(manager_arc) = get_global_transaction_manager().await {
+                        if let Ok(mgr) = manager_arc.try_lock() {
+                            mgr.operations
+                                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                            mgr.rpc_fallback_fetched
+                                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        }
+                    }
+
                     new_count += 1;
                 }
                 Err(e) => {
+                    // Update error metrics
+                    if let Some(manager_arc) = get_global_transaction_manager().await {
+                        if let Ok(mgr) = manager_arc.try_lock() {
+                            mgr.errors
+                                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        }
+                    }
+
                     logger::info(
                         LogTag::Transactions,
                         &format!(
@@ -1454,6 +1482,16 @@ async fn handle_websocket_transaction(
             add_signature_to_known_globally(signature.clone()).await;
             remove_pending_transaction_globally(&signature).await;
 
+            // Update metrics for WebSocket transaction
+            if let Some(manager_arc) = get_global_transaction_manager().await {
+                if let Ok(mgr) = manager_arc.try_lock() {
+                    mgr.operations
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    mgr.websocket_received
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
+            }
+
             logger::info(
                 LogTag::Transactions,
                 &format!(
@@ -1463,6 +1501,14 @@ async fn handle_websocket_transaction(
             );
         }
         Err(e) => {
+            // Update error metrics
+            if let Some(manager_arc) = get_global_transaction_manager().await {
+                if let Ok(mgr) = manager_arc.try_lock() {
+                    mgr.errors
+                        .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                }
+            }
+
             // Check if this is an RPC indexing delay (temporary, should be retried later)
             if crate::errors::is_rpc_indexing_delay(&e) || e.contains("RPC indexing delay") {
                 // Defer this transaction for retry after 5 seconds

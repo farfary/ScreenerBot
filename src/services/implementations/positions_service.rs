@@ -49,4 +49,8 @@ impl Service for PositionsService {
             ServiceHealth::Starting
         }
     }
+
+    async fn metrics(&self) -> ServiceMetrics {
+        crate::positions::get_verification_metrics()
+    }
 }
