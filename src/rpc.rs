@@ -38,6 +38,7 @@ use base64::Engine as _;
 use bincode;
 use bs58;
 use chrono::{DateTime, Utc};
+use chrono::Timelike;
 use futures;
 use once_cell::sync::Lazy;
 use reqwest;
@@ -56,13 +57,14 @@ use solana_sdk::{
     transaction::VersionedTransaction,
 };
 use solana_transaction_status::{EncodedConfirmedTransactionWithStatusMeta, UiTransactionEncoding};
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::{Arc as StdArc, Mutex as StdMutex};
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex as AsyncMutex;
 use url::Url;
+use uuid::Uuid;
 
 /// Structure to hold token account information
 #[derive(Debug)]
@@ -438,9 +440,57 @@ pub fn sol_to_lamports(sol_amount: f64) -> u64 {
     (sol_amount * (LAMPORTS_PER_SOL as f64)) as u64
 }
 
+const RPC_STATS_VERSION: u8 = 2;
+const RPC_STATS_MAX_MINUTE_BUCKETS: usize = 24 * 60; // Keep last 24h of per-minute buckets
+
+/// Aggregated call information for a single minute
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RpcMinuteBucket {
+    pub minute_start: DateTime<Utc>,
+    pub call_count: u64,
+    pub error_count: u64,
+    pub latency_sum_ms: u64,
+}
+
+/// Summary of an RPC session (one bot runtime)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RpcSessionSnapshot {
+    pub session_id: String,
+    pub started_at: DateTime<Utc>,
+    pub ended_at: Option<DateTime<Utc>>,
+    pub total_calls: u64,
+    pub total_errors: u64,
+    pub calls_per_url: HashMap<String, u64>,
+    pub calls_per_method: HashMap<String, u64>,
+    pub errors_per_url: HashMap<String, u64>,
+    pub errors_per_method: HashMap<String, u64>,
+}
+
+/// Persisted RPC stats payload stored on disk
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PersistedRpcStats {
+    pub version: u8,
+    #[serde(default)]
+    pub last_session: Option<RpcSessionSnapshot>,
+    #[serde(default)]
+    pub minute_buckets: VecDeque<RpcMinuteBucket>,
+}
+
+impl Default for PersistedRpcStats {
+    fn default() -> Self {
+        Self {
+            version: RPC_STATS_VERSION,
+            last_session: None,
+            minute_buckets: VecDeque::new(),
+        }
+    }
+}
+
 /// Statistics tracking for RPC usage
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RpcStats {
+    /// Unique ID for this runtime session
+    pub session_id: String,
     /// Total calls per RPC URL
     pub calls_per_url: HashMap<String, u64>,
     /// Total calls per RPC method
@@ -469,11 +519,18 @@ pub struct RpcStats {
     pub startup_time: DateTime<Utc>,
     /// Last save time
     pub last_save_time: DateTime<Utc>,
+    /// Rolling per-minute aggregates for richer analytics
+    #[serde(default)]
+    pub minute_buckets: VecDeque<RpcMinuteBucket>,
+    /// Snapshot of the previous session (if available)
+    #[serde(default)]
+    pub last_session: Option<RpcSessionSnapshot>,
 }
 
 impl Default for RpcStats {
     fn default() -> Self {
         Self {
+            session_id: Uuid::new_v4().to_string(),
             calls_per_url: HashMap::new(),
             calls_per_method: HashMap::new(),
             calls_per_url_per_method: HashMap::new(),
@@ -485,11 +542,135 @@ impl Default for RpcStats {
             timed_calls_per_method: HashMap::new(),
             startup_time: Utc::now(),
             last_save_time: Utc::now(),
+            minute_buckets: VecDeque::new(),
+            last_session: None,
         }
     }
 }
 
 impl RpcStats {
+    fn current_minute_start() -> DateTime<Utc> {
+        let now = Utc::now();
+        let truncated = now
+            .naive_utc()
+            .with_second(0)
+            .and_then(|dt| dt.with_nanosecond(0))
+            .unwrap_or_else(|| now.naive_utc());
+        DateTime::<Utc>::from_utc(truncated, Utc)
+    }
+
+    fn prune_minute_buckets(&mut self) {
+        while self.minute_buckets.len() > RPC_STATS_MAX_MINUTE_BUCKETS {
+            self.minute_buckets.pop_front();
+        }
+    }
+
+    fn ensure_current_minute_bucket(&mut self) -> &mut RpcMinuteBucket {
+        let current_minute = Self::current_minute_start();
+        let needs_new = match self.minute_buckets.back() {
+            Some(last) => last.minute_start != current_minute,
+            None => true,
+        };
+
+        if needs_new {
+            self.minute_buckets.push_back(RpcMinuteBucket {
+                minute_start: current_minute,
+                call_count: 0,
+                error_count: 0,
+                latency_sum_ms: 0,
+            });
+            self.prune_minute_buckets();
+        }
+
+        self.minute_buckets
+            .back_mut()
+            .expect("minute bucket must exist after ensure")
+    }
+
+    fn record_minute_activity(
+        &mut self,
+        call_delta: u64,
+        error_delta: u64,
+        latency_ms: Option<u64>,
+    ) {
+        let bucket = self.ensure_current_minute_bucket();
+        if call_delta > 0 {
+            bucket.call_count += call_delta;
+        }
+        if error_delta > 0 {
+            bucket.error_count += error_delta;
+        }
+        if let Some(ms) = latency_ms {
+            bucket.latency_sum_ms += ms;
+        }
+    }
+
+    /// Create a snapshot of the current session for persistence
+    pub fn snapshot_session(&self) -> RpcSessionSnapshot {
+        RpcSessionSnapshot {
+            session_id: self.session_id.clone(),
+            started_at: self.startup_time,
+            ended_at: Some(Utc::now()),
+            total_calls: self.total_calls(),
+            total_errors: self.total_errors(),
+            calls_per_url: self.calls_per_url.clone(),
+            calls_per_method: self.calls_per_method.clone(),
+            errors_per_url: self.errors_per_url.clone(),
+            errors_per_method: self.errors_per_method.clone(),
+        }
+    }
+
+    /// Returns the persisted representation written to disk
+    pub fn to_persisted_state(&self) -> PersistedRpcStats {
+        PersistedRpcStats {
+            version: RPC_STATS_VERSION,
+            last_session: Some(self.snapshot_session()),
+            minute_buckets: self.minute_buckets.clone(),
+        }
+    }
+
+    /// Adopt previously persisted state (minute buckets + last session)
+    pub fn apply_persisted_state(&mut self, mut state: PersistedRpcStats) {
+        state.version = RPC_STATS_VERSION;
+        // Drop buckets older than retention window
+        self.minute_buckets = state.minute_buckets;
+        self.prune_minute_buckets();
+        self.last_session = state.last_session;
+    }
+
+    /// Get recent calls-per-minute rate using rolling buckets
+    pub fn calls_per_minute_recent(&self, window_minutes: usize) -> f64 {
+        if window_minutes == 0 {
+            return 0.0;
+        }
+
+        let cutoff = Utc::now() - chrono::Duration::minutes(window_minutes as i64);
+        let mut total_calls = 0u64;
+        let mut covered_minutes = 0u64;
+
+        for bucket in self.minute_buckets.iter().rev() {
+            if bucket.minute_start < cutoff {
+                break;
+            }
+            total_calls += bucket.call_count;
+            covered_minutes += 1;
+            if covered_minutes as usize >= window_minutes {
+                break;
+            }
+        }
+
+        if covered_minutes == 0 {
+            return 0.0;
+        }
+
+        (total_calls as f64) / (covered_minutes as f64)
+    }
+
+    /// Expose rolling buckets for diagnostics/UI
+    pub fn get_minute_buckets(&self) -> Vec<RpcMinuteBucket> {
+        self.minute_buckets.iter().cloned().collect()
+    }
+
     /// Record a call to an RPC method on a specific URL
     pub fn record_call(&mut self, url: &str, method: &str) {
         *self.calls_per_url.entry(url.to_string()).or_insert(0) += 1;
@@ -504,6 +685,8 @@ impl RpcStats {
                 *count += 1;
             })
             .or_insert(1);
+
+        self.record_minute_activity(1, 0, None);
     }
 
     /// Record a failed call to an RPC method on a specific URL
@@ -513,6 +696,8 @@ impl RpcStats {
             .errors_per_method
             .entry(method.to_string())
             .or_insert(0) += 1;
+
+        self.record_minute_activity(0, 1, None);
     }
 
     /// Record response time for a call
@@ -612,7 +797,7 @@ impl RpcStats {
     /// Save stats to disk
     pub fn save_to_disk(&mut self) -> Result<(), String> {
         self.last_save_time = Utc::now();
-        let json_data = serde_json::to_string_pretty(self)
+        let json_data = serde_json::to_string_pretty(&self.to_persisted_state())
             .map_err(|e| format!("Failed to serialize RPC stats: {}", e))?;
 
         let stats_path = crate::paths::get_rpc_stats_path();
@@ -627,79 +812,65 @@ impl RpcStats {
         let stats_path = crate::paths::get_rpc_stats_path();
         match std::fs::read_to_string(&stats_path) {
             Ok(data) => {
-                match serde_json::from_str::<RpcStats>(&data) {
-                    Ok(loaded_stats) => {
-                        // Store counts before moving
-                        let url_count = loaded_stats.calls_per_url.len();
-                        let method_count = loaded_stats.calls_per_method.len();
-                        let total_calls = loaded_stats.total_calls();
-
-                        // Merge URL stats
-                        for (url, count) in loaded_stats.calls_per_url {
-                            *self.calls_per_url.entry(url).or_insert(0) += count;
-                        }
-
-                        // Merge method stats
-                        for (method, count) in loaded_stats.calls_per_method {
-                            *self.calls_per_method.entry(method).or_insert(0) += count;
-                        }
-
-                        // Merge method calls per URL stats
-                        for (url, method_counts) in loaded_stats.calls_per_url_per_method {
-                            let url_entry = self
-                                .calls_per_url_per_method
-                                .entry(url)
-                                .or_insert_with(HashMap::new);
-                            for (method, count) in method_counts {
-                                *url_entry.entry(method).or_insert(0) += count;
-                            }
-                        }
-
-                        // Merge error stats
-                        for (url, count) in loaded_stats.errors_per_url {
-                            *self.errors_per_url.entry(url).or_insert(0) += count;
-                        }
-
-                        for (method, count) in loaded_stats.errors_per_method {
-                            *self.errors_per_method.entry(method).or_insert(0) += count;
-                        }
-
-                        // Merge response time sums
-                        for (url, sum_ms) in loaded_stats.response_time_sum_ms_per_url {
-                            *self.response_time_sum_ms_per_url.entry(url).or_insert(0) += sum_ms;
-                        }
-
-                        for (method, sum_ms) in loaded_stats.response_time_sum_ms_per_method {
-                            *self
-                                .response_time_sum_ms_per_method
-                                .entry(method)
-                                .or_insert(0) += sum_ms;
-                        }
-
-                        // Merge timed call counts
-                        for (url, count) in loaded_stats.timed_calls_per_url {
-                            *self.timed_calls_per_url.entry(url).or_insert(0) += count;
-                        }
-
-                        for (method, count) in loaded_stats.timed_calls_per_method {
-                            *self.timed_calls_per_method.entry(method).or_insert(0) += count;
-                        }
-
-                        logger::info(
-                            LogTag::Rpc,
-                            &format!(
-                                "Loaded RPC stats from disk: {} total calls, {} URLs, {} methods",
-                                total_calls, url_count, method_count
-                            ),
-                        );
+                match serde_json::from_str::<PersistedRpcStats>(&data) {
+                    Ok(state) => {
+                        self.apply_persisted_state(state);
+                        logger::info(LogTag::Rpc, "Loaded persisted RPC stats state");
                         Ok(())
                     }
-                    Err(e) => {
-                        logger::debug(
-                            LogTag::Rpc,
-                            &format!("Failed to parse RPC stats file, starting fresh: {}", e),
-                        );
-                        Ok(())
+                    Err(_) => {
+                        // Attempt to parse legacy format to preserve at least summary info
+                        #[derive(Debug, Deserialize)]
+                        struct LegacyRpcStats {
+                            calls_per_url: HashMap<String, u64>,
+                            calls_per_method: HashMap<String, u64>,
+                            calls_per_url_per_method: HashMap<String, HashMap<String, u64>>,
+                            #[serde(default)]
+                            errors_per_url: HashMap<String, u64>,
+                            #[serde(default)]
+                            errors_per_method: HashMap<String, u64>,
+                            #[serde(default)]
+                            response_time_sum_ms_per_url: HashMap<String, u64>,
+                            #[serde(default)]
+                            response_time_sum_ms_per_method: HashMap<String, u64>,
+                            #[serde(default)]
+                            timed_calls_per_url: HashMap<String, u64>,
+                            #[serde(default)]
+                            timed_calls_per_method: HashMap<String, u64>,
+                            startup_time: DateTime<Utc>,
+                            last_save_time: DateTime<Utc>,
+                        }
+
+                        match serde_json::from_str::<LegacyRpcStats>(&data) {
+                            Ok(legacy) => {
+                                let snapshot = RpcSessionSnapshot {
+                                    session_id: format!("legacy-{}", legacy.startup_time.timestamp()),
+                                    started_at: legacy.startup_time,
+                                    ended_at: Some(legacy.last_save_time),
+                                    total_calls: legacy.calls_per_url.values().sum(),
+                                    total_errors: legacy.errors_per_url.values().sum(),
+                                    calls_per_url: legacy.calls_per_url,
+                                    calls_per_method: legacy.calls_per_method,
+                                    errors_per_url: legacy.errors_per_url,
+                                    errors_per_method: legacy.errors_per_method,
+                                };
+
+                                self.minute_buckets.clear();
+                                self.last_session = Some(snapshot);
+                                logger::warning(
+                                    LogTag::Rpc,
+                                    "Migrated legacy RPC stats file; starting fresh for current session",
+                                );
+                                Ok(())
+                            }
+                            Err(e) => {
+                                logger::debug(
+                                    LogTag::Rpc,
+                                    &format!("Failed to parse RPC stats file, starting fresh: {}", e),
+                                );
+                                Ok(())
+                            }
+                        }
                     }
                 }
             }

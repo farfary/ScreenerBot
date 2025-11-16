@@ -12,7 +12,7 @@ use crate::{
         TOKENS_SYSTEM_READY, TRANSACTIONS_SYSTEM_READY,
     },
     logger::{self, LogTag},
-    rpc::get_global_rpc_stats,
+    rpc::{get_global_rpc_stats, RpcMinuteBucket, RpcSessionSnapshot},
     trader::is_trader_running,
     wallet::{get_current_wallet_status, get_snapshot_token_balances},
     webserver::{state::get_app_state, utils::format_duration},
@@ -26,6 +26,7 @@ struct RpcMetricsSummary {
     total_calls: u64,
     total_errors: u64,
     success_rate: f32,
+    recent_calls_per_minute: f64,
 }
 
 impl From<&crate::rpc::RpcStats> for RpcMetricsSummary {
@@ -34,6 +35,7 @@ impl From<&crate::rpc::RpcStats> for RpcMetricsSummary {
             total_calls: stats.total_calls(),
             total_errors: stats.total_errors(),
             success_rate: stats.success_rate(),
+            recent_calls_per_minute: stats.calls_per_minute_recent(5),
         }
     }
 }
@@ -96,6 +98,7 @@ pub struct SystemMetricsSnapshot {
     pub rpc_calls_total: u64,
     pub rpc_calls_failed: u64,
     pub rpc_success_rate: f32,
+    pub rpc_calls_per_minute_recent: f64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -424,6 +427,12 @@ pub struct RpcStatsSnapshot {
     pub calls_per_method: HashMap<String, u64>,
     pub errors_per_method: HashMap<String, u64>,
     pub uptime_seconds: i64,
+    pub session_id: String,
+    pub session_started_at: DateTime<Utc>,
+    pub recent_calls_per_minute: f64,
+    pub minute_buckets: Vec<RpcMinuteBucket>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_session: Option<RpcSessionSnapshot>,
 }
 
 /// Gather current status snapshot (aggregates data from multiple sources)
@@ -497,6 +506,11 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
         uptime_seconds: Utc::now()
             .signed_duration_since(stats.startup_time)
             .num_seconds(),
+        session_id: stats.session_id.clone(),
+        session_started_at: stats.startup_time,
+        recent_calls_per_minute: stats.calls_per_minute_recent(5),
+        minute_buckets: stats.get_minute_buckets(),
+        last_session: stats.last_session.clone(),
     });
 
     let sol_balance = wallet.as_ref().map(|w| w.sol_balance).unwrap_or(0.0);
@@ -587,15 +601,17 @@ async fn collect_system_metrics_snapshot(
             .map(|n| n.get())
             .unwrap_or(1);
 
-        let (rpc_calls_total, rpc_calls_failed, rpc_success_rate) = rpc_metrics
-            .map(|summary| {
-                (
-                    summary.total_calls,
-                    summary.total_errors,
-                    summary.success_rate,
-                )
-            })
-            .unwrap_or((0, 0, 100.0));
+        let (rpc_calls_total, rpc_calls_failed, rpc_success_rate, rpc_calls_per_minute_recent) =
+            rpc_metrics
+                .map(|summary| {
+                    (
+                        summary.total_calls,
+                        summary.total_errors,
+                        summary.success_rate,
+                        summary.recent_calls_per_minute,
+                    )
+                })
+                .unwrap_or((0, 0, 100.0, 0.0));
 
         SystemMetricsSnapshot {
             memory_usage_mb: system_memory_used_mb,
@@ -609,6 +625,7 @@ async fn collect_system_metrics_snapshot(
             rpc_calls_total,
             rpc_calls_failed,
             rpc_success_rate,
+            rpc_calls_per_minute_recent,
         }
     })
     .await

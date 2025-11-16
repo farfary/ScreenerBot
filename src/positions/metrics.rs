@@ -188,6 +188,9 @@ pub static VERIFICATION_METRICS: LazyLock<VerificationMetricsInternal> =
 
 /// Get verification metrics for service integration
 pub fn get_verification_metrics() -> crate::services::ServiceMetrics {
-    let (queue_size, _) = super::queue::get_queue_status_sync();
+    // Try to get queue status, fallback to 0 if queue is locked
+    let queue_size = super::queue::get_queue_status_sync()
+        .map(|(size, _)| size)
+        .unwrap_or(0);
     VERIFICATION_METRICS.to_service_metrics(queue_size)
 }

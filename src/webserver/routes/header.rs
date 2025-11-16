@@ -137,14 +137,16 @@ async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
 
     // RPC info
     let rpc = if let Some(stats) = get_global_rpc_stats() {
+        let recent_cpm = stats.calls_per_minute_recent(5);
         let uptime_secs = chrono::Utc::now()
             .signed_duration_since(stats.startup_time)
             .num_seconds() as u64;
+        let fallback_cpm = (stats.total_calls() as f64 / uptime_secs.max(1) as f64) * 60.0;
 
         RpcHeaderInfo {
             success_rate_percent: stats.success_rate(),
             avg_latency_ms: stats.average_response_time_ms_global() as u64,
-            calls_per_minute: (stats.total_calls() as f64 / uptime_secs.max(1) as f64) * 60.0,
+            calls_per_minute: if recent_cpm > 0.0 { recent_cpm } else { fallback_cpm },
             healthy: stats.success_rate() > 90.0,
         }
     } else {

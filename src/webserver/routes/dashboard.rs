@@ -230,9 +230,15 @@ async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<Dash
             let rpc_uptime = chrono::Utc::now()
                 .signed_duration_since(rpc_stats.startup_time)
                 .num_seconds() as u64;
+            let recent_calls_per_second = rpc_stats.calls_per_minute_recent(5) / 60.0;
+            let fallback_cps = rpc_stats.calls_per_second();
             RpcInfo {
                 total_calls: rpc_stats.total_calls(),
-                calls_per_second: rpc_stats.calls_per_second(),
+                calls_per_second: if recent_calls_per_second > 0.0 {
+                    recent_calls_per_second
+                } else {
+                    fallback_cps
+                },
                 uptime_seconds: rpc_uptime,
             }
         }
