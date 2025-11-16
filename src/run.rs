@@ -269,32 +269,30 @@ fn register_all_services(manager: &mut ServiceManager) {
 
     logger::info(LogTag::System, "Registering services...");
 
-    // Register all services (order doesn't matter - manager handles dependencies and priority)
-
     // Core infrastructure services
-    manager.register(Box::new(crate::connectivity::ConnectivityService::new())); // Priority 5 - Foundation service
+    manager.register(Box::new(crate::connectivity::ConnectivityService::new()));
     manager.register(Box::new(EventsService));
     manager.register(Box::new(TransactionsService));
     manager.register(Box::new(SolPriceService));
 
     // Pool services (4 sub-services + 1 helper coordinator)
-    manager.register(Box::new(PoolDiscoveryService)); // 100
-    manager.register(Box::new(PoolFetcherService)); // 101
-    manager.register(Box::new(PoolCalculatorService)); // 102
-    manager.register(Box::new(PoolAnalyzerService)); // 103
-    manager.register(Box::new(PoolsService)); // 35 - helper tasks (health, cleanup)
+    manager.register(Box::new(PoolDiscoveryService));
+    manager.register(Box::new(PoolFetcherService));
+    manager.register(Box::new(PoolCalculatorService));
+    manager.register(Box::new(PoolAnalyzerService));
+    manager.register(Box::new(PoolsService));
 
-    // Centralized Tokens service (replaces token discovery/monitoring/security/blacklist services)
+    // Centralized Tokens service
     manager.register(Box::new(TokensService::default()));
 
-    // Other application services
+    // Application services
     manager.register(Box::new(FilteringService::new()));
     manager.register(Box::new(OhlcvService));
     manager.register(Box::new(PositionsService));
     manager.register(Box::new(WalletService));
     manager.register(Box::new(RpcStatsService));
     manager.register(Box::new(AtaCleanupService));
-    manager.register(Box::new(TraderService));
+    manager.register(Box::new(crate::trader::TraderService::new()));
     manager.register(Box::new(WebserverService));
 
     logger::info(

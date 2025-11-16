@@ -2,11 +2,14 @@
 
 use crate::events::{record_trader_event, Severity};
 use crate::logger::{self, LogTag};
+use crate::services::{Service, ServiceHealth};
 use crate::trader::auto;
 use crate::trader::config;
+use async_trait::async_trait;
 use serde_json::json;
 use std::sync::Arc;
-use tokio::sync::RwLock;
+use tokio::sync::{Notify, RwLock};
+use tokio::task::JoinHandle;
 
 pub struct TraderService {
     shutdown_tx: Arc<RwLock<Option<tokio::sync::watch::Sender<bool>>>>,
@@ -26,14 +29,44 @@ impl Default for TraderService {
     }
 }
 
-// TODO: Implement Service trait when services module exports are fixed
-// For now, this is a stub implementation
+#[async_trait]
+impl Service for TraderService {
+    fn name(&self) -> &'static str {
+        "trader"
+    }
 
-impl TraderService {
-    pub async fn start(&self) -> Result<(), String> {
+    fn priority(&self) -> i32 {
+        150
+    }
+
+    fn dependencies(&self) -> Vec<&'static str> {
+        vec![
+            "positions",
+            "pool_discovery",
+            "pool_fetcher",
+            "pool_calculator",
+            "token_discovery",
+            "token_monitoring",
+            "filtering",
+        ]
+    }
+
+    fn is_enabled(&self) -> bool {
+        crate::global::is_initialization_complete()
+    }
+
+    async fn initialize(&mut self) -> Result<(), String> {
+        super::init_trader_system().await?;
+        Ok(())
+    }
+
+    async fn start(
+        &mut self,
+        shutdown: Arc<Notify>,
+        monitor: tokio_metrics::TaskMonitor,
+    ) -> Result<Vec<JoinHandle<()>>, String> {
         logger::info(LogTag::Trader, "Starting Trader Service...");
 
-        // Record service start event
         record_trader_event(
             "service_start",
             Severity::Info,
@@ -46,10 +79,6 @@ impl TraderService {
         )
         .await;
 
-        // Initialize trader system
-        super::init_trader_system().await?;
-
-        // Check if trader is enabled
         let trader_enabled = config::is_trader_enabled();
         if !trader_enabled {
             logger::info(
@@ -84,16 +113,19 @@ impl TraderService {
             .await;
         }
 
-        // Create shutdown channel
-        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
-        *self.shutdown_tx.write().await = Some(shutdown_tx);
+        let (watch_tx, watch_rx) = tokio::sync::watch::channel(false);
+        *self.shutdown_tx.write().await = Some(watch_tx.clone());
 
-        // Start auto trading monitors
-        let _auto_task = tokio::spawn(async move {
-            if let Err(e) = auto::start_auto_trading(shutdown_rx).await {
+        let bridge_shutdown = shutdown.clone();
+        tokio::spawn(async move {
+            bridge_shutdown.notified().await;
+            let _ = watch_tx.send(true);
+        });
+
+        let handle = tokio::spawn(monitor.instrument(async move {
+            if let Err(e) = auto::start_auto_trading(watch_rx).await {
                 logger::error(LogTag::Trader, &format!("Auto trading error: {}", e));
 
-                // Record auto trading error event
                 record_trader_event(
                     "auto_trading_error",
                     Severity::Error,
@@ -106,11 +138,10 @@ impl TraderService {
                 )
                 .await;
             }
-        });
+        }));
 
         logger::info(LogTag::Trader, "Trader Service started successfully");
 
-        // Record successful start event
         record_trader_event(
             "service_started",
             Severity::Info,
@@ -123,13 +154,12 @@ impl TraderService {
         )
         .await;
 
-        Ok(())
+        Ok(vec![handle])
     }
 
-    pub async fn stop(&self) -> Result<(), String> {
+    async fn stop(&mut self) -> Result<(), String> {
         logger::info(LogTag::Trader, "Stopping Trader Service...");
 
-        // Record shutdown event
         record_trader_event(
             "service_stop",
             Severity::Info,
@@ -142,17 +172,14 @@ impl TraderService {
         )
         .await;
 
-        // Send shutdown signal
         if let Some(tx) = self.shutdown_tx.write().await.take() {
             let _ = tx.send(true);
         }
 
-        // Wait a moment for graceful shutdown
         tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
 
         logger::info(LogTag::Trader, "Trader Service stopped");
 
-        // Record stopped event
         record_trader_event(
             "service_stopped",
             Severity::Info,
@@ -166,5 +193,13 @@ impl TraderService {
         .await;
 
         Ok(())
+    }
+
+    async fn health(&self) -> ServiceHealth {
+        if crate::global::is_initialization_complete() {
+            ServiceHealth::Healthy
+        } else {
+            ServiceHealth::Starting
+        }
     }
 }
