@@ -288,7 +288,10 @@ impl TransactionsManager {
         custom.insert("websocket_received".to_string(), ws as f64);
         custom.insert("bootstrap_fetched".to_string(), bootstrap as f64);
         custom.insert("rpc_fallback_fetched".to_string(), fallback as f64);
-        custom.insert("known_signatures".to_string(), self.known_signatures.len() as f64);
+        custom.insert(
+            "known_signatures".to_string(),
+            self.known_signatures.len() as f64,
+        );
         custom.insert(
             "pending_transactions".to_string(),
             self.pending_transactions.len() as f64,

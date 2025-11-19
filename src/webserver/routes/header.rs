@@ -146,7 +146,11 @@ async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
         RpcHeaderInfo {
             success_rate_percent: stats.success_rate(),
             avg_latency_ms: stats.average_response_time_ms_global() as u64,
-            calls_per_minute: if recent_cpm > 0.0 { recent_cpm } else { fallback_cpm },
+            calls_per_minute: if recent_cpm > 0.0 {
+                recent_cpm
+            } else {
+                fallback_cpm
+            },
             healthy: stats.success_rate() > 90.0,
         }
     } else {

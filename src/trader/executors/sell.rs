@@ -27,6 +27,9 @@ pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, Strin
         ),
     );
 
+    // Extract exit percentage from decision.size_sol (default to 100% if not specified)
+    let exit_percentage = decision.size_sol.unwrap_or(100.0);
+
     // Determine exit type based on configuration and reason
     let partial_exit_enabled = with_config(|cfg| cfg.positions.partial_exit_enabled);
     let is_emergency_exit = matches!(
@@ -34,13 +37,11 @@ pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, Strin
         TradeReason::StopLoss | TradeReason::Blacklisted | TradeReason::ForceSell
     );
 
-    // Emergency exits are always full exits, otherwise check config for partial exit support
+    // Emergency exits are always full exits, otherwise check config and percentage
     let exit_reason = format!("{:?}", decision.reason);
 
-    if partial_exit_enabled && !is_emergency_exit {
-        // Partial exit enabled - get percentage from config (validated at load time)
-        let exit_percentage = with_config(|cfg| cfg.positions.partial_exit_default_pct);
-
+    if partial_exit_enabled && !is_emergency_exit && exit_percentage < 100.0 {
+        // Partial exit
         match positions::partial_close_position(
             &decision.mint,
             exit_percentage,
@@ -72,7 +73,7 @@ pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, Strin
             }
         }
     } else {
-        // Full exit (either disabled or emergency exit)
+        // Full exit (either disabled, emergency exit, or 100%)
         match positions::close_position_direct(&decision.mint, exit_reason.clone()).await {
             Ok(transaction_signature) => {
                 logger::info(

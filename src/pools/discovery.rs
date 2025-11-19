@@ -70,7 +70,8 @@ impl PoolDiscovery {
         (
             self.operations.load(std::sync::atomic::Ordering::Relaxed),
             self.errors.load(std::sync::atomic::Ordering::Relaxed),
-            self.pools_discovered.load(std::sync::atomic::Ordering::Relaxed),
+            self.pools_discovered
+                .load(std::sync::atomic::Ordering::Relaxed),
         )
     }
 
@@ -161,7 +162,7 @@ impl PoolDiscovery {
         Self::log_source_config();
 
         let interval_seed = DISCOVERY_TICK_INTERVAL_SECS;
-        
+
         let operations = Arc::clone(&self.operations);
         let errors = Arc::clone(&self.errors);
         let pools_discovered = Arc::clone(&self.pools_discovered);
@@ -475,7 +476,7 @@ impl PoolDiscovery {
                 }),
             ))
             .await;
-            
+
             Ok(sent_count)
         } else {
             logger::warning(

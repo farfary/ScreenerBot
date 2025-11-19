@@ -104,23 +104,48 @@ impl Service for OhlcvService {
 
     async fn metrics(&self) -> ServiceMetrics {
         let ohlcv_metrics = crate::ohlcvs::get_metrics().await;
-        
-        // OHLCV doesn't track operations/errors in the traditional sense, 
+
+        // OHLCV doesn't track operations/errors in the traditional sense,
         // but we can use data points stored and gaps filled as proxies
         let mut service_metrics = ServiceMetrics::default();
         service_metrics.operations_total = ohlcv_metrics.data_points_stored as u64;
-        
+
         // Map OHLCV metrics to custom metrics
-        service_metrics.custom_metrics.insert("tokens_monitored".to_string(), ohlcv_metrics.tokens_monitored as f64);
-        service_metrics.custom_metrics.insert("pools_tracked".to_string(), ohlcv_metrics.pools_tracked as f64);
-        service_metrics.custom_metrics.insert("api_calls_per_minute".to_string(), ohlcv_metrics.api_calls_per_minute);
-        service_metrics.custom_metrics.insert("cache_hit_rate".to_string(), ohlcv_metrics.cache_hit_rate);
-        service_metrics.custom_metrics.insert("average_fetch_latency_ms".to_string(), ohlcv_metrics.average_fetch_latency_ms);
-        service_metrics.custom_metrics.insert("gaps_detected".to_string(), ohlcv_metrics.gaps_detected as f64);
-        service_metrics.custom_metrics.insert("gaps_filled".to_string(), ohlcv_metrics.gaps_filled as f64);
-        service_metrics.custom_metrics.insert("data_points_stored".to_string(), ohlcv_metrics.data_points_stored as f64);
-        service_metrics.custom_metrics.insert("database_size_mb".to_string(), ohlcv_metrics.database_size_mb);
-        
+        service_metrics.custom_metrics.insert(
+            "tokens_monitored".to_string(),
+            ohlcv_metrics.tokens_monitored as f64,
+        );
+        service_metrics.custom_metrics.insert(
+            "pools_tracked".to_string(),
+            ohlcv_metrics.pools_tracked as f64,
+        );
+        service_metrics.custom_metrics.insert(
+            "api_calls_per_minute".to_string(),
+            ohlcv_metrics.api_calls_per_minute,
+        );
+        service_metrics
+            .custom_metrics
+            .insert("cache_hit_rate".to_string(), ohlcv_metrics.cache_hit_rate);
+        service_metrics.custom_metrics.insert(
+            "average_fetch_latency_ms".to_string(),
+            ohlcv_metrics.average_fetch_latency_ms,
+        );
+        service_metrics.custom_metrics.insert(
+            "gaps_detected".to_string(),
+            ohlcv_metrics.gaps_detected as f64,
+        );
+        service_metrics
+            .custom_metrics
+            .insert("gaps_filled".to_string(), ohlcv_metrics.gaps_filled as f64);
+        service_metrics.custom_metrics.insert(
+            "data_points_stored".to_string(),
+            ohlcv_metrics.data_points_stored as f64,
+        );
+        service_metrics.custom_metrics.insert(
+            "database_size_mb".to_string(),
+            ohlcv_metrics.database_size_mb,
+        );
+
         service_metrics
     }
 }

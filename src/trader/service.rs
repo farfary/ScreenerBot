@@ -3,8 +3,8 @@
 use crate::events::{record_trader_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth};
-use crate::trader::auto;
 use crate::trader::config;
+use crate::trader::monitors;
 use async_trait::async_trait;
 use serde_json::json;
 use std::sync::Arc;
@@ -123,7 +123,7 @@ impl Service for TraderService {
         });
 
         let handle = tokio::spawn(monitor.instrument(async move {
-            if let Err(e) = auto::start_auto_trading(watch_rx).await {
+            if let Err(e) = monitors::start_automated_trading(watch_rx).await {
                 logger::error(LogTag::Trader, &format!("Auto trading error: {}", e));
 
                 record_trader_event(

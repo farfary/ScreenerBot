@@ -37,8 +37,8 @@ use crate::utils::lamports_to_sol;
 use base64::Engine as _;
 use bincode;
 use bs58;
-use chrono::{DateTime, Utc};
 use chrono::Timelike;
+use chrono::{DateTime, Utc};
 use futures;
 use once_cell::sync::Lazy;
 use reqwest;
@@ -844,7 +844,10 @@ impl RpcStats {
                         match serde_json::from_str::<LegacyRpcStats>(&data) {
                             Ok(legacy) => {
                                 let snapshot = RpcSessionSnapshot {
-                                    session_id: format!("legacy-{}", legacy.startup_time.timestamp()),
+                                    session_id: format!(
+                                        "legacy-{}",
+                                        legacy.startup_time.timestamp()
+                                    ),
                                     started_at: legacy.startup_time,
                                     ended_at: Some(legacy.last_save_time),
                                     total_calls: legacy.calls_per_url.values().sum(),
@@ -866,7 +869,10 @@ impl RpcStats {
                             Err(e) => {
                                 logger::debug(
                                     LogTag::Rpc,
-                                    &format!("Failed to parse RPC stats file, starting fresh: {}", e),
+                                    &format!(
+                                        "Failed to parse RPC stats file, starting fresh: {}",
+                                        e
+                                    ),
                                 );
                                 Ok(())
                             }

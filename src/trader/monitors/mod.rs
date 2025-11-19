@@ -1,31 +1,26 @@
-//! Automated trading system using strategies
+//! Monitoring loops for automated trading
 //!
-//! This module handles strategy-based trading including:
-//! 1. Entry monitoring based on strategies
-//! 2. Exit decisions based on strategies and exit rules
-//! 3. DCA implementation
+//! This module contains orchestration-only code:
+//! - Entry monitor: Loops through available tokens, calls evaluators, executes trades
+//! - Exit monitor: Loops through open positions, calls evaluators, executes trades
+//!
+//! All business logic (safety checks, strategy evaluation, exit conditions) is in evaluators module.
 
-mod dca;
-mod dca_evaluation;
-mod entry_monitor;
-mod exit_monitor;
-mod strategy_manager;
+mod entry;
+mod exit;
 
-pub use dca::process_dca_opportunities;
-pub use dca_evaluation::{DcaCalculations, DcaConfigSnapshot, DcaEvaluation};
-pub use entry_monitor::monitor_entries;
-pub use exit_monitor::monitor_positions;
-pub use strategy_manager::StrategyManager;
+pub use entry::monitor_entries;
+pub use exit::monitor_positions;
 
 use crate::events::{record_trader_event, Severity};
 use crate::logger::{self, LogTag};
 use serde_json::json;
 
 /// Start the auto trading monitors
-pub async fn start_auto_trading(
+pub async fn start_automated_trading(
     shutdown: tokio::sync::watch::Receiver<bool>,
 ) -> Result<(), String> {
-    logger::info(LogTag::Trader, "Starting auto trading monitors...");
+    logger::info(LogTag::Trader, "Starting automated trading monitors...");
 
     // Record auto trading start event
     record_trader_event(
@@ -35,7 +30,7 @@ pub async fn start_auto_trading(
         None,
         json!({
             "system": "auto_trading",
-            "message": "Auto trading monitors starting up",
+            "message": "Automated trading monitors starting up",
         }),
     )
     .await;
@@ -87,7 +82,7 @@ pub async fn start_auto_trading(
     // Wait for both tasks
     let _ = tokio::try_join!(entry_task, exit_task);
 
-    logger::info(LogTag::Trader, "Auto trading monitors stopped");
+    logger::info(LogTag::Trader, "Automated trading monitors stopped");
 
     // Record auto trading stop event
     record_trader_event(
@@ -97,7 +92,7 @@ pub async fn start_auto_trading(
         None,
         json!({
             "system": "auto_trading",
-            "message": "Auto trading monitors stopped",
+            "message": "Automated trading monitors stopped",
         }),
     )
     .await;

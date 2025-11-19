@@ -81,18 +81,23 @@ impl Service for PoolDiscoveryService {
 
     async fn metrics(&self) -> ServiceMetrics {
         let mut metrics = ServiceMetrics::default();
-        
+
         // Get metrics from the component if available
         if let Some(discovery) = crate::pools::get_pool_discovery() {
             let (operations, errors, pools_discovered) = discovery.get_metrics();
             metrics.operations_total = operations;
             metrics.errors_total = errors;
-            metrics.custom_metrics.insert("pools_discovered".to_string(), pools_discovered as f64);
+            metrics
+                .custom_metrics
+                .insert("pools_discovered".to_string(), pools_discovered as f64);
             if operations > 0 {
-                metrics.custom_metrics.insert("avg_pools_per_cycle".to_string(), pools_discovered as f64 / operations as f64);
+                metrics.custom_metrics.insert(
+                    "avg_pools_per_cycle".to_string(),
+                    pools_discovered as f64 / operations as f64,
+                );
             }
         }
-        
+
         metrics
     }
 }

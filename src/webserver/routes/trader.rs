@@ -886,18 +886,37 @@ async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
         &format!("mint={} size_sol={}", req.mint, size),
     );
 
-    match positions::add_to_position(&req.mint, size).await {
-        Ok(signature) => success_response(ManualTradeSuccess {
-            success: true,
-            mint: req.mint,
-            signature: Some(signature),
-            effective_price_sol: None,
-            size_sol: Some(size),
-            position_id: None,
-            message: "Added to position".to_string(),
-            timestamp: chrono::Utc::now().to_rfc3339(),
-        }),
-        Err(e) => error_response(StatusCode::BAD_REQUEST, "ManualAddFailed", &e, None),
+    // Use trader module for centralized logic
+    let result = crate::trader::manual::manual_add(&req.mint, size).await;
+
+    match result {
+        Ok(tr) => {
+            if !tr.success {
+                return error_response(
+                    StatusCode::BAD_REQUEST,
+                    "ManualAddFailed",
+                    tr.error.as_deref().unwrap_or("Manual add failed"),
+                    None,
+                );
+            }
+            let resp = ManualTradeSuccess {
+                success: true,
+                mint: req.mint,
+                signature: tr.tx_signature,
+                effective_price_sol: tr.executed_price_sol,
+                size_sol: tr.executed_size_sol,
+                position_id: tr.position_id,
+                message: "Added to position".to_string(),
+                timestamp: chrono::Utc::now().to_rfc3339(),
+            };
+            success_response(resp)
+        }
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ManualAddError",
+            &e,
+            None,
+        ),
     }
 }
 
@@ -919,62 +938,77 @@ async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response {
         );
     }
 
+    // Determine percentage
     let close_all = req.close_all.unwrap_or(false);
-    let pct = req
-        .percentage
-        .unwrap_or_else(|| with_config(|cfg| cfg.positions.partial_exit_default_pct));
+    let pct = if close_all {
+        None // Full exit (100%)
+    } else {
+        Some(
+            req.percentage
+                .unwrap_or_else(|| with_config(|cfg| cfg.positions.partial_exit_default_pct)),
+        )
+    };
 
-    // Normalize and validate percentage
-    let pct = if close_all { 100.0 } else { pct };
-    if !pct.is_finite() || pct <= 0.0 || pct > 100.0 {
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "InvalidPercentage",
-            "percentage must be in (0, 100]",
-            None,
-        );
+    // Validate percentage if provided
+    if let Some(percentage) = pct {
+        if !percentage.is_finite() || percentage <= 0.0 || percentage > 100.0 {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "InvalidPercentage",
+                "percentage must be in (0, 100]",
+                None,
+            );
+        }
     }
 
     logger::info(
         LogTag::Webserver,
-        &format!("mint={} percentage={}", req.mint, pct),
+        &format!(
+            "mint={} percentage={:?} force={}",
+            req.mint,
+            pct,
+            req.force.unwrap_or(false)
+        ),
     );
 
-    let exit_reason = if req.force.unwrap_or(false) {
-        "ForceSell"
+    // Route to trader module based on force flag
+    let result = if req.force.unwrap_or(false) {
+        crate::trader::manual::force_sell(&req.mint, pct).await
     } else {
-        "ManualExit"
-    }
-    .to_string();
+        crate::trader::manual::manual_sell(&req.mint, pct).await
+    };
 
-    // Full vs partial exit
-    if (pct - 100.0).abs() < f64::EPSILON {
-        match positions::close_position_direct(&req.mint, exit_reason).await {
-            Ok(signature) => success_response(ManualTradeSuccess {
+    match result {
+        Ok(tr) => {
+            if !tr.success {
+                return error_response(
+                    StatusCode::BAD_REQUEST,
+                    "ManualSellFailed",
+                    tr.error.as_deref().unwrap_or("Manual sell failed"),
+                    None,
+                );
+            }
+            let resp = ManualTradeSuccess {
                 success: true,
                 mint: req.mint,
-                signature: Some(signature),
-                effective_price_sol: None,
-                size_sol: None,
-                position_id: None,
-                message: "Full position closed".to_string(),
+                signature: tr.tx_signature,
+                effective_price_sol: tr.executed_price_sol,
+                size_sol: tr.executed_size_sol,
+                position_id: tr.position_id,
+                message: if pct.unwrap_or(100.0) == 100.0 {
+                    "Full position closed".to_string()
+                } else {
+                    format!("Partial position closed ({}%)", pct.unwrap_or(100.0))
+                },
                 timestamp: chrono::Utc::now().to_rfc3339(),
-            }),
-            Err(e) => error_response(StatusCode::BAD_REQUEST, "ManualSellFailed", &e, None),
+            };
+            success_response(resp)
         }
-    } else {
-        match positions::partial_close_position(&req.mint, pct, &exit_reason).await {
-            Ok(signature) => success_response(ManualTradeSuccess {
-                success: true,
-                mint: req.mint,
-                signature: Some(signature),
-                effective_price_sol: None,
-                size_sol: None,
-                position_id: None,
-                message: format!("Partial sell executed ({}%)", pct),
-                timestamp: chrono::Utc::now().to_rfc3339(),
-            }),
-            Err(e) => error_response(StatusCode::BAD_REQUEST, "ManualSellFailed", &e, None),
-        }
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ManualSellError",
+            &e,
+            None,
+        ),
     }
 }

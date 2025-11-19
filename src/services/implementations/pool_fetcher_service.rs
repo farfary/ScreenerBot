@@ -89,22 +89,32 @@ impl Service for PoolFetcherService {
 
     async fn metrics(&self) -> ServiceMetrics {
         let mut metrics = ServiceMetrics::default();
-        
+
         // Get metrics from the component if available
         if let Some(fetcher) = crate::pools::get_account_fetcher() {
             let (operations, errors, accounts_fetched, rpc_batches) = fetcher.get_metrics();
             metrics.operations_total = operations;
             metrics.errors_total = errors;
-            metrics.custom_metrics.insert("accounts_fetched".to_string(), accounts_fetched as f64);
-            metrics.custom_metrics.insert("rpc_batches".to_string(), rpc_batches as f64);
+            metrics
+                .custom_metrics
+                .insert("accounts_fetched".to_string(), accounts_fetched as f64);
+            metrics
+                .custom_metrics
+                .insert("rpc_batches".to_string(), rpc_batches as f64);
             if operations > 0 {
-                metrics.custom_metrics.insert("avg_accounts_per_cycle".to_string(), accounts_fetched as f64 / operations as f64);
+                metrics.custom_metrics.insert(
+                    "avg_accounts_per_cycle".to_string(),
+                    accounts_fetched as f64 / operations as f64,
+                );
             }
             if rpc_batches > 0 {
-                metrics.custom_metrics.insert("avg_accounts_per_batch".to_string(), accounts_fetched as f64 / rpc_batches as f64);
+                metrics.custom_metrics.insert(
+                    "avg_accounts_per_batch".to_string(),
+                    accounts_fetched as f64 / rpc_batches as f64,
+                );
             }
         }
-        
+
         metrics
     }
 }

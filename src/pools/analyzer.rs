@@ -83,7 +83,8 @@ impl PoolAnalyzer {
         (
             self.operations.load(std::sync::atomic::Ordering::Relaxed),
             self.errors.load(std::sync::atomic::Ordering::Relaxed),
-            self.pools_analyzed.load(std::sync::atomic::Ordering::Relaxed),
+            self.pools_analyzed
+                .load(std::sync::atomic::Ordering::Relaxed),
         )
     }
 
@@ -103,7 +104,7 @@ impl PoolAnalyzer {
 
         let pool_directory = self.pool_directory.clone();
         let rpc_client = self.rpc_client.clone();
-        
+
         // Clone metrics for tracking in background task
         let operations = Arc::clone(&self.operations);
         let errors = Arc::clone(&self.errors);
@@ -161,7 +162,7 @@ impl PoolAnalyzer {
                                         // Track metrics
                                         operations.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                                         pools_analyzed.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                        
+
                                         // Store analyzed pool in directory
                                         let mut directory = pool_directory.write().unwrap();
                                         directory.insert(pool_id, descriptor.clone());
@@ -191,7 +192,7 @@ impl PoolAnalyzer {
                                     } else {
                                         // Track error
                                         errors.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                                        
+
                                         // Blacklist pool in database to prevent future attempts
                                         if let Err(e) = super::db::add_pool_to_blacklist(
                                             &pool_id.to_string(),

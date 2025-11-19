@@ -1,4 +1,7 @@
-//! Strategy management and application for trading decisions
+//! Strategy evaluation for trading decisions
+//!
+//! Applies configured strategies to evaluate entry and exit opportunities.
+//! Renamed from StrategyManager to StrategyEvaluator for consistency.
 
 use crate::logger::{self, LogTag};
 use crate::pools::PriceResult;
@@ -8,10 +11,10 @@ use crate::strategies::types::{MarketData, PositionData};
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
 use chrono::Utc;
 
-/// Manager for applying strategies to trading decisions
-pub struct StrategyManager;
+/// Evaluator for applying strategies to trading decisions
+pub struct StrategyEvaluator;
 
-impl StrategyManager {
+impl StrategyEvaluator {
     /// Check if a token meets entry criteria based on strategies
     pub async fn check_entry_strategies(
         token_mint: &str,

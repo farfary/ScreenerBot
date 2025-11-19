@@ -187,7 +187,8 @@ impl AccountFetcher {
         (
             self.operations.load(std::sync::atomic::Ordering::Relaxed),
             self.errors.load(std::sync::atomic::Ordering::Relaxed),
-            self.accounts_fetched.load(std::sync::atomic::Ordering::Relaxed),
+            self.accounts_fetched
+                .load(std::sync::atomic::Ordering::Relaxed),
             self.rpc_batches.load(std::sync::atomic::Ordering::Relaxed),
         )
     }
@@ -210,7 +211,7 @@ impl AccountFetcher {
         let pool_directory = self.pool_directory.clone();
         let account_bundles = self.account_bundles.clone();
         let account_last_fetch = self.account_last_fetch.clone();
-        
+
         // Clone metrics for tracking in background task
         let operations = Arc::clone(&self.operations);
         let errors = Arc::clone(&self.errors);
@@ -471,7 +472,10 @@ impl AccountFetcher {
 
                     // Track metrics
                     operations.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                    accounts_fetched.fetch_add(account_data_list.len() as u64, std::sync::atomic::Ordering::Relaxed);
+                    accounts_fetched.fetch_add(
+                        account_data_list.len() as u64,
+                        std::sync::atomic::Ordering::Relaxed,
+                    );
                     rpc_batches.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
 
                     record_safe(Event::info(

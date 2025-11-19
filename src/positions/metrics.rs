@@ -170,7 +170,10 @@ impl VerificationMetricsInternal {
         custom.insert("dca_verified".to_string(), dcas as f64);
         custom.insert("partial_exit_verified".to_string(), partials as f64);
         custom.insert("verification_retries".to_string(), retry_count as f64);
-        custom.insert("verifications_abandoned".to_string(), abandoned_count as f64);
+        custom.insert(
+            "verifications_abandoned".to_string(),
+            abandoned_count as f64,
+        );
         custom.insert("permanent_failures".to_string(), permanent_count as f64);
 
         crate::services::ServiceMetrics {

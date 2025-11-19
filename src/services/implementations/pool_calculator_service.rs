@@ -84,18 +84,23 @@ impl Service for PoolCalculatorService {
 
     async fn metrics(&self) -> ServiceMetrics {
         let mut metrics = ServiceMetrics::default();
-        
+
         // Get metrics from the component if available
         if let Some(calculator) = crate::pools::get_price_calculator() {
             let (operations, errors, prices_calculated) = calculator.get_metrics();
             metrics.operations_total = operations;
             metrics.errors_total = errors;
-            metrics.custom_metrics.insert("prices_calculated".to_string(), prices_calculated as f64);
+            metrics
+                .custom_metrics
+                .insert("prices_calculated".to_string(), prices_calculated as f64);
             if operations > 0 {
-                metrics.custom_metrics.insert("success_rate".to_string(), (prices_calculated as f64 / operations as f64) * 100.0);
+                metrics.custom_metrics.insert(
+                    "success_rate".to_string(),
+                    (prices_calculated as f64 / operations as f64) * 100.0,
+                );
             }
         }
-        
+
         metrics
     }
 }

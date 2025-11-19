@@ -2305,7 +2305,7 @@ pub async fn start_wallet_monitoring_service(
                             // Track metrics
                             WALLET_METRICS_OPERATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                             WALLET_METRICS_SNAPSHOTS_TAKEN.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-                            
+
                             // Save to database
                             let db_guard = GLOBAL_WALLET_DB.lock().await;
                             match db_guard.as_ref() {
