@@ -60,6 +60,25 @@ pub struct PendingDcaSwap {
 static PENDING_DCA_SWAPS: LazyLock<RwLock<HashMap<String, PendingDcaSwap>>> =
     LazyLock::new(|| RwLock::new(HashMap::new()));
 
+/// Error identifier returned when no global position permits remain.
+pub const POSITION_SLOT_UNAVAILABLE_ERR: &str = "position_slots_unavailable";
+const POSITION_SLOT_ERR_DELIM: char = ':';
+
+/// Format a standardized capacity error payload (e.g., "position_slots_unavailable:2").
+pub fn format_position_slot_error(remaining_permits: usize) -> String {
+    format!(
+        "{}{}{}",
+        POSITION_SLOT_UNAVAILABLE_ERR, POSITION_SLOT_ERR_DELIM, remaining_permits
+    )
+}
+
+/// Parse a capacity error payload and extract remaining permits when possible.
+pub fn parse_position_slot_error(error: &str) -> Option<usize> {
+    let payload = error.strip_prefix(POSITION_SLOT_UNAVAILABLE_ERR)?;
+    let payload = payload.strip_prefix(POSITION_SLOT_ERR_DELIM)?;
+    payload.parse::<usize>().ok()
+}
+
 const PENDING_DCA_METADATA_KEY: &str = "pending_dca_swaps";
 
 // Global position creation semaphore to enforce max_open_positions atomically
@@ -352,10 +371,7 @@ pub async fn acquire_global_position_permit(
         }
         Err(_) => {
             let available = semaphore.available_permits();
-            Err(format!(
-                "No position slots available (permits: {})",
-                available
-            ))
+            Err(format_position_slot_error(available as usize))
         }
     }
 }

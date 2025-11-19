@@ -18,10 +18,7 @@ pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, Strin
         LogTag::Trader,
         &format!(
             "Executing sell for position {} token {} (reason: {:?})",
-            decision
-                .position_id
-                .as_ref()
-                .unwrap_or(&"unknown".to_string()),
+            decision.position_id.as_deref().unwrap_or("unknown"),
             decision.mint,
             decision.reason
         ),

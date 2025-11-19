@@ -10,6 +10,7 @@
 
 use crate::logger::{self, LogTag};
 use crate::pools;
+use crate::positions;
 use crate::trader::{config, constants, evaluators, executors};
 use std::collections::HashMap;
 use std::sync::LazyLock;
@@ -35,7 +36,6 @@ async fn try_reserve_token_for_cycle(mint: &str) -> bool {
     if reservations.contains_key(mint) {
         return false; // Already reserved by another thread
     }
-
     reservations.insert(mint.to_string(), Instant::now());
     true
 }
@@ -217,25 +217,53 @@ pub async fn monitor_entries(
                                 .await;
                             } else {
                                 let error_msg = result.error.clone().unwrap_or_default();
-                                logger::error(
-                                    LogTag::Trader,
-                                    &format!("Entry failed for {}: {}", decision.mint, error_msg),
-                                );
+                                if let Some(remaining) =
+                                    positions::parse_position_slot_error(&error_msg)
+                                {
+                                    logger::info(
+                                        LogTag::Trader,
+                                        &format!(
+                                            "Entry blocked for {} – capacity guard engaged (permits left: {})",
+                                            decision.mint, remaining
+                                        ),
+                                    );
 
-                                // Record failed entry event
-                                crate::events::record_safe(crate::events::Event::new(
-                                    crate::events::EventCategory::Trader,
-                                    Some("entry_failed".to_string()),
-                                    crate::events::Severity::Error,
-                                    Some(decision.mint.clone()),
-                                    None,
-                                    serde_json::json!({
-                                        "success": false,
-                                        "mint": decision.mint,
-                                        "error": result.error,
-                                    }),
-                                ))
-                                .await;
+                                    crate::events::record_safe(crate::events::Event::new(
+                                        crate::events::EventCategory::Trader,
+                                        Some("entry_capacity_guard".to_string()),
+                                        crate::events::Severity::Info,
+                                        Some(decision.mint.clone()),
+                                        None,
+                                        serde_json::json!({
+                                            "mint": decision.mint,
+                                            "reason": error_msg,
+                                            "remaining_permits": remaining,
+                                        }),
+                                    ))
+                                    .await;
+                                } else {
+                                    logger::error(
+                                        LogTag::Trader,
+                                        &format!(
+                                            "Entry failed for {}: {}",
+                                            decision.mint, error_msg
+                                        ),
+                                    );
+
+                                    crate::events::record_safe(crate::events::Event::new(
+                                        crate::events::EventCategory::Trader,
+                                        Some("entry_failed".to_string()),
+                                        crate::events::Severity::Error,
+                                        Some(decision.mint.clone()),
+                                        None,
+                                        serde_json::json!({
+                                            "success": false,
+                                            "mint": decision.mint,
+                                            "error": result.error,
+                                        }),
+                                    ))
+                                    .await;
+                                }
                             }
                         }
                         Err(e) => {

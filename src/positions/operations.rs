@@ -27,8 +27,79 @@ use crate::{
 };
 use chrono::Utc;
 use serde_json::json;
+use tokio::time::{sleep, Duration};
 
 const SOLANA_BLOCKHASH_VALIDITY_SLOTS: u64 = 150;
+const POSITION_SAVE_MAX_RETRIES: usize = 5;
+const POSITION_SAVE_BASE_BACKOFF_MS: u64 = 200;
+const POSITION_SAVE_MAX_BACKOFF_MS: u64 = 3_000;
+
+fn position_save_backoff_ms(attempt: usize) -> u64 {
+    let exp = attempt.saturating_sub(1) as u32;
+    let growth = 1_u64 << exp.min(12);
+    (POSITION_SAVE_BASE_BACKOFF_MS * growth).min(POSITION_SAVE_MAX_BACKOFF_MS)
+}
+
+async fn persist_position_with_retry(position: &Position) -> i64 {
+    let mut attempt = 1;
+    loop {
+        match save_position(position).await {
+            Ok(id) => {
+                if attempt > 1 {
+                    logger::info(
+                        LogTag::Positions,
+                        &format!(
+                            "Recovered after {} persistence retries for mint {} (ID {})",
+                            attempt - 1,
+                            position.mint,
+                            id
+                        ),
+                    );
+                }
+                return id;
+            }
+            Err(err) => {
+                logger::warning(
+                    LogTag::Positions,
+                    &format!(
+                        "Persisting position for mint {} failed on attempt {}: {}",
+                        position.mint, attempt, err
+                    ),
+                );
+
+                if attempt >= POSITION_SAVE_MAX_RETRIES {
+                    let payload = json!({
+                        "mint": position.mint,
+                        "attempts": attempt,
+                        "error": err,
+                    });
+
+                    crate::events::record_safe(crate::events::Event::new(
+                        crate::events::EventCategory::Position,
+                        Some("open_persist_failed".to_string()),
+                        crate::events::Severity::Error,
+                        Some(position.mint.clone()),
+                        None,
+                        payload,
+                    ))
+                    .await;
+
+                    let fatal = format!(
+                        "Critical: failed to persist position for mint {} after {} attempts. Manual intervention required.",
+                        position.mint, attempt
+                    );
+                    logger::error(LogTag::Positions, &fatal);
+
+                    panic!("{}", fatal);
+                }
+
+                let backoff = position_save_backoff_ms(attempt);
+                sleep(Duration::from_millis(backoff)).await;
+                attempt += 1;
+            }
+        }
+    }
+}
 
 /// Internal helper to open a new position with an explicit SOL size
 async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<String, String> {
@@ -266,28 +337,8 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
         last_dca_time: None,
     };
 
-    // Save to database and get ID
-    let position_id = match save_position(&position).await {
-        Ok(id) => id,
-        Err(e) => {
-            // Keep pending-open state for TTL so retries are blocked; propagate error
-            // Record database save failure
-            crate::events::record_position_event(
-                "0",
-                &api_token.mint,
-                "open_db_save_failed",
-                Some(&transaction_signature),
-                None,
-                trade_size_sol,
-                0,
-                None,
-                None,
-            )
-            .await;
-
-            return Err(format!("Failed to save position: {}", e));
-        }
-    };
+    // Save to database (with retry) and get ID
+    let position_id = persist_position_with_retry(&position).await;
 
     let mut position_with_id = position;
     position_with_id.id = Some(position_id);

@@ -96,3 +96,8 @@ pub fn get_time_override_duration_hours() -> f64 {
 pub fn get_position_close_cooldown_minutes() -> u64 {
     with_config(|cfg| cfg.trader.position_close_cooldown_minutes as u64)
 }
+
+/// Get sell (exit) concurrency limit
+pub fn get_sell_concurrency() -> usize {
+    with_config(|cfg| cfg.trader.sell_concurrency)
+}

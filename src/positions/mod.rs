@@ -21,10 +21,11 @@ pub use operations::{
 };
 
 pub use state::{
-    acquire_position_lock, get_active_frozen_cooldowns, get_closed_positions, get_open_mints,
-    get_open_positions, get_open_positions_count, get_position_by_id, get_position_by_mint,
-    init_global_position_semaphore, is_open_position, is_token_in_cooldown,
-    reconcile_global_position_semaphore, MINT_TO_POSITION_INDEX, POSITIONS, SIG_TO_MINT_INDEX,
+    acquire_position_lock, format_position_slot_error, get_active_frozen_cooldowns,
+    get_closed_positions, get_open_mints, get_open_positions, get_open_positions_count,
+    get_position_by_id, get_position_by_mint, init_global_position_semaphore, is_open_position,
+    is_token_in_cooldown, parse_position_slot_error, reconcile_global_position_semaphore,
+    MINT_TO_POSITION_INDEX, POSITIONS, POSITION_SLOT_UNAVAILABLE_ERR, SIG_TO_MINT_INDEX,
 };
 
 pub use tracking::update_position_tracking;

@@ -48,6 +48,24 @@ pub async fn execute_buy(decision: &TradeDecision) -> Result<TradeResult, String
             ))
         }
         Err(e) => {
+            if let Some(remaining) = crate::positions::parse_position_slot_error(&e) {
+                let guard_msg = format!(
+                    "{}: global position limit reached (remaining permits: {})",
+                    crate::positions::POSITION_SLOT_UNAVAILABLE_ERR,
+                    remaining
+                );
+
+                logger::debug(
+                    LogTag::Trader,
+                    &format!(
+                        "Entry guard engaged for {} – max open positions reached (permits left: {})",
+                        decision.mint, remaining
+                    ),
+                );
+
+                return Ok(TradeResult::failure(decision.clone(), guard_msg, 0));
+            }
+
             let error = format!("Buy execution failed: {}", e);
             logger::error(LogTag::Trader, &error);
             Ok(TradeResult::failure(decision.clone(), error, 0))
@@ -68,10 +86,7 @@ pub async fn execute_dca(decision: &TradeDecision) -> Result<TradeResult, String
         LogTag::Trader,
         &format!(
             "Executing DCA for position {} token {}",
-            decision
-                .position_id
-                .as_ref()
-                .unwrap_or(&"unknown".to_string()),
+            decision.position_id.as_deref().unwrap_or("unknown"),
             decision.mint
         ),
     );

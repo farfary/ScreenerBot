@@ -45,8 +45,8 @@ impl Service for TraderService {
             "pool_discovery",
             "pool_fetcher",
             "pool_calculator",
-            "token_discovery",
-            "token_monitoring",
+            "pool_helpers",
+            "tokens",
             "filtering",
         ]
     }

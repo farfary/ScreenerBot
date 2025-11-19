@@ -11,7 +11,6 @@ pub const POSITION_CYCLE_MIN_WAIT_MS: u64 = 200;
 // Timeouts and limits
 pub const ENTRY_CHECK_ACQUIRE_TIMEOUT_SECS: u64 = 30;
 pub const ENTRY_RESERVATION_TIMEOUT_SECS: u64 = 30;
-pub const MAX_CONCURRENT_POSITION_EVALUATIONS: usize = 5;
 
 // Debug flags
 pub const DEBUG_FORCE_SELL_MODE: bool = false;

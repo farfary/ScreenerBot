@@ -19,16 +19,16 @@ pub async fn check_time_override(
 
     // Check if position has exceeded duration threshold
     if position_age_hours >= duration_hours {
-        // Calculate current loss percentage using average entry price
+        // Calculate current P&L percentage using average entry price
         let entry_price = position.average_entry_price;
         if entry_price <= 0.0 || !entry_price.is_finite() {
             return Ok(None);
         }
 
-        let loss_pct = (1.0 - current_price / entry_price) * 100.0;
+        let pnl_pct = ((current_price - entry_price) / entry_price) * 100.0;
 
-        // Check if loss exceeds threshold
-        if loss_pct >= loss_threshold_pct {
+        // Configuration value is negative (e.g. -40) meaning "exit if loss is 40% or worse"
+        if pnl_pct <= loss_threshold_pct {
             return Ok(Some(TradeDecision {
                 position_id: position.id.map(|id| id.to_string()),
                 mint: position.mint.clone(),

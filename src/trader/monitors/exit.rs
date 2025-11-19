@@ -79,9 +79,8 @@ pub async fn monitor_positions(
         );
 
         // Create semaphore for concurrent position evaluation
-        let semaphore = Arc::new(Semaphore::new(
-            constants::MAX_CONCURRENT_POSITION_EVALUATIONS,
-        ));
+        let sell_concurrency = std::cmp::max(1, config::get_sell_concurrency());
+        let semaphore = Arc::new(Semaphore::new(sell_concurrency));
         let mut eval_tasks = Vec::new();
 
         // Phase 1: Spawn concurrent evaluation tasks for all positions
@@ -187,10 +186,7 @@ pub async fn monitor_positions(
                         LogTag::Trader,
                         &format!(
                             "📈 DCA opportunity for position {}",
-                            decision
-                                .position_id
-                                .as_ref()
-                                .unwrap_or(&"unknown".to_string())
+                            decision.position_id.as_deref().unwrap_or("unknown")
                         ),
                     );
                     match executors::execute_trade(&decision).await {
