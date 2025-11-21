@@ -170,6 +170,8 @@ pub struct StrategyRequest {
     pub enabled: bool,
     #[serde(default = "default_priority")]
     pub priority: i32,
+    #[serde(default = "default_timeframe")]
+    pub timeframe: String,
     pub rules: serde_json::Value,
     #[serde(default)]
     pub parameters: HashMap<String, serde_json::Value>,
@@ -182,6 +184,10 @@ fn default_enabled() -> bool {
 
 fn default_priority() -> i32 {
     10
+}
+
+fn default_timeframe() -> String {
+    "5m".to_string()
 }
 
 /// Query parameters for strategy list
@@ -434,6 +440,7 @@ async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
         strategy_type,
         enabled: request.enabled,
         priority: request.priority,
+        timeframe: request.timeframe,
         rules,
         parameters: request.parameters,
         created_at: now,
@@ -521,6 +528,7 @@ async fn update_strategy_handler(
         strategy_type,
         enabled: request.enabled,
         priority: request.priority,
+        timeframe: request.timeframe,
         rules,
         parameters: request.parameters,
         created_at: existing.created_at,
@@ -718,6 +726,7 @@ async fn test_strategy(
         position_data,
         market_data,
         timeframe_bundle,
+        strategy_timeframe: strategy.timeframe.clone(),
     };
 
     // Create engine and evaluate

@@ -6,6 +6,10 @@
 //! - DCA count limits
 //! - Cooldown periods
 //! - DCA size percentage
+//!
+//! NOTE: This evaluator uses simple price-threshold logic and does NOT integrate
+//! with the strategy system or OHLCV data. For OHLCV-based DCA decisions, consider
+//! creating DCA-specific strategies in the strategy system instead.
 
 use crate::logger::{self, LogTag};
 use crate::positions;

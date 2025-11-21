@@ -28,6 +28,7 @@ CREATE TABLE IF NOT EXISTS strategies (
     type TEXT NOT NULL, -- 'ENTRY' or 'EXIT'
     enabled INTEGER NOT NULL DEFAULT 1,
     priority INTEGER NOT NULL DEFAULT 10,
+    timeframe TEXT NOT NULL DEFAULT '5m', -- Which timeframe to use for OHLCV conditions
     rules_json TEXT NOT NULL,
     parameters_json TEXT,
     created_at TEXT NOT NULL,
@@ -225,8 +226,8 @@ pub fn insert_strategy(strategy: &Strategy) -> Result<(), String> {
         .map_err(|e| format!("Failed to serialize parameters: {}", e))?;
 
     conn.execute(
-        "INSERT INTO strategies (id, name, description, type, enabled, priority, rules_json, parameters_json, created_at, updated_at, author, version)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)",
+        "INSERT INTO strategies (id, name, description, type, enabled, priority, timeframe, rules_json, parameters_json, created_at, updated_at, author, version)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
         params![
             strategy.id,
             strategy.name,
@@ -234,6 +235,7 @@ pub fn insert_strategy(strategy: &Strategy) -> Result<(), String> {
             strategy.strategy_type.to_string(),
             strategy.enabled,
             strategy.priority,
+            strategy.timeframe,
             rules_json,
             parameters_json,
             strategy.created_at.to_rfc3339(),
@@ -269,7 +271,7 @@ pub fn update_strategy(strategy: &Strategy) -> Result<(), String> {
         .execute(
             "UPDATE strategies 
              SET name = ?2, description = ?3, type = ?4, enabled = ?5, priority = ?6, 
-                 rules_json = ?7, parameters_json = ?8, updated_at = ?9, author = ?10, version = ?11
+                 timeframe = ?7, rules_json = ?8, parameters_json = ?9, updated_at = ?10, author = ?11, version = ?12
              WHERE id = ?1",
             params![
                 strategy.id,
@@ -278,6 +280,7 @@ pub fn update_strategy(strategy: &Strategy) -> Result<(), String> {
                 strategy.strategy_type.to_string(),
                 strategy.enabled,
                 strategy.priority,
+                strategy.timeframe,
                 rules_json,
                 parameters_json,
                 strategy.updated_at.to_rfc3339(),
@@ -328,17 +331,17 @@ pub fn get_strategy(strategy_id: &str) -> Result<Option<Strategy>, String> {
 
     let result = conn
         .query_row(
-            "SELECT id, name, description, type, enabled, priority, rules_json, parameters_json, created_at, updated_at, author, version
+            "SELECT id, name, description, type, enabled, priority, timeframe, rules_json, parameters_json, created_at, updated_at, author, version
              FROM strategies WHERE id = ?1",
             params![strategy_id],
             |row| {
-                let rules_json: String = row.get(6)?;
-                let parameters_json: String = row.get(7)?;
+                let rules_json: String = row.get(7)?;
+                let parameters_json: String = row.get(8)?;
                 let type_str: String = row.get(3)?;
-                let created_at_str: String = row.get(8)?;
-                let updated_at_str: String = row.get(9)?;
+                let created_at_str: String = row.get(9)?;
+                let updated_at_str: String = row.get(10)?;
 
-                Ok((rules_json, parameters_json, type_str, created_at_str, updated_at_str, row.get(0)?, row.get(1)?, row.get(2)?, row.get(4)?, row.get(5)?, row.get(10)?, row.get(11)?))
+                Ok((rules_json, parameters_json, type_str, created_at_str, updated_at_str, row.get(0)?, row.get(1)?, row.get(2)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(11)?, row.get(12)?))
             },
         )
         .optional()
@@ -356,6 +359,7 @@ pub fn get_strategy(strategy_id: &str) -> Result<Option<Strategy>, String> {
             description,
             enabled,
             priority,
+            timeframe,
             author,
             version,
         )) => {
@@ -382,6 +386,7 @@ pub fn get_strategy(strategy_id: &str) -> Result<Option<Strategy>, String> {
                 strategy_type,
                 enabled,
                 priority,
+                timeframe,
                 rules,
                 parameters,
                 created_at,
@@ -400,18 +405,18 @@ pub fn get_all_strategies() -> Result<Vec<Strategy>, String> {
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, name, description, type, enabled, priority, rules_json, parameters_json, created_at, updated_at, author, version
+            "SELECT id, name, description, type, enabled, priority, timeframe, rules_json, parameters_json, created_at, updated_at, author, version
              FROM strategies ORDER BY priority ASC, name ASC",
         )
         .map_err(|e| format!("Failed to prepare statement: {}", e))?;
 
     let strategies = stmt
         .query_map([], |row| {
-            let rules_json: String = row.get(6)?;
-            let parameters_json: String = row.get(7)?;
+            let rules_json: String = row.get(7)?;
+            let parameters_json: String = row.get(8)?;
             let type_str: String = row.get(3)?;
-            let created_at_str: String = row.get(8)?;
-            let updated_at_str: String = row.get(9)?;
+            let created_at_str: String = row.get(9)?;
+            let updated_at_str: String = row.get(10)?;
 
             Ok((
                 row.get(0)?,
@@ -420,12 +425,13 @@ pub fn get_all_strategies() -> Result<Vec<Strategy>, String> {
                 type_str,
                 row.get(4)?,
                 row.get(5)?,
+                row.get(6)?,
                 rules_json,
                 parameters_json,
                 created_at_str,
                 updated_at_str,
-                row.get(10)?,
                 row.get(11)?,
+                row.get(12)?,
             ))
         })
         .map_err(|e| format!("Failed to query strategies: {}", e))?
@@ -440,6 +446,7 @@ pub fn get_all_strategies() -> Result<Vec<Strategy>, String> {
         type_str,
         enabled,
         priority,
+        timeframe,
         rules_json,
         parameters_json,
         created_at_str,
@@ -471,6 +478,7 @@ pub fn get_all_strategies() -> Result<Vec<Strategy>, String> {
             strategy_type,
             enabled,
             priority,
+            timeframe,
             rules,
             parameters,
             created_at,
@@ -489,18 +497,18 @@ pub fn get_enabled_strategies(strategy_type: StrategyType) -> Result<Vec<Strateg
 
     let mut stmt = conn
         .prepare(
-            "SELECT id, name, description, type, enabled, priority, rules_json, parameters_json, created_at, updated_at, author, version
+            "SELECT id, name, description, type, enabled, priority, timeframe, rules_json, parameters_json, created_at, updated_at, author, version
              FROM strategies WHERE type = ?1 AND enabled = 1 ORDER BY priority ASC, name ASC",
         )
         .map_err(|e| format!("Failed to prepare statement: {}", e))?;
 
     let strategies = stmt
         .query_map(params![strategy_type.to_string()], |row| {
-            let rules_json: String = row.get(6)?;
-            let parameters_json: String = row.get(7)?;
+            let rules_json: String = row.get(7)?;
+            let parameters_json: String = row.get(8)?;
             let type_str: String = row.get(3)?;
-            let created_at_str: String = row.get(8)?;
-            let updated_at_str: String = row.get(9)?;
+            let created_at_str: String = row.get(9)?;
+            let updated_at_str: String = row.get(10)?;
 
             Ok((
                 row.get(0)?,
@@ -509,12 +517,13 @@ pub fn get_enabled_strategies(strategy_type: StrategyType) -> Result<Vec<Strateg
                 type_str,
                 row.get(4)?,
                 row.get(5)?,
+                row.get(6)?,
                 rules_json,
                 parameters_json,
                 created_at_str,
                 updated_at_str,
-                row.get(10)?,
                 row.get(11)?,
+                row.get(12)?,
             ))
         })
         .map_err(|e| format!("Failed to query strategies: {}", e))?
@@ -529,6 +538,7 @@ pub fn get_enabled_strategies(strategy_type: StrategyType) -> Result<Vec<Strateg
         type_str,
         enabled,
         priority,
+        timeframe,
         rules_json,
         parameters_json,
         created_at_str,
@@ -560,6 +570,7 @@ pub fn get_enabled_strategies(strategy_type: StrategyType) -> Result<Vec<Strateg
             strategy_type,
             enabled,
             priority,
+            timeframe,
             rules,
             parameters,
             created_at,

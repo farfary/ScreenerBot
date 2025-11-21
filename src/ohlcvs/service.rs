@@ -167,6 +167,7 @@ impl OhlcvServiceImpl {
                     &format!("CACHE_HIT: Bundle for {} (age: {}s)", mint, age_secs),
                 );
                 
+                // Create result with correct metadata - don't modify cached bundle
                 let mut result = bundle.clone();
                 result.cache_hit = true;
                 result.cache_age_seconds = age_secs;
@@ -191,10 +192,12 @@ impl OhlcvServiceImpl {
     /// Fetches in parallel with PARALLEL_FETCH_LIMIT concurrency
     /// Coordinates to prevent duplicate concurrent builds for same token
     async fn build_timeframe_bundle(&self, mint: &str) -> OhlcvResult<TimeframeBundle> {
-        // Check if another task is already building this token's bundle
+        // Use single write transaction to atomically check and mark as building
         {
-            let in_progress = self.build_in_progress.read().await;
-            if in_progress.contains(mint) {
+            let mut in_progress = self.build_in_progress.write().await;
+            
+            // Try to insert - if already present, another task is building
+            if !in_progress.insert(mint.to_string()) {
                 logger::debug(
                     LogTag::Ohlcv,
                     &format!("BUNDLE_BUILD_SKIP: Another task already building bundle for {}, waiting...", mint),
@@ -213,13 +216,10 @@ impl OhlcvServiceImpl {
                     return Ok(bundle);
                 }
                 // If still not in cache, proceed with build (other task may have failed)
+                // Re-acquire write lock and mark as building
+                let mut in_progress = self.build_in_progress.write().await;
+                in_progress.insert(mint.to_string());
             }
-        }
-        
-        // Mark this token as being built
-        {
-            let mut in_progress = self.build_in_progress.write().await;
-            in_progress.insert(mint.to_string());
         }
         
         let start = Instant::now();

@@ -31,6 +31,7 @@ pub struct Strategy {
     pub strategy_type: StrategyType,
     pub enabled: bool,
     pub priority: i32,
+    pub timeframe: String, // Which timeframe to use for OHLCV conditions ("1m", "5m", etc.)
     pub rules: RuleTree,
     pub parameters: HashMap<String, serde_json::Value>,
     pub created_at: DateTime<Utc>,
@@ -127,6 +128,7 @@ pub struct EvaluationContext {
     pub position_data: Option<PositionData>,
     pub market_data: Option<MarketData>,
     pub timeframe_bundle: Option<TimeframeBundle>,
+    pub strategy_timeframe: String, // Which timeframe this strategy uses (from Strategy.timeframe)
 }
 
 /// Position-related data for evaluation

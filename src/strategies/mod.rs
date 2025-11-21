@@ -79,17 +79,17 @@ pub async fn evaluate_entry_strategies(
         return Ok(None);
     }
 
-    // Build evaluation context
-    let context = EvaluationContext {
-        token_mint: token_mint.to_string(),
-        current_price: Some(current_price),
-        position_data: None,
-        market_data,
-        timeframe_bundle,
-    };
-
     // Evaluate strategies by priority (lower priority first)
     for strategy in strategies {
+        let context = EvaluationContext {
+            token_mint: token_mint.to_string(),
+            current_price: Some(current_price),
+            position_data: None,
+            market_data: market_data.clone(),
+            timeframe_bundle: timeframe_bundle.clone(),
+            strategy_timeframe: strategy.timeframe.clone(),
+        };
+        
         let result = engine.evaluate_strategy(&strategy, &context).await;
 
         match result {
@@ -165,17 +165,17 @@ pub async fn evaluate_exit_strategies(
         return Ok(None);
     }
 
-    // Build evaluation context
-    let context = EvaluationContext {
-        token_mint: token_mint.to_string(),
-        current_price: Some(current_price),
-        position_data: Some(position_data.clone()),
-        market_data,
-        timeframe_bundle,
-    };
-
     // Evaluate strategies by priority (lower priority first)
     for strategy in strategies {
+        let context = EvaluationContext {
+            token_mint: token_mint.to_string(),
+            current_price: Some(current_price),
+            position_data: Some(position_data.clone()),
+            market_data: market_data.clone(),
+            timeframe_bundle: timeframe_bundle.clone(),
+            strategy_timeframe: strategy.timeframe.clone(),
+        };
+        
         let result = engine.evaluate_strategy(&strategy, &context).await;
 
         match result {
