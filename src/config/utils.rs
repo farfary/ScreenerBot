@@ -137,6 +137,57 @@ fn validate_config(config: &Config) -> Result<(), String> {
         }
     }
 
+    // ROI exit validation
+    if config.trader.roi_target_percent <= 0.0 {
+        return Err("trader.roi_target_percent must be greater than 0".to_string());
+    }
+    if !config.trader.roi_target_percent.is_finite() {
+        return Err("trader.roi_target_percent must be a finite number".to_string());
+    }
+
+    // Time override validation
+    if config.trader.time_override_enabled {
+        if config.trader.time_override_duration <= 0.0 {
+            return Err("trader.time_override_duration must be greater than 0".to_string());
+        }
+        if !config.trader.time_override_duration.is_finite() {
+            return Err("trader.time_override_duration must be a finite number".to_string());
+        }
+
+        // Validate unit
+        use crate::config::TimeUnit;
+        let unit = TimeUnit::from_str(&config.trader.time_override_unit)
+            .ok_or_else(|| format!("Invalid time_override_unit: '{}'. Must be 'seconds', 'minutes', 'hours', or 'days'", config.trader.time_override_unit))?;
+
+        // Validate duration based on unit (max 30 days in any unit)
+        let max_seconds = 30.0 * 86400.0; // 30 days
+        let duration_seconds = unit.to_seconds(config.trader.time_override_duration);
+        if duration_seconds > max_seconds {
+            return Err(format!(
+                "trader.time_override_duration ({} {}) exceeds maximum of 30 days",
+                config.trader.time_override_duration, config.trader.time_override_unit
+            ));
+        }
+
+        if config.trader.time_override_loss_threshold_percent > 0.0 {
+            return Err(
+                "trader.time_override_loss_threshold_percent must be <= 0 (represents loss percentage)"
+                    .to_string(),
+            );
+        }
+        if !config.trader.time_override_loss_threshold_percent.is_finite() {
+            return Err(
+                "trader.time_override_loss_threshold_percent must be a finite number".to_string(),
+            );
+        }
+        if config.trader.time_override_loss_threshold_percent < -100.0 {
+            return Err(
+                "trader.time_override_loss_threshold_percent must be >= -100 (cannot lose more than 100%)"
+                    .to_string(),
+            );
+        }
+    }
+
     // Positions validation
     if config.positions.profit_extra_needed_sol < 0.0
         || !config.positions.profit_extra_needed_sol.is_finite()
@@ -635,6 +686,81 @@ where
 ///
 /// println!("Changed from {} to {}", old.max_open_positions, new.max_open_positions);
 /// ```
+/// Reset configuration to defaults while preserving wallet and RPC URLs
+///
+/// This function:
+/// 1. Captures current wallet private key and RPC URLs
+/// 2. Creates a fresh Config with all defaults
+/// 3. Restores wallet and RPC URLs
+/// 4. Forces save to disk
+///
+/// # Returns
+/// - `Ok(())` - Configuration reset successfully
+/// - `Err(String)` - Reset failed
+///
+/// # Example
+/// ```
+/// use screenerbot::config::reset_config_to_defaults_preserving_credentials;
+///
+/// reset_config_to_defaults_preserving_credentials()?;
+/// ```
+pub fn reset_config_to_defaults_preserving_credentials() -> Result<(), String> {
+    logger::info(LogTag::System, "🔄 Resetting configuration to defaults...");
+
+    // 1. Capture current wallet and RPC URLs
+    let (wallet_key, rpc_urls) = with_config(|cfg| {
+        (
+            cfg.main_wallet_private.clone(),
+            cfg.rpc.urls.clone(),
+        )
+    });
+
+    // 2. Create fresh config with defaults
+    let mut fresh_config = Config::default();
+
+    // 3. Restore preserved values
+    if !wallet_key.is_empty() {
+        fresh_config.main_wallet_private = wallet_key;
+        logger::info(LogTag::System, "✅ Preserved wallet private key");
+    }
+
+    if !rpc_urls.is_empty() {
+        fresh_config.rpc.urls = rpc_urls;
+        logger::info(
+            LogTag::System,
+            &format!("✅ Preserved {} RPC URL(s)", fresh_config.rpc.urls.len()),
+        );
+    }
+
+    // 4. Validate the fresh config
+    validate_config(&fresh_config)?;
+
+    // 5. Replace current config
+    let result = update_config_section(
+        |cfg| {
+            *cfg = fresh_config;
+        },
+        true, // Force save to disk
+    );
+
+    match result {
+        Ok(_) => {
+            logger::info(
+                LogTag::System,
+                "✅ Configuration reset to defaults successfully (wallet + RPC preserved)",
+            );
+            Ok(())
+        }
+        Err(e) => {
+            logger::error(
+                LogTag::System,
+                &format!("❌ Failed to reset configuration: {}", e),
+            );
+            Err(e)
+        }
+    }
+}
+
 pub fn update_with_diff<F, T>(
     get_section: impl Fn(&Config) -> T,
     update_fn: F,

@@ -89,11 +89,12 @@ pub use metadata::{
 
 pub use schemas::{
     Config, EventsConfig, FilteringConfig, MonitoringConfig, OhlcvConfig, PositionsConfig,
-    RpcConfig, ServicesConfig, SolPriceConfig, SwapsConfig, TokensConfig, TraderConfig,
+    RpcConfig, ServicesConfig, SolPriceConfig, SwapsConfig, TimeUnit, TokensConfig, TraderConfig,
 };
 
 pub use utils::{
     get_config_clone, get_wallet_keypair, get_wallet_pubkey, get_wallet_pubkey_string,
     is_config_initialized, load_config, load_config_from_path, reload_config,
-    reload_config_from_path, save_config, update_config_section, with_config, CONFIG,
+    reload_config_from_path, reset_config_to_defaults_preserving_credentials, save_config,
+    update_config_section, with_config, CONFIG,
 };

@@ -74,22 +74,42 @@ pub fn get_partial_exit_default_pct() -> f64 {
 
 /// Check if ROI-based exit is enabled
 pub fn is_roi_exit_enabled() -> bool {
-    with_config(|cfg| cfg.trader.min_profit_threshold_enabled)
+    with_config(|cfg| cfg.trader.roi_exit_enabled)
 }
 
-/// Get target profit percentage for ROI exit
+/// Get target ROI percentage
 pub fn get_target_profit_pct() -> f64 {
-    with_config(|cfg| cfg.trader.min_profit_threshold_percent)
+    with_config(|cfg| cfg.trader.roi_target_percent)
+}
+
+/// Check if time override is enabled
+pub fn is_time_override_enabled() -> bool {
+    with_config(|cfg| cfg.trader.time_override_enabled)
+}
+
+/// Get time override duration in seconds (converted from configured unit)
+pub fn get_time_override_duration_seconds() -> f64 {
+    with_config(|cfg| {
+        use crate::config::TimeUnit;
+        let unit = TimeUnit::from_str(&cfg.trader.time_override_unit)
+            .unwrap_or(TimeUnit::Hours);
+        unit.to_seconds(cfg.trader.time_override_duration)
+    })
+}
+
+/// Get time override duration (raw value)
+pub fn get_time_override_duration() -> f64 {
+    with_config(|cfg| cfg.trader.time_override_duration)
+}
+
+/// Get time override unit
+pub fn get_time_override_unit() -> String {
+    with_config(|cfg| cfg.trader.time_override_unit.clone())
 }
 
 /// Get time override loss threshold percentage
 pub fn get_time_override_loss_threshold_pct() -> f64 {
     with_config(|cfg| cfg.trader.time_override_loss_threshold_percent)
-}
-
-/// Get time override duration in hours
-pub fn get_time_override_duration_hours() -> f64 {
-    with_config(|cfg| cfg.trader.time_override_duration_hours)
 }
 
 /// Get position close cooldown in minutes

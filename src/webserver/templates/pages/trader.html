@@ -5,67 +5,143 @@
       <!-- Stats Tab -->
       <div id="stats-tab" class="trader-tab-content" style="display: none">
         <div class="stats-grid">
-          <!-- Performance Metrics Row -->
-          <div class="stats-section">
-            <h3><i class="icon-bar-chart-2"></i> Performance Metrics</h3>
-            <div class="metrics-row">
-              <div class="metric-card">
-                <div class="metric-label">Win Rate</div>
-                <div class="metric-value" id="win-rate">—</div>
-                <div class="metric-change" id="win-rate-change"></div>
+          <!-- Key Performance Indicators -->
+          <div class="stats-section stats-section-primary">
+            <div class="section-header">
+              <div>
+                <h3><i class="icon-bar-chart-2"></i> Performance Overview</h3>
+                <p class="section-subtitle">Last 30 days trading performance</p>
+              </div>
+              <div class="stats-period" id="stats-period">Loading...</div>
+            </div>
+            <div class="metrics-grid">
+              <div class="metric-card metric-card-primary">
+                <div class="metric-icon">
+                  <i class="icon-trending-up"></i>
+                </div>
+                <div class="metric-content">
+                  <div class="metric-label">Win Rate</div>
+                  <div class="metric-value" id="win-rate">—</div>
+                  <div class="metric-detail" id="win-rate-detail">—</div>
+                </div>
+              </div>
+              <div class="metric-card metric-card-primary">
+                <div class="metric-icon">
+                  <i class="icon-activity"></i>
+                </div>
+                <div class="metric-content">
+                  <div class="metric-label">Total P&L</div>
+                  <div class="metric-value" id="total-pnl">—</div>
+                  <div class="metric-detail" id="total-pnl-detail">—</div>
+                </div>
               </div>
               <div class="metric-card">
-                <div class="metric-label">Total Trades</div>
-                <div class="metric-value" id="total-trades">—</div>
-                <div class="metric-change" id="total-trades-change"></div>
+                <div class="metric-icon">
+                  <i class="icon-repeat"></i>
+                </div>
+                <div class="metric-content">
+                  <div class="metric-label">Total Trades</div>
+                  <div class="metric-value" id="total-trades">—</div>
+                  <div class="metric-detail" id="total-trades-detail">—</div>
+                </div>
               </div>
               <div class="metric-card">
-                <div class="metric-label">Avg Hold Time</div>
-                <div class="metric-value" id="avg-hold-time">—</div>
-                <div class="metric-change" id="avg-hold-time-change"></div>
+                <div class="metric-icon">
+                  <i class="icon-clock"></i>
+                </div>
+                <div class="metric-content">
+                  <div class="metric-label">Avg Hold Time</div>
+                  <div class="metric-value" id="avg-hold-time">—</div>
+                  <div class="metric-detail" id="avg-hold-time-detail">—</div>
+                </div>
               </div>
-              <div class="metric-card">
-                <div class="metric-label">Best Trade</div>
-                <div class="metric-value" id="best-trade">—</div>
-                <div class="metric-change" id="best-trade-token"></div>
+              <div class="metric-card metric-highlight-success">
+                <div class="metric-icon">
+                  <i class="icon-arrow-up"></i>
+                </div>
+                <div class="metric-content">
+                  <div class="metric-label">Best Trade</div>
+                  <div class="metric-value" id="best-trade">—</div>
+                  <div class="metric-detail" id="best-trade-detail">—</div>
+                </div>
+              </div>
+              <div class="metric-card metric-highlight-danger">
+                <div class="metric-icon">
+                  <i class="icon-arrow-down"></i>
+                </div>
+                <div class="metric-content">
+                  <div class="metric-label">Worst Trade</div>
+                  <div class="metric-value" id="worst-trade">—</div>
+                  <div class="metric-detail" id="worst-trade-detail">—</div>
+                </div>
               </div>
             </div>
           </div>
 
-          <!-- Exit Reason Breakdown -->
+          <!-- Exit Strategy Performance -->
           <div class="stats-section">
-            <h3><i class="icon-trending-up"></i> Exit Strategy Performance (Last 30 days)</h3>
+            <div class="section-header">
+              <h3><i class="icon-trending-up"></i> Exit Strategy Breakdown</h3>
+              <p class="section-subtitle">How positions were closed and their outcomes</p>
+            </div>
             <div id="exit-breakdown" class="exit-breakdown">
-              <div class="loading">Loading exit data...</div>
+              <div class="loading-state">
+                <i class="icon-loader"></i>
+                <span>Loading exit data...</span>
+              </div>
             </div>
           </div>
 
-          <!-- Current Positions Risk Analysis -->
+          <!-- Active Positions Summary -->
           <div class="stats-section">
-            <h3><i class="icon-target"></i> Active Positions Risk Matrix</h3>
-            <div id="positions-risk" class="positions-risk">
-              <div class="info-message">No open positions</div>
+            <div class="section-header">
+              <h3><i class="icon-target"></i> Active Positions Summary</h3>
+              <p class="section-subtitle">Current open positions and risk exposure</p>
+            </div>
+            <div id="positions-summary" class="positions-summary">
+              <div class="info-state">
+                <i class="icon-inbox"></i>
+                <span>No open positions</span>
+              </div>
             </div>
           </div>
 
-          <!-- System Health -->
+          <!-- System Health & Activity -->
           <div class="stats-section">
-            <h3><i class="icon-cpu"></i> System Health & Activity</h3>
+            <div class="section-header">
+              <h3><i class="icon-cpu"></i> System Health</h3>
+              <p class="section-subtitle">Trader components status and activity</p>
+            </div>
             <div class="health-grid">
               <div class="health-card">
-                <div class="health-label">Trader Status</div>
-                <div class="health-value" id="trader-status">—</div>
-                <div class="health-detail" id="trader-detail"></div>
+                <div class="health-icon" id="trader-icon">
+                  <i class="icon-zap"></i>
+                </div>
+                <div class="health-content">
+                  <div class="health-label">Trader Engine</div>
+                  <div class="health-value" id="trader-status">—</div>
+                  <div class="health-detail" id="trader-detail"></div>
+                </div>
               </div>
               <div class="health-card">
-                <div class="health-label">Entry Monitor</div>
-                <div class="health-value" id="entry-monitor">—</div>
-                <div class="health-detail" id="entry-detail"></div>
+                <div class="health-icon" id="entry-icon">
+                  <i class="icon-log-in"></i>
+                </div>
+                <div class="health-content">
+                  <div class="health-label">Entry Monitor</div>
+                  <div class="health-value" id="entry-monitor">—</div>
+                  <div class="health-detail" id="entry-detail"></div>
+                </div>
               </div>
               <div class="health-card">
-                <div class="health-label">Exit Monitor</div>
-                <div class="health-value" id="exit-monitor">—</div>
-                <div class="health-detail" id="exit-detail"></div>
+                <div class="health-icon" id="exit-icon">
+                  <i class="icon-log-out"></i>
+                </div>
+                <div class="health-content">
+                  <div class="health-label">Exit Monitor</div>
+                  <div class="health-value" id="exit-monitor">—</div>
+                  <div class="health-detail" id="exit-detail"></div>
+                </div>
               </div>
             </div>
           </div>
@@ -74,135 +150,223 @@
 
       <!-- Trailing Stop Tab -->
       <div id="trailing-stop-tab" class="trader-tab-content" style="display: none">
-        <div class="two-column-layout">
-          <!-- Left Column: Configuration -->
-          <div class="config-column">
-            <div class="config-form">
-              <h3><i class="icon-trending-up"></i> Trailing Stop Configuration</h3>
+        <div class="trailing-stop-container">
+          <!-- Configuration Section -->
+          <div class="config-section">
+            <div class="section-header">
+              <div>
+                <h3><i class="icon-trending-up"></i> Trailing Stop Configuration</h3>
+                <p class="section-subtitle">Protect profits while letting winners run</p>
+              </div>
+            </div>
 
-              <div class="form-section">
-                <h4><i class="icon-settings"></i> Basic Settings</h4>
-                <div class="form-group">
-                  <label for="trailing-enabled">
-                    <input type="checkbox" id="trailing-enabled" />
-                    Enable Trailing Stop
+            <div class="config-card">
+              <!-- Enable/Disable -->
+              <div class="config-group config-group-primary">
+                <div class="config-toggle">
+                  <label class="toggle-label" for="trailing-enabled">
+                    <div class="toggle-header">
+                      <div class="toggle-title">
+                        <i class="icon-shield"></i>
+                        <span>Enable Trailing Stop</span>
+                      </div>
+                      <div class="toggle-switch">
+                        <input type="checkbox" id="trailing-enabled" />
+                        <span class="toggle-slider"></span>
+                      </div>
+                    </div>
+                    <p class="toggle-description">Automatically protect profits when positions reach target gains</p>
                   </label>
                 </div>
               </div>
 
-              <div class="form-section">
-                <h4><i class="icon-bar-chart-2"></i> Single Level (Current)</h4>
-                <div class="form-group">
-                  <label for="trail-activation">
-                    Activation Threshold
-                    <span class="hint">Start trailing when position is up by this %</span>
+              <!-- Activation Threshold -->
+              <div class="config-group">
+                <div class="config-label-row">
+                  <label for="trail-activation" class="config-label">
+                    <i class="icon-trending-up"></i>
+                    <span>Activation Threshold</span>
                   </label>
-                  <div class="input-with-unit">
-                    <input
-                      type="number"
-                      id="trail-activation"
-                      min="0"
-                      max="100"
-                      step="1"
-                      value="10"
-                    />
-                    <span class="unit">%</span>
+                  <span class="config-badge config-badge-info">When to start</span>
+                </div>
+                <p class="config-hint">Begin trailing when position profit reaches this percentage</p>
+                <div class="input-group-enhanced">
+                  <input
+                    type="number"
+                    id="trail-activation"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value="10"
+                    class="input-large"
+                  />
+                  <span class="input-unit">%</span>
+                  <div class="input-indicator" id="activation-indicator"></div>
+                </div>
+                <div class="config-impact">
+                  <span class="impact-label">Impact:</span>
+                  <span class="impact-text" id="activation-impact">Starts trailing at +10% profit</span>
+                </div>
+              </div>
+
+              <!-- Trail Distance -->
+              <div class="config-group">
+                <div class="config-label-row">
+                  <label for="trail-distance" class="config-label">
+                    <i class="icon-arrow-down"></i>
+                    <span>Trail Distance</span>
+                  </label>
+                  <span class="config-badge config-badge-warning">Safety margin</span>
+                </div>
+                <p class="config-hint">Exit if price drops this much from highest point reached</p>
+                <div class="input-group-enhanced">
+                  <input
+                    type="number"
+                    id="trail-distance"
+                    min="0"
+                    max="50"
+                    step="1"
+                    value="5"
+                    class="input-large"
+                  />
+                  <span class="input-unit">%</span>
+                  <div class="input-indicator" id="distance-indicator"></div>
+                </div>
+                <div class="config-impact">
+                  <span class="impact-label">Impact:</span>
+                  <span class="impact-text" id="distance-impact">Exits at -5% from peak</span>
+                </div>
+              </div>
+
+              <!-- Visual Example -->
+              <div class="visual-example">
+                <h4><i class="icon-bar-chart-2"></i> How It Works</h4>
+                <div class="example-timeline">
+                  <div class="timeline-step">
+                    <div class="step-icon step-icon-entry">
+                      <i class="icon-arrow-right"></i>
+                    </div>
+                    <div class="step-content">
+                      <div class="step-title">Entry</div>
+                      <div class="step-value" id="example-entry">0.001000 SOL</div>
+                      <div class="step-detail">Initial position</div>
+                    </div>
+                  </div>
+                  <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
+                  <div class="timeline-step">
+                    <div class="step-icon step-icon-activation">
+                      <i class="icon-zap"></i>
+                    </div>
+                    <div class="step-content">
+                      <div class="step-title">Activation</div>
+                      <div class="step-value" id="example-activation">0.001100 SOL</div>
+                      <div class="step-detail" id="example-activation-pct">+10% profit</div>
+                    </div>
+                  </div>
+                  <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
+                  <div class="timeline-step">
+                    <div class="step-icon step-icon-peak">
+                      <i class="icon-trending-up"></i>
+                    </div>
+                    <div class="step-content">
+                      <div class="step-title">Peak</div>
+                      <div class="step-value" id="example-peak">0.001200 SOL</div>
+                      <div class="step-detail" id="example-peak-pct">+20% profit</div>
+                    </div>
+                  </div>
+                  <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
+                  <div class="timeline-step">
+                    <div class="step-icon step-icon-exit">
+                      <i class="icon-log-out"></i>
+                    </div>
+                    <div class="step-content">
+                      <div class="step-title">Exit</div>
+                      <div class="step-value" id="example-exit">0.001140 SOL</div>
+                      <div class="step-detail" id="example-exit-pct">+14% final</div>
+                    </div>
                   </div>
                 </div>
-
-                <div class="form-group">
-                  <label for="trail-distance">
-                    Trail Distance
-                    <span class="hint">Exit if price drops by this % from peak</span>
-                  </label>
-                  <div class="input-with-unit">
-                    <input
-                      type="number"
-                      id="trail-distance"
-                      min="0"
-                      max="50"
-                      step="1"
-                      value="5"
-                    />
-                    <span class="unit">%</span>
+                <div class="example-summary">
+                  <div class="summary-item summary-item-success">
+                    <i class="icon-check-circle"></i>
+                    <span>Protected <strong id="example-protected">14%</strong> profit</span>
+                  </div>
+                  <div class="summary-item summary-item-info">
+                    <i class="icon-shield"></i>
+                    <span>Avoided <strong id="example-avoided">6%</strong> loss from peak</span>
                   </div>
                 </div>
-
-                <div class="example-box">
-                  <strong><i class="icon-lightbulb"></i> Example:</strong> Buy at 0.001 SOL → Peak at 0.0011 SOL (+10%) → Trail
-                  starts → Exit at 0.001045 SOL (-5% from peak)
-                </div>
               </div>
 
-              <div class="form-section disabled">
-                <h4><i class="icon-target"></i> Multi-Level (Advanced - Future) <span class="badge warning">UPGRADE</span></h4>
-                <div class="info-message">
-                  Multi-level trailing stops require backend changes. Coming in Phase 3.
-                </div>
-              </div>
-
+              <!-- Action Buttons -->
               <div class="form-actions">
-                <button class="btn primary" id="save-trailing">Save Changes</button>
-                <button class="btn secondary" id="reset-trailing">Reset to Defaults</button>
+                <button class="btn btn-primary" id="save-trailing">
+                  <i class="icon-save"></i>
+                  <span>Save Configuration</span>
+                </button>
+                <button class="btn btn-secondary" id="reset-trailing">
+                  <i class="icon-rotate-ccw"></i>
+                  <span>Reset to Defaults</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Advanced Features (Coming Soon) -->
+            <div class="feature-preview">
+              <div class="feature-header">
+                <h4><i class="icon-star"></i> Coming Soon</h4>
+                <span class="badge badge-warning">Phase 3</span>
+              </div>
+              <div class="feature-grid">
+                <div class="feature-item">
+                  <i class="icon-layers"></i>
+                  <div class="feature-content">
+                    <div class="feature-title">Multi-Level Trailing</div>
+                    <div class="feature-desc">Different trail distances at different profit levels</div>
+                  </div>
+                </div>
+                <div class="feature-item">
+                  <i class="icon-clock"></i>
+                  <div class="feature-content">
+                    <div class="feature-title">Time-Based Adjustments</div>
+                    <div class="feature-desc">Tighten trail distance based on holding period</div>
+                  </div>
+                </div>
+                <div class="feature-item">
+                  <i class="icon-activity"></i>
+                  <div class="feature-content">
+                    <div class="feature-title">Volatility Adaptation</div>
+                    <div class="feature-desc">Auto-adjust trail distance based on price volatility</div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
 
-          <!-- Right Column: Live Preview (Phase 2) -->
-          <div class="preview-column">
-            <div class="preview-panel">
-              <h3><i class="icon-bar-chart-2"></i> Live Preview</h3>
-              
-              <div class="position-selector">
-                <label for="preview-position-select">Position:</label>
-                <select id="preview-position-select">
-                  <option value="simulate">Simulate Random</option>
-                  <!-- Will be populated dynamically with open positions -->
-                </select>
+          <!-- Quick Stats Section -->
+          <div class="stats-section-compact">
+            <h4><i class="icon-bar-chart-2"></i> Trailing Stop Performance</h4>
+            <div class="quick-stats">
+              <div class="quick-stat-card">
+                <div class="quick-stat-value" id="trailing-exits-count">—</div>
+                <div class="quick-stat-label">Total Exits</div>
               </div>
-
-              <div class="preview-section">
-                <h4>Position State</h4>
-                <div class="preview-row">
-                  <span>Symbol:</span>
-                  <span id="preview-symbol">—</span>
-                </div>
-                <div class="preview-row">
-                  <span>Entry Price:</span>
-                  <span id="preview-entry-price">—</span>
-                </div>
-                <div class="preview-row">
-                  <span>Current Price:</span>
-                  <span id="preview-current-price">—</span>
-                </div>
-                <div class="preview-row">
-                  <span>Peak Price:</span>
-                  <span id="preview-peak-price">—</span>
-                </div>
-                <div class="preview-row">
-                  <span>Current Profit:</span>
-                  <span id="preview-current-profit" class="profit-value">—</span>
-                </div>
+              <div class="quick-stat-card">
+                <div class="quick-stat-value" id="trailing-avg-profit">—</div>
+                <div class="quick-stat-label">Avg Profit</div>
               </div>
-
-              <div class="preview-section">
-                <h4>Trailing Stop Status</h4>
-                <div class="preview-row">
-                  <span>Trail Active:</span>
-                  <span id="preview-trail-status">—</span>
-                </div>
-                <div class="preview-row">
-                  <span>Stop Price:</span>
-                  <span id="preview-trail-price">—</span>
-                </div>
-                <div class="preview-row">
-                  <span>Distance to Exit:</span>
-                  <span id="preview-distance-to-exit">—</span>
-                </div>
-                <div class="preview-row">
-                  <span>Estimated Exit:</span>
-                  <span id="preview-estimated-exit">—</span>
-                </div>
+              <div class="quick-stat-card">
+                <div class="quick-stat-value" id="trailing-best-save">—</div>
+                <div class="quick-stat-label">Best Save</div>
+              </div>
+              <div class="quick-stat-card">
+                <div class="quick-stat-value" id="trailing-active-count">—</div>
+                <div class="quick-stat-label">Active Now</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
                 <div class="preview-row">
                   <span>Estimated Profit:</span>
                   <span id="preview-estimated-profit" class="profit-value">—</span>
@@ -223,14 +387,14 @@
       <!-- Take Profit (ROI) Tab -->
       <div id="roi-tab" class="trader-tab-content" style="display: none">
         <div class="config-form">
-          <h3><i class="icon-target"></i> Take Profit (ROI) Configuration</h3>
+          <h3><i class="icon-target"></i> ROI Exit Configuration</h3>
 
           <div class="form-section">
             <h4><i class="icon-settings"></i> Basic Settings</h4>
             <div class="form-group">
               <label for="roi-enabled">
                 <input type="checkbox" id="roi-enabled" />
-                Enable Take Profit
+                Enable ROI-Based Exit
               </label>
             </div>
           </div>
@@ -239,11 +403,11 @@
             <h4><i class="icon-target"></i> Single Target (Current)</h4>
             <div class="form-group">
               <label for="roi-target">
-                Target Profit
-                <span class="hint">Sell entire position when profit reaches this %</span>
+                Target ROI
+                <span class="hint">Automatically exit when profit reaches this %</span>
               </label>
               <div class="input-with-unit">
-                <input type="number" id="roi-target" min="0" max="1000" step="0.1" value="2.0" />
+                <input type="number" id="roi-target" min="1" max="1000" step="1" value="20" />
                 <span class="unit">%</span>
               </div>
             </div>
@@ -254,7 +418,7 @@
             </div>
 
             <div class="example-box">
-              <strong><i class="icon-lightbulb"></i></strong> Sell entire position when profit reaches +2%
+              <strong><i class="icon-lightbulb"></i></strong> Exit entire position when profit reaches +<span id="roi-example">20</span>%
             </div>
           </div>
 
@@ -278,30 +442,45 @@
           <h3><i class="icon-clock"></i> Time-Based Exit Rules</h3>
 
           <div class="form-section">
-            <h4><i class="icon-settings"></i> Basic Time Override (Current)</h4>
+            <h4><i class="icon-settings"></i> Basic Settings</h4>
+            <div class="form-group">
+              <label for="time-override-enabled">
+                <input type="checkbox" id="time-override-enabled" />
+                Enable Time-Based Exit Override
+              </label>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h4><i class="icon-clock"></i> Time Override Configuration</h4>
             <div class="form-group">
               <label for="time-max-hold">
-                Max Hold Duration
-                <span class="hint">Force exit after this many hours</span>
+                Hold Duration Limit
+                <span class="hint">Exit positions held longer than this duration</span>
               </label>
-              <div class="input-with-unit">
+              <div class="input-with-unit-group">
                 <input
                   type="number"
                   id="time-max-hold"
                   min="1"
-                  max="720"
+                  max="43200"
                   step="1"
                   value="168"
                 />
-                <span class="unit">hours</span>
+                <select id="time-unit" class="unit-select">
+                  <option value="seconds">seconds</option>
+                  <option value="minutes">minutes</option>
+                  <option value="hours" selected>hours</option>
+                  <option value="days">days</option>
+                </select>
               </div>
-              <div class="hint-text">168 hours = 7 days</div>
+              <div class="hint-text" id="time-conversion-hint">168 hours = 7 days</div>
             </div>
 
             <div class="form-group">
               <label for="time-loss-threshold">
                 Loss Threshold
-                <span class="hint">Exit if position is down by this % (use negative values)</span>
+                <span class="hint">Only exit if position loss exceeds this % (negative value)</span>
               </label>
               <div class="input-with-unit">
                 <input
@@ -317,7 +496,11 @@
             </div>
 
             <div class="example-box">
-              <strong><i class="icon-lightbulb"></i> Example:</strong> After 168h, exit if position is down 40% or more
+              <strong><i class="icon-lightbulb"></i> How it works:</strong> 
+              After holding a position for <span id="example-duration">7 days</span>, 
+              automatically exit if the position is down <span id="example-loss">40%</span> or more.
+              <br><br>
+              <strong>Note:</strong> Positions at profit or smaller losses will NOT be exited.
             </div>
 
             <div class="form-group">

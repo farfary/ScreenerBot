@@ -38,6 +38,201 @@ function createLifecycle() {
   // ============================================================================
 
   /**
+   * Convert time duration to human-readable format
+   */
+  function convertTimeToReadable(duration, unit) {
+    const units = {
+      seconds: { seconds: 1, minutes: 60, hours: 3600, days: 86400 },
+      minutes: { seconds: 1 / 60, minutes: 1, hours: 60, days: 1440 },
+      hours: { seconds: 1 / 3600, minutes: 1 / 60, hours: 1, days: 24 },
+      days: { seconds: 1 / 86400, minutes: 1 / 1440, hours: 1 / 24, days: 1 },
+    };
+
+    if (!units[unit]) return `${duration} ${unit}`;
+
+    const conversions = units[unit];
+    const totalSeconds = duration / conversions.seconds;
+
+    // Find the best unit for display
+    if (totalSeconds >= 86400 && totalSeconds % 86400 === 0) {
+      const days = totalSeconds / 86400;
+      return `${days} day${days !== 1 ? "s" : ""}`;
+    }
+    if (totalSeconds >= 3600 && totalSeconds % 3600 === 0) {
+      const hours = totalSeconds / 3600;
+      return `${hours} hour${hours !== 1 ? "s" : ""}`;
+    }
+    if (totalSeconds >= 60 && totalSeconds % 60 === 0) {
+      const minutes = totalSeconds / 60;
+      return `${minutes} minute${minutes !== 1 ? "s" : ""}`;
+    }
+    return `${totalSeconds} second${totalSeconds !== 1 ? "s" : ""}`;
+  }
+
+  /**
+   * Update time conversion hint display
+   */
+  function updateTimeConversionHint() {
+    const durationInput = $("#time-max-hold");
+    const unitSelect = $("#time-unit");
+    const hintText = $("#time-conversion-hint");
+    const exampleDuration = $("#example-duration");
+
+    if (!durationInput || !unitSelect || !hintText) return;
+
+    const duration = parseFloat(durationInput.value) || 168;
+    const unit = unitSelect.value || "hours";
+
+    const readable = convertTimeToReadable(duration, unit);
+    hintText.textContent = `${duration} ${unit} = ${readable}`;
+    
+    if (exampleDuration) {
+      exampleDuration.textContent = readable;
+    }
+  }
+
+  /**
+   * Update ROI example display
+   */
+  function updateRoiExample() {
+    const roiInput = $("#roi-target");
+    const exampleSpan = $("#roi-example");
+    
+    if (!roiInput || !exampleSpan) return;
+    
+    const value = parseFloat(roiInput.value) || 20;
+    exampleSpan.textContent = value.toFixed(0);
+  }
+
+  /**
+   * Update time override loss example display
+   */
+  function updateTimeLossExample() {
+    const lossInput = $("#time-loss-threshold");
+    const exampleSpan = $("#example-loss");
+    
+    if (!lossInput || !exampleSpan) return;
+    
+    const value = parseFloat(lossInput.value) || -40;
+    exampleSpan.textContent = Math.abs(value).toFixed(0);
+  }
+
+  /**
+   * Update trailing stop visual example calculations
+   */
+  function updateTrailingStopExample() {
+    const activationInput = $("#trailing-activation");
+    const distanceInput = $("#trailing-distance");
+    
+    if (!activationInput || !distanceInput) return;
+    
+    const activation = parseFloat(activationInput.value) || 15;
+    const distance = parseFloat(distanceInput.value) || 5;
+    
+    // Example scenario: Entry at 1.00 SOL
+    const entryPrice = 1.00;
+    const activationPrice = entryPrice * (1 + activation / 100);
+    const peakPrice = activationPrice * 1.20; // +20% from activation
+    const exitPrice = peakPrice * (1 - distance / 100);
+    const protectedProfit = ((exitPrice - entryPrice) / entryPrice) * 100;
+    
+    // Update timeline values
+    const stepEntry = $("#step-entry-value");
+    const stepActivation = $("#step-activation-value");
+    const stepPeak = $("#step-peak-value");
+    const stepExit = $("#step-exit-value");
+    
+    if (stepEntry) stepEntry.textContent = `${entryPrice.toFixed(4)} SOL`;
+    if (stepActivation) {
+      stepActivation.textContent = `${activationPrice.toFixed(4)} SOL`;
+      const activationDetail = $("#step-activation-detail");
+      if (activationDetail) activationDetail.textContent = `+${activation}%`;
+    }
+    if (stepPeak) {
+      stepPeak.textContent = `${peakPrice.toFixed(4)} SOL`;
+      const peakDetail = $("#step-peak-detail");
+      if (peakDetail) {
+        const gainFromEntry = ((peakPrice - entryPrice) / entryPrice) * 100;
+        peakDetail.textContent = `+${gainFromEntry.toFixed(1)}%`;
+      }
+    }
+    if (stepExit) {
+      stepExit.textContent = `${exitPrice.toFixed(4)} SOL`;
+      const exitDetail = $("#step-exit-detail");
+      if (exitDetail) exitDetail.textContent = `-${distance}% from peak`;
+    }
+    
+    // Update summary
+    const summaryProfit = $("#summary-protected-profit");
+    if (summaryProfit) {
+      summaryProfit.textContent = `${protectedProfit.toFixed(1)}%`;
+    }
+    
+    // Update impact indicators
+    const activationIndicator = $("#activation-indicator");
+    const distanceIndicator = $("#distance-indicator");
+    const activationImpact = $("#activation-impact-text");
+    const distanceImpact = $("#distance-impact-text");
+    
+    if (activationIndicator) {
+      activationIndicator.innerHTML = activation >= 20 ? '<i class="icon-alert-triangle"></i>' : '<i class="icon-check-circle"></i>';
+      activationIndicator.style.background = activation >= 20 ? 'var(--warning-alpha-10)' : 'var(--success-alpha-10)';
+      activationIndicator.style.color = activation >= 20 ? 'var(--warning)' : 'var(--success)';
+    }
+    
+    if (activationImpact) {
+      if (activation < 10) {
+        activationImpact.textContent = 'Activates quickly - good for volatile tokens';
+      } else if (activation < 20) {
+        activationImpact.textContent = 'Balanced activation - suitable for most scenarios';
+      } else {
+        activationImpact.textContent = 'Delayed activation - may miss protection window';
+      }
+    }
+    
+    if (distanceIndicator) {
+      distanceIndicator.innerHTML = distance >= 10 ? '<i class="icon-alert-triangle"></i>' : '<i class="icon-check-circle"></i>';
+      distanceIndicator.style.background = distance >= 10 ? 'var(--warning-alpha-10)' : 'var(--success-alpha-10)';
+      distanceIndicator.style.color = distance >= 10 ? 'var(--warning)' : 'var(--success)';
+    }
+    
+    if (distanceImpact) {
+      if (distance < 5) {
+        distanceImpact.textContent = 'Tight protection - may exit on minor dips';
+      } else if (distance < 10) {
+        distanceImpact.textContent = 'Balanced protection - good for most situations';
+      } else {
+        distanceImpact.textContent = 'Loose protection - allows larger pullbacks';
+      }
+    }
+  }
+
+  /**
+   * Load trailing stop performance stats (placeholder for Phase 2)
+   */
+  async function loadTrailingStopStats() {
+    // This will be implemented in Phase 2 when we add trailing stop tracking
+    const statsCards = $$('.quick-stat-card');
+    statsCards.forEach(card => {
+      const value = card.querySelector('.quick-stat-value');
+      if (value) {
+        value.textContent = '--';
+      }
+    });
+  }
+
+  /**
+   * Load trailing stop preview data (placeholder for Phase 2)
+   */
+  async function loadTrailingStopPreview() {
+    // Update example with current config values
+    updateTrailingStopExample();
+    
+    // Load performance stats (Phase 2)
+    await loadTrailingStopStats();
+  }
+
+  /**
    * Switch to a different tab
    */
   function switchTab(tabId) {
@@ -148,21 +343,33 @@ function createLifecycle() {
     const roiEnabled = $("#roi-enabled");
     const roiTarget = $("#roi-target");
     if (roiEnabled) {
-      roiEnabled.checked = trader.min_profit_threshold_enabled || false;
+      roiEnabled.checked = trader.roi_exit_enabled || false;
     }
     if (roiTarget) {
-      roiTarget.value = trader.min_profit_threshold_percent || 2.0;
+      roiTarget.value = trader.roi_target_percent || 20;
     }
 
     // Time Rules
+    const timeOverrideEnabled = $("#time-override-enabled");
     const timeMaxHold = $("#time-max-hold");
+    const timeUnit = $("#time-unit");
     const timeLossThreshold = $("#time-loss-threshold");
+    
+    if (timeOverrideEnabled) {
+      timeOverrideEnabled.checked = trader.time_override_enabled || false;
+    }
     if (timeMaxHold) {
-      timeMaxHold.value = trader.time_override_duration_hours || 168;
+      timeMaxHold.value = trader.time_override_duration || 168;
+    }
+    if (timeUnit) {
+      timeUnit.value = trader.time_override_unit || "hours";
     }
     if (timeLossThreshold) {
       timeLossThreshold.value = trader.time_override_loss_threshold_percent || -40;
     }
+    
+    // Update time conversion hint
+    updateTimeConversionHint();
 
     // General Settings
     const maxPositions = $("#max-positions");
@@ -183,8 +390,8 @@ function createLifecycle() {
     if (dcaEnabled) dcaEnabled.checked = trader.dca_enabled || false;
     if (dcaThreshold) dcaThreshold.value = trader.dca_threshold_pct || -10;
     if (dcaMaxCount) dcaMaxCount.value = trader.dca_max_count || 2;
-    if (dcaSize) dcaSize.value = trader.dca_size_pct || 50;
-    if (dcaCooldown) dcaCooldown.value = trader.dca_cooldown_minutes || 5;
+    if (dcaSize) dcaSize.value = trader.dca_size_percentage || 50;
+    if (dcaCooldown) dcaCooldown.value = trader.dca_cooldown_minutes || 30;
     if (closeCooldown) closeCooldown.value = trader.close_cooldown_seconds || 10;
     if (entryConcurrency) entryConcurrency.value = trader.entry_monitor_concurrency || 3;
     if (dryRun) dryRun.checked = trader.dry_run || false;
@@ -204,55 +411,135 @@ function createLifecycle() {
       }
       const data = await response.json();
 
+      // Update stats period
+      const statsPeriod = $("#stats-period");
+      if (statsPeriod) {
+        statsPeriod.textContent = "Last 30 days";
+      }
+
       // Update performance metrics
       const winRate = $("#win-rate");
+      const winRateDetail = $("#win-rate-detail");
+      const totalPnl = $("#total-pnl");
+      const totalPnlDetail = $("#total-pnl-detail");
       const totalTrades = $("#total-trades");
+      const totalTradesDetail = $("#total-trades-detail");
       const avgHoldTime = $("#avg-hold-time");
+      const avgHoldTimeDetail = $("#avg-hold-time-detail");
       const bestTrade = $("#best-trade");
+      const bestTradeDetail = $("#best-trade-detail");
+      const worstTrade = $("#worst-trade");
+      const worstTradeDetail = $("#worst-trade-detail");
 
+      // Win Rate
       if (winRate) {
-        winRate.textContent = `${data.win_rate_pct.toFixed(1)}%`;
+        const rate = data.win_rate_pct.toFixed(1);
+        winRate.textContent = `${rate}%`;
+        winRate.className = `metric-value ${data.win_rate_pct >= 50 ? "positive" : ""}`;
       }
+      if (winRateDetail) {
+        const wins = Math.round((data.total_trades * data.win_rate_pct) / 100);
+        const losses = data.total_trades - wins;
+        winRateDetail.textContent = `${wins} wins, ${losses} losses`;
+      }
+
+      // Total P&L (calculated from exit breakdown)
+      if (totalPnl && data.exit_breakdown) {
+        const totalProfit = data.exit_breakdown.reduce((sum, exit) => {
+          return sum + (exit.avg_profit_pct * exit.count);
+        }, 0);
+        const avgProfit = data.total_trades > 0 ? totalProfit / data.total_trades : 0;
+        totalPnl.textContent = `${avgProfit >= 0 ? "+" : ""}${avgProfit.toFixed(1)}%`;
+        totalPnl.className = `metric-value ${avgProfit >= 0 ? "positive" : "negative"}`;
+      }
+      if (totalPnlDetail) {
+        totalPnlDetail.textContent = `Average profit per trade`;
+      }
+
+      // Total Trades
       if (totalTrades) {
         totalTrades.textContent = data.total_trades;
       }
+      if (totalTradesDetail) {
+        totalTradesDetail.textContent = data.total_trades === 1 ? "1 position closed" : `${data.total_trades} positions closed`;
+      }
+
+      // Avg Hold Time
       if (avgHoldTime) {
-        // Convert hours to seconds and use formatUptime for better display
         const seconds = data.avg_hold_time_hours * 3600;
-        avgHoldTime.textContent = Utils.formatUptime(seconds, { style: "detailed" });
+        avgHoldTime.textContent = Utils.formatUptime(seconds, { style: "short" });
       }
+      if (avgHoldTimeDetail) {
+        const seconds = data.avg_hold_time_hours * 3600;
+        avgHoldTimeDetail.textContent = Utils.formatUptime(seconds, { style: "detailed" });
+      }
+
+      // Best Trade
       if (bestTrade) {
-        bestTrade.textContent = `${data.best_trade_pct > 0 ? "+" : ""}${data.best_trade_pct.toFixed(1)}%`;
+        const pct = data.best_trade_pct;
+        bestTrade.textContent = `${pct > 0 ? "+" : ""}${pct.toFixed(1)}%`;
+        bestTrade.className = `metric-value ${pct >= 0 ? "positive" : ""}`;
+      }
+      if (bestTradeDetail) {
+        bestTradeDetail.textContent = data.best_trade_token || "No trades yet";
       }
 
-      // Update system health
-      const openPositions = $("#open-positions-count");
-      const lockedSol = $("#locked-sol");
-
-      if (openPositions) {
-        openPositions.textContent = data.open_positions_count;
+      // Worst Trade (calculate from exit breakdown or set placeholder)
+      if (worstTrade) {
+        const worstPct = data.worst_trade_pct !== undefined ? data.worst_trade_pct : 0;
+        worstTrade.textContent = `${worstPct > 0 ? "+" : ""}${worstPct.toFixed(1)}%`;
+        worstTrade.className = `metric-value ${worstPct < 0 ? "negative" : ""}`;
       }
-      if (lockedSol) {
-        lockedSol.textContent = `${data.locked_sol.toFixed(3)} SOL`;
+      if (worstTradeDetail) {
+        worstTradeDetail.textContent = data.worst_trade_token || "No trades yet";
       }
 
-      // Update exit breakdown
+      // Update exit breakdown with visual bars
       const exitBreakdown = $("#exit-breakdown");
-      if (exitBreakdown && data.exit_breakdown) {
-        exitBreakdown.innerHTML = "";
-        data.exit_breakdown.forEach((exit) => {
-          const row = document.createElement("div");
-          row.className = "exit-row";
-          row.innerHTML = `
-            <span class="exit-type">${exit.exit_type}</span>
-            <span class="exit-count">${exit.count} trades</span>
-            <span class="exit-avg ${exit.avg_profit_pct >= 0 ? "positive" : "negative"}">
-              Avg: ${exit.avg_profit_pct >= 0 ? "+" : ""}${exit.avg_profit_pct.toFixed(1)}%
-            </span>
+      if (exitBreakdown && data.exit_breakdown && data.exit_breakdown.length > 0) {
+        const maxCount = Math.max(...data.exit_breakdown.map(e => e.count));
+        
+        const barsHtml = data.exit_breakdown.map((exit) => {
+          const percentage = maxCount > 0 ? (exit.count / maxCount) * 100 : 0;
+          const barClass = exit.avg_profit_pct >= 0 ? "success" : "danger";
+          const avgClass = exit.avg_profit_pct >= 0 ? "positive" : "negative";
+          
+          return `
+            <div class="exit-bar-item">
+              <div class="exit-bar-header">
+                <div class="exit-bar-label">
+                  <span class="exit-icon">
+                    <i class="icon-${getExitIcon(exit.exit_type)}"></i>
+                  </span>
+                  ${Utils.escapeHtml(exit.exit_type)}
+                </div>
+                <div class="exit-bar-stats">
+                  <span class="exit-bar-count">${exit.count} trade${exit.count !== 1 ? "s" : ""}</span>
+                  <span class="exit-bar-avg ${avgClass}">
+                    ${exit.avg_profit_pct >= 0 ? "+" : ""}${exit.avg_profit_pct.toFixed(1)}% avg
+                  </span>
+                </div>
+              </div>
+              <div class="exit-bar-wrapper">
+                <div class="exit-bar ${barClass}" style="width: ${percentage}%"></div>
+              </div>
+            </div>
           `;
-          exitBreakdown.appendChild(row);
-        });
+        }).join("");
+        
+        exitBreakdown.innerHTML = `<div class="exit-bars">${barsHtml}</div>`;
+      } else if (exitBreakdown) {
+        exitBreakdown.innerHTML = `
+          <div class="empty-state">
+            <i class="icon-inbox"></i>
+            <span>No closed positions yet</span>
+          </div>
+        `;
       }
+
+      // Update positions summary (if we have active positions)
+      await updatePositionsSummary();
+
     } catch (error) {
       console.error("[Trader] Failed to load stats:", error);
       // Show error state in UI
@@ -262,6 +549,88 @@ function createLifecycle() {
       if (winRate) winRate.textContent = "—";
       if (totalTrades) totalTrades.textContent = "—";
       if (avgHoldTime) avgHoldTime.textContent = "—";
+    }
+  }
+
+  /**
+   * Get icon name for exit type
+   */
+  function getExitIcon(exitType) {
+    const iconMap = {
+      "ROI Target": "target",
+      "Trailing Stop": "trending-down",
+      "Time Override": "clock",
+      "Manual": "hand",
+      "Stop Loss": "alert-triangle",
+      "Strategy": "zap",
+    };
+    return iconMap[exitType] || "circle";
+  }
+
+  /**
+   * Update positions summary section
+   */
+  async function updatePositionsSummary() {
+    const positionsSummary = $("#positions-summary");
+    if (!positionsSummary) return;
+
+    try {
+      const response = await fetch("/api/positions");
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = await response.json();
+
+      if (!data.positions || data.positions.length === 0) {
+        positionsSummary.innerHTML = `
+          <div class="info-state">
+            <i class="icon-inbox"></i>
+            <span>No open positions</span>
+          </div>
+        `;
+        return;
+      }
+
+      const cardsHtml = data.positions.map((pos) => {
+        const roi = pos.roi_percent || 0;
+        const roiClass = roi >= 0 ? "positive" : "negative";
+        const holdTime = pos.opened_at_timestamp 
+          ? Utils.formatDuration((Date.now() - new Date(pos.opened_at_timestamp).getTime()) / 1000)
+          : "—";
+
+        return `
+          <div class="position-summary-card">
+            <div class="position-summary-header">
+              <div class="position-summary-token">${Utils.escapeHtml(pos.token_symbol || "Unknown")}</div>
+              <div class="position-summary-roi ${roiClass}">${roi >= 0 ? "+" : ""}${roi.toFixed(2)}%</div>
+            </div>
+            <div class="position-summary-details">
+              <div class="position-summary-row">
+                <span class="position-summary-label">Size:</span>
+                <span class="position-summary-value">${(pos.size_sol || 0).toFixed(4)} SOL</span>
+              </div>
+              <div class="position-summary-row">
+                <span class="position-summary-label">Hold Time:</span>
+                <span class="position-summary-value">${holdTime}</span>
+              </div>
+              <div class="position-summary-row">
+                <span class="position-summary-label">Entry:</span>
+                <span class="position-summary-value">${Utils.formatPrice(pos.average_entry_price || 0)}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join("");
+
+      positionsSummary.innerHTML = `<div class="positions-grid">${cardsHtml}</div>`;
+    } catch (error) {
+      console.error("[Trader] Failed to load positions summary:", error);
+      positionsSummary.innerHTML = `
+        <div class="info-state">
+          <i class="icon-alert-circle"></i>
+          <span>Failed to load positions</span>
+        </div>
+      `;
     }
   }
 
@@ -582,35 +951,91 @@ function createLifecycle() {
       });
     }
 
-    // ROI form
-    const roiForm = $("#roi-form");
-    if (roiForm) {
-      roiForm.addEventListener("submit", async (e) => {
+    // ROI save button
+    const saveRoi = $("#save-roi");
+    if (saveRoi) {
+      saveRoi.addEventListener("click", async (e) => {
         e.preventDefault();
         const enabled = $("#roi-enabled")?.checked || false;
-        const target = parseFloat($("#roi-target")?.value || "2.0");
+        const target = parseFloat($("#roi-target")?.value || "20");
         await saveConfig({
           trader: {
-            min_profit_threshold_enabled: enabled,
-            min_profit_threshold_percent: target,
+            roi_exit_enabled: enabled,
+            roi_target_percent: target,
           },
         });
       });
     }
 
-    // Time Rules form
-    const timeForm = $("#time-rules-form");
-    if (timeForm) {
-      timeForm.addEventListener("submit", async (e) => {
+    // ROI reset button
+    const resetRoi = $("#reset-roi");
+    if (resetRoi) {
+      resetRoi.addEventListener("click", async (e) => {
         e.preventDefault();
-        const maxHold = parseFloat($("#time-max-hold")?.value || "168");
+        const { confirmed } = await ConfirmationDialog.show({
+          title: "Reset ROI Exit",
+          message:
+            "This will reset ROI exit settings to default values:\n• Enabled\n• Target: 20%",
+          confirmLabel: "Reset",
+          cancelLabel: "Cancel",
+          variant: "warning",
+        });
+
+        if (confirmed) {
+          await saveConfig({
+            trader: {
+              roi_exit_enabled: true,
+              roi_target_percent: 20,
+            },
+          });
+        }
+      });
+    }
+
+    // Time Rules save button
+    const saveTimeRules = $("#save-time-rules");
+    if (saveTimeRules) {
+      saveTimeRules.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const enabled = $("#time-override-enabled")?.checked || false;
+        const duration = parseFloat($("#time-max-hold")?.value || "168");
+        const unit = $("#time-unit")?.value || "hours";
         const lossThreshold = parseFloat($("#time-loss-threshold")?.value || "-40");
         await saveConfig({
           trader: {
-            time_override_duration_hours: maxHold,
+            time_override_enabled: enabled,
+            time_override_duration: duration,
+            time_override_unit: unit,
             time_override_loss_threshold_percent: lossThreshold,
           },
         });
+      });
+    }
+
+    // Time Rules reset button
+    const resetTimeRules = $("#reset-time-rules");
+    if (resetTimeRules) {
+      resetTimeRules.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const { confirmed } = await ConfirmationDialog.show({
+          title: "Reset Time Override",
+          message:
+            "This will reset time override settings to default values:\n• Enabled\n• Duration: 168 hours (7 days)\n• Loss Threshold: -40%",
+          confirmLabel: "Reset",
+          cancelLabel: "Cancel",
+          variant: "warning",
+        });
+
+        if (confirmed) {
+          await saveConfig({
+            trader: {
+              time_override_enabled: true,
+              time_override_duration: 168,
+              time_override_unit: "hours",
+              time_override_loss_threshold_percent: -40,
+            },
+          });
+        }
       });
     }
 
@@ -644,7 +1069,7 @@ function createLifecycle() {
             dca_enabled: dcaEnabled,
             dca_threshold_pct: dcaThreshold,
             dca_max_count: dcaMaxCount,
-            dca_size_pct: dcaSize,
+            dca_size_percentage: dcaSize,
             dca_cooldown_minutes: dcaCooldown,
             close_cooldown_seconds: closeCooldown,
             entry_monitor_concurrency: entryConcurrency,
@@ -677,6 +1102,38 @@ function createLifecycle() {
         importConfig();
       });
     }
+
+    // Time unit change listener
+    const timeUnit = $("#time-unit");
+    if (timeUnit) {
+      timeUnit.addEventListener("change", () => {
+        updateTimeConversionHint();
+      });
+    }
+
+    // Time duration input listener
+    const timeMaxHold = $("#time-max-hold");
+    if (timeMaxHold) {
+      timeMaxHold.addEventListener("input", () => {
+        updateTimeConversionHint();
+      });
+    }
+
+    // ROI target input listener
+    const roiTarget = $("#roi-target");
+    if (roiTarget) {
+      roiTarget.addEventListener("input", () => {
+        updateRoiExample();
+      });
+    }
+
+    // Time loss threshold input listener
+    const timeLossThreshold = $("#time-loss-threshold");
+    if (timeLossThreshold) {
+      timeLossThreshold.addEventListener("input", () => {
+        updateTimeLossExample();
+      });
+    }
   }
 
   /**
@@ -684,28 +1141,20 @@ function createLifecycle() {
    */
   function setupPreviewListeners() {
     // Debounced preview update on config change
-    const debouncedPreview = Utils.debounce(() => {
-      const positionSelect = $("#preview-position-select");
-      const positionId = positionSelect?.value === "simulate" ? null : positionSelect?.value;
-      loadTrailingStopPreview(positionId);
-    }, 500);
+    const debouncedTrailingPreview = Utils.debounce(() => {
+      updateTrailingStopExample();
+    }, 300);
 
-    // Trail activation input
-    const trailActivation = $("#trail-activation");
-    if (trailActivation) {
-      trailActivation.addEventListener("input", debouncedPreview);
+    // Trailing activation input
+    const activationInput = $("#trailing-activation");
+    if (activationInput) {
+      activationInput.addEventListener("input", debouncedTrailingPreview);
     }
 
-    // Trail distance input
-    const trailDistance = $("#trail-distance");
-    if (trailDistance) {
-      trailDistance.addEventListener("input", debouncedPreview);
-    }
-
-    // Position selector (if exists)
-    const positionSelect = $("#preview-position-select");
-    if (positionSelect) {
-      positionSelect.addEventListener("change", debouncedPreview);
+    // Trailing distance input
+    const distanceInput = $("#trailing-distance");
+    if (distanceInput) {
+      distanceInput.addEventListener("input", debouncedTrailingPreview);
     }
   }
 

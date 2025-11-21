@@ -6,8 +6,8 @@
 
 use screenerbot::{
     arguments::{
-        is_clean_wallet_data_enabled, is_force_enabled, is_gui_enabled, is_reset_enabled, patterns,
-        print_debug_info, print_help,
+        is_clean_wallet_data_enabled, is_force_enabled, is_gui_enabled, is_reset_enabled,
+        is_reset_default_configs_enabled, patterns, print_debug_info, print_help,
     },
     logger::{self as logger, LogTag},
 };
@@ -92,6 +92,38 @@ async fn main() {
         } else {
             logger::info(LogTag::System, "❌ Cleanup cancelled");
             std::process::exit(0);
+        }
+    }
+
+    // Reset config to defaults mode - execute and exit
+    if is_reset_default_configs_enabled() {
+        logger::info(LogTag::System, "🔄 Reset config to defaults mode enabled");
+
+        // Load current config first (to get wallet + RPC)
+        if let Err(e) = screenerbot::config::load_config() {
+            logger::error(
+                LogTag::System,
+                &format!("❌ Failed to load current config: {}", e),
+            );
+            std::process::exit(1);
+        }
+
+        // Execute reset
+        match screenerbot::config::reset_config_to_defaults_preserving_credentials() {
+            Ok(_) => {
+                logger::info(
+                    LogTag::System,
+                    "✅ Config reset completed successfully. Restart the bot to apply changes.",
+                );
+                std::process::exit(0);
+            }
+            Err(e) => {
+                logger::error(
+                    LogTag::System,
+                    &format!("❌ Config reset failed: {}", e),
+                );
+                std::process::exit(1);
+            }
         }
     }
 

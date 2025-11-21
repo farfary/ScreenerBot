@@ -10,6 +10,11 @@ pub async fn check_trailing_stop(
     position: &Position,
     current_price: f64,
 ) -> Result<Option<TradeDecision>, String> {
+    // Validate current price
+    if !current_price.is_finite() || current_price <= 0.0 {
+        return Err(format!("Invalid current_price for trailing stop: {}", current_price));
+    }
+
     // Skip if position doesn't have highest price recorded
     if position.price_highest <= 0.0 {
         return Ok(None);
@@ -25,6 +30,14 @@ pub async fn check_trailing_stop(
     let activation_pct = config::get_trailing_stop_activation_pct();
     let distance_pct = config::get_trailing_stop_distance_pct();
 
+    // Runtime validation: distance must be less than activation to prevent impossible conditions
+    if distance_pct >= activation_pct {
+        return Err(format!(
+            "Invalid trailing stop config: distance_pct ({:.1}%) must be less than activation_pct ({:.1}%)",
+            distance_pct, activation_pct
+        ));
+    }
+
     // Calculate unrealized profit percentage using average entry price
     let entry_price = position.average_entry_price;
     if entry_price <= 0.0 || !entry_price.is_finite() {
@@ -38,8 +51,11 @@ pub async fn check_trailing_stop(
         // Calculate stop price based on highest recorded price
         let stop_price = position.price_highest * (1.0 - distance_pct / 100.0);
 
-        // Check if current price fell below stop price
-        if current_price <= stop_price {
+        // Only trigger if still profitable - prevents exits at loss after price retracement
+        let current_profit_pct = (current_price / entry_price - 1.0) * 100.0;
+
+        // Check if current price fell below stop price AND position is still profitable
+        if current_price <= stop_price && current_profit_pct > 0.0 {
             return Ok(Some(TradeDecision {
                 position_id: position.id.map(|id| id.to_string()),
                 mint: position.mint.clone(),

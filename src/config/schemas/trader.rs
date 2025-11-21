@@ -1,6 +1,55 @@
 /// Trading system configuration
 use crate::config_struct;
 use crate::field_metadata;
+use serde::{Deserialize, Serialize};
+
+/// Time unit for duration configuration
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub enum TimeUnit {
+    Seconds,
+    Minutes,
+    Hours,
+    Days,
+}
+
+impl Default for TimeUnit {
+    fn default() -> Self {
+        TimeUnit::Hours
+    }
+}
+
+impl TimeUnit {
+    /// Convert duration to seconds
+    pub fn to_seconds(&self, value: f64) -> f64 {
+        match self {
+            TimeUnit::Seconds => value,
+            TimeUnit::Minutes => value * 60.0,
+            TimeUnit::Hours => value * 3600.0,
+            TimeUnit::Days => value * 86400.0,
+        }
+    }
+
+    /// Convert from string
+    pub fn from_str(s: &str) -> Option<Self> {
+        match s.to_lowercase().as_str() {
+            "seconds" | "s" | "sec" => Some(TimeUnit::Seconds),
+            "minutes" | "m" | "min" => Some(TimeUnit::Minutes),
+            "hours" | "h" | "hr" => Some(TimeUnit::Hours),
+            "days" | "d" | "day" => Some(TimeUnit::Days),
+            _ => None,
+        }
+    }
+
+    /// Convert to string
+    pub fn to_string(&self) -> String {
+        match self {
+            TimeUnit::Seconds => "seconds".to_string(),
+            TimeUnit::Minutes => "minutes".to_string(),
+            TimeUnit::Hours => "hours".to_string(),
+            TimeUnit::Days => "days".to_string(),
+        }
+    }
+}
 
 config_struct! {
     /// Trading system configuration
@@ -38,38 +87,51 @@ config_struct! {
         })]
         entry_sizes: Vec<f64> = vec![0.005, 0.01, 0.02, 0.05],
 
-        // Profit thresholds
+        // ==================== ROI EXIT CONFIGURATION ====================
         #[metadata(field_metadata! {
-            label: "Enable Profit Threshold",
-            hint: "Require minimum profit before exit",
+            label: "Enable ROI Exit",
+            hint: "Enable automatic exit when profit target is reached",
             impact: "high",
-            category: "Profit Management",
+            category: "ROI Exit",
         })]
-        min_profit_threshold_enabled: bool = true,
+        roi_exit_enabled: bool = true,
         #[metadata(field_metadata! {
-            label: "Min Profit %",
-            hint: "2-5% typical for volatile tokens",
-            min: 0,
-            max: 100,
-            step: 0.1,
+            label: "ROI Target %",
+            hint: "Exit when profit reaches this % (20 = exit at +20%)",
+            min: 1,
+            max: 1000,
+            step: 1,
             unit: "%",
             impact: "high",
-            category: "Profit Management",
+            category: "ROI Exit",
         })]
-        min_profit_threshold_percent: f64 = 2.0,
+        roi_target_percent: f64 = 20.0,
 
-        // Time-based overrides
+        // ==================== TIME OVERRIDE CONFIGURATION ====================
+        #[metadata(field_metadata! {
+            label: "Enable Time Override",
+            hint: "Enable automatic exit for positions held too long at a loss",
+            impact: "high",
+            category: "Time Override",
+        })]
+        time_override_enabled: bool = true,
         #[metadata(field_metadata! {
             label: "Time Override Duration",
-            hint: "Hours before forced exit (168=1 week)",
+            hint: "Duration before forced exit (168 hours = 7 days, 30 minutes, etc)",
             min: 1,
-            max: 720,
+            max: 43200,
             step: 1,
-            unit: "hours",
             impact: "critical",
-            category: "Time Overrides",
+            category: "Time Override",
         })]
-        time_override_duration_hours: f64 = 168.0,
+        time_override_duration: f64 = 168.0,
+        #[metadata(field_metadata! {
+            label: "Time Override Unit",
+            hint: "Time unit: seconds, minutes, hours, days",
+            impact: "critical",
+            category: "Time Override",
+        })]
+        time_override_unit: String = "hours".to_string(),
         #[metadata(field_metadata! {
             label: "Time Override Loss %",
             hint: "Loss % to trigger time override (-40 = exit if down 40%)",
@@ -78,7 +140,7 @@ config_struct! {
             step: 1,
             unit: "%",
             impact: "medium",
-            category: "Time Overrides",
+            category: "Time Override",
         })]
         time_override_loss_threshold_percent: f64 = -40.0,
 

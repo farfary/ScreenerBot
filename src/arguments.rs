@@ -125,6 +125,12 @@ pub fn is_clean_wallet_data_enabled() -> bool {
     has_arg("--clean-wallet-data")
 }
 
+/// Reset configuration to defaults while preserving wallet and RPC URLs
+/// Use when you want to restore default settings without losing credentials
+pub fn is_reset_default_configs_enabled() -> bool {
+    has_arg("--reset-default-configs")
+}
+
 // =============================================================================
 // PROFILING FLAGS
 // =============================================================================
@@ -170,6 +176,7 @@ pub fn print_help() {
     println!(
         "    --reset                     Reset pending verifications and delete database files"
     );
+    println!("    --reset-default-configs     Reset all config to defaults (preserves wallet + RPC URLs)");
     println!("    --clean-wallet-data         Clean all wallet-specific databases (use when switching wallets)");
     println!("    --help, -h                  Show this help message");
     println!();
@@ -208,6 +215,7 @@ pub fn print_help() {
     println!("    screenerbot --debug-trader                   # Start bot with trader debug logs");
     println!("    screenerbot --reset                          # Reset with confirmation prompt");
     println!("    screenerbot --reset --force                  # Reset without confirmation");
+    println!("    screenerbot --reset-default-configs          # Reset config to defaults");
     println!(
         "    screenerbot --clean-wallet-data              # Clean databases when switching wallets"
     );

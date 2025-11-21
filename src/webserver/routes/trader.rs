@@ -553,10 +553,11 @@ pub struct TemplateConfig {
     pub trailing_stop_enabled: bool,
     pub trailing_stop_activation_pct: f64,
     pub trailing_stop_distance_pct: f64,
-    pub roi_enabled: bool,
+    pub roi_exit_enabled: bool,
     pub roi_target_pct: f64,
     pub time_override_enabled: bool,
-    pub time_override_max_age_hours: f64,
+    pub time_override_duration: f64,
+    pub time_override_unit: String,
     pub time_override_loss_threshold_pct: f64,
 }
 
@@ -615,11 +616,13 @@ async fn apply_template(Json(request): Json<ApplyTemplateRequest>) -> Response {
     // Update trader config
     let result = update_config_section(
         |config| {
-            config.trader.min_profit_threshold_enabled = cfg.roi_enabled;
-            config.trader.min_profit_threshold_percent = cfg.roi_target_pct;
-            config.trader.time_override_duration_hours = cfg.time_override_max_age_hours;
-            config.trader.time_override_loss_threshold_percent =
-                cfg.time_override_loss_threshold_pct;
+            config.trader.roi_exit_enabled = cfg.roi_exit_enabled;
+            config.trader.roi_target_percent = cfg.roi_target_pct;
+            
+            config.trader.time_override_enabled = cfg.time_override_enabled;
+            config.trader.time_override_duration = cfg.time_override_duration;
+            config.trader.time_override_unit = cfg.time_override_unit.clone();
+            config.trader.time_override_loss_threshold_percent = cfg.time_override_loss_threshold_pct;
         },
         true, // Save to disk
     );
@@ -655,10 +658,11 @@ fn get_all_templates() -> Vec<Template> {
                 trailing_stop_enabled: true,
                 trailing_stop_activation_pct: 5.0,
                 trailing_stop_distance_pct: 3.0,
-                roi_enabled: true,
+                roi_exit_enabled: true,
                 roi_target_pct: 10.0,
                 time_override_enabled: true,
-                time_override_max_age_hours: 72.0,
+                time_override_duration: 3.0,
+                time_override_unit: "days".to_string(),
                 time_override_loss_threshold_pct: -20.0,
             },
         },
@@ -671,10 +675,11 @@ fn get_all_templates() -> Vec<Template> {
                 trailing_stop_enabled: true,
                 trailing_stop_activation_pct: 10.0,
                 trailing_stop_distance_pct: 5.0,
-                roi_enabled: true,
+                roi_exit_enabled: true,
                 roi_target_pct: 20.0,
                 time_override_enabled: true,
-                time_override_max_age_hours: 168.0,
+                time_override_duration: 7.0,
+                time_override_unit: "days".to_string(),
                 time_override_loss_threshold_pct: -40.0,
             },
         },
@@ -687,10 +692,11 @@ fn get_all_templates() -> Vec<Template> {
                 trailing_stop_enabled: true,
                 trailing_stop_activation_pct: 15.0,
                 trailing_stop_distance_pct: 7.0,
-                roi_enabled: true,
+                roi_exit_enabled: true,
                 roi_target_pct: 50.0,
                 time_override_enabled: true,
-                time_override_max_age_hours: 336.0,
+                time_override_duration: 14.0,
+                time_override_unit: "days".to_string(),
                 time_override_loss_threshold_pct: -60.0,
             },
         },
@@ -703,10 +709,11 @@ fn get_all_templates() -> Vec<Template> {
                 trailing_stop_enabled: true,
                 trailing_stop_activation_pct: 5.0,
                 trailing_stop_distance_pct: 2.0,
-                roi_enabled: true,
+                roi_exit_enabled: true,
                 roi_target_pct: 5.0,
                 time_override_enabled: true,
-                time_override_max_age_hours: 24.0,
+                time_override_duration: 4.0,
+                time_override_unit: "hours".to_string(),
                 time_override_loss_threshold_pct: -15.0,
             },
         },
