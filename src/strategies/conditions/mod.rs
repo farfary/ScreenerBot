@@ -16,8 +16,27 @@ pub use price_change_percent::PriceChangePercentCondition;
 pub use price_to_ma::PriceToMaCondition;
 pub use volume_spike::VolumeSpikeCondition;
 
+use crate::ohlcvs::Candle;
 use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
+
+// TEMPORARY: Default timeframe for conditions until Phase 4 implementation
+// Phase 4 will add timeframe parameter to each condition
+const DEFAULT_TIMEFRAME: &str = "5m";
+
+/// Temporary helper to extract candles from TimeframeBundle
+/// This will be replaced in Phase 4 when conditions get timeframe parameters
+pub fn get_candles_from_context(context: &EvaluationContext) -> Result<Vec<Candle>, String> {
+    let bundle = context
+        .timeframe_bundle
+        .as_ref()
+        .ok_or_else(|| "OHLCV data not available".to_string())?;
+    
+    bundle
+        .get_timeframe(DEFAULT_TIMEFRAME)
+        .ok_or_else(|| format!("Timeframe {} not available in bundle", DEFAULT_TIMEFRAME))
+        .map(|candles| candles.clone())
+}
 
 /// Trait for condition evaluation
 #[async_trait]

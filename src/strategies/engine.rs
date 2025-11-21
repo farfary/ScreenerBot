@@ -363,15 +363,10 @@ fn context_fingerprint(ctx: &EvaluationContext) -> u64 {
         "no_market".hash(&mut s);
     }
 
-    // OHLCV: anchor to the latest candle identity (ts + close) and timeframe
-    if let Some(ohlcv) = &ctx.ohlcv_data {
-        ohlcv.timeframe.hash(&mut s);
-        if let Some(last) = ohlcv.candles.last() {
-            last.timestamp.timestamp().hash(&mut s);
-            format!("{:.9}", last.close).hash(&mut s);
-        } else {
-            "no_candles".hash(&mut s);
-        }
+    // TimeframeBundle: hash bundle timestamp for cache invalidation
+    if let Some(bundle) = &ctx.timeframe_bundle {
+        bundle.timestamp.timestamp().hash(&mut s);
+        bundle.cache_age_seconds.hash(&mut s);
     } else {
         "no_ohlcv".hash(&mut s);
     }

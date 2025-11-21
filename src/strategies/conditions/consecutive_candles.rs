@@ -1,4 +1,4 @@
-use crate::strategies::conditions::{get_param_f64, get_param_string, ConditionEvaluator};
+use crate::strategies::conditions::{get_candles_from_context, get_param_f64, get_param_string, ConditionEvaluator};
 use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
 use serde_json::json;
@@ -21,21 +21,18 @@ impl ConditionEvaluator for ConsecutiveCandlesCondition {
         let direction = get_param_string(condition, "direction")?;
         let minimum_change = get_param_f64(condition, "minimum_change")?;
 
-        let ohlcv_data = context
-            .ohlcv_data
-            .as_ref()
-            .ok_or_else(|| "OHLCV data not available".to_string())?;
+        let candles = get_candles_from_context(context)?;
 
-        if ohlcv_data.candles.len() < count {
+        if candles.len() < count {
             return Err(format!(
                 "Not enough candles: {} < {}",
-                ohlcv_data.candles.len(),
+                candles.len(),
                 count
             ));
         }
 
         // Get the most recent candles
-        let recent_candles = &ohlcv_data.candles[ohlcv_data.candles.len() - count..];
+        let recent_candles = &candles[candles.len() - count..];
 
         // Check for consecutive pattern
         let mut consecutive_count = 0;

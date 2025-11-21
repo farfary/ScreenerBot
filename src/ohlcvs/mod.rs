@@ -14,8 +14,8 @@ mod service;
 mod types;
 
 pub use types::{
-    OhlcvDataPoint, OhlcvError, OhlcvMetrics, OhlcvResult, PoolConfig, PoolMetadata, Priority,
-    Timeframe, TokenOhlcvConfig,
+    Candle, OhlcvError, OhlcvMetrics, OhlcvResult, PoolConfig, PoolMetadata, Priority,
+    Timeframe, TimeframeBundle, TokenOhlcvConfig, BUNDLE_CANDLE_COUNT,
 };
 
 pub use monitor::{MonitorStats, MonitorTelemetrySnapshot};
@@ -37,7 +37,7 @@ pub async fn get_ohlcv_data(
     limit: usize,
     from_timestamp: Option<i64>,
     to_timestamp: Option<i64>,
-) -> OhlcvResult<Vec<OhlcvDataPoint>> {
+) -> OhlcvResult<Vec<Candle>> {
     service::get_ohlcv_data(
         mint,
         timeframe,
@@ -87,4 +87,17 @@ pub async fn remove_token_monitoring(mint: &str) -> OhlcvResult<()> {
 
 pub async fn record_activity(mint: &str, activity_type: ActivityType) -> OhlcvResult<()> {
     service::record_activity(mint, activity_type).await
+}
+
+// Phase 2: Bundle Cache API for strategy evaluation
+pub async fn get_timeframe_bundle(mint: &str) -> OhlcvResult<Option<TimeframeBundle>> {
+    service::get_timeframe_bundle(mint).await
+}
+
+pub async fn build_timeframe_bundle(mint: &str) -> OhlcvResult<TimeframeBundle> {
+    service::build_timeframe_bundle(mint).await
+}
+
+pub async fn store_bundle(mint: String, bundle: TimeframeBundle) -> OhlcvResult<()> {
+    service::store_bundle(mint, bundle).await
 }

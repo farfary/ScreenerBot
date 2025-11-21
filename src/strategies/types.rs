@@ -2,6 +2,9 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
+// Import unified types from OHLCV module
+use crate::ohlcvs::{Candle, TimeframeBundle};
+
 /// Strategy type classification
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
@@ -123,7 +126,7 @@ pub struct EvaluationContext {
     pub current_price: Option<f64>,
     pub position_data: Option<PositionData>,
     pub market_data: Option<MarketData>,
-    pub ohlcv_data: Option<OhlcvData>,
+    pub timeframe_bundle: Option<TimeframeBundle>,
 }
 
 /// Position-related data for evaluation
@@ -144,23 +147,6 @@ pub struct MarketData {
     pub market_cap: Option<f64>,
     pub holder_count: Option<u32>,
     pub token_age_hours: Option<f64>,
-}
-
-/// OHLCV data for technical analysis
-#[derive(Debug, Clone)]
-pub struct OhlcvData {
-    pub candles: Vec<Candle>,
-    pub timeframe: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct Candle {
-    pub timestamp: DateTime<Utc>,
-    pub open: f64,
-    pub high: f64,
-    pub low: f64,
-    pub close: f64,
-    pub volume: f64,
 }
 
 /// Result of strategy evaluation

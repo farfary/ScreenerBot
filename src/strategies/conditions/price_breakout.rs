@@ -1,4 +1,4 @@
-use crate::strategies::conditions::{get_param_f64, get_param_string, ConditionEvaluator};
+use crate::strategies::conditions::{get_candles_from_context, get_param_f64, get_param_string, ConditionEvaluator};
 use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
 use serde_json::json;
@@ -21,15 +21,12 @@ impl ConditionEvaluator for PriceBreakoutCondition {
         let direction = get_param_string(condition, "direction")?;
         let confirmation = get_param_f64(condition, "confirmation")?;
 
-        let ohlcv_data = context
-            .ohlcv_data
-            .as_ref()
-            .ok_or_else(|| "OHLCV data not available".to_string())?;
+        let candles = get_candles_from_context(context)?;
 
-        if ohlcv_data.candles.len() < lookback {
+        if candles.len() < lookback {
             return Err(format!(
                 "Not enough candles: {} < {}",
-                ohlcv_data.candles.len(),
+                candles.len(),
                 lookback
             ));
         }
@@ -39,9 +36,9 @@ impl ConditionEvaluator for PriceBreakoutCondition {
             .ok_or_else(|| "Current price not available".to_string())?;
 
         // Get lookback candles (excluding current)
-        let end_idx = ohlcv_data.candles.len().saturating_sub(1);
+        let end_idx = candles.len().saturating_sub(1);
         let start_idx = end_idx.saturating_sub(lookback);
-        let lookback_candles = &ohlcv_data.candles[start_idx..end_idx];
+        let lookback_candles = &candles[start_idx..end_idx];
 
         if lookback_candles.is_empty() {
             return Err("No lookback candles available".to_string());

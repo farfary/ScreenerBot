@@ -1,7 +1,7 @@
 // Timeframe aggregation logic
 
 use crate::events::{record_ohlcv_event, Severity};
-use crate::ohlcvs::types::{OhlcvDataPoint, OhlcvError, OhlcvResult, Timeframe};
+use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Timeframe};
 use serde_json::json;
 use std::collections::HashMap;
 
@@ -10,22 +10,23 @@ pub struct OhlcvAggregator;
 impl OhlcvAggregator {
     /// Aggregate 1-minute data to a higher timeframe
     pub fn aggregate(
-        data: &[OhlcvDataPoint],
-        target_timeframe: Timeframe,
-    ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
+        data: &[Candle],
+        from_timeframe: Timeframe,
+        to_timeframe: Timeframe,
+    ) -> OhlcvResult<Vec<Candle>> {
         if data.is_empty() {
             return Ok(Vec::new());
         }
 
         // 1-minute data doesn't need aggregation
-        if target_timeframe == Timeframe::Minute1 {
+        if to_timeframe == Timeframe::Minute1 {
             return Ok(data.to_vec());
         }
 
-        let bucket_size = target_timeframe.to_seconds();
+        let bucket_size = to_timeframe.to_seconds();
 
-        // Group data points by bucket
-        let mut buckets: HashMap<i64, Vec<&OhlcvDataPoint>> = HashMap::new();
+        // Group data points into buckets
+        let mut buckets: HashMap<i64, Vec<&Candle>> = HashMap::new();
 
         for point in data {
             let bucket_start = (point.timestamp / bucket_size) * bucket_size;
@@ -33,7 +34,7 @@ impl OhlcvAggregator {
         }
 
         // Aggregate each bucket
-        let mut aggregated: Vec<OhlcvDataPoint> = buckets
+        let mut aggregated: Vec<Candle> = buckets
             .into_iter()
             .filter_map(|(timestamp, points)| Self::aggregate_bucket(timestamp, &points))
             .collect();
@@ -45,7 +46,7 @@ impl OhlcvAggregator {
         if data.len() >= 1000 {
             let input_len = data.len();
             let output_len = aggregated.len();
-            let target_timeframe_str = target_timeframe.to_string();
+            let to_timeframe_str = to_timeframe.to_string();
             tokio::spawn(async move {
                 record_ohlcv_event(
                     "large_aggregation",
@@ -55,7 +56,7 @@ impl OhlcvAggregator {
                     json!({
                         "input_points": input_len,
                         "output_points": output_len,
-                        "target_timeframe": target_timeframe_str,
+                        "target_timeframe": to_timeframe_str,
                     }),
                 )
                 .await
@@ -66,7 +67,7 @@ impl OhlcvAggregator {
     }
 
     /// Aggregate multiple data points into a single candle
-    fn aggregate_bucket(timestamp: i64, points: &[&OhlcvDataPoint]) -> Option<OhlcvDataPoint> {
+    fn aggregate_bucket(timestamp: i64, points: &[&Candle]) -> Option<Candle> {
         if points.is_empty() {
             return None;
         }
@@ -92,9 +93,9 @@ impl OhlcvAggregator {
             .iter()
             .map(|p| p.low)
             .fold(f64::INFINITY, f64::min);
-        let volume: f64 = sorted_points.iter().map(|p| p.volume).sum();
+        let volume: f64 = points.iter().map(|p| p.volume).sum();
 
-        Some(OhlcvDataPoint {
+        Some(Candle {
             timestamp,
             open,
             high,
@@ -104,8 +105,8 @@ impl OhlcvAggregator {
         })
     }
 
-    /// Validate aggregated data
-    pub fn validate_aggregated(data: &[OhlcvDataPoint]) -> bool {
+    /// Validates aggregated data for consistency
+    pub fn validate_aggregated(data: &[Candle]) -> bool {
         data.iter().all(|point| point.is_valid())
     }
 
@@ -126,7 +127,7 @@ impl OhlcvAggregator {
     }
 
     /// Check if data has gaps
-    pub fn detect_gaps(data: &[OhlcvDataPoint], timeframe: Timeframe) -> Vec<(i64, i64)> {
+    pub fn detect_gaps(data: &[Candle], timeframe: Timeframe) -> Vec<(i64, i64)> {
         if data.len() < 2 {
             return Vec::new();
         }
@@ -151,8 +152,8 @@ impl OhlcvAggregator {
         gaps
     }
 
-    /// Interpolate missing candles (simple forward fill)
-    pub fn interpolate_gaps(data: &[OhlcvDataPoint], timeframe: Timeframe) -> Vec<OhlcvDataPoint> {
+    /// Interpolates missing data points in gaps
+    pub fn interpolate_gaps(data: &[Candle], timeframe: Timeframe) -> Vec<Candle> {
         if data.len() < 2 {
             return data.to_vec();
         }
@@ -175,7 +176,7 @@ impl OhlcvAggregator {
                 // Fill gaps with forward-filled data up to but not including next existing candle
                 let mut fill_timestamp = expected_next;
                 while fill_timestamp < next_timestamp {
-                    result.push(OhlcvDataPoint {
+                    result.push(Candle {
                         timestamp: fill_timestamp,
                         open: sorted[i].close,
                         high: sorted[i].close,
@@ -194,10 +195,10 @@ impl OhlcvAggregator {
 
     /// Resample data to a different timeframe (downsample only)
     pub fn resample(
-        data: &[OhlcvDataPoint],
+        data: &[Candle],
         from_timeframe: Timeframe,
         to_timeframe: Timeframe,
-    ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
+    ) -> OhlcvResult<Vec<Candle>> {
         // Can only downsample (smaller -> larger timeframe)
         if to_timeframe.to_seconds() < from_timeframe.to_seconds() {
             return Err(OhlcvError::InvalidTimeframe(
@@ -209,11 +210,11 @@ impl OhlcvAggregator {
             return Ok(data.to_vec());
         }
 
-        Self::aggregate(data, to_timeframe)
+        Self::aggregate(data, from_timeframe, to_timeframe)
     }
 
     /// Calculate volume-weighted average price (VWAP) for a bucket
-    pub fn calculate_vwap(data: &[OhlcvDataPoint]) -> Option<f64> {
+    pub fn calculate_vwap(data: &[Candle]) -> Option<f64> {
         if data.is_empty() {
             return None;
         }

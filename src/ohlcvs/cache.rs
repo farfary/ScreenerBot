@@ -4,7 +4,7 @@
 // This ensures consistent behavior across cache hits, DB queries, and aggregations.
 
 use crate::events::{record_ohlcv_event, Severity};
-use crate::ohlcvs::types::{OhlcvDataPoint, OhlcvError, OhlcvResult, Timeframe};
+use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Timeframe};
 use serde_json::json;
 use std::collections::{HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
@@ -15,13 +15,13 @@ const HOT_CACHE_RETENTION_HOURS: i64 = 24;
 
 #[derive(Clone)]
 struct CacheEntry {
-    data: Vec<OhlcvDataPoint>,
+    data: Vec<Candle>,
     last_access: Instant,
     created_at: Instant,
 }
 
 impl CacheEntry {
-    fn new(data: Vec<OhlcvDataPoint>) -> Self {
+    fn new(data: Vec<Candle>) -> Self {
         Self {
             data,
             last_access: Instant::now(),
@@ -29,7 +29,7 @@ impl CacheEntry {
         }
     }
 
-    fn access(&mut self) -> &Vec<OhlcvDataPoint> {
+    fn access(&mut self) -> &Vec<Candle> {
         self.last_access = Instant::now();
         &self.data
     }
@@ -64,7 +64,7 @@ impl OhlcvCache {
         mint: &str,
         pool_address: Option<&str>,
         timeframe: Timeframe,
-    ) -> OhlcvResult<Option<Vec<OhlcvDataPoint>>> {
+    ) -> OhlcvResult<Option<Vec<Candle>>> {
         let key = (
             mint.to_string(),
             pool_address.map(|s| s.to_string()),
@@ -148,7 +148,7 @@ impl OhlcvCache {
         mint: &str,
         pool_address: Option<&str>,
         timeframe: Timeframe,
-        data: Vec<OhlcvDataPoint>,
+        data: Vec<Candle>,
     ) -> OhlcvResult<()> {
         if data.is_empty() {
             return Ok(());

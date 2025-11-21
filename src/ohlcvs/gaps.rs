@@ -6,7 +6,7 @@ use crate::logger::{self, LogTag};
 use crate::ohlcvs::aggregator::OhlcvAggregator;
 use crate::ohlcvs::database::OhlcvDatabase;
 use crate::ohlcvs::fetcher::OhlcvFetcher;
-use crate::ohlcvs::types::{OhlcvDataPoint, OhlcvError, OhlcvResult, Priority, Timeframe};
+use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Priority, Timeframe};
 use chrono::Utc;
 use serde_json::json;
 use std::sync::Arc;
@@ -72,7 +72,7 @@ impl GapManager {
         let normalized = if timeframe == Timeframe::Minute1 {
             data
         } else {
-            OhlcvAggregator::aggregate(&data, timeframe)?
+            OhlcvAggregator::aggregate(&data, Timeframe::Minute1, timeframe)?
         };
 
         // Detect gaps using aggregator

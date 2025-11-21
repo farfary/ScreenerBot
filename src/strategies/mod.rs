@@ -4,11 +4,11 @@ pub mod engine;
 pub mod types;
 
 use crate::logger::{self, LogTag};
+use crate::ohlcvs::TimeframeBundle;
 use crate::strategies::db::{get_enabled_strategies, get_strategy, record_evaluation};
 use crate::strategies::engine::{EngineConfig, StrategyEngine};
 use crate::strategies::types::{
-    Candle, EvaluationContext, EvaluationResult, MarketData, OhlcvData, PositionData, Strategy,
-    StrategyType,
+    EvaluationContext, EvaluationResult, MarketData, PositionData, Strategy, StrategyType,
 };
 use chrono::Utc;
 use once_cell::sync::Lazy;
@@ -54,7 +54,7 @@ async fn get_engine() -> Result<Arc<RwLock<Option<StrategyEngine>>>, String> {
 /// * `token_mint` - The token mint address
 /// * `current_price` - Current token price in SOL
 /// * `market_data` - Optional market data (liquidity, volume, etc.)
-/// * `ohlcv_data` - Optional OHLCV candle data
+/// * `timeframe_bundle` - Optional multi-timeframe OHLCV bundle
 ///
 /// # Returns
 /// * `Ok(Some(strategy_id))` - If a strategy signals entry
@@ -64,7 +64,7 @@ pub async fn evaluate_entry_strategies(
     token_mint: &str,
     current_price: f64,
     market_data: Option<MarketData>,
-    ohlcv_data: Option<OhlcvData>,
+    timeframe_bundle: Option<TimeframeBundle>,
 ) -> Result<Option<String>, String> {
     let engine_lock = get_engine().await?;
     let engine_guard = engine_lock.read().await;
@@ -85,7 +85,7 @@ pub async fn evaluate_entry_strategies(
         current_price: Some(current_price),
         position_data: None,
         market_data,
-        ohlcv_data,
+        timeframe_bundle,
     };
 
     // Evaluate strategies by priority (lower priority first)
@@ -139,7 +139,7 @@ pub async fn evaluate_entry_strategies(
 /// * `current_price` - Current token price in SOL
 /// * `position_data` - Position data (entry price, age, etc.)
 /// * `market_data` - Optional market data (liquidity, volume, etc.)
-/// * `ohlcv_data` - Optional OHLCV candle data
+/// * `timeframe_bundle` - Optional multi-timeframe OHLCV bundle
 ///
 /// # Returns
 /// * `Ok(Some(strategy_id))` - If a strategy signals exit
@@ -150,7 +150,7 @@ pub async fn evaluate_exit_strategies(
     current_price: f64,
     position_data: PositionData,
     market_data: Option<MarketData>,
-    ohlcv_data: Option<OhlcvData>,
+    timeframe_bundle: Option<TimeframeBundle>,
 ) -> Result<Option<String>, String> {
     let engine_lock = get_engine().await?;
     let engine_guard = engine_lock.read().await;
@@ -171,7 +171,7 @@ pub async fn evaluate_exit_strategies(
         current_price: Some(current_price),
         position_data: Some(position_data.clone()),
         market_data,
-        ohlcv_data,
+        timeframe_bundle,
     };
 
     // Evaluate strategies by priority (lower priority first)

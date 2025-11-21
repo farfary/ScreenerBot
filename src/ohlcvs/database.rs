@@ -2,7 +2,7 @@
 
 use crate::events::{record_ohlcv_event, Severity};
 use crate::ohlcvs::types::{
-    MintGapAggregate, OhlcvDataPoint, OhlcvError, OhlcvResult, PoolConfig, Priority, Timeframe,
+    Candle, MintGapAggregate, OhlcvError, OhlcvResult, PoolConfig, Priority, Timeframe,
     TokenOhlcvConfig,
 };
 use chrono::{DateTime, Duration, Utc};
@@ -588,7 +588,7 @@ impl OhlcvDatabase {
         mint: &str,
         pool_address: &str,
         timeframe: Timeframe,
-        candles: &[OhlcvDataPoint],
+        candles: &[Candle],
         source: &str,
     ) -> OhlcvResult<usize> {
         if candles.is_empty() {
@@ -647,7 +647,7 @@ impl OhlcvDatabase {
         from_ts: Option<i64>,
         to_ts: Option<i64>,
         limit: Option<usize>,
-    ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
+    ) -> OhlcvResult<Vec<Candle>> {
         let conn = self
             .conn
             .lock()
@@ -700,7 +700,7 @@ impl OhlcvDatabase {
 
         let candles = stmt
             .query_map(param_refs.as_slice(), |row| {
-                Ok(OhlcvDataPoint {
+                Ok(Candle {
                     timestamp: row.get(0)?,
                     open: row.get(1)?,
                     high: row.get(2)?,

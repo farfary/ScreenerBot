@@ -11,7 +11,7 @@ use crate::ohlcvs::gaps::GapManager;
 use crate::ohlcvs::manager::PoolManager;
 use crate::ohlcvs::priorities::{ActivityType, PriorityManager};
 use crate::ohlcvs::types::{
-    MintGapAggregate, OhlcvDataPoint, OhlcvError, OhlcvResult, OhlcvTokenStatus, Priority,
+    Candle, MintGapAggregate, OhlcvError, OhlcvResult, OhlcvTokenStatus, Priority,
     Timeframe, TokenOhlcvConfig,
 };
 use chrono::{DateTime, Utc};
@@ -966,8 +966,8 @@ impl OhlcvMonitor {
         &self,
         mint: &str,
         pool_address: &str,
-        mut data_points: Vec<OhlcvDataPoint>,
-    ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
+        mut data_points: Vec<Candle>,
+    ) -> OhlcvResult<Vec<Candle>> {
         if data_points.is_empty() {
             return Ok(Vec::new());
         }

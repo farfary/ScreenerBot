@@ -2,7 +2,7 @@
 
 use crate::ohlcvs::{
     add_token_monitoring, get_available_pools, get_data_gaps, get_metrics, get_ohlcv_data,
-    record_activity, remove_token_monitoring, request_refresh, ActivityType, OhlcvDataPoint,
+    record_activity, remove_token_monitoring, request_refresh, ActivityType, Candle,
     PoolMetadata, Priority, Timeframe,
 };
 use crate::webserver::{
@@ -27,7 +27,7 @@ struct OhlcvDataResponse {
     mint: String,
     pool_address: Option<String>,
     timeframe: String,
-    data: Vec<OhlcvDataPoint>,
+    data: Vec<Candle>,
     count: usize,
 }
 

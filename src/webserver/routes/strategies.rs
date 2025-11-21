@@ -708,36 +708,16 @@ async fn test_strategy(
             })
     });
 
-    let ohlcv_data = request.ohlcv_data.and_then(|od| {
-        let candles: Result<Vec<Candle>, _> = od
-            .candles
-            .into_iter()
-            .map(|c| {
-                DateTime::parse_from_rfc3339(&c.timestamp)
-                    .map(|ts| Candle {
-                        timestamp: ts.with_timezone(&Utc),
-                        open: c.open,
-                        high: c.high,
-                        low: c.low,
-                        close: c.close,
-                        volume: c.volume,
-                    })
-                    .map_err(|_| ())
-            })
-            .collect();
-
-        candles.ok().map(|candles| OhlcvData {
-            candles,
-            timeframe: od.timeframe,
-        })
-    });
+    // TODO Phase 4: Re-enable OHLCV bundle creation for test endpoint
+    // For now, strategies will work without OHLCV data (non-OHLCV conditions only)
+    let timeframe_bundle = None; // request.ohlcv_data conversion will be implemented in Phase 4
 
     let context = EvaluationContext {
         token_mint: request.token_mint.clone(),
         current_price: Some(request.current_price),
         position_data,
         market_data,
-        ohlcv_data,
+        timeframe_bundle,
     };
 
     // Create engine and evaluate

@@ -2,7 +2,7 @@
 
 use crate::apis::{get_api_manager, ApiManager};
 use crate::events::{record_ohlcv_event, Severity};
-use crate::ohlcvs::types::{OhlcvDataPoint, OhlcvError, OhlcvResult, Priority, Timeframe};
+use crate::ohlcvs::types::{Candle, OhlcvError, OhlcvResult, Priority, Timeframe};
 use serde_json::json;
 use std::collections::{BinaryHeap, VecDeque};
 use std::sync::{Arc, Mutex};
@@ -75,7 +75,7 @@ impl OhlcvFetcher {
         priority: Priority,
         before_timestamp: Option<i64>,
         limit: usize,
-    ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
+    ) -> OhlcvResult<Vec<Candle>> {
         // Queue the request
         self.queue_request(
             mint.to_string(),
@@ -99,7 +99,7 @@ impl OhlcvFetcher {
         aggregate: u32,
         before_timestamp: Option<i64>,
         limit: usize,
-    ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
+    ) -> OhlcvResult<Vec<Candle>> {
         self.record_attempt();
         let start = Instant::now();
         let limit_clamped = limit.min(1000) as u32;
@@ -137,10 +137,10 @@ impl OhlcvFetcher {
 
         match response {
             Ok(ohlcv) => {
-                let data_points: Vec<OhlcvDataPoint> = ohlcv
+                let data_points: Vec<Candle> = ohlcv
                     .ohlcv_list
                     .into_iter()
-                    .map(|candle| OhlcvDataPoint {
+                    .map(|candle| Candle {
                         timestamp: candle[0] as i64,
                         open: candle[1],
                         high: candle[2],
@@ -215,7 +215,7 @@ impl OhlcvFetcher {
         timeframe: Timeframe,
         before_timestamp: Option<i64>,
         limit: usize,
-    ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
+    ) -> OhlcvResult<Vec<Candle>> {
         // Record request attempt for local metrics
         self.record_attempt();
 
@@ -254,10 +254,10 @@ impl OhlcvFetcher {
 
         match response {
             Ok(ohlcv) => {
-                let data_points: Vec<OhlcvDataPoint> = ohlcv
+                let data_points: Vec<Candle> = ohlcv
                     .ohlcv_list
                     .into_iter()
-                    .map(|candle| OhlcvDataPoint {
+                    .map(|candle| Candle {
                         timestamp: candle[0] as i64,
                         open: candle[1],
                         high: candle[2],
@@ -340,7 +340,7 @@ impl OhlcvFetcher {
         timeframe: Timeframe,
         from_timestamp: i64,
         to_timestamp: i64,
-    ) -> OhlcvResult<Vec<OhlcvDataPoint>> {
+    ) -> OhlcvResult<Vec<Candle>> {
         if from_timestamp >= to_timestamp {
             return Ok(Vec::new());
         }
@@ -511,7 +511,7 @@ impl OhlcvFetcher {
         Ok(())
     }
 
-    async fn process_queue(&self) -> OhlcvResult<Vec<OhlcvDataPoint>> {
+    async fn process_queue(&self) -> OhlcvResult<Vec<Candle>> {
         // Get next request from queue
         let request = {
             let mut queue = self

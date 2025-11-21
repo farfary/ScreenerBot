@@ -1,4 +1,4 @@
-use crate::strategies::conditions::{get_param_f64, get_param_string, ConditionEvaluator};
+use crate::strategies::conditions::{get_candles_from_context, get_param_f64, get_param_string, ConditionEvaluator};
 use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
 use serde_json::json;
@@ -20,17 +20,14 @@ impl ConditionEvaluator for CandleSizeCondition {
         let pattern = get_param_string(condition, "pattern")?;
         let threshold = get_param_f64(condition, "threshold")?;
 
-        let ohlcv_data = context
-            .ohlcv_data
-            .as_ref()
-            .ok_or_else(|| "OHLCV data not available".to_string())?;
+        let candles = get_candles_from_context(context)?;
 
-        if ohlcv_data.candles.is_empty() {
+        if candles.is_empty() {
             return Err("No candles available".to_string());
         }
 
         // Get the most recent candle
-        let candle = ohlcv_data.candles.last().unwrap();
+        let candle = candles.last().unwrap();
 
         // Calculate candle metrics
         let body_size = (candle.close - candle.open).abs();

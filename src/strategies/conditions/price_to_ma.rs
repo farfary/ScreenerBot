@@ -1,4 +1,5 @@
 use crate::strategies::conditions::{get_param_f64, get_param_string, ConditionEvaluator};
+use crate::strategies::conditions::get_candles_from_context;
 use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
 use serde_json::json;
@@ -21,21 +22,18 @@ impl ConditionEvaluator for PriceToMaCondition {
         let position = get_param_string(condition, "position")?;
         let distance = get_param_f64(condition, "distance")?;
 
-        let ohlcv_data = context
-            .ohlcv_data
-            .as_ref()
-            .ok_or_else(|| "OHLCV data not available".to_string())?;
+        let candles = get_candles_from_context(context)?;
 
-        if ohlcv_data.candles.len() < period {
+        if candles.len() < period {
             return Err(format!(
                 "Not enough candles for MA calculation: {} < {}",
-                ohlcv_data.candles.len(),
+                candles.len(),
                 period
             ));
         }
 
         // Calculate simple moving average
-        let recent_candles = &ohlcv_data.candles[ohlcv_data.candles.len() - period..];
+        let recent_candles = &candles[candles.len() - period..];
         let ma: f64 = recent_candles.iter().map(|c| c.close).sum::<f64>() / period as f64;
 
         let current_price = context

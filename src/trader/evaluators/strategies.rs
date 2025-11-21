@@ -45,10 +45,50 @@ impl StrategyEvaluator {
         // Build market data from price info
         let market_data = MarketData {
             liquidity_sol: Some(price_info.sol_reserves),
-            volume_24h: None, // Could be enriched from tokens module if needed
+            volume_24h: None,
             market_cap: None,
             holder_count: None,
             token_age_hours: None,
+        };
+
+        // Prefetch OHLCV bundle from cache (non-blocking)
+        let timeframe_bundle = match crate::ohlcvs::get_timeframe_bundle(token_mint).await {
+            Ok(Some(bundle)) => {
+                logger::debug(
+                    LogTag::Trader,
+                    &format!("OHLCV bundle available for {} (age: {}s)", token_mint, bundle.cache_age_seconds),
+                );
+                Some(bundle)
+            }
+            Ok(None) => {
+                // Bundle not in cache - build it on demand
+                logger::debug(
+                    LogTag::Trader,
+                    &format!("OHLCV bundle cache miss for {} - building on demand", token_mint),
+                );
+                
+                match crate::ohlcvs::build_timeframe_bundle(token_mint).await {
+                    Ok(bundle) => {
+                        // Store in cache for future use (takes bundle by move)
+                        let _ = crate::ohlcvs::store_bundle(token_mint.to_string(), bundle.clone()).await;
+                        Some(bundle)
+                    }
+                    Err(e) => {
+                        logger::debug(
+                            LogTag::Trader,
+                            &format!("Failed to build OHLCV bundle for {}: {} - evaluating without OHLCV", token_mint, e),
+                        );
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                logger::warning(
+                    LogTag::Trader,
+                    &format!("Failed to get OHLCV bundle for {}: {} - evaluating without OHLCV", token_mint, e),
+                );
+                None
+            }
         };
 
         // Call strategies module for evaluation with timeout
@@ -59,7 +99,7 @@ impl StrategyEvaluator {
                 token_mint,
                 price_info.price_sol,
                 Some(market_data),
-                None, // OHLCV data could be added later
+                timeframe_bundle,
             ),
         )
         .await;
@@ -177,6 +217,46 @@ impl StrategyEvaluator {
             token_age_hours: None,
         };
 
+        // Prefetch OHLCV bundle from cache (non-blocking)
+        let timeframe_bundle = match crate::ohlcvs::get_timeframe_bundle(&position.mint).await {
+            Ok(Some(bundle)) => {
+                logger::debug(
+                    LogTag::Trader,
+                    &format!("OHLCV bundle available for position {:?} (age: {}s)", position.id, bundle.cache_age_seconds),
+                );
+                Some(bundle)
+            }
+            Ok(None) => {
+                // Bundle not in cache - build it on demand
+                logger::debug(
+                    LogTag::Trader,
+                    &format!("OHLCV bundle cache miss for position {:?} - building on demand", position.id),
+                );
+                
+                match crate::ohlcvs::build_timeframe_bundle(&position.mint).await {
+                    Ok(bundle) => {
+                        // Store in cache for future use (takes bundle by move)
+                        let _ = crate::ohlcvs::store_bundle(position.mint.clone(), bundle.clone()).await;
+                        Some(bundle)
+                    }
+                    Err(e) => {
+                        logger::debug(
+                            LogTag::Trader,
+                            &format!("Failed to build OHLCV bundle for position {:?}: {} - evaluating without OHLCV", position.id, e),
+                        );
+                        None
+                    }
+                }
+            }
+            Err(e) => {
+                logger::warning(
+                    LogTag::Trader,
+                    &format!("Failed to get OHLCV bundle for position {:?}: {} - evaluating without OHLCV", position.id, e),
+                );
+                None
+            }
+        };
+
         // Call strategies module for evaluation with timeout
         let strategy_timeout = std::time::Duration::from_secs(5);
         let evaluation_result = tokio::time::timeout(
@@ -186,7 +266,7 @@ impl StrategyEvaluator {
                 current_price,
                 position_data,
                 Some(market_data),
-                None, // OHLCV data could be added later
+                timeframe_bundle,
             ),
         )
         .await;
