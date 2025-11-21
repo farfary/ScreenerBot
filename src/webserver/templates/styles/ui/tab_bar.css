@@ -116,7 +116,7 @@
   overflow-x: auto;
   flex: 0 0 auto;
   scrollbar-width: thin;
-  min-height: 42px; /* Prevent layout shift */
+  min-height: 0; /* No minimum height needed */
 }
 
 .sub-tabs-container[data-ui="tab-bar"] {

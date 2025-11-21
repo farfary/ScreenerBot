@@ -11,6 +11,7 @@ const SUB_TABS = [
   { id: "trailing-stop", label: '<i class="icon-trending-up"></i> Trailing Stop' },
   { id: "roi", label: '<i class="icon-target"></i> Take Profit' },
   { id: "time-rules", label: '<i class="icon-timer"></i> Time Rules' },
+  { id: "dca", label: '<i class="icon-dollar-sign"></i> DCA' },
   { id: "strategy-control", label: '<i class="icon-puzzle"></i> Strategy Control' },
   { id: "general-settings", label: '<i class="icon-settings"></i> Settings' },
 ];
@@ -76,7 +77,8 @@ function createLifecycle() {
     const durationInput = $("#time-max-hold");
     const unitSelect = $("#time-unit");
     const hintText = $("#time-conversion-hint");
-    const exampleDuration = $("#example-duration");
+    const exampleDuration = $("#time-example-duration");
+    const indicator = $("#time-duration-indicator");
 
     if (!durationInput || !unitSelect || !hintText) return;
 
@@ -89,6 +91,29 @@ function createLifecycle() {
     if (exampleDuration) {
       exampleDuration.textContent = readable;
     }
+    
+    // Update dynamic indicator with visual feedback based on duration in hours
+    if (indicator) {
+      const hoursMap = { seconds: 1/3600, minutes: 1/60, hours: 1, days: 24 };
+      const totalHours = duration * (hoursMap[unit] || 1);
+      
+      if (totalHours < 24) {
+        // Less than 1 day - very short
+        indicator.innerHTML = '<i class="icon-alert-circle"></i>';
+        indicator.style.background = 'var(--warning-alpha-10)';
+        indicator.style.color = 'var(--warning)';
+      } else if (totalHours > 336) {
+        // More than 2 weeks - very long
+        indicator.innerHTML = '<i class="icon-calendar"></i>';
+        indicator.style.background = 'var(--info-alpha-10)';
+        indicator.style.color = 'var(--info)';
+      } else {
+        // 1 day to 2 weeks - moderate
+        indicator.innerHTML = '<i class="icon-clock"></i>';
+        indicator.style.background = 'var(--primary-alpha-10)';
+        indicator.style.color = 'var(--primary)';
+      }
+    }
   }
 
   /**
@@ -96,12 +121,49 @@ function createLifecycle() {
    */
   function updateRoiExample() {
     const roiInput = $("#roi-target");
-    const exampleSpan = $("#roi-example");
+    const impactText = $("#roi-impact");
+    const exampleProfit = $("#roi-example-profit");
+    const exampleTarget = $("#roi-example-target");
+    const exampleSummary = $("#roi-example-summary");
+    const indicator = $("#roi-indicator");
     
-    if (!roiInput || !exampleSpan) return;
+    if (!roiInput) return;
     
     const value = parseFloat(roiInput.value) || 20;
-    exampleSpan.textContent = value.toFixed(0);
+    
+    // Update impact indicator
+    if (impactText) {
+      impactText.textContent = `Exit at +${value}% profit`;
+    }
+    
+    // Update visual example
+    if (exampleProfit) {
+      exampleProfit.textContent = `+${value}% profit`;
+    }
+    if (exampleTarget) {
+      const targetValue = (0.01 * (1 + value / 100)).toFixed(4);
+      exampleTarget.textContent = `${targetValue} SOL`;
+    }
+    if (exampleSummary) {
+      exampleSummary.textContent = `+${value}%`;
+    }
+    
+    // Update dynamic indicator with visual feedback
+    if (indicator) {
+      if (value < 10) {
+        indicator.innerHTML = '<i class="icon-alert-triangle"></i>';
+        indicator.style.background = 'var(--warning-alpha-10)';
+        indicator.style.color = 'var(--warning)';
+      } else if (value > 100) {
+        indicator.innerHTML = '<i class="icon-trending-up"></i>';
+        indicator.style.background = 'var(--success-alpha-10)';
+        indicator.style.color = 'var(--success)';
+      } else {
+        indicator.innerHTML = '<i class="icon-target"></i>';
+        indicator.style.background = 'var(--primary-alpha-10)';
+        indicator.style.color = 'var(--primary)';
+      }
+    }
   }
 
   /**
@@ -109,20 +171,52 @@ function createLifecycle() {
    */
   function updateTimeLossExample() {
     const lossInput = $("#time-loss-threshold");
-    const exampleSpan = $("#example-loss");
+    const impactText = $("#time-loss-impact");
+    const exampleLoss = $("#time-example-loss");
+    const indicator = $("#time-loss-indicator");
     
-    if (!lossInput || !exampleSpan) return;
+    if (!lossInput) return;
     
     const value = parseFloat(lossInput.value) || -40;
-    exampleSpan.textContent = Math.abs(value).toFixed(0);
+    const absValue = Math.abs(value);
+    
+    // Update impact indicator
+    if (impactText) {
+      impactText.textContent = `Exit if down ${absValue}% or more after hold period`;
+    }
+    
+    // Update visual example
+    if (exampleLoss) {
+      exampleLoss.textContent = `${value}%`;
+    }
+    
+    // Update dynamic indicator with visual feedback based on threshold severity
+    if (indicator) {
+      if (absValue < 20) {
+        // Low threshold - exits quickly even with small losses
+        indicator.innerHTML = '<i class="icon-alert-triangle"></i>';
+        indicator.style.background = 'var(--warning-alpha-10)';
+        indicator.style.color = 'var(--warning)';
+      } else if (absValue > 60) {
+        // High threshold - allows large losses
+        indicator.innerHTML = '<i class="icon-trending-down"></i>';
+        indicator.style.background = 'var(--error-alpha-10)';
+        indicator.style.color = 'var(--error)';
+      } else {
+        // Moderate threshold
+        indicator.innerHTML = '<i class="icon-minus-circle"></i>';
+        indicator.style.background = 'var(--primary-alpha-10)';
+        indicator.style.color = 'var(--primary)';
+      }
+    }
   }
 
   /**
    * Update trailing stop visual example calculations
    */
   function updateTrailingStopExample() {
-    const activationInput = $("#trailing-activation");
-    const distanceInput = $("#trailing-distance");
+    const activationInput = $("#trail-activation");
+    const distanceInput = $("#trail-distance");
     
     if (!activationInput || !distanceInput) return;
     
@@ -137,35 +231,40 @@ function createLifecycle() {
     const protectedProfit = ((exitPrice - entryPrice) / entryPrice) * 100;
     
     // Update timeline values
-    const stepEntry = $("#step-entry-value");
-    const stepActivation = $("#step-activation-value");
-    const stepPeak = $("#step-peak-value");
-    const stepExit = $("#step-exit-value");
+    const stepEntry = $("#example-entry");
+    const stepActivation = $("#example-activation");
+    const stepPeak = $("#example-peak");
+    const stepExit = $("#example-exit");
     
     if (stepEntry) stepEntry.textContent = `${entryPrice.toFixed(4)} SOL`;
     if (stepActivation) {
       stepActivation.textContent = `${activationPrice.toFixed(4)} SOL`;
-      const activationDetail = $("#step-activation-detail");
-      if (activationDetail) activationDetail.textContent = `+${activation}%`;
+      const activationDetail = $("#example-activation-pct");
+      if (activationDetail) activationDetail.textContent = `+${activation}% profit`;
     }
     if (stepPeak) {
       stepPeak.textContent = `${peakPrice.toFixed(4)} SOL`;
-      const peakDetail = $("#step-peak-detail");
+      const peakDetail = $("#example-peak-pct");
       if (peakDetail) {
         const gainFromEntry = ((peakPrice - entryPrice) / entryPrice) * 100;
-        peakDetail.textContent = `+${gainFromEntry.toFixed(1)}%`;
+        peakDetail.textContent = `+${gainFromEntry.toFixed(1)}% profit`;
       }
     }
     if (stepExit) {
       stepExit.textContent = `${exitPrice.toFixed(4)} SOL`;
-      const exitDetail = $("#step-exit-detail");
-      if (exitDetail) exitDetail.textContent = `-${distance}% from peak`;
+      const exitDetail = $("#example-exit-pct");
+      if (exitDetail) exitDetail.textContent = `+${protectedProfit.toFixed(1)}% final`;
     }
     
     // Update summary
-    const summaryProfit = $("#summary-protected-profit");
-    if (summaryProfit) {
-      summaryProfit.textContent = `${protectedProfit.toFixed(1)}%`;
+    const summaryProtected = $("#example-protected");
+    const summaryAvoided = $("#example-avoided");
+    if (summaryProtected) {
+      summaryProtected.textContent = `${protectedProfit.toFixed(1)}%`;
+    }
+    if (summaryAvoided) {
+      const avoidedLoss = ((peakPrice - exitPrice) / peakPrice) * 100;
+      summaryAvoided.textContent = `${avoidedLoss.toFixed(1)}%`;
     }
     
     // Update impact indicators
@@ -222,17 +321,6 @@ function createLifecycle() {
   }
 
   /**
-   * Load trailing stop preview data (placeholder for Phase 2)
-   */
-  async function loadTrailingStopPreview() {
-    // Update example with current config values
-    updateTrailingStopExample();
-    
-    // Load performance stats (Phase 2)
-    await loadTrailingStopStats();
-  }
-
-  /**
    * Switch to a different tab
    */
   function switchTab(tabId) {
@@ -249,6 +337,7 @@ function createLifecycle() {
       "trailing-stop": "trailing-stop-tab",
       roi: "roi-tab",
       "time-rules": "time-rules-tab",
+      dca: "dca-tab",
       "strategy-control": "strategy-control-tab",
       "general-settings": "general-settings-tab",
     };
@@ -281,8 +370,10 @@ function createLifecycle() {
       }
     }
 
-    // Load preview when switching to trailing stop tab (Phase 2)
+    // Load preview when switching to trailing stop tab
     if (tabId === "trailing-stop") {
+      updateTrailingStopExample();
+      loadTrailingStopStats();
       loadTrailingStopPreview();
     }
 
@@ -306,6 +397,13 @@ function createLifecycle() {
 
       // Update form fields
       updateFormFields();
+      
+      // Update config overview in stats tab
+      updateConfigOverview();
+      
+      // Update visual examples with loaded values
+      updateRoiExample();
+      updateTimeLossExample();
     } catch (error) {
       console.error("[Trader] Failed to load config:", error);
       Utils.showToast({
@@ -313,6 +411,88 @@ function createLifecycle() {
         title: "Load Failed",
         message: "Failed to load trader configuration",
       });
+    }
+  }
+
+  /**
+   * Update config overview section in stats tab
+   */
+  function updateConfigOverview() {
+    if (!state.config) return;
+    
+    const trader = state.config.trader || {};
+    const positions = state.config.positions || {};
+    
+    // Exit Strategies
+    updateConfigItem('roi-status', trader.roi_exit_enabled, `${trader.roi_target_percent || 20}%`);
+    updateConfigItem('trailing-status', positions.trailing_stop_enabled, 
+      `${positions.trailing_stop_activation_pct || 10}%→${positions.trailing_stop_distance_pct || 5}%`);
+    updateConfigItem('time-status', trader.time_override_enabled,
+      `${trader.time_override_duration || 168}${(trader.time_override_unit?.[0] || 'h')} @ ${trader.time_override_loss_threshold_percent || -40}%`);
+    
+    // Position Management
+    const maxPositionsEl = $('#config-max-positions');
+    if (maxPositionsEl) maxPositionsEl.textContent = trader.max_open_positions || 2;
+    
+    const tradeSizeEl = $('#config-trade-size');
+    if (tradeSizeEl) tradeSizeEl.textContent = `${trader.trade_size_sol || 0.005} SOL`;
+    
+    updateConfigItem('dca-status', trader.dca_enabled,
+      `${trader.dca_threshold_pct || -10}% (${trader.dca_max_count || 2}x, ${trader.dca_size_percentage || 50}%)`);
+    
+    // Risk Controls
+    const closeCooldownEl = $('#config-close-cooldown');
+    if (closeCooldownEl) {
+      const seconds = Number.isFinite(trader.close_cooldown_seconds)
+        ? trader.close_cooldown_seconds
+        : 600;
+      const minutes = seconds / 60;
+      closeCooldownEl.textContent = minutes < 1 ? '<1m' : `${Math.round(minutes)}m`;
+    }
+    
+    const entryConcurrencyEl = $('#config-entry-concurrency');
+    if (entryConcurrencyEl) entryConcurrencyEl.textContent = trader.entry_monitor_concurrency || 10;
+    
+    // System Status
+    const modeEl = $('#config-mode');
+    if (modeEl) {
+      if (trader.dry_run) {
+        modeEl.innerHTML = '<span class="mode-indicator dry-run">🟡 DRY RUN</span>';
+      } else {
+        modeEl.innerHTML = '<span class="mode-indicator live">🔴 LIVE TRADING</span>';
+      }
+    }
+    
+    const strategiesCountEl = $('#config-strategies-count');
+    if (strategiesCountEl) {
+      const activeCount = state.strategies?.filter(s => s.enabled).length || 0;
+      strategiesCountEl.textContent = `${activeCount} active`;
+    }
+    
+    const lastCheckEl = $('#config-last-check');
+    if (lastCheckEl) {
+      lastCheckEl.textContent = 'Just now';
+      lastCheckEl.dataset.timestamp = Date.now();
+    }
+  }
+
+  /**
+   * Update individual config item with enable/disable status
+   */
+  function updateConfigItem(id, enabled, value) {
+    const el = $(`#${id}`);
+    if (!el) return;
+    
+    const icon = enabled 
+      ? '<i class="icon-check-circle status-icon enabled"></i>' 
+      : '<i class="icon-circle status-icon disabled"></i>';
+    const displayValue = enabled ? value : 'Disabled';
+    const labelEl = el.querySelector('.label');
+    const valueEl = el.querySelector('.value');
+    
+    if (labelEl && valueEl) {
+      el.querySelector('i').outerHTML = icon;
+      valueEl.textContent = displayValue;
     }
   }
 
@@ -392,7 +572,12 @@ function createLifecycle() {
     if (dcaMaxCount) dcaMaxCount.value = trader.dca_max_count || 2;
     if (dcaSize) dcaSize.value = trader.dca_size_percentage || 50;
     if (dcaCooldown) dcaCooldown.value = trader.dca_cooldown_minutes || 30;
-    if (closeCooldown) closeCooldown.value = trader.close_cooldown_seconds || 10;
+    if (closeCooldown) {
+      const seconds = Number.isFinite(trader.close_cooldown_seconds)
+        ? trader.close_cooldown_seconds
+        : 600;
+      closeCooldown.value = Math.max(0, Math.round(seconds / 60));
+    }
     if (entryConcurrency) entryConcurrency.value = trader.entry_monitor_concurrency || 3;
     if (dryRun) dryRun.checked = trader.dry_run || false;
 
@@ -486,7 +671,7 @@ function createLifecycle() {
 
       // Worst Trade (calculate from exit breakdown or set placeholder)
       if (worstTrade) {
-        const worstPct = data.worst_trade_pct !== undefined ? data.worst_trade_pct : 0;
+        const worstPct = data.worst_trade_pct ?? 0;
         worstTrade.textContent = `${worstPct > 0 ? "+" : ""}${worstPct.toFixed(1)}%`;
         worstTrade.className = `metric-value ${worstPct < 0 ? "negative" : ""}`;
       }
@@ -749,6 +934,10 @@ function createLifecycle() {
       const data = await response.json();
 
       state.strategies = data.strategies || [];
+
+      if (state.config) {
+        updateConfigOverview();
+      }
 
       // Separate entry and exit strategies
       const entryStrategies = state.strategies.filter((s) => s.strategy_type === "entry");
@@ -1039,10 +1228,10 @@ function createLifecycle() {
       });
     }
 
-    // General Settings form
-    const generalForm = $("#general-settings-form");
-    if (generalForm) {
-      generalForm.addEventListener("submit", async (e) => {
+    // General Settings save button
+    const saveGeneral = $("#save-general");
+    if (saveGeneral) {
+      saveGeneral.addEventListener("click", async (e) => {
         e.preventDefault();
 
         const maxPositions = parseInt($("#max-positions")?.value || "2", 10);
@@ -1052,12 +1241,10 @@ function createLifecycle() {
           .split(",")
           .map((s) => parseFloat(s.trim()))
           .filter((n) => !isNaN(n));
-        const dcaEnabled = $("#dca-enabled")?.checked || false;
-        const dcaThreshold = parseFloat($("#dca-threshold")?.value || "-10");
-        const dcaMaxCount = parseInt($("#dca-max-count")?.value || "2", 10);
-        const dcaSize = parseFloat($("#dca-size")?.value || "50");
-        const dcaCooldown = parseInt($("#dca-cooldown")?.value || "5", 10);
-        const closeCooldown = parseInt($("#close-cooldown")?.value || "10", 10);
+        const closeCooldownMinutes = parseInt($("#close-cooldown")?.value || "10", 10);
+        const closeCooldownSeconds = Number.isNaN(closeCooldownMinutes)
+          ? 600
+          : Math.max(0, closeCooldownMinutes) * 60;
         const entryConcurrency = parseInt($("#entry-concurrency")?.value || "3", 10);
         const dryRun = $("#dry-run")?.checked || false;
 
@@ -1066,16 +1253,92 @@ function createLifecycle() {
             max_open_positions: maxPositions,
             trade_size_sol: tradeSize,
             entry_sizes: entrySizes,
+            close_cooldown_seconds: closeCooldownSeconds,
+            entry_monitor_concurrency: entryConcurrency,
+            dry_run: dryRun,
+          },
+        });
+      });
+    }
+
+    // General Settings reset button
+    const resetGeneral = $("#reset-general");
+    if (resetGeneral) {
+      resetGeneral.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const { confirmed } = await ConfirmationDialog.show({
+          title: "Reset General Settings",
+          message:
+            "This will reset all general settings to default values.\n\nThis action cannot be undone.",
+          confirmLabel: "Reset",
+          cancelLabel: "Cancel",
+          variant: "warning",
+        });
+
+        if (confirmed) {
+          await saveConfig({
+            trader: {
+              max_open_positions: 2,
+              trade_size_sol: 0.005,
+              entry_sizes: [0.005, 0.01, 0.02, 0.05],
+              close_cooldown_seconds: 600,
+              entry_monitor_concurrency: 10,
+              dry_run: false,
+            },
+          });
+        }
+      });
+    }
+
+    // DCA save button
+    const saveDca = $("#save-dca");
+    if (saveDca) {
+      saveDca.addEventListener("click", async (e) => {
+        e.preventDefault();
+
+        const dcaEnabled = $("#dca-enabled")?.checked || false;
+        const dcaThreshold = parseFloat($("#dca-threshold")?.value || "-10");
+        const dcaMaxCount = parseInt($("#dca-max-count")?.value || "2", 10);
+        const dcaSize = parseFloat($("#dca-size")?.value || "50");
+        const dcaCooldown = parseInt($("#dca-cooldown")?.value || "30", 10);
+
+        await saveConfig({
+          trader: {
             dca_enabled: dcaEnabled,
             dca_threshold_pct: dcaThreshold,
             dca_max_count: dcaMaxCount,
             dca_size_percentage: dcaSize,
             dca_cooldown_minutes: dcaCooldown,
-            close_cooldown_seconds: closeCooldown,
-            entry_monitor_concurrency: entryConcurrency,
-            dry_run: dryRun,
           },
         });
+      });
+    }
+
+    // DCA reset button
+    const resetDca = $("#reset-dca");
+    if (resetDca) {
+      resetDca.addEventListener("click", async (e) => {
+        e.preventDefault();
+        const { confirmed } = await ConfirmationDialog.show({
+          title: "Reset DCA Settings",
+          message:
+            "This will reset all DCA settings to default values.\n\nThis action cannot be undone.",
+          confirmLabel: "Reset",
+          cancelLabel: "Cancel",
+          variant: "warning",
+        });
+
+        if (confirmed) {
+          await saveConfig({
+            trader: {
+              dca_enabled: false,
+              dca_threshold_pct: -10,
+              dca_max_count: 2,
+              dca_size_percentage: 50,
+              dca_cooldown_minutes: 30,
+            },
+          });
+        }
       });
     }
 
@@ -1084,6 +1347,32 @@ function createLifecycle() {
     if (dryRunCheckbox) {
       dryRunCheckbox.addEventListener("change", () => {
         updateDryRunWarning();
+      });
+    }
+
+    // Strategy Control save button
+    const saveStrategies = $("#save-strategies");
+    if (saveStrategies) {
+      saveStrategies.addEventListener("click", async () => {
+        await loadStrategies();
+        Utils.showToast({
+          type: "success",
+          title: "Strategies Saved",
+          message: "Strategy configuration updated successfully",
+        });
+      });
+    }
+
+    // Strategy Control refresh button
+    const refreshStrategies = $("#refresh-strategies");
+    if (refreshStrategies) {
+      refreshStrategies.addEventListener("click", async () => {
+        await loadStrategies();
+        Utils.showToast({
+          type: "info",
+          title: "Strategies Refreshed",
+          message: "Strategy list reloaded from server",
+        });
       });
     }
 
@@ -1134,6 +1423,36 @@ function createLifecycle() {
         updateTimeLossExample();
       });
     }
+    
+    // Config overview "View Details" button
+    const expandConfigBtn = $("#expand-config");
+    if (expandConfigBtn) {
+      expandConfigBtn.addEventListener("click", () => {
+        if (tabBar) {
+          tabBar.switchTo("general-settings");
+        }
+      });
+    }
+  }
+
+  /**
+   * Update relative time display for last check
+   */
+  function updateLastCheckTime() {
+    const lastCheckEl = $('#config-last-check');
+    if (!lastCheckEl || !lastCheckEl.dataset.timestamp) return;
+    
+    const timestamp = parseInt(lastCheckEl.dataset.timestamp, 10);
+    const seconds = Math.floor((Date.now() - timestamp) / 1000);
+    
+    if (seconds < 10) {
+      lastCheckEl.textContent = 'Just now';
+    } else if (seconds < 60) {
+      lastCheckEl.textContent = `${seconds}s ago`;
+    } else {
+      const minutes = Math.floor(seconds / 60);
+      lastCheckEl.textContent = `${minutes}m ago`;
+    }
   }
 
   /**
@@ -1141,18 +1460,18 @@ function createLifecycle() {
    */
   function setupPreviewListeners() {
     // Debounced preview update on config change
-    const debouncedTrailingPreview = Utils.debounce(() => {
-      updateTrailingStopExample();
-    }, 300);
+    const debouncedTrailingPreview = typeof Utils.debounce === 'function' 
+      ? Utils.debounce(() => { updateTrailingStopExample(); }, 300)
+      : () => { updateTrailingStopExample(); };
 
     // Trailing activation input
-    const activationInput = $("#trailing-activation");
+    const activationInput = $("#trail-activation");
     if (activationInput) {
       activationInput.addEventListener("input", debouncedTrailingPreview);
     }
 
     // Trailing distance input
-    const distanceInput = $("#trailing-distance");
+    const distanceInput = $("#trail-distance");
     if (distanceInput) {
       distanceInput.addEventListener("input", debouncedTrailingPreview);
     }
@@ -1323,6 +1642,9 @@ function createLifecycle() {
       if (activeTab && activeTab !== state.currentTab) {
         state.currentTab = activeTab;
       }
+      
+      // Show the active tab content
+      switchTab(state.currentTab);
 
       // Setup form handlers
       setupFormHandlers();
@@ -1372,18 +1694,29 @@ function createLifecycle() {
         )
       );
 
+      // Poller for updating relative timestamps
+      const timestampPoller = ctx.managePoller(
+        new Poller(
+          () => {
+            updateLastCheckTime();
+          },
+          { label: "Timestamp Updates", intervalMs: 1000 }
+        )
+      );
+
       // Start pollers
       if (state.currentTab === "stats") {
         statsPoller.start();
       }
       configPoller.start();
+      timestampPoller.start();
 
       // Initial loads
-      await loadConfig();
+      await Promise.all([loadConfig(), loadStrategies()]);
       if (state.currentTab === "stats") {
         await loadStats();
-      } else if (state.currentTab === "strategy-control") {
-        await loadStrategies();
+      }
+      if (state.currentTab === "strategy-control" && strategiesPoller) {
         strategiesPoller.start();
       }
 

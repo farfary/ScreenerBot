@@ -1,6 +1,6 @@
 <div class="page-table trader-page">
+  <div id="subTabsContainer" class="sub-tabs-container"></div>
   <div id="trader-root">
-    <!-- Tab Content Area -->
     <div id="trader-content">
       <!-- Stats Tab -->
       <div id="stats-tab" class="trader-tab-content" style="display: none">
@@ -73,6 +73,115 @@
                   <div class="metric-label">Worst Trade</div>
                   <div class="metric-value" id="worst-trade">—</div>
                   <div class="metric-detail" id="worst-trade-detail">—</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Configuration Snapshot -->
+          <div class="stats-section stats-section-config">
+            <div class="section-header">
+              <h3><i class="icon-settings"></i> Active Configuration</h3>
+              <button class="btn btn-link btn-sm" id="expand-config" title="View details in other tabs">
+                <i class="icon-maximize-2"></i>
+                <span>View Details</span>
+              </button>
+            </div>
+            <div class="config-overview-grid">
+              <!-- Exit Strategies Column -->
+              <div class="config-column">
+                <div class="config-column-header">Exit Strategies</div>
+                <div class="config-items-compact">
+                  <div class="config-item-compact" id="roi-status">
+                    <i class="icon-circle status-icon"></i>
+                    <span class="label">ROI Exit:</span>
+                    <span class="value">—</span>
+                  </div>
+                  <div class="config-item-compact" id="trailing-status">
+                    <i class="icon-circle status-icon"></i>
+                    <span class="label">Trailing Stop:</span>
+                    <span class="value">—</span>
+                  </div>
+                  <div class="config-item-compact" id="time-status">
+                    <i class="icon-circle status-icon"></i>
+                    <span class="label">Time Override:</span>
+                    <span class="value">—</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Position Management Column -->
+              <div class="config-column">
+                <div class="config-column-header">Position Management</div>
+                <div class="config-items-compact">
+                  <div class="config-item-compact">
+                    <i class="icon-layers status-icon enabled"></i>
+                    <span class="label">Max Positions:</span>
+                    <span class="value" id="config-max-positions">—</span>
+                  </div>
+                  <div class="config-item-compact">
+                    <i class="icon-dollar-sign status-icon enabled"></i>
+                    <span class="label">Trade Size:</span>
+                    <span class="value" id="config-trade-size">—</span>
+                  </div>
+                  <div class="config-item-compact" id="dca-status">
+                    <i class="icon-circle status-icon"></i>
+                    <span class="label">DCA:</span>
+                    <span class="value">—</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Risk Controls Column -->
+              <div class="config-column">
+                <div class="config-column-header">Risk Controls</div>
+                <div class="config-items-compact">
+                  <div class="config-item-compact">
+                    <i class="icon-pause status-icon enabled"></i>
+                    <span class="label">Close Cooldown:</span>
+                    <span class="value" id="config-close-cooldown">—</span>
+                  </div>
+                  <div class="config-item-compact">
+                    <i class="icon-zap status-icon enabled"></i>
+                    <span class="label">Entry Concurrency:</span>
+                    <span class="value" id="config-entry-concurrency">—</span>
+                  </div>
+                  <div class="config-item-compact">
+                    <i class="icon-activity status-icon enabled"></i>
+                    <span class="label">Entry Interval:</span>
+                    <span class="value">30s</span>
+                  </div>
+                  <div class="config-item-compact">
+                    <i class="icon-activity status-icon enabled"></i>
+                    <span class="label">Exit Interval:</span>
+                    <span class="value">5s</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- System Status Column -->
+              <div class="config-column">
+                <div class="config-column-header">System Status</div>
+                <div class="config-items-compact">
+                  <div class="config-item-compact">
+                    <span class="label">Mode:</span>
+                    <span class="value" id="config-mode">—</span>
+                  </div>
+                  <div class="config-item-compact">
+                    <i class="icon-puzzle status-icon enabled"></i>
+                    <span class="label">Strategies:</span>
+                    <span class="value" id="config-strategies-count">—</span>
+                  </div>
+                  <div class="config-item-compact">
+                    <i class="icon-cpu status-icon enabled"></i>
+                    <span class="label">Monitors:</span>
+                    <span class="value">Running</span>
+                  </div>
+                  <div class="config-item-compact">
+                    <i class="icon-clock status-icon enabled"></i>
+                    <span class="label">Last Check:</span>
+                    <span class="value" id="config-last-check">—</span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -311,434 +420,680 @@
               </div>
             </div>
 
-            <!-- Advanced Features (Coming Soon) -->
-            <div class="feature-preview">
-              <div class="feature-header">
-                <h4><i class="icon-star"></i> Coming Soon</h4>
-                <span class="badge badge-warning">Phase 3</span>
-              </div>
-              <div class="feature-grid">
-                <div class="feature-item">
-                  <i class="icon-layers"></i>
-                  <div class="feature-content">
-                    <div class="feature-title">Multi-Level Trailing</div>
-                    <div class="feature-desc">Different trail distances at different profit levels</div>
-                  </div>
-                </div>
-                <div class="feature-item">
-                  <i class="icon-clock"></i>
-                  <div class="feature-content">
-                    <div class="feature-title">Time-Based Adjustments</div>
-                    <div class="feature-desc">Tighten trail distance based on holding period</div>
-                  </div>
-                </div>
-                <div class="feature-item">
-                  <i class="icon-activity"></i>
-                  <div class="feature-content">
-                    <div class="feature-title">Volatility Adaptation</div>
-                    <div class="feature-desc">Auto-adjust trail distance based on price volatility</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Quick Stats Section -->
-          <div class="stats-section-compact">
-            <h4><i class="icon-bar-chart-2"></i> Trailing Stop Performance</h4>
-            <div class="quick-stats">
-              <div class="quick-stat-card">
-                <div class="quick-stat-value" id="trailing-exits-count">—</div>
-                <div class="quick-stat-label">Total Exits</div>
-              </div>
-              <div class="quick-stat-card">
-                <div class="quick-stat-value" id="trailing-avg-profit">—</div>
-                <div class="quick-stat-label">Avg Profit</div>
-              </div>
-              <div class="quick-stat-card">
-                <div class="quick-stat-value" id="trailing-best-save">—</div>
-                <div class="quick-stat-label">Best Save</div>
-              </div>
-              <div class="quick-stat-card">
-                <div class="quick-stat-value" id="trailing-active-count">—</div>
-                <div class="quick-stat-label">Active Now</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-                <div class="preview-row">
-                  <span>Estimated Profit:</span>
-                  <span id="preview-estimated-profit" class="profit-value">—</span>
-                </div>
-              </div>
-
-              <div class="preview-section">
-                <h4>What-If Analysis</h4>
-                <div id="preview-what-if-scenarios">
-                  <!-- Populated dynamically -->
-                </div>
-              </div>
-            </div>
           </div>
         </div>
       </div>
 
       <!-- Take Profit (ROI) Tab -->
       <div id="roi-tab" class="trader-tab-content" style="display: none">
-        <div class="config-form">
-          <h3><i class="icon-target"></i> ROI Exit Configuration</h3>
-
-          <div class="form-section">
-            <h4><i class="icon-settings"></i> Basic Settings</h4>
-            <div class="form-group">
-              <label for="roi-enabled">
-                <input type="checkbox" id="roi-enabled" />
-                Enable ROI-Based Exit
-              </label>
+        <div class="config-section">
+          <div class="section-header">
+            <div>
+              <h3><i class="icon-target"></i> Take Profit Configuration</h3>
+              <p class="section-subtitle">Automatically exit at target profit levels</p>
             </div>
           </div>
 
-          <div class="form-section">
-            <h4><i class="icon-target"></i> Single Target (Current)</h4>
-            <div class="form-group">
-              <label for="roi-target">
-                Target ROI
-                <span class="hint">Automatically exit when profit reaches this %</span>
-              </label>
-              <div class="input-with-unit">
-                <input type="number" id="roi-target" min="1" max="1000" step="1" value="20" />
-                <span class="unit">%</span>
+          <div class="config-card">
+            <!-- Enable/Disable -->
+            <div class="config-group config-group-primary">
+              <div class="config-toggle">
+                <label class="toggle-label" for="roi-enabled">
+                  <div class="toggle-header">
+                    <div class="toggle-title">
+                      <i class="icon-target"></i>
+                      <span>Enable Take Profit Exit</span>
+                    </div>
+                    <div class="toggle-switch">
+                      <input type="checkbox" id="roi-enabled" />
+                      <span class="toggle-slider"></span>
+                    </div>
+                  </div>
+                  <p class="toggle-description">Exit entire position when profit reaches target percentage</p>
+                </label>
               </div>
             </div>
 
-            <div class="form-group">
-              <label>Exit Amount</label>
-              <div class="info-text">100% (full position)</div>
+            <!-- Target Profit -->
+            <div class="config-group">
+              <div class="config-label-row">
+                <label for="roi-target" class="config-label">
+                  <i class="icon-trending-up"></i>
+                  <span>Target Profit</span>
+                </label>
+                <span class="config-badge config-badge-info">Single target</span>
+              </div>
+              <p class="config-hint">Automatically exit when unrealized profit reaches this percentage</p>
+              <div class="input-group-enhanced">
+                <input type="number" id="roi-target" min="1" max="1000" step="1" value="20" class="input-large" />
+                <span class="input-unit">%</span>
+                <div class="input-indicator" id="roi-indicator"></div>
+              </div>
+              <div class="config-impact">
+                <span class="impact-label">Impact:</span>
+                <span class="impact-text" id="roi-impact">Exit at +20% profit</span>
+              </div>
             </div>
 
-            <div class="example-box">
-              <strong><i class="icon-lightbulb"></i></strong> Exit entire position when profit reaches +<span id="roi-example">20</span>%
+            <!-- Visual Example -->
+            <div class="visual-example">
+              <h4><i class="icon-bar-chart-2"></i> Example Scenario</h4>
+              <div class="example-timeline">
+                <div class="timeline-step">
+                  <div class="step-icon step-icon-entry">
+                    <i class="icon-arrow-right"></i>
+                  </div>
+                  <div class="step-content">
+                    <div class="step-title">Entry</div>
+                    <div class="step-value">0.01 SOL</div>
+                    <div class="step-detail">Initial buy</div>
+                  </div>
+                </div>
+                <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
+                <div class="timeline-step">
+                  <div class="step-icon step-icon-peak">
+                    <i class="icon-trending-up"></i>
+                  </div>
+                  <div class="step-content">
+                    <div class="step-title">Target Hit</div>
+                    <div class="step-value" id="roi-example-target">0.012 SOL</div>
+                    <div class="step-detail" id="roi-example-profit">+20% profit</div>
+                  </div>
+                </div>
+                <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
+                <div class="timeline-step">
+                  <div class="step-icon step-icon-exit">
+                    <i class="icon-log-out"></i>
+                  </div>
+                  <div class="step-content">
+                    <div class="step-title">Auto Exit</div>
+                    <div class="step-value">Full Position</div>
+                    <div class="step-detail">100% sold</div>
+                  </div>
+                </div>
+              </div>
+              <div class="example-summary">
+                <div class="summary-item summary-item-success">
+                  <i class="icon-check-circle"></i>
+                  <span>Locked in <strong id="roi-example-summary">+20%</strong> profit</span>
+                </div>
+              </div>
             </div>
-          </div>
 
-          <div class="form-section disabled">
-            <h4><i class="icon-target"></i> Ladder Targets (Advanced - Future) <span class="badge warning">UPGRADE</span></h4>
-            <div class="info-message">
-              Multi-level profit targets require backend changes. Coming in Phase 3.
             </div>
-          </div>
 
-          <div class="form-actions">
-            <button class="btn primary" id="save-roi">Save Changes</button>
-            <button class="btn secondary" id="reset-roi">Reset to Defaults</button>
+            <!-- Actions -->
+            <div class="form-actions">
+              <button class="btn btn-primary" id="save-roi">
+                <i class="icon-save"></i>
+                <span>Save Configuration</span>
+              </button>
+              <button class="btn btn-secondary" id="reset-roi">
+                <i class="icon-rotate-ccw"></i>
+                <span>Reset to Defaults</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       <!-- Time Rules Tab -->
       <div id="time-rules-tab" class="trader-tab-content" style="display: none">
-        <div class="config-form">
-          <h3><i class="icon-clock"></i> Time-Based Exit Rules</h3>
-
-          <div class="form-section">
-            <h4><i class="icon-settings"></i> Basic Settings</h4>
-            <div class="form-group">
-              <label for="time-override-enabled">
-                <input type="checkbox" id="time-override-enabled" />
-                Enable Time-Based Exit Override
-              </label>
+        <div class="config-section">
+          <div class="section-header">
+            <div>
+              <h3><i class="icon-clock"></i> Time-Based Exit Rules</h3>
+              <p class="section-subtitle">Exit positions that exceed hold duration thresholds</p>
             </div>
           </div>
 
-          <div class="form-section">
-            <h4><i class="icon-clock"></i> Time Override Configuration</h4>
-            <div class="form-group">
-              <label for="time-max-hold">
-                Hold Duration Limit
-                <span class="hint">Exit positions held longer than this duration</span>
-              </label>
-              <div class="input-with-unit-group">
-                <input
-                  type="number"
-                  id="time-max-hold"
-                  min="1"
-                  max="43200"
-                  step="1"
-                  value="168"
-                />
+          <div class="config-card">
+            <!-- Enable/Disable -->
+            <div class="config-group config-group-primary">
+              <div class="config-toggle">
+                <label class="toggle-label" for="time-override-enabled">
+                  <div class="toggle-header">
+                    <div class="toggle-title">
+                      <i class="icon-clock"></i>
+                      <span>Enable Time-Based Exit</span>
+                    </div>
+                    <div class="toggle-switch">
+                      <input type="checkbox" id="time-override-enabled" />
+                      <span class="toggle-slider"></span>
+                    </div>
+                  </div>
+                  <p class="toggle-description">Automatically exit positions after holding for a specified duration if loss exceeds threshold</p>
+                </label>
+              </div>
+            </div>
+
+            <!-- Hold Duration Limit -->
+            <div class="config-group">
+              <div class="config-label-row">
+                <label for="time-max-hold" class="config-label">
+                  <i class="icon-clock"></i>
+                  <span>Hold Duration Limit</span>
+                </label>
+                <span class="config-badge config-badge-warning">Time trigger</span>
+              </div>
+              <p class="config-hint">Exit positions held longer than this duration (when combined with loss threshold)</p>
+              <div class="input-group-enhanced">
+                <input type="number" id="time-max-hold" min="1" max="43200" step="1" value="168" class="input-large" />
                 <select id="time-unit" class="unit-select">
                   <option value="seconds">seconds</option>
                   <option value="minutes">minutes</option>
                   <option value="hours" selected>hours</option>
                   <option value="days">days</option>
                 </select>
+                <div class="input-indicator" id="time-duration-indicator"></div>
               </div>
-              <div class="hint-text" id="time-conversion-hint">168 hours = 7 days</div>
-            </div>
-
-            <div class="form-group">
-              <label for="time-loss-threshold">
-                Loss Threshold
-                <span class="hint">Only exit if position loss exceeds this % (negative value)</span>
-              </label>
-              <div class="input-with-unit">
-                <input
-                  type="number"
-                  id="time-loss-threshold"
-                  min="-100"
-                  max="0"
-                  step="1"
-                  value="-40"
-                />
-                <span class="unit">%</span>
+              <div class="config-impact">
+                <span class="impact-label">Readable:</span>
+                <span class="impact-text" id="time-conversion-hint">168 hours = 7 days</span>
               </div>
             </div>
 
-            <div class="example-box">
-              <strong><i class="icon-lightbulb"></i> How it works:</strong> 
-              After holding a position for <span id="example-duration">7 days</span>, 
-              automatically exit if the position is down <span id="example-loss">40%</span> or more.
-              <br><br>
-              <strong>Note:</strong> Positions at profit or smaller losses will NOT be exited.
+            <!-- Loss Threshold -->
+            <div class="config-group">
+              <div class="config-label-row">
+                <label for="time-loss-threshold" class="config-label">
+                  <i class="icon-trending-down"></i>
+                  <span>Loss Threshold</span>
+                </label>
+                <span class="config-badge config-badge-info">Loss gate</span>
+              </div>
+              <p class="config-hint">Only exit if position loss exceeds this percentage (negative value)</p>
+              <div class="input-group-enhanced">
+                <input type="number" id="time-loss-threshold" min="-100" max="0" step="1" value="-40" class="input-large" />
+                <span class="input-unit">%</span>
+                <div class="input-indicator" id="time-loss-indicator"></div>
+              </div>
+              <div class="config-impact">
+                <span class="impact-label">Impact:</span>
+                <span class="impact-text" id="time-loss-impact">Exit if down 40% or more after hold period</span>
+              </div>
             </div>
 
-            <div class="form-group">
-              <label>Current Positions Status:</label>
+            <!-- Visual Example -->
+            <div class="visual-example">
+              <h4><i class="icon-bar-chart-2"></i> How It Works</h4>
+              <div class="example-timeline">
+                <div class="timeline-step">
+                  <div class="step-icon step-icon-entry">
+                    <i class="icon-arrow-right"></i>
+                  </div>
+                  <div class="step-content">
+                    <div class="step-title">Entry</div>
+                    <div class="step-value">Day 0</div>
+                    <div class="step-detail">Position opened</div>
+                  </div>
+                </div>
+                <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
+                <div class="timeline-step">
+                  <div class="step-icon step-icon-activation">
+                    <i class="icon-clock"></i>
+                  </div>
+                  <div class="step-content">
+                    <div class="step-title">Time Limit</div>
+                    <div class="step-value" id="time-example-duration">Day 7</div>
+                    <div class="step-detail">Hold period reached</div>
+                  </div>
+                </div>
+                <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
+                <div class="timeline-step">
+                  <div class="step-icon step-icon-exit">
+                    <i class="icon-log-out"></i>
+                  </div>
+                  <div class="step-content">
+                    <div class="step-title">Auto Exit</div>
+                    <div class="step-value" id="time-example-loss">-40%</div>
+                    <div class="step-detail">Loss threshold met</div>
+                  </div>
+                </div>
+              </div>
+              <div class="example-summary">
+                <div class="summary-item summary-item-info">
+                  <i class="icon-info"></i>
+                  <span><strong>Note:</strong> Positions at profit or smaller losses will NOT be exited</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Current Positions Status -->
+            <div class="config-group">
+              <div class="config-label-row">
+                <label class="config-label">
+                  <i class="icon-list"></i>
+                  <span>Current Positions Status</span>
+                </label>
+              </div>
               <div id="time-positions-status" class="status-list">
                 <div class="loading">Loading positions...</div>
               </div>
             </div>
-          </div>
 
-          <div class="form-section disabled">
-            <h4><i class="icon-target"></i> Escalation Rules (Advanced - Future) <span class="badge warning">UPGRADE</span></h4>
-            <div class="info-message">
-              Time-based rule escalation requires backend changes. Coming in Phase 3.
+            </div>
+
+            <!-- Actions -->
+            <div class="form-actions">
+              <button class="btn btn-primary" id="save-time-rules">
+                <i class="icon-save"></i>
+                <span>Save Configuration</span>
+              </button>
+              <button class="btn btn-secondary" id="reset-time-rules">
+                <i class="icon-rotate-ccw"></i>
+                <span>Reset to Defaults</span>
+              </button>
             </div>
           </div>
-
-          <div class="form-actions">
-            <button class="btn primary" id="save-time-rules">Save Changes</button>
-            <button class="btn secondary" id="reset-time-rules">Reset to Defaults</button>
-          </div>
         </div>
-      </div>
 
       <!-- Strategy Control Tab -->
       <div id="strategy-control-tab" class="trader-tab-content" style="display: none">
-        <div class="config-form">
-          <h3><i class="icon-puzzle"></i> Strategy Integration Control</h3>
+        <div class="config-section">
+          <div class="section-header">
+            <div>
+              <h3><i class="icon-puzzle"></i> Strategy Integration Control</h3>
+              <p class="section-subtitle">Manage which strategies the trader uses for entry and exit decisions</p>
+            </div>
+          </div>
 
           <div class="info-box">
-            <strong><i class="icon-lightbulb"></i></strong> Manage which strategies the trader uses for entry/exit decisions.
-            Create/edit strategies in the
-            <a href="#" data-page="strategies" class="link">Strategies tab</a>.
+            <i class="icon-lightbulb"></i>
+            <span>Create and edit strategies in the <a href="#" data-page="strategies" class="link">Strategies tab</a>.</span>
           </div>
 
-          <div class="form-section">
-            <h4><i class="icon-target"></i> Entry Strategies</h4>
-            <div id="entry-strategies" class="strategies-list">
-              <div class="loading">Loading strategies...</div>
+          <!-- Entry Strategies -->
+          <div class="config-card">
+            <div class="config-group">
+              <div class="config-label-row">
+                <label class="config-label">
+                  <i class="icon-target"></i>
+                  <span>Entry Strategies</span>
+                </label>
+                <span class="config-badge config-badge-info">Buy signals</span>
+              </div>
+              <p class="config-hint">Select strategies that determine when to open positions</p>
+              <div id="entry-strategies" class="strategies-list">
+                <div class="loading">Loading strategies...</div>
+              </div>
             </div>
           </div>
 
-          <div class="form-section">
-            <h4><i class="icon-log-out"></i> Exit Strategies</h4>
-            <div id="exit-strategies" class="strategies-list">
-              <div class="loading">Loading strategies...</div>
+          <!-- Exit Strategies -->
+          <div class="config-card">
+            <div class="config-group">
+              <div class="config-label-row">
+                <label class="config-label">
+                  <i class="icon-log-out"></i>
+                  <span>Exit Strategies</span>
+                </label>
+                <span class="config-badge config-badge-warning">Sell signals</span>
+              </div>
+              <p class="config-hint">Select strategies that determine when to close positions</p>
+              <div id="exit-strategies" class="strategies-list">
+                <div class="loading">Loading strategies...</div>
+              </div>
             </div>
           </div>
 
-          <div class="form-section disabled">
-            <h4><i class="icon-settings"></i> Strategy Voting Mode (Advanced - Future) <span class="badge warning">UPGRADE</span></h4>
-            <div class="info-message">
-              Strategy voting modes require backend changes. Coming in Phase 3.
-            </div>
           </div>
 
+          <!-- Actions -->
           <div class="form-actions">
-            <button class="btn primary" id="save-strategies">Save Changes</button>
-            <button class="btn secondary" id="refresh-strategies">Refresh List</button>
+            <button class="btn btn-primary" id="save-strategies">
+              <i class="icon-save"></i>
+              <span>Save Configuration</span>
+            </button>
+            <button class="btn btn-secondary" id="refresh-strategies">
+              <i class="icon-refresh-cw"></i>
+              <span>Refresh List</span>
+            </button>
+          </div>
+        </div>
+
+      <!-- DCA Tab -->
+      <div id="dca-tab" class="trader-tab-content" style="display: none">
+        <!-- DCA Configuration Section -->
+        <div class="config-section">
+          <div class="section-header">
+            <div>
+              <h3><i class="icon-dollar-sign"></i> DCA (Dollar Cost Averaging)</h3>
+              <p class="section-subtitle">Average down on losing positions to reduce cost basis</p>
+            </div>
+          </div>
+
+          <div class="config-card">
+            <!-- Enable DCA -->
+            <div class="config-group config-group-primary">
+              <div class="config-toggle">
+                <label class="toggle-label" for="dca-enabled">
+                  <div class="toggle-header">
+                    <div class="toggle-title">
+                      <i class="icon-dollar-sign"></i>
+                      <span>Enable DCA</span>
+                    </div>
+                    <div class="toggle-switch">
+                      <input type="checkbox" id="dca-enabled" />
+                      <span class="toggle-slider"></span>
+                    </div>
+                  </div>
+                  <p class="toggle-description">Add to losing positions to lower average entry price</p>
+                </label>
+              </div>
+            </div>
+
+            <div class="config-group">
+              <div class="config-label-row">
+                <label for="dca-threshold" class="config-label">
+                  <i class="icon-trending-down"></i>
+                  <span>DCA Threshold</span>
+                </label>
+                <span class="config-badge config-badge-warning">Entry trigger</span>
+              </div>
+              <p class="config-hint">Enter DCA when position is down by this percentage</p>
+              <div class="input-group-enhanced">
+                <input type="number" id="dca-threshold" min="-100" max="0" step="1" value="-10" class="input-large" />
+                <span class="input-unit">%</span>
+                <div class="input-indicator" id="dca-threshold-indicator"></div>
+              </div>
+            </div>
+
+            <div class="config-group">
+              <div class="config-label-row">
+                <label for="dca-max-count" class="config-label">
+                  <i class="icon-repeat"></i>
+                  <span>Max DCA Count</span>
+                </label>
+              </div>
+              <p class="config-hint">Maximum additional entries per position</p>
+              <div class="input-group-enhanced">
+                <input type="number" id="dca-max-count" min="1" max="5" step="1" value="2" class="input-large" />
+                <span class="input-unit">entries</span>
+                <div class="input-indicator" id="dca-count-indicator"></div>
+              </div>
+            </div>
+
+            <div class="config-group">
+              <div class="config-label-row">
+                <label for="dca-size" class="config-label">
+                  <i class="icon-percent"></i>
+                  <span>DCA Size</span>
+                </label>
+              </div>
+              <p class="config-hint">Percentage of initial position size for each DCA entry</p>
+              <div class="input-group-enhanced">
+                <input type="number" id="dca-size" min="10" max="200" step="10" value="50" class="input-large" />
+                <span class="input-unit">%</span>
+                <div class="input-indicator" id="dca-size-indicator"></div>
+              </div>
+            </div>
+
+            <div class="config-group">
+              <div class="config-label-row">
+                <label for="dca-cooldown" class="config-label">
+                  <i class="icon-clock"></i>
+                  <span>DCA Cooldown</span>
+                </label>
+              </div>
+              <p class="config-hint">Minimum time between DCA entries</p>
+              <div class="input-group-enhanced">
+                <input type="number" id="dca-cooldown" min="1" max="1440" step="5" value="30" class="input-large" />
+                <span class="input-unit">minutes</span>
+                <div class="input-indicator" id="dca-cooldown-indicator"></div>
+              </div>
+            </div>
+
+            <!-- Visual Example -->
+            <div class="visual-example">
+              <h4><i class="icon-bar-chart-2"></i> DCA Example</h4>
+              <div class="example-summary">
+                <div class="summary-item summary-item-info">
+                  <i class="icon-info"></i>
+                  <span>0.01 SOL initial → DCA #1: 0.005 SOL @ -10% → DCA #2: 0.005 SOL @ -10% more</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DCA Impact & Warnings -->
+        <div class="config-section">
+          <div class="section-header">
+            <div>
+              <h3><i class="icon-alert-triangle"></i> DCA Strategy Info</h3>
+              <p class="section-subtitle">Important considerations for DCA trading</p>
+            </div>
+          </div>
+
+          <div class="config-card">
+            <div class="config-group">
+              <div class="visual-example">
+                <h4><i class="icon-info"></i> How DCA Works</h4>
+                <div class="example-summary">
+                  <div class="summary-item summary-item-info">
+                    <i class="icon-trending-down"></i>
+                    <span><strong>Trigger:</strong> Position drops below DCA threshold (e.g., -10%)</span>
+                  </div>
+                  <div class="summary-item summary-item-info">
+                    <i class="icon-dollar-sign"></i>
+                    <span><strong>Action:</strong> Add more SOL to reduce average cost basis</span>
+                  </div>
+                  <div class="summary-item summary-item-info">
+                    <i class="icon-repeat"></i>
+                    <span><strong>Repeat:</strong> Can DCA multiple times based on max count</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="config-group">
+              <div class="visual-example">
+                <h4><i class="icon-alert-circle"></i> Risk Warnings</h4>
+                <div class="example-summary">
+                  <div class="summary-item summary-item-warning">
+                    <i class="icon-alert-triangle"></i>
+                    <span><strong>Increased Exposure:</strong> DCA increases total capital at risk per position</span>
+                  </div>
+                  <div class="summary-item summary-item-warning">
+                    <i class="icon-trending-down"></i>
+                    <span><strong>Falling Knife:</strong> DCA won't help if token continues downward trend</span>
+                  </div>
+                  <div class="summary-item summary-item-warning">
+                    <i class="icon-clock"></i>
+                    <span><strong>Cooldown:</strong> Use cooldown to avoid rapid-fire DCA entries</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Actions Section -->
+        <div class="config-section">
+          <div class="form-actions">
+            <button class="btn btn-primary" id="save-dca">
+              <i class="icon-save"></i>
+              <span>Save DCA Configuration</span>
+            </button>
+            <button class="btn btn-secondary" id="reset-dca">
+              <i class="icon-rotate-ccw"></i>
+              <span>Reset to Defaults</span>
+            </button>
           </div>
         </div>
       </div>
 
       <!-- General Settings Tab -->
       <div id="general-settings-tab" class="trader-tab-content" style="display: none">
-        <div class="config-form">
-          <h3><i class="icon-settings"></i> General Trader Settings</h3>
-
-          <div class="form-section">
-            <h4><i class="icon-target"></i> Position Sizing</h4>
-            <div class="form-group">
-              <label for="max-positions">
-                Max Open Positions
-                <span class="hint">1-100, conservative: 2-5</span>
-              </label>
-              <input type="number" id="max-positions" min="1" max="100" step="1" value="2" />
-            </div>
-
-            <div class="form-group">
-              <label for="trade-size">
-                Default Trade Size
-                <span class="hint">SOL per position</span>
-              </label>
-              <div class="input-with-unit">
-                <input
-                  type="number"
-                  id="trade-size"
-                  min="0.001"
-                  max="10"
-                  step="0.001"
-                  value="0.005"
-                />
-                <span class="unit">SOL</span>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label for="entry-sizes">
-                Preset Entry Sizes
-                <span class="hint">Comma-separated SOL amounts (e.g., 0.005, 0.01, 0.02)</span>
-              </label>
-              <input
-                type="text"
-                id="entry-sizes"
-                placeholder="0.005, 0.01, 0.02, 0.05"
-                value="0.005, 0.01, 0.02, 0.05"
-              />
+        <!-- Position Sizing Section -->
+        <div class="config-section">
+          <div class="section-header">
+            <div>
+              <h3><i class="icon-target"></i> Position Sizing</h3>
+              <p class="section-subtitle">Control how much to invest per position</p>
             </div>
           </div>
 
-          <div class="form-section">
-            <h4><i class="icon-dollar-sign"></i> DCA (Dollar Cost Averaging)</h4>
-            <div class="form-group">
-              <label for="dca-enabled">
-                <input type="checkbox" id="dca-enabled" />
-                Enable DCA
-              </label>
-            </div>
-
-            <div class="form-group">
-              <label for="dca-threshold">
-                DCA Threshold
-                <span class="hint">Enter DCA when position is down by this %</span>
-              </label>
-              <div class="input-with-unit">
-                <input
-                  type="number"
-                  id="dca-threshold"
-                  min="-100"
-                  max="0"
-                  step="1"
-                  value="-10"
-                />
-                <span class="unit">%</span>
+          <div class="config-card">
+            <div class="config-group">
+              <div class="config-label-row">
+                <label for="max-positions" class="config-label">
+                  <i class="icon-layers"></i>
+                  <span>Max Open Positions</span>
+                </label>
+                <span class="config-badge config-badge-info">Risk control</span>
+              </div>
+              <p class="config-hint">Maximum number of positions to hold simultaneously (conservative: 2-5)</p>
+              <div class="input-group-enhanced">
+                <input type="number" id="max-positions" min="1" max="100" step="1" value="2" class="input-large" />
+                <span class="input-unit">positions</span>
+                <div class="input-indicator" id="max-positions-indicator"></div>
               </div>
             </div>
 
-            <div class="form-group">
-              <label for="dca-max-count">
-                Max DCA Count
-                <span class="hint">Maximum additional entries per position</span>
-              </label>
-              <input type="number" id="dca-max-count" min="1" max="5" step="1" value="2" />
-            </div>
-
-            <div class="form-group">
-              <label for="dca-size">
-                DCA Size
-                <span class="hint">% of initial position size for each DCA</span>
-              </label>
-              <div class="input-with-unit">
-                <input type="number" id="dca-size" min="10" max="200" step="10" value="50" />
-                <span class="unit">%</span>
+            <div class="config-group">
+              <div class="config-label-row">
+                <label for="trade-size" class="config-label">
+                  <i class="icon-dollar-sign"></i>
+                  <span>Default Trade Size</span>
+                </label>
+                <span class="config-badge config-badge-warning">Per position</span>
+              </div>
+              <p class="config-hint">Amount of SOL to invest in each new position</p>
+              <div class="input-group-enhanced">
+                <input type="number" id="trade-size" min="0.001" max="10" step="0.001" value="0.005" class="input-large" />
+                <span class="input-unit">SOL</span>
+                <div class="input-indicator" id="trade-size-indicator"></div>
               </div>
             </div>
 
-            <div class="form-group">
-              <label for="dca-cooldown">
-                DCA Cooldown
-                <span class="hint">Minutes between DCA entries</span>
-              </label>
-              <div class="input-with-unit">
-                <input type="number" id="dca-cooldown" min="1" max="1440" step="5" value="30" />
-                <span class="unit">minutes</span>
+            <div class="config-group">
+              <div class="config-label-row">
+                <label for="entry-sizes" class="config-label">
+                  <i class="icon-list"></i>
+                  <span>Preset Entry Sizes</span>
+                </label>
               </div>
+              <p class="config-hint">Comma-separated SOL amounts for quick selection (e.g., 0.005, 0.01, 0.02)</p>
+              <input type="text" id="entry-sizes" placeholder="0.005, 0.01, 0.02, 0.05" value="0.005, 0.01, 0.02, 0.05" class="input-text-compact" />
             </div>
+          </div>
+        </div>
 
-            <div class="example-box">
-              <strong><i class="icon-lightbulb"></i> Example:</strong> 0.01 SOL initial → DCA #1: 0.005 SOL @ -10% → DCA #2:
-              0.005 SOL @ -10% more
+        <!-- Timing & Cooldowns Section -->
+        <div class="config-section">
+          <div class="section-header">
+            <div>
+              <h3><i class="icon-clock"></i> Timing & Cooldowns</h3>
+              <p class="section-subtitle">Control timing between operations</p>
             </div>
           </div>
 
-          <div class="form-section">
-            <h4><i class="icon-clock"></i> Timing & Cooldowns</h4>
-            <div class="form-group">
-              <label for="close-cooldown">
-                Position Close Cooldown
-                <span class="hint">Minutes before reopening same token</span>
-              </label>
-              <div class="input-with-unit">
-                <input
-                  type="number"
-                  id="close-cooldown"
-                  min="0"
-                  max="1440"
-                  step="5"
-                  value="15"
-                />
-                <span class="unit">minutes</span>
+          <div class="config-card">
+            <div class="config-group">
+              <div class="config-label-row">
+                <label for="close-cooldown" class="config-label">
+                  <i class="icon-pause"></i>
+                  <span>Position Close Cooldown</span>
+                </label>
+              </div>
+              <p class="config-hint">Minutes to wait before reopening the same token</p>
+              <div class="input-group-enhanced">
+                <input type="number" id="close-cooldown" min="0" max="1440" step="5" value="15" class="input-large" />
+                <span class="input-unit">minutes</span>
+                <div class="input-indicator" id="close-cooldown-indicator"></div>
               </div>
             </div>
 
-            <div class="form-group">
-              <label for="entry-concurrency">
-                Entry Check Concurrency
-                <span class="hint">Tokens to check at once (higher = faster but more CPU)</span>
-              </label>
-              <input type="number" id="entry-concurrency" min="1" max="50" step="1" value="10" />
+            <div class="config-group">
+              <div class="config-label-row">
+                <label for="entry-concurrency" class="config-label">
+                  <i class="icon-zap"></i>
+                  <span>Entry Check Concurrency</span>
+                </label>
+              </div>
+              <p class="config-hint">Number of tokens to check simultaneously (higher = faster but more CPU)</p>
+              <div class="input-group-enhanced">
+                <input type="number" id="entry-concurrency" min="1" max="50" step="1" value="10" class="input-large" />
+                <span class="input-unit">tokens</span>
+                <div class="input-indicator" id="entry-concurrency-indicator"></div>
+              </div>
             </div>
 
-            <div class="form-group readonly">
-              <label>
-                Entry Monitor Interval
-                <span class="hint">Configured in code (not editable)</span>
-              </label>
-              <div class="readonly-value">30s</div>
+            <div class="config-group">
+              <div class="config-label-row">
+                <label class="config-label">
+                  <i class="icon-info"></i>
+                  <span>Monitor Intervals</span>
+                </label>
+                <span class="config-badge config-badge-info">Read-only</span>
+              </div>
+              <p class="config-hint">Configured in code (not editable via UI)</p>
+              <div class="example-summary">
+                <div class="summary-item summary-item-info">
+                  <i class="icon-activity"></i>
+                  <span><strong>Entry Monitor:</strong> 30s | <strong>Exit Monitor:</strong> 5s</span>
+                </div>
+              </div>
             </div>
+          </div>
+        </div>
 
-            <div class="form-group readonly">
-              <label>
-                Exit Monitor Interval
-                <span class="hint">Configured in code (not editable)</span>
-              </label>
-              <div class="readonly-value">5s</div>
+        <!-- Testing & Debug Section -->
+        <div class="config-section">
+          <div class="section-header">
+            <div>
+              <h3><i class="icon-flask-conical"></i> Testing & Debug</h3>
+              <p class="section-subtitle">Development and testing controls</p>
             </div>
           </div>
 
-          <div class="form-section">
-            <h4><i class="icon-flask-conical"></i> Testing & Debug</h4>
-            <div class="form-group">
-              <label for="dry-run">
-                <input type="checkbox" id="dry-run" />
-                Dry Run Mode
-                <span class="hint">Simulate trades without executing</span>
-              </label>
+          <div class="config-card">
+            <div class="config-group config-group-primary">
+              <div class="config-toggle">
+                <label class="toggle-label" for="dry-run">
+                  <div class="toggle-header">
+                    <div class="toggle-title">
+                      <i class="icon-flask-conical"></i>
+                      <span>Dry Run Mode</span>
+                    </div>
+                    <div class="toggle-switch">
+                      <input type="checkbox" id="dry-run" />
+                      <span class="toggle-slider"></span>
+                    </div>
+                  </div>
+                  <p class="toggle-description">Simulate trades without executing on-chain transactions</p>
+                </label>
+              </div>
             </div>
 
-            <div id="dry-run-warning" class="warning-box" style="display: none">
-              <i class="icon-alert-triangle"></i> <strong>LIVE TRADING MODE:</strong> Real transactions will execute!
+            <div id="dry-run-warning" class="config-impact" style="display: none; border-left-color: var(--danger);">
+              <i class="icon-alert-triangle" style="color: var(--danger);"></i>
+              <span style="color: var(--danger); font-weight: 600;">LIVE TRADING MODE: Real transactions will execute!</span>
             </div>
           </div>
+        </div>
 
+        <!-- Actions Section -->
+        <div class="config-section">
           <div class="form-actions">
-            <button class="btn primary" id="save-general">Save Changes</button>
-            <button class="btn secondary" id="reset-general">Reset to Defaults</button>
-            <button class="btn secondary" id="export-config">Export Config</button>
-            <button class="btn secondary" id="import-config">Import Config</button>
+            <button class="btn btn-primary" id="save-general">
+              <i class="icon-save"></i>
+              <span>Save Configuration</span>
+            </button>
+            <button class="btn btn-secondary" id="reset-general">
+              <i class="icon-rotate-ccw"></i>
+              <span>Reset to Defaults</span>
+            </button>
+            <button class="btn btn-secondary" id="export-config-btn">
+              <i class="icon-download"></i>
+              <span>Export Config</span>
+            </button>
+            <button class="btn btn-secondary" id="import-config-btn">
+              <i class="icon-upload"></i>
+              <span>Import Config</span>
+            </button>
           </div>
         </div>
       </div>
