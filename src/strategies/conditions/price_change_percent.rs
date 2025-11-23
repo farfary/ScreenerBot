@@ -67,7 +67,7 @@ impl ConditionEvaluator for PriceChangePercentCondition {
             "name": "Price Change %",
             "category": "Price Analysis",
             "tags": ["price", "percentage", "change"],
-            "icon": "📈",
+            "icon": "icon-percent",
             "origin": "strategy",
             "description": "Check if price changed by a percentage threshold (Entry: vs current price, Exit: vs entry price)",
             "parameters": {

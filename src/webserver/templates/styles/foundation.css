@@ -11,7 +11,7 @@
   --border-color: #d1d5db;
   --header-bg: linear-gradient(135deg, #0f4c81 0%, #1565c0 100%);
   --header-text: #fff;
-  --link-color: #7BA8D1;
+  --link-color: #7ba8d1;
   --link-hover: #0f4c81;
   --badge-online: #10b981;
   --badge-error: #d32f2f;
@@ -22,6 +22,34 @@
   --table-header-bg: #f0f2f6;
   --table-header-text: #374151;
   --service-item-bg: #f0f2f6;
+
+  /* Primary Color System */
+  --primary-color: #1565c0;
+  --primary-color-light: #e3f2fd;
+  --primary-color-dark: #0d47a1;
+  --primary-hover: #1e88e5;
+
+  /* Success Color System */
+  --success-color: #10b981;
+  --success-color-light: #d1fae5;
+  --success-color-dark: #059669;
+
+  /* Warning Color System */
+  --warning-color: #f59e0b;
+  --warning-color-light: #fef3c7;
+  --warning-color-dark: #d97706;
+
+  /* Error Color System */
+  --error-color: #ef4444;
+  --error-color-light: #fee2e2;
+  --error-color-dark: #dc2626;
+
+  /* Semantic Aliases */
+  --surface-color: var(--bg-card);
+  --background-color: var(--bg-primary);
+  --hover-color: var(--bg-card-hover);
+  --text-color: var(--text-primary);
+  --input-bg: var(--bg-card);
 }
 
 [data-theme="dark"] {
@@ -36,7 +64,7 @@
   --border-color: #334155;
   --header-bg: linear-gradient(135deg, #0d324d 0%, #0e4e6d 100%);
   --header-text: #fff;
-  --link-color: #8BB4D9;
+  --link-color: #8bb4d9;
   --link-hover: #0ea5e9;
   --badge-online: #10b981;
   --badge-error: #ef4444;
@@ -47,6 +75,34 @@
   --table-header-bg: #273247;
   --table-header-text: #d1d5db;
   --service-item-bg: #273247;
+
+  /* Primary Color System */
+  --primary-color: #3b82f6;
+  --primary-color-light: #1e3a8a20;
+  --primary-color-dark: #1e40af;
+  --primary-hover: #60a5fa;
+
+  /* Success Color System */
+  --success-color: #10b981;
+  --success-color-light: #05402820;
+  --success-color-dark: #047857;
+
+  /* Warning Color System */
+  --warning-color: #f59e0b;
+  --warning-color-light: #78350f20;
+  --warning-color-dark: #b45309;
+
+  /* Error Color System */
+  --error-color: #ef4444;
+  --error-color-light: #7f1d1d20;
+  --error-color-dark: #b91c1c;
+
+  /* Semantic Aliases */
+  --surface-color: var(--bg-card);
+  --background-color: var(--bg-primary);
+  --hover-color: var(--bg-card-hover);
+  --text-color: var(--text-primary);
+  --input-bg: var(--bg-secondary);
 }
 
 * {

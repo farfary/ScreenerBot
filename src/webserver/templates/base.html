@@ -6,7 +6,7 @@
 
     <!-- Theme initialization - MUST run before any rendering to prevent flash -->
     <script>
-      (function() {
+      (function () {
         const savedTheme = localStorage.getItem("theme") || "dark";
         document.documentElement.setAttribute("data-theme", savedTheme);
       })();
@@ -30,9 +30,9 @@
     <script>
       (async function checkInitialization() {
         try {
-          const response = await fetch('/api/initialization/status');
+          const response = await fetch("/api/initialization/status");
           if (!response.ok) {
-            console.warn('Failed to fetch initialization status:', response.status);
+            console.warn("Failed to fetch initialization status:", response.status);
             return;
           }
 
@@ -40,7 +40,7 @@
           try {
             result = await response.json();
           } catch (jsonError) {
-            console.error('Failed to parse initialization status JSON:', jsonError);
+            console.error("Failed to parse initialization status JSON:", jsonError);
             return;
           }
 
@@ -48,14 +48,16 @@
           if (result && result.required) {
             // Initialization is required - redirect to initialization page
             // But only if we're not already on the initialization page
-            if (!window.location.pathname.includes('/initialization') && 
-                !window.location.hash.includes('initialization')) {
-              console.log('Initialization required - redirecting to setup page');
-              window.location.href = '/initialization';
+            if (
+              !window.location.pathname.includes("/initialization") &&
+              !window.location.hash.includes("initialization")
+            ) {
+              console.log("Initialization required - redirecting to setup page");
+              window.location.href = "/initialization";
             }
           }
         } catch (error) {
-          console.error('Failed to check initialization status:', error);
+          console.error("Failed to check initialization status:", error);
           // If we can't check, don't redirect - might be a temporary network issue
         }
       })();
@@ -154,11 +156,16 @@
           <div class="ticker-scroll" id="tickerScroll">
             <div class="ticker-segment" id="tickerMonitoring">
               <i class="ticker-icon icon-scan"></i>
-              <span class="ticker-text">Monitoring: <strong id="tickerMonitoringCount">—</strong></span>
+              <span class="ticker-text"
+                >Monitoring: <strong id="tickerMonitoringCount">—</strong></span
+              >
             </div>
             <div class="ticker-segment" id="tickerFiltering">
               <i class="ticker-icon icon-list-filter"></i>
-              <span class="ticker-text">Passed: <strong id="tickerPassedCount">—</strong> • Rejected: <strong id="tickerRejectedCount">—</strong></span>
+              <span class="ticker-text"
+                >Passed: <strong id="tickerPassedCount">—</strong> • Rejected:
+                <strong id="tickerRejectedCount">—</strong></span
+              >
             </div>
             <div class="ticker-segment" id="tickerPnL">
               <i class="ticker-icon icon-trending-up"></i>
@@ -166,7 +173,10 @@
             </div>
             <div class="ticker-segment" id="tickerRPC">
               <i class="ticker-icon icon-zap"></i>
-              <span class="ticker-text">RPC: <strong id="tickerRPCCalls">—</strong>/min • <strong id="tickerRPCSuccess">—</strong>%</span>
+              <span class="ticker-text"
+                >RPC: <strong id="tickerRPCCalls">—</strong>/min •
+                <strong id="tickerRPCSuccess">—</strong>%</span
+              >
             </div>
             <div class="ticker-segment" id="tickerServices">
               <i class="ticker-icon icon-link"></i>
@@ -177,12 +187,7 @@
       </div>
     </header>
 
-    <div
-      id="notificationDrawer"
-      class="notification-drawer"
-      data-state="closed"
-      aria-hidden="true"
-    >
+    <div id="notificationDrawer" class="notification-drawer" data-state="closed" aria-hidden="true">
       <div class="notification-drawer__backdrop" data-role="dismiss"></div>
       <section
         class="notification-drawer__panel"
@@ -203,11 +208,7 @@
               </span>
             </div>
             <div class="notification-panel-actions">
-              <button
-                id="markAllReadBtn"
-                class="panel-action-btn"
-                title="Mark all as read"
-              >
+              <button id="markAllReadBtn" class="panel-action-btn" title="Mark all as read">
                 ✓
               </button>
               <button id="clearAllBtn" class="panel-action-btn" title="Clear all">
@@ -257,9 +258,30 @@
           </button>
         </div>
 
-        <div class="notification-filters" id="notificationFilters" style="display: none; padding: 12px; background: var(--surface-elevated); border-bottom: 1px solid var(--border-subtle);">
-          <div class="filter-row" style="display: flex; gap: 8px; align-items: center;">
-            <select id="filterActionType" class="filter-select" style="flex: 1; padding: 6px 10px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--surface); color: var(--text-primary); font-size: 13px;">
+        <div
+          class="notification-filters"
+          id="notificationFilters"
+          style="
+            display: none;
+            padding: 12px;
+            background: var(--surface-elevated);
+            border-bottom: 1px solid var(--border-subtle);
+          "
+        >
+          <div class="filter-row" style="display: flex; gap: 8px; align-items: center">
+            <select
+              id="filterActionType"
+              class="filter-select"
+              style="
+                flex: 1;
+                padding: 6px 10px;
+                border: 1px solid var(--border-subtle);
+                border-radius: 6px;
+                background: var(--surface);
+                color: var(--text-primary);
+                font-size: 13px;
+              "
+            >
               <option value="">All Types</option>
               <option value="swapbuy">Swap Buy</option>
               <option value="swapsell">Swap Sell</option>
@@ -269,16 +291,42 @@
               <option value="positionpartialexit">Partial Exit</option>
               <option value="manualorder">Manual Order</option>
             </select>
-            
-            <select id="filterState" class="filter-select" style="flex: 1; padding: 6px 10px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--surface); color: var(--text-primary); font-size: 13px;">
+
+            <select
+              id="filterState"
+              class="filter-select"
+              style="
+                flex: 1;
+                padding: 6px 10px;
+                border: 1px solid var(--border-subtle);
+                border-radius: 6px;
+                background: var(--surface);
+                color: var(--text-primary);
+                font-size: 13px;
+              "
+            >
               <option value="">All States</option>
               <option value="in_progress">In Progress</option>
               <option value="completed">Completed</option>
               <option value="failed">Failed</option>
               <option value="cancelled">Cancelled</option>
             </select>
-            
-            <button id="clearFiltersBtn" class="filter-clear-btn" style="padding: 6px 12px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--surface); color: var(--text-secondary); font-size: 13px; cursor: pointer;">Clear</button>
+
+            <button
+              id="clearFiltersBtn"
+              class="filter-clear-btn"
+              style="
+                padding: 6px 12px;
+                border: 1px solid var(--border-subtle);
+                border-radius: 6px;
+                background: var(--surface);
+                color: var(--text-secondary);
+                font-size: 13px;
+                cursor: pointer;
+              "
+            >
+              Clear
+            </button>
           </div>
         </div>
 
@@ -289,10 +337,58 @@
           </div>
         </div>
 
-        <div class="notification-pagination" id="notificationPagination" style="display: none; padding: 12px; background: var(--surface-elevated); border-top: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center; gap: 12px;">
-          <button id="prevPageBtn" class="pagination-btn" disabled style="padding: 6px 14px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--surface); color: var(--text-primary); font-size: 13px; cursor: pointer;">← Previous</button>
-          <span class="pagination-info" id="paginationInfo" style="font-size: 13px; color: var(--text-secondary);">Page 1</span>
-          <button id="nextPageBtn" class="pagination-btn" disabled style="padding: 6px 14px; border: 1px solid var(--border-subtle); border-radius: 6px; background: var(--surface); color: var(--text-primary); font-size: 13px; cursor: pointer;">Next →</button>
+        <div
+          class="notification-pagination"
+          id="notificationPagination"
+          style="
+            display: none;
+            padding: 12px;
+            background: var(--surface-elevated);
+            border-top: 1px solid var(--border-subtle);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+          "
+        >
+          <button
+            id="prevPageBtn"
+            class="pagination-btn"
+            disabled
+            style="
+              padding: 6px 14px;
+              border: 1px solid var(--border-subtle);
+              border-radius: 6px;
+              background: var(--surface);
+              color: var(--text-primary);
+              font-size: 13px;
+              cursor: pointer;
+            "
+          >
+            ← Previous
+          </button>
+          <span
+            class="pagination-info"
+            id="paginationInfo"
+            style="font-size: 13px; color: var(--text-secondary)"
+            >Page 1</span
+          >
+          <button
+            id="nextPageBtn"
+            class="pagination-btn"
+            disabled
+            style="
+              padding: 6px 14px;
+              border: 1px solid var(--border-subtle);
+              border-radius: 6px;
+              background: var(--surface);
+              color: var(--text-primary);
+              font-size: 13px;
+              cursor: pointer;
+            "
+          >
+            Next →
+          </button>
         </div>
 
         <footer class="notification-panel-footer">
@@ -300,11 +396,7 @@
             <span id="notificationFooterActive">0 live</span>
             <span>Auto-dismiss after completion</span>
           </div>
-          <button
-            id="notificationOpenHistory"
-            type="button"
-            class="panel-secondary-btn"
-          >
+          <button id="notificationOpenHistory" type="button" class="panel-secondary-btn">
             View full activity
           </button>
         </footer>

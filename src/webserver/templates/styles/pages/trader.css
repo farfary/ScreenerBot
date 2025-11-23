@@ -86,7 +86,9 @@
   padding: var(--trader-card-padding);
   border: 1px solid var(--trader-card-border);
   box-shadow: var(--trader-card-shadow);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .stats-section:hover {
@@ -557,7 +559,6 @@
   }
 }
 
-
 /* Positions Summary */
 .positions-summary {
   min-height: 100px;
@@ -762,7 +763,9 @@
   padding: var(--trader-card-padding);
   border: 1px solid var(--trader-card-border);
   box-shadow: var(--trader-card-shadow);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .config-section:hover {

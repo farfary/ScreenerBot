@@ -77,7 +77,7 @@ impl ConditionEvaluator for VolumeSpikeCondition {
             "name": "Volume Spike",
             "category": "Volume Analysis",
             "tags": ["volume", "spike", "momentum", "interest"],
-            "icon": "📊",
+            "icon": "icon-chart-bar",
             "origin": "strategy",
             "description": "Detect volume spikes compared to average volume (indicates increased interest)",
             "parameters": {

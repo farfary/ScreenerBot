@@ -140,7 +140,7 @@ export async function loadPage(pageName) {
 
   const previousPage = _state.currentPage;
   if (previousPage) {
-    PageLifecycleRegistry.deactivate(previousPage);
+    await PageLifecycleRegistry.deactivate(previousPage);
   }
 
   runCleanupHandlers();
@@ -169,7 +169,7 @@ export async function loadPage(pageName) {
 
     ensurePageStyles(pageName);
     displayPageElement(mainContent, cachedEl);
-    PageLifecycleRegistry.activate(pageName);
+    await PageLifecycleRegistry.activate(pageName);
 
     const targetUrl = `/${pageName}`;
     if (window.location.pathname !== targetUrl) {
@@ -221,7 +221,7 @@ export async function loadPage(pageName) {
       console.warn(`[Router] No module for page ${pageName}:`, err.message);
     }
 
-    PageLifecycleRegistry.activate(pageName);
+    await PageLifecycleRegistry.activate(pageName);
 
     const targetUrl = `/${pageName}`;
     if (window.location.pathname !== targetUrl) {
@@ -311,7 +311,7 @@ export function initRouter() {
     (async () => {
       try {
         await import(`../pages/${initialPage}.js`);
-        PageLifecycleRegistry.activate(initialPage);
+        await PageLifecycleRegistry.activate(initialPage);
       } catch (err) {
         console.warn(`[Router] No module for initial page ${initialPage}:`, err.message);
       }

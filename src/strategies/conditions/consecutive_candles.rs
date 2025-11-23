@@ -84,7 +84,7 @@ impl ConditionEvaluator for ConsecutiveCandlesCondition {
             "name": "Consecutive Candles",
             "category": "Candle Patterns",
             "tags": ["candles", "pattern", "momentum", "streak"],
-            "icon": "🕯️",
+            "icon": "icon-chart-candlestick",
             "origin": "strategy",
             "description": "Detect consecutive green (bullish) or red (bearish) candles with minimum size filter",
             "parameters": {

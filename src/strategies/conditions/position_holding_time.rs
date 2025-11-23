@@ -59,7 +59,7 @@ impl ConditionEvaluator for PositionHoldingTimeCondition {
             "name": "Position Holding Time",
             "category": "Position & Performance",
             "tags": ["position", "time", "duration", "exit"],
-            "icon": "⏱️",
+            "icon": "icon-hourglass",
             "origin": "strategy",
             "description": "Check how long a position has been held (for exit strategies - time-based exits)",
             "parameters": {

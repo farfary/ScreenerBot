@@ -84,7 +84,7 @@ impl ConditionEvaluator for PriceToMaCondition {
             "name": "Price vs Moving Average",
             "category": "Technical Indicators",
             "tags": ["ma", "sma", "trend", "technical"],
-            "icon": "📊",
+            "icon": "icon-chart-line",
             "origin": "strategy",
             "description": "Check if price is above, below, or within range of its Simple Moving Average",
             "parameters": {

@@ -514,7 +514,11 @@
 }
 
 .config-category-body
-  .config-field:nth-child(even):not(.config-field--changed, .config-field--match, .config-field--error) {
+  .config-field:nth-child(even):not(
+    .config-field--changed,
+    .config-field--match,
+    .config-field--error
+  ) {
   background: rgb(15 23 42 / 0.24);
 }
 

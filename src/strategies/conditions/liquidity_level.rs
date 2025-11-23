@@ -61,7 +61,7 @@ impl ConditionEvaluator for LiquidityLevelCondition {
             "name": "Pool Liquidity Level",
             "category": "Market Context",
             "tags": ["liquidity", "safety", "sol", "risk"],
-            "icon": "💧",
+            "icon": "icon-droplet",
             "origin": "strategy",
             "description": "Check pool liquidity in SOL (Entry: ensure sufficient liquidity, Exit: detect liquidity drain)",
             "parameters": {

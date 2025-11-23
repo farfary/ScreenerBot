@@ -289,7 +289,9 @@ body.notification-drawer-open {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  transition: transform 0.2s ease, border 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    border 0.2s ease;
 }
 
 .summary-card:hover {

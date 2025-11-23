@@ -62,7 +62,9 @@
   line-height: 1.05;
   letter-spacing: var(--home-number-spacing);
   text-shadow: 0 2px 4px rgb(0 0 0 / 0.2);
-  font-feature-settings: "tnum" 1, "lnum" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "lnum" 1;
 }
 
 .hero-change {
@@ -112,7 +114,9 @@
   font-weight: 700;
   padding-top: 0.2rem;
   letter-spacing: var(--home-number-spacing);
-  font-feature-settings: "tnum" 1, "lnum" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "lnum" 1;
 }
 
 /* Trader Analytics Section - Full Width */
@@ -245,7 +249,9 @@
   /* Removed obsolete word-break declaration */
   justify-self: end;
   letter-spacing: var(--home-number-spacing);
-  font-feature-settings: "tnum" 1, "lnum" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "lnum" 1;
   white-space: nowrap;
   word-break: normal;
 }
@@ -470,7 +476,9 @@
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: var(--home-number-spacing);
-  font-feature-settings: "tnum" 1, "lnum" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "lnum" 1;
   white-space: nowrap;
   word-break: normal;
 }

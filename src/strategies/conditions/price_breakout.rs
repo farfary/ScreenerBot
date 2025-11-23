@@ -96,7 +96,7 @@ impl ConditionEvaluator for PriceBreakoutCondition {
             "name": "Price Breakout",
             "category": "Price Analysis",
             "tags": ["breakout", "resistance", "support", "momentum"],
-            "icon": "🚀",
+            "icon": "icon-rocket",
             "origin": "strategy",
             "description": "Detect price breaking above resistance (period high) or below support (period low)",
             "parameters": {

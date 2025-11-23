@@ -206,7 +206,7 @@ function setupToggle() {
       icon.className = "toggle-icon icon-eye-off";
     }
   };
-  
+
   addTrackedListener(toggleBtn, "click", handler);
 
   // Initialize as hidden

@@ -13,6 +13,18 @@ const defaultLifecycle = {
   dispose: noop,
 };
 
+async function runHook(phase, pageName, hook, context) {
+  if (typeof hook !== "function") {
+    return;
+  }
+  try {
+    await hook(context);
+  } catch (error) {
+    console.error(`[PageLifecycle] ${phase} failed for ${pageName}`, error);
+    throw error;
+  }
+}
+
 const safeInvokeAll = (callbacks) => {
   callbacks.forEach((callback) => {
     try {
@@ -40,6 +52,7 @@ const createContext = (pageName) => {
     pageName,
     data: {},
     isActive: () => active,
+    __initPromise: null,
     onDeactivate(callback) {
       return register(deactivateCleanups, callback);
     },
@@ -195,7 +208,7 @@ export const PageLifecycleRegistry = {
     return getOrCreateContext(pageName);
   },
 
-  init(pageName) {
+  async init(pageName) {
     const lifecycle = getLifecycle(pageName);
     if (!lifecycle) {
       return;
@@ -204,30 +217,30 @@ export const PageLifecycleRegistry = {
     if (context.__initialized) {
       return;
     }
-    context.__initialized = true;
-    try {
-      lifecycle.init(context);
-    } catch (error) {
-      console.error(`[PageLifecycle] init failed for ${pageName}`, error);
+    if (context.__initPromise) {
+      return context.__initPromise;
     }
+    context.__initPromise = (async () => {
+      await runHook("init", pageName, lifecycle.init, context);
+      context.__initialized = true;
+    })().finally(() => {
+      context.__initPromise = null;
+    });
+    return context.__initPromise;
   },
 
-  activate(pageName) {
+  async activate(pageName) {
     const lifecycle = getLifecycle(pageName);
     if (!lifecycle) {
       return;
     }
     const context = getOrCreateContext(pageName);
-    this.init(pageName);
+    await this.init(pageName);
     context.__setActive(true);
-    try {
-      lifecycle.activate(context);
-    } catch (error) {
-      console.error(`[PageLifecycle] activate failed for ${pageName}`, error);
-    }
+    await runHook("activate", pageName, lifecycle.activate, context);
   },
 
-  deactivate(pageName) {
+  async deactivate(pageName) {
     const lifecycle = getLifecycle(pageName);
     if (!lifecycle) {
       return;
@@ -237,16 +250,14 @@ export const PageLifecycleRegistry = {
       return;
     }
     try {
-      lifecycle.deactivate(context);
-    } catch (error) {
-      console.error(`[PageLifecycle] deactivate failed for ${pageName}`, error);
+      await runHook("deactivate", pageName, lifecycle.deactivate, context);
     } finally {
       context.__setActive(false);
       context.__runDeactivateCleanups();
     }
   },
 
-  dispose(pageName) {
+  async dispose(pageName) {
     const lifecycle = getLifecycle(pageName);
     if (!lifecycle) {
       return;
@@ -258,9 +269,7 @@ export const PageLifecycleRegistry = {
       return;
     }
     try {
-      lifecycle.dispose(context);
-    } catch (error) {
-      console.error(`[PageLifecycle] dispose failed for ${pageName}`, error);
+      await runHook("dispose", pageName, lifecycle.dispose, context);
     } finally {
       context.__runDeactivateCleanups();
       context.__runDisposeCleanups();

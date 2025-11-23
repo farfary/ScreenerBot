@@ -11,9 +11,11 @@ export function createLifecycle() {
   let strategies = [];
   let templates = [];
   let conditionSchemas = null;
+  let categoryStates = null;
 
   // Editor state (vertical cards)
   let conditions = []; // [{ type, name, enabled, required, params: {k: v} }]
+  let activeTab = "ENTRY"; // ENTRY | EXIT
 
   // Pollers
   let strategiesPoller = null;
@@ -21,20 +23,37 @@ export function createLifecycle() {
 
   // Event listener cleanup tracking
   const eventCleanups = [];
-  let dynamicCleanupStart = 0; // Track where dynamic listeners start
+  const CleanupScope = {
+    STATIC: "static",
+    STRATEGIES_LIST: "strategies-list",
+    TEMPLATE_LIST: "strategy-templates",
+    CONDITION_CARDS: "condition-cards",
+    PROPERTY_PANEL: "condition-properties",
+    MODAL: "condition-modal",
+  };
 
   // Helper to track event listeners for cleanup
-  function addTrackedListener(element, event, handler) {
+  function addTrackedListener(element, event, handler, scope = CleanupScope.STATIC) {
+    if (!element) {
+      return;
+    }
     element.addEventListener(event, handler);
-    eventCleanups.push(() => element.removeEventListener(event, handler));
+    eventCleanups.push({
+      scope,
+      cleanup: () => element.removeEventListener(event, handler),
+    });
   }
 
-  // Helper to clear only dynamic listeners (added during render)
-  function clearDynamicListeners() {
-    // Remove dynamic listeners from the end of the array
-    while (eventCleanups.length > dynamicCleanupStart) {
-      const cleanup = eventCleanups.pop();
-      cleanup();
+  function clearScope(scope) {
+    if (!scope) {
+      return;
+    }
+    for (let i = eventCleanups.length - 1; i >= 0; i -= 1) {
+      const entry = eventCleanups[i];
+      if (entry.scope === scope) {
+        entry.cleanup();
+        eventCleanups.splice(i, 1);
+      }
     }
   }
 
@@ -42,20 +61,14 @@ export function createLifecycle() {
     async init(_ctx) {
       console.log("[Strategies] Initializing page");
 
-      // Setup tab switching
-      setupTabs();
-
-      // Setup filters
-      setupFilters();
+      // Setup strategy type toggle
+      setupTypeToggle();
 
       // Setup sidebar actions
       setupSidebarActions();
 
       // Setup editor actions
       setupEditorActions();
-
-      // Setup toolbar actions
-      setupToolbarActions();
 
       // Setup search
       setupSearch();
@@ -69,9 +82,6 @@ export function createLifecycle() {
 
     async activate(ctx) {
       console.log("[Strategies] Activating page");
-
-      // Mark where static listeners end (everything before this is in init)
-      dynamicCleanupStart = eventCleanups.length;
 
       // Create pollers
       strategiesPoller = ctx.managePoller(
@@ -110,7 +120,7 @@ export function createLifecycle() {
       console.log("[Strategies] Disposing page");
 
       // Clean up all event listeners
-      eventCleanups.forEach((cleanup) => cleanup());
+      eventCleanups.forEach((entry) => entry.cleanup());
       eventCleanups.length = 0;
 
       // Cleanup state
@@ -121,60 +131,48 @@ export function createLifecycle() {
     },
   };
 
-  // Tab System
-  function setupTabs() {
-    const tabButtons = $$(".sidebar-tabs .tab-btn");
-    const tabContents = $$(".tab-content");
+  // Strategy Type Toggle
+  function setupTypeToggle() {
+    const toggleButtons = document.querySelectorAll(".type-option");
 
-    tabButtons.forEach((button) => {
-      addTrackedListener(button, "click", () => {
-        const targetTab = button.dataset.tab;
+    toggleButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        const type = button.dataset.type.toUpperCase();
+        activeTab = type;
 
-        // Update buttons
-        tabButtons.forEach((btn) => btn.classList.remove("active"));
+        // Update active state
+        toggleButtons.forEach((btn) => btn.classList.remove("active"));
         button.classList.add("active");
 
-        // Update content
-        tabContents.forEach((content) => {
-          if (content.dataset.tab === targetTab) {
-            content.classList.add("active");
-          } else {
-            content.classList.remove("active");
-          }
-        });
+        // Filter sidebar strategies by type
+        filterStrategies(type);
+
+        // Update current strategy type if creating new
+        if (currentStrategy && !currentStrategy.id) {
+          currentStrategy.strategy_type = type;
+        }
       });
     });
   }
 
   // Filters
-  function setupFilters() {
-    // Strategy type filters
-    const filterButtons = $$(".strategy-filters .filter-btn");
-    filterButtons.forEach((button) => {
-      addTrackedListener(button, "click", () => {
-        filterButtons.forEach((btn) => btn.classList.remove("active"));
-        button.classList.add("active");
+  function filterStrategies(type) {
+    const items = $$(".strategy-item");
+    items.forEach((item) => {
+      const strategyId = item.dataset.strategyId;
+      const strategy = strategies.find((s) => s.id === strategyId);
 
-        const filter = button.dataset.filter;
-        filterStrategies(filter);
-      });
+      if (!strategy) {
+        item.style.display = "none";
+        return;
+      }
+
+      if (type === "ALL") {
+        item.style.display = "";
+      } else {
+        item.style.display = strategy.type === type ? "" : "none";
+      }
     });
-
-    // Template filters
-    const categorySelect = $("#template-category");
-    const riskSelect = $("#template-risk");
-
-    if (categorySelect) {
-      addTrackedListener(categorySelect, "change", () => {
-        filterTemplates();
-      });
-    }
-
-    if (riskSelect) {
-      addTrackedListener(riskSelect, "change", () => {
-        filterTemplates();
-      });
-    }
   }
 
   // Sidebar Actions
@@ -242,28 +240,14 @@ export function createLifecycle() {
     const categories = $$(".condition-category");
 
     if (!query) {
+      const states = getCategoryStates();
       // Show all, restore saved states
       categories.forEach((cat) => {
         cat.style.display = "block";
         const header = cat.querySelector(".category-header");
         if (!header) return;
-        const categoryName = header.dataset.category;
-        let savedStates = {};
-        try {
-          savedStates = JSON.parse(localStorage.getItem("condition-category-states") || "{}");
-        } catch (e) {
-          console.warn("[Strategies] Invalid category states, resetting:", e);
-        }
-        const items = cat.querySelector(".category-items");
-        const isCollapsed = savedStates[categoryName] !== false;
-
-        if (isCollapsed) {
-          items.classList.add("collapsed");
-          header.classList.add("collapsed");
-        } else {
-          items.classList.remove("collapsed");
-          header.classList.remove("collapsed");
-        }
+        const collapsed = states[header.dataset.category] !== false;
+        applyCategoryCollapsedState(header, collapsed);
       });
 
       $$(".condition-item").forEach((item) => {
@@ -283,7 +267,7 @@ export function createLifecycle() {
         const nameEl = item.querySelector(".condition-name");
         const descEl = item.querySelector(".condition-description");
         if (!nameEl || !descEl) return;
-        
+
         const name = nameEl.textContent.toLowerCase();
         const desc = descEl.textContent.toLowerCase();
         const matches = name.includes(query) || desc.includes(query);
@@ -434,8 +418,7 @@ export function createLifecycle() {
 
   // Render Functions
   function renderStrategies() {
-    // Clear old dynamic listeners before re-render
-    clearDynamicListeners();
+    clearScope(CleanupScope.STRATEGIES_LIST);
 
     const listContainer = $("#strategy-list");
     if (!listContainer) return;
@@ -485,11 +468,16 @@ export function createLifecycle() {
     $$(".strategy-item").forEach((item) => {
       const strategyId = item.dataset.strategyId;
 
-      addTrackedListener(item, "click", (e) => {
+      addTrackedListener(
+        item,
+        "click",
+        (e) => {
         if (!e.target.closest(".btn-icon")) {
           loadStrategy(strategyId);
         }
-      });
+        },
+        CleanupScope.STRATEGIES_LIST
+      );
 
       // Action buttons
       const editBtn = item.querySelector("[data-action='edit']");
@@ -497,31 +485,48 @@ export function createLifecycle() {
       const deleteBtn = item.querySelector("[data-action='delete']");
 
       if (editBtn) {
-        addTrackedListener(editBtn, "click", (e) => {
-          e.stopPropagation();
-          loadStrategy(strategyId);
-        });
+        addTrackedListener(
+          editBtn,
+          "click",
+          (e) => {
+            e.stopPropagation();
+            loadStrategy(strategyId);
+          },
+          CleanupScope.STRATEGIES_LIST
+        );
       }
 
       if (toggleBtn) {
-        addTrackedListener(toggleBtn, "click", async (e) => {
-          e.stopPropagation();
-          await toggleStrategyEnabled(strategyId);
-        });
+        addTrackedListener(
+          toggleBtn,
+          "click",
+          async (e) => {
+            e.stopPropagation();
+            await toggleStrategyEnabled(strategyId);
+          },
+          CleanupScope.STRATEGIES_LIST
+        );
       }
 
       if (deleteBtn) {
-        addTrackedListener(deleteBtn, "click", async (e) => {
-          e.stopPropagation();
-          await deleteStrategy(strategyId);
-        });
+        addTrackedListener(
+          deleteBtn,
+          "click",
+          async (e) => {
+            e.stopPropagation();
+            await deleteStrategy(strategyId);
+          },
+          CleanupScope.STRATEGIES_LIST
+        );
       }
     });
+
+    // Apply current filter
+    filterStrategies(activeTab);
   }
 
   function renderTemplates() {
-    // Clear old dynamic listeners before re-render
-    clearDynamicListeners();
+    clearScope(CleanupScope.TEMPLATE_LIST);
 
     const listContainer = $("#template-list");
     if (!listContainer) return;
@@ -562,10 +567,15 @@ export function createLifecycle() {
     $$(".template-item").forEach((item) => {
       const useBtn = item.querySelector("[data-action='use']");
       if (useBtn) {
-        addTrackedListener(useBtn, "click", () => {
-          const templateId = item.dataset.templateId;
-          useTemplate(templateId);
-        });
+        addTrackedListener(
+          useBtn,
+          "click",
+          () => {
+            const templateId = item.dataset.templateId;
+            useTemplate(templateId);
+          },
+          CleanupScope.TEMPLATE_LIST
+        );
       }
     });
   }
@@ -573,6 +583,8 @@ export function createLifecycle() {
   function initializeConditionCatalog() {
     const container = $("#condition-categories");
     if (!container || !conditionSchemas) return;
+
+    clearScope(CleanupScope.MODAL);
 
     // Build categories from schema metadata; hide non-strategy origins
     const categories = {};
@@ -583,13 +595,7 @@ export function createLifecycle() {
       categories[cat].push({ type, ...schema });
     });
 
-    // Load saved category states (default: all collapsed)
-    let savedStates = {};
-    try {
-      savedStates = JSON.parse(localStorage.getItem("condition-category-states") || "{}");
-    } catch (e) {
-      console.warn("[Strategies] Invalid category states, resetting:", e);
-    }
+    const savedStates = getCategoryStates();
 
     // Render
     container.innerHTML = Object.entries(categories)
@@ -599,7 +605,7 @@ export function createLifecycle() {
           <div class="condition-category">
             <div class="category-header ${isCollapsed ? "collapsed" : ""}" data-category="${category}">
               <div class="category-title">
-                <span class="icon">${getCategoryIcon(category)}</span>
+                <span class="icon"><i class="${getCategoryIcon(category)}"></i></span>
                 ${category}
               </div>
               <span class="category-toggle">▶</span>
@@ -614,39 +620,19 @@ export function createLifecycle() {
 
     // Toggle with state persistence (with cleanup tracking)
     $$(".category-header").forEach((header) => {
+      const category = header.dataset.category;
+      const shouldCollapse = savedStates[category] !== false;
+      applyCategoryCollapsedState(header, shouldCollapse);
+
       const handler = () => {
-        const category = header.dataset.category;
-        const items = header.nextElementSibling;
-        const toggle = header.querySelector(".category-toggle");
-        const isCollapsed = items.classList.contains("collapsed");
-
-        if (isCollapsed) {
-          items.classList.remove("collapsed");
-          header.classList.remove("collapsed");
-          toggle.textContent = "▼";
-        } else {
-          items.classList.add("collapsed");
-          header.classList.add("collapsed");
-          toggle.textContent = "▶";
-        }
-
-        // Save state
-        let states = {};
-        try {
-          states = JSON.parse(localStorage.getItem("condition-category-states") || "{}");
-        } catch (e) {
-          console.warn("[Strategies] Invalid category states, resetting:", e);
-        }
-        states[category] = !isCollapsed;
-        try {
-          localStorage.setItem("condition-category-states", JSON.stringify(states));
-        } catch (e) {
-          console.warn("[Strategies] Failed to save category states:", e);
-        }
+        const nextCollapsed = !header.classList.contains("collapsed");
+        applyCategoryCollapsedState(header, nextCollapsed);
+        updateCategoryState(category, nextCollapsed);
       };
-      header.addEventListener("click", handler);
-      eventCleanups.push(() => header.removeEventListener("click", handler));
+      addTrackedListener(header, "click", handler, CleanupScope.MODAL);
     });
+
+    setupCategoryBulkControls();
 
     // Click to add (with cleanup tracking)
     $$(".condition-item").forEach((item) => {
@@ -656,8 +642,7 @@ export function createLifecycle() {
         const catalog = $("#condition-catalog-modal");
         if (catalog) catalog.classList.remove("active");
       };
-      item.addEventListener("click", handler);
-      eventCleanups.push(() => item.removeEventListener("click", handler));
+      addTrackedListener(item, "click", handler, CleanupScope.MODAL);
     });
   }
 
@@ -676,26 +661,132 @@ export function createLifecycle() {
     `;
   }
 
+  function setupCategoryBulkControls() {
+    const collapseBtn = $("#collapse-all-categories");
+    const expandBtn = $("#expand-all-categories");
+
+    if (collapseBtn) {
+      addTrackedListener(
+        collapseBtn,
+        "click",
+        () => setAllCategoriesCollapsed(true),
+        CleanupScope.MODAL
+      );
+    }
+
+    if (expandBtn) {
+      addTrackedListener(
+        expandBtn,
+        "click",
+        () => setAllCategoriesCollapsed(false),
+        CleanupScope.MODAL
+      );
+    }
+  }
+
+  function setAllCategoriesCollapsed(collapsed) {
+    const headers = $$(".condition-category .category-header");
+    if (!headers.length) return;
+    const states = getCategoryStates();
+    headers.forEach((header) => {
+      const category = header.dataset.category;
+      applyCategoryCollapsedState(header, collapsed);
+      if (category) {
+        states[category] = collapsed;
+      }
+    });
+    categoryStates = states;
+    persistCategoryStates();
+  }
+
+  function updateCategoryState(category, collapsed) {
+    if (!category) return;
+    const states = getCategoryStates();
+    states[category] = collapsed;
+    categoryStates = states;
+    persistCategoryStates();
+  }
+
+  function applyCategoryCollapsedState(header, collapsed) {
+    if (!header) return;
+    const items = header.nextElementSibling;
+    const toggle = header.querySelector(".category-toggle");
+
+    if (collapsed) {
+      header.classList.add("collapsed");
+      if (items) items.classList.add("collapsed");
+      if (toggle) toggle.textContent = "▶";
+    } else {
+      header.classList.remove("collapsed");
+      if (items) items.classList.remove("collapsed");
+      if (toggle) toggle.textContent = "▼";
+    }
+  }
+
+  function getCategoryStates() {
+    if (!categoryStates) {
+      categoryStates = loadStoredCategoryStates();
+    }
+    return categoryStates;
+  }
+
+  function loadStoredCategoryStates() {
+    if (typeof window === "undefined" || typeof window.localStorage === "undefined") {
+      return {};
+    }
+
+    try {
+      const raw = window.localStorage.getItem("condition-category-states");
+      if (!raw) return {};
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch (error) {
+      console.warn("[Strategies] Invalid category states, resetting:", error);
+      return {};
+    }
+  }
+
+  function persistCategoryStates() {
+    if (typeof window === "undefined" || typeof window.localStorage === "undefined") {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(
+        "condition-category-states",
+        JSON.stringify(categoryStates || {})
+      );
+    } catch (error) {
+      console.warn("[Strategies] Failed to save category states:", error);
+    }
+  }
+
   // Helper Functions
   function getCategoryIcon(category) {
     const icons = {
-      "Price Patterns": "icon-dollar-sign",
-      "Technical Indicators": "icon-bar-chart-2",
+      "Price Patterns": "icon-chart-line",
+      "Price Analysis": "icon-chart-line",
+      "Candle Patterns": "icon-chart-candlestick",
+      "Technical Indicators": "icon-sliders-horizontal",
       "Market Context": "icon-globe",
-      "Position & Performance": "icon-trending-up",
+      "Position & Performance": "icon-trophy",
+      "Volume Analysis": "icon-chart-bar",
     };
     return icons[category] || "icon-bookmark";
   }
 
   function getConditionIcon(type) {
     const icons = {
-      PriceThreshold: "icon-target",
-      PriceMovement: "icon-trending-up",
-      RelativeToMA: "icon-trending-down",
-      LiquidityDepth: "icon-droplet",
-      PositionAge: "icon-timer",
+      PriceChangePercent: "icon-percent",
+      PriceToMa: "icon-chart-line",
+      LiquidityLevel: "icon-droplet",
+      PriceBreakout: "icon-rocket",
+      PositionHoldingTime: "icon-hourglass",
+      CandleSize: "icon-expand",
+      ConsecutiveCandles: "icon-chart-candlestick",
+      VolumeSpike: "icon-chart-bar",
     };
-    return icons[type] || "icon-circle";
+    return icons[type] || "icon-puzzle";
   }
 
   function filterStrategies(filter) {
@@ -790,8 +881,7 @@ export function createLifecycle() {
       return;
     }
 
-    // Clear old dynamic listeners before re-rendering
-    clearDynamicListeners();
+    clearScope(CleanupScope.CONDITION_CARDS);
 
     list.innerHTML = conditions.map((c, idx) => renderConditionCard(c, idx)).join("");
 
@@ -812,8 +902,7 @@ export function createLifecycle() {
         handler = () => moveCondition(index, 1);
       }
       if (handler) {
-        btn.addEventListener("click", handler);
-        eventCleanups.push(() => btn.removeEventListener("click", handler));
+        addTrackedListener(btn, "click", handler, CleanupScope.CONDITION_CARDS);
       }
     });
 
@@ -824,8 +913,7 @@ export function createLifecycle() {
         conditions[idx].enabled = e.target.checked;
         updateRuleTreeFromEditor();
       };
-      el.addEventListener("change", handler);
-      eventCleanups.push(() => el.removeEventListener("change", handler));
+      addTrackedListener(el, "change", handler, CleanupScope.CONDITION_CARDS);
     });
     $$(".condition-card .toggle-required").forEach((el) => {
       const handler = (e) => {
@@ -833,8 +921,7 @@ export function createLifecycle() {
         conditions[idx].required = e.target.checked;
         // For now, required flag is cosmetic; combinator remains global AND
       };
-      el.addEventListener("change", handler);
-      eventCleanups.push(() => el.removeEventListener("change", handler));
+      addTrackedListener(el, "change", handler, CleanupScope.CONDITION_CARDS);
     });
 
     // Param inputs with cleanup tracking
@@ -856,8 +943,7 @@ export function createLifecycle() {
           const summary = card.querySelector(".condition-summary");
           if (summary) summary.textContent = buildConditionSummary(conditions[idx]);
         };
-        input.addEventListener("change", handler);
-        eventCleanups.push(() => input.removeEventListener("change", handler));
+        addTrackedListener(input, "change", handler, CleanupScope.CONDITION_CARDS);
       }
     );
   }
@@ -1006,6 +1092,7 @@ export function createLifecycle() {
   }
 
   function renderPropertiesPanel(node) {
+    clearScope(CleanupScope.PROPERTY_PANEL);
     const editor = $("#property-editor");
     if (!editor) return;
 
@@ -1068,8 +1155,7 @@ export function createLifecycle() {
         node.name = e.target.value;
         renderConditionsList();
       };
-      nameInput.addEventListener("input", handler);
-      eventCleanups.push(() => nameInput.removeEventListener("input", handler));
+      addTrackedListener(nameInput, "input", handler, CleanupScope.PROPERTY_PANEL);
     }
 
     // Parameter inputs with cleanup tracking
@@ -1097,12 +1183,8 @@ export function createLifecycle() {
             }
             updateRuleTreeFromEditor();
           };
-          input.addEventListener("input", handler);
-          input.addEventListener("change", handler);
-          eventCleanups.push(() => {
-            input.removeEventListener("input", handler);
-            input.removeEventListener("change", handler);
-          });
+          addTrackedListener(input, "input", handler, CleanupScope.PROPERTY_PANEL);
+          addTrackedListener(input, "change", handler, CleanupScope.PROPERTY_PANEL);
         }
       });
     }
@@ -1221,23 +1303,27 @@ export function createLifecycle() {
     const cancelBtn = $("#cancel-parameter-edit");
     const applyBtn = $("#apply-parameter-edit");
 
+    clearScope(CleanupScope.MODAL);
+
     // Close handlers
     const closeModal = () => {
       modal.classList.remove("active");
+      clearScope(CleanupScope.MODAL);
     };
 
-    closeBtn.onclick = closeModal;
-    cancelBtn.onclick = closeModal;
+    addTrackedListener(closeBtn, "click", closeModal, CleanupScope.MODAL);
+    addTrackedListener(cancelBtn, "click", closeModal, CleanupScope.MODAL);
 
     // Click outside to close
-    modal.onclick = (e) => {
+    const outsideClickHandler = (e) => {
       if (e.target === modal) {
         closeModal();
       }
     };
+    addTrackedListener(modal, "click", outsideClickHandler, CleanupScope.MODAL);
 
     // Apply changes
-    applyBtn.onclick = () => {
+    const applyHandler = () => {
       // Update node name
       const nameInput = $("#modal-node-name");
       if (nameInput) {
@@ -1275,6 +1361,7 @@ export function createLifecycle() {
       closeModal();
       Utils.showToast("Parameters updated", "success");
     };
+    addTrackedListener(applyBtn, "click", applyHandler, CleanupScope.MODAL);
 
     // ESC key to close (with cleanup tracking)
     const escHandler = (e) => {
@@ -1283,8 +1370,7 @@ export function createLifecycle() {
         document.removeEventListener("keydown", escHandler);
       }
     };
-    document.addEventListener("keydown", escHandler);
-    eventCleanups.push(() => document.removeEventListener("keydown", escHandler));
+    addTrackedListener(document, "keydown", escHandler, CleanupScope.MODAL);
   }
 
   // Strategy Operations
@@ -1292,7 +1378,7 @@ export function createLifecycle() {
     currentStrategy = {
       id: null,
       name: "New Strategy",
-      type: "ENTRY",
+      type: activeTab,
       enabled: true,
       priority: 10,
       rules: null,
@@ -1301,17 +1387,21 @@ export function createLifecycle() {
 
     // Update UI
     const nameInput = $("#strategy-name");
-    const typeSelect = $("#strategy-type");
-
     if (nameInput) nameInput.value = currentStrategy.name;
-    if (typeSelect) typeSelect.value = currentStrategy.type;
+
+    const statusBadge = $("#strategy-status");
+    if (statusBadge) statusBadge.textContent = `Draft (${activeTab})`;
 
     // Clear editor conditions
     conditions = [];
     renderConditionsList();
     renderPropertiesPanel(null);
 
-    Utils.showToast("New strategy created", "success");
+    Utils.showToast({
+      type: "success",
+      title: "New Strategy",
+      message: "Created new strategy",
+    });
   }
 
   async function loadStrategy(strategyId) {
@@ -1336,10 +1426,13 @@ export function createLifecycle() {
 
       // Update UI
       const nameInput = $("#strategy-name");
-      const typeSelect = $("#strategy-type");
-
       if (nameInput) nameInput.value = currentStrategy.name;
-      if (typeSelect) typeSelect.value = currentStrategy.type;
+
+      const statusBadge = $("#strategy-status");
+      if (statusBadge) {
+        statusBadge.textContent = `${currentStrategy.enabled ? "Active" : "Disabled"} (${currentStrategy.type})`;
+        statusBadge.className = `strategy-status-badge ${currentStrategy.enabled ? "enabled" : "disabled"}`;
+      }
 
       // Render strategy into vertical editor
       parseRuleTreeToConditions(currentStrategy.rules);

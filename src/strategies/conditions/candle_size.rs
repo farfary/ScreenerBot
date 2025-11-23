@@ -105,7 +105,7 @@ impl ConditionEvaluator for CandleSizeCondition {
             "name": "Candle Size Pattern",
             "category": "Candle Patterns",
             "tags": ["candles", "pattern", "doji", "wick"],
-            "icon": "🎯",
+            "icon": "icon-expand",
             "origin": "strategy",
             "description": "Detect specific candle patterns: large body, small body (doji), long wicks",
             "parameters": {

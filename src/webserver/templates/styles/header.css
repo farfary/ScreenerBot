@@ -16,7 +16,7 @@
   background: var(--header-bg, linear-gradient(135deg, #0a192f 0%, #1e3a5f 50%, #0e2a47 100%));
   border-bottom: 2px solid var(--header-border, #2563eb);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
-  font-family: var(--header-font, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif);
+  font-family: var(--header-font, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
 }
 
 /* ============================================================================
@@ -134,7 +134,7 @@
 .card-value {
   font-size: 18px;
   font-weight: 700;
-  font-family: var(--metric-font, 'Roboto Mono', 'SF Mono', monospace);
+  font-family: var(--metric-font, "Roboto Mono", "SF Mono", monospace);
   color: var(--text-primary, #fff);
 }
 
@@ -202,7 +202,8 @@
 }
 
 @keyframes status-pulse {
-  0%, 100% {
+  0%,
+  100% {
     opacity: 1;
     filter: drop-shadow(0 0 0 currentColor);
   }
@@ -398,7 +399,7 @@
   .header-row-1 {
     gap: 36px;
   }
-  
+
   .header-card {
     padding-left: 28px;
   }
@@ -517,7 +518,8 @@
   }
 
   @keyframes status-pulse {
-    0%, 100% {
+    0%,
+    100% {
       opacity: 1;
       filter: none;
     }
