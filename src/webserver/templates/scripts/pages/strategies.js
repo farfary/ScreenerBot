@@ -1067,17 +1067,39 @@ export function createLifecycle() {
     const params = schema.parameters || {};
     const parts = [];
 
-    // Build human-readable summary based on condition type
-    Object.entries(c.params).forEach(([key, value]) => {
-      const spec = params[key];
-      if (!spec) return;
+    // Special handling for conditions with time period (time_value + time_unit)
+    if (c.params.time_value !== undefined && c.params.time_unit !== undefined) {
+      const timeValue = c.params.time_value;
+      const timeUnit = c.params.time_unit;
+      const unitLabel = timeUnit === "SECONDS" ? "sec" : timeUnit === "MINUTES" ? "min" : "hrs";
+      const timePart = `${timeValue} ${unitLabel}`;
+      
+      // Add other parameters (skip time_value and time_unit as they're combined)
+      Object.entries(c.params).forEach(([key, value]) => {
+        if (key === "time_value" || key === "time_unit") return;
+        const spec = params[key];
+        if (!spec) return;
 
-      const label = spec.name || key;
-      const formattedValue = formatParamValueWithUnit(value, spec);
-      parts.push(`${label}: ${formattedValue}`);
-    });
+        const label = spec.name || key;
+        const formattedValue = formatParamValueWithUnit(value, spec);
+        parts.push(`${label}: ${formattedValue}`);
+      });
+      
+      // Add time period last
+      parts.push(`Period: ${timePart}`);
+    } else {
+      // Build human-readable summary based on condition type
+      Object.entries(c.params).forEach(([key, value]) => {
+        const spec = params[key];
+        if (!spec) return;
 
-    return parts.slice(0, 2).join(", ") || "No parameters";
+        const label = spec.name || key;
+        const formattedValue = formatParamValueWithUnit(value, spec);
+        parts.push(`${label}: ${formattedValue}`);
+      });
+    }
+
+    return parts.slice(0, 3).join(", ") || "No parameters";
   }
 
   function formatParamValue(v) {
