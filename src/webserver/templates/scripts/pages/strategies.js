@@ -14,7 +14,7 @@ export function createLifecycle() {
   let categoryStates = null;
 
   // Editor state (vertical cards)
-  let conditions = []; // [{ type, name, enabled, required, params: {k: v} }]
+  let conditions = []; // [{ type, name, enabled, params: {k: v} }]
   let activeTab = "ENTRY"; // ENTRY | EXIT
 
   // Pollers
@@ -69,6 +69,9 @@ export function createLifecycle() {
 
       // Setup editor actions
       setupEditorActions();
+      
+      // Setup toolbar actions
+      setupToolbarActions();
 
       // Setup search
       setupSearch();
@@ -299,6 +302,16 @@ export function createLifecycle() {
     const validateBtn = $("#validate-strategy");
     const testBtn = $("#test-strategy");
     const deployBtn = $("#deploy-strategy");
+    const nameInput = $("#strategy-name");
+    
+    // Sync strategy name in real-time as user types
+    if (nameInput) {
+      addTrackedListener(nameInput, "input", (e) => {
+        if (currentStrategy) {
+          currentStrategy.name = e.target.value.trim();
+        }
+      });
+    }
 
     if (saveBtn) {
       addTrackedListener(saveBtn, "click", async () => {
@@ -789,27 +802,6 @@ export function createLifecycle() {
     return icons[type] || "icon-puzzle";
   }
 
-  function filterStrategies(filter) {
-    const items = $$(".strategy-item");
-    items.forEach((item) => {
-      const strategyId = item.dataset.strategyId;
-      const strategy = strategies.find((s) => s.id === strategyId);
-
-      if (!strategy) {
-        item.style.display = "none";
-        return;
-      }
-
-      if (filter === "all") {
-        item.style.display = "";
-      } else if (filter === "entry") {
-        item.style.display = strategy.type === "ENTRY" ? "" : "none";
-      } else if (filter === "exit") {
-        item.style.display = strategy.type === "EXIT" ? "" : "none";
-      }
-    });
-  }
-
   function filterTemplates() {
     const categorySelect = $("#template-category");
     const riskSelect = $("#template-risk");
@@ -851,6 +843,32 @@ export function createLifecycle() {
         title: "Unknown Condition",
         message: "Condition type not found",
       });
+    
+    // Auto-create strategy if none exists (first condition added)
+    if (!currentStrategy) {
+      currentStrategy = {
+        id: null,
+        name: "New Strategy",
+        type: activeTab,
+        enabled: true,
+        priority: 10,
+        rules: null,
+        parameters: {},
+      };
+      
+      // Update UI to reflect new strategy
+      const nameInput = $("#strategy-name");
+      if (nameInput && !nameInput.value) {
+        nameInput.value = currentStrategy.name;
+      } else if (nameInput && nameInput.value) {
+        // Use user-entered name if already typed
+        currentStrategy.name = nameInput.value;
+      }
+      
+      const statusBadge = $("#strategy-status");
+      if (statusBadge) statusBadge.textContent = `Draft (${activeTab})`;
+    }
+    
     const params = {};
     Object.entries(schema.parameters || {}).forEach(([k, p]) => {
       params[k] = p.default ?? null;
@@ -859,7 +877,6 @@ export function createLifecycle() {
       type: conditionType,
       name: schema.name || conditionType,
       enabled: true,
-      required: true,
       params,
     });
     renderConditionsList();
@@ -884,6 +901,24 @@ export function createLifecycle() {
     clearScope(CleanupScope.CONDITION_CARDS);
 
     list.innerHTML = conditions.map((c, idx) => renderConditionCard(c, idx)).join("");
+
+    // Wire card header click to expand/collapse (except when clicking on interactive elements)
+    $$(".condition-card .card-header").forEach((header) => {
+      const card = header.closest(".condition-card");
+      const index = parseInt(card.dataset.index, 10);
+      const handler = (e) => {
+        // Don't toggle if clicking on checkbox, button, or action button
+        if (
+          e.target.closest("input") ||
+          e.target.closest("button") ||
+          e.target.closest(".condition-actions")
+        ) {
+          return;
+        }
+        toggleCardExpand(index);
+      };
+      addTrackedListener(header, "click", handler, CleanupScope.CONDITION_CARDS);
+    });
 
     // Wire actions with cleanup tracking
     $$(".condition-card [data-action]").forEach((btn) => {
@@ -910,16 +945,19 @@ export function createLifecycle() {
     $$(".condition-card .toggle-enabled").forEach((el) => {
       const handler = (e) => {
         const idx = parseInt(el.closest(".condition-card").dataset.index, 10);
+        const card = el.closest(".condition-card");
         conditions[idx].enabled = e.target.checked;
+        
+        // Update card status class
+        if (e.target.checked) {
+          card.classList.remove("status-disabled");
+          card.classList.add("status-enabled");
+        } else {
+          card.classList.remove("status-enabled");
+          card.classList.add("status-disabled");
+        }
+        
         updateRuleTreeFromEditor();
-      };
-      addTrackedListener(el, "change", handler, CleanupScope.CONDITION_CARDS);
-    });
-    $$(".condition-card .toggle-required").forEach((el) => {
-      const handler = (e) => {
-        const idx = parseInt(el.closest(".condition-card").dataset.index, 10);
-        conditions[idx].required = e.target.checked;
-        // For now, required flag is cosmetic; combinator remains global AND
       };
       addTrackedListener(el, "change", handler, CleanupScope.CONDITION_CARDS);
     });
@@ -940,8 +978,8 @@ export function createLifecycle() {
           conditions[idx].params[key] = value;
           updateRuleTreeFromEditor();
           // Update summary text
-          const summary = card.querySelector(".condition-summary");
-          if (summary) summary.textContent = buildConditionSummary(conditions[idx]);
+          const summaryContent = card.querySelector(".summary-content");
+          if (summaryContent) summaryContent.textContent = buildConditionSummary(conditions[idx]);
         };
         addTrackedListener(input, "change", handler, CleanupScope.CONDITION_CARDS);
       }
@@ -951,30 +989,46 @@ export function createLifecycle() {
   function renderConditionCard(c, idx) {
     const schema = conditionSchemas?.[c.type] || {};
     const iconClass = schema.icon || getConditionIcon(c.type);
-    const badges = [schema.category || "General"]
-      .map((b) => `<span class="condition-badge">${Utils.escapeHtml(b)}</span>`)
-      .join("");
+    const category = schema.category || "General";
+    const description = schema.description || "";
     const summary = buildConditionSummary(c);
     const body = renderParamEditor(c, schema, idx);
+    const statusClass = c.enabled ? "status-enabled" : "status-disabled";
+    const categorySlug = category.toLowerCase().replace(/[^a-z0-9]+/g, "-");
+    
     return `
-      <div class="condition-card" data-index="${idx}">
+      <div class="condition-card ${statusClass}" data-index="${idx}" data-category="${categorySlug}">
         <div class="card-header">
-          <div class="card-title"><i class="${iconClass}"></i>${Utils.escapeHtml(c.name || c.type)}</div>
-          <div class="card-meta">
-            ${badges}
-            <label><input type="checkbox" class="toggle-enabled" ${c.enabled ? "checked" : ""}/> Enabled</label>
-            <label><input type="checkbox" class="toggle-required" ${c.required ? "checked" : ""}/> Required</label>
-            <div class="condition-actions">
-              <button class="btn-icon" data-action="move-up" title="Move up">▲</button>
-              <button class="btn-icon" data-action="move-down" title="Move down">▼</button>
-              <button class="btn-icon" data-action="duplicate" title="Duplicate"><i class="icon-copy"></i></button>
-              <button class="btn-icon" data-action="delete" title="Delete"><i class="icon-trash-2"></i></button>
-              <button class="btn-icon" data-action="toggle-expand" title="More">⋯</button>
+          <div class="card-header-left">
+            <div class="condition-icon">
+              <i class="${iconClass}"></i>
+            </div>
+            <div class="condition-info">
+              <div class="condition-name">
+                ${Utils.escapeHtml(c.name || c.type)}
+                <span class="condition-category-badge category-${categorySlug}">${Utils.escapeHtml(category)}</span>
+              </div>
+              <div class="condition-description">${Utils.escapeHtml(description)}</div>
             </div>
           </div>
+          <div class="card-header-right">
+            <div class="condition-status">
+              <label class="status-toggle" title="${c.enabled ? "Enabled" : "Disabled"}">
+                <input type="checkbox" class="toggle-enabled" ${c.enabled ? "checked" : ""}/>
+                <span class="status-indicator"></span>
+              </label>
+            </div>
+            <div class="condition-actions">
+              <button class="btn-icon" data-action="move-up" title="Move up"><i class="icon-chevron-up"></i></button>
+              <button class="btn-icon" data-action="move-down" title="Move down"><i class="icon-chevron-down"></i></button>
+              <button class="btn-icon" data-action="duplicate" title="Duplicate"><i class="icon-copy"></i></button>
+              <button class="btn-icon" data-action="delete" title="Delete"><i class="icon-trash-2"></i></button>
+            </div>
+            <span class="expand-indicator"><i class="icon-chevron-down"></i></span>
+          </div>
         </div>
-        <div class="card-header" style="padding-top:0;">
-          <div class="condition-summary">${Utils.escapeHtml(summary)}</div>
+        <div class="card-summary">
+          <div class="summary-content">${Utils.escapeHtml(summary)}</div>
         </div>
         <div class="card-body">${body}</div>
       </div>
@@ -1010,9 +1064,20 @@ export function createLifecycle() {
 
   function buildConditionSummary(c) {
     const schema = conditionSchemas?.[c.type] || {};
-    const keys = Object.keys(schema.parameters || {}).slice(0, 3);
-    const parts = keys.map((k) => `${k}=${formatParamValue(c.params[k])}`);
-    return parts.join(", ") || "No parameters";
+    const params = schema.parameters || {};
+    const parts = [];
+
+    // Build human-readable summary based on condition type
+    Object.entries(c.params).forEach(([key, value]) => {
+      const spec = params[key];
+      if (!spec) return;
+
+      const label = spec.name || key;
+      const formattedValue = formatParamValueWithUnit(value, spec);
+      parts.push(`${label}: ${formattedValue}`);
+    });
+
+    return parts.slice(0, 2).join(", ") || "No parameters";
   }
 
   function formatParamValue(v) {
@@ -1022,9 +1087,60 @@ export function createLifecycle() {
     return String(v);
   }
 
+  function formatParamValueWithUnit(value, spec) {
+    if (value === undefined || value === null) return "—";
+
+    // Handle enum types - show label instead of value
+    if (spec.type === "enum" && spec.options) {
+      const option = spec.options.find((opt) => {
+        const optValue = typeof opt === "object" ? opt.value : opt;
+        return optValue === value;
+      });
+      if (option) {
+        return typeof option === "object" ? option.label : option;
+      }
+      return String(value);
+    }
+
+    // Handle boolean
+    if (spec.type === "boolean") {
+      return value ? "✓ Yes" : "✗ No";
+    }
+
+    // Handle numbers with units
+    if (typeof value === "number") {
+      // Percent type
+      if (spec.type === "percent") {
+        return `${value}%`;
+      }
+      // SOL type
+      if (spec.type === "sol") {
+        return `${value} SOL`;
+      }
+      // Check name for hints about unit
+      const name = (spec.name || "").toLowerCase();
+      if (name.includes("hour")) {
+        return value === 1 ? `${value} hour` : `${value} hours`;
+      }
+      if (name.includes("minute")) {
+        return value === 1 ? `${value} minute` : `${value} minutes`;
+      }
+      if (name.includes("candle") || name.includes("period") || name.includes("lookback")) {
+        return value === 1 ? `${value} candle` : `${value} candles`;
+      }
+      if (name.includes("multiplier") || name.includes("ratio")) {
+        return `${value}×`;
+      }
+      // Default number formatting
+      return value % 1 === 0 ? String(value) : value.toFixed(2);
+    }
+
+    return String(value);
+  }
+
   function renderParamEditor(c, schema, idx) {
     const entries = Object.entries(schema.parameters || {});
-    if (!entries.length) return '<div class="param-row">No parameters</div>';
+    if (!entries.length) return "<div class=\"param-row\">No parameters</div>";
     // Basic approach: show all params; could gate last N as advanced in future
     const fields = entries.map(([key, spec]) => {
       const label = spec.name || key;
@@ -1043,26 +1159,55 @@ export function createLifecycle() {
   function renderParamInput(idx, key, spec, value) {
     const id = `param-${idx}-${key}`;
     const data = `data-key="${key}"`;
+    const min = spec.min !== undefined ? `min="${spec.min}"` : "";
+    const max = spec.max !== undefined ? `max="${spec.max}"` : "";
+    const step = spec.step !== undefined ? `step="${spec.step}"` : "";
+
     switch (spec.type) {
-      case "number":
-      case "percent":
-      case "sol":
-        return `<input id="${id}" ${data} type="number" value="${value}" ${spec.min !== undefined ? `min="${spec.min}"` : ""} ${spec.max !== undefined ? `max="${spec.max}"` : ""} ${spec.step !== undefined ? `step="${spec.step}"` : ""}>`;
+      case "percent": {
+        return `<div class="input-with-unit">
+          <input id="${id}" ${data} type="number" value="${value}" ${min} ${max} ${step} placeholder="0">
+          <span class="input-unit">%</span>
+        </div>`;
+      }
+      case "sol": {
+        return `<div class="input-with-unit">
+          <input id="${id}" ${data} type="number" value="${value}" ${min} ${max} ${step} placeholder="0">
+          <span class="input-unit">SOL</span>
+        </div>`;
+      }
+      case "number": {
+        // Check if we should add a unit based on the name
+        const name = (spec.name || "").toLowerCase();
+        let unit = "";
+        if (name.includes("hour")) unit = "hrs";
+        else if (name.includes("minute")) unit = "min";
+        else if (name.includes("multiplier")) unit = "×";
+
+        if (unit) {
+          return `<div class="input-with-unit">
+            <input id="${id}" ${data} type="number" value="${value}" ${min} ${max} ${step} placeholder="0">
+            <span class="input-unit">${unit}</span>
+          </div>`;
+        }
+        return `<input id="${id}" ${data} type="number" value="${value}" ${min} ${max} ${step} placeholder="0">`;
+      }
       case "boolean":
-        return `<input id="${id}" ${data} type="checkbox" ${value ? "checked" : ""}>`;
+        return `<label class="toggle-switch">
+          <input id="${id}" ${data} type="checkbox" ${value ? "checked" : ""}>
+          <span class="toggle-slider"></span>
+        </label>`;
       case "enum": {
-        // Handle both old format (string array) and new format (object array with value/label)
         const options = spec.options || spec.values || [];
         const optionsHtml = options
           .map((opt) => {
-            // Check if option is an object with value/label or a simple string
             const optValue = typeof opt === "object" ? opt.value : opt;
             const optLabel = typeof opt === "object" ? opt.label : opt;
             const selected = optValue === value ? "selected" : "";
             return `<option value="${Utils.escapeHtml(String(optValue))}" ${selected}>${Utils.escapeHtml(String(optLabel))}</option>`;
           })
           .join("");
-        return `<select id="${id}" ${data}>${optionsHtml}</select>`;
+        return `<select id="${id}" ${data} class="select-field">${optionsHtml}</select>`;
       }
       default:
         return `<input id="${id}" ${data} type="text" value="${Utils.escapeHtml(String(value))}">`;
@@ -1480,7 +1625,6 @@ export function createLifecycle() {
         type: cond.type,
         name: schema.name || cond.type,
         enabled: true,
-        required: true,
         params,
       });
     });
@@ -1488,7 +1632,21 @@ export function createLifecycle() {
 
   async function saveStrategy() {
     if (!currentStrategy) {
-      Utils.showToast("No strategy to save", "warning");
+      Utils.showToast({
+        type: "error",
+        title: "No Strategy Created",
+        message: "Add at least one condition or click 'New Strategy' to create a strategy first",
+      });
+      return;
+    }
+    
+    // Validate strategy has conditions
+    if (conditions.length === 0) {
+      Utils.showToast({
+        type: "warning",
+        title: "No Conditions",
+        message: "Add at least one condition to the strategy before saving",
+      });
       return;
     }
 
@@ -1497,8 +1655,19 @@ export function createLifecycle() {
       const nameInput = $("#strategy-name");
       const typeSelect = $("#strategy-type");
 
-      if (nameInput) currentStrategy.name = nameInput.value;
+      if (nameInput) currentStrategy.name = nameInput.value.trim();
       if (typeSelect) currentStrategy.type = typeSelect.value;
+      
+      // Validate name
+      if (!currentStrategy.name) {
+        Utils.showToast({
+          type: "warning",
+          title: "Name Required",
+          message: "Enter a strategy name before saving",
+        });
+        if (nameInput) nameInput.focus();
+        return;
+      }
 
       // Sync rule tree from editor
       updateRuleTreeFromEditor();
