@@ -43,6 +43,38 @@ pub fn get_candles_from_context(context: &EvaluationContext) -> Result<Vec<Candl
     Ok(candles.clone())
 }
 
+/// Helper to extract candles for a specific timeframe from TimeframeBundle
+/// Supports per-condition timeframe selection with fallback to strategy timeframe
+/// Returns detailed error messages for debugging
+pub fn get_candles_for_timeframe(context: &EvaluationContext, condition_timeframe: Option<&str>) -> Result<Vec<Candle>, String> {
+    // Check if bundle exists
+    let bundle = context
+        .timeframe_bundle
+        .as_ref()
+        .ok_or_else(|| "OHLCV data not available - bundle is None".to_string())?;
+    
+    // Use condition's timeframe if provided, otherwise fallback to strategy timeframe
+    let timeframe = condition_timeframe.unwrap_or(&context.strategy_timeframe);
+    
+    // Validate timeframe value
+    let valid_timeframes = ["1m", "5m", "15m", "1h", "4h", "12h", "1d"];
+    if !valid_timeframes.contains(&timeframe) {
+        return Err(format!("Invalid timeframe '{}' - valid options: {}", timeframe, valid_timeframes.join(", ")));
+    }
+    
+    // Check if timeframe exists in bundle
+    let candles = bundle
+        .get_timeframe(timeframe)
+        .ok_or_else(|| format!("Timeframe {} not available in bundle (valid: 1m, 5m, 15m, 1h, 4h, 12h, 1d)", timeframe))?;
+    
+    // Check if timeframe has data
+    if candles.is_empty() {
+        return Err(format!("Timeframe {} has no candle data - OHLCV system may not have fetched historical data yet", timeframe));
+    }
+    
+    Ok(candles.clone())
+}
+
 /// Trait for condition evaluation
 #[async_trait]
 pub trait ConditionEvaluator: Send + Sync {
@@ -158,4 +190,28 @@ pub fn get_param_bool(condition: &Condition, param_name: &str) -> Result<bool, S
         .value
         .as_bool()
         .ok_or_else(|| format!("Parameter {} must be a boolean", param_name))
+}
+
+/// Helper function to get optional parameter value as string
+pub fn get_param_string_optional(condition: &Condition, param_name: &str) -> Option<String> {
+    condition
+        .parameters
+        .get(param_name)
+        .and_then(|param| param.value.as_str())
+        .map(|s| s.to_string())
+}
+
+/// Helper function to validate optional timeframe parameter
+pub fn validate_timeframe_param(condition: &Condition) -> Result<(), String> {
+    if let Some(timeframe) = get_param_string_optional(condition, "timeframe") {
+        let valid_timeframes = ["1m", "5m", "15m", "1h", "4h", "12h", "1d"];
+        if !valid_timeframes.contains(&timeframe.as_str()) {
+            return Err(format!(
+                "Invalid timeframe '{}' - valid options: {}",
+                timeframe,
+                valid_timeframes.join(", ")
+            ));
+        }
+    }
+    Ok(())
 }

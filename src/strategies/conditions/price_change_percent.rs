@@ -1,4 +1,4 @@
-use crate::strategies::conditions::{get_param_f64, get_param_string, ConditionEvaluator};
+use crate::strategies::conditions::{get_candles_for_timeframe, get_param_f64, get_param_string, get_param_string_optional, validate_timeframe_param, ConditionEvaluator};
 use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
 use serde_json::json;
@@ -21,6 +21,7 @@ impl ConditionEvaluator for PriceChangePercentCondition {
         let direction = get_param_string(condition, "direction")?;
         let time_value = get_param_f64(condition, "time_value")?;
         let time_unit = get_param_string(condition, "time_unit")?;
+        let timeframe = get_param_string_optional(condition, "timeframe");
 
         let current_price = context
             .current_price
@@ -34,39 +35,8 @@ impl ConditionEvaluator for PriceChangePercentCondition {
             _ => return Err(format!("Invalid time unit: {}", time_unit)),
         };
 
-        // Get OHLCV data bundle
-        let bundle = context
-            .timeframe_bundle
-            .as_ref()
-            .ok_or_else(|| "OHLCV data not available".to_string())?;
-
-        // Select appropriate timeframe based on lookback period
-        let candles = if lookback_seconds <= 3600 {
-            // Up to 1 hour: use 1m candles (covers up to 100 minutes)
-            &bundle.m1
-        } else if lookback_seconds <= 1800 * 60 {
-            // Up to 30 hours: use 5m candles (covers up to 500 minutes)
-            &bundle.m5
-        } else if lookback_seconds <= 90000 {
-            // Up to 25 hours: use 15m candles (covers up to 1500 minutes)
-            &bundle.m15
-        } else if lookback_seconds <= 360000 {
-            // Up to 100 hours: use 1h candles (covers up to 100 hours)
-            &bundle.h1
-        } else if lookback_seconds <= 1440000 {
-            // Up to 400 hours: use 4h candles (covers up to 400 hours)
-            &bundle.h4
-        } else if lookback_seconds <= 4320000 {
-            // Up to 1200 hours: use 12h candles (covers up to 1200 hours)
-            &bundle.h12
-        } else {
-            // Beyond: use 1d candles (covers up to 100 days)
-            &bundle.d1
-        };
-
-        if candles.is_empty() {
-            return Err("No OHLCV data available for time period".to_string());
-        }
+        // Get candles for specified timeframe (or use strategy default)
+        let candles = get_candles_for_timeframe(context, timeframe.as_deref())?;
 
         // Get current timestamp (use most recent candle timestamp)
         let current_timestamp = candles.last().map(|c| c.timestamp).unwrap_or(0);
@@ -109,6 +79,9 @@ impl ConditionEvaluator for PriceChangePercentCondition {
     }
 
     fn validate(&self, condition: &Condition) -> Result<(), String> {
+        // Validate timeframe if provided
+        validate_timeframe_param(condition)?;
+
         let percentage = get_param_f64(condition, "percentage")?;
         if percentage < 0.1 {
             return Err("Percentage must be at least 0.1".to_string());
@@ -165,6 +138,22 @@ impl ConditionEvaluator for PriceChangePercentCondition {
             "origin": "strategy",
             "description": "Check if price changed by a percentage threshold within a time period",
             "parameters": {
+                "timeframe": {
+                    "type": "enum",
+                    "name": "Timeframe",
+                    "description": "Candle timeframe to analyze (defaults to strategy timeframe if not set)",
+                    "default": null,
+                    "optional": true,
+                    "options": [
+                        { "value": "1m", "label": "1 Minute" },
+                        { "value": "5m", "label": "5 Minutes" },
+                        { "value": "15m", "label": "15 Minutes" },
+                        { "value": "1h", "label": "1 Hour" },
+                        { "value": "4h", "label": "4 Hours" },
+                        { "value": "12h", "label": "12 Hours" },
+                        { "value": "1d", "label": "1 Day" }
+                    ]
+                },
                 "percentage": {
                     "type": "percent",
                     "name": "Change Threshold %",

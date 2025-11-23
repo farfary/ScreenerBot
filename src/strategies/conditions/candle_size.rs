@@ -1,4 +1,4 @@
-use crate::strategies::conditions::{get_candles_from_context, get_param_f64, get_param_string, ConditionEvaluator};
+use crate::strategies::conditions::{get_candles_for_timeframe, get_param_f64, get_param_string, get_param_string_optional, validate_timeframe_param, ConditionEvaluator};
 use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
 use serde_json::json;
@@ -19,8 +19,9 @@ impl ConditionEvaluator for CandleSizeCondition {
     ) -> Result<bool, String> {
         let pattern = get_param_string(condition, "pattern")?;
         let threshold = get_param_f64(condition, "threshold")?;
+        let timeframe = get_param_string_optional(condition, "timeframe");
 
-        let candles = get_candles_from_context(context)?;
+        let candles = get_candles_for_timeframe(context, timeframe.as_deref())?;
 
         if candles.is_empty() {
             return Err("No candles available".to_string());
@@ -76,7 +77,10 @@ impl ConditionEvaluator for CandleSizeCondition {
     }
 
     fn validate(&self, condition: &Condition) -> Result<(), String> {
-        let pattern = get_param_string(condition, "pattern")?;
+        // Validate timeframe if provided
+        validate_timeframe_param(condition)?;
+
+        let pattern = get_param_string(condition, "pattern")?;;
         if ![
             "LARGE_BODY",
             "SMALL_BODY",
@@ -109,6 +113,22 @@ impl ConditionEvaluator for CandleSizeCondition {
             "origin": "strategy",
             "description": "Detect specific candle patterns: large body, small body (doji), long wicks",
             "parameters": {
+                "timeframe": {
+                    "type": "enum",
+                    "name": "Timeframe",
+                    "description": "Candle timeframe to analyze (defaults to strategy timeframe if not set)",
+                    "default": null,
+                    "optional": true,
+                    "options": [
+                        { "value": "1m", "label": "1 Minute" },
+                        { "value": "5m", "label": "5 Minutes" },
+                        { "value": "15m", "label": "15 Minutes" },
+                        { "value": "1h", "label": "1 Hour" },
+                        { "value": "4h", "label": "4 Hours" },
+                        { "value": "12h", "label": "12 Hours" },
+                        { "value": "1d", "label": "1 Day" }
+                    ]
+                },
                 "pattern": {
                     "type": "enum",
                     "name": "Pattern Type",
