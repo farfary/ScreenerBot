@@ -1,8 +1,11 @@
-use axum::{extract::Query, routing::get, Json, Router};
+use axum::{extract::Query, http::StatusCode, routing::get, Json, Router};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::{events, webserver::state::AppState};
+use crate::{
+    events,
+    webserver::{state::AppState, utils::error_response},
+};
 
 fn default_limit() -> usize {
     100
@@ -87,10 +90,18 @@ async fn get_events_head(Query(params): Query<HeadQuery>) -> Json<EventsListResp
     let reference = params.reference.as_deref();
     let search = params.search.as_deref();
 
-    let db = crate::events::EVENTS_DB
-        .get()
-        .expect("events DB not initialized")
-        .clone();
+    let db = match crate::events::EVENTS_DB.get() {
+        Some(db) => db.clone(),
+        None => {
+            return Json(EventsListResponse {
+                events: vec![],
+                count: 0,
+                total_count: None,
+                max_id: 0,
+                timestamp: chrono::Utc::now().to_rfc3339(),
+            });
+        }
+    };
     let (events_vec, max_id) = db
         .get_events_head(limit, category, severity, mint, reference, search)
         .await
@@ -171,10 +182,18 @@ async fn get_events_since(Query(params): Query<SinceQuery>) -> Json<EventsListRe
     let search = params.search.as_deref();
     let after_id = params.after_id;
 
-    let db = crate::events::EVENTS_DB
-        .get()
-        .expect("events DB not initialized")
-        .clone();
+    let db = match crate::events::EVENTS_DB.get() {
+        Some(db) => db.clone(),
+        None => {
+            return Json(EventsListResponse {
+                events: vec![],
+                count: 0,
+                total_count: None,
+                max_id: 0,
+                timestamp: chrono::Utc::now().to_rfc3339(),
+            });
+        }
+    };
     let events_vec = db
         .get_events_since(after_id, limit, category, severity, mint, reference, search)
         .await
@@ -239,10 +258,18 @@ async fn get_events_before(Query(params): Query<BeforeQuery>) -> Json<EventsList
     let search = params.search.as_deref();
     let before_id = params.before_id;
 
-    let db = crate::events::EVENTS_DB
-        .get()
-        .expect("events DB not initialized")
-        .clone();
+    let db = match crate::events::EVENTS_DB.get() {
+        Some(db) => db.clone(),
+        None => {
+            return Json(EventsListResponse {
+                events: vec![],
+                count: 0,
+                total_count: None,
+                max_id: 0,
+                timestamp: chrono::Utc::now().to_rfc3339(),
+            });
+        }
+    };
     let events_vec = db
         .get_events_before(
             before_id, limit, category, severity, mint, reference, search,

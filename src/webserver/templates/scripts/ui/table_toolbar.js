@@ -58,9 +58,7 @@ function renderSummary(summaryItems = []) {
     .map((item) => {
       const id = item.id ? ` data-summary-id="${escapeHtml(item.id)}"` : "";
       const variant = item.variant ? ` data-variant="${escapeHtml(item.variant)}"` : "";
-      const icon = item.icon
-        ? `<span class="table-toolbar-chip__icon">${escapeHtml(item.icon)}</span>`
-        : "";
+      const icon = renderIconMarkup(item.icon, "table-toolbar-chip__icon");
       const label = item.label
         ? `<span class="table-toolbar-chip__label">${escapeHtml(item.label)}</span>`
         : "";
@@ -103,7 +101,7 @@ function renderButtons(buttons = []) {
       if (btn.classes) {
         classes.push(btn.classes);
       }
-      const icon = btn.icon ? `<span class="dt-btn-icon">${escapeHtml(btn.icon)}</span>` : "";
+      const icon = renderIconMarkup(btn.icon, "dt-btn-icon");
       const label = btn.label ? `<span class="dt-btn-label">${escapeHtml(btn.label)}</span>` : "";
       const tooltip = btn.tooltip ? btn.tooltip : btn.label;
       const titleAttr = tooltip ? ` title="${escapeHtml(tooltip)}"` : "";
@@ -112,6 +110,73 @@ function renderButtons(buttons = []) {
       return `<button class="${classNames(classes)}" type="button"${dataId}${titleAttr}${ariaLabel}>${icon}${label}</button>`;
     })
     .join("");
+}
+
+function sanitizeIconClassNames(value = "") {
+  return value
+    .split(/\s+/)
+    .filter((part) => part && /^[a-zA-Z0-9_-]+$/.test(part))
+    .join(" ");
+}
+
+function extractIconFromHtml(value = "") {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("<")) {
+    return "";
+  }
+  const match = trimmed.match(/class=["']([^"']+)["']/i);
+  if (!match) {
+    return "";
+  }
+  return sanitizeIconClassNames(match[1]);
+}
+
+function resolveIconClass(iconConfig) {
+  if (!iconConfig) {
+    return "";
+  }
+  if (typeof iconConfig === "string") {
+    const trimmed = iconConfig.trim();
+    if (!trimmed) {
+      return "";
+    }
+    if (trimmed.startsWith("<")) {
+      return extractIconFromHtml(trimmed);
+    }
+    return sanitizeIconClassNames(trimmed);
+  }
+  if (typeof iconConfig === "object") {
+    if (iconConfig.html) {
+      return extractIconFromHtml(iconConfig.html);
+    }
+    const candidate =
+      iconConfig.class || iconConfig.className || iconConfig.name || iconConfig.icon || "";
+    return sanitizeIconClassNames(candidate);
+  }
+  return "";
+}
+
+function renderIconMarkup(iconConfig, wrapperClass) {
+  if (!iconConfig || !wrapperClass) {
+    return "";
+  }
+  const classes = resolveIconClass(iconConfig);
+  if (!classes) {
+    if (typeof iconConfig === "string") {
+      const trimmed = iconConfig.trim();
+      return trimmed
+        ? `<span class="${wrapperClass}" aria-hidden="true">${escapeHtml(trimmed)}</span>`
+        : "";
+    }
+    if (typeof iconConfig === "object") {
+      const textVariant = iconConfig.text || iconConfig.label;
+      return textVariant
+        ? `<span class="${wrapperClass}" aria-hidden="true">${escapeHtml(textVariant)}</span>`
+        : "";
+    }
+    return "";
+  }
+  return `<span class="${wrapperClass}" aria-hidden="true"><i class="${escapeHtml(classes)}"></i></span>`;
 }
 
 function renderSearch(searchConfig = {}, state = {}) {
@@ -272,9 +337,7 @@ export class TableToolbarView {
 
   render(state = {}) {
     const titleConfig = this.config.title || {};
-    const titleIcon = titleConfig.icon
-      ? `<span class="table-toolbar-title__icon">${escapeHtml(titleConfig.icon)}</span>`
-      : "";
+    const titleIcon = renderIconMarkup(titleConfig.icon, "table-toolbar-title__icon");
     const titleText = titleConfig.text
       ? `<span class="table-toolbar-title__text">${escapeHtml(titleConfig.text)}</span>`
       : "";
@@ -302,9 +365,10 @@ export class TableToolbarView {
           <button class="dt-btn dt-btn-columns table-toolbar-btn table-toolbar-btn--icon" type="button" title="${escapeHtml(
             (this.config.settings && this.config.settings.tooltip) || "Table settings"
           )}" aria-label="Table settings">
-            <span class="dt-btn-icon">${escapeHtml(
-              (this.config.settings && this.config.settings.icon) || "icon-settings"
-            )}</span>
+            ${renderIconMarkup(
+              (this.config.settings && this.config.settings.icon) || "icon-settings",
+              "dt-btn-icon"
+            )}
           </button>
           <div class="dt-column-menu" style="display:none;"></div>
         </div>

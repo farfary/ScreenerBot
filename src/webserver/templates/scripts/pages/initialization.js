@@ -1,6 +1,8 @@
 import { registerPage } from "../core/lifecycle.js";
+import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";
 import { $, $$ } from "../core/dom.js";
+import { requestManager } from "../core/request_manager.js";
 
 // State management
 const state = {
@@ -71,7 +73,7 @@ function setStep(step) {
   // Update progress indicators
   $$("[data-step]").forEach((el) => {
     el.classList.remove("active", "completed");
-    const elStep = parseInt(el.dataset.step);
+    const elStep = parseInt(el.dataset.step, 10);
     if (elStep === step) {
       el.classList.add("active");
     } else if (elStep < step) {
@@ -82,7 +84,7 @@ function setStep(step) {
   // Update step content visibility
   $$(".init-step-content").forEach((el) => {
     el.classList.remove("active");
-    if (parseInt(el.dataset.step) === step) {
+    if (parseInt(el.dataset.step, 10) === step) {
       el.classList.add("active");
     }
   });
@@ -189,7 +191,7 @@ function setupToggle() {
   const toggleBtn = $('[data-toggle="wallet-private-key"]');
   if (!toggleBtn) return;
 
-  toggleBtn.addEventListener("click", () => {
+  const handler = () => {
     const input = $("#wallet-private-key");
     if (!input) return;
 
@@ -203,7 +205,9 @@ function setupToggle() {
       input.style.textSecurity = "none";
       icon.className = "toggle-icon icon-eye-off";
     }
-  });
+  };
+  
+  addTrackedListener(toggleBtn, "click", handler);
 
   // Initialize as hidden
   const input = $("#wallet-private-key");
@@ -236,21 +240,15 @@ async function validateCredentials() {
     throw new Error("At least one RPC URL is required");
   }
 
-  const response = await fetch("/api/initialization/validate", {
+  return await requestManager.fetch("/api/initialization/validate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       wallet_private_key: walletPrivateKey,
       rpc_urls: rpcUrls,
     }),
+    priority: "high",
   });
-
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || "Validation failed");
-  }
-
-  return await response.json();
 }
 
 async function completeInitialization() {
@@ -267,21 +265,17 @@ async function completeInitialization() {
     .map((u) => u.trim())
     .filter((u) => u);
 
-  const response = await fetch("/api/initialization/complete", {
+  const response = await requestManager.fetch("/api/initialization/complete", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       wallet_private_key: walletPrivateKey,
       rpc_urls: rpcUrls,
     }),
+    priority: "high",
   });
 
-  if (!response.ok) {
-    const error = await response.json();
-    throw new Error(error.error?.message || "Initialization failed");
-  }
-
-  return await response.json();
+  return response;
 }
 
 // Verification step
@@ -391,54 +385,60 @@ async function startServicesProgress() {
 
   // Clear existing poller if any
   if (servicesPoller) {
-    clearInterval(servicesPoller);
+    servicesPoller.stop();
+    servicesPoller.cleanup();
     servicesPoller = null;
   }
 
-  servicesPoller = setInterval(async () => {
-    try {
-      const response = await fetch("/api/services");
-      if (!response.ok) {
-        return;
-      }
-
-      const result = await response.json();
-      if (result.services && Array.isArray(result.services)) {
-        // Update total services count from first response
-        if (totalServices === 20) {
-          totalServices = result.services.length;
-        }
-
-        const runningServices = result.services.filter(
-          (s) => s.health?.status === "healthy"
-        ).length;
-        servicesStarted = runningServices;
-
-        const progress = (servicesStarted / totalServices) * 100;
-        if (progressFill) {
-          progressFill.style.width = `${progress}%`;
-        }
-        if (progressText) {
-          progressText.textContent = `Initializing services (${servicesStarted}/${totalServices})...`;
-        }
-
-        // If all services are running, redirect to dashboard
-        if (servicesStarted >= totalServices - 1) {
-          // Allow for 1 service to still be starting
-          clearInterval(servicesPoller);
-          servicesPoller = null;
-          if (progressText) {
-            progressText.textContent = "Complete! Redirecting to dashboard...";
+  // Use managed Poller instead of raw setInterval
+  servicesPoller = new Poller(
+    async () => {
+      try {
+        const result = await requestManager.fetch("/api/services", {
+          priority: "normal",
+        });
+        if (result.services && Array.isArray(result.services)) {
+          // Update total services count from first response
+          if (totalServices === 20) {
+            totalServices = result.services.length;
           }
-          setTimeout(() => {
-            window.location.href = "/services";
-          }, 1500);
+
+          const runningServices = result.services.filter(
+            (s) => s.health?.status === "healthy"
+          ).length;
+          servicesStarted = runningServices;
+
+          const progress = (servicesStarted / totalServices) * 100;
+          if (progressFill) {
+            progressFill.style.width = `${progress}%`;
+          }
+          if (progressText) {
+            progressText.textContent = `Initializing services (${servicesStarted}/${totalServices})...`;
+          }
+
+          // If all services are running, redirect to dashboard
+          if (servicesStarted >= totalServices - 1) {
+            // Allow for 1 service to still be starting
+            servicesPoller.stop();
+            servicesPoller.cleanup();
+            servicesPoller = null;
+            if (progressText) {
+              progressText.textContent = "Complete! Redirecting to dashboard...";
+            }
+            setTimeout(() => {
+              window.location.href = "/services";
+            }, 1500);
+          }
         }
+      } catch (error) {
+        console.error("Error polling services:", error);
+        // Stop polling on persistent errors to prevent runaway requests
       }
-    } catch (error) {
-      console.error("Error polling services:", error);
-    }
-  }, 1000);
+    },
+    { label: "ServicesInit", interval: 1000 }
+  );
+
+  servicesPoller.start();
 }
 
 // Error handling
@@ -580,9 +580,10 @@ function createLifecycle() {
       // Clean up all tracked event listeners
       removeAllListeners();
 
-      // Clear services poller
+      // Clean up services poller
       if (servicesPoller) {
-        clearInterval(servicesPoller);
+        servicesPoller.stop();
+        servicesPoller.cleanup();
         servicesPoller = null;
       }
     },

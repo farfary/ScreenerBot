@@ -2,6 +2,14 @@
 
 .trader-page {
   padding: 0;
+
+  --trader-max-width: 1280px;
+  --trader-horizontal-padding: clamp(1rem, 2vw, 2.25rem);
+  --trader-vertical-gap: clamp(1rem, 2vw, 1.75rem);
+  --trader-card-radius: 14px;
+  --trader-card-padding: clamp(1rem, 1.8vw, 1.6rem);
+  --trader-card-border: var(--border-color);
+  --trader-card-shadow: 0 10px 26px var(--shadow-lg);
 }
 
 #trader-root {
@@ -11,15 +19,26 @@
 }
 
 #trader-content {
-  padding: 0.75rem;
+  padding: var(--trader-vertical-gap) var(--trader-horizontal-padding)
+    calc(var(--trader-vertical-gap) * 2);
   overflow-y: auto;
 }
 
 .trader-tab-content {
-  animation: fadeIn 0.2s ease-in;
+  animation: trader-tab-fade 0.2s ease-in;
+  width: 100%;
 }
 
-@keyframes fadeIn {
+.trader-tab-content > * {
+  width: min(100%, var(--trader-max-width));
+  margin: 0 auto;
+}
+
+.trader-tab-content > * + * {
+  margin-top: var(--trader-vertical-gap);
+}
+
+@keyframes trader-tab-fade {
   from {
     opacity: 0;
   }
@@ -37,7 +56,7 @@
 .stats-grid {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: var(--trader-vertical-gap);
 }
 
 /* ============================================================================
@@ -49,12 +68,12 @@
   background: var(--card-bg);
   border-radius: 6px;
   padding: 0.875rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.1);
   transition: box-shadow 0.2s ease;
 }
 
 .card-base:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.1);
 }
 
 /* ============================================================================
@@ -63,14 +82,16 @@
 
 .stats-section {
   background: var(--card-bg);
-  border-radius: 6px;
-  padding: 0.875rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  transition: box-shadow 0.2s ease;
+  border-radius: var(--trader-card-radius);
+  padding: var(--trader-card-padding);
+  border: 1px solid var(--trader-card-border);
+  box-shadow: var(--trader-card-shadow);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .stats-section:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+  box-shadow: 0 14px 34px var(--shadow-lg);
 }
 
 .stats-section-primary {
@@ -161,14 +182,14 @@
   padding: 0.25rem 0;
 }
 
-@media (max-width: 1400px) {
+@media (width <= 1400px) {
   .config-overview-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 1.25rem;
   }
 }
 
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .config-overview-grid {
     grid-template-columns: 1fr;
     gap: 1rem;
@@ -268,13 +289,13 @@
   gap: 0.625rem;
 }
 
-@media (max-width: 1400px) {
+@media (width <= 1400px) {
   .metrics-grid {
     grid-template-columns: repeat(2, 1fr);
   }
 }
 
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .metrics-grid {
     grid-template-columns: 1fr;
   }
@@ -325,7 +346,7 @@
 
 .metric-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.08);
   border-color: var(--primary-alpha-30);
 }
 
@@ -530,10 +551,12 @@
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
 }
+
 
 /* Positions Summary */
 .positions-summary {
@@ -556,7 +579,7 @@
 
 .position-summary-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.08);
   border-color: var(--primary-alpha-30);
 }
 
@@ -628,7 +651,7 @@
 
 .health-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.08);
 }
 
 .health-icon {
@@ -735,15 +758,16 @@
 /* Unified Section Base Class - replaces stats-section, config-section, form-section */
 .config-section {
   background: var(--card-bg);
-  border-radius: 6px;
-  padding: 0.875rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  transition: box-shadow 0.2s ease;
-  margin-bottom: 0.75rem;
+  border-radius: var(--trader-card-radius);
+  padding: var(--trader-card-padding);
+  border: 1px solid var(--trader-card-border);
+  box-shadow: var(--trader-card-shadow);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .config-section:hover {
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+  box-shadow: 0 14px 34px var(--shadow-lg);
 }
 
 .config-section.disabled {
@@ -753,30 +777,35 @@
 
 /* Unified Card Container */
 .config-card {
-  background: var(--card-bg);
-  border-radius: 6px;
-  padding: 0.875rem;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+  background: var(--background-secondary);
+  border-radius: calc(var(--trader-card-radius) - 4px);
+  padding: clamp(1rem, 1.5vw, 1.25rem);
+  border: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 /* Unified Config Group */
 .config-group {
-  margin-bottom: 0.75rem;
   padding-bottom: 0.75rem;
   border-bottom: 1px solid var(--border-color);
 }
 
+.config-group + .config-group {
+  padding-top: 0.75rem;
+}
+
 .config-group:last-child {
-  margin-bottom: 0;
-  padding-bottom: 0;
   border-bottom: none;
+  padding-bottom: 0;
 }
 
 .config-group-primary {
   background: linear-gradient(135deg, var(--primary-alpha-5) 0%, transparent 100%);
-  border-radius: 6px;
-  padding: 0.875rem;
-  margin-bottom: 0.75rem;
+  border-radius: calc(var(--trader-card-radius) - 6px);
+  padding: clamp(0.875rem, 1.4vw, 1.25rem);
+  border: 1px solid var(--primary-alpha-20);
 }
 
 /* Toggle Switch Component */
@@ -827,17 +856,14 @@
 .toggle-slider {
   position: absolute;
   cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   background: var(--background-secondary);
   transition: 0.3s;
   border-radius: 28px;
   border: 2px solid var(--border-color);
 }
 
-.toggle-slider:before {
+.toggle-slider::before {
   position: absolute;
   content: "";
   height: 16px;
@@ -847,7 +873,7 @@
   background: white;
   transition: 0.3s;
   border-radius: 50%;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.2);
 }
 
 .toggle-switch input:checked + .toggle-slider {
@@ -855,7 +881,7 @@
   border-color: var(--primary);
 }
 
-.toggle-switch input:checked + .toggle-slider:before {
+.toggle-switch input:checked + .toggle-slider::before {
   transform: translateX(20px);
 }
 
@@ -1045,7 +1071,7 @@
   align-items: center;
   justify-content: center;
   font-size: 12px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 6px rgb(0, 0, 0, 0.1);
   transition: all 0.3s ease;
 }
 
@@ -1220,7 +1246,7 @@
   background: var(--card-bg);
   border-radius: 12px;
   padding: 1.5rem;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 8px rgb(0, 0, 0, 0.1);
 }
 
 .stats-section-compact h4 {
@@ -1250,7 +1276,7 @@
 
 .quick-stat-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.08);
   border-color: var(--primary-alpha-30);
 }
 
@@ -1474,20 +1500,23 @@
 /* Form Actions */
 .form-actions {
   display: flex;
-  gap: 0.5rem;
-  margin-top: 1rem;
-  padding-top: 1rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
   border-top: 1px solid var(--border-color);
 }
 
 .form-actions .btn {
-  padding: 0.5rem 1rem;
-  border-radius: 0.375rem;
-  font-size: 0.75rem;
+  padding: 0.6rem 1.25rem;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
   border: none;
   transition: all 0.2s;
+  min-width: 160px;
 }
 
 .form-actions .btn.primary {
@@ -1526,15 +1555,6 @@
   background: var(--bg-secondary);
   border-radius: 0.375rem;
   font-size: 0.875rem;
-}
-
-/* ============================================================================
-   Strategy Control Tab Components
-   ============================================================================ */
-
-/* Strategies List */
-.strategies-list {
-  min-height: 100px;
 }
 
 .strategies-grid {
@@ -1628,6 +1648,12 @@
    ============================================================================ */
 
 @media (width <= 768px) {
+  .trader-page {
+    --trader-horizontal-padding: 1rem;
+    --trader-vertical-gap: 1.1rem;
+    --trader-card-padding: 1rem;
+  }
+
   .metrics-grid {
     grid-template-columns: 1fr;
   }
@@ -1660,11 +1686,12 @@
   }
 
   .form-actions {
-    flex-direction: column;
+    justify-content: stretch;
   }
 
   .form-actions .btn {
     width: 100%;
+    min-width: 0;
   }
 
   .strategies-grid {

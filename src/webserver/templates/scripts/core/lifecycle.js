@@ -1,6 +1,8 @@
 // Page Lifecycle Registry - centralized init/activate/deactivate/dispose flows
 const lifecycles = new Map();
 const contexts = new Map();
+let visibilityHandlerAdded = false;
+const activePollers = new Set();
 
 const noop = () => {};
 
@@ -48,12 +50,17 @@ const createContext = (pageName) => {
       if (!poller || typeof poller !== "object") {
         return poller;
       }
+
+      // Track poller globally for visibility handling
+      activePollers.add(poller);
+
       this.onDeactivate(() => {
         if (typeof poller.stop === "function") {
           poller.stop({ silent: true });
         }
       });
       this.onDispose(() => {
+        activePollers.delete(poller);
         if (typeof poller.cleanup === "function") {
           poller.cleanup();
         }
@@ -112,6 +119,41 @@ const createContext = (pageName) => {
 
   return context;
 };
+
+// Setup global visibility change handler for all pollers
+const setupVisibilityHandler = () => {
+  if (visibilityHandlerAdded) {
+    return;
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      // Pause all active pollers when tab hidden
+      activePollers.forEach((poller) => {
+        if (poller.isActive && poller.isActive() && typeof poller.pause === "function") {
+          poller.pause();
+        }
+      });
+    } else {
+      // Resume all active pollers when tab visible
+      activePollers.forEach((poller) => {
+        if (poller.isActive && poller.isActive() && typeof poller.resume === "function") {
+          poller.resume();
+        }
+      });
+    }
+  });
+
+  visibilityHandlerAdded = true;
+  console.log("[PageLifecycle] Global visibility handler initialized");
+};
+
+// Initialize visibility handler immediately
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", setupVisibilityHandler);
+} else {
+  setupVisibilityHandler();
+}
 
 const getLifecycle = (pageName) => {
   const lifecycle = lifecycles.get(pageName);

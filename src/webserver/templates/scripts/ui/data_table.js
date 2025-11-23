@@ -3066,12 +3066,6 @@ export class DataTable {
       return;
     }
 
-    console.log("[DataTable] applySettings called with:", settings);
-    console.log("[DataTable] Current state before:", {
-      columnOrder: [...this.state.columnOrder],
-      visibleColumns: { ...this.state.visibleColumns },
-    });
-
     let hasChanges = false;
 
     // Validate and apply column order
@@ -3081,16 +3075,8 @@ export class DataTable {
       const validOrder = settings.columnOrder.filter((colId) => validColumnIds.has(colId));
 
       if (validOrder.length > 0 && !this._arraysEqual(validOrder, this.state.columnOrder)) {
-        console.log(
-          "[DataTable] Updating column order from",
-          this.state.columnOrder,
-          "to",
-          validOrder
-        );
         this.state.columnOrder = validOrder;
         hasChanges = true;
-      } else {
-        console.log("[DataTable] Column order unchanged or invalid");
       }
     }
 
@@ -3103,9 +3089,6 @@ export class DataTable {
         if (validColumnIds.has(colId)) {
           const newVisibility = settings.visibleColumns[colId];
           if (this.state.visibleColumns[colId] !== newVisibility) {
-            console.log(
-              `[DataTable] Updating visibility for ${colId}: ${this.state.visibleColumns[colId]} -> ${newVisibility}`
-            );
             this.state.visibleColumns[colId] = newVisibility;
             hasChanges = true;
           }
@@ -3114,15 +3097,12 @@ export class DataTable {
     }
 
     if (hasChanges) {
-      console.log("[DataTable] Changes detected, saving state and re-rendering");
       this._saveState();
       this._renderTable();
       this._log("info", "Table settings applied", {
         columnOrder: this.state.columnOrder,
         visibleColumns: this.state.visibleColumns,
       });
-    } else {
-      console.log("[DataTable] No changes detected, skipping re-render");
     }
   }
 
@@ -3426,6 +3406,11 @@ export class DataTable {
       clearTimeout(this.scrollThrottle);
       this.scrollThrottle = null;
     }
+
+    // Clear data arrays to release memory
+    this.state.data = [];
+    this.state.filteredData = [];
+    this.state.selectedRows.clear();
 
     // Clear container
     if (this.elements.container) {

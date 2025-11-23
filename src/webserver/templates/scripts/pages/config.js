@@ -3,6 +3,7 @@ import { $, on, off, create, show, hide } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
+import { requestManager } from "../core/request_manager.js";
 
 const CONFIG_STATE_KEY = "config.page";
 const DEFAULT_SECTION = "trader";
@@ -1258,15 +1259,12 @@ async function handleSaveAll() {
     }
 
     for (const [sectionId, payload] of Object.entries(updates)) {
-      const response = await fetch(`/api/config/${sectionId}`, {
+      await requestManager.fetch(`/api/config/${sectionId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
+        priority: "high",
       });
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Failed to save ${sectionId}: ${errorText}`);
-      }
     }
 
     Utils.showToast({
@@ -1293,10 +1291,10 @@ async function handleReload() {
   }
   setState({ loading: true });
   try {
-    const response = await fetch("/api/config/reload", { method: "POST" });
-    if (!response.ok) {
-      throw new Error(`Reload failed: HTTP ${response.status}`);
-    }
+    await requestManager.fetch("/api/config/reload", {
+      method: "POST",
+      priority: "high",
+    });
     Utils.showToast({
       type: "success",
       title: "Configuration Reloaded",
@@ -1317,11 +1315,9 @@ async function handleReload() {
 
 async function handleDiff() {
   try {
-    const response = await fetch("/api/config/diff");
-    if (!response.ok) {
-      throw new Error(`Diff failed: HTTP ${response.status}`);
-    }
-    const payload = await response.json();
+    const payload = await requestManager.fetch("/api/config/diff", {
+      priority: "normal",
+    });
     const message = payload?.message ?? payload?.error?.message;
     Utils.showToast({
       type: "info",
@@ -1353,10 +1349,10 @@ async function handleResetToDefaults() {
     return;
   }
   try {
-    const response = await fetch("/api/config/reset", { method: "POST" });
-    if (!response.ok) {
-      throw new Error(`Reset failed: HTTP ${response.status}`);
-    }
+    await requestManager.fetch("/api/config/reset", {
+      method: "POST",
+      priority: "high",
+    });
     Utils.showToast({
       type: "warning",
       title: "Configuration Reset",
@@ -1374,11 +1370,9 @@ async function handleResetToDefaults() {
 }
 
 async function loadMetadata() {
-  const response = await fetch("/api/config/metadata");
-  if (!response.ok) {
-    throw new Error(`Metadata fetch failed: HTTP ${response.status}`);
-  }
-  const payload = await response.json();
+  const payload = await requestManager.fetch("/api/config/metadata", {
+    priority: "normal",
+  });
   state.metadata = transformMetadata(payload?.data ?? {});
   ensureActiveSectionValid();
 }
@@ -1386,11 +1380,9 @@ async function loadMetadata() {
 async function loadConfig() {
   try {
     setState({ loading: true });
-    const response = await fetch("/api/config");
-    if (!response.ok) {
-      throw new Error(`Config fetch failed: HTTP ${response.status}`);
-    }
-    const payload = await response.json();
+    const payload = await requestManager.fetch("/api/config", {
+      priority: "normal",
+    });
 
     const configData = { ...payload };
     delete configData.timestamp;

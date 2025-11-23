@@ -1,6 +1,9 @@
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
+import { requestManager } from "../core/request_manager.js";
+import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
+import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
 import { TabBar } from "../ui/tab_bar.js";
 import { TradeActionDialog } from "../ui/trade_action_dialog.js";
@@ -30,6 +33,9 @@ function createLifecycle() {
   let balanceChart = null;
   let flowsChart = null;
 
+  // Event cleanup tracking
+  const eventCleanups = [];
+
   const state = {
     view: "overview",
     window: 24,
@@ -41,6 +47,15 @@ function createLifecycle() {
   // ============================================================================
   // UTILITY FUNCTIONS
   // ============================================================================
+
+  /**
+   * Add tracked event listener for cleanup
+   */
+  function addTrackedListener(element, event, handler) {
+    if (!element) return;
+    element.addEventListener(event, handler);
+    eventCleanups.push(() => element.removeEventListener(event, handler));
+  }
 
   const formatSol = (v) => Utils.formatSol(v, { decimals: 4, fallback: "—" });
   const formatPercent = (v) => Utils.formatPercent(v, { style: "pnl", decimals: 2, fallback: "—" });
@@ -70,9 +85,9 @@ function createLifecycle() {
 
   async function fetchCurrentSnapshot() {
     try {
-      const response = await fetch("/api/wallet/current");
-      if (!response.ok) return null;
-      const data = await response.json();
+      const data = await requestManager.fetch("/api/wallet/current", {
+        priority: "normal",
+      });
       state.currentSnapshot = data;
       return data;
     } catch (error) {
@@ -83,7 +98,7 @@ function createLifecycle() {
 
   async function fetchDashboardData(windowHours = 24) {
     try {
-      const response = await fetch("/api/wallet/dashboard", {
+      const result = await requestManager.fetch("/api/wallet/dashboard", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -91,10 +106,9 @@ function createLifecycle() {
           snapshotLimit: 600,
           maxTokens: 250,
         }),
+        priority: "normal",
       });
 
-      if (!response.ok) return null;
-      const result = await response.json();
       if (result.error) {
         console.error("[Wallet] Dashboard error:", result.error);
         return null;
@@ -111,14 +125,13 @@ function createLifecycle() {
 
   async function refreshDashboardCache(windowHours = 24) {
     try {
-      const response = await fetch("/api/wallet/dashboard/refresh", {
+      const result = await requestManager.fetch("/api/wallet/dashboard/refresh", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ windowHours }),
+        priority: "high",
       });
 
-      if (!response.ok) return null;
-      const result = await response.json();
       return result.data;
     } catch (error) {
       console.error("[Wallet] Failed to refresh cache:", error);
@@ -192,7 +205,7 @@ function createLifecycle() {
 
     // Attach event listeners
     container.querySelectorAll(".window-btn").forEach((btn) => {
-      btn.addEventListener("click", async () => {
+      addTrackedListener(btn, "click", async () => {
         const newWindow = parseInt(btn.dataset.window, 10);
         if (newWindow === state.window) return;
 
@@ -206,12 +219,12 @@ function createLifecycle() {
 
     const exportBtn = container.querySelector("#exportBalanceBtn");
     if (exportBtn) {
-      exportBtn.addEventListener("click", () => exportBalanceTrend(balance_trend));
+      addTrackedListener(exportBtn, "click", () => exportBalanceTrend(balance_trend));
     }
 
     const refreshBtn = container.querySelector("#refreshCacheBtn");
     if (refreshBtn) {
-      refreshBtn.addEventListener("click", async () => {
+      addTrackedListener(refreshBtn, "click", async () => {
         refreshBtn.disabled = true;
         refreshBtn.innerHTML = '<i class="icon-loader"></i> Refreshing...';
         await refreshDashboardCache(state.window);
@@ -347,7 +360,7 @@ function createLifecycle() {
 
     // Attach event listeners
     container.querySelectorAll(".window-btn").forEach((btn) => {
-      btn.addEventListener("click", async () => {
+      addTrackedListener(btn, "click", async () => {
         const newWindow = parseInt(btn.dataset.window, 10);
         if (newWindow === state.window) return;
 
@@ -361,7 +374,7 @@ function createLifecycle() {
 
     const exportBtn = container.querySelector("#exportFlowsBtn");
     if (exportBtn) {
-      exportBtn.addEventListener("click", () => exportDailyFlows(daily_flows));
+      addTrackedListener(exportBtn, "click", () => exportDailyFlows(daily_flows));
     }
 
     // Render chart
@@ -471,7 +484,7 @@ function createLifecycle() {
 
     const exportBtn = container.querySelector("#exportHoldingsBtn");
     if (exportBtn) {
-      exportBtn.addEventListener("click", () => exportHoldings(tokens));
+      addTrackedListener(exportBtn, "click", () => exportHoldings(tokens));
     }
 
     // Render table
@@ -639,7 +652,7 @@ function createLifecycle() {
 
     const exportBtn = container.querySelector("#exportHistoryBtn");
     if (exportBtn) {
-      exportBtn.addEventListener("click", () => exportHistory());
+      addTrackedListener(exportBtn, "click", () => exportHistory());
     }
 
     // Fetch and render history
@@ -858,6 +871,10 @@ function createLifecycle() {
 
     dispose() {
       console.log("[Wallet] Disposing...");
+
+      // Clean up all tracked event listeners
+      eventCleanups.forEach((cleanup) => cleanup());
+      eventCleanups.length = 0;
 
       // Cleanup charts
       if (balanceChart) {

@@ -149,7 +149,7 @@ impl RaydiumCpmmDecoder {
                     LogTag::PoolDecoder,
                     &format!(
                         "No decimals found for CPMM token_0: {}, skipping pool calculation",
-                        token_0_mint.chars().take(8).collect::<String>()
+                        token_0_mint
                     ),
                 );
                 return None;
@@ -163,7 +163,7 @@ impl RaydiumCpmmDecoder {
                     LogTag::PoolDecoder,
                     &format!(
                         "No decimals found for CPMM token_1: {}, skipping pool calculation",
-                        token_1_mint.chars().take(8).collect::<String>()
+                        token_1_mint
                     ),
                 );
                 return None;
@@ -174,10 +174,10 @@ impl RaydiumCpmmDecoder {
             LogTag::PoolDecoder,
             &format!(
                 "Decimal Analysis:\n\n                     Token0 {} decimals: {} (cached) vs {} (pool)\n\n                     Token1 {} decimals: {} (cached) vs {} (pool)",
-                token_0_mint.chars().take(8).collect::<String>(),
+                token_0_mint,
                 mint_0_decimals,
                 pool_mint_0_decimals,
-                token_1_mint.chars().take(8).collect::<String>(),
+                token_1_mint,
                 mint_1_decimals,
                 pool_mint_1_decimals
             ),

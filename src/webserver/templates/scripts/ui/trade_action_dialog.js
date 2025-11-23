@@ -146,6 +146,12 @@ export class TradeActionDialog {
       throw new Error(`Invalid action: ${action}`);
     }
 
+    // Guard against multiple simultaneous opens
+    if (this._isOpen) {
+      console.warn("[TradeActionDialog] Dialog already open, ignoring duplicate request");
+      return null;
+    }
+
     this._ensureElements();
 
     this._previousActiveElement =

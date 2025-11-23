@@ -1,6 +1,7 @@
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";
+import { requestManager } from "../core/request_manager.js";
 
 function createLifecycle() {
   let poller = null;
@@ -8,6 +9,20 @@ function createLifecycle() {
   let cpuChart = null;
   let currentPeriod = "today";
   let cachedData = null;
+
+  // Event cleanup tracking
+  const eventCleanups = [];
+  // Animation intervals tracking
+  const animationIntervals = [];
+
+  /**
+   * Add tracked event listener for cleanup
+   */
+  function addTrackedListener(element, event, handler) {
+    if (!element) return;
+    element.addEventListener(event, handler);
+    eventCleanups.push(() => element.removeEventListener(event, handler));
+  }
 
   // Initialize Chart.js instances
   function initCharts() {
@@ -89,12 +104,9 @@ function createLifecycle() {
   // Fetch dashboard data
   async function fetchData() {
     try {
-      const response = await fetch("/api/dashboard/home");
-      if (!response.ok) {
-        console.error("Failed to fetch dashboard data:", response.status);
-        return;
-      }
-      const data = await response.json();
+      const data = await requestManager.fetch("/api/dashboard/home", {
+        priority: "normal",
+      });
       cachedData = data;
       updateUI(data);
     } catch (error) {
@@ -342,17 +354,21 @@ function createLifecycle() {
       if (step >= steps) {
         element.textContent = targetValue;
         clearInterval(interval);
+        const idx = animationIntervals.indexOf(interval);
+        if (idx !== -1) animationIntervals.splice(idx, 1);
       } else {
         element.textContent = Math.round(current);
       }
     }, stepDuration);
+
+    animationIntervals.push(interval);
   }
 
   // Handle period tab clicks
   function setupPeriodTabs() {
     const tabs = document.querySelectorAll(".period-tab");
     tabs.forEach((tab) => {
-      tab.addEventListener("click", () => {
+      addTrackedListener(tab, "click", () => {
         tabs.forEach((t) => t.classList.remove("active"));
         tab.classList.add("active");
         currentPeriod = tab.dataset.period;
@@ -369,6 +385,19 @@ function createLifecycle() {
       console.log("[Home] Initializing dashboard");
       setupPeriodTabs();
       initCharts();
+
+      // Chart update interval - managed by lifecycle context
+      const chartUpdatePoller = ctx.managePoller(
+        new Poller(
+          () => {
+            if (memoryChart) memoryChart.update();
+            if (cpuChart) cpuChart.update();
+          },
+          { label: "ChartUpdate", interval: 1000 }
+        )
+      );
+      chartUpdatePoller.start();
+
       fetchData();
     },
 
@@ -393,6 +422,15 @@ function createLifecycle() {
 
     dispose: () => {
       console.log("[Home] Disposing dashboard");
+
+      // Clean up all tracked event listeners
+      eventCleanups.forEach((cleanup) => cleanup());
+      eventCleanups.length = 0;
+
+      // Clear all animation intervals
+      animationIntervals.forEach((interval) => clearInterval(interval));
+      animationIntervals.length = 0;
+
       if (memoryChart) {
         memoryChart.destroy();
         memoryChart = null;

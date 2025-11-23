@@ -1,8 +1,11 @@
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
+import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
+import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
 import { EventDetailsDialog } from "../ui/events_dialog.js";
+import { requestManager } from "../core/request_manager.js";
 
 const DEFAULT_FILTERS = {
   category: "all",
@@ -137,15 +140,11 @@ function createLifecycle() {
     );
 
     const fetchJson = async (url) => {
-      const response = await fetch(url, {
+      return await requestManager.fetch(url, {
         headers: { "X-Requested-With": "fetch" },
         cache: "no-store",
-        signal,
+        priority: "normal",
       });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-      return response.json();
     };
 
     const normaliseEvents = (events, order = "desc", dedupeExisting = true) => {

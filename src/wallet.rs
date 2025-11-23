@@ -1784,6 +1784,29 @@ impl WalletDatabase {
         Ok(snapshot_id)
     }
 
+    /// Get SOL balance at or before a specific time (optimized for single value)
+    /// Uses idx_wallet_snapshots_time index for fast descending time lookup
+    pub fn get_balance_at_time_sync(&self, target_time: DateTime<Utc>) -> Result<Option<f64>, String> {
+        let conn = self.get_connection()?;
+
+        let result = conn
+            .query_row(
+                r#"
+            SELECT sol_balance 
+            FROM wallet_snapshots 
+            WHERE datetime(snapshot_time) <= datetime(?1)
+            ORDER BY snapshot_time DESC 
+            LIMIT 1
+            "#,
+                params![target_time.to_rfc3339()],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| format!("Failed to query balance at time: {}", e))?;
+
+        Ok(result)
+    }
+
     /// Get recent wallet snapshots (synchronous version)
     pub fn get_recent_snapshots_sync(&self, limit: usize) -> Result<Vec<WalletSnapshot>, String> {
         let conn = self.get_connection()?;
@@ -2467,6 +2490,15 @@ pub async fn get_snapshot_token_balances(snapshot_id: i64) -> Result<Vec<TokenBa
 pub async fn get_current_wallet_status() -> Result<Option<WalletSnapshot>, String> {
     let snapshots = get_recent_wallet_snapshots(1).await?;
     Ok(snapshots.into_iter().next())
+}
+
+/// Get SOL balance at or before a specific time (optimized single-value query)
+pub async fn get_balance_at_time(target_time: DateTime<Utc>) -> Result<Option<f64>, String> {
+    let db_guard = GLOBAL_WALLET_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.get_balance_at_time_sync(target_time),
+        None => Err("Wallet database not initialized".to_string()),
+    }
 }
 
 /// Public accessor for flow cache stats

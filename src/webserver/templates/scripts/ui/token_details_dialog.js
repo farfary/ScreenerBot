@@ -4,6 +4,7 @@
  */
 /* global LightweightCharts, ResizeObserver */
 import * as Utils from "../core/utils.js";
+import { Poller } from "../core/poller.js";
 
 export class TokenDetailsDialog {
   constructor(options = {}) {
@@ -12,8 +13,8 @@ export class TokenDetailsDialog {
     this.currentTab = "overview";
     this.tokenData = null;
     this.tabHandlers = new Map();
-    this.refreshInterval = null;
-    this.chartPollInterval = null;
+    this.refreshPoller = null; // Changed from refreshInterval
+    this.chartPoller = null; // Changed from chartPollInterval
     this.isRefreshing = false;
     this.currentTimeframe = "5m"; // Track current chart timeframe
     this.isOpening = false; // Guard against multiple simultaneous opens
@@ -167,22 +168,28 @@ export class TokenDetailsDialog {
    * Start polling for token data updates
    */
   _startPolling() {
-    // Clear any existing interval
+    // Clear any existing poller
     this._stopPolling();
 
-    // Poll every 1 second
-    this.refreshInterval = setInterval(() => {
-      this._fetchTokenData();
-    }, 1000);
+    // Create managed Poller (polls every 1 second)
+    this.refreshPoller = new Poller(
+      () => {
+        this._fetchTokenData();
+      },
+      { label: "TokenRefresh", interval: 1000 }
+    );
+
+    this.refreshPoller.start();
   }
 
   /**
    * Stop polling for token data updates
    */
   _stopPolling() {
-    if (this.refreshInterval) {
-      clearInterval(this.refreshInterval);
-      this.refreshInterval = null;
+    if (this.refreshPoller) {
+      this.refreshPoller.stop();
+      this.refreshPoller.cleanup();
+      this.refreshPoller = null;
     }
   }
 
@@ -190,22 +197,28 @@ export class TokenDetailsDialog {
    * Start polling for chart data updates (every 5 seconds)
    */
   _startChartPolling() {
-    // Clear any existing interval
+    // Clear any existing poller
     this._stopChartPolling();
 
-    // Poll every 5 seconds for new candles
-    this.chartPollInterval = setInterval(() => {
-      this._refreshChartData();
-    }, 5000);
+    // Create managed Poller (polls every 5 seconds for new candles)
+    this.chartPoller = new Poller(
+      () => {
+        this._refreshChartData();
+      },
+      { label: "ChartRefresh", interval: 5000 }
+    );
+
+    this.chartPoller.start();
   }
 
   /**
    * Stop polling for chart data updates
    */
   _stopChartPolling() {
-    if (this.chartPollInterval) {
-      clearInterval(this.chartPollInterval);
-      this.chartPollInterval = null;
+    if (this.chartPoller) {
+      this.chartPoller.stop();
+      this.chartPoller.cleanup();
+      this.chartPoller = null;
     }
   }
 
@@ -279,10 +292,35 @@ export class TokenDetailsDialog {
 
     // Clean up after animation
     setTimeout(() => {
-      // Remove event listeners
+      // Remove all event listeners
       if (this._escapeHandler) {
         document.removeEventListener("keydown", this._escapeHandler);
         this._escapeHandler = null;
+      }
+
+      if (this.dialogEl) {
+        if (this._closeHandler) {
+          const closeBtn = this.dialogEl.querySelector(".dialog-close");
+          if (closeBtn) {
+            closeBtn.removeEventListener("click", this._closeHandler);
+          }
+          this._closeHandler = null;
+        }
+
+        if (this._backdropHandler) {
+          const backdrop = this.dialogEl.querySelector(".dialog-backdrop");
+          if (backdrop) {
+            backdrop.removeEventListener("click", this._backdropHandler);
+          }
+          this._backdropHandler = null;
+        }
+
+        if (this._tabHandlers) {
+          this._tabHandlers.forEach(({ element, handler }) => {
+            element.removeEventListener("click", handler);
+          });
+          this._tabHandlers = null;
+        }
       }
 
       // Clean up chart
@@ -442,11 +480,13 @@ export class TokenDetailsDialog {
   _attachEventHandlers() {
     // Close button
     const closeBtn = this.dialogEl.querySelector(".dialog-close");
-    closeBtn.addEventListener("click", () => this.close());
+    this._closeHandler = () => this.close();
+    closeBtn.addEventListener("click", this._closeHandler);
 
     // Backdrop click
     const backdrop = this.dialogEl.querySelector(".dialog-backdrop");
-    backdrop.addEventListener("click", () => this.close());
+    this._backdropHandler = () => this.close();
+    backdrop.addEventListener("click", this._backdropHandler);
 
     // ESC key
     this._escapeHandler = (e) => {
@@ -458,11 +498,14 @@ export class TokenDetailsDialog {
 
     // Tab buttons
     const tabButtons = this.dialogEl.querySelectorAll(".tab-button");
+    this._tabHandlers = [];
     tabButtons.forEach((btn) => {
-      btn.addEventListener("click", () => {
+      const handler = () => {
         const tabId = btn.dataset.tab;
         this._switchTab(tabId);
-      });
+      };
+      btn.addEventListener("click", handler);
+      this._tabHandlers.push({ element: btn, handler });
     });
   }
 
@@ -621,9 +664,12 @@ export class TokenDetailsDialog {
     // Status flags
     const badges = [];
     if (token.verified) badges.push('<span class="badge-success">✓ Verified</span>');
-    if (token.has_open_position) badges.push('<span class="badge-info"><i class="icon-bar-chart-2"></i> Position Open</span>');
-    if (token.blacklisted) badges.push('<span class="badge-danger"><i class="icon-ban"></i> Blacklisted</span>');
-    if (token.has_ohlcv) badges.push('<span class="badge-success"><i class="icon-trending-up"></i> Chart Data</span>');
+    if (token.has_open_position)
+      badges.push('<span class="badge-info"><i class="icon-bar-chart-2"></i> Position Open</span>');
+    if (token.blacklisted)
+      badges.push('<span class="badge-danger"><i class="icon-ban"></i> Blacklisted</span>');
+    if (token.has_ohlcv)
+      badges.push('<span class="badge-success"><i class="icon-trending-up"></i> Chart Data</span>');
     if (badges.length > 0) {
       rows.push(this._buildDataRow("Status", badges.join(" ")));
     }
@@ -845,7 +891,10 @@ export class TokenDetailsDialog {
     }
     if (token.rugged) {
       rows.push(
-        this._buildDataRow("Status", '<span class="badge-danger"><i class="icon-alert-triangle"></i> Flagged as Rugged</span>')
+        this._buildDataRow(
+          "Status",
+          '<span class="badge-danger"><i class="icon-alert-triangle"></i> Flagged as Rugged</span>'
+        )
       );
     }
     if (token.security_summary) {

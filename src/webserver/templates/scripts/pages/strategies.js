@@ -3,6 +3,7 @@ import { Poller } from "../core/poller.js";
 import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
+import { requestManager } from "../core/request_manager.js";
 
 export function createLifecycle() {
   // State
@@ -17,6 +18,25 @@ export function createLifecycle() {
   // Pollers
   let strategiesPoller = null;
   let templatesPoller = null;
+
+  // Event listener cleanup tracking
+  const eventCleanups = [];
+  let dynamicCleanupStart = 0; // Track where dynamic listeners start
+
+  // Helper to track event listeners for cleanup
+  function addTrackedListener(element, event, handler) {
+    element.addEventListener(event, handler);
+    eventCleanups.push(() => element.removeEventListener(event, handler));
+  }
+
+  // Helper to clear only dynamic listeners (added during render)
+  function clearDynamicListeners() {
+    // Remove dynamic listeners from the end of the array
+    while (eventCleanups.length > dynamicCleanupStart) {
+      const cleanup = eventCleanups.pop();
+      cleanup();
+    }
+  }
 
   return {
     async init(_ctx) {
@@ -49,6 +69,9 @@ export function createLifecycle() {
 
     async activate(ctx) {
       console.log("[Strategies] Activating page");
+
+      // Mark where static listeners end (everything before this is in init)
+      dynamicCleanupStart = eventCleanups.length;
 
       // Create pollers
       strategiesPoller = ctx.managePoller(
@@ -85,7 +108,12 @@ export function createLifecycle() {
 
     dispose() {
       console.log("[Strategies] Disposing page");
-      // Cleanup if needed
+
+      // Clean up all event listeners
+      eventCleanups.forEach((cleanup) => cleanup());
+      eventCleanups.length = 0;
+
+      // Cleanup state
       currentStrategy = null;
       strategies = [];
       templates = [];
@@ -99,7 +127,7 @@ export function createLifecycle() {
     const tabContents = $$(".tab-content");
 
     tabButtons.forEach((button) => {
-      button.addEventListener("click", () => {
+      addTrackedListener(button, "click", () => {
         const targetTab = button.dataset.tab;
 
         // Update buttons
@@ -123,7 +151,7 @@ export function createLifecycle() {
     // Strategy type filters
     const filterButtons = $$(".strategy-filters .filter-btn");
     filterButtons.forEach((button) => {
-      button.addEventListener("click", () => {
+      addTrackedListener(button, "click", () => {
         filterButtons.forEach((btn) => btn.classList.remove("active"));
         button.classList.add("active");
 
@@ -137,13 +165,13 @@ export function createLifecycle() {
     const riskSelect = $("#template-risk");
 
     if (categorySelect) {
-      categorySelect.addEventListener("change", () => {
+      addTrackedListener(categorySelect, "change", () => {
         filterTemplates();
       });
     }
 
     if (riskSelect) {
-      riskSelect.addEventListener("change", () => {
+      addTrackedListener(riskSelect, "change", () => {
         filterTemplates();
       });
     }
@@ -154,7 +182,7 @@ export function createLifecycle() {
     // Create new strategy
     const createBtn = $("#create-strategy");
     if (createBtn) {
-      createBtn.addEventListener("click", () => {
+      addTrackedListener(createBtn, "click", () => {
         createNewStrategy();
       });
     }
@@ -162,7 +190,7 @@ export function createLifecycle() {
     // Import strategy
     const importBtn = $("#import-strategy");
     if (importBtn) {
-      importBtn.addEventListener("click", () => {
+      addTrackedListener(importBtn, "click", () => {
         importStrategy();
       });
     }
@@ -170,7 +198,7 @@ export function createLifecycle() {
     // Refresh strategies
     const refreshBtn = $("#refresh-strategies");
     if (refreshBtn) {
-      refreshBtn.addEventListener("click", async () => {
+      addTrackedListener(refreshBtn, "click", async () => {
         await loadStrategies();
         // Removed success toast - silent refresh, only show errors
       });
@@ -186,24 +214,24 @@ export function createLifecycle() {
     const searchInput = $("#condition-search");
 
     if (addBtn) {
-      addBtn.addEventListener("click", () => openConditionCatalog());
+      addTrackedListener(addBtn, "click", () => openConditionCatalog());
     }
     if (loadTemplateBtn) {
-      loadTemplateBtn.addEventListener("click", () => {
+      addTrackedListener(loadTemplateBtn, "click", () => {
         const templatesTab = $(".tab-btn[data-tab='templates']");
         if (templatesTab) templatesTab.click();
       });
     }
     if (closeCatalog && catalog) {
-      closeCatalog.addEventListener("click", () => catalog.classList.remove("active"));
-      catalog.addEventListener("click", (e) => {
+      addTrackedListener(closeCatalog, "click", () => catalog.classList.remove("active"));
+      addTrackedListener(catalog, "click", (e) => {
         if (e.target === catalog) catalog.classList.remove("active");
       });
     }
 
     // Search conditions
     if (searchInput) {
-      searchInput.addEventListener("input", (e) => {
+      addTrackedListener(searchInput, "input", (e) => {
         const query = e.target.value.toLowerCase().trim();
         filterConditions(query);
       });
@@ -217,10 +245,16 @@ export function createLifecycle() {
       // Show all, restore saved states
       categories.forEach((cat) => {
         cat.style.display = "block";
-        const categoryName = cat.querySelector(".category-header").dataset.category;
-        const savedStates = JSON.parse(localStorage.getItem("condition-category-states") || "{}");
-        const items = cat.querySelector(".category-items");
         const header = cat.querySelector(".category-header");
+        if (!header) return;
+        const categoryName = header.dataset.category;
+        let savedStates = {};
+        try {
+          savedStates = JSON.parse(localStorage.getItem("condition-category-states") || "{}");
+        } catch (e) {
+          console.warn("[Strategies] Invalid category states, resetting:", e);
+        }
+        const items = cat.querySelector(".category-items");
         const isCollapsed = savedStates[categoryName] !== false;
 
         if (isCollapsed) {
@@ -246,8 +280,12 @@ export function createLifecycle() {
       let hasVisibleItems = false;
 
       items.forEach((item) => {
-        const name = item.querySelector(".condition-name").textContent.toLowerCase();
-        const desc = item.querySelector(".condition-description").textContent.toLowerCase();
+        const nameEl = item.querySelector(".condition-name");
+        const descEl = item.querySelector(".condition-description");
+        if (!nameEl || !descEl) return;
+        
+        const name = nameEl.textContent.toLowerCase();
+        const desc = descEl.textContent.toLowerCase();
         const matches = name.includes(query) || desc.includes(query);
 
         if (matches) {
@@ -279,37 +317,37 @@ export function createLifecycle() {
     const deployBtn = $("#deploy-strategy");
 
     if (saveBtn) {
-      saveBtn.addEventListener("click", async () => {
+      addTrackedListener(saveBtn, "click", async () => {
         await saveStrategy();
       });
     }
 
     if (saveAsBtn) {
-      saveAsBtn.addEventListener("click", async () => {
+      addTrackedListener(saveAsBtn, "click", async () => {
         await saveStrategyAs();
       });
     }
 
     if (duplicateBtn) {
-      duplicateBtn.addEventListener("click", () => {
+      addTrackedListener(duplicateBtn, "click", () => {
         duplicateStrategy();
       });
     }
 
     if (validateBtn) {
-      validateBtn.addEventListener("click", async () => {
+      addTrackedListener(validateBtn, "click", async () => {
         await validateStrategy();
       });
     }
 
     if (testBtn) {
-      testBtn.addEventListener("click", async () => {
+      addTrackedListener(testBtn, "click", async () => {
         await testStrategy();
       });
     }
 
     if (deployBtn) {
-      deployBtn.addEventListener("click", async () => {
+      addTrackedListener(deployBtn, "click", async () => {
         await deployStrategy();
       });
     }
@@ -321,14 +359,14 @@ export function createLifecycle() {
     const clearBtn = $("#clear-search");
 
     if (searchInput) {
-      searchInput.addEventListener("input", (e) => {
+      addTrackedListener(searchInput, "input", (e) => {
         const query = e.target.value.toLowerCase();
         filterConditions(query);
       });
     }
 
     if (clearBtn) {
-      clearBtn.addEventListener("click", () => {
+      addTrackedListener(clearBtn, "click", () => {
         if (searchInput) {
           searchInput.value = "";
           filterConditions("");
@@ -340,10 +378,9 @@ export function createLifecycle() {
   // Load Data
   async function loadStrategies() {
     try {
-      const response = await fetch("/api/strategies");
-      if (!response.ok) throw new Error("Failed to load strategies");
-
-      const data = await response.json();
+      const data = await requestManager.fetch("/api/strategies", {
+        priority: "normal",
+      });
       const items = data.items || [];
       strategies = items.map((s) => ({
         id: s.id,
@@ -371,10 +408,9 @@ export function createLifecycle() {
 
   async function loadTemplates() {
     try {
-      const response = await fetch("/api/strategies/templates");
-      if (!response.ok) throw new Error("Failed to load templates");
-
-      const data = await response.json();
+      const data = await requestManager.fetch("/api/strategies/templates", {
+        priority: "normal",
+      });
       templates = data.items || [];
 
       renderTemplates();
@@ -386,10 +422,9 @@ export function createLifecycle() {
 
   async function loadConditionSchemas() {
     try {
-      const response = await fetch("/api/strategies/conditions/schemas");
-      if (!response.ok) throw new Error("Failed to load condition schemas");
-
-      const data = await response.json();
+      const data = await requestManager.fetch("/api/strategies/conditions/schemas", {
+        priority: "normal",
+      });
       conditionSchemas = data.schemas || {};
     } catch (error) {
       console.error("Failed to load condition schemas:", error);
@@ -399,6 +434,9 @@ export function createLifecycle() {
 
   // Render Functions
   function renderStrategies() {
+    // Clear old dynamic listeners before re-render
+    clearDynamicListeners();
+
     const listContainer = $("#strategy-list");
     if (!listContainer) return;
 
@@ -447,7 +485,7 @@ export function createLifecycle() {
     $$(".strategy-item").forEach((item) => {
       const strategyId = item.dataset.strategyId;
 
-      item.addEventListener("click", (e) => {
+      addTrackedListener(item, "click", (e) => {
         if (!e.target.closest(".btn-icon")) {
           loadStrategy(strategyId);
         }
@@ -459,21 +497,21 @@ export function createLifecycle() {
       const deleteBtn = item.querySelector("[data-action='delete']");
 
       if (editBtn) {
-        editBtn.addEventListener("click", (e) => {
+        addTrackedListener(editBtn, "click", (e) => {
           e.stopPropagation();
           loadStrategy(strategyId);
         });
       }
 
       if (toggleBtn) {
-        toggleBtn.addEventListener("click", async (e) => {
+        addTrackedListener(toggleBtn, "click", async (e) => {
           e.stopPropagation();
           await toggleStrategyEnabled(strategyId);
         });
       }
 
       if (deleteBtn) {
-        deleteBtn.addEventListener("click", async (e) => {
+        addTrackedListener(deleteBtn, "click", async (e) => {
           e.stopPropagation();
           await deleteStrategy(strategyId);
         });
@@ -482,6 +520,9 @@ export function createLifecycle() {
   }
 
   function renderTemplates() {
+    // Clear old dynamic listeners before re-render
+    clearDynamicListeners();
+
     const listContainer = $("#template-list");
     if (!listContainer) return;
 
@@ -521,7 +562,7 @@ export function createLifecycle() {
     $$(".template-item").forEach((item) => {
       const useBtn = item.querySelector("[data-action='use']");
       if (useBtn) {
-        useBtn.addEventListener("click", () => {
+        addTrackedListener(useBtn, "click", () => {
           const templateId = item.dataset.templateId;
           useTemplate(templateId);
         });
@@ -543,7 +584,12 @@ export function createLifecycle() {
     });
 
     // Load saved category states (default: all collapsed)
-    const savedStates = JSON.parse(localStorage.getItem("condition-category-states") || "{}");
+    let savedStates = {};
+    try {
+      savedStates = JSON.parse(localStorage.getItem("condition-category-states") || "{}");
+    } catch (e) {
+      console.warn("[Strategies] Invalid category states, resetting:", e);
+    }
 
     // Render
     container.innerHTML = Object.entries(categories)
@@ -566,9 +612,9 @@ export function createLifecycle() {
       })
       .join("");
 
-    // Toggle with state persistence
+    // Toggle with state persistence (with cleanup tracking)
     $$(".category-header").forEach((header) => {
-      header.addEventListener("click", () => {
+      const handler = () => {
         const category = header.dataset.category;
         const items = header.nextElementSibling;
         const toggle = header.querySelector(".category-toggle");
@@ -585,20 +631,33 @@ export function createLifecycle() {
         }
 
         // Save state
-        const states = JSON.parse(localStorage.getItem("condition-category-states") || "{}");
+        let states = {};
+        try {
+          states = JSON.parse(localStorage.getItem("condition-category-states") || "{}");
+        } catch (e) {
+          console.warn("[Strategies] Invalid category states, resetting:", e);
+        }
         states[category] = !isCollapsed;
-        localStorage.setItem("condition-category-states", JSON.stringify(states));
-      });
+        try {
+          localStorage.setItem("condition-category-states", JSON.stringify(states));
+        } catch (e) {
+          console.warn("[Strategies] Failed to save category states:", e);
+        }
+      };
+      header.addEventListener("click", handler);
+      eventCleanups.push(() => header.removeEventListener("click", handler));
     });
 
-    // Click to add
+    // Click to add (with cleanup tracking)
     $$(".condition-item").forEach((item) => {
-      item.addEventListener("click", () => {
+      const handler = () => {
         const type = item.dataset.conditionType;
         addCondition(type);
         const catalog = $("#condition-catalog-modal");
         if (catalog) catalog.classList.remove("active");
-      });
+      };
+      item.addEventListener("click", handler);
+      eventCleanups.push(() => item.removeEventListener("click", handler));
     });
   }
 
@@ -731,45 +790,57 @@ export function createLifecycle() {
       return;
     }
 
+    // Clear old dynamic listeners before re-rendering
+    clearDynamicListeners();
+
     list.innerHTML = conditions.map((c, idx) => renderConditionCard(c, idx)).join("");
 
-    // Wire actions
+    // Wire actions with cleanup tracking
     $$(".condition-card [data-action]").forEach((btn) => {
       const action = btn.dataset.action;
       const index = parseInt(btn.closest(".condition-card").dataset.index, 10);
+      let handler;
       if (action === "toggle-expand") {
-        btn.addEventListener("click", () => toggleCardExpand(index));
+        handler = () => toggleCardExpand(index);
       } else if (action === "delete") {
-        btn.addEventListener("click", () => deleteCondition(index));
+        handler = () => deleteCondition(index);
       } else if (action === "duplicate") {
-        btn.addEventListener("click", () => duplicateCondition(index));
+        handler = () => duplicateCondition(index);
       } else if (action === "move-up") {
-        btn.addEventListener("click", () => moveCondition(index, -1));
+        handler = () => moveCondition(index, -1);
       } else if (action === "move-down") {
-        btn.addEventListener("click", () => moveCondition(index, 1));
+        handler = () => moveCondition(index, 1);
+      }
+      if (handler) {
+        btn.addEventListener("click", handler);
+        eventCleanups.push(() => btn.removeEventListener("click", handler));
       }
     });
 
-    // Toggles and param inputs
+    // Toggles and param inputs with cleanup tracking
     $$(".condition-card .toggle-enabled").forEach((el) => {
-      el.addEventListener("change", (e) => {
+      const handler = (e) => {
         const idx = parseInt(el.closest(".condition-card").dataset.index, 10);
         conditions[idx].enabled = e.target.checked;
         updateRuleTreeFromEditor();
-      });
+      };
+      el.addEventListener("change", handler);
+      eventCleanups.push(() => el.removeEventListener("change", handler));
     });
     $$(".condition-card .toggle-required").forEach((el) => {
-      el.addEventListener("change", (e) => {
+      const handler = (e) => {
         const idx = parseInt(el.closest(".condition-card").dataset.index, 10);
         conditions[idx].required = e.target.checked;
         // For now, required flag is cosmetic; combinator remains global AND
-      });
+      };
+      el.addEventListener("change", handler);
+      eventCleanups.push(() => el.removeEventListener("change", handler));
     });
 
-    // Param inputs
+    // Param inputs with cleanup tracking
     $$(".condition-card .param-field input, .condition-card .param-field select").forEach(
       (input) => {
-        input.addEventListener("change", () => {
+        const handler = () => {
           const card = input.closest(".condition-card");
           const idx = parseInt(card.dataset.index, 10);
           const key = input.dataset.key;
@@ -784,7 +855,9 @@ export function createLifecycle() {
           // Update summary text
           const summary = card.querySelector(".condition-summary");
           if (summary) summary.textContent = buildConditionSummary(conditions[idx]);
-        });
+        };
+        input.addEventListener("change", handler);
+        eventCleanups.push(() => input.removeEventListener("change", handler));
       }
     );
   }
@@ -988,16 +1061,18 @@ export function createLifecycle() {
 
     editor.innerHTML = html;
 
-    // Attach event listeners
+    // Attach event listeners with cleanup tracking
     const nameInput = $("#node-name");
     if (nameInput) {
-      nameInput.addEventListener("input", (e) => {
+      const handler = (e) => {
         node.name = e.target.value;
         renderConditionsList();
-      });
+      };
+      nameInput.addEventListener("input", handler);
+      eventCleanups.push(() => nameInput.removeEventListener("input", handler));
     }
 
-    // Parameter inputs
+    // Parameter inputs with cleanup tracking
     if (schema.parameters) {
       Object.keys(schema.parameters).forEach((key) => {
         const input = $(`#param-${key}`);
@@ -1024,6 +1099,10 @@ export function createLifecycle() {
           };
           input.addEventListener("input", handler);
           input.addEventListener("change", handler);
+          eventCleanups.push(() => {
+            input.removeEventListener("input", handler);
+            input.removeEventListener("change", handler);
+          });
         }
       });
     }
@@ -1197,7 +1276,7 @@ export function createLifecycle() {
       Utils.showToast("Parameters updated", "success");
     };
 
-    // ESC key to close
+    // ESC key to close (with cleanup tracking)
     const escHandler = (e) => {
       if (e.key === "Escape") {
         closeModal();
@@ -1205,6 +1284,7 @@ export function createLifecycle() {
       }
     };
     document.addEventListener("keydown", escHandler);
+    eventCleanups.push(() => document.removeEventListener("keydown", escHandler));
   }
 
   // Strategy Operations
@@ -1236,10 +1316,9 @@ export function createLifecycle() {
 
   async function loadStrategy(strategyId) {
     try {
-      const response = await fetch(`/api/strategies/${strategyId}`);
-      if (!response.ok) throw new Error("Failed to load strategy");
-
-      const data = await response.json();
+      const data = await requestManager.fetch(`/api/strategies/${strategyId}`, {
+        priority: "normal",
+      });
       currentStrategy = {
         id: data.id,
         name: data.name,
@@ -1345,15 +1424,12 @@ export function createLifecycle() {
       const method = currentStrategy.id ? "PUT" : "POST";
       const url = currentStrategy.id ? `/api/strategies/${currentStrategy.id}` : "/api/strategies";
 
-      const response = await fetch(url, {
+      const data = await requestManager.fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        priority: "high",
       });
-
-      if (!response.ok) throw new Error("Failed to save strategy");
-
-      const data = await response.json();
       if (!currentStrategy.id && data.id) {
         currentStrategy.id = data.id;
       }
@@ -1414,13 +1490,10 @@ export function createLifecycle() {
     }
 
     try {
-      const response = await fetch(`/api/strategies/${currentStrategy.id}/validate`, {
+      const data = await requestManager.fetch(`/api/strategies/${currentStrategy.id}/validate`, {
         method: "POST",
+        priority: "high",
       });
-
-      if (!response.ok) throw new Error("Validation failed");
-
-      const data = await response.json();
 
       if (data.valid) {
         updateValidationStatus(true, "Strategy is valid");
@@ -1443,13 +1516,10 @@ export function createLifecycle() {
     }
 
     try {
-      const response = await fetch(`/api/strategies/${currentStrategy.id}/test`, {
+      const data = await requestManager.fetch(`/api/strategies/${currentStrategy.id}/test`, {
         method: "POST",
+        priority: "high",
       });
-
-      if (!response.ok) throw new Error("Test failed");
-
-      const data = await response.json();
       Utils.showToast(
         `Test result: ${data.result ? "Passed" : "Failed"}`,
         data.result ? "success" : "error"
@@ -1477,11 +1547,10 @@ export function createLifecycle() {
     if (!confirmed) return;
 
     try {
-      const response = await fetch(`/api/strategies/${currentStrategy.id}/deploy`, {
+      await requestManager.fetch(`/api/strategies/${currentStrategy.id}/deploy`, {
         method: "POST",
+        priority: "high",
       });
-
-      if (!response.ok) throw new Error("Deploy failed");
 
       await loadStrategies();
       Utils.showToast("Strategy deployed successfully", "success");
@@ -1496,9 +1565,9 @@ export function createLifecycle() {
       const strategy = strategies.find((s) => s.id === strategyId);
       if (!strategy) return;
       // Fetch full detail to avoid missing fields
-      const detailRes = await fetch(`/api/strategies/${strategyId}`);
-      if (!detailRes.ok) throw new Error("Failed to load strategy detail");
-      const detail = await detailRes.json();
+      const detail = await requestManager.fetch(`/api/strategies/${strategyId}`, {
+        priority: "normal",
+      });
 
       const body = {
         name: detail.name,
@@ -1511,13 +1580,12 @@ export function createLifecycle() {
         author: detail.author || null,
       };
 
-      const response = await fetch(`/api/strategies/${strategyId}`, {
+      await requestManager.fetch(`/api/strategies/${strategyId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        priority: "high",
       });
-
-      if (!response.ok) throw new Error("Failed to toggle strategy");
 
       await loadStrategies();
       Utils.showToast(`Strategy ${strategy.enabled ? "disabled" : "enabled"}`, "success");
@@ -1542,11 +1610,10 @@ export function createLifecycle() {
     if (!confirmed) return;
 
     try {
-      const response = await fetch(`/api/strategies/${strategyId}`, {
+      await requestManager.fetch(`/api/strategies/${strategyId}`, {
         method: "DELETE",
+        priority: "high",
       });
-
-      if (!response.ok) throw new Error("Failed to delete strategy");
 
       if (currentStrategy?.id === strategyId) {
         currentStrategy = null;
@@ -1575,7 +1642,7 @@ export function createLifecycle() {
     input.accept = ".json";
 
     input.onchange = async (e) => {
-      const file = e.target.files[0];
+      const file = e.target.files?.[0];
       if (!file) return;
 
       try {

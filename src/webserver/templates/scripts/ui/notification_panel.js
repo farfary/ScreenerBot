@@ -20,6 +20,26 @@ let currentFilters = {
   state: "",
 };
 
+// Event listener cleanup tracking
+let handlers = {
+  backdrop: null,
+  closeBtn: null,
+  keydown: null,
+  tabs: [],
+  filterActionType: null,
+  filterState: null,
+  clearFilters: null,
+  prevPage: null,
+  nextPage: null,
+  markAllRead: null,
+  clearAll: null,
+  openHistory: null,
+  notificationList: null, // Event delegation handler
+};
+
+// Subscription cleanup
+let unsubscribe = null;
+
 function escapeText(value) {
   return Utils.escapeHtml(value === undefined || value === null ? "" : String(value));
 }
@@ -38,6 +58,7 @@ export function init() {
   setupDrawerControls();
   setupFilters();
   setupPagination();
+  setupNotificationListDelegation();
   subscribeToUpdates();
   renderNotifications();
 
@@ -102,20 +123,23 @@ function setupDrawerControls() {
 
   // Backdrop click closes drawer
   if (backdrop) {
-    backdrop.addEventListener("click", close);
+    handlers.backdrop = close;
+    backdrop.addEventListener("click", handlers.backdrop);
   }
 
   // Close button
   if (closeBtn) {
-    closeBtn.addEventListener("click", close);
+    handlers.closeBtn = close;
+    closeBtn.addEventListener("click", handlers.closeBtn);
   }
 
   // ESC key closes drawer
-  document.addEventListener("keydown", (e) => {
+  handlers.keydown = (e) => {
     if (e.key === "Escape" && isOpen) {
       close();
     }
-  });
+  };
+  document.addEventListener("keydown", handlers.keydown);
 }
 
 /**
@@ -124,7 +148,7 @@ function setupDrawerControls() {
 function setupTabs() {
   const tabs = document.querySelectorAll(".notification-tab");
   tabs.forEach((tab) => {
-    tab.addEventListener("click", () => {
+    const handler = () => {
       currentTab = tab.dataset.tab;
       currentPage = 1; // Reset pagination when switching tabs
       setActiveTab(tab);
@@ -132,7 +156,9 @@ function setupTabs() {
 
       // Show filters and pagination only for completed/failed tabs
       toggleHistoryControls(currentTab === "completed" || currentTab === "failed");
-    });
+    };
+    handlers.tabs.push({ element: tab, handler });
+    tab.addEventListener("click", handler);
   });
 }
 
@@ -145,29 +171,32 @@ function setupFilters() {
   const clearFiltersBtn = document.getElementById("clearFiltersBtn");
 
   if (filterActionType) {
-    filterActionType.addEventListener("change", () => {
+    handlers.filterActionType = () => {
       currentFilters.action_type = filterActionType.value;
       currentPage = 1; // Reset to page 1
       renderNotifications();
-    });
+    };
+    filterActionType.addEventListener("change", handlers.filterActionType);
   }
 
   if (filterState) {
-    filterState.addEventListener("change", () => {
+    handlers.filterState = () => {
       currentFilters.state = filterState.value;
       currentPage = 1; // Reset to page 1
       renderNotifications();
-    });
+    };
+    filterState.addEventListener("change", handlers.filterState);
   }
 
   if (clearFiltersBtn) {
-    clearFiltersBtn.addEventListener("click", () => {
+    handlers.clearFilters = () => {
       currentFilters = { action_type: "", state: "" };
       if (filterActionType) filterActionType.value = "";
       if (filterState) filterState.value = "";
       currentPage = 1;
       renderNotifications();
-    });
+    };
+    clearFiltersBtn.addEventListener("click", handlers.clearFilters);
   }
 }
 
@@ -179,22 +208,24 @@ function setupPagination() {
   const nextBtn = document.getElementById("nextPageBtn");
 
   if (prevBtn) {
-    prevBtn.addEventListener("click", () => {
+    handlers.prevPage = () => {
       if (currentPage > 1) {
         currentPage--;
         renderNotifications();
       }
-    });
+    };
+    prevBtn.addEventListener("click", handlers.prevPage);
   }
 
   if (nextBtn) {
-    nextBtn.addEventListener("click", () => {
+    handlers.nextPage = () => {
       const totalPages = Math.ceil(totalResults / pageSize);
       if (currentPage < totalPages) {
         currentPage++;
         renderNotifications();
       }
-    });
+    };
+    nextBtn.addEventListener("click", handlers.nextPage);
   }
 }
 
@@ -264,14 +295,15 @@ function setupActions() {
   const openHistoryBtn = document.getElementById("notificationOpenHistory");
 
   if (markAllReadBtn) {
-    markAllReadBtn.addEventListener("click", () => {
+    handlers.markAllRead = () => {
       notificationManager.markAllAsRead();
       Utils.showToast("✓ All notifications marked as read", "success");
-    });
+    };
+    markAllReadBtn.addEventListener("click", handlers.markAllRead);
   }
 
   if (clearAllBtn) {
-    clearAllBtn.addEventListener("click", async () => {
+    handlers.clearAll = async () => {
       const { confirmed } = await ConfirmationDialog.show({
         title: "Clear All Notifications",
         message: "This will remove all notifications from the panel. This action cannot be undone.",
@@ -284,15 +316,17 @@ function setupActions() {
         notificationManager.clearAll();
         Utils.showToast("All notifications cleared", "info");
       }
-    });
+    };
+    clearAllBtn.addEventListener("click", handlers.clearAll);
   }
 
   if (openHistoryBtn) {
-    openHistoryBtn.addEventListener("click", () => {
+    handlers.openHistory = () => {
       close();
       // TODO: Navigate to dedicated actions/history page when implemented
       Utils.showToast("Full activity history coming soon", "info");
-    });
+    };
+    openHistoryBtn.addEventListener("click", handlers.openHistory);
   }
 }
 
@@ -300,7 +334,7 @@ function setupActions() {
  * Subscribe to notification updates
  */
 function subscribeToUpdates() {
-  notificationManager.subscribe((event) => {
+  unsubscribe = notificationManager.subscribe((event) => {
     if (event.type === "summary") {
       updateSummaryCards(event.summary);
       updateConnectionStatus(event.summary.connection);
@@ -528,9 +562,6 @@ async function renderNotifications() {
   }
 
   list.innerHTML = notifications.map((n) => renderNotification(n)).join("");
-
-  // Attach event listeners
-  attachNotificationListeners();
 }
 
 function mergeWithStoredState(notification) {
@@ -687,25 +718,35 @@ function renderNotification(notification) {
 }
 
 /**
- * Attach event listeners to notification items
+ * Setup event delegation for notification list (fixes memory leak)
  */
-function attachNotificationListeners() {
-  const dismissButtons = document.querySelectorAll(".notification-dismiss");
-  dismissButtons.forEach((btn) => {
-    btn.addEventListener("click", (e) => {
-      e.stopPropagation();
-      const id = btn.dataset.id;
-      notificationManager.dismiss(id);
-    });
-  });
+function setupNotificationListDelegation() {
+  const list = document.getElementById("notificationList");
+  if (!list) return;
 
-  const items = document.querySelectorAll(".notification-item");
-  items.forEach((item) => {
-    item.addEventListener("click", () => {
+  handlers.notificationList = (e) => {
+    // Handle dismiss button clicks
+    const dismissBtn = e.target.closest(".notification-dismiss");
+    if (dismissBtn) {
+      e.stopPropagation();
+      const id = dismissBtn.dataset.id;
+      if (id) {
+        notificationManager.dismiss(id);
+      }
+      return;
+    }
+
+    // Handle notification item clicks
+    const item = e.target.closest(".notification-item");
+    if (item) {
       const id = item.dataset.id;
-      notificationManager.markAsRead(id);
-    });
-  });
+      if (id) {
+        notificationManager.markAsRead(id);
+      }
+    }
+  };
+
+  list.addEventListener("click", handlers.notificationList);
 }
 
 /**
@@ -767,5 +808,87 @@ function resolveTimestamp(notification) {
  */
 export function dispose() {
   close();
+
+  // Remove all event listeners
+  const drawer = document.getElementById("notificationDrawer");
+  const backdrop = drawer?.querySelector('[data-role="dismiss"]');
+  const closeBtn = document.getElementById("notificationDrawerClose");
+  const filterActionType = document.getElementById("filterActionType");
+  const filterState = document.getElementById("filterState");
+  const clearFiltersBtn = document.getElementById("clearFiltersBtn");
+  const prevBtn = document.getElementById("prevPageBtn");
+  const nextBtn = document.getElementById("nextPageBtn");
+  const markAllReadBtn = document.getElementById("markAllReadBtn");
+  const clearAllBtn = document.getElementById("clearAllBtn");
+  const openHistoryBtn = document.getElementById("notificationOpenHistory");
+
+  if (backdrop && handlers.backdrop) {
+    backdrop.removeEventListener("click", handlers.backdrop);
+  }
+  if (closeBtn && handlers.closeBtn) {
+    closeBtn.removeEventListener("click", handlers.closeBtn);
+  }
+  if (handlers.keydown) {
+    document.removeEventListener("keydown", handlers.keydown);
+  }
+
+  handlers.tabs.forEach(({ element, handler }) => {
+    element.removeEventListener("click", handler);
+  });
+
+  if (filterActionType && handlers.filterActionType) {
+    filterActionType.removeEventListener("change", handlers.filterActionType);
+  }
+  if (filterState && handlers.filterState) {
+    filterState.removeEventListener("change", handlers.filterState);
+  }
+  if (clearFiltersBtn && handlers.clearFilters) {
+    clearFiltersBtn.removeEventListener("click", handlers.clearFilters);
+  }
+  if (prevBtn && handlers.prevPage) {
+    prevBtn.removeEventListener("click", handlers.prevPage);
+  }
+  if (nextBtn && handlers.nextPage) {
+    nextBtn.removeEventListener("click", handlers.nextPage);
+  }
+  if (markAllReadBtn && handlers.markAllRead) {
+    markAllReadBtn.removeEventListener("click", handlers.markAllRead);
+  }
+  if (clearAllBtn && handlers.clearAll) {
+    clearAllBtn.removeEventListener("click", handlers.clearAll);
+  }
+  if (openHistoryBtn && handlers.openHistory) {
+    openHistoryBtn.removeEventListener("click", handlers.openHistory);
+  }
+
+  // Remove notification list delegation
+  const list = document.getElementById("notificationList");
+  if (list && handlers.notificationList) {
+    list.removeEventListener("click", handlers.notificationList);
+  }
+
+  // Unsubscribe from notifications
+  if (unsubscribe) {
+    unsubscribe();
+    unsubscribe = null;
+  }
+
+  // Reset handlers
+  handlers = {
+    backdrop: null,
+    closeBtn: null,
+    keydown: null,
+    tabs: [],
+    filterActionType: null,
+    filterState: null,
+    clearFilters: null,
+    prevPage: null,
+    nextPage: null,
+    markAllRead: null,
+    clearAll: null,
+    openHistory: null,
+    notificationList: null,
+  };
+
   isInitialized = false;
 }

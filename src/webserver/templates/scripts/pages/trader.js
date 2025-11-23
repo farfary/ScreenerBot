@@ -4,6 +4,7 @@ import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
+import { requestManager } from "../core/request_manager.js";
 
 // Sub-tabs configuration
 const SUB_TABS = [
@@ -26,6 +27,9 @@ function createLifecycle() {
   let configPoller = null;
   let strategiesPoller = null;
 
+  // Event cleanup tracking
+  const eventCleanups = [];
+
   // Page state
   const state = {
     currentTab: DEFAULT_TAB,
@@ -37,6 +41,15 @@ function createLifecycle() {
   // ============================================================================
   // Helper Functions
   // ============================================================================
+
+  /**
+   * Add tracked event listener for cleanup
+   */
+  function addTrackedListener(element, event, handler) {
+    if (!element) return;
+    element.addEventListener(event, handler);
+    eventCleanups.push(() => element.removeEventListener(event, handler));
+  }
 
   /**
    * Convert time duration to human-readable format
@@ -87,31 +100,31 @@ function createLifecycle() {
 
     const readable = convertTimeToReadable(duration, unit);
     hintText.textContent = `${duration} ${unit} = ${readable}`;
-    
+
     if (exampleDuration) {
       exampleDuration.textContent = readable;
     }
-    
+
     // Update dynamic indicator with visual feedback based on duration in hours
     if (indicator) {
-      const hoursMap = { seconds: 1/3600, minutes: 1/60, hours: 1, days: 24 };
+      const hoursMap = { seconds: 1 / 3600, minutes: 1 / 60, hours: 1, days: 24 };
       const totalHours = duration * (hoursMap[unit] || 1);
-      
+
       if (totalHours < 24) {
         // Less than 1 day - very short
         indicator.innerHTML = '<i class="icon-alert-circle"></i>';
-        indicator.style.background = 'var(--warning-alpha-10)';
-        indicator.style.color = 'var(--warning)';
+        indicator.style.background = "var(--warning-alpha-10)";
+        indicator.style.color = "var(--warning)";
       } else if (totalHours > 336) {
         // More than 2 weeks - very long
         indicator.innerHTML = '<i class="icon-calendar"></i>';
-        indicator.style.background = 'var(--info-alpha-10)';
-        indicator.style.color = 'var(--info)';
+        indicator.style.background = "var(--info-alpha-10)";
+        indicator.style.color = "var(--info)";
       } else {
         // 1 day to 2 weeks - moderate
         indicator.innerHTML = '<i class="icon-clock"></i>';
-        indicator.style.background = 'var(--primary-alpha-10)';
-        indicator.style.color = 'var(--primary)';
+        indicator.style.background = "var(--primary-alpha-10)";
+        indicator.style.color = "var(--primary)";
       }
     }
   }
@@ -126,16 +139,16 @@ function createLifecycle() {
     const exampleTarget = $("#roi-example-target");
     const exampleSummary = $("#roi-example-summary");
     const indicator = $("#roi-indicator");
-    
+
     if (!roiInput) return;
-    
+
     const value = parseFloat(roiInput.value) || 20;
-    
+
     // Update impact indicator
     if (impactText) {
       impactText.textContent = `Exit at +${value}% profit`;
     }
-    
+
     // Update visual example
     if (exampleProfit) {
       exampleProfit.textContent = `+${value}% profit`;
@@ -147,21 +160,21 @@ function createLifecycle() {
     if (exampleSummary) {
       exampleSummary.textContent = `+${value}%`;
     }
-    
+
     // Update dynamic indicator with visual feedback
     if (indicator) {
       if (value < 10) {
         indicator.innerHTML = '<i class="icon-alert-triangle"></i>';
-        indicator.style.background = 'var(--warning-alpha-10)';
-        indicator.style.color = 'var(--warning)';
+        indicator.style.background = "var(--warning-alpha-10)";
+        indicator.style.color = "var(--warning)";
       } else if (value > 100) {
         indicator.innerHTML = '<i class="icon-trending-up"></i>';
-        indicator.style.background = 'var(--success-alpha-10)';
-        indicator.style.color = 'var(--success)';
+        indicator.style.background = "var(--success-alpha-10)";
+        indicator.style.color = "var(--success)";
       } else {
         indicator.innerHTML = '<i class="icon-target"></i>';
-        indicator.style.background = 'var(--primary-alpha-10)';
-        indicator.style.color = 'var(--primary)';
+        indicator.style.background = "var(--primary-alpha-10)";
+        indicator.style.color = "var(--primary)";
       }
     }
   }
@@ -174,39 +187,39 @@ function createLifecycle() {
     const impactText = $("#time-loss-impact");
     const exampleLoss = $("#time-example-loss");
     const indicator = $("#time-loss-indicator");
-    
+
     if (!lossInput) return;
-    
+
     const value = parseFloat(lossInput.value) || -40;
     const absValue = Math.abs(value);
-    
+
     // Update impact indicator
     if (impactText) {
       impactText.textContent = `Exit if down ${absValue}% or more after hold period`;
     }
-    
+
     // Update visual example
     if (exampleLoss) {
       exampleLoss.textContent = `${value}%`;
     }
-    
+
     // Update dynamic indicator with visual feedback based on threshold severity
     if (indicator) {
       if (absValue < 20) {
         // Low threshold - exits quickly even with small losses
         indicator.innerHTML = '<i class="icon-alert-triangle"></i>';
-        indicator.style.background = 'var(--warning-alpha-10)';
-        indicator.style.color = 'var(--warning)';
+        indicator.style.background = "var(--warning-alpha-10)";
+        indicator.style.color = "var(--warning)";
       } else if (absValue > 60) {
         // High threshold - allows large losses
         indicator.innerHTML = '<i class="icon-trending-down"></i>';
-        indicator.style.background = 'var(--error-alpha-10)';
-        indicator.style.color = 'var(--error)';
+        indicator.style.background = "var(--error-alpha-10)";
+        indicator.style.color = "var(--error)";
       } else {
         // Moderate threshold
         indicator.innerHTML = '<i class="icon-minus-circle"></i>';
-        indicator.style.background = 'var(--primary-alpha-10)';
-        indicator.style.color = 'var(--primary)';
+        indicator.style.background = "var(--primary-alpha-10)";
+        indicator.style.color = "var(--primary)";
       }
     }
   }
@@ -217,25 +230,25 @@ function createLifecycle() {
   function updateTrailingStopExample() {
     const activationInput = $("#trail-activation");
     const distanceInput = $("#trail-distance");
-    
+
     if (!activationInput || !distanceInput) return;
-    
+
     const activation = parseFloat(activationInput.value) || 15;
     const distance = parseFloat(distanceInput.value) || 5;
-    
+
     // Example scenario: Entry at 1.00 SOL
-    const entryPrice = 1.00;
+    const entryPrice = 1.0;
     const activationPrice = entryPrice * (1 + activation / 100);
-    const peakPrice = activationPrice * 1.20; // +20% from activation
+    const peakPrice = activationPrice * 1.2; // +20% from activation
     const exitPrice = peakPrice * (1 - distance / 100);
     const protectedProfit = ((exitPrice - entryPrice) / entryPrice) * 100;
-    
+
     // Update timeline values
     const stepEntry = $("#example-entry");
     const stepActivation = $("#example-activation");
     const stepPeak = $("#example-peak");
     const stepExit = $("#example-exit");
-    
+
     if (stepEntry) stepEntry.textContent = `${entryPrice.toFixed(4)} SOL`;
     if (stepActivation) {
       stepActivation.textContent = `${activationPrice.toFixed(4)} SOL`;
@@ -255,7 +268,7 @@ function createLifecycle() {
       const exitDetail = $("#example-exit-pct");
       if (exitDetail) exitDetail.textContent = `+${protectedProfit.toFixed(1)}% final`;
     }
-    
+
     // Update summary
     const summaryProtected = $("#example-protected");
     const summaryAvoided = $("#example-avoided");
@@ -266,42 +279,50 @@ function createLifecycle() {
       const avoidedLoss = ((peakPrice - exitPrice) / peakPrice) * 100;
       summaryAvoided.textContent = `${avoidedLoss.toFixed(1)}%`;
     }
-    
+
     // Update impact indicators
     const activationIndicator = $("#activation-indicator");
     const distanceIndicator = $("#distance-indicator");
     const activationImpact = $("#activation-impact-text");
     const distanceImpact = $("#distance-impact-text");
-    
+
     if (activationIndicator) {
-      activationIndicator.innerHTML = activation >= 20 ? '<i class="icon-alert-triangle"></i>' : '<i class="icon-check-circle"></i>';
-      activationIndicator.style.background = activation >= 20 ? 'var(--warning-alpha-10)' : 'var(--success-alpha-10)';
-      activationIndicator.style.color = activation >= 20 ? 'var(--warning)' : 'var(--success)';
+      activationIndicator.innerHTML =
+        activation >= 20
+          ? '<i class="icon-alert-triangle"></i>'
+          : '<i class="icon-check-circle"></i>';
+      activationIndicator.style.background =
+        activation >= 20 ? "var(--warning-alpha-10)" : "var(--success-alpha-10)";
+      activationIndicator.style.color = activation >= 20 ? "var(--warning)" : "var(--success)";
     }
-    
+
     if (activationImpact) {
       if (activation < 10) {
-        activationImpact.textContent = 'Activates quickly - good for volatile tokens';
+        activationImpact.textContent = "Activates quickly - good for volatile tokens";
       } else if (activation < 20) {
-        activationImpact.textContent = 'Balanced activation - suitable for most scenarios';
+        activationImpact.textContent = "Balanced activation - suitable for most scenarios";
       } else {
-        activationImpact.textContent = 'Delayed activation - may miss protection window';
+        activationImpact.textContent = "Delayed activation - may miss protection window";
       }
     }
-    
+
     if (distanceIndicator) {
-      distanceIndicator.innerHTML = distance >= 10 ? '<i class="icon-alert-triangle"></i>' : '<i class="icon-check-circle"></i>';
-      distanceIndicator.style.background = distance >= 10 ? 'var(--warning-alpha-10)' : 'var(--success-alpha-10)';
-      distanceIndicator.style.color = distance >= 10 ? 'var(--warning)' : 'var(--success)';
+      distanceIndicator.innerHTML =
+        distance >= 10
+          ? '<i class="icon-alert-triangle"></i>'
+          : '<i class="icon-check-circle"></i>';
+      distanceIndicator.style.background =
+        distance >= 10 ? "var(--warning-alpha-10)" : "var(--success-alpha-10)";
+      distanceIndicator.style.color = distance >= 10 ? "var(--warning)" : "var(--success)";
     }
-    
+
     if (distanceImpact) {
       if (distance < 5) {
-        distanceImpact.textContent = 'Tight protection - may exit on minor dips';
+        distanceImpact.textContent = "Tight protection - may exit on minor dips";
       } else if (distance < 10) {
-        distanceImpact.textContent = 'Balanced protection - good for most situations';
+        distanceImpact.textContent = "Balanced protection - good for most situations";
       } else {
-        distanceImpact.textContent = 'Loose protection - allows larger pullbacks';
+        distanceImpact.textContent = "Loose protection - allows larger pullbacks";
       }
     }
   }
@@ -311,11 +332,11 @@ function createLifecycle() {
    */
   async function loadTrailingStopStats() {
     // This will be implemented in Phase 2 when we add trailing stop tracking
-    const statsCards = $$('.quick-stat-card');
-    statsCards.forEach(card => {
-      const value = card.querySelector('.quick-stat-value');
+    const statsCards = $$(".quick-stat-card");
+    statsCards.forEach((card) => {
+      const value = card.querySelector(".quick-stat-value");
       if (value) {
-        value.textContent = '--';
+        value.textContent = "--";
       }
     });
   }
@@ -388,19 +409,17 @@ function createLifecycle() {
    */
   async function loadConfig() {
     try {
-      const response = await fetch("/api/config");
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const data = await response.json();
+      const data = await requestManager.fetch("/api/config", {
+        priority: "normal",
+      });
       state.config = data.config;
 
       // Update form fields
       updateFormFields();
-      
+
       // Update config overview in stats tab
       updateConfigOverview();
-      
+
       // Update visual examples with loaded values
       updateRoiExample();
       updateTimeLossExample();
@@ -419,42 +438,51 @@ function createLifecycle() {
    */
   function updateConfigOverview() {
     if (!state.config) return;
-    
+
     const trader = state.config.trader || {};
     const positions = state.config.positions || {};
-    
+
     // Exit Strategies
-    updateConfigItem('roi-status', trader.roi_exit_enabled, `${trader.roi_target_percent || 20}%`);
-    updateConfigItem('trailing-status', positions.trailing_stop_enabled, 
-      `${positions.trailing_stop_activation_pct || 10}%→${positions.trailing_stop_distance_pct || 5}%`);
-    updateConfigItem('time-status', trader.time_override_enabled,
-      `${trader.time_override_duration || 168}${(trader.time_override_unit?.[0] || 'h')} @ ${trader.time_override_loss_threshold_percent || -40}%`);
-    
+    updateConfigItem("roi-status", trader.roi_exit_enabled, `${trader.roi_target_percent || 20}%`);
+    updateConfigItem(
+      "trailing-status",
+      positions.trailing_stop_enabled,
+      `${positions.trailing_stop_activation_pct || 10}%→${positions.trailing_stop_distance_pct || 5}%`
+    );
+    updateConfigItem(
+      "time-status",
+      trader.time_override_enabled,
+      `${trader.time_override_duration || 168}${trader.time_override_unit?.[0] || "h"} @ ${trader.time_override_loss_threshold_percent || -40}%`
+    );
+
     // Position Management
-    const maxPositionsEl = $('#config-max-positions');
+    const maxPositionsEl = $("#config-max-positions");
     if (maxPositionsEl) maxPositionsEl.textContent = trader.max_open_positions || 2;
-    
-    const tradeSizeEl = $('#config-trade-size');
+
+    const tradeSizeEl = $("#config-trade-size");
     if (tradeSizeEl) tradeSizeEl.textContent = `${trader.trade_size_sol || 0.005} SOL`;
-    
-    updateConfigItem('dca-status', trader.dca_enabled,
-      `${trader.dca_threshold_pct || -10}% (${trader.dca_max_count || 2}x, ${trader.dca_size_percentage || 50}%)`);
-    
+
+    updateConfigItem(
+      "dca-status",
+      trader.dca_enabled,
+      `${trader.dca_threshold_pct || -10}% (${trader.dca_max_count || 2}x, ${trader.dca_size_percentage || 50}%)`
+    );
+
     // Risk Controls
-    const closeCooldownEl = $('#config-close-cooldown');
+    const closeCooldownEl = $("#config-close-cooldown");
     if (closeCooldownEl) {
       const seconds = Number.isFinite(trader.close_cooldown_seconds)
         ? trader.close_cooldown_seconds
         : 600;
       const minutes = seconds / 60;
-      closeCooldownEl.textContent = minutes < 1 ? '<1m' : `${Math.round(minutes)}m`;
+      closeCooldownEl.textContent = minutes < 1 ? "<1m" : `${Math.round(minutes)}m`;
     }
-    
-    const entryConcurrencyEl = $('#config-entry-concurrency');
+
+    const entryConcurrencyEl = $("#config-entry-concurrency");
     if (entryConcurrencyEl) entryConcurrencyEl.textContent = trader.entry_monitor_concurrency || 10;
-    
+
     // System Status
-    const modeEl = $('#config-mode');
+    const modeEl = $("#config-mode");
     if (modeEl) {
       if (trader.dry_run) {
         modeEl.innerHTML = '<span class="mode-indicator dry-run">🟡 DRY RUN</span>';
@@ -462,16 +490,16 @@ function createLifecycle() {
         modeEl.innerHTML = '<span class="mode-indicator live">🔴 LIVE TRADING</span>';
       }
     }
-    
-    const strategiesCountEl = $('#config-strategies-count');
+
+    const strategiesCountEl = $("#config-strategies-count");
     if (strategiesCountEl) {
-      const activeCount = state.strategies?.filter(s => s.enabled).length || 0;
+      const activeCount = state.strategies?.filter((s) => s.enabled).length || 0;
       strategiesCountEl.textContent = `${activeCount} active`;
     }
-    
-    const lastCheckEl = $('#config-last-check');
+
+    const lastCheckEl = $("#config-last-check");
     if (lastCheckEl) {
-      lastCheckEl.textContent = 'Just now';
+      lastCheckEl.textContent = "Just now";
       lastCheckEl.dataset.timestamp = Date.now();
     }
   }
@@ -482,16 +510,19 @@ function createLifecycle() {
   function updateConfigItem(id, enabled, value) {
     const el = $(`#${id}`);
     if (!el) return;
-    
-    const icon = enabled 
-      ? '<i class="icon-check-circle status-icon enabled"></i>' 
+
+    const icon = enabled
+      ? '<i class="icon-check-circle status-icon enabled"></i>'
       : '<i class="icon-circle status-icon disabled"></i>';
-    const displayValue = enabled ? value : 'Disabled';
-    const labelEl = el.querySelector('.label');
-    const valueEl = el.querySelector('.value');
-    
+    const displayValue = enabled ? value : "Disabled";
+    const labelEl = el.querySelector(".label");
+    const valueEl = el.querySelector(".value");
+
     if (labelEl && valueEl) {
-      el.querySelector('i').outerHTML = icon;
+      const iconEl = el.querySelector("i");
+      if (iconEl) {
+        iconEl.outerHTML = icon;
+      }
       valueEl.textContent = displayValue;
     }
   }
@@ -534,7 +565,7 @@ function createLifecycle() {
     const timeMaxHold = $("#time-max-hold");
     const timeUnit = $("#time-unit");
     const timeLossThreshold = $("#time-loss-threshold");
-    
+
     if (timeOverrideEnabled) {
       timeOverrideEnabled.checked = trader.time_override_enabled || false;
     }
@@ -547,7 +578,7 @@ function createLifecycle() {
     if (timeLossThreshold) {
       timeLossThreshold.value = trader.time_override_loss_threshold_percent || -40;
     }
-    
+
     // Update time conversion hint
     updateTimeConversionHint();
 
@@ -590,11 +621,9 @@ function createLifecycle() {
    */
   async function loadStats() {
     try {
-      const response = await fetch("/api/trader/stats");
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const data = await response.json();
+      const data = await requestManager.fetch("/api/trader/stats", {
+        priority: "normal",
+      });
 
       // Update stats period
       const statsPeriod = $("#stats-period");
@@ -631,7 +660,7 @@ function createLifecycle() {
       // Total P&L (calculated from exit breakdown)
       if (totalPnl && data.exit_breakdown) {
         const totalProfit = data.exit_breakdown.reduce((sum, exit) => {
-          return sum + (exit.avg_profit_pct * exit.count);
+          return sum + exit.avg_profit_pct * exit.count;
         }, 0);
         const avgProfit = data.total_trades > 0 ? totalProfit / data.total_trades : 0;
         totalPnl.textContent = `${avgProfit >= 0 ? "+" : ""}${avgProfit.toFixed(1)}%`;
@@ -646,7 +675,8 @@ function createLifecycle() {
         totalTrades.textContent = data.total_trades;
       }
       if (totalTradesDetail) {
-        totalTradesDetail.textContent = data.total_trades === 1 ? "1 position closed" : `${data.total_trades} positions closed`;
+        totalTradesDetail.textContent =
+          data.total_trades === 1 ? "1 position closed" : `${data.total_trades} positions closed`;
       }
 
       // Avg Hold Time
@@ -682,14 +712,16 @@ function createLifecycle() {
       // Update exit breakdown with visual bars
       const exitBreakdown = $("#exit-breakdown");
       if (exitBreakdown && data.exit_breakdown && data.exit_breakdown.length > 0) {
-        const maxCount = Math.max(...data.exit_breakdown.map(e => e.count));
-        
-        const barsHtml = data.exit_breakdown.map((exit) => {
-          const percentage = maxCount > 0 ? (exit.count / maxCount) * 100 : 0;
-          const barClass = exit.avg_profit_pct >= 0 ? "success" : "danger";
-          const avgClass = exit.avg_profit_pct >= 0 ? "positive" : "negative";
-          
-          return `
+        const counts = data.exit_breakdown.map((e) => e.count);
+        const maxCount = counts.length > 0 ? Math.max(...counts) : 1;
+
+        const barsHtml = data.exit_breakdown
+          .map((exit) => {
+            const percentage = maxCount > 0 ? (exit.count / maxCount) * 100 : 0;
+            const barClass = exit.avg_profit_pct >= 0 ? "success" : "danger";
+            const avgClass = exit.avg_profit_pct >= 0 ? "positive" : "negative";
+
+            return `
             <div class="exit-bar-item">
               <div class="exit-bar-header">
                 <div class="exit-bar-label">
@@ -710,8 +742,9 @@ function createLifecycle() {
               </div>
             </div>
           `;
-        }).join("");
-        
+          })
+          .join("");
+
         exitBreakdown.innerHTML = `<div class="exit-bars">${barsHtml}</div>`;
       } else if (exitBreakdown) {
         exitBreakdown.innerHTML = `
@@ -724,7 +757,6 @@ function createLifecycle() {
 
       // Update positions summary (if we have active positions)
       await updatePositionsSummary();
-
     } catch (error) {
       console.error("[Trader] Failed to load stats:", error);
       // Show error state in UI
@@ -745,9 +777,9 @@ function createLifecycle() {
       "ROI Target": "target",
       "Trailing Stop": "trending-down",
       "Time Override": "clock",
-      "Manual": "hand",
+      Manual: "hand",
       "Stop Loss": "alert-triangle",
-      "Strategy": "zap",
+      Strategy: "zap",
     };
     return iconMap[exitType] || "circle";
   }
@@ -760,11 +792,9 @@ function createLifecycle() {
     if (!positionsSummary) return;
 
     try {
-      const response = await fetch("/api/positions");
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const data = await response.json();
+      const data = await requestManager.fetch("/api/positions", {
+        priority: "normal",
+      });
 
       if (!data.positions || data.positions.length === 0) {
         positionsSummary.innerHTML = `
@@ -776,14 +806,17 @@ function createLifecycle() {
         return;
       }
 
-      const cardsHtml = data.positions.map((pos) => {
-        const roi = pos.roi_percent || 0;
-        const roiClass = roi >= 0 ? "positive" : "negative";
-        const holdTime = pos.opened_at_timestamp 
-          ? Utils.formatDuration((Date.now() - new Date(pos.opened_at_timestamp).getTime()) / 1000)
-          : "—";
+      const cardsHtml = data.positions
+        .map((pos) => {
+          const roi = pos.roi_percent || 0;
+          const roiClass = roi >= 0 ? "positive" : "negative";
+          const holdTime = pos.opened_at_timestamp
+            ? Utils.formatDuration(
+                (Date.now() - new Date(pos.opened_at_timestamp).getTime()) / 1000
+              )
+            : "—";
 
-        return `
+          return `
           <div class="position-summary-card">
             <div class="position-summary-header">
               <div class="position-summary-token">${Utils.escapeHtml(pos.token_symbol || "Unknown")}</div>
@@ -805,7 +838,8 @@ function createLifecycle() {
             </div>
           </div>
         `;
-      }).join("");
+        })
+        .join("");
 
       positionsSummary.innerHTML = `<div class="positions-grid">${cardsHtml}</div>`;
     } catch (error) {
@@ -832,11 +866,9 @@ function createLifecycle() {
       params.append("activation_pct", activation);
       params.append("distance_pct", distance);
 
-      const response = await fetch(`/api/trader/preview-trailing-stop?${params}`);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const data = await response.json();
+      const data = await requestManager.fetch(`/api/trader/preview-trailing-stop?${params}`, {
+        priority: "normal",
+      });
 
       if (data.success) {
         updatePreviewPanel(data.data);
@@ -927,11 +959,9 @@ function createLifecycle() {
    */
   async function loadStrategies() {
     try {
-      const response = await fetch("/api/strategies");
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const data = await response.json();
+      const data = await requestManager.fetch("/api/strategies", {
+        priority: "normal",
+      });
 
       state.strategies = data.strategies || [];
 
@@ -998,11 +1028,13 @@ function createLifecycle() {
 
     // Attach event listeners for toggle switches
     container.querySelectorAll('input[type="checkbox"]').forEach((checkbox) => {
-      checkbox.addEventListener("change", async (e) => {
+      const handler = async (e) => {
         const strategyId = parseInt(e.target.dataset.strategyId, 10);
         const enabled = e.target.checked;
         await updateStrategyStatus(strategyId, enabled);
-      });
+      };
+      checkbox.addEventListener("change", handler);
+      eventCleanups.push(() => checkbox.removeEventListener("change", handler));
     });
   }
 
@@ -1011,15 +1043,12 @@ function createLifecycle() {
    */
   async function updateStrategyStatus(strategyId, enabled) {
     try {
-      const response = await fetch(`/api/strategies/${strategyId}`, {
+      await requestManager.fetch(`/api/strategies/${strategyId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled }),
+        priority: "high",
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
 
       Utils.showToast({
         type: "success",
@@ -1043,11 +1072,9 @@ function createLifecycle() {
    */
   async function updateTimeRulesStatus() {
     try {
-      const response = await fetch("/api/positions");
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const data = await response.json();
+      const data = await requestManager.fetch("/api/positions", {
+        priority: "normal",
+      });
 
       const statusList = $("#time-positions-status");
       if (!statusList) return;
@@ -1099,7 +1126,7 @@ function createLifecycle() {
     // Trailing Stop form
     const saveTrailing = $("#save-trailing");
     if (saveTrailing) {
-      saveTrailing.addEventListener("click", async (e) => {
+      addTrackedListener(saveTrailing, "click", async (e) => {
         e.preventDefault();
         const enabled = $("#trailing-enabled")?.checked || false;
         const activation = parseFloat($("#trail-activation")?.value || "10.0");
@@ -1117,7 +1144,7 @@ function createLifecycle() {
     // Trailing Stop reset button
     const resetTrailing = $("#reset-trailing");
     if (resetTrailing) {
-      resetTrailing.addEventListener("click", async (e) => {
+      addTrackedListener(resetTrailing, "click", async (e) => {
         e.preventDefault();
         const { confirmed } = await ConfirmationDialog.show({
           title: "Reset Trailing Stop",
@@ -1143,7 +1170,7 @@ function createLifecycle() {
     // ROI save button
     const saveRoi = $("#save-roi");
     if (saveRoi) {
-      saveRoi.addEventListener("click", async (e) => {
+      addTrackedListener(saveRoi, "click", async (e) => {
         e.preventDefault();
         const enabled = $("#roi-enabled")?.checked || false;
         const target = parseFloat($("#roi-target")?.value || "20");
@@ -1159,12 +1186,11 @@ function createLifecycle() {
     // ROI reset button
     const resetRoi = $("#reset-roi");
     if (resetRoi) {
-      resetRoi.addEventListener("click", async (e) => {
+      addTrackedListener(resetRoi, "click", async (e) => {
         e.preventDefault();
         const { confirmed } = await ConfirmationDialog.show({
           title: "Reset ROI Exit",
-          message:
-            "This will reset ROI exit settings to default values:\n• Enabled\n• Target: 20%",
+          message: "This will reset ROI exit settings to default values:\n• Enabled\n• Target: 20%",
           confirmLabel: "Reset",
           cancelLabel: "Cancel",
           variant: "warning",
@@ -1184,7 +1210,7 @@ function createLifecycle() {
     // Time Rules save button
     const saveTimeRules = $("#save-time-rules");
     if (saveTimeRules) {
-      saveTimeRules.addEventListener("click", async (e) => {
+      addTrackedListener(saveTimeRules, "click", async (e) => {
         e.preventDefault();
         const enabled = $("#time-override-enabled")?.checked || false;
         const duration = parseFloat($("#time-max-hold")?.value || "168");
@@ -1204,7 +1230,7 @@ function createLifecycle() {
     // Time Rules reset button
     const resetTimeRules = $("#reset-time-rules");
     if (resetTimeRules) {
-      resetTimeRules.addEventListener("click", async (e) => {
+      addTrackedListener(resetTimeRules, "click", async (e) => {
         e.preventDefault();
         const { confirmed } = await ConfirmationDialog.show({
           title: "Reset Time Override",
@@ -1231,7 +1257,7 @@ function createLifecycle() {
     // General Settings save button
     const saveGeneral = $("#save-general");
     if (saveGeneral) {
-      saveGeneral.addEventListener("click", async (e) => {
+      addTrackedListener(saveGeneral, "click", async (e) => {
         e.preventDefault();
 
         const maxPositions = parseInt($("#max-positions")?.value || "2", 10);
@@ -1264,7 +1290,7 @@ function createLifecycle() {
     // General Settings reset button
     const resetGeneral = $("#reset-general");
     if (resetGeneral) {
-      resetGeneral.addEventListener("click", async (e) => {
+      addTrackedListener(resetGeneral, "click", async (e) => {
         e.preventDefault();
         const { confirmed } = await ConfirmationDialog.show({
           title: "Reset General Settings",
@@ -1293,7 +1319,7 @@ function createLifecycle() {
     // DCA save button
     const saveDca = $("#save-dca");
     if (saveDca) {
-      saveDca.addEventListener("click", async (e) => {
+      addTrackedListener(saveDca, "click", async (e) => {
         e.preventDefault();
 
         const dcaEnabled = $("#dca-enabled")?.checked || false;
@@ -1317,7 +1343,7 @@ function createLifecycle() {
     // DCA reset button
     const resetDca = $("#reset-dca");
     if (resetDca) {
-      resetDca.addEventListener("click", async (e) => {
+      addTrackedListener(resetDca, "click", async (e) => {
         e.preventDefault();
         const { confirmed } = await ConfirmationDialog.show({
           title: "Reset DCA Settings",
@@ -1345,7 +1371,7 @@ function createLifecycle() {
     // Dry run checkbox immediate update
     const dryRunCheckbox = $("#dry-run");
     if (dryRunCheckbox) {
-      dryRunCheckbox.addEventListener("change", () => {
+      addTrackedListener(dryRunCheckbox, "change", () => {
         updateDryRunWarning();
       });
     }
@@ -1353,7 +1379,7 @@ function createLifecycle() {
     // Strategy Control save button
     const saveStrategies = $("#save-strategies");
     if (saveStrategies) {
-      saveStrategies.addEventListener("click", async () => {
+      addTrackedListener(saveStrategies, "click", async () => {
         await loadStrategies();
         Utils.showToast({
           type: "success",
@@ -1366,7 +1392,7 @@ function createLifecycle() {
     // Strategy Control refresh button
     const refreshStrategies = $("#refresh-strategies");
     if (refreshStrategies) {
-      refreshStrategies.addEventListener("click", async () => {
+      addTrackedListener(refreshStrategies, "click", async () => {
         await loadStrategies();
         Utils.showToast({
           type: "info",
@@ -1379,7 +1405,7 @@ function createLifecycle() {
     // Export config button
     const exportBtn = $("#export-config-btn");
     if (exportBtn) {
-      exportBtn.addEventListener("click", () => {
+      addTrackedListener(exportBtn, "click", () => {
         exportConfig();
       });
     }
@@ -1387,7 +1413,7 @@ function createLifecycle() {
     // Import config button
     const importBtn = $("#import-config-btn");
     if (importBtn) {
-      importBtn.addEventListener("click", () => {
+      addTrackedListener(importBtn, "click", () => {
         importConfig();
       });
     }
@@ -1395,7 +1421,7 @@ function createLifecycle() {
     // Time unit change listener
     const timeUnit = $("#time-unit");
     if (timeUnit) {
-      timeUnit.addEventListener("change", () => {
+      addTrackedListener(timeUnit, "change", () => {
         updateTimeConversionHint();
       });
     }
@@ -1403,7 +1429,7 @@ function createLifecycle() {
     // Time duration input listener
     const timeMaxHold = $("#time-max-hold");
     if (timeMaxHold) {
-      timeMaxHold.addEventListener("input", () => {
+      addTrackedListener(timeMaxHold, "input", () => {
         updateTimeConversionHint();
       });
     }
@@ -1411,7 +1437,7 @@ function createLifecycle() {
     // ROI target input listener
     const roiTarget = $("#roi-target");
     if (roiTarget) {
-      roiTarget.addEventListener("input", () => {
+      addTrackedListener(roiTarget, "input", () => {
         updateRoiExample();
       });
     }
@@ -1419,15 +1445,15 @@ function createLifecycle() {
     // Time loss threshold input listener
     const timeLossThreshold = $("#time-loss-threshold");
     if (timeLossThreshold) {
-      timeLossThreshold.addEventListener("input", () => {
+      addTrackedListener(timeLossThreshold, "input", () => {
         updateTimeLossExample();
       });
     }
-    
+
     // Config overview "View Details" button
     const expandConfigBtn = $("#expand-config");
     if (expandConfigBtn) {
-      expandConfigBtn.addEventListener("click", () => {
+      addTrackedListener(expandConfigBtn, "click", () => {
         if (tabBar) {
           tabBar.switchTo("general-settings");
         }
@@ -1439,14 +1465,14 @@ function createLifecycle() {
    * Update relative time display for last check
    */
   function updateLastCheckTime() {
-    const lastCheckEl = $('#config-last-check');
+    const lastCheckEl = $("#config-last-check");
     if (!lastCheckEl || !lastCheckEl.dataset.timestamp) return;
-    
+
     const timestamp = parseInt(lastCheckEl.dataset.timestamp, 10);
     const seconds = Math.floor((Date.now() - timestamp) / 1000);
-    
+
     if (seconds < 10) {
-      lastCheckEl.textContent = 'Just now';
+      lastCheckEl.textContent = "Just now";
     } else if (seconds < 60) {
       lastCheckEl.textContent = `${seconds}s ago`;
     } else {
@@ -1460,20 +1486,25 @@ function createLifecycle() {
    */
   function setupPreviewListeners() {
     // Debounced preview update on config change
-    const debouncedTrailingPreview = typeof Utils.debounce === 'function' 
-      ? Utils.debounce(() => { updateTrailingStopExample(); }, 300)
-      : () => { updateTrailingStopExample(); };
+    const debouncedTrailingPreview =
+      typeof Utils.debounce === "function"
+        ? Utils.debounce(() => {
+            updateTrailingStopExample();
+          }, 300)
+        : () => {
+            updateTrailingStopExample();
+          };
 
     // Trailing activation input
     const activationInput = $("#trail-activation");
     if (activationInput) {
-      activationInput.addEventListener("input", debouncedTrailingPreview);
+      addTrackedListener(activationInput, "input", debouncedTrailingPreview);
     }
 
     // Trailing distance input
     const distanceInput = $("#trail-distance");
     if (distanceInput) {
-      distanceInput.addEventListener("input", debouncedTrailingPreview);
+      addTrackedListener(distanceInput, "input", debouncedTrailingPreview);
     }
   }
 
@@ -1482,15 +1513,12 @@ function createLifecycle() {
    */
   async function saveConfig(updates) {
     try {
-      const response = await fetch("/api/config", {
+      await requestManager.fetch("/api/config", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(updates),
+        priority: "high",
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
 
       Utils.showToast({
         type: "success",
@@ -1590,7 +1618,7 @@ function createLifecycle() {
   function setupNavigation() {
     // Link to positions page
     $$(".nav-to-positions").forEach((link) => {
-      link.addEventListener("click", (e) => {
+      addTrackedListener(link, "click", (e) => {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent("navigate", { detail: { page: "positions" } }));
       });
@@ -1598,7 +1626,7 @@ function createLifecycle() {
 
     // Link to strategies page
     $$(".nav-to-strategies").forEach((link) => {
-      link.addEventListener("click", (e) => {
+      addTrackedListener(link, "click", (e) => {
         e.preventDefault();
         window.dispatchEvent(new CustomEvent("navigate", { detail: { page: "strategies" } }));
       });
@@ -1642,7 +1670,7 @@ function createLifecycle() {
       if (activeTab && activeTab !== state.currentTab) {
         state.currentTab = activeTab;
       }
-      
+
       // Show the active tab content
       switchTab(state.currentTab);
 
@@ -1737,6 +1765,11 @@ function createLifecycle() {
      */
     dispose() {
       console.log("[Trader] Disposing page");
+
+      // Clean up all tracked event listeners
+      eventCleanups.forEach((cleanup) => cleanup());
+      eventCleanups.length = 0;
+
       // TabBar cleaned up automatically by manageTabBar
       tabBar = null;
       state.config = null;

@@ -1,7 +1,10 @@
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
+import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
+import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
+import { requestManager } from "../core/request_manager.js";
 
 const PAGE_LIMIT = 100;
 const DEFAULT_FILTERS = {
@@ -198,21 +201,16 @@ function createLifecycle() {
 
   const fetchSummary = async ({ signal } = {}) => {
     try {
-      const response = await fetch("/api/transactions/summary", {
+      const data = await requestManager.fetch("/api/transactions/summary", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "X-Requested-With": "fetch",
         },
         cache: "no-store",
-        signal,
+        priority: "normal",
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
       state.summary = data ?? null;
       updateToolbar();
     } catch (error) {
@@ -229,7 +227,7 @@ function createLifecycle() {
     const payload = buildRequestPayload(payloadCursor);
 
     try {
-      const response = await fetch("/api/transactions/list", {
+      const data = await requestManager.fetch("/api/transactions/list", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -237,14 +235,8 @@ function createLifecycle() {
         },
         body: JSON.stringify(payload),
         cache: "no-store",
-        signal,
+        priority: "normal",
       });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
       if (
         data?.total_estimate !== undefined &&
         data.total_estimate !== null &&
@@ -289,7 +281,7 @@ function createLifecycle() {
         while (nextCursor && guard < MAX_EXTRA_BATCHES && !hitDuplicate) {
           guard += 1;
           const nextPayload = buildRequestPayload(nextCursor);
-          const nextResponse = await fetch("/api/transactions/list", {
+          const nextData = await requestManager.fetch("/api/transactions/list", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -297,14 +289,9 @@ function createLifecycle() {
             },
             body: JSON.stringify(nextPayload),
             cache: "no-store",
-            signal,
+            priority: "normal",
           });
 
-          if (!nextResponse.ok) {
-            throw new Error(`HTTP ${nextResponse.status}: ${nextResponse.statusText}`);
-          }
-
-          const nextData = await nextResponse.json();
           const nextItems = Array.isArray(nextData?.items) ? nextData.items : [];
 
           processBatch(nextItems);

@@ -168,46 +168,53 @@ export class Toast {
     // Close button
     const closeBtn = this.element.querySelector(".toast__close");
     if (closeBtn) {
-      closeBtn.addEventListener("click", (e) => {
+      this._closeClickHandler = (e) => {
         e.stopPropagation();
         this._handleClose();
-      });
+      };
+      closeBtn.addEventListener("click", this._closeClickHandler);
 
       // Keyboard accessibility for close button
-      closeBtn.addEventListener("keydown", (e) => {
+      this._closeKeyHandler = (e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
           this._handleClose();
         }
-      });
+      };
+      closeBtn.addEventListener("keydown", this._closeKeyHandler);
     }
 
     // Action buttons
     const actionButtons = this.element.querySelectorAll(".toast__action");
+    this._actionHandlers = [];
     actionButtons.forEach((btn) => {
-      btn.addEventListener("click", (e) => {
+      const handler = (e) => {
         e.stopPropagation();
         const index = parseInt(btn.getAttribute("data-action-index"), 10);
         this._handleAction(index);
-      });
+      };
+      btn.addEventListener("click", handler);
+      this._actionHandlers.push({ element: btn, handler });
     });
 
     // Make toast focusable for keyboard navigation
     this.element.setAttribute("tabindex", "0");
 
     // Keyboard shortcuts
-    this.element.addEventListener("keydown", (e) => {
+    this._keydownHandler = (e) => {
       if (e.key === "Escape") {
         this._handleClose();
       }
-    });
+    };
+    this.element.addEventListener("keydown", this._keydownHandler);
 
     // Click on toast (optional callback)
-    this.element.addEventListener("click", () => {
+    this._clickHandler = () => {
       if (this.config.onClick) {
         this.config.onClick();
       }
-    });
+    };
+    this.element.addEventListener("click", this._clickHandler);
   }
 
   /**
@@ -260,9 +267,44 @@ export class Toast {
    * Destroy the toast (cleanup)
    */
   destroy() {
-    if (this.element && this.element.parentNode) {
-      this.element.remove();
+    // Remove all event listeners
+    if (this.element) {
+      const closeBtn = this.element.querySelector(".toast__close");
+      if (closeBtn) {
+        if (this._closeClickHandler) {
+          closeBtn.removeEventListener("click", this._closeClickHandler);
+        }
+        if (this._closeKeyHandler) {
+          closeBtn.removeEventListener("keydown", this._closeKeyHandler);
+        }
+      }
+
+      // Remove action button handlers
+      if (this._actionHandlers) {
+        this._actionHandlers.forEach(({ element, handler }) => {
+          element.removeEventListener("click", handler);
+        });
+        this._actionHandlers = null;
+      }
+
+      // Remove toast-level handlers
+      if (this._keydownHandler) {
+        this.element.removeEventListener("keydown", this._keydownHandler);
+        this._keydownHandler = null;
+      }
+      if (this._clickHandler) {
+        this.element.removeEventListener("click", this._clickHandler);
+        this._clickHandler = null;
+      }
+
+      // Remove from DOM
+      if (this.element.parentNode) {
+        this.element.remove();
+      }
     }
+
+    this._closeClickHandler = null;
+    this._closeKeyHandler = null;
     this.element = null;
   }
 }

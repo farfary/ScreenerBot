@@ -111,7 +111,8 @@ impl SwapBuilder {
         let account_data = AccountData::from_account(*pool_address, pool_account, 0);
 
         // Determine program type from owner
-        let program_kind = match account_data.owner.to_string().as_str() {
+        let owner_str = account_data.owner.to_string();
+        let program_kind = match owner_str.as_str() {
             RAYDIUM_CPMM_PROGRAM_ID => ProgramKind::RaydiumCpmm,
             RAYDIUM_CLMM_PROGRAM_ID => ProgramKind::RaydiumClmm,
             _ => {

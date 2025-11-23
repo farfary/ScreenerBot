@@ -1,5 +1,6 @@
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
+import { requestManager } from "../core/request_manager.js";
 import * as Utils from "../core/utils.js";
 import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
@@ -261,9 +262,9 @@ function createLifecycle() {
     const status = state.view;
     const url = `/api/positions?status=${encodeURIComponent(status)}&limit=500`;
     try {
-      const res = await fetch(url, { cache: "no-store", signal });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const rows = await res.json();
+      const rows = await requestManager.fetch(url, {
+        priority: "normal",
+      });
       state.total = Array.isArray(rows) ? rows.length : 0;
       state.lastUpdate = Date.now();
 
@@ -410,12 +411,11 @@ function createLifecycle() {
             // Fetch config for entry sizes
             let entrySizes = [0.005, 0.01, 0.02, 0.05];
             try {
-              const configRes = await fetch("/api/config/trader");
-              if (configRes.ok) {
-                const configData = await configRes.json();
-                if (Array.isArray(configData?.data?.entry_sizes)) {
-                  entrySizes = configData.data.entry_sizes;
-                }
+              const configData = await requestManager.fetch("/api/config/trader", {
+                priority: "normal",
+              });
+              if (Array.isArray(configData?.data?.entry_sizes)) {
+                entrySizes = configData.data.entry_sizes;
               }
             } catch (err) {
               console.warn("Failed to fetch entry_sizes config:", err);
@@ -438,17 +438,16 @@ function createLifecycle() {
 
             // Proceed with API call
             btn.disabled = true;
-            const res = await fetch("/api/trader/manual/add", {
+            const data = await requestManager.fetch("/api/trader/manual/add", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 mint,
                 ...(result.amount ? { size_sol: result.amount } : {}),
               }),
+              priority: "high",
             });
-            const data = await res.json();
             btn.disabled = false;
-            if (!res.ok) throw new Error(data?.error?.message || "Add failed");
             Utils.showToast("Added to position", "success");
             table.refresh({ reason: "manual", preserveScroll: true });
           } else if (action === "sell") {
@@ -471,14 +470,13 @@ function createLifecycle() {
                 : { mint, percentage: result.percentage };
 
             btn.disabled = true;
-            const res = await fetch("/api/trader/manual/sell", {
+            const data = await requestManager.fetch("/api/trader/manual/sell", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(body),
+              priority: "high",
             });
-            const data = await res.json();
             btn.disabled = false;
-            if (!res.ok) throw new Error(data?.error?.message || "Sell failed");
             Utils.showToast("Sell placed", "success");
             table.refresh({ reason: "manual", preserveScroll: true });
           }
@@ -496,8 +494,8 @@ function createLifecycle() {
 
     activate(ctx) {
       // Fetch wallet balance for dialog context
-      fetch("/api/wallet/balance")
-        .then((res) => (res.ok ? res.json() : null))
+      requestManager
+        .fetch("/api/wallet/balance", { priority: "low" })
         .then((data) => {
           if (data?.sol_balance != null) {
             walletBalance = data.sol_balance;

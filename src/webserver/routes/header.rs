@@ -200,7 +200,7 @@ async fn calculate_today_pnl() -> (f64, f64) {
     let today_start = chrono::Utc::now()
         .date_naive()
         .and_hms_opt(0, 0, 0)
-        .unwrap();
+        .unwrap_or_else(|| chrono::NaiveDateTime::default());
     let today_start_ts = today_start.and_utc().timestamp();
 
     // Get all closed positions from state and filter for today

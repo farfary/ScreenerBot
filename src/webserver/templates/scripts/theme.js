@@ -26,14 +26,23 @@
         tauriWindow = getCurrentWebviewWindow();
         console.log("[Theme] Using window.__TAURI__.webviewWindow API");
       } else if (window.__TAURI_INTERNALS__) {
-        console.log("[Theme] Found __TAURI_INTERNALS__, checking structure:", Object.keys(window.__TAURI_INTERNALS__));
+        console.log(
+          "[Theme] Found __TAURI_INTERNALS__, checking structure:",
+          Object.keys(window.__TAURI_INTERNALS__)
+        );
       }
-      
+
       if (tauriWindow) {
         console.log("[Theme] Successfully initialized Tauri window:", tauriWindow);
-        console.log("[Theme] Available methods:", Object.getOwnPropertyNames(Object.getPrototypeOf(tauriWindow)));
+        console.log(
+          "[Theme] Available methods:",
+          Object.getOwnPropertyNames(Object.getPrototypeOf(tauriWindow))
+        );
       } else {
-        console.warn("[Theme] Could not initialize Tauri window - API structure:", Object.keys(window.__TAURI__));
+        console.warn(
+          "[Theme] Could not initialize Tauri window - API structure:",
+          Object.keys(window.__TAURI__)
+        );
       }
     } catch (error) {
       console.warn("[Theme] Failed to initialize Tauri window API:", error);
@@ -50,7 +59,11 @@
     const newTheme = currentTheme === "light" ? "dark" : "light";
     console.log("[Theme] User toggled theme from", currentTheme, "to", newTheme);
     await setTheme(newTheme);
-    localStorage.setItem("theme", newTheme);
+    try {
+      localStorage.setItem("theme", newTheme);
+    } catch (e) {
+      console.warn("[Theme] Failed to save theme to localStorage:", e);
+    }
   });
 
   // Listen to system theme changes if in Tauri
@@ -60,7 +73,7 @@
         const systemTheme = event.payload; // 'light' or 'dark'
         const savedTheme = localStorage.getItem("theme");
         console.log("[Theme] System theme changed to:", systemTheme);
-        
+
         // Only auto-sync if user hasn't explicitly set a theme preference
         if (!savedTheme) {
           await setTheme(systemTheme);
@@ -74,7 +87,7 @@
   async function setTheme(theme) {
     console.log("[Theme] Setting theme to:", theme);
     html.setAttribute("data-theme", theme);
-    
+
     // Update UI elements
     if (theme === "dark") {
       themeIcon.className = "action-icon icon-sun";

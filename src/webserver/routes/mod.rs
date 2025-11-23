@@ -207,6 +207,7 @@ async fn get_core_script(axum::extract::Path(file): axum::extract::Path<String>)
         "header.js" => Some(templates::CORE_HEADER),
         "notifications.js" => Some(templates::CORE_NOTIFICATIONS),
         "toast.js" => Some(templates::CORE_TOAST),
+        "request_manager.js" => Some(templates::CORE_REQUEST_MANAGER),
         _ => None,
     };
 

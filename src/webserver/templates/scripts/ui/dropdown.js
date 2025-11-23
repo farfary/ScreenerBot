@@ -12,6 +12,12 @@ export class Dropdown {
     this.isOpen = false;
     this.dropdownEl = null;
 
+    // Store bound handlers for cleanup
+    this._triggerListener = null;
+    this._documentClickListener = null;
+    this._documentKeydownListener = null;
+    this._itemListeners = [];
+
     this._init();
   }
 
@@ -25,25 +31,28 @@ export class Dropdown {
     // Create dropdown menu
     this._createDropdown();
 
-    // Attach event listeners
-    this.trigger.addEventListener("click", (e) => {
+    // Attach event listeners with stored references
+    this._triggerListener = (e) => {
       e.stopPropagation();
       this.toggle();
-    });
+    };
+    this.trigger.addEventListener("click", this._triggerListener);
 
     // Close on outside click
-    document.addEventListener("click", (e) => {
+    this._documentClickListener = (e) => {
       if (this.isOpen && !this.dropdownEl.contains(e.target)) {
         this.close();
       }
-    });
+    };
+    document.addEventListener("click", this._documentClickListener);
 
     // Close on escape
-    document.addEventListener("keydown", (e) => {
+    this._documentKeydownListener = (e) => {
       if (e.key === "Escape" && this.isOpen) {
         this.close();
       }
-    });
+    };
+    document.addEventListener("keydown", this._documentKeydownListener);
   }
 
   _createDropdown() {
@@ -94,7 +103,7 @@ export class Dropdown {
         itemEl.classList.add("danger");
       }
 
-      itemEl.addEventListener("click", (e) => {
+      const itemHandler = (e) => {
         e.stopPropagation();
         if (!item.disabled) {
           this.onSelect(item.id, item);
@@ -102,7 +111,10 @@ export class Dropdown {
             this.close();
           }
         }
-      });
+      };
+
+      itemEl.addEventListener("click", itemHandler);
+      this._itemListeners.push({ element: itemEl, handler: itemHandler });
 
       this.dropdownEl.appendChild(itemEl);
     });
@@ -139,8 +151,41 @@ export class Dropdown {
   }
 
   destroy() {
+    // Remove document-level listeners
+    if (this._documentClickListener) {
+      document.removeEventListener("click", this._documentClickListener);
+      this._documentClickListener = null;
+    }
+
+    if (this._documentKeydownListener) {
+      document.removeEventListener("keydown", this._documentKeydownListener);
+      this._documentKeydownListener = null;
+    }
+
+    // Remove trigger listener
+    if (this._triggerListener && this.trigger) {
+      this.trigger.removeEventListener("click", this._triggerListener);
+      this._triggerListener = null;
+    }
+
+    // Remove all item listeners
+    this._itemListeners.forEach(({ element, handler }) => {
+      if (element) {
+        element.removeEventListener("click", handler);
+      }
+    });
+    this._itemListeners = [];
+
+    // Remove DOM
     if (this.dropdownEl) {
       this.dropdownEl.remove();
+      this.dropdownEl = null;
     }
+
+    // Clear references
+    this.trigger = null;
+    this.items = null;
+    this.onSelect = null;
+    this.isOpen = false;
   }
 }

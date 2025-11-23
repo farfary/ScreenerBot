@@ -689,7 +689,10 @@ fn parse_metaplex_metadata(data: &[u8]) -> Result<MetaplexMetadata, String> {
                 break; // Not enough data, stop parsing
             }
 
-            let address_bytes: [u8; 32] = data[offset..offset + 32].try_into().unwrap();
+            let address_bytes: [u8; 32] = match data[offset..offset + 32].try_into() {
+                Ok(bytes) => bytes,
+                Err(_) => break, // Invalid slice length, stop parsing
+            };
             let address = Pubkey::new_from_array(address_bytes);
             let verified = data[offset + 32] == 1;
 

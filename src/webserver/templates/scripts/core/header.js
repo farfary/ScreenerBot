@@ -9,6 +9,7 @@ import { Dropdown } from "../ui/dropdown.js";
 import { notificationManager } from "./notifications.js";
 import * as NotificationPanel from "../ui/notification_panel.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
+import { requestManager } from "./request_manager.js";
 
 const MIN_STATUS_POLL_INTERVAL = 5000;
 const METRICS_POLL_INTERVAL = 5000; // Header metrics update every 5s
@@ -173,22 +174,17 @@ function setLoading(isLoading) {
 
 async function fetchHeaderMetrics() {
   try {
-    const res = await fetch("/api/header/metrics", {
+    const data = await requestManager.fetch("/api/header/metrics", {
       method: "GET",
       headers: { "X-Requested-With": "fetch" },
       cache: "no-store",
+      priority: "normal",
     });
 
-    if (!res.ok) {
-      console.warn(`[Header] Metrics fetch failed: ${res.status}`);
-      return null;
-    }
-
-    const data = await res.json();
     updateHeaderMetrics(data);
     return data;
   } catch (err) {
-    if (err?.name !== "AbortError") {
+    if (err?.name !== "AbortError" && err?.name !== "TimeoutError") {
       console.error("[Header] Failed to fetch metrics:", err);
     }
     return null;
@@ -362,9 +358,13 @@ function startMetricsPolling() {
   metricsPoller = new Poller(() => fetchHeaderMetrics(), {
     label: "HeaderMetrics",
     interval: METRICS_POLL_INTERVAL,
+    pauseWhenHidden: true, // Pause when tab hidden
   });
 
   metricsPoller.start({ silent: true });
+
+  // Add visibility change handler
+  setupVisibilityHandler();
 }
 
 // ============================================================================
@@ -555,6 +555,9 @@ function initTraderControls() {
 
   // Initialize notification panel UI
   NotificationPanel.init();
+
+  // Setup visibility handling for pollers
+  setupVisibilityHandler();
 
   // Fetch initial data
   fetchTraderStatus({ silent: true, showLoading: true }).finally(() => {
@@ -747,6 +750,7 @@ function initTraderDropdown() {
 }
 
 let notificationsInitialized = false;
+let notificationUnsubscribe = null;
 
 function initNotifications() {
   if (notificationsInitialized) {
@@ -759,7 +763,7 @@ function initNotifications() {
   if (!notifBtn) return;
 
   // Subscribe to notification updates
-  notificationManager.subscribe((event) => {
+  notificationUnsubscribe = notificationManager.subscribe((event) => {
     if (event.type === "summary" && event.summary) {
       updateNotificationBadge(event.summary.unread);
     }
@@ -863,33 +867,68 @@ async function handleRestart() {
 
     Utils.showToast('<i class="icon-check"></i> Bot restarting... Please wait.', "success");
 
-    // Poll for reconnection
+    // Poll for reconnection using Poller
     setTimeout(() => {
       let attempts = 0;
-      const checkConnection = setInterval(async () => {
-        attempts++;
-        try {
-          const ping = await fetch("/api/trader/status", { cache: "no-store" });
-          if (ping.ok) {
-            clearInterval(checkConnection);
-            Utils.showToast('<i class="icon-check"></i> Bot restarted successfully!', "success");
-            window.location.reload();
+      const reconnectPoller = new Poller(
+        async () => {
+          attempts++;
+          try {
+            const ping = await fetch("/api/trader/status", { cache: "no-store" });
+            if (ping.ok) {
+              reconnectPoller.stop();
+              reconnectPoller.cleanup();
+              Utils.showToast('<i class="icon-check"></i> Bot restarted successfully!', "success");
+              window.location.reload();
+            }
+          } catch {
+            if (attempts > 30) {
+              reconnectPoller.stop();
+              reconnectPoller.cleanup();
+              Utils.showToast(
+                '<i class="icon-alert-triangle"></i> Restart taking longer than expected',
+                "warning"
+              );
+            }
           }
-        } catch {
-          if (attempts > 30) {
-            clearInterval(checkConnection);
-            Utils.showToast(
-              '<i class="icon-alert-triangle"></i> Restart taking longer than expected',
-              "warning"
-            );
-          }
-        }
-      }, 1000);
+        },
+        { label: "RestartReconnect", interval: 1000 }
+      );
+      reconnectPoller.start();
     }, 2000);
   } catch (err) {
     console.error("[Header] Restart failed:", err);
     Utils.showToast(`<i class="icon-x"></i> ${err.message}`, "error");
   }
+}
+
+function setupVisibilityHandler() {
+  // Prevent duplicate listeners
+  if (window.__headerVisibilityHandlerAdded) {
+    return;
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      // Pause header pollers when tab hidden
+      if (metricsPoller && metricsPoller.isActive()) {
+        metricsPoller.pause();
+      }
+      if (statusPoller && statusPoller.isActive()) {
+        statusPoller.pause();
+      }
+    } else {
+      // Resume header pollers when tab visible
+      if (metricsPoller && metricsPoller.isActive()) {
+        metricsPoller.resume();
+      }
+      if (statusPoller && statusPoller.isActive()) {
+        statusPoller.resume();
+      }
+    }
+  });
+
+  window.__headerVisibilityHandlerAdded = true;
 }
 
 if (document.readyState === "loading") {

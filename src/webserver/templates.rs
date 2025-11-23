@@ -59,6 +59,7 @@ pub const CORE_ROUTER: &str = include_str!("templates/scripts/core/router.js");
 pub const CORE_HEADER: &str = include_str!("templates/scripts/core/header.js");
 pub const CORE_NOTIFICATIONS: &str = include_str!("templates/scripts/core/notifications.js");
 pub const CORE_TOAST: &str = include_str!("templates/scripts/core/toast.js");
+pub const CORE_REQUEST_MANAGER: &str = include_str!("templates/scripts/core/request_manager.js");
 
 const THEME_SCRIPTS: &str = include_str!("templates/scripts/theme.js");
 

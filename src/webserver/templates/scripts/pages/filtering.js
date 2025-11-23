@@ -9,6 +9,7 @@
 
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
+import { requestManager } from "../core/request_manager.js";
 import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
@@ -42,6 +43,14 @@ const FILTER_TABS = [
 const TABBAR_STATE_KEY = "filtering.tab";
 
 let tabBar = null;
+const eventCleanups = [];
+
+// Helper to track event listeners
+function addTrackedListener(element, event, handler) {
+  if (!element) return;
+  element.addEventListener(event, handler);
+  eventCleanups.push(() => element.removeEventListener(event, handler));
+}
 
 // ============================================================================
 // CONFIGURATION METADATA
@@ -774,43 +783,31 @@ function configsEqual(config1, config2) {
 // ============================================================================
 
 async function fetchConfig() {
-  const response = await fetch("/api/config/filtering");
-  if (!response.ok) {
-    throw new Error(`Failed to fetch config: ${response.statusText}`);
-  }
-  return response.json();
+  return await requestManager.fetch("/api/config/filtering", {
+    priority: "high",
+  });
 }
 
 async function saveConfig(config) {
-  const response = await fetch("/api/config/filtering", {
+  return await requestManager.fetch("/api/config/filtering", {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(config),
+    priority: "high",
   });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(error.message || "Failed to save config");
-  }
-  return response.json();
 }
 
 async function refreshSnapshot() {
-  const response = await fetch("/api/filtering/refresh", {
+  return await requestManager.fetch("/api/filtering/refresh", {
     method: "POST",
+    priority: "high",
   });
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ message: response.statusText }));
-    throw new Error(error.message || "Failed to refresh snapshot");
-  }
-  return response.json();
 }
 
 async function fetchStats() {
-  const response = await fetch("/api/filtering/stats");
-  if (!response.ok) {
-    throw new Error(`Failed to fetch stats: ${response.statusText}`);
-  }
-  return response.json();
+  return await requestManager.fetch("/api/filtering/stats", {
+    priority: "normal",
+  });
 }
 
 // ============================================================================
@@ -1159,18 +1156,18 @@ function bindGlobalHandlers() {
   const exportBtn = $("#export-config-btn");
   const importBtn = $("#import-config-btn");
 
-  if (saveBtn) saveBtn.addEventListener("click", handleSaveConfig);
-  if (resetBtn) resetBtn.addEventListener("click", handleResetConfig);
-  if (refreshBtn) refreshBtn.addEventListener("click", handleRefreshSnapshot);
-  if (exportBtn) exportBtn.addEventListener("click", handleExportConfig);
-  if (importBtn) importBtn.addEventListener("click", handleImportConfig);
+  if (saveBtn) addTrackedListener(saveBtn, "click", handleSaveConfig);
+  if (resetBtn) addTrackedListener(resetBtn, "click", handleResetConfig);
+  if (refreshBtn) addTrackedListener(refreshBtn, "click", handleRefreshSnapshot);
+  if (exportBtn) addTrackedListener(exportBtn, "click", handleExportConfig);
+  if (importBtn) addTrackedListener(importBtn, "click", handleImportConfig);
 
   globalHandlersBound = true;
 }
 
 function bindSourceToggleHandlers() {
   $$("[data-source-toggle]").forEach((input) => {
-    input.addEventListener("change", handleSourceToggle);
+    addTrackedListener(input, "change", handleSourceToggle);
   });
 }
 
@@ -1179,14 +1176,14 @@ function bindConfigHandlers() {
   if (!container) return;
 
   container.querySelectorAll("[data-field]").forEach((input) => {
-    input.addEventListener("input", handleFieldChange);
+    addTrackedListener(input, "input", handleFieldChange);
     if (input.type === "checkbox") {
-      input.addEventListener("change", handleFieldChange);
+      addTrackedListener(input, "change", handleFieldChange);
     }
   });
 
   container.querySelectorAll("[data-category-toggle]").forEach((input) => {
-    input.addEventListener("change", handleCategoryToggle);
+    addTrackedListener(input, "change", handleCategoryToggle);
   });
 }
 
@@ -1209,7 +1206,7 @@ function updateSearchBar() {
 function bindSearchHandler() {
   const searchInput = $("#filtering-search");
   if (searchInput) {
-    searchInput.addEventListener("input", (event) => {
+    addTrackedListener(searchInput, "input", (event) => {
       state.searchQuery = (event.target.value || "").toLowerCase();
       AppState.save("filtering_searchQuery", state.searchQuery);
       updateConfigPanels({ scrollTop: 0 });
@@ -1419,7 +1416,7 @@ function handleImportConfig() {
   input.type = "file";
   input.accept = ".json";
   input.addEventListener("change", async (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
     if (!file) return;
 
     try {
@@ -1548,6 +1545,11 @@ export function createLifecycle() {
 
     dispose() {
       console.log("[Filtering] Disposing");
+
+      // Clean up all tracked event listeners
+      eventCleanups.forEach((cleanup) => cleanup());
+      eventCleanups.length = 0;
+
       if (poller) {
         poller.stop();
         poller = null;

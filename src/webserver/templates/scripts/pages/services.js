@@ -2,6 +2,7 @@ import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";
 import { DataTable } from "../ui/data_table.js";
+import { requestManager } from "../core/request_manager.js";
 
 // Helper functions
 function healthRank(status) {
@@ -108,17 +109,12 @@ function createLifecycle() {
 
   const loadServicesPage = async ({ reason, signal }) => {
     try {
-      const response = await fetch("/api/services/overview", {
+      const data = await requestManager.fetch("/api/services/overview", {
         headers: { "X-Requested-With": "fetch" },
         cache: "no-store",
-        signal,
+        priority: "normal",
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
       const services = Array.isArray(data?.services) ? data.services : [];
       state.summary = data?.summary ?? null;
 

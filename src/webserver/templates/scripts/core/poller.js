@@ -55,10 +55,15 @@ export class Poller {
     this.label = options.label || "Poller";
     this.onPoll = onPoll;
     this.getInterval = options.getInterval;
+    this.pauseWhenHidden = options.pauseWhenHidden !== false; // Default true
+    this.adaptive = options.adaptive || false;
 
     this.timerId = null;
     this.listener = null;
     this.active = false;
+    this.consecutiveFailures = 0;
+    this.lastSuccessTime = null;
+    this.isPaused = false;
 
     if (typeof onPoll !== "function") {
       throw new Error(`[Poller:${this.label}] onPoll callback is required`);
@@ -96,15 +101,50 @@ export class Poller {
   _schedule() {
     const interval = this._computeInterval();
     this.timerId = globalThis.setInterval(() => {
+      // Skip if paused (e.g., tab hidden)
+      if (this.isPaused) {
+        return;
+      }
+
       try {
         const result = this.onPoll();
         if (result && typeof result.then === "function") {
-          Promise.resolve(result).catch((error) => {
-            console.error(`${this._logPrefix()} Poll callback rejected`, error);
-          });
+          Promise.resolve(result)
+            .then(() => {
+              // Success - reset failure counter
+              this.consecutiveFailures = 0;
+              this.lastSuccessTime = Date.now();
+            })
+            .catch((error) => {
+              // Failure - increment counter
+              this.consecutiveFailures++;
+              console.error(
+                `${this._logPrefix()} Poll callback rejected (${this.consecutiveFailures} consecutive failures)`,
+                error
+              );
+
+              // Apply exponential backoff if multiple failures
+              if (this.consecutiveFailures >= 3) {
+                const backoffDelay = Math.min(
+                  1000 * Math.pow(2, this.consecutiveFailures - 3),
+                  30000
+                );
+                console.warn(
+                  `${this._logPrefix()} Applying backoff: ${backoffDelay}ms (${this.consecutiveFailures} failures)`
+                );
+              }
+            });
+        } else {
+          // Synchronous success
+          this.consecutiveFailures = 0;
+          this.lastSuccessTime = Date.now();
         }
       } catch (error) {
-        console.error(`${this._logPrefix()} Poll callback threw`, error);
+        this.consecutiveFailures++;
+        console.error(
+          `${this._logPrefix()} Poll callback threw (${this.consecutiveFailures} consecutive failures)`,
+          error
+        );
       }
     }, interval);
 
@@ -172,8 +212,26 @@ export class Poller {
     this.listener = null;
   }
 
+  pause() {
+    if (this.isPaused) return;
+    this.isPaused = true;
+  }
+
+  resume() {
+    if (!this.isPaused) return;
+    this.isPaused = false;
+  }
+
   isActive() {
     return this.active;
+  }
+
+  isPausedState() {
+    return this.isPaused;
+  }
+
+  getFailureCount() {
+    return this.consecutiveFailures;
   }
 }
 

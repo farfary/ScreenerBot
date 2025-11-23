@@ -141,6 +141,12 @@ export class EventDetailsDialog {
       return;
     }
 
+    // Guard against multiple simultaneous opens
+    if (this._isOpen) {
+      console.warn("[EventsDialog] Dialog already open, ignoring duplicate request");
+      return;
+    }
+
     this._ensureElements();
 
     this._previousActiveElement =

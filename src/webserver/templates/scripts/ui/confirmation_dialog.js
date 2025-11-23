@@ -150,24 +150,28 @@ class ConfirmationDialog {
     // Confirm button
     const confirmBtn = this.element.querySelector('[data-action="confirm"]');
     if (confirmBtn) {
-      confirmBtn.addEventListener("click", () => this._handleConfirm());
+      this._confirmHandler = () => this._handleConfirm();
+      confirmBtn.addEventListener("click", this._confirmHandler);
     }
 
     // Cancel button
     const cancelBtn = this.element.querySelector('[data-action="cancel"]');
     if (cancelBtn) {
-      cancelBtn.addEventListener("click", () => this._handleCancel());
+      this._cancelHandler = () => this._handleCancel();
+      cancelBtn.addEventListener("click", this._cancelHandler);
     }
 
     // Backdrop click cancels
-    this.backdrop.addEventListener("click", () => this._handleCancel());
+    this._backdropHandler = () => this._handleCancel();
+    this.backdrop.addEventListener("click", this._backdropHandler);
 
     // Checkbox
     const checkbox = this.element.querySelector("#confirmation-dialog-checkbox");
     if (checkbox) {
-      checkbox.addEventListener("change", (e) => {
+      this._checkboxHandler = (e) => {
         this.checkboxChecked = e.target.checked;
-      });
+      };
+      checkbox.addEventListener("change", this._checkboxHandler);
     }
 
     // Keyboard shortcuts
@@ -216,9 +220,39 @@ class ConfirmationDialog {
       this.resolver = null;
     }
 
-    // Remove event listeners
+    // Remove all event listeners
     if (this._keydownHandler) {
       document.removeEventListener("keydown", this._keydownHandler);
+      this._keydownHandler = null;
+    }
+
+    if (this._confirmHandler) {
+      const confirmBtn = this.element?.querySelector('[data-action="confirm"]');
+      if (confirmBtn) {
+        confirmBtn.removeEventListener("click", this._confirmHandler);
+      }
+      this._confirmHandler = null;
+    }
+
+    if (this._cancelHandler) {
+      const cancelBtn = this.element?.querySelector('[data-action="cancel"]');
+      if (cancelBtn) {
+        cancelBtn.removeEventListener("click", this._cancelHandler);
+      }
+      this._cancelHandler = null;
+    }
+
+    if (this._backdropHandler && this.backdrop) {
+      this.backdrop.removeEventListener("click", this._backdropHandler);
+      this._backdropHandler = null;
+    }
+
+    if (this._checkboxHandler) {
+      const checkbox = this.element?.querySelector("#confirmation-dialog-checkbox");
+      if (checkbox) {
+        checkbox.removeEventListener("change", this._checkboxHandler);
+      }
+      this._checkboxHandler = null;
     }
 
     // Animate out

@@ -1,5 +1,6 @@
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
+import { requestManager } from "../core/request_manager.js";
 import * as Utils from "../core/utils.js";
 import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
@@ -217,7 +218,11 @@ function createLifecycle() {
   let tradeDialog = null;
   let tokenDetailsDialog = null;
   let walletBalance = 0;
-  let lastUpdateInterval = null; // Track interval for updating "Last Update" display
+  let lastUpdatePoller = null; // Poller for updating "Last Update" display
+
+  // Event cleanup tracking
+  const eventCleanups = [];
+
   const priceHistory = new Map();
   let priceBaselineReady = false;
 
@@ -231,6 +236,15 @@ function createLifecycle() {
     summary: { ...DEFAULT_SUMMARY },
     availableRejectionReasons: [],
   };
+
+  /**
+   * Add tracked event listener for cleanup
+   */
+  function addTrackedListener(element, event, handler) {
+    if (!element) return;
+    element.addEventListener(event, handler);
+    eventCleanups.push(() => element.removeEventListener(event, handler));
+  }
 
   const resetPriceTracking = () => {
     priceHistory.clear();
@@ -617,16 +631,9 @@ function createLifecycle() {
     const url = `/api/tokens/list?${params.toString()}`;
 
     try {
-      const response = await fetch(url, {
-        headers: { "X-Requested-With": "fetch" },
-        cache: "no-store",
-        signal,
+      const data = await requestManager.fetch(url, {
+        priority: "normal",
       });
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = await response.json();
       const items = Array.isArray(data?.items) ? data.items : [];
 
       const rejectionReasons =
@@ -1240,7 +1247,7 @@ function createLifecycle() {
       container.appendChild(menu);
 
       // Handle menu item clicks
-      menu.addEventListener("click", (e) => {
+      const menuClickHandler = (e) => {
         const item = e.target.closest(".dropdown-item");
         if (!item) return;
 
@@ -1249,13 +1256,17 @@ function createLifecycle() {
           handleLinkAction(action, mint);
         }
         menu.remove();
-      });
+        document.removeEventListener("click", closeHandler);
+        document.removeEventListener("keydown", escapeHandler);
+      };
+      menu.addEventListener("click", menuClickHandler);
 
       // Close on outside click
       const closeHandler = (e) => {
         if (!menu.contains(e.target) && e.target !== trigger) {
           menu.remove();
           document.removeEventListener("click", closeHandler);
+          document.removeEventListener("keydown", escapeHandler);
         }
       };
       setTimeout(() => document.addEventListener("click", closeHandler), 0);
@@ -1264,6 +1275,7 @@ function createLifecycle() {
       const escapeHandler = (e) => {
         if (e.key === "Escape") {
           menu.remove();
+          document.removeEventListener("click", closeHandler);
           document.removeEventListener("keydown", escapeHandler);
         }
       };
@@ -1359,22 +1371,22 @@ function createLifecycle() {
         lightbox.classList.add("active");
       });
 
-      // Close handlers
+      // Close handlers with proper cleanup
+      const escapeHandler = (e) => {
+        if (e.key === "Escape") {
+          close();
+        }
+      };
+      document.addEventListener("keydown", escapeHandler);
+
       const close = () => {
         lightbox.classList.remove("active");
+        document.removeEventListener("keydown", escapeHandler);
         setTimeout(() => lightbox.remove(), 300);
       };
 
       lightbox.querySelector(".lightbox-close").addEventListener("click", close);
       lightbox.querySelector(".lightbox-backdrop").addEventListener("click", close);
-
-      const escapeHandler = (e) => {
-        if (e.key === "Escape") {
-          close();
-          document.removeEventListener("keydown", escapeHandler);
-        }
-      };
-      document.addEventListener("keydown", escapeHandler);
     };
 
     container._logoClickHandler = clickHandler;
@@ -1599,29 +1611,27 @@ function createLifecycle() {
 
             // Proceed with API call
             btn.disabled = true;
-            const res = await fetch("/api/trader/manual/buy", {
+            const data = await requestManager.fetch("/api/trader/manual/buy", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 mint,
                 ...(result.amount ? { size_sol: result.amount } : {}),
               }),
+              priority: "high",
             });
-            const data = await res.json();
             btn.disabled = false;
-            if (!res.ok) throw new Error(data?.error?.message || "Buy failed");
             Utils.showToast("Buy placed", "success");
             requestReload("manual", { silent: false, preserveScroll: true }).catch(() => {});
           } else if (action === "add") {
             // Fetch config for entry sizes
             let entrySizes = [0.005, 0.01, 0.02, 0.05];
             try {
-              const configRes = await fetch("/api/config/trader");
-              if (configRes.ok) {
-                const configData = await configRes.json();
-                if (Array.isArray(configData?.data?.entry_sizes)) {
-                  entrySizes = configData.data.entry_sizes;
-                }
+              const configData = await requestManager.fetch("/api/config/trader", {
+                priority: "normal",
+              });
+              if (Array.isArray(configData?.data?.entry_sizes)) {
+                entrySizes = configData.data.entry_sizes;
               }
             } catch (err) {
               console.warn("Failed to fetch entry_sizes config:", err);
@@ -1643,17 +1653,16 @@ function createLifecycle() {
 
             // Proceed with API call
             btn.disabled = true;
-            const res = await fetch("/api/trader/manual/add", {
+            const data = await requestManager.fetch("/api/trader/manual/add", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 mint,
                 ...(result.amount ? { size_sol: result.amount } : {}),
               }),
+              priority: "high",
             });
-            const data = await res.json();
             btn.disabled = false;
-            if (!res.ok) throw new Error(data?.error?.message || "Add failed");
             Utils.showToast("Added to position", "success");
             requestReload("manual", { silent: false, preserveScroll: true }).catch(() => {});
           } else if (action === "sell") {
@@ -1676,14 +1685,13 @@ function createLifecycle() {
                 : { mint, percentage: result.percentage };
 
             btn.disabled = true;
-            const res = await fetch("/api/trader/manual/sell", {
+            const data = await requestManager.fetch("/api/trader/manual/sell", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify(body),
+              priority: "high",
             });
-            const data = await res.json();
             btn.disabled = false;
-            if (!res.ok) throw new Error(data?.error?.message || "Sell failed");
             Utils.showToast("Sell placed", "success");
             requestReload("manual", { silent: false, preserveScroll: true }).catch(() => {});
           }
@@ -1775,14 +1783,24 @@ function createLifecycle() {
           console.warn("[Tokens] Failed to fetch wallet balance");
         });
 
-      // Start interval to update "Last Update" display every second
-      if (!lastUpdateInterval) {
-        lastUpdateInterval = setInterval(() => {
-          // Only update if we have a lastUpdate timestamp
-          if (state.lastUpdate && table) {
-            updateToolbar();
-          }
-        }, 1000);
+      // Start poller to update "Last Update" display every second
+      if (!lastUpdatePoller) {
+        lastUpdatePoller = ctx.managePoller(
+          new Poller(
+            () => {
+              // Only update if we have a lastUpdate timestamp
+              if (state.lastUpdate && table) {
+                updateToolbar();
+              }
+            },
+            {
+              label: "TokensLastUpdate",
+              getInterval: () => 1000, // 1 second fixed interval
+              pauseWhenHidden: true,
+            }
+          )
+        );
+        lastUpdatePoller.start();
       }
 
       if (!poller) {
@@ -1800,19 +1818,15 @@ function createLifecycle() {
 
     deactivate() {
       table?.cancelPendingLoad();
-      // Stop the interval when page is deactivated
-      if (lastUpdateInterval) {
-        clearInterval(lastUpdateInterval);
-        lastUpdateInterval = null;
-      }
+      // Lifecycle automatically stops managed pollers
     },
 
     dispose() {
-      // Clean up interval
-      if (lastUpdateInterval) {
-        clearInterval(lastUpdateInterval);
-        lastUpdateInterval = null;
-      }
+      // Clean up all tracked event listeners
+      eventCleanups.forEach((cleanup) => cleanup());
+      eventCleanups.length = 0;
+
+      // Lifecycle automatically cleans up managed pollers
       // Clean up any open dropdown menus
       const existingMenu = document.querySelector(".links-dropdown-menu");
       if (existingMenu) {
