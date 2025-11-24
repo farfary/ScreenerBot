@@ -32,6 +32,7 @@ const EVENTS_DIALOG_STYLES: &str = include_str!("templates/styles/ui/events_dial
 const TRADE_ACTION_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/trade_action_dialog.css");
 const TAB_BAR_STYLES: &str = include_str!("templates/styles/ui/tab_bar.css");
+const ACTION_BAR_STYLES: &str = include_str!("templates/styles/ui/action_bar.css");
 const TABLE_SETTINGS_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/table_settings_dialog.css");
 const CONFIRMATION_DIALOG_STYLES: &str =
@@ -136,6 +137,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         EVENTS_DIALOG_STYLES,
         TRADE_ACTION_DIALOG_STYLES,
         TAB_BAR_STYLES,
+        ACTION_BAR_STYLES,
         TABLE_SETTINGS_DIALOG_STYLES,
         CONFIRMATION_DIALOG_STYLES,
         TOKEN_DETAILS_DIALOG_STYLES,
