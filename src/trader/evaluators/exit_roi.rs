@@ -12,7 +12,10 @@ pub async fn check_roi_exit(
 ) -> Result<Option<TradeDecision>, String> {
     // Validate current price
     if !current_price.is_finite() || current_price <= 0.0 {
-        return Err(format!("Invalid current_price for ROI exit: {}", current_price));
+        return Err(format!(
+            "Invalid current_price for ROI exit: {}",
+            current_price
+        ));
     }
 
     // Check if ROI-based exit is enabled

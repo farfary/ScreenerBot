@@ -1,5 +1,6 @@
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
+use futures::stream::{self, StreamExt};
 use once_cell::sync::Lazy;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
@@ -123,6 +124,7 @@ const DEFAULT_PRECOMPUTED_TOKEN_LIMIT: usize = 250;
 const MAX_API_CACHE_ENTRIES: usize = 128;
 const CIRCUIT_BREAKER_THRESHOLD: u32 = 3;
 const CIRCUIT_BREAKER_COOLDOWN_SECS: u64 = 300;
+const TOKEN_METADATA_CONCURRENCY: usize = 8;
 
 // =============================================================================
 // DATA STRUCTURES
@@ -841,6 +843,33 @@ async fn compute_daily_flows(window_hours: i64) -> Result<Vec<DailyFlowPoint>, S
     Ok(result)
 }
 
+async fn fetch_token_metadata_batch(
+    mints: &[String],
+) -> HashMap<String, crate::tokens::types::Token> {
+    if mints.is_empty() {
+        return HashMap::new();
+    }
+
+    stream::iter(mints.iter().cloned())
+        .map(|mint| async move {
+            match crate::tokens::get_full_token_async(&mint).await {
+                Ok(Some(token)) => Some((mint, token)),
+                Ok(None) => None,
+                Err(err) => {
+                    logger::debug(
+                        LogTag::Wallet,
+                        &format!("Failed to load token metadata for {}: {}", mint, err),
+                    );
+                    None
+                }
+            }
+        })
+        .buffer_unordered(TOKEN_METADATA_CONCURRENCY)
+        .filter_map(|entry| async move { entry })
+        .collect()
+        .await
+}
+
 async fn enrich_token_overview(
     balances: Vec<TokenBalance>,
     max_tokens: usize,
@@ -855,17 +884,8 @@ async fn enrich_token_overview(
         }
     }
 
-    let metadata_map: HashMap<String, crate::tokens::types::Token> = if unique_mints.is_empty() {
-        HashMap::new()
-    } else {
-        let mut map = HashMap::new();
-        for mint in &unique_mints {
-            if let Ok(Some(token)) = crate::tokens::get_full_token_async(mint).await {
-                map.insert(mint.clone(), token);
-            }
-        }
-        map
-    };
+    let metadata_map: HashMap<String, crate::tokens::types::Token> =
+        fetch_token_metadata_batch(&unique_mints).await;
 
     for balance in balances {
         let token_meta = metadata_map.get(&balance.mint);
@@ -1363,6 +1383,14 @@ impl WalletDatabase {
             .map_err(|e| format!("Failed to enable foreign keys: {}", e))?;
         conn.pragma_update(None, "synchronous", "NORMAL")
             .map_err(|e| format!("Failed to set synchronous mode: {}", e))?;
+        conn.busy_timeout(Duration::from_millis(30000))
+            .map_err(|e| format!("Failed to set busy_timeout: {}", e))?;
+        conn.pragma_update(None, "cache_size", &10000i64)
+            .map_err(|e| format!("Failed to set cache_size: {}", e))?;
+        conn.pragma_update(None, "temp_store", &"MEMORY")
+            .map_err(|e| format!("Failed to set temp_store: {}", e))?;
+        conn.pragma_update(None, "mmap_size", &30000000000i64)
+            .map_err(|e| format!("Failed to set mmap_size: {}", e))?;
 
         // Create all tables
         conn.execute(SCHEMA_WALLET_SNAPSHOTS, [])
@@ -1786,7 +1814,10 @@ impl WalletDatabase {
 
     /// Get SOL balance at or before a specific time (optimized for single value)
     /// Uses idx_wallet_snapshots_time index for fast descending time lookup
-    pub fn get_balance_at_time_sync(&self, target_time: DateTime<Utc>) -> Result<Option<f64>, String> {
+    pub fn get_balance_at_time_sync(
+        &self,
+        target_time: DateTime<Utc>,
+    ) -> Result<Option<f64>, String> {
         let conn = self.get_connection()?;
 
         let result = conn

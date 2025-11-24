@@ -185,16 +185,16 @@ pub struct TimeframeBundle {
     pub mint: String,
     pub pool_address: String,
     pub timestamp: DateTime<Utc>,
-    
+
     // All timeframes pre-loaded (each contains BUNDLE_CANDLE_COUNT candles)
-    pub m1: Vec<Candle>,   // 1-minute (100 candles = 100 min = 1.67 hours)
-    pub m5: Vec<Candle>,   // 5-minute (100 candles = 500 min = 8.33 hours)
-    pub m15: Vec<Candle>,  // 15-minute (100 candles = 1500 min = 25 hours)
-    pub h1: Vec<Candle>,   // 1-hour (100 candles = 100 hours = 4.17 days)
-    pub h4: Vec<Candle>,   // 4-hour (100 candles = 400 hours = 16.67 days)
-    pub h12: Vec<Candle>,  // 12-hour (100 candles = 1200 hours = 50 days)
-    pub d1: Vec<Candle>,   // 1-day (100 candles = 100 days)
-    
+    pub m1: Vec<Candle>,  // 1-minute (100 candles = 100 min = 1.67 hours)
+    pub m5: Vec<Candle>,  // 5-minute (100 candles = 500 min = 8.33 hours)
+    pub m15: Vec<Candle>, // 15-minute (100 candles = 1500 min = 25 hours)
+    pub h1: Vec<Candle>,  // 1-hour (100 candles = 100 hours = 4.17 days)
+    pub h4: Vec<Candle>,  // 4-hour (100 candles = 400 hours = 16.67 days)
+    pub h12: Vec<Candle>, // 12-hour (100 candles = 1200 hours = 50 days)
+    pub d1: Vec<Candle>,  // 1-day (100 candles = 100 days)
+
     // Metadata
     pub cache_age_seconds: u64, // Age of bundle in cache (0 for fresh build)
     pub cache_hit: bool,        // Whether this was served from cache
@@ -218,7 +218,7 @@ impl TimeframeBundle {
             cache_hit: false,
         }
     }
-    
+
     /// Get candles for a specific timeframe by string
     pub fn get_timeframe(&self, timeframe: &str) -> Option<&Vec<Candle>> {
         match timeframe {
@@ -232,18 +232,18 @@ impl TimeframeBundle {
             _ => None,
         }
     }
-    
+
     /// Check if bundle has data for all timeframes
     pub fn is_complete(&self) -> bool {
-        !self.m1.is_empty() 
-            && !self.m5.is_empty() 
-            && !self.m15.is_empty() 
-            && !self.h1.is_empty() 
-            && !self.h4.is_empty() 
-            && !self.h12.is_empty() 
+        !self.m1.is_empty()
+            && !self.m5.is_empty()
+            && !self.m15.is_empty()
+            && !self.h1.is_empty()
+            && !self.h4.is_empty()
+            && !self.h12.is_empty()
             && !self.d1.is_empty()
     }
-    
+
     /// Check if bundle is fresh enough (age in seconds)
     pub fn is_fresh(&self, max_age_seconds: u64) -> bool {
         let age = Utc::now()
@@ -251,15 +251,15 @@ impl TimeframeBundle {
             .num_seconds();
         age >= 0 && (age as u64) < max_age_seconds
     }
-    
+
     /// Get total number of candles across all timeframes
     pub fn total_candles(&self) -> usize {
-        self.m1.len() 
-            + self.m5.len() 
-            + self.m15.len() 
-            + self.h1.len() 
-            + self.h4.len() 
-            + self.h12.len() 
+        self.m1.len()
+            + self.m5.len()
+            + self.m15.len()
+            + self.h1.len()
+            + self.h4.len()
+            + self.h12.len()
             + self.d1.len()
     }
 }

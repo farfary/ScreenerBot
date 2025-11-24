@@ -14,8 +14,8 @@ mod service;
 mod types;
 
 pub use types::{
-    Candle, OhlcvError, OhlcvMetrics, OhlcvResult, PoolConfig, PoolMetadata, Priority,
-    Timeframe, TimeframeBundle, TokenOhlcvConfig, BUNDLE_CANDLE_COUNT,
+    Candle, OhlcvError, OhlcvMetrics, OhlcvResult, PoolConfig, PoolMetadata, Priority, Timeframe,
+    TimeframeBundle, TokenOhlcvConfig, BUNDLE_CANDLE_COUNT,
 };
 
 pub use monitor::{MonitorStats, MonitorTelemetrySnapshot};

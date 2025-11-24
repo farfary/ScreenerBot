@@ -1,4 +1,7 @@
-use crate::strategies::conditions::{get_candles_for_timeframe, get_param_f64, get_param_string, get_param_string_optional, validate_timeframe_param, ConditionEvaluator};
+use crate::strategies::conditions::{
+    get_candles_for_timeframe, get_param_f64, get_param_string, get_param_string_optional,
+    validate_timeframe_param, ConditionEvaluator,
+};
 use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
 use serde_json::json;
@@ -109,17 +112,23 @@ impl ConditionEvaluator for PriceChangePercentCondition {
         match time_unit.as_str() {
             "SECONDS" => {
                 if time_value > 3600.0 {
-                    return Err("Time value for seconds must be 3600 or less (1 hour max)".to_string());
+                    return Err(
+                        "Time value for seconds must be 3600 or less (1 hour max)".to_string()
+                    );
                 }
             }
             "MINUTES" => {
                 if time_value > 1440.0 {
-                    return Err("Time value for minutes must be 1440 or less (24 hours max)".to_string());
+                    return Err(
+                        "Time value for minutes must be 1440 or less (24 hours max)".to_string()
+                    );
                 }
             }
             "HOURS" => {
                 if time_value > 720.0 {
-                    return Err("Time value for hours must be 720 or less (30 days max)".to_string());
+                    return Err(
+                        "Time value for hours must be 720 or less (30 days max)".to_string()
+                    );
                 }
             }
             _ => {}

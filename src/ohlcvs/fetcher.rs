@@ -386,7 +386,10 @@ impl OhlcvFetcher {
                 break;
             }
 
-            let oldest_timestamp = data.iter().map(|d| d.timestamp).min()
+            let oldest_timestamp = data
+                .iter()
+                .map(|d| d.timestamp)
+                .min()
                 .ok_or_else(|| OhlcvError::ApiError("No timestamps in data".to_string()))?;
 
             if let Some(prev_oldest) = last_oldest {

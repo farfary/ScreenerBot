@@ -28,50 +28,63 @@ pub fn get_candles_from_context(context: &EvaluationContext) -> Result<Vec<Candl
         .timeframe_bundle
         .as_ref()
         .ok_or_else(|| "OHLCV data not available - bundle is None".to_string())?;
-    
+
     // Check if timeframe exists in bundle
     let timeframe = &context.strategy_timeframe;
-    let candles = bundle
-        .get_timeframe(timeframe)
-        .ok_or_else(|| format!("Timeframe {} not available in bundle (valid: 1m, 5m, 15m, 1h, 4h, 12h, 1d)", timeframe))?;
-    
+    let candles = bundle.get_timeframe(timeframe).ok_or_else(|| {
+        format!(
+            "Timeframe {} not available in bundle (valid: 1m, 5m, 15m, 1h, 4h, 12h, 1d)",
+            timeframe
+        )
+    })?;
+
     // Check if timeframe has data
     if candles.is_empty() {
         return Err(format!("Timeframe {} has no candle data - OHLCV system may not have fetched historical data yet", timeframe));
     }
-    
+
     Ok(candles.clone())
 }
 
 /// Helper to extract candles for a specific timeframe from TimeframeBundle
 /// Supports per-condition timeframe selection with fallback to strategy timeframe
 /// Returns detailed error messages for debugging
-pub fn get_candles_for_timeframe(context: &EvaluationContext, condition_timeframe: Option<&str>) -> Result<Vec<Candle>, String> {
+pub fn get_candles_for_timeframe(
+    context: &EvaluationContext,
+    condition_timeframe: Option<&str>,
+) -> Result<Vec<Candle>, String> {
     // Check if bundle exists
     let bundle = context
         .timeframe_bundle
         .as_ref()
         .ok_or_else(|| "OHLCV data not available - bundle is None".to_string())?;
-    
+
     // Use condition's timeframe if provided, otherwise fallback to strategy timeframe
     let timeframe = condition_timeframe.unwrap_or(&context.strategy_timeframe);
-    
+
     // Validate timeframe value
     let valid_timeframes = ["1m", "5m", "15m", "1h", "4h", "12h", "1d"];
     if !valid_timeframes.contains(&timeframe) {
-        return Err(format!("Invalid timeframe '{}' - valid options: {}", timeframe, valid_timeframes.join(", ")));
+        return Err(format!(
+            "Invalid timeframe '{}' - valid options: {}",
+            timeframe,
+            valid_timeframes.join(", ")
+        ));
     }
-    
+
     // Check if timeframe exists in bundle
-    let candles = bundle
-        .get_timeframe(timeframe)
-        .ok_or_else(|| format!("Timeframe {} not available in bundle (valid: 1m, 5m, 15m, 1h, 4h, 12h, 1d)", timeframe))?;
-    
+    let candles = bundle.get_timeframe(timeframe).ok_or_else(|| {
+        format!(
+            "Timeframe {} not available in bundle (valid: 1m, 5m, 15m, 1h, 4h, 12h, 1d)",
+            timeframe
+        )
+    })?;
+
     // Check if timeframe has data
     if candles.is_empty() {
         return Err(format!("Timeframe {} has no candle data - OHLCV system may not have fetched historical data yet", timeframe));
     }
-    
+
     Ok(candles.clone())
 }
 

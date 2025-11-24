@@ -1259,71 +1259,63 @@ impl PositionsDatabase {
         };
 
         let start_str = period_start.to_rfc3339();
-        
+
         let stats = if let Some(end) = period_end {
             let end_str = end.to_rfc3339();
-            conn.query_row(
-                query,
-                params![wallet_address, start_str, end_str],
-                |row| {
-                    let trade_count: i64 = row.get(0)?;
-                    let wins: Option<i64> = row.get(1)?;
-                    let profit: f64 = row.get(2)?;
-                    let loss: f64 = row.get(3)?;
-                    let total_pnl: f64 = row.get(4)?;
-                    let total_buys: i64 = row.get(5)?;
-                    let total_sells: i64 = row.get(6)?;
-                    let max_dd: f64 = row.get(7)?;
+            conn.query_row(query, params![wallet_address, start_str, end_str], |row| {
+                let trade_count: i64 = row.get(0)?;
+                let wins: Option<i64> = row.get(1)?;
+                let profit: f64 = row.get(2)?;
+                let loss: f64 = row.get(3)?;
+                let total_pnl: f64 = row.get(4)?;
+                let total_buys: i64 = row.get(5)?;
+                let total_sells: i64 = row.get(6)?;
+                let max_dd: f64 = row.get(7)?;
 
-                    let win_rate = if trade_count > 0 {
-                        (wins.unwrap_or(0) as f64 / trade_count as f64) * 100.0
-                    } else {
-                        0.0
-                    };
+                let win_rate = if trade_count > 0 {
+                    (wins.unwrap_or(0) as f64 / trade_count as f64) * 100.0
+                } else {
+                    0.0
+                };
 
-                    Ok(PeriodTradingStats {
-                        buys: total_buys,
-                        sells: total_sells,
-                        profit_sol: profit,
-                        loss_sol: loss,
-                        net_pnl_sol: total_pnl,
-                        drawdown_percent: max_dd,
-                        win_rate,
-                    })
-                },
-            )
-            .map_err(|e| format!("Failed to execute period stats query: {}", e))?  
+                Ok(PeriodTradingStats {
+                    buys: total_buys,
+                    sells: total_sells,
+                    profit_sol: profit,
+                    loss_sol: loss,
+                    net_pnl_sol: total_pnl,
+                    drawdown_percent: max_dd,
+                    win_rate,
+                })
+            })
+            .map_err(|e| format!("Failed to execute period stats query: {}", e))?
         } else {
-            conn.query_row(
-                query,
-                params![wallet_address, start_str],
-                |row| {
-                    let trade_count: i64 = row.get(0)?;
-                    let wins: Option<i64> = row.get(1)?;
-                    let profit: f64 = row.get(2)?;
-                    let loss: f64 = row.get(3)?;
-                    let total_pnl: f64 = row.get(4)?;
-                    let total_buys: i64 = row.get(5)?;
-                    let total_sells: i64 = row.get(6)?;
-                    let max_dd: f64 = row.get(7)?;
+            conn.query_row(query, params![wallet_address, start_str], |row| {
+                let trade_count: i64 = row.get(0)?;
+                let wins: Option<i64> = row.get(1)?;
+                let profit: f64 = row.get(2)?;
+                let loss: f64 = row.get(3)?;
+                let total_pnl: f64 = row.get(4)?;
+                let total_buys: i64 = row.get(5)?;
+                let total_sells: i64 = row.get(6)?;
+                let max_dd: f64 = row.get(7)?;
 
-                    let win_rate = if trade_count > 0 {
-                        (wins.unwrap_or(0) as f64 / trade_count as f64) * 100.0
-                    } else {
-                        0.0
-                    };
+                let win_rate = if trade_count > 0 {
+                    (wins.unwrap_or(0) as f64 / trade_count as f64) * 100.0
+                } else {
+                    0.0
+                };
 
-                    Ok(PeriodTradingStats {
-                        buys: total_buys,
-                        sells: total_sells,
-                        profit_sol: profit,
-                        loss_sol: loss,
-                        net_pnl_sol: total_pnl,
-                        drawdown_percent: max_dd,
-                        win_rate,
-                    })
-                },
-            )
+                Ok(PeriodTradingStats {
+                    buys: total_buys,
+                    sells: total_sells,
+                    profit_sol: profit,
+                    loss_sol: loss,
+                    net_pnl_sol: total_pnl,
+                    drawdown_percent: max_dd,
+                    win_rate,
+                })
+            })
             .map_err(|e| format!("Failed to execute period stats query: {}", e))?
         };
 

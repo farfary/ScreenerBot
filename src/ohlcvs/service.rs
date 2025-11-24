@@ -39,10 +39,10 @@ struct OhlcvServiceImpl {
     pool_manager: Arc<PoolManager>,
     gap_manager: Arc<GapManager>,
     monitor: Arc<OhlcvMonitor>,
-    
+
     // Phase 2: Bundle cache for strategy evaluation
     bundle_cache: Arc<RwLock<HashMap<String, (TimeframeBundle, Instant)>>>,
-    
+
     // Track in-flight builds to prevent duplicate concurrent builds
     build_in_progress: Arc<RwLock<HashSet<String>>>,
 }
@@ -61,7 +61,7 @@ impl OhlcvServiceImpl {
             Arc::clone(&pool_manager),
             Arc::clone(&gap_manager),
         ));
-        
+
         let bundle_cache = Arc::new(RwLock::new(HashMap::new()));
         let build_in_progress = Arc::new(RwLock::new(HashSet::new()));
 
@@ -152,31 +152,34 @@ impl OhlcvServiceImpl {
     fn get_mints_with_data(&self, mints: &[String]) -> OhlcvResult<HashSet<String>> {
         self.db.get_mints_with_data(mints)
     }
-    
+
     /// Get timeframe bundle from cache (non-blocking, cache-only)
     /// Returns None if bundle is stale or missing (triggers background refresh)
     async fn get_timeframe_bundle(&self, mint: &str) -> OhlcvResult<Option<TimeframeBundle>> {
         let cache = self.bundle_cache.read().await;
-        
+
         if let Some((bundle, cached_at)) = cache.get(mint) {
             let age_secs = cached_at.elapsed().as_secs();
-            
+
             if age_secs < BUNDLE_CACHE_TTL_SECONDS {
                 logger::debug(
                     LogTag::Ohlcv,
                     &format!("CACHE_HIT: Bundle for {} (age: {}s)", mint, age_secs),
                 );
-                
+
                 // Create result with correct metadata - don't modify cached bundle
                 let mut result = bundle.clone();
                 result.cache_hit = true;
                 result.cache_age_seconds = age_secs;
                 return Ok(Some(result));
             }
-            
+
             logger::debug(
                 LogTag::Ohlcv,
-                &format!("CACHE_STALE: Bundle for {} (age: {}s > {}s TTL)", mint, age_secs, BUNDLE_CACHE_TTL_SECONDS),
+                &format!(
+                    "CACHE_STALE: Bundle for {} (age: {}s > {}s TTL)",
+                    mint, age_secs, BUNDLE_CACHE_TTL_SECONDS
+                ),
             );
         } else {
             logger::debug(
@@ -184,10 +187,10 @@ impl OhlcvServiceImpl {
                 &format!("CACHE_MISS: No bundle for {}", mint),
             );
         }
-        
+
         Ok(None)
     }
-    
+
     /// Build complete timeframe bundle by fetching all 7 timeframes
     /// Fetches in parallel with PARALLEL_FETCH_LIMIT concurrency
     /// Coordinates to prevent duplicate concurrent builds for same token
@@ -195,7 +198,7 @@ impl OhlcvServiceImpl {
         // Use single write transaction to atomically check and mark as building
         {
             let mut in_progress = self.build_in_progress.write().await;
-            
+
             // Try to insert - if already present, another task is building
             if !in_progress.insert(mint.to_string()) {
                 logger::debug(
@@ -203,15 +206,18 @@ impl OhlcvServiceImpl {
                     &format!("BUNDLE_BUILD_SKIP: Another task already building bundle for {}, waiting...", mint),
                 );
                 drop(in_progress);
-                
+
                 // Wait briefly for the other build to complete
                 tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
-                
+
                 // Check cache again - the other build should have stored it
                 if let Ok(Some(bundle)) = self.get_timeframe_bundle(mint).await {
                     logger::debug(
                         LogTag::Ohlcv,
-                        &format!("BUNDLE_BUILD_REUSE: Found bundle built by another task for {}", mint),
+                        &format!(
+                            "BUNDLE_BUILD_REUSE: Found bundle built by another task for {}",
+                            mint
+                        ),
                     );
                     return Ok(bundle);
                 }
@@ -221,9 +227,9 @@ impl OhlcvServiceImpl {
                 in_progress.insert(mint.to_string());
             }
         }
-        
+
         let start = Instant::now();
-        
+
         // Get default pool
         let pool = {
             let mut selected_pool = self.pool_manager.get_default_pool(mint).await?;
@@ -232,9 +238,9 @@ impl OhlcvServiceImpl {
             }
             selected_pool.ok_or_else(|| OhlcvError::PoolNotFound(mint.to_string()))?
         };
-        
+
         let pool_address = pool.address.clone();
-        
+
         // Fetch all 7 timeframes in parallel
         let timeframes = vec![
             Timeframe::Minute1,
@@ -245,25 +251,25 @@ impl OhlcvServiceImpl {
             Timeframe::Hour12,
             Timeframe::Day1,
         ];
-        
+
         let mut tasks = Vec::new();
-        
+
         for tf in timeframes {
             let mint_owned = mint.to_string();
             let pool_owned = pool_address.clone();
             let db = Arc::clone(&self.db);
             let cache = Arc::clone(&self.cache);
-            
+
             let task = tokio::spawn(async move {
                 // Try cache first
                 if let Ok(Some(mut cached)) = cache.get(&mint_owned, Some(&pool_owned), tf) {
                     cached.sort_by_key(|d| d.timestamp);
                     let start_idx = cached.len().saturating_sub(BUNDLE_CANDLE_COUNT);
                     return Ok::<Vec<Candle>, OhlcvError>(
-                        cached.into_iter().skip(start_idx).collect()
+                        cached.into_iter().skip(start_idx).collect(),
                     );
                 }
-                
+
                 // Fetch from database
                 let candles = tokio::task::spawn_blocking(move || {
                     db.get_candles(
@@ -277,16 +283,16 @@ impl OhlcvServiceImpl {
                 })
                 .await
                 .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))??;
-                
+
                 Ok(candles)
             });
-            
+
             tasks.push(task);
         }
-        
+
         // Wait for all tasks to complete
         let results = futures::future::join_all(tasks).await;
-        
+
         // Extract results
         let mut m1 = Vec::new();
         let mut m5 = Vec::new();
@@ -295,11 +301,11 @@ impl OhlcvServiceImpl {
         let mut h4 = Vec::new();
         let mut h12 = Vec::new();
         let mut d1 = Vec::new();
-        
+
         for (idx, result) in results.into_iter().enumerate() {
-            let candles = result
-                .map_err(|e| OhlcvError::ApiError(format!("Task join error: {}", e)))??;
-            
+            let candles =
+                result.map_err(|e| OhlcvError::ApiError(format!("Task join error: {}", e)))??;
+
             match idx {
                 0 => m1 = candles,
                 1 => m5 = candles,
@@ -311,26 +317,32 @@ impl OhlcvServiceImpl {
                 _ => {}
             }
         }
-        
+
         let elapsed_ms = start.elapsed().as_millis();
         if elapsed_ms > 500 {
             logger::info(
                 LogTag::Ohlcv,
-                &format!("BUNDLE_BUILD_SLOW: Built bundle for {} in {}ms", mint, elapsed_ms),
+                &format!(
+                    "BUNDLE_BUILD_SLOW: Built bundle for {} in {}ms",
+                    mint, elapsed_ms
+                ),
             );
         } else {
             logger::debug(
                 LogTag::Ohlcv,
-                &format!("BUNDLE_BUILD: Built bundle for {} in {}ms", mint, elapsed_ms),
+                &format!(
+                    "BUNDLE_BUILD: Built bundle for {} in {}ms",
+                    mint, elapsed_ms
+                ),
             );
         }
-        
+
         // Remove from in-progress tracking
         {
             let mut in_progress = self.build_in_progress.write().await;
             in_progress.remove(mint);
         }
-        
+
         Ok(TimeframeBundle {
             mint: mint.to_string(),
             pool_address,
@@ -342,16 +354,16 @@ impl OhlcvServiceImpl {
             h4,
             h12,
             d1,
-            cache_age_seconds: 0,  // Fresh build
+            cache_age_seconds: 0, // Fresh build
             cache_hit: false,
         })
     }
-    
+
     /// Store bundle in cache with LRU eviction
     /// Takes bundle by value to avoid unnecessary cloning
     async fn store_bundle(&self, mint: String, bundle: TimeframeBundle) -> OhlcvResult<()> {
         let mut cache = self.bundle_cache.write().await;
-        
+
         // LRU eviction: if cache is full, remove oldest entry
         if cache.len() >= BUNDLE_CACHE_MAX_SIZE && !cache.contains_key(&mint) {
             if let Some(oldest_mint) = cache
@@ -366,13 +378,17 @@ impl OhlcvServiceImpl {
                 );
             }
         }
-        
+
         cache.insert(mint.clone(), (bundle, Instant::now()));
         logger::debug(
             LogTag::Ohlcv,
-            &format!("BUNDLE_STORE: Stored bundle for {} (cache size: {})", mint, cache.len()),
+            &format!(
+                "BUNDLE_STORE: Stored bundle for {} (cache size: {})",
+                mint,
+                cache.len()
+            ),
         );
-        
+
         Ok(())
     }
 }

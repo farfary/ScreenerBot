@@ -219,7 +219,7 @@
 .stats-section {
   background: var(--card-bg);
   border-radius: var(--trader-card-radius);
-  padding: 0.75rem;  /* Reduced from var(--trader-card-padding) which is 1rem */
+  padding: 0.75rem; /* Reduced from var(--trader-card-padding) which is 1rem */
   border: 1px solid var(--trader-card-border);
   box-shadow: var(--trader-card-shadow);
   transition: box-shadow 0.2s ease;
@@ -238,12 +238,12 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 0.625rem;  /* Reduced from 0.875rem for tighter spacing */
+  margin-bottom: 0.625rem; /* Reduced from 0.875rem for tighter spacing */
   gap: 1rem;
 }
 
 .section-header h3 {
-  font-size: 0.9375rem;  /* Reduced from 1.05rem for compactness */
+  font-size: 0.9375rem; /* Reduced from 1.05rem for compactness */
   font-weight: 600;
   margin: 0;
   color: var(--text-color);
@@ -254,9 +254,9 @@
 }
 
 .section-subtitle {
-  font-size: 0.6875rem;  /* Reduced from 0.8rem */
+  font-size: 0.6875rem; /* Reduced from 0.8rem */
   color: var(--text-muted);
-  margin: 0.125rem 0 0 0;  /* Reduced from 0.25rem */
+  margin: 0.125rem 0 0 0; /* Reduced from 0.25rem */
   line-height: 1.4;
 }
 
@@ -422,7 +422,7 @@
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 0.5rem;  /* Reduced from 0.625rem for tighter spacing */
+  gap: 0.5rem; /* Reduced from 0.625rem for tighter spacing */
 }
 
 @media (width <= 1400px) {
@@ -472,7 +472,7 @@
 .metric-card {
   background: var(--background-secondary);
   border-radius: 6px;
-  padding: 0.625rem;  /* Reduced from 0.875rem for compactness */
+  padding: 0.625rem; /* Reduced from 0.875rem for compactness */
   border: 1px solid var(--border-color);
   display: flex;
   gap: 0.5rem;
@@ -502,7 +502,7 @@
 
 /* Metric icon extends base icon-container */
 .metric-icon {
-  width: 24px;  /* Reduced from 28px for compactness */
+  width: 24px; /* Reduced from 28px for compactness */
   height: 24px;
   border-radius: 6px;
   background: var(--primary-alpha-10);
@@ -513,7 +513,7 @@
 }
 
 .metric-icon i {
-  font-size: 12px;  /* Reduced from 14px for better proportions */
+  font-size: 12px; /* Reduced from 14px for better proportions */
   color: var(--primary);
 }
 
@@ -539,16 +539,16 @@
 }
 
 .metric-label {
-  font-size: 0.5625rem;  /* Reduced from 0.625rem for tighter layout */
+  font-size: 0.5625rem; /* Reduced from 0.625rem for tighter layout */
   color: var(--text-secondary);
-  margin-bottom: 0.125rem;  /* Reduced from 0.25rem */
+  margin-bottom: 0.125rem; /* Reduced from 0.25rem */
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .metric-value {
-  font-size: 1.125rem;  /* Reduced from 1.25rem for better proportions */
+  font-size: 1.125rem; /* Reduced from 1.25rem for better proportions */
   font-weight: 700;
   color: var(--text-primary);
   margin-bottom: 0.125rem;
@@ -564,7 +564,7 @@
 }
 
 .metric-detail {
-  font-size: 0.5625rem;  /* Reduced from 0.625rem for compactness */
+  font-size: 0.5625rem; /* Reduced from 0.625rem for compactness */
   color: var(--text-muted);
   line-height: 1.3;
 }

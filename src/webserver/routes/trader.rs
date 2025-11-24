@@ -618,11 +618,12 @@ async fn apply_template(Json(request): Json<ApplyTemplateRequest>) -> Response {
         |config| {
             config.trader.roi_exit_enabled = cfg.roi_exit_enabled;
             config.trader.roi_target_percent = cfg.roi_target_pct;
-            
+
             config.trader.time_override_enabled = cfg.time_override_enabled;
             config.trader.time_override_duration = cfg.time_override_duration;
             config.trader.time_override_unit = cfg.time_override_unit.clone();
-            config.trader.time_override_loss_threshold_percent = cfg.time_override_loss_threshold_pct;
+            config.trader.time_override_loss_threshold_percent =
+                cfg.time_override_loss_threshold_pct;
         },
         true, // Save to disk
     );

@@ -415,12 +415,18 @@ async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<HomeDash
     use chrono::{DateTime, Duration, TimeZone};
 
     let now = chrono::Utc::now();
-    let today_start = now.date_naive().and_hms_opt(0, 0, 0).unwrap_or_else(|| chrono::NaiveDateTime::default());
+    let today_start = now
+        .date_naive()
+        .and_hms_opt(0, 0, 0)
+        .unwrap_or_else(|| chrono::NaiveDateTime::default());
     let today_start = chrono::Utc.from_utc_datetime(&today_start);
     let yesterday_start = today_start - Duration::days(1);
     let week_start = today_start - Duration::days(7);
     let month_start = today_start - Duration::days(30);
-    let epoch_start = chrono::Utc.timestamp_opt(0, 0).earliest().unwrap_or(today_start);
+    let epoch_start = chrono::Utc
+        .timestamp_opt(0, 0)
+        .earliest()
+        .unwrap_or(today_start);
 
     struct PeriodRange {
         start: DateTime<chrono::Utc>,
@@ -430,7 +436,13 @@ async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<HomeDash
     // OPTIMIZED: Calculate trader analytics using SQL aggregation (3.2s → 0.25s)
     // Instead of fetching ALL closed positions and iterating in Rust,
     // we use 5 parallel SQL queries that return pre-aggregated stats
-    let (today_stats_result, yesterday_stats_result, week_stats_result, month_stats_result, alltime_stats_result) = tokio::join!(
+    let (
+        today_stats_result,
+        yesterday_stats_result,
+        week_stats_result,
+        month_stats_result,
+        alltime_stats_result,
+    ) = tokio::join!(
         positions::get_period_trading_stats(today_start, Some(now)),
         positions::get_period_trading_stats(yesterday_start, Some(today_start)),
         positions::get_period_trading_stats(week_start, Some(now)),
@@ -439,28 +451,29 @@ async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<HomeDash
     );
 
     // Convert from database PeriodTradingStats to dashboard TradingPeriodStats
-    let convert_stats = |result: Result<positions::PeriodTradingStats, String>| -> TradingPeriodStats {
-        match result {
-            Ok(stats) => TradingPeriodStats {
-                buys: stats.buys,
-                sells: stats.sells,
-                profit_sol: stats.profit_sol,
-                loss_sol: stats.loss_sol,
-                net_pnl_sol: stats.net_pnl_sol,
-                drawdown_percent: stats.drawdown_percent,
-                win_rate: stats.win_rate,
-            },
-            Err(_) => TradingPeriodStats {
-                buys: 0,
-                sells: 0,
-                profit_sol: 0.0,
-                loss_sol: 0.0,
-                net_pnl_sol: 0.0,
-                drawdown_percent: 0.0,
-                win_rate: 0.0,
-            },
-        }
-    };
+    let convert_stats =
+        |result: Result<positions::PeriodTradingStats, String>| -> TradingPeriodStats {
+            match result {
+                Ok(stats) => TradingPeriodStats {
+                    buys: stats.buys,
+                    sells: stats.sells,
+                    profit_sol: stats.profit_sol,
+                    loss_sol: stats.loss_sol,
+                    net_pnl_sol: stats.net_pnl_sol,
+                    drawdown_percent: stats.drawdown_percent,
+                    win_rate: stats.win_rate,
+                },
+                Err(_) => TradingPeriodStats {
+                    buys: 0,
+                    sells: 0,
+                    profit_sol: 0.0,
+                    loss_sol: 0.0,
+                    net_pnl_sol: 0.0,
+                    drawdown_percent: 0.0,
+                    win_rate: 0.0,
+                },
+            }
+        };
 
     let trader = TraderAnalytics {
         today: convert_stats(today_stats_result),
@@ -475,17 +488,16 @@ async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<HomeDash
 
     // Get start of day balance using optimized single-value query
     // Performance: ~0.05s vs 1.5s (fetching 100 snapshots)
-    let start_of_day_balance_sol = 
-        crate::wallet::get_balance_at_time(today_start)
-            .await
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| {
-                current_wallet
-                    .as_ref()
-                    .map(|w| w.sol_balance)
-                    .unwrap_or(0.0)
-            });
+    let start_of_day_balance_sol = crate::wallet::get_balance_at_time(today_start)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| {
+            current_wallet
+                .as_ref()
+                .map(|w| w.sol_balance)
+                .unwrap_or(0.0)
+        });
 
     let current_balance_sol = current_wallet
         .as_ref()
@@ -640,7 +652,10 @@ async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<HomeDash
 
     let days_remaining =
         if let (Some(expiry), true) = (license_status.expiry_ts, license_status.valid) {
-            let expiry_dt = chrono::Utc.timestamp_opt(expiry as i64, 0).earliest().unwrap_or(now);
+            let expiry_dt = chrono::Utc
+                .timestamp_opt(expiry as i64, 0)
+                .earliest()
+                .unwrap_or(now);
             let remaining = expiry_dt.signed_duration_since(now).num_days();
             Some(remaining)
         } else {

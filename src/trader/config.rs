@@ -91,8 +91,7 @@ pub fn is_time_override_enabled() -> bool {
 pub fn get_time_override_duration_seconds() -> f64 {
     with_config(|cfg| {
         use crate::config::TimeUnit;
-        let unit = TimeUnit::from_str(&cfg.trader.time_override_unit)
-            .unwrap_or(TimeUnit::Hours);
+        let unit = TimeUnit::from_str(&cfg.trader.time_override_unit).unwrap_or(TimeUnit::Hours);
         unit.to_seconds(cfg.trader.time_override_duration)
     })
 }

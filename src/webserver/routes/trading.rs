@@ -58,7 +58,8 @@ async fn get_trading_config() -> Response {
             time_override_loss_threshold_percent: cfg.trader.time_override_loss_threshold_percent,
             time_override_duration_hours: {
                 use crate::config::TimeUnit;
-                let unit = TimeUnit::from_str(&cfg.trader.time_override_unit).unwrap_or(TimeUnit::Hours);
+                let unit =
+                    TimeUnit::from_str(&cfg.trader.time_override_unit).unwrap_or(TimeUnit::Hours);
                 unit.to_seconds(cfg.trader.time_override_duration) / 3600.0
             },
             debug_force_sell_mode: crate::trader::DEBUG_FORCE_SELL_MODE,

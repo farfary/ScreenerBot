@@ -12,7 +12,10 @@ pub async fn check_trailing_stop(
 ) -> Result<Option<TradeDecision>, String> {
     // Validate current price
     if !current_price.is_finite() || current_price <= 0.0 {
-        return Err(format!("Invalid current_price for trailing stop: {}", current_price));
+        return Err(format!(
+            "Invalid current_price for trailing stop: {}",
+            current_price
+        ));
     }
 
     // Skip if position doesn't have highest price recorded

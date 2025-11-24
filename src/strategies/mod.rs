@@ -89,7 +89,7 @@ pub async fn evaluate_entry_strategies(
             timeframe_bundle: timeframe_bundle.clone(),
             strategy_timeframe: strategy.timeframe.clone(),
         };
-        
+
         let result = engine.evaluate_strategy(&strategy, &context).await;
 
         match result {
@@ -175,7 +175,7 @@ pub async fn evaluate_exit_strategies(
             timeframe_bundle: timeframe_bundle.clone(),
             strategy_timeframe: strategy.timeframe.clone(),
         };
-        
+
         let result = engine.evaluate_strategy(&strategy, &context).await;
 
         match result {

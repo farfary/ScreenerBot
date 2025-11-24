@@ -1,4 +1,7 @@
-use crate::strategies::conditions::{get_candles_for_timeframe, get_param_f64, get_param_string, get_param_string_optional, validate_timeframe_param, ConditionEvaluator};
+use crate::strategies::conditions::{
+    get_candles_for_timeframe, get_param_f64, get_param_string, get_param_string_optional,
+    validate_timeframe_param, ConditionEvaluator,
+};
 use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
 use serde_json::json;
@@ -80,7 +83,7 @@ impl ConditionEvaluator for CandleSizeCondition {
         // Validate timeframe if provided
         validate_timeframe_param(condition)?;
 
-        let pattern = get_param_string(condition, "pattern")?;;
+        let pattern = get_param_string(condition, "pattern")?;
         if ![
             "LARGE_BODY",
             "SMALL_BODY",

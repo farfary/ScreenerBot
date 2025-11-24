@@ -1,4 +1,7 @@
-use crate::strategies::conditions::{get_candles_for_timeframe, get_param_f64, get_param_string, get_param_string_optional, validate_timeframe_param, ConditionEvaluator};
+use crate::strategies::conditions::{
+    get_candles_for_timeframe, get_param_f64, get_param_string, get_param_string_optional,
+    validate_timeframe_param, ConditionEvaluator,
+};
 use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
 use serde_json::json;
@@ -57,7 +60,7 @@ impl ConditionEvaluator for PriceToMaCondition {
         // Validate timeframe if provided
         validate_timeframe_param(condition)?;
 
-        let period = get_param_f64(condition, "period")?;;
+        let period = get_param_f64(condition, "period")?;
         if period < 2.0 {
             return Err("Period must be at least 2".to_string());
         }

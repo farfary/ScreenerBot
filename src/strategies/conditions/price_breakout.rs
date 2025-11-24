@@ -1,4 +1,7 @@
-use crate::strategies::conditions::{get_candles_for_timeframe, get_param_f64, get_param_string, get_param_string_optional, validate_timeframe_param, ConditionEvaluator};
+use crate::strategies::conditions::{
+    get_candles_for_timeframe, get_param_f64, get_param_string, get_param_string_optional,
+    validate_timeframe_param, ConditionEvaluator,
+};
 use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
 use serde_json::json;
@@ -76,7 +79,7 @@ impl ConditionEvaluator for PriceBreakoutCondition {
         // Validate timeframe if provided
         validate_timeframe_param(condition)?;
 
-        let lookback = get_param_f64(condition, "lookback")?;;
+        let lookback = get_param_f64(condition, "lookback")?;
         if lookback < 2.0 || lookback > 100.0 {
             return Err("Lookback must be between 2 and 100".to_string());
         }

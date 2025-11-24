@@ -1,4 +1,7 @@
-use crate::strategies::conditions::{get_candles_for_timeframe, get_param_f64, get_param_string, get_param_string_optional, validate_timeframe_param, ConditionEvaluator};
+use crate::strategies::conditions::{
+    get_candles_for_timeframe, get_param_f64, get_param_string, get_param_string_optional,
+    validate_timeframe_param, ConditionEvaluator,
+};
 use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
 use serde_json::json;
@@ -25,11 +28,7 @@ impl ConditionEvaluator for ConsecutiveCandlesCondition {
         let candles = get_candles_for_timeframe(context, timeframe.as_deref())?;
 
         if candles.len() < count {
-            return Err(format!(
-                "Not enough candles: {} < {}",
-                candles.len(),
-                count
-            ));
+            return Err(format!("Not enough candles: {} < {}", candles.len(), count));
         }
 
         // Get the most recent candles
@@ -61,7 +60,7 @@ impl ConditionEvaluator for ConsecutiveCandlesCondition {
         // Validate timeframe if provided
         validate_timeframe_param(condition)?;
 
-        let count = get_param_f64(condition, "count")?;;
+        let count = get_param_f64(condition, "count")?;
         if count < 2.0 || count > 20.0 {
             return Err("Count must be between 2 and 20".to_string());
         }

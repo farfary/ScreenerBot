@@ -6,8 +6,8 @@
 
 use screenerbot::{
     arguments::{
-        is_clean_wallet_data_enabled, is_force_enabled, is_gui_enabled, is_reset_enabled,
-        is_reset_default_configs_enabled, patterns, print_debug_info, print_help,
+        is_clean_wallet_data_enabled, is_force_enabled, is_gui_enabled,
+        is_reset_default_configs_enabled, is_reset_enabled, patterns, print_debug_info, print_help,
     },
     logger::{self as logger, LogTag},
 };
@@ -118,10 +118,7 @@ async fn main() {
                 std::process::exit(0);
             }
             Err(e) => {
-                logger::error(
-                    LogTag::System,
-                    &format!("❌ Config reset failed: {}", e),
-                );
+                logger::error(LogTag::System, &format!("❌ Config reset failed: {}", e));
                 std::process::exit(1);
             }
         }

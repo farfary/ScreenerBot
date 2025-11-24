@@ -470,11 +470,7 @@ pub async fn close_single_ata(
         Some(account) => {
             logger::info(
                 LogTag::Wallet,
-                &format!(
-                    "Found empty ATA {} for mint {}",
-                    account.account,
-                    mint
-                ),
+                &format!("Found empty ATA {} for mint {}", account.account, mint),
             );
 
             // Close the ATA
@@ -491,9 +487,7 @@ pub async fn close_single_ata(
                         LogTag::Wallet,
                         &format!(
                             "Closed ATA {} for mint {}. TX: {}",
-                            account.account,
-                            mint,
-                            signature
+                            account.account, mint, signature
                         ),
                     );
                     Ok(signature)
@@ -503,9 +497,7 @@ pub async fn close_single_ata(
                         LogTag::Wallet,
                         &format!(
                             "Failed to close ATA {} for mint {}: {}",
-                            account.account,
-                            mint,
-                            e
+                            account.account, mint, e
                         ),
                     );
                     Err(e)
@@ -657,9 +649,7 @@ pub async fn close_token_account_with_context(
         LogTag::Wallet,
         &format!(
             "🔧 ATA_CLOSE_START: wallet={}, mint={}, recently_sold={}",
-            wallet_address,
-            mint,
-            recently_sold
+            wallet_address, mint, recently_sold
         ),
     );
 
@@ -686,9 +676,7 @@ pub async fn close_token_account_with_context(
             LogTag::Wallet,
             &format!(
                 "🔍 ATA_BALANCE_CHECK: attempt {}/{} for mint {}",
-                balance_check_attempts,
-                max_checks,
-                mint
+                balance_check_attempts, max_checks, mint
             ),
         );
 
@@ -698,8 +686,7 @@ pub async fn close_token_account_with_context(
                     LogTag::Wallet,
                     &format!(
                         "📊 ATA_BALANCE_RESULT: {} tokens remaining for mint {}",
-                        balance,
-                        mint
+                        balance, mint
                     ),
                 );
 
@@ -742,8 +729,7 @@ pub async fn close_token_account_with_context(
                     LogTag::Wallet,
                     &format!(
                         "✅ ATA_BALANCE_ZERO: confirmed zero balance for mint {} after {} attempts",
-                        mint,
-                        balance_check_attempts
+                        mint, balance_check_attempts
                     ),
                 );
 
@@ -804,11 +790,7 @@ pub async fn close_token_account_with_context(
         Ok(account) => {
             logger::debug(
                 LogTag::Wallet,
-                &format!(
-                    "✅ ATA_FOUND: token_account={} for mint={}",
-                    account,
-                    mint
-                ),
+                &format!("✅ ATA_FOUND: token_account={} for mint={}", account, mint),
             );
             account
         }
@@ -817,8 +799,7 @@ pub async fn close_token_account_with_context(
                 LogTag::Wallet,
                 &format!(
                     "❌ ATA_NOT_FOUND: error finding token account for mint {}: {}",
-                    mint,
-                    e
+                    mint, e
                 ),
             );
             logger::warning(
@@ -889,9 +870,7 @@ pub async fn close_token_account_with_context(
                 LogTag::Wallet,
                 &format!(
                     "🎉 ATA_CLOSE_SUCCESS: transaction={}, account={}, mint={}",
-                    signature,
-                    token_account,
-                    mint
+                    signature, token_account, mint
                 ),
             );
             logger::info(
@@ -908,9 +887,7 @@ pub async fn close_token_account_with_context(
                 LogTag::Wallet,
                 &format!(
                     "❌ ATA_CLOSE_FAILED: account={}, mint={}, error={}",
-                    token_account,
-                    mint,
-                    e
+                    token_account, mint, e
                 ),
             );
             logger::error(

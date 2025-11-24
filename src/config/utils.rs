@@ -175,7 +175,11 @@ fn validate_config(config: &Config) -> Result<(), String> {
                     .to_string(),
             );
         }
-        if !config.trader.time_override_loss_threshold_percent.is_finite() {
+        if !config
+            .trader
+            .time_override_loss_threshold_percent
+            .is_finite()
+        {
             return Err(
                 "trader.time_override_loss_threshold_percent must be a finite number".to_string(),
             );
@@ -708,12 +712,8 @@ pub fn reset_config_to_defaults_preserving_credentials() -> Result<(), String> {
     logger::info(LogTag::System, "🔄 Resetting configuration to defaults...");
 
     // 1. Capture current wallet and RPC URLs
-    let (wallet_key, rpc_urls) = with_config(|cfg| {
-        (
-            cfg.main_wallet_private.clone(),
-            cfg.rpc.urls.clone(),
-        )
-    });
+    let (wallet_key, rpc_urls) =
+        with_config(|cfg| (cfg.main_wallet_private.clone(), cfg.rpc.urls.clone()));
 
     // 2. Create fresh config with defaults
     let mut fresh_config = Config::default();

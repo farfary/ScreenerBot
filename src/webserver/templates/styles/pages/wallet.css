@@ -266,3 +266,39 @@
   color: var(--text-muted);
   font-size: 1.1rem;
 }
+
+.wallet-loading-state,
+.wallet-error-state {
+  flex-direction: column;
+  gap: 12px;
+  text-align: center;
+}
+
+.wallet-loading-spinner {
+  font-size: 2rem;
+  animation: wallet-spin 1s linear infinite;
+}
+
+.wallet-loading-title {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.wallet-loading-hint {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.wallet-error-title {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+@keyframes wallet-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

@@ -56,7 +56,10 @@ impl StrategyEvaluator {
             Ok(Some(bundle)) => {
                 logger::debug(
                     LogTag::Trader,
-                    &format!("OHLCV bundle available for {} (age: {}s)", token_mint, bundle.cache_age_seconds),
+                    &format!(
+                        "OHLCV bundle available for {} (age: {}s)",
+                        token_mint, bundle.cache_age_seconds
+                    ),
                 );
                 Some(bundle)
             }
@@ -64,13 +67,17 @@ impl StrategyEvaluator {
                 // Bundle not in cache - build it on demand
                 logger::debug(
                     LogTag::Trader,
-                    &format!("OHLCV bundle cache miss for {} - building on demand", token_mint),
+                    &format!(
+                        "OHLCV bundle cache miss for {} - building on demand",
+                        token_mint
+                    ),
                 );
-                
+
                 match crate::ohlcvs::build_timeframe_bundle(token_mint).await {
                     Ok(bundle) => {
                         // Store in cache for future use (takes bundle by move)
-                        let _ = crate::ohlcvs::store_bundle(token_mint.to_string(), bundle.clone()).await;
+                        let _ = crate::ohlcvs::store_bundle(token_mint.to_string(), bundle.clone())
+                            .await;
                         Some(bundle)
                     }
                     Err(e) => {
@@ -85,7 +92,10 @@ impl StrategyEvaluator {
             Err(e) => {
                 logger::warning(
                     LogTag::Trader,
-                    &format!("Failed to get OHLCV bundle for {}: {} - evaluating without OHLCV", token_mint, e),
+                    &format!(
+                        "Failed to get OHLCV bundle for {}: {} - evaluating without OHLCV",
+                        token_mint, e
+                    ),
                 );
                 None
             }
@@ -222,7 +232,10 @@ impl StrategyEvaluator {
             Ok(Some(bundle)) => {
                 logger::debug(
                     LogTag::Trader,
-                    &format!("OHLCV bundle available for position {:?} (age: {}s)", position.id, bundle.cache_age_seconds),
+                    &format!(
+                        "OHLCV bundle available for position {:?} (age: {}s)",
+                        position.id, bundle.cache_age_seconds
+                    ),
                 );
                 Some(bundle)
             }
@@ -230,13 +243,17 @@ impl StrategyEvaluator {
                 // Bundle not in cache - build it on demand
                 logger::debug(
                     LogTag::Trader,
-                    &format!("OHLCV bundle cache miss for position {:?} - building on demand", position.id),
+                    &format!(
+                        "OHLCV bundle cache miss for position {:?} - building on demand",
+                        position.id
+                    ),
                 );
-                
+
                 match crate::ohlcvs::build_timeframe_bundle(&position.mint).await {
                     Ok(bundle) => {
                         // Store in cache for future use (takes bundle by move)
-                        let _ = crate::ohlcvs::store_bundle(position.mint.clone(), bundle.clone()).await;
+                        let _ = crate::ohlcvs::store_bundle(position.mint.clone(), bundle.clone())
+                            .await;
                         Some(bundle)
                     }
                     Err(e) => {

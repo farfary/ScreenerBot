@@ -6,7 +6,7 @@ use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReaso
 use chrono::Utc;
 
 /// Check if a position should be exited based on time override rules
-/// 
+///
 /// Time override exits positions that:
 /// 1. Have been held longer than configured duration
 /// 2. Are at a loss exceeding the configured threshold (negative %)
@@ -19,7 +19,10 @@ pub async fn check_time_override(
 ) -> Result<Option<TradeDecision>, String> {
     // Validate current price
     if !current_price.is_finite() || current_price <= 0.0 {
-        return Err(format!("Invalid current_price for time override: {}", current_price));
+        return Err(format!(
+            "Invalid current_price for time override: {}",
+            current_price
+        ));
     }
 
     // Check if time override is enabled
@@ -34,10 +37,16 @@ pub async fn check_time_override(
 
     // Defensive runtime validation of config values
     if !duration_seconds.is_finite() || duration_seconds <= 0.0 {
-        return Err(format!("Invalid time_override_duration: {} seconds", duration_seconds));
+        return Err(format!(
+            "Invalid time_override_duration: {} seconds",
+            duration_seconds
+        ));
     }
     if !loss_threshold_pct.is_finite() {
-        return Err(format!("Invalid time_override_loss_threshold_pct: {}", loss_threshold_pct));
+        return Err(format!(
+            "Invalid time_override_loss_threshold_pct: {}",
+            loss_threshold_pct
+        ));
     }
     // Warn if threshold is positive (would exit on profit, likely misconfigured)
     if loss_threshold_pct > 0.0 {

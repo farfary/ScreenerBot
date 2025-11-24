@@ -11,8 +11,8 @@ use crate::ohlcvs::gaps::GapManager;
 use crate::ohlcvs::manager::PoolManager;
 use crate::ohlcvs::priorities::{ActivityType, PriorityManager};
 use crate::ohlcvs::types::{
-    Candle, MintGapAggregate, OhlcvError, OhlcvResult, OhlcvTokenStatus, Priority,
-    Timeframe, TokenOhlcvConfig,
+    Candle, MintGapAggregate, OhlcvError, OhlcvResult, OhlcvTokenStatus, Priority, Timeframe,
+    TokenOhlcvConfig,
 };
 use chrono::{DateTime, Utc};
 use serde_json::json;

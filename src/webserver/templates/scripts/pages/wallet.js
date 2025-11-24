@@ -37,12 +37,44 @@ function createLifecycle() {
   const eventCleanups = [];
 
   const state = {
-    view: "overview",
+    view: null,
     window: 24,
     dashboardData: null,
     currentSnapshot: null,
     lastUpdate: null,
+    loadError: null,
   };
+
+  const ROOT_SELECTOR = "#wallet-root";
+
+  function getWalletRoot() {
+    return document.querySelector(ROOT_SELECTOR);
+  }
+
+  function renderLoadingState(message = "Loading wallet data...") {
+    const root = getWalletRoot();
+    if (!root) return;
+
+    root.innerHTML = `
+      <div class="empty-state wallet-loading-state">
+        <i class="icon-loader wallet-loading-spinner"></i>
+        <div class="wallet-loading-title">${escapeHtml(message)}</div>
+        <div class="wallet-loading-hint">Please keep this tab open while we prepare your balances.</div>
+      </div>
+    `;
+  }
+
+  function renderErrorState(message = "Unable to load wallet data.") {
+    const root = getWalletRoot();
+    if (!root) return;
+
+    root.innerHTML = `
+      <div class="empty-state wallet-error-state">
+        <i class="icon-alert-triangle"></i>
+        <div class="wallet-error-title">${escapeHtml(message)}</div>
+      </div>
+    `;
+  }
 
   // ============================================================================
   // UTILITY FUNCTIONS
@@ -785,18 +817,33 @@ function createLifecycle() {
   // VIEW SWITCHER
   // ============================================================================
 
-  function switchView(newView) {
-    if (state.view === newView) return;
-    state.view = newView;
+  function switchView(newView, options = {}) {
+    const { force = false } = options;
+    const targetView = newView || "overview";
 
-    const root = document.querySelector("#wallet-root");
+    if (!force && state.view === targetView && state.dashboardData) {
+      return;
+    }
+
+    state.view = targetView;
+
+    const root = getWalletRoot();
     if (!root) return;
+
+    if (!state.dashboardData) {
+      if (state.loadError) {
+        renderErrorState(state.loadError);
+      } else {
+        renderLoadingState();
+      }
+      return;
+    }
 
     // Clear content
     root.innerHTML = "";
 
     // Render based on view
-    switch (newView) {
+    switch (targetView) {
       case "overview":
         renderOverview(root, state.dashboardData);
         break;
@@ -820,9 +867,24 @@ function createLifecycle() {
     async init(ctx) {
       console.log("[Wallet] Initializing...");
 
-      // Fetch initial data
-      await fetchCurrentSnapshot();
-      await fetchDashboardData(state.window);
+      renderLoadingState();
+
+      let loadError = null;
+
+      try {
+        await Promise.all([fetchCurrentSnapshot(), fetchDashboardData(state.window)]);
+      } catch (error) {
+        console.error("[Wallet] Failed to load initial data:", error);
+        loadError = "Failed to load wallet data.";
+      }
+
+      if (state.dashboardData) {
+        state.loadError = null;
+        switchView(state.view || "overview", { force: true });
+      } else {
+        state.loadError = loadError || "Wallet data is temporarily unavailable.";
+        renderErrorState(state.loadError);
+      }
     },
 
     async activate(ctx) {
@@ -847,16 +909,19 @@ function createLifecycle() {
 
         // Trigger initial view
         const activeTab = tabBar.getActive() || "overview";
-        switchView(activeTab);
+        switchView(activeTab, { force: true });
       }
 
       // Start polling
       poller = new Poller(async () => {
-        await fetchCurrentSnapshot();
-        await fetchDashboardData(state.window);
+        try {
+          await Promise.all([fetchCurrentSnapshot(), fetchDashboardData(state.window)]);
+        } catch (error) {
+          console.error("[Wallet] Poller refresh failed:", error);
+        }
 
         // Refresh current view
-        switchView(state.view);
+        switchView(state.view || "overview", { force: true });
       }, 10000);
 
       ctx.managePoller(poller);
@@ -908,11 +973,12 @@ function createLifecycle() {
       }
 
       // Reset state
-      state.view = "overview";
+      state.view = null;
       state.window = 24;
       state.dashboardData = null;
       state.currentSnapshot = null;
       state.lastUpdate = null;
+      state.loadError = null;
     },
   };
 }
