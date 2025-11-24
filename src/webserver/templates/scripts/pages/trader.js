@@ -655,7 +655,7 @@ function createLifecycle() {
         totalPnl.className = `metric-value ${avgProfit >= 0 ? "positive" : "negative"}`;
       }
       if (totalPnlDetail) {
-        totalPnlDetail.textContent = `Average profit per trade`;
+        totalPnlDetail.textContent = "Average profit per trade";
       }
 
       // Total Trades

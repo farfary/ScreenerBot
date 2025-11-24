@@ -1,13 +1,12 @@
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { requestManager } from "../core/request_manager.js";
-import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
-import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
 import { TabBar } from "../ui/tab_bar.js";
 import { TradeActionDialog } from "../ui/trade_action_dialog.js";
 import { TokenDetailsDialog } from "../ui/token_details_dialog.js";
+import { ActionBar } from "../ui/action_bar.js";
 
 const SUB_TABS = [
   { id: "overview", label: '<i class="icon-bar-chart-2"></i> Overview' },
@@ -26,15 +25,13 @@ const WINDOW_OPTIONS = [
 function createLifecycle() {
   let tabBar = null;
   let poller = null;
+  let actionBar = null;
   let holdingsTable = null;
   let historyTable = null;
   let tradeDialog = null;
   let detailsDialog = null;
   let balanceChart = null;
   let flowsChart = null;
-
-  // Event cleanup tracking
-  const eventCleanups = [];
 
   const state = {
     view: null,
@@ -79,15 +76,6 @@ function createLifecycle() {
   // ============================================================================
   // UTILITY FUNCTIONS
   // ============================================================================
-
-  /**
-   * Add tracked event listener for cleanup
-   */
-  function addTrackedListener(element, event, handler) {
-    if (!element) return;
-    element.addEventListener(event, handler);
-    eventCleanups.push(() => element.removeEventListener(event, handler));
-  }
 
   const formatSol = (v) => Utils.formatSol(v, { decimals: 4, fallback: "—" });
   const formatPercent = (v) => Utils.formatPercent(v, { style: "pnl", decimals: 2, fallback: "—" });
@@ -177,7 +165,7 @@ function createLifecycle() {
 
   function renderOverview(container, data) {
     if (!data) {
-      container.innerHTML = `<div class="empty-state">No wallet data available</div>`;
+      container.innerHTML = "<div class=\"empty-state\">No wallet data available</div>";
       return;
     }
 
@@ -208,66 +196,14 @@ function createLifecycle() {
           </div>
         </div>
 
-        <div class="window-selector">
-          ${WINDOW_OPTIONS.map(
-            (opt) => `
-            <button 
-              class="btn window-btn ${state.window === opt.hours ? "active" : ""}" 
-              data-window="${opt.hours}"
-            >
-              ${opt.label}
-            </button>
-          `
-          ).join("")}
-        </div>
-
         <div class="chart-container">
           <div class="chart-header">
             <h3>Balance Trend</h3>
-            <button class="btn small" id="exportBalanceBtn">Export CSV</button>
           </div>
           <div id="balanceChart" style="height: 300px;"></div>
         </div>
-
-        <div class="actions-bar">
-          <button class="btn" id="refreshCacheBtn"><i class="icon-refresh-cw"></i> Refresh Cache</button>
-        </div>
       </div>
     `;
-
-    // Attach event listeners
-    container.querySelectorAll(".window-btn").forEach((btn) => {
-      addTrackedListener(btn, "click", async () => {
-        const newWindow = parseInt(btn.dataset.window, 10);
-        if (newWindow === state.window) return;
-
-        state.window = newWindow;
-        const newData = await fetchDashboardData(newWindow);
-        if (newData) {
-          renderOverview(container, newData);
-        }
-      });
-    });
-
-    const exportBtn = container.querySelector("#exportBalanceBtn");
-    if (exportBtn) {
-      addTrackedListener(exportBtn, "click", () => exportBalanceTrend(balance_trend));
-    }
-
-    const refreshBtn = container.querySelector("#refreshCacheBtn");
-    if (refreshBtn) {
-      addTrackedListener(refreshBtn, "click", async () => {
-        refreshBtn.disabled = true;
-        refreshBtn.innerHTML = '<i class="icon-loader"></i> Refreshing...';
-        await refreshDashboardCache(state.window);
-        const newData = await fetchDashboardData(state.window);
-        if (newData) {
-          renderOverview(container, newData);
-        }
-        refreshBtn.disabled = false;
-        refreshBtn.innerHTML = '<i class="icon-refresh-cw"></i> Refresh Cache';
-      });
-    }
 
     // Render chart
     renderBalanceChart(balance_trend);
@@ -337,7 +273,7 @@ function createLifecycle() {
 
   function renderFlows(container, data) {
     if (!data) {
-      container.innerHTML = `<div class="empty-state">No flow data available</div>`;
+      container.innerHTML = "<div class=\"empty-state\">No flow data available</div>";
       return;
     }
 
@@ -348,19 +284,6 @@ function createLifecycle() {
 
     container.innerHTML = `
       <div class="wallet-flows">
-        <div class="window-selector">
-          ${WINDOW_OPTIONS.map(
-            (opt) => `
-            <button 
-              class="btn window-btn ${state.window === opt.hours ? "active" : ""}" 
-              data-window="${opt.hours}"
-            >
-              ${opt.label}
-            </button>
-          `
-          ).join("")}
-        </div>
-
         <div class="flow-cards">
           <div class="flow-card inflow">
             <div class="flow-label">Inflow</div>
@@ -383,31 +306,11 @@ function createLifecycle() {
         <div class="chart-container">
           <div class="chart-header">
             <h3>Daily Flows</h3>
-            <button class="btn small" id="exportFlowsBtn">Export CSV</button>
           </div>
           <div id="flowsChart" style="height: 300px;"></div>
         </div>
       </div>
     `;
-
-    // Attach event listeners
-    container.querySelectorAll(".window-btn").forEach((btn) => {
-      addTrackedListener(btn, "click", async () => {
-        const newWindow = parseInt(btn.dataset.window, 10);
-        if (newWindow === state.window) return;
-
-        state.window = newWindow;
-        const newData = await fetchDashboardData(newWindow);
-        if (newData) {
-          renderFlows(container, newData);
-        }
-      });
-    });
-
-    const exportBtn = container.querySelector("#exportFlowsBtn");
-    if (exportBtn) {
-      addTrackedListener(exportBtn, "click", () => exportDailyFlows(daily_flows));
-    }
 
     // Render chart
     renderFlowsChart(daily_flows);
@@ -496,31 +399,18 @@ function createLifecycle() {
 
   function renderHoldings(container, data) {
     if (!data) {
-      container.innerHTML = `<div class="empty-state">No token holdings available</div>`;
+      container.innerHTML = "<div class=\"empty-state\">No token holdings available</div>";
       return;
     }
 
-    const { tokens } = data;
-
     container.innerHTML = `
       <div class="wallet-holdings">
-        <div class="holdings-toolbar">
-          <div class="holdings-info">
-            <span>${tokens.length} token${tokens.length !== 1 ? "s" : ""}</span>
-          </div>
-          <button class="btn small" id="exportHoldingsBtn">Export CSV</button>
-        </div>
         <div id="holdingsTableContainer"></div>
       </div>
     `;
 
-    const exportBtn = container.querySelector("#exportHoldingsBtn");
-    if (exportBtn) {
-      addTrackedListener(exportBtn, "click", () => exportHoldings(tokens));
-    }
-
     // Render table
-    renderHoldingsTable(tokens);
+    renderHoldingsTable(data.tokens);
   }
 
   function renderHoldingsTable(tokens) {
@@ -672,20 +562,9 @@ function createLifecycle() {
   function renderHistory(container) {
     container.innerHTML = `
       <div class="wallet-history">
-        <div class="history-toolbar">
-          <div class="history-info">
-            <span>Historical Snapshots</span>
-          </div>
-          <button class="btn small" id="exportHistoryBtn">Export CSV</button>
-        </div>
         <div id="historyTableContainer"></div>
       </div>
     `;
-
-    const exportBtn = container.querySelector("#exportHistoryBtn");
-    if (exportBtn) {
-      addTrackedListener(exportBtn, "click", () => exportHistory());
-    }
 
     // Fetch and render history
     fetchHistory();
@@ -814,6 +693,129 @@ function createLifecycle() {
   }
 
   // ============================================================================
+  // ACTIONBAR CONFIGURATION
+  // ============================================================================
+
+  /**
+   * Configure the ActionBar based on current view
+   */
+  function configureActionBar(view) {
+    if (!actionBar) return;
+
+    const windowSelectorConfig = {
+      options: WINDOW_OPTIONS.map((opt) => ({
+        id: opt.id,
+        label: opt.label,
+        value: opt.hours,
+      })),
+      active: state.window,
+      onChange: async (newWindow) => {
+        if (newWindow === state.window) return;
+        state.window = newWindow;
+        const newData = await fetchDashboardData(newWindow);
+        if (newData) {
+          switchView(state.view, { force: true });
+        }
+      },
+    };
+
+    const configs = {
+      overview: {
+        title: "Balance Overview",
+        icon: "icon-bar-chart-2",
+        windowSelector: windowSelectorConfig,
+        actions: [
+          {
+            id: "export",
+            label: "Export CSV",
+            icon: "icon-download",
+            variant: "secondary",
+            onClick: () => {
+              if (state.dashboardData?.balance_trend) {
+                exportBalanceTrend(state.dashboardData.balance_trend);
+              }
+            },
+          },
+          {
+            id: "refresh",
+            label: "Refresh",
+            icon: "icon-refresh-cw",
+            variant: "primary",
+            onClick: async () => {
+              actionBar.updateAction("refresh", { disabled: true, loading: true });
+              await refreshDashboardCache(state.window);
+              const newData = await fetchDashboardData(state.window);
+              if (newData) {
+                switchView(state.view, { force: true });
+              }
+              actionBar.updateAction("refresh", { disabled: false, loading: false });
+            },
+          },
+        ],
+      },
+      flows: {
+        title: "Cash Flows",
+        icon: "icon-arrow-right-left",
+        windowSelector: windowSelectorConfig,
+        actions: [
+          {
+            id: "export",
+            label: "Export CSV",
+            icon: "icon-download",
+            variant: "secondary",
+            onClick: () => {
+              if (state.dashboardData?.daily_flows) {
+                exportDailyFlows(state.dashboardData.daily_flows);
+              }
+            },
+          },
+        ],
+      },
+      holdings: {
+        title: "Token Holdings",
+        subtitle: state.dashboardData?.tokens
+          ? `${state.dashboardData.tokens.length} token${state.dashboardData.tokens.length !== 1 ? "s" : ""}`
+          : null,
+        icon: "icon-coins",
+        actions: [
+          {
+            id: "export",
+            label: "Export CSV",
+            icon: "icon-download",
+            variant: "secondary",
+            onClick: () => {
+              if (state.dashboardData?.tokens) {
+                exportHoldings(state.dashboardData.tokens);
+              }
+            },
+          },
+        ],
+      },
+      history: {
+        title: "Historical Snapshots",
+        icon: "icon-history",
+        windowSelector: windowSelectorConfig,
+        actions: [
+          {
+            id: "export",
+            label: "Export CSV",
+            icon: "icon-download",
+            variant: "secondary",
+            onClick: () => exportHistory(),
+          },
+        ],
+      },
+    };
+
+    const config = configs[view];
+    if (config) {
+      actionBar.configure(config);
+    } else {
+      actionBar.clear();
+    }
+  }
+
+  // ============================================================================
   // VIEW SWITCHER
   // ============================================================================
 
@@ -836,8 +838,13 @@ function createLifecycle() {
       } else {
         renderLoadingState();
       }
+      // Hide action bar when no data
+      if (actionBar) actionBar.clear();
       return;
     }
+
+    // Configure action bar for this view
+    configureActionBar(targetView);
 
     // Clear content
     root.innerHTML = "";
@@ -864,8 +871,14 @@ function createLifecycle() {
   // ============================================================================
 
   return {
-    async init(ctx) {
+    async init(_ctx) {
       console.log("[Wallet] Initializing...");
+
+      // Initialize ActionBar
+      const toolbarContainer = document.querySelector("#toolbarContainer");
+      if (toolbarContainer) {
+        actionBar = new ActionBar({ container: toolbarContainer });
+      }
 
       renderLoadingState();
 
@@ -908,7 +921,7 @@ function createLifecycle() {
         subTabsContainer.style.display = "flex";
 
         // Trigger initial view
-        const activeTab = tabBar.getActive() || "overview";
+        const activeTab = tabBar.getActiveTab() || "overview";
         switchView(activeTab, { force: true });
       }
 
@@ -937,9 +950,11 @@ function createLifecycle() {
     dispose() {
       console.log("[Wallet] Disposing...");
 
-      // Clean up all tracked event listeners
-      eventCleanups.forEach((cleanup) => cleanup());
-      eventCleanups.length = 0;
+      // Cleanup ActionBar
+      if (actionBar) {
+        actionBar.dispose();
+        actionBar = null;
+      }
 
       // Cleanup charts
       if (balanceChart) {
