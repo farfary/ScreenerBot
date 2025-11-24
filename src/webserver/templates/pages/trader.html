@@ -1,6 +1,5 @@
 <div class="page-table trader-page">
   <div id="subTabsContainer" class="sub-tabs-container"></div>
-  <div id="trader-mode-indicator" class="trader-mode-indicator"></div>
   <div id="trader-content">
     <!-- Stats Tab -->
     <div id="stats-tab" class="trader-tab-content" style="display: none">
@@ -30,7 +29,7 @@
                 <i class="icon-activity"></i>
               </div>
               <div class="metric-content">
-                <div class="metric-label">Total P&L</div>
+                <div class="metric-label">Total P&amp;L</div>
                 <div class="metric-value" id="total-pnl">—</div>
                 <div class="metric-detail" id="total-pnl-detail">—</div>
               </div>
@@ -83,6 +82,7 @@
           <div class="section-header">
             <h3><i class="icon-settings"></i> Active Configuration</h3>
             <button
+              type="button"
               class="btn btn-link btn-sm"
               id="expand-config"
               title="View details in other tabs"
@@ -266,23 +266,16 @@
       <div class="trailing-stop-container">
         <!-- Configuration Section -->
         <div class="config-section">
-          <div class="section-header">
-            <div>
-              <h3><i class="icon-trending-up"></i> Trailing Stop Configuration</h3>
-              <p class="section-subtitle">Protect profits while letting winners run</p>
-            </div>
-          </div>
-
           <div class="config-card">
             <!-- Enable/Disable -->
             <div class="config-group config-group-primary">
               <div class="config-toggle">
-                <label class="toggle-label" for="trailing-enabled">
+                <div class="toggle-label">
                   <div class="toggle-header">
-                    <div class="toggle-title">
+                    <label for="trailing-enabled" class="toggle-title">
                       <i class="icon-shield"></i>
                       <span>Enable Trailing Stop</span>
-                    </div>
+                    </label>
                     <div class="toggle-switch">
                       <input type="checkbox" id="trailing-enabled" />
                       <span class="toggle-slider"></span>
@@ -291,7 +284,7 @@
                   <p class="toggle-description">
                     Automatically protect profits when positions reach target gains
                   </p>
-                </label>
+                </div>
               </div>
             </div>
 
@@ -316,7 +309,6 @@
                   class="input-large"
                 />
                 <span class="input-unit">%</span>
-                <div class="input-indicator" id="activation-indicator"></div>
               </div>
               <div class="config-impact">
                 <span class="impact-label">Impact:</span>
@@ -347,7 +339,6 @@
                   class="input-large"
                 />
                 <span class="input-unit">%</span>
-                <div class="input-indicator" id="distance-indicator"></div>
               </div>
               <div class="config-impact">
                 <span class="impact-label">Impact:</span>
@@ -411,31 +402,27 @@
                 <div class="summary-item summary-item-info">
                   <i class="icon-shield"></i>
                   <span>Avoided <strong id="example-avoided">6%</strong> loss from peak</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
       </div>
-    </div>    <!-- Take Profit (ROI) Tab -->
+    </div>
+
+    <!-- Take Profit (ROI) Tab -->
     <div id="roi-tab" class="trader-tab-content" style="display: none">
       <div class="config-section">
-        <div class="section-header">
-          <div>
-            <h3><i class="icon-target"></i> Take Profit Configuration</h3>
-            <p class="section-subtitle">Automatically exit at target profit levels</p>
-          </div>
-        </div>
-
         <div class="config-card">
           <!-- Enable/Disable -->
           <div class="config-group config-group-primary">
             <div class="config-toggle">
-              <label class="toggle-label" for="roi-enabled">
+              <div class="toggle-label">
                 <div class="toggle-header">
-                  <div class="toggle-title">
+                  <label for="roi-enabled" class="toggle-title">
                     <i class="icon-target"></i>
                     <span>Enable Take Profit Exit</span>
-                  </div>
+                  </label>
                   <div class="toggle-switch">
                     <input type="checkbox" id="roi-enabled" />
                     <span class="toggle-slider"></span>
@@ -444,7 +431,7 @@
                 <p class="toggle-description">
                   Exit entire position when profit reaches target percentage
                 </p>
-              </label>
+              </div>
             </div>
           </div>
 
@@ -471,7 +458,6 @@
                 class="input-large"
               />
               <span class="input-unit">%</span>
-              <div class="input-indicator" id="roi-indicator"></div>
             </div>
             <div class="config-impact">
               <span class="impact-label">Impact:</span>
@@ -530,23 +516,16 @@
     <!-- Time Rules Tab -->
     <div id="time-rules-tab" class="trader-tab-content" style="display: none">
       <div class="config-section">
-        <div class="section-header">
-          <div>
-            <h3><i class="icon-clock"></i> Time-Based Exit Rules</h3>
-            <p class="section-subtitle">Exit positions that exceed hold duration thresholds</p>
-          </div>
-        </div>
-
         <div class="config-card">
           <!-- Enable/Disable -->
           <div class="config-group config-group-primary">
             <div class="config-toggle">
-              <label class="toggle-label" for="time-override-enabled">
+              <div class="toggle-label">
                 <div class="toggle-header">
-                  <div class="toggle-title">
+                  <label for="time-override-enabled" class="toggle-title">
                     <i class="icon-clock"></i>
                     <span>Enable Time-Based Exit</span>
-                  </div>
+                  </label>
                   <div class="toggle-switch">
                     <input type="checkbox" id="time-override-enabled" />
                     <span class="toggle-slider"></span>
@@ -556,7 +535,7 @@
                   Automatically exit positions after holding for a specified duration if loss
                   exceeds threshold
                 </p>
-              </label>
+              </div>
             </div>
           </div>
 
@@ -588,7 +567,6 @@
                 <option value="hours" selected>hours</option>
                 <option value="days">days</option>
               </select>
-              <div class="input-indicator" id="time-duration-indicator"></div>
             </div>
             <div class="config-impact">
               <span class="impact-label">Readable:</span>
@@ -619,7 +597,6 @@
                 class="input-large"
               />
               <span class="input-unit">%</span>
-              <div class="input-indicator" id="time-loss-indicator"></div>
             </div>
             <div class="config-impact">
               <span class="impact-label">Impact:</span>
@@ -697,15 +674,6 @@
     <!-- Strategy Control Tab -->
     <div id="strategy-control-tab" class="trader-tab-content" style="display: none">
       <div class="config-section">
-        <div class="section-header">
-          <div>
-            <h3><i class="icon-puzzle"></i> Strategy Integration Control</h3>
-            <p class="section-subtitle">
-              Manage which strategies the trader uses for entry and exit decisions
-            </p>
-          </div>
-        </div>
-
         <div class="info-box">
           <i class="icon-lightbulb"></i>
           <span
@@ -755,23 +723,16 @@
     <div id="dca-tab" class="trader-tab-content" style="display: none">
       <!-- DCA Configuration Section -->
       <div class="config-section">
-        <div class="section-header">
-          <div>
-            <h3><i class="icon-dollar-sign"></i> DCA (Dollar Cost Averaging)</h3>
-            <p class="section-subtitle">Average down on losing positions to reduce cost basis</p>
-          </div>
-        </div>
-
         <div class="config-card">
           <!-- Enable DCA -->
           <div class="config-group config-group-primary">
             <div class="config-toggle">
-              <label class="toggle-label" for="dca-enabled">
+              <div class="toggle-label">
                 <div class="toggle-header">
-                  <div class="toggle-title">
+                  <label for="dca-enabled" class="toggle-title">
                     <i class="icon-dollar-sign"></i>
                     <span>Enable DCA</span>
-                  </div>
+                  </label>
                   <div class="toggle-switch">
                     <input type="checkbox" id="dca-enabled" />
                     <span class="toggle-slider"></span>
@@ -780,7 +741,7 @@
                 <p class="toggle-description">
                   Add to losing positions to lower average entry price
                 </p>
-              </label>
+              </div>
             </div>
           </div>
 
@@ -804,7 +765,6 @@
                 class="input-large"
               />
               <span class="input-unit">%</span>
-              <div class="input-indicator" id="dca-threshold-indicator"></div>
             </div>
           </div>
 
@@ -827,7 +787,6 @@
                 class="input-large"
               />
               <span class="input-unit">entries</span>
-              <div class="input-indicator" id="dca-count-indicator"></div>
             </div>
           </div>
 
@@ -850,7 +809,6 @@
                 class="input-large"
               />
               <span class="input-unit">%</span>
-              <div class="input-indicator" id="dca-size-indicator"></div>
             </div>
           </div>
 
@@ -873,7 +831,6 @@
                 class="input-large"
               />
               <span class="input-unit">minutes</span>
-              <div class="input-indicator" id="dca-cooldown-indicator"></div>
             </div>
           </div>
 
@@ -894,14 +851,11 @@
 
       <!-- DCA Impact & Warnings -->
       <div class="config-section">
-        <div class="section-header">
-          <div>
-            <h3><i class="icon-alert-triangle"></i> DCA Strategy Info</h3>
-            <p class="section-subtitle">Important considerations for DCA trading</p>
-          </div>
-        </div>
-
         <div class="config-card">
+          <div class="card-header">
+            <h3><i class="icon-alert-triangle"></i> DCA Strategy Info</h3>
+            <p class="card-subtitle">Important considerations for DCA trading</p>
+          </div>
           <div class="config-group">
             <div class="visual-example">
               <h4><i class="icon-info"></i> How DCA Works</h4>
@@ -960,14 +914,11 @@
     <div id="general-settings-tab" class="trader-tab-content" style="display: none">
       <!-- Position Sizing Section -->
       <div class="config-section">
-        <div class="section-header">
-          <div>
-            <h3><i class="icon-target"></i> Position Sizing</h3>
-            <p class="section-subtitle">Control how much to invest per position</p>
-          </div>
-        </div>
-
         <div class="config-card">
+          <div class="card-header">
+            <h3><i class="icon-target"></i> Position Sizing</h3>
+            <p class="card-subtitle">Control how much to invest per position</p>
+          </div>
           <div class="config-group">
             <div class="config-label-row">
               <label for="max-positions" class="config-label">
@@ -990,7 +941,6 @@
                 class="input-large"
               />
               <span class="input-unit">positions</span>
-              <div class="input-indicator" id="max-positions-indicator"></div>
             </div>
           </div>
 
@@ -1014,7 +964,6 @@
                 class="input-large"
               />
               <span class="input-unit">SOL</span>
-              <div class="input-indicator" id="trade-size-indicator"></div>
             </div>
           </div>
 
@@ -1041,14 +990,11 @@
 
       <!-- Timing & Cooldowns Section -->
       <div class="config-section">
-        <div class="section-header">
-          <div>
-            <h3><i class="icon-clock"></i> Timing & Cooldowns</h3>
-            <p class="section-subtitle">Control timing between operations</p>
-          </div>
-        </div>
-
         <div class="config-card">
+          <div class="card-header">
+            <h3><i class="icon-clock"></i> Timing &amp; Cooldowns</h3>
+            <p class="card-subtitle">Control timing between operations</p>
+          </div>
           <div class="config-group">
             <div class="config-label-row">
               <label for="close-cooldown" class="config-label">
@@ -1068,7 +1014,6 @@
                 class="input-large"
               />
               <span class="input-unit">minutes</span>
-              <div class="input-indicator" id="close-cooldown-indicator"></div>
             </div>
           </div>
 
@@ -1093,7 +1038,6 @@
                 class="input-large"
               />
               <span class="input-unit">tokens</span>
-              <div class="input-indicator" id="entry-concurrency-indicator"></div>
             </div>
           </div>
 
@@ -1112,49 +1056,6 @@
                 <span><strong>Entry Monitor:</strong> 30s | <strong>Exit Monitor:</strong> 5s</span>
               </div>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Testing & Debug Section -->
-      <div class="config-section">
-        <div class="section-header">
-          <div>
-            <h3><i class="icon-flask-conical"></i> Testing & Debug</h3>
-            <p class="section-subtitle">Development and testing controls</p>
-          </div>
-        </div>
-
-        <div class="config-card">
-          <div class="config-group config-group-primary">
-            <div class="config-toggle">
-              <label class="toggle-label" for="dry-run">
-                <div class="toggle-header">
-                  <div class="toggle-title">
-                    <i class="icon-flask-conical"></i>
-                    <span>Dry Run Mode</span>
-                  </div>
-                  <div class="toggle-switch">
-                    <input type="checkbox" id="dry-run" />
-                    <span class="toggle-slider"></span>
-                  </div>
-                </div>
-                <p class="toggle-description">
-                  Simulate trades without executing on-chain transactions
-                </p>
-              </label>
-            </div>
-          </div>
-
-          <div
-            id="dry-run-warning"
-            class="config-impact"
-            style="display: none; border-left-color: var(--danger)"
-          >
-            <i class="icon-alert-triangle" style="color: var(--danger)"></i>
-            <span style="color: var(--danger); font-weight: 600"
-              >LIVE TRADING MODE: Real transactions will execute!</span
-            >
           </div>
         </div>
       </div>

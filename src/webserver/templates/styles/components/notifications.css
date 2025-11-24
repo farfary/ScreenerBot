@@ -109,7 +109,7 @@
   width: min(480px, 90vw);
   max-width: 520px;
   background: var(--bg-primary);
-  border-left: 1px solid var(--border);
+  border-left: none;
   box-shadow: -12px 0 32px rgb(0, 0, 0, 0.35);
   display: flex;
   flex-direction: column;
@@ -554,8 +554,8 @@ body.notification-drawer-open {
   margin-top: 6px;
   padding: 6px 8px;
   background: var(--error-alpha);
-  border-left: 2px solid var(--error);
-  border-radius: 3px;
+  border: 1px solid var(--error-alpha);
+  border-radius: 4px;
   font-size: 11px;
   color: var(--error);
   line-height: 1.3;
@@ -596,7 +596,7 @@ body.notification-drawer-open {
 /* Light Mode Support */
 :root[data-theme="light"] .notification-drawer__panel {
   background: var(--bg-primary);
-  border-left: 1px solid var(--border);
+  border-left: none;
   box-shadow: -12px 0 32px rgb(0, 0, 0, 0.12);
 }
 

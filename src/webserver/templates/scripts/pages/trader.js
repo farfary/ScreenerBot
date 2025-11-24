@@ -93,7 +93,6 @@ function createLifecycle() {
     const unitSelect = $("#time-unit");
     const hintText = $("#time-conversion-hint");
     const exampleDuration = $("#time-example-duration");
-    const indicator = $("#time-duration-indicator");
 
     if (!durationInput || !unitSelect || !hintText) return;
 
@@ -106,29 +105,6 @@ function createLifecycle() {
     if (exampleDuration) {
       exampleDuration.textContent = readable;
     }
-
-    // Update dynamic indicator with visual feedback based on duration in hours
-    if (indicator) {
-      const hoursMap = { seconds: 1 / 3600, minutes: 1 / 60, hours: 1, days: 24 };
-      const totalHours = duration * (hoursMap[unit] || 1);
-
-      if (totalHours < 24) {
-        // Less than 1 day - very short
-        indicator.innerHTML = '<i class="icon-alert-circle"></i>';
-        indicator.style.background = "var(--warning-alpha-10)";
-        indicator.style.color = "var(--warning)";
-      } else if (totalHours > 336) {
-        // More than 2 weeks - very long
-        indicator.innerHTML = '<i class="icon-calendar"></i>';
-        indicator.style.background = "var(--info-alpha-10)";
-        indicator.style.color = "var(--info)";
-      } else {
-        // 1 day to 2 weeks - moderate
-        indicator.innerHTML = '<i class="icon-clock"></i>';
-        indicator.style.background = "var(--primary-alpha-10)";
-        indicator.style.color = "var(--primary)";
-      }
-    }
   }
 
   /**
@@ -140,13 +116,12 @@ function createLifecycle() {
     const exampleProfit = $("#roi-example-profit");
     const exampleTarget = $("#roi-example-target");
     const exampleSummary = $("#roi-example-summary");
-    const indicator = $("#roi-indicator");
 
     if (!roiInput) return;
 
     const value = parseFloat(roiInput.value) || 20;
 
-    // Update impact indicator
+    // Update impact text
     if (impactText) {
       impactText.textContent = `Exit at +${value}% profit`;
     }
@@ -162,23 +137,6 @@ function createLifecycle() {
     if (exampleSummary) {
       exampleSummary.textContent = `+${value}%`;
     }
-
-    // Update dynamic indicator with visual feedback
-    if (indicator) {
-      if (value < 10) {
-        indicator.innerHTML = '<i class="icon-alert-triangle"></i>';
-        indicator.style.background = "var(--warning-alpha-10)";
-        indicator.style.color = "var(--warning)";
-      } else if (value > 100) {
-        indicator.innerHTML = '<i class="icon-trending-up"></i>';
-        indicator.style.background = "var(--success-alpha-10)";
-        indicator.style.color = "var(--success)";
-      } else {
-        indicator.innerHTML = '<i class="icon-target"></i>';
-        indicator.style.background = "var(--primary-alpha-10)";
-        indicator.style.color = "var(--primary)";
-      }
-    }
   }
 
   /**
@@ -188,14 +146,13 @@ function createLifecycle() {
     const lossInput = $("#time-loss-threshold");
     const impactText = $("#time-loss-impact");
     const exampleLoss = $("#time-example-loss");
-    const indicator = $("#time-loss-indicator");
 
     if (!lossInput) return;
 
     const value = parseFloat(lossInput.value) || -40;
     const absValue = Math.abs(value);
 
-    // Update impact indicator
+    // Update impact text
     if (impactText) {
       impactText.textContent = `Exit if down ${absValue}% or more after hold period`;
     }
@@ -203,26 +160,6 @@ function createLifecycle() {
     // Update visual example
     if (exampleLoss) {
       exampleLoss.textContent = `${value}%`;
-    }
-
-    // Update dynamic indicator with visual feedback based on threshold severity
-    if (indicator) {
-      if (absValue < 20) {
-        // Low threshold - exits quickly even with small losses
-        indicator.innerHTML = '<i class="icon-alert-triangle"></i>';
-        indicator.style.background = "var(--warning-alpha-10)";
-        indicator.style.color = "var(--warning)";
-      } else if (absValue > 60) {
-        // High threshold - allows large losses
-        indicator.innerHTML = '<i class="icon-trending-down"></i>';
-        indicator.style.background = "var(--error-alpha-10)";
-        indicator.style.color = "var(--error)";
-      } else {
-        // Moderate threshold
-        indicator.innerHTML = '<i class="icon-minus-circle"></i>';
-        indicator.style.background = "var(--primary-alpha-10)";
-        indicator.style.color = "var(--primary)";
-      }
     }
   }
 
@@ -686,7 +623,6 @@ function createLifecycle() {
                   ? 600
                   : Math.max(0, closeCooldownMinutes) * 60;
                 const entryConcurrency = parseInt($("#entry-concurrency")?.value || "3", 10);
-                const dryRun = $("#dry-run")?.checked || false;
 
                 await saveConfig({
                   trader: {
@@ -695,7 +631,6 @@ function createLifecycle() {
                     entry_sizes: entrySizes,
                     close_cooldown_seconds: closeCooldownSeconds,
                     entry_monitor_concurrency: entryConcurrency,
-                    dry_run: dryRun,
                   },
                 });
               },
@@ -852,15 +787,6 @@ function createLifecycle() {
     const entryConcurrencyEl = $("#config-entry-concurrency");
     if (entryConcurrencyEl) entryConcurrencyEl.textContent = trader.entry_monitor_concurrency || 10;
 
-    // Mode Indicator (in header)
-    const modeIndicatorEl = $("#trader-mode-indicator");
-    if (modeIndicatorEl) {
-      if (trader.dry_run) {
-        modeIndicatorEl.innerHTML = '<span class="mode-indicator dry-run">🟡 DRY RUN</span>';
-      } else {
-        modeIndicatorEl.innerHTML = '<span class="mode-indicator live">🔴 LIVE TRADING</span>';
-      }
-    }
   }
 
   /**
@@ -952,7 +878,6 @@ function createLifecycle() {
     const dcaCooldown = $("#dca-cooldown");
     const closeCooldown = $("#close-cooldown");
     const entryConcurrency = $("#entry-concurrency");
-    const dryRun = $("#dry-run");
 
     if (maxPositions) maxPositions.value = trader.max_open_positions || 2;
     if (tradeSize) tradeSize.value = trader.trade_size_sol || 0.005;
@@ -969,10 +894,6 @@ function createLifecycle() {
       closeCooldown.value = Math.max(0, Math.round(seconds / 60));
     }
     if (entryConcurrency) entryConcurrency.value = trader.entry_monitor_concurrency || 3;
-    if (dryRun) dryRun.checked = trader.dry_run || false;
-
-    // Update dry run warning
-    updateDryRunWarning();
   }
 
   /**
@@ -1422,14 +1343,6 @@ function createLifecycle() {
    * Note: Button handlers moved to ActionBar in configureActionBar()
    */
   function setupFormHandlers() {
-    // Dry run checkbox immediate update
-    const dryRunCheckbox = $("#dry-run");
-    if (dryRunCheckbox) {
-      addTrackedListener(dryRunCheckbox, "change", () => {
-        updateDryRunWarning();
-      });
-    }
-
     // Time unit change listener
     const timeUnit = $("#time-unit");
     if (timeUnit) {
@@ -1599,18 +1512,6 @@ function createLifecycle() {
       }
     };
     input.click();
-  }
-
-  /**
-   * Update dry run warning visibility
-   */
-  function updateDryRunWarning() {
-    const dryRunCheckbox = $("#dry-run");
-    const warning = $("#dry-run-warning");
-    if (!warning) return;
-
-    const isDryRun = dryRunCheckbox?.checked || false;
-    warning.style.display = isDryRun ? "block" : "none";
   }
 
   /**
