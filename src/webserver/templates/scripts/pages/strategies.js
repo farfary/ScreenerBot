@@ -69,7 +69,7 @@ export function createLifecycle() {
 
       // Setup editor actions
       setupEditorActions();
-      
+
       // Setup toolbar actions
       setupToolbarActions();
 
@@ -303,7 +303,7 @@ export function createLifecycle() {
     const testBtn = $("#test-strategy");
     const deployBtn = $("#deploy-strategy");
     const nameInput = $("#strategy-name");
-    
+
     // Sync strategy name in real-time as user types
     if (nameInput) {
       addTrackedListener(nameInput, "input", (e) => {
@@ -485,9 +485,9 @@ export function createLifecycle() {
         item,
         "click",
         (e) => {
-        if (!e.target.closest(".btn-icon")) {
-          loadStrategy(strategyId);
-        }
+          if (!e.target.closest(".btn-icon")) {
+            loadStrategy(strategyId);
+          }
         },
         CleanupScope.STRATEGIES_LIST
       );
@@ -843,7 +843,7 @@ export function createLifecycle() {
         title: "Unknown Condition",
         message: "Condition type not found",
       });
-    
+
     // Auto-create strategy if none exists (first condition added)
     if (!currentStrategy) {
       currentStrategy = {
@@ -855,7 +855,7 @@ export function createLifecycle() {
         rules: null,
         parameters: {},
       };
-      
+
       // Update UI to reflect new strategy
       const nameInput = $("#strategy-name");
       if (nameInput && !nameInput.value) {
@@ -864,11 +864,11 @@ export function createLifecycle() {
         // Use user-entered name if already typed
         currentStrategy.name = nameInput.value;
       }
-      
+
       const statusBadge = $("#strategy-status");
       if (statusBadge) statusBadge.textContent = `Draft (${activeTab})`;
     }
-    
+
     const params = {};
     Object.entries(schema.parameters || {}).forEach(([k, p]) => {
       params[k] = p.default ?? null;
@@ -947,7 +947,7 @@ export function createLifecycle() {
         const idx = parseInt(el.closest(".condition-card").dataset.index, 10);
         const card = el.closest(".condition-card");
         conditions[idx].enabled = e.target.checked;
-        
+
         // Update card status class
         if (e.target.checked) {
           card.classList.remove("status-disabled");
@@ -956,7 +956,7 @@ export function createLifecycle() {
           card.classList.remove("status-enabled");
           card.classList.add("status-disabled");
         }
-        
+
         updateRuleTreeFromEditor();
       };
       addTrackedListener(el, "change", handler, CleanupScope.CONDITION_CARDS);
@@ -995,7 +995,7 @@ export function createLifecycle() {
     const body = renderParamEditor(c, schema, idx);
     const statusClass = c.enabled ? "status-enabled" : "status-disabled";
     const categorySlug = category.toLowerCase().replace(/[^a-z0-9]+/g, "-");
-    
+
     return `
       <div class="condition-card ${statusClass}" data-index="${idx}" data-category="${categorySlug}">
         <div class="card-header">
@@ -1073,7 +1073,7 @@ export function createLifecycle() {
       const timeUnit = c.params.time_unit;
       const unitLabel = timeUnit === "SECONDS" ? "sec" : timeUnit === "MINUTES" ? "min" : "hrs";
       const timePart = `${timeValue} ${unitLabel}`;
-      
+
       // Add other parameters (skip time_value and time_unit as they're combined)
       Object.entries(c.params).forEach(([key, value]) => {
         if (key === "time_value" || key === "time_unit") return;
@@ -1084,7 +1084,7 @@ export function createLifecycle() {
         const formattedValue = formatParamValueWithUnit(value, spec);
         parts.push(`${label}: ${formattedValue}`);
       });
-      
+
       // Add time period last
       parts.push(`Period: ${timePart}`);
     } else {
@@ -1162,7 +1162,7 @@ export function createLifecycle() {
 
   function renderParamEditor(c, schema, idx) {
     const entries = Object.entries(schema.parameters || {});
-    if (!entries.length) return "<div class=\"param-row\">No parameters</div>";
+    if (!entries.length) return '<div class="param-row">No parameters</div>';
     // Basic approach: show all params; could gate last N as advanced in future
     const fields = entries.map(([key, spec]) => {
       const label = spec.name || key;
@@ -1661,7 +1661,7 @@ export function createLifecycle() {
       });
       return;
     }
-    
+
     // Validate strategy has conditions
     if (conditions.length === 0) {
       Utils.showToast({
@@ -1679,7 +1679,7 @@ export function createLifecycle() {
 
       if (nameInput) currentStrategy.name = nameInput.value.trim();
       if (typeSelect) currentStrategy.type = typeSelect.value;
-      
+
       // Validate name
       if (!currentStrategy.name) {
         Utils.showToast({

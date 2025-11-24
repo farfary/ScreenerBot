@@ -1,9 +1,9 @@
 <div class="page-table trader-page">
   <div id="subTabsContainer" class="sub-tabs-container"></div>
-  <div id="trader-root">
-    <div id="trader-content">
-      <!-- Stats Tab -->
-      <div id="stats-tab" class="trader-tab-content" style="display: none">
+  <div id="trader-mode-indicator" class="trader-mode-indicator"></div>
+  <div id="trader-content">
+    <!-- Stats Tab -->
+    <div id="stats-tab" class="trader-tab-content" style="display: none">
         <div class="stats-grid">
           <!-- Key Performance Indicators -->
           <div class="stats-section stats-section-primary">
@@ -262,7 +262,7 @@
       </div>
 
       <!-- Trailing Stop Tab -->
-      <div id="trailing-stop-tab" class="trader-tab-content" style="display: none">
+    <div id="trailing-stop-tab" class="trader-tab-content" style="display: none">
         <div class="trailing-stop-container">
           <!-- Configuration Section -->
           <div class="config-section">
@@ -434,7 +434,7 @@
       </div>
 
       <!-- Take Profit (ROI) Tab -->
-      <div id="roi-tab" class="trader-tab-content" style="display: none">
+    <div id="roi-tab" class="trader-tab-content" style="display: none">
         <div class="config-section">
           <div class="section-header">
             <div>
@@ -555,7 +555,6 @@
           </div>
         </div>
       </div>
-    </div>
 
     <!-- Time Rules Tab -->
     <div id="time-rules-tab" class="trader-tab-content" style="display: none">
@@ -733,7 +732,7 @@
           </button>
         </div>
       </div>
-    </div>
+    </div> <!-- #time-rules-tab -->
 
     <!-- Strategy Control Tab -->
     <div id="strategy-control-tab" class="trader-tab-content" style="display: none">
@@ -801,7 +800,7 @@
           <span>Refresh List</span>
         </button>
       </div>
-    </div>
+    </div> <!-- #strategy-control-tab -->
 
     <!-- DCA Tab -->
     <div id="dca-tab" class="trader-tab-content" style="display: none">
@@ -1019,7 +1018,7 @@
           </button>
         </div>
       </div>
-    </div>
+    </div> <!-- #dca-tab -->
 
     <!-- General Settings Tab -->
     <div id="general-settings-tab" class="trader-tab-content" style="display: none">
@@ -1245,6 +1244,6 @@
           </button>
         </div>
       </div>
-    </div>
-  </div>
-</div>
+    </div> <!-- #general-settings-tab -->
+  </div> <!-- #trader-content -->
+</div> <!-- .trader-page -->

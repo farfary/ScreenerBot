@@ -2,50 +2,185 @@
 
 .trader-page {
   padding: 0;
-
-  --trader-max-width: 1280px;
-  --trader-horizontal-padding: clamp(1rem, 2vw, 2.25rem);
-  --trader-vertical-gap: clamp(1rem, 2vw, 1.75rem);
-  --trader-card-radius: 14px;
-  --trader-card-padding: clamp(1rem, 1.8vw, 1.6rem);
-  --trader-card-border: var(--border-color);
-  --trader-card-shadow: 0 10px 26px var(--shadow-lg);
-}
-
-#trader-root {
   display: flex;
   flex-direction: column;
   height: 100%;
+  overflow: hidden;
+
+  --trader-max-width: 1280px;
+  --trader-horizontal-padding: clamp(0.85rem, 1.8vw, 1.5rem);
+  --trader-vertical-gap: clamp(0.75rem, 1.2vw, 1.3rem);
+  --trader-card-radius: 8px;
+  --trader-card-padding: 1rem;
+  --trader-card-border: var(--border-color);
+  --trader-card-shadow: 0 2px 8px var(--shadow-md);
 }
 
+/* Trader content container - single scrolling layer */
 #trader-content {
-  padding: var(--trader-vertical-gap) var(--trader-horizontal-padding)
-    calc(var(--trader-vertical-gap) * 2);
+  padding: 0 var(--trader-horizontal-padding) calc(var(--trader-vertical-gap) * 2);
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
+/* Mode Indicator in Header */
+.trader-mode-indicator {
+  display: none; /* Hidden by default until populated by JS */
+  justify-content: center;
+  align-items: center;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--card-bg);
+  flex-shrink: 0;
+}
+
+.trader-mode-indicator:not(:empty) {
+  display: flex; /* Show only when content exists */
+}
+
+.trader-mode-indicator .mode-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.trader-mode-indicator .mode-indicator.dry-run {
+  background: rgba(255, 193, 7, 0.1);
+  color: #ffc107;
+  border: 1px solid rgba(255, 193, 7, 0.3);
+}
+
+.trader-mode-indicator .mode-indicator.live {
+  background: rgba(244, 67, 54, 0.1);
+  color: #f44336;
+  border: 1px solid rgba(244, 67, 54, 0.3);
+}
+
 .trader-tab-content {
-  animation: trader-tab-fade 0.2s ease-in;
-  width: 100%;
+  display: none;
+  padding-top: 1.5rem; /* Space below subtabs row */
 }
 
 .trader-tab-content > * {
-  width: min(100%, var(--trader-max-width));
-  margin: 0 auto;
+  animation: trader-tab-fade 0.3s ease-out;
 }
 
-.trader-tab-content > * + * {
-  margin-top: var(--trader-vertical-gap);
+/* Add spacing between sections, but not between action bar and first content */
+.trader-tab-content > .trader-action-bar + * {
+  margin-top: 0;
+}
+
+.trader-tab-content > * + *:not(.trader-action-bar + *) {
+  margin-top: 1rem;
 }
 
 @keyframes trader-tab-fade {
   from {
     opacity: 0;
   }
-
   to {
     opacity: 1;
   }
+}
+
+/* ============================================================================
+   Trader Action Bar - Sticky Actions at Top
+   ============================================================================ */
+
+.trader-action-bar {
+  position: sticky;
+  top: 0;
+  background: var(--surface-color);
+  border-bottom: 2px solid var(--border-color);
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  z-index: 10;
+  min-height: 52px;
+}
+
+.action-bar-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.action-bar-title i {
+  font-size: 18px;
+  color: var(--primary-color);
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+.action-bar-title h3 {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-color);
+  letter-spacing: 0.01em;
+}
+
+.action-bar-actions {
+  display: flex;
+  gap: 0.375rem;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.trader-action-bar .btn {
+  padding: 6px 12px;
+  font-size: 0.8rem;
+  height: 32px;
+  font-weight: 500;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.trader-action-bar .btn-primary {
+  background: var(--primary-color);
+  color: #fff;
+}
+
+.trader-action-bar .btn-primary:hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px var(--shadow-md);
+}
+
+.trader-action-bar .btn-secondary {
+  background: var(--background-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.trader-action-bar .btn-secondary:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--primary-alpha-30);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px var(--shadow-md);
+}
+
+.trader-action-bar .btn i {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.trader-action-bar .btn:active {
+  transform: translateY(1px);
 }
 
 /* ============================================================================
@@ -57,6 +192,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--trader-vertical-gap);
+  padding: 1rem 0 0 0;
 }
 
 /* ============================================================================
@@ -83,17 +219,14 @@
 .stats-section {
   background: var(--card-bg);
   border-radius: var(--trader-card-radius);
-  padding: var(--trader-card-padding);
+  padding: 0.75rem;  /* Reduced from var(--trader-card-padding) which is 1rem */
   border: 1px solid var(--trader-card-border);
   box-shadow: var(--trader-card-shadow);
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
+  transition: box-shadow 0.2s ease;
 }
 
 .stats-section:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 14px 34px var(--shadow-lg);
+  box-shadow: 0 4px 12px var(--shadow-md);
 }
 
 .stats-section-primary {
@@ -105,25 +238,26 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 0.75rem;
-  gap: 0.625rem;
+  margin-bottom: 0.625rem;  /* Reduced from 0.875rem for tighter spacing */
+  gap: 1rem;
 }
 
 .section-header h3 {
-  margin: 0;
-  font-size: 0.9375rem;
+  font-size: 0.9375rem;  /* Reduced from 1.05rem for compactness */
   font-weight: 600;
-  color: var(--text-primary);
+  margin: 0;
+  color: var(--text-color);
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  letter-spacing: 0.01em;
 }
 
 .section-subtitle {
-  margin: 0.125rem 0 0;
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  font-weight: 400;
+  font-size: 0.6875rem;  /* Reduced from 0.8rem */
+  color: var(--text-muted);
+  margin: 0.125rem 0 0 0;  /* Reduced from 0.25rem */
+  line-height: 1.4;
 }
 
 .stats-period {
@@ -179,7 +313,7 @@
 
 .config-overview-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(3, 1fr);
   gap: 0.875rem;
   padding: 0.25rem 0;
 }
@@ -288,7 +422,7 @@
 .metrics-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
-  gap: 0.625rem;
+  gap: 0.5rem;  /* Reduced from 0.625rem for tighter spacing */
 }
 
 @media (width <= 1400px) {
@@ -338,16 +472,15 @@
 .metric-card {
   background: var(--background-secondary);
   border-radius: 6px;
-  padding: 0.625rem;
+  padding: 0.625rem;  /* Reduced from 0.875rem for compactness */
   border: 1px solid var(--border-color);
   display: flex;
   gap: 0.5rem;
   align-items: flex-start;
-  transition: all 0.2s ease;
+  transition: box-shadow 0.2s ease;
 }
 
 .metric-card:hover {
-  transform: translateY(-2px);
   box-shadow: 0 4px 12px rgb(0, 0, 0, 0.08);
   border-color: var(--primary-alpha-30);
 }
@@ -369,8 +502,8 @@
 
 /* Metric icon extends base icon-container */
 .metric-icon {
-  width: 28px;
-  height: 28px;
+  width: 24px;  /* Reduced from 28px for compactness */
+  height: 24px;
   border-radius: 6px;
   background: var(--primary-alpha-10);
   display: flex;
@@ -380,7 +513,7 @@
 }
 
 .metric-icon i {
-  font-size: 14px;
+  font-size: 12px;  /* Reduced from 14px for better proportions */
   color: var(--primary);
 }
 
@@ -406,16 +539,16 @@
 }
 
 .metric-label {
-  font-size: 0.625rem;
+  font-size: 0.5625rem;  /* Reduced from 0.625rem for tighter layout */
   color: var(--text-secondary);
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.125rem;  /* Reduced from 0.25rem */
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .metric-value {
-  font-size: 1.25rem;
+  font-size: 1.125rem;  /* Reduced from 1.25rem for better proportions */
   font-weight: 700;
   color: var(--text-primary);
   margin-bottom: 0.125rem;
@@ -431,98 +564,14 @@
 }
 
 .metric-detail {
-  font-size: 0.625rem;
+  font-size: 0.5625rem;  /* Reduced from 0.625rem for compactness */
   color: var(--text-muted);
   line-height: 1.3;
 }
 
-/* Exit Breakdown */
-.exit-breakdown {
-  min-height: 120px;
-}
-
-.exit-bars {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-}
-
-.exit-bar-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-.exit-bar-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 1rem;
-}
-
-.exit-bar-label {
-  font-size: 0.875rem;
-  color: var(--text-primary);
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.exit-bar-label .exit-icon {
-  width: 24px;
-  height: 24px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-}
-
-.exit-bar-stats {
-  display: flex;
-  gap: 1rem;
-  font-size: 0.813rem;
-  color: var(--text-secondary);
-}
-
-.exit-bar-count {
-  font-weight: 600;
-}
-
-.exit-bar-avg {
-  font-weight: 600;
-}
-
-.exit-bar-avg.positive {
-  color: var(--success);
-}
-
-.exit-bar-avg.negative {
-  color: var(--danger);
-}
-
-.exit-bar-wrapper {
-  background: var(--background-secondary);
-  height: 8px;
-  border-radius: 4px;
-  overflow: hidden;
-  position: relative;
-}
-
-.exit-bar {
-  height: 100%;
-  background: linear-gradient(90deg, var(--primary), var(--primary-hover));
-  transition: width 0.4s ease;
-  border-radius: 4px;
-}
-
-.exit-bar.success {
-  background: linear-gradient(90deg, var(--success), var(--success-hover));
-}
-
-.exit-bar.danger {
-  background: linear-gradient(90deg, var(--danger), var(--danger-hover));
+/* Positions Summary */
+.positions-summary {
+  min-height: 100px;
 }
 
 .loading-state,
@@ -559,11 +608,6 @@
   }
 }
 
-/* Positions Summary */
-.positions-summary {
-  min-height: 100px;
-}
-
 .positions-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -575,11 +619,10 @@
   border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 1rem;
-  transition: all 0.2s ease;
+  transition: box-shadow 0.2s ease;
 }
 
 .position-summary-card:hover {
-  transform: translateY(-2px);
   box-shadow: 0 4px 12px rgb(0, 0, 0, 0.08);
   border-color: var(--primary-alpha-30);
 }
@@ -632,110 +675,6 @@
   font-weight: 500;
 }
 
-/* Health Grid */
-.health-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1rem;
-}
-
-.health-card {
-  background: var(--background-secondary);
-  border-radius: 8px;
-  padding: 1.25rem;
-  border: 1px solid var(--border-color);
-  display: flex;
-  gap: 1rem;
-  align-items: flex-start;
-  transition: all 0.2s ease;
-}
-
-.health-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.08);
-}
-
-.health-icon {
-  width: 48px;
-  height: 48px;
-  border-radius: 8px;
-  background: var(--background-tertiary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  transition: all 0.3s ease;
-}
-
-.health-icon i {
-  font-size: 24px;
-  color: var(--text-secondary);
-  transition: all 0.3s ease;
-}
-
-.health-icon.status-success {
-  background: var(--success-alpha-10);
-}
-
-.health-icon.status-success i {
-  color: var(--success);
-}
-
-.health-icon.status-danger {
-  background: var(--danger-alpha-10);
-}
-
-.health-icon.status-danger i {
-  color: var(--danger);
-}
-
-.health-icon.status-warning {
-  background: var(--warning-alpha-10);
-}
-
-.health-icon.status-warning i {
-  color: var(--warning);
-}
-
-.health-content {
-  flex: 1;
-  min-width: 0;
-}
-
-.health-label {
-  font-size: 0.813rem;
-  color: var(--text-secondary);
-  margin-bottom: 0.5rem;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.health-value {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 0.25rem;
-}
-
-.health-value.status-success {
-  color: var(--success);
-}
-
-.health-value.status-danger {
-  color: var(--danger);
-}
-
-.health-value.status-warning {
-  color: var(--warning);
-}
-
-.health-detail {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  line-height: 1.4;
-}
-
 /* ============================================================================
    Configuration Components
    ============================================================================ */
@@ -758,57 +697,62 @@
 
 /* Unified Section Base Class - replaces stats-section, config-section, form-section */
 .config-section {
-  background: var(--card-bg);
-  border-radius: var(--trader-card-radius);
-  padding: var(--trader-card-padding);
-  border: 1px solid var(--trader-card-border);
-  box-shadow: var(--trader-card-shadow);
-  transition:
-    transform 0.2s ease,
-    box-shadow 0.2s ease;
-}
-
-.config-section:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 14px 34px var(--shadow-lg);
-}
-
-.config-section.disabled {
-  opacity: 0.6;
-  pointer-events: none;
+  padding: 0 1rem 1rem 1rem;
 }
 
 /* Unified Card Container */
 .config-card {
-  background: var(--background-secondary);
-  border-radius: calc(var(--trader-card-radius) - 4px);
-  padding: clamp(1rem, 1.5vw, 1.25rem);
+  background: var(--card-bg);
+  border-radius: 8px;
+  padding: 1.25rem;
   border: 1px solid var(--border-color);
+  box-shadow: 0 2px 8px var(--shadow-sm);
+  transition: box-shadow 0.2s ease;
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 0.75rem;
+}
+
+.config-card:hover {
+  box-shadow: 0 4px 12px var(--shadow-md);
+}
+
+.config-card + .config-card {
+  margin-top: 1rem;
 }
 
 /* Unified Config Group */
 .config-group {
-  padding-bottom: 0.75rem;
-  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 1.25rem;
 }
 
 .config-group + .config-group {
-  padding-top: 0.75rem;
+  margin-top: 1.25rem;
 }
 
 .config-group:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
+  margin-bottom: 0;
 }
 
 .config-group-primary {
-  background: linear-gradient(135deg, var(--primary-alpha-5) 0%, transparent 100%);
-  border-radius: calc(var(--trader-card-radius) - 6px);
-  padding: clamp(0.875rem, 1.4vw, 1.25rem);
-  border: 1px solid var(--primary-alpha-20);
+  background: var(--primary-alpha-5);
+  border-left: 3px solid var(--primary-color);
+  padding: 1rem;
+  border-radius: 6px;
+}
+
+/* Compact Row Layout for Small Configs */
+.config-row-compact {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+@media (width <= 768px) {
+  .config-row-compact {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Toggle Switch Component */
@@ -832,7 +776,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -906,7 +850,7 @@
   display: flex;
   align-items: center;
   gap: 0.375rem;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--text-primary);
 }
@@ -951,8 +895,8 @@
 
 .input-large {
   flex: 1;
-  padding: 0.5rem 0.625rem;
-  font-size: 0.9375rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 1rem;
   font-weight: 600;
   border: 2px solid var(--border-color);
   border-radius: 6px;
@@ -969,7 +913,7 @@
 }
 
 .input-unit {
-  font-size: 0.9375rem;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--text-secondary);
   min-width: 24px;
@@ -990,8 +934,8 @@
 
 .input-text-compact {
   width: 100%;
-  padding: 0.5rem;
-  font-size: 0.8125rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
   font-weight: 500;
   border: 2px solid var(--border-color);
   border-radius: 6px;
@@ -1041,7 +985,7 @@
 
 .visual-example h4 {
   margin: 0 0 0.625rem;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--text-primary);
   display: flex;
@@ -1112,7 +1056,7 @@
 }
 
 .step-value {
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   font-weight: 700;
   color: var(--text-primary);
   font-family: monospace;
@@ -1480,6 +1424,23 @@
 .info-box {
   background: var(--primary-alpha-10);
   border: 1px solid var(--primary-alpha-30);
+  padding: 0.875rem;
+  margin: 0 1rem 1rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.info-box i {
+  color: var(--primary-color);
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.info-box .link {
+  color: var(--primary-color);
+  font-weight: 500;
+  text-decoration: underline;
 }
 
 .warning-box {
@@ -1673,15 +1634,6 @@
   .exit-bar-header {
     flex-direction: column;
     align-items: flex-start;
-  }
-
-  .exit-bar-stats {
-    flex-direction: column;
-    gap: 0.25rem;
-  }
-
-  .health-grid {
-    grid-template-columns: 1fr;
   }
 
   .positions-grid {

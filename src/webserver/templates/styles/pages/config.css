@@ -12,8 +12,6 @@
   padding: 8px;
 }
 
-/* TODO: Revisit responsive layout once config pagination lands. */
-
 .config-sidebar {
   width: var(--config-sidebar-width);
   max-width: 100%;

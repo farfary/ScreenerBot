@@ -481,26 +481,14 @@ function createLifecycle() {
     const entryConcurrencyEl = $("#config-entry-concurrency");
     if (entryConcurrencyEl) entryConcurrencyEl.textContent = trader.entry_monitor_concurrency || 10;
 
-    // System Status
-    const modeEl = $("#config-mode");
-    if (modeEl) {
+    // Mode Indicator (in header)
+    const modeIndicatorEl = $("#trader-mode-indicator");
+    if (modeIndicatorEl) {
       if (trader.dry_run) {
-        modeEl.innerHTML = '<span class="mode-indicator dry-run">🟡 DRY RUN</span>';
+        modeIndicatorEl.innerHTML = '<span class="mode-indicator dry-run">🟡 DRY RUN</span>';
       } else {
-        modeEl.innerHTML = '<span class="mode-indicator live">🔴 LIVE TRADING</span>';
+        modeIndicatorEl.innerHTML = '<span class="mode-indicator live">🔴 LIVE TRADING</span>';
       }
-    }
-
-    const strategiesCountEl = $("#config-strategies-count");
-    if (strategiesCountEl) {
-      const activeCount = state.strategies?.filter((s) => s.enabled).length || 0;
-      strategiesCountEl.textContent = `${activeCount} active`;
-    }
-
-    const lastCheckEl = $("#config-last-check");
-    if (lastCheckEl) {
-      lastCheckEl.textContent = "Just now";
-      lastCheckEl.dataset.timestamp = Date.now();
     }
   }
 
@@ -709,52 +697,6 @@ function createLifecycle() {
         worstTradeDetail.textContent = data.worst_trade_token || "No trades yet";
       }
 
-      // Update exit breakdown with visual bars
-      const exitBreakdown = $("#exit-breakdown");
-      if (exitBreakdown && data.exit_breakdown && data.exit_breakdown.length > 0) {
-        const counts = data.exit_breakdown.map((e) => e.count);
-        const maxCount = counts.length > 0 ? Math.max(...counts) : 1;
-
-        const barsHtml = data.exit_breakdown
-          .map((exit) => {
-            const percentage = maxCount > 0 ? (exit.count / maxCount) * 100 : 0;
-            const barClass = exit.avg_profit_pct >= 0 ? "success" : "danger";
-            const avgClass = exit.avg_profit_pct >= 0 ? "positive" : "negative";
-
-            return `
-            <div class="exit-bar-item">
-              <div class="exit-bar-header">
-                <div class="exit-bar-label">
-                  <span class="exit-icon">
-                    <i class="icon-${getExitIcon(exit.exit_type)}"></i>
-                  </span>
-                  ${Utils.escapeHtml(exit.exit_type)}
-                </div>
-                <div class="exit-bar-stats">
-                  <span class="exit-bar-count">${exit.count} trade${exit.count !== 1 ? "s" : ""}</span>
-                  <span class="exit-bar-avg ${avgClass}">
-                    ${exit.avg_profit_pct >= 0 ? "+" : ""}${exit.avg_profit_pct.toFixed(1)}% avg
-                  </span>
-                </div>
-              </div>
-              <div class="exit-bar-wrapper">
-                <div class="exit-bar ${barClass}" style="width: ${percentage}%"></div>
-              </div>
-            </div>
-          `;
-          })
-          .join("");
-
-        exitBreakdown.innerHTML = `<div class="exit-bars">${barsHtml}</div>`;
-      } else if (exitBreakdown) {
-        exitBreakdown.innerHTML = `
-          <div class="empty-state">
-            <i class="icon-inbox"></i>
-            <span>No closed positions yet</span>
-          </div>
-        `;
-      }
-
       // Update positions summary (if we have active positions)
       await updatePositionsSummary();
     } catch (error) {
@@ -767,21 +709,6 @@ function createLifecycle() {
       if (totalTrades) totalTrades.textContent = "—";
       if (avgHoldTime) avgHoldTime.textContent = "—";
     }
-  }
-
-  /**
-   * Get icon name for exit type
-   */
-  function getExitIcon(exitType) {
-    const iconMap = {
-      "ROI Target": "target",
-      "Trailing Stop": "trending-down",
-      "Time Override": "clock",
-      Manual: "hand",
-      "Stop Loss": "alert-triangle",
-      Strategy: "zap",
-    };
-    return iconMap[exitType] || "circle";
   }
 
   /**
@@ -1463,22 +1390,11 @@ function createLifecycle() {
 
   /**
    * Update relative time display for last check
+   * NOTE: Removed - config-last-check element no longer exists after System Status column removal
    */
   function updateLastCheckTime() {
-    const lastCheckEl = $("#config-last-check");
-    if (!lastCheckEl || !lastCheckEl.dataset.timestamp) return;
-
-    const timestamp = parseInt(lastCheckEl.dataset.timestamp, 10);
-    const seconds = Math.floor((Date.now() - timestamp) / 1000);
-
-    if (seconds < 10) {
-      lastCheckEl.textContent = "Just now";
-    } else if (seconds < 60) {
-      lastCheckEl.textContent = `${seconds}s ago`;
-    } else {
-      const minutes = Math.floor(seconds / 60);
-      lastCheckEl.textContent = `${minutes}m ago`;
-    }
+    // Deprecated: System Status column removed from Stats tab
+    return;
   }
 
   /**

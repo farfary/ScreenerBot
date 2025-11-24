@@ -47,9 +47,41 @@
   /* Semantic Aliases */
   --surface-color: var(--bg-card);
   --background-color: var(--bg-primary);
+  --background-secondary: var(--bg-secondary);
+  --background-tertiary: var(--bg-card-hover);
   --hover-color: var(--bg-card-hover);
   --text-color: var(--text-primary);
+  --text-tertiary: var(--text-muted);
   --input-bg: var(--bg-card);
+  --active-bg: #e0e7ff;
+  --hover-bg: var(--bg-card-hover);
+  --card-bg: var(--bg-card);
+
+  /* Short aliases for trader compatibility */
+  --primary: var(--primary-color);
+  --success: var(--success-color);
+  --warning: var(--warning-color);
+  --danger: var(--error-color);
+  --success-hover: #059669;
+  --danger-hover: #dc2626;
+
+  /* Alpha color variants for layering */
+  --primary-alpha-5: rgba(21, 101, 192, 0.05);
+  --primary-alpha-10: rgba(21, 101, 192, 0.1);
+  --primary-alpha-20: rgba(21, 101, 192, 0.2);
+  --primary-alpha-30: rgba(21, 101, 192, 0.3);
+
+  --success-alpha-10: rgba(16, 185, 129, 0.1);
+  --success-alpha-20: rgba(16, 185, 129, 0.2);
+  --success-alpha-30: rgba(16, 185, 129, 0.3);
+
+  --warning-alpha-10: rgba(245, 158, 11, 0.1);
+  --warning-alpha-20: rgba(245, 158, 11, 0.2);
+  --warning-alpha-30: rgba(245, 158, 11, 0.3);
+
+  --danger-alpha-10: rgba(239, 68, 68, 0.1);
+  --danger-alpha-20: rgba(239, 68, 68, 0.2);
+  --danger-alpha-30: rgba(239, 68, 68, 0.3);
 }
 
 [data-theme="dark"] {
@@ -100,9 +132,41 @@
   /* Semantic Aliases */
   --surface-color: var(--bg-card);
   --background-color: var(--bg-primary);
+  --background-secondary: var(--bg-secondary);
+  --background-tertiary: var(--bg-card-hover);
   --hover-color: var(--bg-card-hover);
   --text-color: var(--text-primary);
+  --text-tertiary: var(--text-muted);
   --input-bg: var(--bg-secondary);
+  --active-bg: #1e3a8a40;
+  --hover-bg: var(--bg-card-hover);
+  --card-bg: var(--bg-card);
+
+  /* Short aliases for trader compatibility */
+  --primary: var(--primary-color);
+  --success: var(--success-color);
+  --warning: var(--warning-color);
+  --danger: var(--error-color);
+  --success-hover: #047857;
+  --danger-hover: #b91c1c;
+
+  /* Alpha color variants for layering */
+  --primary-alpha-5: rgba(59, 130, 246, 0.05);
+  --primary-alpha-10: rgba(59, 130, 246, 0.1);
+  --primary-alpha-20: rgba(59, 130, 246, 0.2);
+  --primary-alpha-30: rgba(59, 130, 246, 0.3);
+
+  --success-alpha-10: rgba(16, 185, 129, 0.1);
+  --success-alpha-20: rgba(16, 185, 129, 0.2);
+  --success-alpha-30: rgba(16, 185, 129, 0.3);
+
+  --warning-alpha-10: rgba(245, 158, 11, 0.1);
+  --warning-alpha-20: rgba(245, 158, 11, 0.2);
+  --warning-alpha-30: rgba(245, 158, 11, 0.3);
+
+  --danger-alpha-10: rgba(239, 68, 68, 0.1);
+  --danger-alpha-20: rgba(239, 68, 68, 0.2);
+  --danger-alpha-30: rgba(239, 68, 68, 0.3);
 }
 
 * {

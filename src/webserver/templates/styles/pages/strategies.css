@@ -427,7 +427,11 @@
 
 .condition-card:hover .condition-icon {
   transform: scale(1.1);
-  background: linear-gradient(135deg, var(--primary-color), var(--primary-color-dark, var(--primary-color)));
+  background: linear-gradient(
+    135deg,
+    var(--primary-color),
+    var(--primary-color-dark, var(--primary-color))
+  );
   color: white;
 }
 
@@ -478,33 +482,33 @@
 }
 
 /* Category Color Coding */
-.category-price-analysis { 
-  background: rgba(59, 130, 246, 0.1); 
-  border-color: rgba(59, 130, 246, 0.3); 
+.category-price-analysis {
+  background: rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.3);
   color: rgb(59, 130, 246);
 }
 
-.category-position-performance { 
-  background: rgba(16, 185, 129, 0.1); 
-  border-color: rgba(16, 185, 129, 0.3); 
+.category-position-performance {
+  background: rgba(16, 185, 129, 0.1);
+  border-color: rgba(16, 185, 129, 0.3);
   color: rgb(16, 185, 129);
 }
 
-.category-market-context { 
-  background: rgba(245, 158, 11, 0.1); 
-  border-color: rgba(245, 158, 11, 0.3); 
+.category-market-context {
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
   color: rgb(245, 158, 11);
 }
 
-.category-candle-patterns { 
-  background: rgba(139, 92, 246, 0.1); 
-  border-color: rgba(139, 92, 246, 0.3); 
+.category-candle-patterns {
+  background: rgba(139, 92, 246, 0.1);
+  border-color: rgba(139, 92, 246, 0.3);
   color: rgb(139, 92, 246);
 }
 
-.category-volume-analysis { 
-  background: rgba(236, 72, 153, 0.1); 
-  border-color: rgba(236, 72, 153, 0.3); 
+.category-volume-analysis {
+  background: rgba(236, 72, 153, 0.1);
+  border-color: rgba(236, 72, 153, 0.3);
   color: rgb(236, 72, 153);
 }
 
@@ -593,7 +597,7 @@
   font-size: 0.85rem;
   color: var(--text-muted);
   line-height: 1.5;
-  font-family: 'SF Mono', 'Monaco', 'Consolas', monospace;
+  font-family: "SF Mono", "Monaco", "Consolas", monospace;
   background: rgba(0, 0, 0, 0.02);
   padding: 0.5rem 0.75rem;
   border-radius: 6px;
@@ -767,7 +771,9 @@
   background: var(--surface-color);
   color: var(--text-color);
   font-size: 0.9rem;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .param-field input:focus,
