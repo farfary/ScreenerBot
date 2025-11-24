@@ -691,11 +691,11 @@
 
 /* Unified Config Group */
 .config-group {
-  margin-bottom: 1.25rem;
+  margin-bottom: 0.75rem;
 }
 
 .config-group + .config-group {
-  margin-top: 1.25rem;
+  margin-top: 0.75rem;
 }
 
 .config-group:last-child {
@@ -934,8 +934,7 @@
 .visual-example {
   background: linear-gradient(135deg, var(--background-secondary) 0%, var(--card-bg) 100%);
   border-radius: 6px;
-  padding: 0.875rem;
-  margin-top: 0.75rem;
+  padding: 0.75rem;
 }
 
 .visual-example h4 {
@@ -1032,23 +1031,23 @@
 
 .example-summary {
   display: flex;
-  gap: 0.625rem;
+  gap: 0.5rem;
   flex-wrap: wrap;
 }
 
 .summary-item {
   flex: 1;
-  min-width: 200px;
+  min-width: 180px;
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.625rem;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
   border-radius: 6px;
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
 }
 
 .summary-item i {
-  font-size: 1.5rem;
+  font-size: 1.125rem;
   flex-shrink: 0;
 }
 
