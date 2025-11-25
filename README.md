@@ -99,45 +99,46 @@ ScreenerBot is a professional-grade trading automation platform for Solana DeFi.
 17 independent services orchestrated by a central ServiceManager:
 
 ```
-                                    ScreenerBot Architecture
-    
-    +-----------------------------------------------------------------------------------+
-    |                                   ServiceManager                                   |
-    |  (Dependency resolution, priority-based startup, health monitoring, metrics)      |
-    +-----------------------------------------------------------------------------------+
-                |                    |                    |                    |
-    +-----------v--------+ +---------v----------+ +-------v------------+ +----v---------+
-    |   Pool Service     | |   Token Service    | | Transaction Service| |   Trader     |
-    |                    | |                    | |                    | |   Service    |
-    | - Discovery        | | - Database (6 tbl) | | - WebSocket stream | | - Entry eval |
-    | - Fetcher (batch)  | | - Market data      | | - Batch processor  | | - Exit eval  |
-    | - Decoders (11)    | | - Security data    | | - Analyzer         | | - Executors  |
-    | - Calculator       | | - Priority updates | | - P&L calculation  | | - Safety     |
-    | - Cache            | | - Blacklist        | | - SQLite cache     | | - DCA/Partial|
-    +--------------------+ +--------------------+ +--------------------+ +--------------+
-                |                    |                    |                    |
-    +-----------v--------+ +---------v----------+ +-------v------------+ +----v---------+
-    |  Filtering Engine  | |   OHLCV Service    | |  Position Manager  | | Strategy     |
-    |                    | |                    | |                    | | Engine       |
-    | - Multi-source     | | - Multi-timeframe  | | - State management | | - Conditions |
-    | - Configurable     | | - Gap detection    | | - DCA tracking     | | - Rule trees |
-    | - Pass/reject      | | - Priority-based   | | - Partial exits    | | - Evaluation |
-    | - Blacklist aware  | | - Bundle cache     | | - P&L calculation  | | - Caching    |
-    +--------------------+ +--------------------+ +--------------------+ +--------------+
-                |                    |                    |                    |
-    +-----------v--------+ +---------v----------+ +-------v------------+ +----v---------+
-    | Connectivity       | |   Events System    | |   Swap Router      | |   Wallet     |
-    | Monitor            | |                    | |                    | |   Monitor    |
-    |                    | | - Non-blocking     | | - Jupiter V6       | |              |
-    | - Endpoint health  | | - Categorized      | | - GMGN             | | - Balance    |
-    | - Fallback logic   | | - SQLite storage   | | - Concurrent quote | | - Snapshots  |
-    | - Critical check   | | - Ring buffer      | | - Best route       | | - History    |
-    +--------------------+ +--------------------+ +--------------------+ +--------------+
-                                        |
-    +-----------------------------------v-------------------------------------------+
-    |                              Web Dashboard                                    |
-    |  Axum REST API + Real-time Updates | 12 Feature Pages | Hot-reload Config    |
-    +---------------------------------------------------------------------------+
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                  ServiceManager                                      │
+│         Dependency Resolution • Priority Startup • Health Monitoring • Metrics       │
+└─────────────────────────────────────────────────────────────────────────────────────┘
+        │                    │                    │                    │
+        ▼                    ▼                    ▼                    ▼
+┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
+│   Pool Service   │ │  Token Service   │ │Transaction Service│ │  Trader Service  │
+├──────────────────┤ ├──────────────────┤ ├──────────────────┤ ├──────────────────┤
+│ • Discovery      │ │ • Database (6tbl)│ │ • WebSocket stream│ │ • Entry eval     │
+│ • Fetcher (batch)│ │ • Market data    │ │ • Batch processor │ │ • Exit eval      │
+│ • Decoders (11)  │ │ • Security data  │ │ • DEX analyzer    │ │ • Executors      │
+│ • Calculator     │ │ • Priority update│ │ • P&L calculation │ │ • Safety gates   │
+│ • Cache          │ │ • Blacklist      │ │ • SQLite cache    │ │ • DCA/Partial    │
+└──────────────────┘ └──────────────────┘ └──────────────────┘ └──────────────────┘
+        │                    │                    │                    │
+        ▼                    ▼                    ▼                    ▼
+┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
+│ Filtering Engine │ │  OHLCV Service   │ │ Position Manager │ │ Strategy Engine  │
+├──────────────────┤ ├──────────────────┤ ├──────────────────┤ ├──────────────────┤
+│ • Multi-source   │ │ • 7 timeframes   │ │ • State tracking │ │ • Conditions     │
+│ • Configurable   │ │ • Gap detection  │ │ • DCA tracking   │ │ • Rule trees     │
+│ • Pass/reject    │ │ • Priority-based │ │ • Partial exits  │ │ • Evaluation     │
+│ • Blacklist aware│ │ • Bundle cache   │ │ • P&L calculation│ │ • Caching        │
+└──────────────────┘ └──────────────────┘ └──────────────────┘ └──────────────────┘
+        │                    │                    │                    │
+        ▼                    ▼                    ▼                    ▼
+┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
+│   Connectivity   │ │  Events System   │ │   Swap Router    │ │  Wallet Monitor  │
+├──────────────────┤ ├──────────────────┤ ├──────────────────┤ ├──────────────────┤
+│ • Endpoint health│ │ • Non-blocking   │ │ • Jupiter V6     │ │ • SOL balance    │
+│ • Fallback logic │ │ • Categorized    │ │ • GMGN           │ │ • Token holdings │
+│ • Critical check │ │ • SQLite storage │ │ • Concurrent     │ │ • Snapshots      │
+└──────────────────┘ └──────────────────┘ └──────────────────┘ └──────────────────┘
+                                    │
+                                    ▼
+┌─────────────────────────────────────────────────────────────────────────────────────┐
+│                                 Web Dashboard                                        │
+│              Axum REST API • Real-time Updates • 12 Pages • Hot-reload Config        │
+└─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Service Dependencies
