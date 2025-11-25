@@ -12,6 +12,27 @@
       })();
     </script>
 
+    <!-- Critical polyfills for WebView/Tauri environments -->
+    <script>
+      (function () {
+        if (typeof window.queueMicrotask !== "function") {
+          window.queueMicrotask = function queueMicrotaskPolyfill(callback) {
+            if (typeof callback !== "function") {
+              throw new TypeError("queueMicrotask callback must be a function");
+            }
+
+            Promise.resolve()
+              .then(callback)
+              .catch(function (error) {
+                setTimeout(function () {
+                  throw error;
+                });
+              });
+          };
+        }
+      })();
+    </script>
+
     <title>{{TITLE}} - ScreenerBot</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />

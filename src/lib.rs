@@ -25,6 +25,7 @@ pub mod rpc;
 pub mod run;
 pub mod services;
 pub mod sol_price;
+pub mod startup;
 pub mod strategies;
 pub mod swaps;
 pub mod tokens;

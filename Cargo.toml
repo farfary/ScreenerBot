@@ -2,6 +2,7 @@
 name = "screenerbot"
 version = "0.1.0"
 edition = "2021"
+default-run = "screenerbot"
 
 # Workspace optimization for faster builds
 [workspace]

@@ -4,6 +4,7 @@
 /// The GUI mode embeds the webserver dashboard (localhost:8080) in a native window.
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
+use serde::Deserialize;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::Manager;
@@ -14,7 +15,7 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut}
 /// This function:
 /// 1. Spawns the ScreenerBot backend in a background task
 /// 2. Builds and runs the Tauri desktop application
-/// 3. Registers global keyboard shortcuts for zoom (Ctrl/Cmd +/-/0)
+/// 3. Registers global keyboard shortcuts for zoom (Ctrl/Cmd +/-/0) and reload (Ctrl/Cmd + R)
 /// 4. Waits for the webserver to be ready
 /// 5. Shows the window with the dashboard loaded
 ///
@@ -59,8 +60,8 @@ pub async fn run_gui_mode() -> Result<(), String> {
             move |app| {
                 let app_handle = app.handle().clone();
 
-                // Register global keyboard shortcuts for zoom
-                register_zoom_shortcuts(app, Arc::clone(&zoom_level_clone))?;
+                // Register global keyboard shortcuts for zoom + reload
+                register_window_shortcuts(app, Arc::clone(&zoom_level_clone))?;
 
                 logger::info(
                     LogTag::System,
@@ -81,13 +82,14 @@ pub async fn run_gui_mode() -> Result<(), String> {
     Ok(())
 }
 
-/// Register global keyboard shortcuts for zoom control
+/// Register global keyboard shortcuts for zoom control + reload
 ///
 /// Registers:
 /// - Cmd/Ctrl + Plus: Zoom in
 /// - Cmd/Ctrl + Minus: Zoom out
 /// - Cmd/Ctrl + 0: Reset zoom to 100%
-fn register_zoom_shortcuts(
+/// - Cmd/Ctrl + R: Reload embedded dashboard
+fn register_window_shortcuts(
     app: &mut tauri::App,
     zoom_level: Arc<Mutex<f64>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -174,6 +176,7 @@ fn register_zoom_shortcuts(
     let zoom_reset_shortcut = Shortcut::new(Some(modifier), Code::Digit0);
     let zoom_level_reset = Arc::clone(&zoom_level);
     let last_zoom_reset = Arc::new(Mutex::new(Instant::now() - Duration::from_millis(1000)));
+    let app_handle_reset = app_handle.clone();
 
     app.global_shortcut()
         .on_shortcut(zoom_reset_shortcut, move |_app, _event, _shortcut| {
@@ -185,7 +188,7 @@ fn register_zoom_shortcuts(
             *last = Instant::now();
             drop(last);
 
-            if let Some(window) = app_handle.get_webview_window("main") {
+            if let Some(window) = app_handle_reset.get_webview_window("main") {
                 let mut zoom = zoom_level_reset.lock().unwrap();
                 *zoom = 1.0;
                 let zoom_val = *zoom;
@@ -201,9 +204,37 @@ fn register_zoom_shortcuts(
             }
         })?;
 
+    // Register Reload (Cmd/Ctrl + R)
+    let reload_shortcut = Shortcut::new(Some(modifier), Code::KeyR);
+    let reload_handle = app_handle.clone();
+    let last_reload = Arc::new(Mutex::new(Instant::now() - Duration::from_millis(1000)));
+
+    app.global_shortcut()
+        .on_shortcut(reload_shortcut, move |_app, _event, _shortcut| {
+            // Debounce identical to zoom shortcuts
+            let mut last = last_reload.lock().unwrap();
+            if last.elapsed() < Duration::from_millis(300) {
+                return;
+            }
+            *last = Instant::now();
+            drop(last);
+
+            if let Some(window) = reload_handle.get_webview_window("main") {
+                match window.eval("window.location.reload()") {
+                    Ok(_) => logger::info(LogTag::System, "🔄 Reloaded dashboard (Cmd/Ctrl + R)"),
+                    Err(e) => logger::warning(
+                        LogTag::System,
+                        &format!("Failed to reload dashboard via shortcut: {}", e),
+                    ),
+                }
+            } else {
+                logger::warning(LogTag::System, "Reload shortcut triggered without window");
+            }
+        })?;
+
     logger::info(
         LogTag::System,
-        "✅ Registered zoom shortcuts (Ctrl/Cmd +/-/0)",
+        "✅ Registered window shortcuts (Ctrl/Cmd +/-/0/R)",
     );
 
     Ok(())
@@ -243,6 +274,8 @@ fn wait_for_dashboard_and_show_window(app_handle: tauri::AppHandle, zoom_level: 
         .timeout(Duration::from_millis(500))
         .build()
         .unwrap();
+
+    wait_for_bootstrap_ready(&client);
 
     let mut poll_count = 0;
 
@@ -331,6 +364,138 @@ fn wait_for_dashboard_and_show_window(app_handle: tauri::AppHandle, zoom_level: 
     }
 }
 
+#[derive(Debug, Deserialize)]
+struct BootstrapStatus {
+    ready_for_requests: bool,
+    initialization_required: bool,
+    message: Option<String>,
+}
+
+fn wait_for_bootstrap_ready(client: &reqwest::blocking::Client) {
+    logger::info(
+        LogTag::System,
+        "🚦 Waiting for core services to report ready state...",
+    );
+    let mut attempts = 0;
+    loop {
+        attempts += 1;
+        match client
+            .get("http://localhost:8080/api/system/bootstrap")
+            .send()
+        {
+            Ok(response) if response.status().is_success() => {
+                match response.json::<BootstrapStatus>() {
+                    Ok(status) => {
+                        if status.initialization_required || status.ready_for_requests {
+                            logger::info(
+                                LogTag::System,
+                                &format!(
+                                    "✅ Bootstrap ready after {} checks ({})",
+                                    attempts,
+                                    status.message.unwrap_or_else(|| "no message".to_string())
+                                ),
+                            );
+                            break;
+                        }
+                    }
+                    Err(err) => {
+                        logger::debug(
+                            LogTag::System,
+                            &format!("Bootstrap status parse failed: {}", err),
+                        );
+                    }
+                }
+            }
+            Ok(response) => {
+                logger::debug(
+                    LogTag::System,
+                    &format!(
+                        "Bootstrap check #{} returned HTTP {}",
+                        attempts,
+                        response.status()
+                    ),
+                );
+            }
+            Err(err) => {
+                if attempts == 1 || attempts % 20 == 0 {
+                    logger::debug(
+                        LogTag::System,
+                        &format!("Bootstrap endpoint not ready yet: {}", err),
+                    );
+                }
+            }
+        }
+
+        std::thread::sleep(Duration::from_millis(200));
+    }
+}
+
+/// Wait for frontend JavaScript to set the ready flag
+///
+/// Since Tauri's eval() is fire-and-forget and doesn't return values,
+/// we wait a fixed time after navigation to allow the frontend to:
+/// 1. Load the HTML/JS/CSS
+/// 2. Execute bootstrap.js which polls /api/system/bootstrap
+/// 3. Set window.__screenerbot_ready = true
+///
+/// Minimum wait is 2.5 seconds to ensure frontend has initialized.
+fn wait_for_frontend_ready(window: &tauri::WebviewWindow) {
+    logger::info(
+        LogTag::System,
+        "⏳ Waiting for frontend to initialize...",
+    );
+
+    let start = Instant::now();
+    let min_wait = Duration::from_millis(2500); // Minimum 2.5 seconds for frontend init
+    let timeout = Duration::from_secs(30);
+    let mut attempts = 0;
+    let mut url_confirmed = false;
+
+    loop {
+        attempts += 1;
+
+        // Check if URL is correct (navigation completed)
+        if !url_confirmed {
+            if let Ok(result) = window.url() {
+                let url_str = result.to_string();
+                if url_str.contains("localhost:8080") {
+                    url_confirmed = true;
+                    logger::debug(
+                        LogTag::System,
+                        &format!("Navigation confirmed at attempt {}", attempts),
+                    );
+                }
+            }
+        }
+
+        // Once URL is confirmed and minimum wait passed, we're done
+        if url_confirmed && start.elapsed() >= min_wait {
+            logger::info(
+                LogTag::System,
+                &format!(
+                    "✅ Frontend ready after {:?}",
+                    start.elapsed()
+                ),
+            );
+            break;
+        }
+
+        // Timeout check
+        if start.elapsed() > timeout {
+            logger::warning(
+                LogTag::System,
+                &format!(
+                    "⚠️  Frontend ready timeout after {:?}, proceeding anyway",
+                    start.elapsed()
+                ),
+            );
+            break;
+        }
+
+        std::thread::sleep(Duration::from_millis(100));
+    }
+}
+
 /// Navigate the window to the dashboard URL and show it
 fn navigate_and_show_window(window: tauri::WebviewWindow, zoom_level: Arc<Mutex<f64>>) {
     logger::info(
@@ -355,8 +520,9 @@ fn navigate_and_show_window(window: tauri::WebviewWindow, zoom_level: Arc<Mutex<
         }
     }
 
-    // Small delay to let navigation start before showing
-    std::thread::sleep(Duration::from_millis(200));
+    // Wait for frontend JavaScript to signal ready state
+    // This prevents showing "LOADING" badges while frontend initializes
+    wait_for_frontend_ready(&window);
 
     // Try to load saved zoom level from config (if available)
     let mut zoom = *zoom_level.lock().unwrap();

@@ -10,6 +10,7 @@ import { notificationManager } from "./notifications.js";
 import * as NotificationPanel from "../ui/notification_panel.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { requestManager } from "./request_manager.js";
+import { subscribeToBootstrap, waitForReady } from "./bootstrap.js";
 
 const MIN_STATUS_POLL_INTERVAL = 5000;
 const METRICS_POLL_INTERVAL = 5000; // Header metrics update every 5s
@@ -21,6 +22,10 @@ const state = {
   loading: false,
   fetching: false,
   connected: false,
+  bootstrapping: true,
+   uiReady: false,
+   coreReady: false,
+  bootstrapStatus: null,
 };
 
 let statusPoller = null;
@@ -30,6 +35,7 @@ let currentController = null;
 let powerDropdown = null;
 let refreshDropdown = null;
 let traderDropdown = null;
+let bootstrapUnsubscribe = null;
 
 function getElements() {
   return {
@@ -168,6 +174,45 @@ function setLoading(isLoading) {
   updateBadge(elements);
 }
 
+function applyBootstrapStatus(status) {
+  state.bootstrapStatus = status;
+  const initializationRequired = Boolean(status?.initialization_required);
+  const uiReady = Boolean(status && (status.ui_ready || initializationRequired));
+  const coreReady = Boolean(status?.ready_for_requests);
+
+  state.uiReady = uiReady;
+  state.coreReady = coreReady;
+  state.bootstrapping = !uiReady;
+
+  if (state.bootstrapping) {
+    state.available = false;
+    state.loading = true;
+  }
+
+  const elements = getElements();
+
+  if (!uiReady) {
+    if (elements.badgeText) {
+      const label = status?.message?.toUpperCase() || "BOOTING";
+      elements.badgeText.textContent = label;
+    }
+    if (elements.badgeIcon) {
+      elements.badgeIcon.className = "icon-loader";
+    }
+    if (elements.badge) {
+      elements.badge.classList.add("loading");
+    }
+    updateBadge(elements);
+    updateConnectionStatus(false);
+    return;
+  }
+
+  state.loading = false;
+  state.available = true;
+  updateBadge(elements);
+  updateConnectionStatus(true);
+}
+
 // ============================================================================
 // HEADER METRICS (New Advanced Header Design)
 // ============================================================================
@@ -178,7 +223,9 @@ async function fetchHeaderMetrics() {
       method: "GET",
       headers: { "X-Requested-With": "fetch" },
       cache: "no-store",
-      priority: "normal",
+      priority: "high",
+      skipQueue: true,
+      skipDedup: true,
     });
 
     updateHeaderMetrics(data);
@@ -372,6 +419,10 @@ function startMetricsPolling() {
 // ============================================================================
 
 async function fetchTraderStatus({ silent = false, showLoading = false } = {}) {
+  if (state.bootstrapping) {
+    return null;
+  }
+
   if (state.fetching && currentStatusPromise) {
     return currentStatusPromise;
   }
@@ -531,6 +582,10 @@ function initTraderControls() {
     attachToggleHandler(elements.toggle);
   }
 
+  if (!bootstrapUnsubscribe) {
+    bootstrapUnsubscribe = subscribeToBootstrap(applyBootstrapStatus);
+  }
+
   // Initialize connection status as connecting
   if (elements.connectionStatus && elements.connectionIcon) {
     elements.connectionStatus.classList.add("connecting");
@@ -559,15 +614,18 @@ function initTraderControls() {
   // Setup visibility handling for pollers
   setupVisibilityHandler();
 
-  // Fetch initial data
-  fetchTraderStatus({ silent: true, showLoading: true }).finally(() => {
-    startStatusPolling();
-  });
-
-  // Start metrics polling for new header
-  fetchHeaderMetrics().finally(() => {
-    startMetricsPolling();
-  });
+  waitForReady()
+    .then(() => fetchTraderStatus({ silent: true, showLoading: true }))
+    .then(() => {
+      startStatusPolling();
+      return fetchHeaderMetrics();
+    })
+    .then(() => {
+      startMetricsPolling();
+    })
+    .catch((error) => {
+      console.error("[Header] Failed to initialize after bootstrap", error);
+    });
 }
 
 function initCardHandlers() {

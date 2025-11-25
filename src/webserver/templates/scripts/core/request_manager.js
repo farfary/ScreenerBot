@@ -11,6 +11,8 @@
 
 const DEFAULT_TIMEOUT = 10000; // 10 seconds
 const MAX_CONCURRENT_REQUESTS = 4;
+const MAX_CONNECTION_RETRIES = 5;
+const CONNECTION_RETRY_DELAY_MS = 1000;
 
 class RequestManager {
   constructor() {
@@ -25,6 +27,21 @@ class RequestManager {
 
     // Per-endpoint failure tracking for backoff
     this.failures = new Map();
+  }
+
+  /**
+   * Check if error is a connection failure (server not ready)
+   */
+  _isConnectionError(error) {
+    // Network errors when server is down
+    if (error instanceof TypeError && error.message.includes("Failed to fetch")) {
+      return true;
+    }
+    // ERR_CONNECTION_REFUSED, ERR_CONNECTION_RESET, etc.
+    if (error.name === "TypeError" || error.message?.includes("NetworkError")) {
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -88,6 +105,7 @@ class RequestManager {
    *   - priority: 'high' | 'normal' (default 'normal')
    *   - skipDedup: boolean (default false)
    *   - skipQueue: boolean (default false)
+   *   - retryOnConnectionError: boolean (default true for boot resilience)
    * @returns {Promise<any>} - Parsed JSON response
    */
   async fetch(url, options = {}) {
@@ -96,6 +114,8 @@ class RequestManager {
       priority = "normal",
       skipDedup = false,
       skipQueue = false,
+      retryOnConnectionError = true,
+      signal: externalSignal = null,
       ...fetchOptions
     } = options;
 
@@ -113,12 +133,28 @@ class RequestManager {
       return this.inFlight.get(key);
     }
 
-    // Create the fetch promise
+    // Create the fetch promise with connection retry logic
     const fetchPromise = new Promise((resolve, reject) => {
-      const execute = async () => {
+      const executeWithRetry = async (retryCount = 0) => {
         // Create abort controller for timeout
         const controller = new AbortController();
+        let externalAbortHandler = null;
+        let didTimeout = false;
+
+        if (externalSignal) {
+          if (externalSignal.aborted) {
+            controller.abort();
+            const abortError = new Error("Request aborted");
+            abortError.name = "AbortError";
+            reject(abortError);
+            return;
+          }
+          externalAbortHandler = () => controller.abort();
+          externalSignal.addEventListener("abort", externalAbortHandler, { once: true });
+        }
+
         const timeoutId = setTimeout(() => {
+          didTimeout = true;
           controller.abort();
         }, timeout);
 
@@ -153,19 +189,39 @@ class RequestManager {
           }
         } catch (error) {
           clearTimeout(timeoutId);
+          if (externalSignal && externalAbortHandler) {
+            externalSignal.removeEventListener("abort", externalAbortHandler);
+          }
 
-          // Handle timeout
+          // Check if this is a connection error and we should retry
+          if (retryOnConnectionError && this._isConnectionError(error) && retryCount < MAX_CONNECTION_RETRIES) {
+            this.activeCount--;
+            // Wait before retry (progressive delay)
+            const retryDelay = CONNECTION_RETRY_DELAY_MS * (retryCount + 1);
+            console.debug(`[RequestManager] Connection failed for ${endpoint}, retry ${retryCount + 1}/${MAX_CONNECTION_RETRIES} in ${retryDelay}ms`);
+            await new Promise((r) => setTimeout(r, retryDelay));
+            return executeWithRetry(retryCount + 1);
+          }
+
           if (error.name === "AbortError") {
-            this._recordFailure(endpoint);
-            const timeoutError = new Error(`Request timeout after ${timeout}ms`);
-            timeoutError.name = "TimeoutError";
-            timeoutError.endpoint = endpoint;
-            reject(timeoutError);
+            if (didTimeout) {
+              this._recordFailure(endpoint);
+              const timeoutError = new Error(`Request timeout after ${timeout}ms`);
+              timeoutError.name = "TimeoutError";
+              timeoutError.endpoint = endpoint;
+              reject(timeoutError);
+            } else {
+              reject(error);
+            }
           } else {
             this._recordFailure(endpoint);
             reject(error);
           }
         } finally {
+          if (externalSignal && externalAbortHandler) {
+            externalSignal.removeEventListener("abort", externalAbortHandler);
+          }
+          clearTimeout(timeoutId);
           this.activeCount--;
           this.inFlight.delete(key);
 
@@ -176,11 +232,11 @@ class RequestManager {
 
       // If under concurrency limit and not skipping queue, execute immediately
       if (this.activeCount < MAX_CONCURRENT_REQUESTS || skipQueue) {
-        execute();
+        executeWithRetry(0);
       } else {
         // Queue the request
         this.queue.push({
-          execute,
+          execute: () => executeWithRetry(0),
           priority: priority === "high" ? 1 : 0,
           timestamp: Date.now(),
         });
@@ -235,6 +291,32 @@ const requestManager = new RequestManager();
 // Expose for debugging
 if (typeof window !== "undefined") {
   window.__requestManager = requestManager;
+}
+
+export function createScopedFetcher(ctx, { latestOnly = false } = {}) {
+  if (!ctx || typeof ctx.createAbortController !== "function") {
+    throw new Error("createScopedFetcher requires a lifecycle context");
+  }
+
+  let lastController = null;
+
+  return (url, options = {}) => {
+    if (latestOnly && lastController) {
+      try {
+        lastController.abort();
+      } catch (error) {
+        console.warn("[RequestManager] Failed to abort previous request", error);
+      }
+    }
+
+    const controller = ctx.createAbortController();
+    lastController = controller;
+
+    return requestManager.fetch(url, {
+      ...options,
+      signal: controller.signal,
+    });
+  };
 }
 
 export { requestManager, RequestManager };

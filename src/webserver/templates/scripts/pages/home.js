@@ -1,10 +1,12 @@
+/* global Chart */
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";
-import { requestManager } from "../core/request_manager.js";
+import { requestManager, createScopedFetcher } from "../core/request_manager.js";
 
 function createLifecycle() {
   let poller = null;
+  let scopedFetch = null;
   let memoryChart = null;
   let cpuChart = null;
   let currentPeriod = "today";
@@ -103,13 +105,22 @@ function createLifecycle() {
 
   // Fetch dashboard data
   async function fetchData() {
+    const fetcher =
+      typeof scopedFetch === "function"
+        ? scopedFetch
+        : (url, options) => requestManager.fetch(url, options);
+
     try {
-      const data = await requestManager.fetch("/api/dashboard/home", {
+      const data = await fetcher("/api/dashboard/home", {
         priority: "normal",
+        cache: "no-store",
       });
       cachedData = data;
       updateUI(data);
     } catch (error) {
+      if (error?.name === "AbortError") {
+        return;
+      }
       console.error("Error fetching dashboard data:", error);
     }
   }
@@ -383,6 +394,7 @@ function createLifecycle() {
   return {
     init: (ctx) => {
       console.log("[Home] Initializing dashboard");
+      scopedFetch = createScopedFetcher(ctx, { latestOnly: true });
       setupPeriodTabs();
       initCharts();
 
@@ -404,24 +416,34 @@ function createLifecycle() {
     activate: (ctx) => {
       console.log("[Home] Activating dashboard");
 
-      // Start polling for updates every 5 seconds
-      poller = new Poller(async () => {
-        await fetchData();
-      }, 5000);
+      if (!scopedFetch) {
+        scopedFetch = createScopedFetcher(ctx, { latestOnly: true });
+      }
 
-      ctx.managePoller(poller);
+      if (!poller) {
+        poller = ctx.managePoller(
+          new Poller(() => fetchData(), {
+            label: "HomeDashboard",
+            getInterval: () => 5000,
+          })
+        );
+      }
+
+      poller.start({ silent: true });
+      fetchData();
     },
 
     deactivate: () => {
       console.log("[Home] Deactivating dashboard");
       if (poller) {
-        poller.stop();
+        poller.stop({ silent: true });
         poller = null;
       }
     },
 
     dispose: () => {
       console.log("[Home] Disposing dashboard");
+      scopedFetch = null;
 
       // Clean up all tracked event listeners
       eventCleanups.forEach((cleanup) => cleanup());

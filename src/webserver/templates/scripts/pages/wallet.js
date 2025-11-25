@@ -3,10 +3,10 @@ import { Poller } from "../core/poller.js";
 import { requestManager } from "../core/request_manager.js";
 import * as Utils from "../core/utils.js";
 import { DataTable } from "../ui/data_table.js";
-import { TabBar } from "../ui/tab_bar.js";
+import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { TradeActionDialog } from "../ui/trade_action_dialog.js";
 import { TokenDetailsDialog } from "../ui/token_details_dialog.js";
-import { ActionBar } from "../ui/action_bar.js";
+import { ActionBar, ActionBarManager } from "../ui/action_bar.js";
 
 const SUB_TABS = [
   { id: "overview", label: '<i class="icon-bar-chart-2"></i> Overview' },
@@ -871,13 +871,19 @@ function createLifecycle() {
   // ============================================================================
 
   return {
-    async init(_ctx) {
+    async init(ctx) {
       console.log("[Wallet] Initializing...");
 
       // Initialize ActionBar
       const toolbarContainer = document.querySelector("#toolbarContainer");
       if (toolbarContainer) {
         actionBar = new ActionBar({ container: toolbarContainer });
+
+        // Register with ActionBarManager for page-switch coordination
+        ActionBarManager.register("wallet", actionBar);
+
+        // Integrate with lifecycle for auto-cleanup (clears on deactivate, disposes on dispose)
+        ctx.manageActionBar(actionBar);
       }
 
       renderLoadingState();
@@ -917,6 +923,9 @@ function createLifecycle() {
           },
         });
 
+        // Register with TabBarManager for page-switch coordination
+        TabBarManager.register("wallet", tabBar);
+
         ctx.manageTabBar(tabBar);
         subTabsContainer.style.display = "flex";
 
@@ -950,11 +959,13 @@ function createLifecycle() {
     dispose() {
       console.log("[Wallet] Disposing...");
 
-      // Cleanup ActionBar
-      if (actionBar) {
-        actionBar.dispose();
-        actionBar = null;
-      }
+      // Unregister ActionBar from manager (lifecycle already disposes it via manageActionBar)
+      ActionBarManager.unregister("wallet");
+      actionBar = null;
+
+      // Unregister TabBar from manager (lifecycle already destroys it via manageTabBar)
+      TabBarManager.unregister("wallet");
+      tabBar = null;
 
       // Cleanup charts
       if (balanceChart) {

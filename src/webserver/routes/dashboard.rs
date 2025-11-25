@@ -600,75 +600,63 @@ async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<HomeDash
         found_all_time: total_in_database,
     };
 
-    // Get license info
-    let wallet_address = match crate::utils::get_wallet_address() {
-        Ok(addr) => addr,
-        Err(_) => {
-            // Return default invalid license if wallet address cannot be retrieved
-            return Json(HomeDashboardResponse {
-                trader,
-                wallet,
-                positions: positions_snapshot,
-                system,
-                tokens,
-                license: LicenseInfo {
-                    valid: false,
-                    tier: None,
-                    start_ts: None,
-                    expiry_ts: None,
-                    mint: None,
-                    days_remaining: None,
-                },
-                timestamp: now.to_rfc3339(),
-            });
+    // Get license info - NON-BLOCKING: use cached data only, never wait for RPC
+    // License is verified at startup and cached for 30 minutes
+    // If cache is empty/expired, return null and spawn background refresh
+    let license = match crate::utils::get_wallet_address()
+        .ok()
+        .and_then(|addr| crate::utils::parse_pubkey_safe(&addr).ok())
+    {
+        Some(wallet_pubkey) => {
+            // Try to get cached license (never blocks on RPC)
+            match crate::license::get_cached_license(&wallet_pubkey) {
+                Some((license_status, _is_fresh)) => {
+                    // Spawn background refresh if stale (fire-and-forget)
+                    crate::license::spawn_license_refresh_if_needed(wallet_pubkey);
+
+                    let days_remaining = if let (Some(expiry), true) =
+                        (license_status.expiry_ts, license_status.valid)
+                    {
+                        let expiry_dt = chrono::Utc
+                            .timestamp_opt(expiry as i64, 0)
+                            .earliest()
+                            .unwrap_or(now);
+                        Some(expiry_dt.signed_duration_since(now).num_days())
+                    } else {
+                        None
+                    };
+
+                    LicenseInfo {
+                        valid: license_status.valid,
+                        tier: license_status.tier,
+                        start_ts: license_status.start_ts,
+                        expiry_ts: license_status.expiry_ts,
+                        mint: license_status.mint,
+                        days_remaining,
+                    }
+                }
+                None => {
+                    // No cache - spawn background verification and return null
+                    crate::license::spawn_license_refresh_if_needed(wallet_pubkey);
+                    LicenseInfo {
+                        valid: false,
+                        tier: None,
+                        start_ts: None,
+                        expiry_ts: None,
+                        mint: None,
+                        days_remaining: None,
+                    }
+                }
+            }
         }
-    };
-
-    let wallet_pubkey = match crate::utils::parse_pubkey_safe(&wallet_address) {
-        Ok(pk) => pk,
-        Err(_) => {
-            return Json(HomeDashboardResponse {
-                trader,
-                wallet,
-                positions: positions_snapshot,
-                system,
-                tokens,
-                license: LicenseInfo {
-                    valid: false,
-                    tier: None,
-                    start_ts: None,
-                    expiry_ts: None,
-                    mint: None,
-                    days_remaining: None,
-                },
-                timestamp: now.to_rfc3339(),
-            });
-        }
-    };
-
-    let license_status = crate::license::verify_license_for_wallet(&wallet_pubkey)
-        .await
-        .unwrap_or_else(|_| crate::license::LicenseStatus::invalid("Failed to verify license"));
-
-    let days_remaining =
-        if let (Some(expiry), true) = (license_status.expiry_ts, license_status.valid) {
-            let expiry_dt = chrono::Utc
-                .timestamp_opt(expiry as i64, 0)
-                .earliest()
-                .unwrap_or(now);
-            let remaining = expiry_dt.signed_duration_since(now).num_days();
-            Some(remaining)
-        } else {
-            None
-        };
-
-    let license = LicenseInfo {
-        valid: license_status.valid,
-        tier: license_status.tier,
-        start_ts: license_status.start_ts,
-        expiry_ts: license_status.expiry_ts,
-        mint: license_status.mint,
-        days_remaining,
+        None => LicenseInfo {
+            valid: false,
+            tier: None,
+            start_ts: None,
+            expiry_ts: None,
+            mint: None,
+            days_remaining: None,
+        },
     };
 
     Json(HomeDashboardResponse {

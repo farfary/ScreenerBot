@@ -1,16 +1,32 @@
-use axum::{extract::State, http::StatusCode, response::Response, routing::post, Router};
+use axum::{
+    extract::State,
+    http::StatusCode,
+    response::Response,
+    routing::{get, post},
+    Router,
+};
+use chrono::Utc;
 use serde::Serialize;
 use std::env;
 use std::process::Command;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::time::Instant;
+use tokio::task;
 
 use crate::logger::{self, LogTag};
 // TODO: Re-enable when trader module is fully integrated
 // use crate::trader::CRITICAL_OPERATIONS_IN_PROGRESS;
 use crate::webserver::state::AppState;
 use crate::webserver::utils::{error_response, success_response};
+use crate::{
+    global::{
+        self, are_core_services_ready, get_pending_services, CONNECTIVITY_SYSTEM_READY,
+        POOL_SERVICE_READY, POSITIONS_SYSTEM_READY, TOKENS_SYSTEM_READY, TRANSACTIONS_SYSTEM_READY,
+    },
+    services::get_service_manager,
+    startup::{self, StartupServiceStatus},
+    wallet,
+};
 
 // =============================================================================
 // RESPONSE TYPES
@@ -20,6 +36,32 @@ use crate::webserver::utils::{error_response, success_response};
 pub struct RebootResponse {
     pub success: bool,
     pub message: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct BootStatusResponse {
+    pub timestamp: String,
+    pub initialization_required: bool,
+    pub initialization_complete: bool,
+    pub core_services_ready: bool,
+    pub ui_ready: bool,
+    pub ready_for_requests: bool,
+    pub pending_services: Vec<&'static str>,
+    pub services_total: usize,
+    pub services_running: usize,
+    pub connectivity_ready: bool,
+    pub tokens_ready: bool,
+    pub positions_ready: bool,
+    pub pools_ready: bool,
+    pub transactions_ready: bool,
+    pub boot_progress: Vec<StartupServiceStatus>,
+    pub wallet_snapshot_ready: bool,
+    pub wallet_last_updated: Option<String>,
+    pub uptime_seconds: u64,
+    pub phase: String,
+    pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retry_after_ms: Option<u64>,
 }
 
 // =============================================================================
@@ -132,5 +174,112 @@ async fn reboot_system() -> Response {
 // =============================================================================
 
 pub fn routes() -> Router<Arc<AppState>> {
-    Router::new().route("/reboot", post(reboot_system))
+    Router::new()
+        .route("/reboot", post(reboot_system))
+        .route("/bootstrap", get(boot_status))
+}
+
+/// GET /api/system/bootstrap - Report real-time boot status for GUI/frontend gating
+async fn boot_status(State(state): State<Arc<AppState>>) -> Response {
+    let timestamp = Utc::now();
+    let initialization_complete = global::is_initialization_complete();
+    let initialization_required = !initialization_complete;
+    let core_services_ready = are_core_services_ready();
+    let ready_for_requests = initialization_complete && core_services_ready;
+
+    let pending_services = if core_services_ready {
+        Vec::new()
+    } else {
+        get_pending_services()
+    };
+
+    let connectivity_ready = CONNECTIVITY_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst);
+    let tokens_ready = TOKENS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst);
+    let positions_ready = POSITIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst);
+    let pools_ready = POOL_SERVICE_READY.load(std::sync::atomic::Ordering::SeqCst);
+    let transactions_ready = TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst);
+
+    let ui_prereqs_ready = connectivity_ready && tokens_ready && pools_ready;
+    let ui_ready = initialization_required || ui_prereqs_ready;
+    let boot_progress = task::spawn_blocking(startup::snapshot)
+        .await
+        .unwrap_or_else(|_| Vec::new());
+
+    let snapshot_status = wallet::get_cached_wallet_snapshot_status();
+    let wallet_snapshot_ready = snapshot_status.is_ready;
+    let wallet_last_updated = snapshot_status
+        .last_updated
+        .map(|timestamp| timestamp.to_rfc3339());
+
+    let (services_total, services_running) = match get_service_manager().await {
+        Some(manager_ref) => {
+            if let Some(manager) = manager_ref.read().await.as_ref() {
+                (
+                    manager.get_all_service_names().len(),
+                    manager.get_running_service_count(),
+                )
+            } else {
+                (0, 0)
+            }
+        }
+        None => (0, 0),
+    };
+
+    let phase = if initialization_required {
+        "initialization"
+    } else if !ui_prereqs_ready {
+        "ui_startup"
+    } else if !core_services_ready {
+        "service_startup"
+    } else {
+        "ready"
+    };
+
+    let message = match phase {
+        "initialization" => "Waiting for initial wallet/RPC setup",
+        "ui_startup" => {
+            if pending_services.is_empty() {
+                "Frontend prerequisites warming up"
+            } else {
+                "Frontend prerequisites still starting"
+            }
+        }
+        "service_startup" => {
+            if pending_services.is_empty() {
+                "Core services warming up"
+            } else {
+                "Core services still starting"
+            }
+        }
+        _ => "All systems ready",
+    }
+    .to_string();
+
+    let retry_after_ms = if ui_ready { None } else { Some(750) };
+
+    let response = BootStatusResponse {
+        timestamp: timestamp.to_rfc3339(),
+        initialization_required,
+        initialization_complete,
+        core_services_ready,
+        ui_ready,
+        ready_for_requests,
+        pending_services,
+        services_total,
+        services_running,
+        connectivity_ready,
+        tokens_ready,
+        positions_ready,
+        pools_ready,
+        transactions_ready,
+        boot_progress,
+        wallet_snapshot_ready,
+        wallet_last_updated,
+        uptime_seconds: state.uptime_seconds(),
+        phase: phase.to_string(),
+        message,
+        retry_after_ms,
+    };
+
+    success_response(response)
 }

@@ -2,6 +2,7 @@
 import { PageLifecycleRegistry } from "./lifecycle.js";
 import * as AppState from "./app_state.js";
 import * as PollingManager from "./poller.js";
+import { waitForReady } from "./bootstrap.js";
 
 // Import TabBarManager for coordinated tab bar management
 let TabBarManager = null;
@@ -10,6 +11,15 @@ try {
   TabBarManager = tabBarModule.TabBarManager;
 } catch (err) {
   console.warn("[Router] TabBar module not available:", err.message);
+}
+
+// Import ActionBarManager for coordinated action bar management
+let ActionBarManager = null;
+try {
+  const actionBarModule = await import("../ui/action_bar.js");
+  ActionBarManager = actionBarModule.ActionBarManager;
+} catch (err) {
+  console.warn("[Router] ActionBar module not available:", err.message);
 }
 
 const _state = {
@@ -151,6 +161,11 @@ export async function loadPage(pageName) {
   // Notify TabBarManager about page switch (deferred to ensure DOM is ready)
   if (TabBarManager) {
     TabBarManager.onPageSwitch(pageName, previousPage);
+  }
+
+  // Notify ActionBarManager about page switch (deferred to ensure DOM is ready)
+  if (ActionBarManager) {
+    ActionBarManager.onPageSwitch(pageName, previousPage);
   }
 
   const mainContent = document.querySelector("main");
@@ -358,8 +373,13 @@ function initPollingIntervalControl() {
   console.log("[Router] Polling interval control initialized:", currentInterval, "ms");
 }
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initRouter);
-} else {
+async function bootstrapRouter() {
+  await waitForReady();
   initRouter();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", bootstrapRouter);
+} else {
+  bootstrapRouter();
 }

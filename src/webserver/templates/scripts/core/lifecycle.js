@@ -96,6 +96,22 @@ const createContext = (pageName) => {
       });
       return tabBar;
     },
+    manageActionBar(actionBar) {
+      if (!actionBar || typeof actionBar !== "object") {
+        return actionBar;
+      }
+      this.onDeactivate(() => {
+        if (typeof actionBar.clear === "function") {
+          actionBar.clear();
+        }
+      });
+      this.onDispose(() => {
+        if (typeof actionBar.dispose === "function") {
+          actionBar.dispose();
+        }
+      });
+      return actionBar;
+    },
     createAbortController() {
       const controller = new AbortController();
       const abort = () => {

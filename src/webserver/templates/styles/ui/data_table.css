@@ -88,6 +88,79 @@ body.dt-column-resizing .data-table col {
   max-height: 600px; /* Default max height for scrolling */
 }
 
+.data-table-blocking-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  text-align: center;
+  background: var(--bg-primary);
+  z-index: 2;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.18s ease, visibility 0.18s ease;
+}
+
+.data-table-blocking-state.is-visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.data-table-blocking-state__inner {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 560px;
+  align-items: center;
+}
+
+.data-table-blocking-state__icon {
+  font-size: 2.4rem;
+  color: var(--text-secondary);
+}
+
+.data-table-blocking-state__title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.data-table-blocking-state__description {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+}
+
+.data-table-blocking-state--loading .data-table-blocking-state__icon {
+  color: var(--primary-color);
+  animation: data-table-blocking-spin 1s linear infinite;
+}
+
+.data-table-blocking-state--info .data-table-blocking-state__icon {
+  color: var(--primary-color);
+}
+
+.data-table-blocking-state--warning .data-table-blocking-state__icon {
+  color: var(--warning);
+}
+
+.data-table-blocking-state--error .data-table-blocking-state__icon {
+  color: var(--badge-error, #d32f2f);
+}
+
+@keyframes data-table-blocking-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Fixed height support */
 .data-table-wrapper.fixed-height {
   height: 600px; /* Default fixed height */

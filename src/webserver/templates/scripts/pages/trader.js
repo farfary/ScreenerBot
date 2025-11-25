@@ -5,7 +5,7 @@ import * as Utils from "../core/utils.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { requestManager } from "../core/request_manager.js";
-import { ActionBar } from "../ui/action_bar.js";
+import { ActionBar, ActionBarManager } from "../ui/action_bar.js";
 
 // Sub-tabs configuration
 const SUB_TABS = [
@@ -1551,6 +1551,12 @@ function createLifecycle() {
         container: "#toolbarContainer",
       });
 
+      // Register with ActionBarManager for page-switch coordination
+      ActionBarManager.register("trader", actionBar);
+
+      // Integrate with lifecycle for auto-cleanup (clears on deactivate, disposes on dispose)
+      ctx.manageActionBar(actionBar);
+
       // Initialize tab bar
       tabBar = new TabBar({
         container: "#subTabsContainer",
@@ -1673,11 +1679,9 @@ function createLifecycle() {
     dispose() {
       console.log("[Trader] Disposing page");
 
-      // Dispose ActionBar
-      if (actionBar) {
-        actionBar.dispose();
-        actionBar = null;
-      }
+      // Unregister ActionBar from manager (lifecycle already disposes it via manageActionBar)
+      ActionBarManager.unregister("trader");
+      actionBar = null;
 
       // Clean up all tracked event listeners
       eventCleanups.forEach((cleanup) => cleanup());

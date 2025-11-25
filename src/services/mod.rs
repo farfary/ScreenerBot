@@ -6,6 +6,7 @@ pub use health::ServiceHealth;
 pub use metrics::{MetricsCollector, ServiceMetrics};
 
 use crate::logger::{self, LogTag};
+use crate::startup;
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -277,6 +278,7 @@ impl ServiceManager {
             let monitor = self.get_task_monitor(service_name);
 
             if let Some(service) = self.services.get_mut(service_name) {
+                startup::mark_service_start(service_name);
                 log_service_event(service_name, ServiceLogEvent::InitializeStart, None, false);
                 let init_start = Instant::now();
                 service.initialize().await?;
@@ -321,6 +323,7 @@ impl ServiceManager {
                     false,
                 );
                 self.handles.insert(service_name, handles);
+                startup::mark_service_ready(service_name);
             }
 
             // Update last service time for gap detection
@@ -420,6 +423,7 @@ impl ServiceManager {
             let monitor = self.get_task_monitor(service_name);
 
             if let Some(service) = self.services.get_mut(service_name) {
+                startup::mark_service_start(service_name);
                 // Initialize
                 log_service_event(service_name, ServiceLogEvent::InitializeStart, None, true);
                 match service.initialize().await {
@@ -468,6 +472,7 @@ impl ServiceManager {
 
                         self.handles.insert(service_name, handles);
                         successful_starts.push(service_name);
+                        startup::mark_service_ready(service_name);
 
                         // Register monitor with metrics collector
                         self.metrics_collector

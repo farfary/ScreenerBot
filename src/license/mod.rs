@@ -94,6 +94,35 @@ pub async fn verify_license_for_wallet(wallet: &Pubkey) -> Result<LicenseStatus,
     Ok(status)
 }
 
+/// Get cached license status without blocking on RPC calls
+/// Returns (status, is_fresh) if cached, or None if no cache exists
+/// Use this for dashboard APIs that should never block on license verification
+pub fn get_cached_license(wallet: &Pubkey) -> Option<(LicenseStatus, bool)> {
+    let wallet_str = wallet.to_string();
+    LICENSE_CACHE.get_cached_or_stale(&wallet_str)
+}
+
+/// Check if license cache needs refresh for a wallet
+pub fn license_needs_refresh(wallet: &Pubkey) -> bool {
+    let wallet_str = wallet.to_string();
+    LICENSE_CACHE.needs_refresh(&wallet_str)
+}
+
+/// Spawn a background task to refresh license if stale
+/// This is fire-and-forget - does not block the caller
+pub fn spawn_license_refresh_if_needed(wallet: Pubkey) {
+    let wallet_str = wallet.to_string();
+    if LICENSE_CACHE.needs_refresh(&wallet_str) {
+        tokio::spawn(async move {
+            logger::debug(
+                LogTag::License,
+                &format!("Background license refresh for wallet={}", wallet_str),
+            );
+            let _ = verify_license_for_wallet(&wallet).await;
+        });
+    }
+}
+
 /// Verify license for a wallet address using custom RPC endpoints (for pre-initialization)
 /// This function creates an ephemeral RPC client and does NOT use the global RPC client
 /// Does NOT cache the result (use this only during initialization validation)

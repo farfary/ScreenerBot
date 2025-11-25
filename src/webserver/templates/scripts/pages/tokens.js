@@ -235,6 +235,7 @@ function createLifecycle() {
     filters: getDefaultFiltersForView(DEFAULT_VIEW),
     summary: { ...DEFAULT_SUMMARY },
     availableRejectionReasons: [],
+    hasLoadedOnce: false,
   };
 
   /**
@@ -627,6 +628,14 @@ function createLifecycle() {
       };
     }
 
+    if (!state.hasLoadedOnce && reason !== "poll" && table?.showBlockingState) {
+      table.showBlockingState({
+        variant: "loading",
+        title: "Loading tokens snapshot...",
+        description: "Large token databases can take a few seconds to warm up during startup.",
+      });
+    }
+
     const params = buildQuery({ cursor });
     const url = `/api/tokens/list?${params.toString()}`;
 
@@ -731,6 +740,11 @@ function createLifecycle() {
             : rowsWithPriceMeta.filter((row) => row.blacklisted).length,
       };
 
+      state.hasLoadedOnce = true;
+      if (table?.hideBlockingState) {
+        table.hideBlockingState();
+      }
+
       return {
         rows: rowsWithPriceMeta,
         cursorNext: data?.next_cursor ?? null,
@@ -746,7 +760,13 @@ function createLifecycle() {
         throw error;
       }
       console.error("[Tokens] Failed to load tokens list:", error);
-      if (reason !== "poll") {
+      if (!state.hasLoadedOnce) {
+        table?.showBlockingState?.({
+          variant: "error",
+          title: "Still loading tokens...",
+          description: "Waiting for the backend to respond. We will retry automatically.",
+        });
+      } else if (reason !== "poll") {
         Utils.showToast("Failed to load tokens", "warning");
       }
       throw error;
@@ -1478,6 +1498,7 @@ function createLifecycle() {
       }
 
       state.filters = getDefaultFiltersForView(state.view);
+      state.hasLoadedOnce = false;
 
       const initialSortColumn = resolveSortColumn(state.sort.by);
 
@@ -1574,6 +1595,12 @@ function createLifecycle() {
             },
           ],
         },
+      });
+
+      table.showBlockingState?.({
+        variant: "loading",
+        title: "Loading tokens snapshot...",
+        description: "Large token databases can take a few seconds to warm up during startup.",
       });
 
       // Hide rejection_reason filter immediately if not in rejected tab
@@ -1846,6 +1873,7 @@ function createLifecycle() {
         tokenDetailsDialog = null;
       }
       if (table) {
+        table.hideBlockingState?.();
         table.destroy();
         table = null;
       }
@@ -1860,6 +1888,7 @@ function createLifecycle() {
       state.sort = { ...DEFAULT_SERVER_SORT };
       state.filters = getDefaultFiltersForView(DEFAULT_VIEW);
       state.summary = { ...DEFAULT_SUMMARY };
+      state.hasLoadedOnce = false;
       walletBalance = 0;
     },
   };

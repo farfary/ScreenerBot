@@ -203,6 +203,7 @@ async fn get_core_script(axum::extract::Path(file): axum::extract::Path<String>)
         "poller.js" => Some(templates::CORE_POLLER),
         "dom.js" => Some(templates::CORE_DOM),
         "utils.js" => Some(templates::CORE_UTILS),
+        "bootstrap.js" => Some(templates::CORE_BOOTSTRAP),
         "router.js" => Some(templates::CORE_ROUTER),
         "header.js" => Some(templates::CORE_HEADER),
         "notifications.js" => Some(templates::CORE_NOTIFICATIONS),

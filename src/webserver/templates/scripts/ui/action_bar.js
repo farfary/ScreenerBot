@@ -40,6 +40,8 @@
  * ```
  */
 
+/* global queueMicrotask */
+
 function escapeHtml(str) {
   if (str == null) return "";
   return String(str)
@@ -302,3 +304,68 @@ export class ActionBar {
     }
   }
 }
+
+/**
+ * ActionBarManager - Singleton for coordinated action bar management across pages
+ *
+ * Similar to TabBarManager, this handles:
+ * - Tracking which page has an action bar
+ * - Hiding action bars when switching to pages without one
+ * - Showing action bars when switching to pages with one
+ */
+class ActionBarManagerClass {
+  constructor() {
+    this.instances = new Map();
+    this.currentPage = null;
+  }
+
+  register(pageName, actionBar) {
+    if (!pageName || !actionBar) {
+      console.warn("[ActionBarManager] Invalid registration", { pageName, actionBar });
+      return;
+    }
+    this.instances.set(pageName, actionBar);
+  }
+
+  unregister(pageName) {
+    const actionBar = this.instances.get(pageName);
+    if (actionBar) {
+      actionBar.dispose();
+      this.instances.delete(pageName);
+    }
+  }
+
+  onPageSwitch(newPage, oldPage) {
+    // Use queueMicrotask to ensure DOM is ready after router innerHTML replacement
+    queueMicrotask(() => {
+      // Hide old page's action bar
+      if (oldPage) {
+        const oldActionBar = this.instances.get(oldPage);
+        if (oldActionBar) {
+          oldActionBar.clear();
+        }
+      }
+
+      // If new page doesn't have an action bar registered, ensure container is hidden
+      if (newPage && !this.instances.has(newPage)) {
+        // Hide the global container if the new page doesn't use ActionBar
+        const container = document.querySelector("#toolbarContainer");
+        if (container) {
+          container.style.display = "none";
+        }
+      }
+
+      this.currentPage = newPage;
+    });
+  }
+
+  hideAll() {
+    this.instances.forEach((actionBar) => actionBar.clear());
+  }
+
+  getActiveActionBar() {
+    return this.currentPage ? this.instances.get(this.currentPage) : null;
+  }
+}
+
+export const ActionBarManager = new ActionBarManagerClass();

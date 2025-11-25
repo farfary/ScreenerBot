@@ -2,6 +2,7 @@
 /* global EventSource */
 
 import { toastManager } from "./toast.js";
+import { waitForReady } from "./bootstrap.js";
 
 const AUTO_DISMISS_COMPLETED_MS = 10000; // 10 seconds
 const AUTO_DISMISS_FAILED_MS = 30000; // 30 seconds
@@ -757,7 +758,11 @@ class NotificationManager {
 // Global singleton instance
 const notificationManager = new NotificationManager();
 
-// Auto-initialize on module load
-notificationManager.init();
+// Auto-initialize once backend is ready
+waitForReady()
+  .then(() => notificationManager.init())
+  .catch((error) => {
+    console.error("[NotificationManager] Failed to start after bootstrap", error);
+  });
 
 export { notificationManager, NotificationManager };

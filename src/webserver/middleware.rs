@@ -39,7 +39,7 @@ pub async fn initialization_gate(request: Request, next: Next) -> Response {
     // Not initialized - check if this is an allowed path
 
     // Allow initialization endpoints
-    if path.starts_with("/api/initialization") {
+    if path.starts_with("/api/initialization") || path.starts_with("/api/system/bootstrap") {
         return next.run(request).await;
     }
 

@@ -21,7 +21,7 @@ use std::io::{Read, Write};
 /// - Integration with existing RPC infrastructure
 /// - Pure wallet monitoring without position management interference
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex, Notify, RwLock};
 
@@ -243,6 +243,72 @@ pub struct WalletDashboardData {
 pub struct WalletFlowCacheStats {
     pub rows: u64,
     pub max_timestamp: Option<String>,
+}
+
+/// Cached readiness data for lightweight webserver checks
+#[derive(Debug, Clone)]
+pub struct WalletSnapshotStatus {
+    pub is_ready: bool,
+    pub last_updated: Option<DateTime<Utc>>,
+}
+
+#[derive(Default)]
+struct WalletSnapshotStatusCache {
+    ready: std::sync::atomic::AtomicBool,
+    last_updated: StdMutex<Option<DateTime<Utc>>>,
+}
+
+impl WalletSnapshotStatusCache {
+    fn mark_ready(&self, timestamp: DateTime<Utc>) {
+        if let Ok(mut guard) = self.last_updated.lock() {
+            *guard = Some(timestamp);
+        }
+        self.ready.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    fn reset(&self) {
+        if let Ok(mut guard) = self.last_updated.lock() {
+            *guard = None;
+        }
+        self.ready.store(false, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    fn set(&self, timestamp: Option<DateTime<Utc>>) {
+        if let Some(ts) = timestamp {
+            self.mark_ready(ts);
+        } else {
+            self.reset();
+        }
+    }
+
+    fn snapshot(&self) -> WalletSnapshotStatus {
+        let ready = self.ready.load(std::sync::atomic::Ordering::SeqCst);
+        let last_updated = self
+            .last_updated
+            .lock()
+            .ok()
+            .and_then(|guard| guard.clone());
+
+        WalletSnapshotStatus {
+            is_ready: ready && last_updated.is_some(),
+            last_updated,
+        }
+    }
+}
+
+static WALLET_SNAPSHOT_STATUS: Lazy<WalletSnapshotStatusCache> =
+    Lazy::new(WalletSnapshotStatusCache::default);
+
+fn update_wallet_snapshot_status(timestamp: DateTime<Utc>) {
+    WALLET_SNAPSHOT_STATUS.mark_ready(timestamp);
+}
+
+fn hydrate_wallet_snapshot_status(timestamp: Option<DateTime<Utc>>) {
+    WALLET_SNAPSHOT_STATUS.set(timestamp);
+}
+
+pub fn get_cached_wallet_snapshot_status() -> WalletSnapshotStatus {
+    WALLET_SNAPSHOT_STATUS.snapshot()
 }
 
 #[derive(Debug, Clone)]
@@ -1753,6 +1819,8 @@ impl WalletDatabase {
             ),
         );
 
+        update_wallet_snapshot_status(snapshot.snapshot_time);
+
         Ok(snapshot_id)
     }
 
@@ -1809,6 +1877,8 @@ impl WalletDatabase {
             ),
         );
 
+        update_wallet_snapshot_status(snapshot.snapshot_time);
+
         Ok(snapshot_id)
     }
 
@@ -1836,6 +1906,34 @@ impl WalletDatabase {
             .map_err(|e| format!("Failed to query balance at time: {}", e))?;
 
         Ok(result)
+    }
+
+    /// Get the most recent snapshot timestamp (if any) without loading token data
+    pub fn get_latest_snapshot_time(&self) -> Result<Option<DateTime<Utc>>, String> {
+        let conn = self.get_connection()?;
+
+        let snapshot_time_str: Option<String> = conn
+            .query_row(
+                r#"
+            SELECT snapshot_time
+            FROM wallet_snapshots
+            ORDER BY snapshot_time DESC
+            LIMIT 1
+            "#,
+                [],
+                |row| row.get(0),
+            )
+            .optional()
+            .map_err(|e| format!("Failed to fetch latest wallet snapshot time: {}", e))?;
+
+        if let Some(ts_str) = snapshot_time_str {
+            let timestamp = DateTime::parse_from_rfc3339(&ts_str)
+                .map_err(|_| format!("Invalid snapshot_time stored: {}", ts_str))?
+                .with_timezone(&Utc);
+            Ok(Some(timestamp))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Get recent wallet snapshots (synchronous version)
@@ -2209,7 +2307,10 @@ pub async fn initialize_wallet_database() -> Result<(), String> {
     }
 
     let db = WalletDatabase::new().await?;
+    let latest_snapshot_time = db.get_latest_snapshot_time()?;
     *db_lock = Some(db);
+
+    hydrate_wallet_snapshot_status(latest_snapshot_time);
 
     logger::info(
         LogTag::Wallet,

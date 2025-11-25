@@ -128,6 +128,14 @@ import { $ } from "../core/dom.js";
 import { TableToolbarView } from "./table_toolbar.js";
 import { TableSettingsDialog } from "./table_settings_dialog.js";
 
+const BLOCKING_STATE_VARIANTS = ["loading", "info", "warning", "error"];
+const BLOCKING_STATE_DEFAULT_ICONS = {
+  loading: "icon-loader",
+  info: "icon-info",
+  warning: "icon-alert-triangle",
+  error: "icon-alert-triangle",
+};
+
 export class DataTable {
   constructor(options) {
     this.options = {
@@ -216,6 +224,7 @@ export class DataTable {
     this._pendingRenderOptions = null;
     this._serverStateRestored = false; // Track if server state has been restored
     this._settingsDialog = null; // NEW: Table settings dialog instance
+    this._blockingState = null; // Overlay for full-table loading/error states
 
     this._loadState();
     this._restoreServerState(); // NEW: Restore server-side state after loading
@@ -403,6 +412,15 @@ export class DataTable {
       }>
         ${this._renderToolbar()}
         <div class="data-table-scroll-container">
+          <div class="data-table-blocking-state" aria-live="polite" aria-hidden="true">
+            <div class="data-table-blocking-state__inner">
+              <i class="data-table-blocking-state__icon icon-loader" aria-hidden="true"></i>
+              <div class="data-table-blocking-state__text">
+                <div class="data-table-blocking-state__title"></div>
+                <div class="data-table-blocking-state__description"></div>
+              </div>
+            </div>
+          </div>
           <table class="data-table ${this.options.compact ? "compact" : ""} ${
             this.options.zebra ? "zebra" : ""
           } ${uniformRowsLines ? "uniform-rows" : ""}" ${
@@ -426,6 +444,16 @@ export class DataTable {
     this.elements.table = container.querySelector(".data-table");
     this.elements.thead = container.querySelector("thead");
     this.elements.tbody = container.querySelector("tbody");
+    this.elements.blockingState = container.querySelector(".data-table-blocking-state");
+    this.elements.blockingStateIcon = container.querySelector(
+      ".data-table-blocking-state__icon"
+    );
+    this.elements.blockingStateTitle = container.querySelector(
+      ".data-table-blocking-state__title"
+    );
+    this.elements.blockingStateDescription = container.querySelector(
+      ".data-table-blocking-state__description"
+    );
 
     // Cache col elements for fast width updates
     this.elements.colgroup = container.querySelector("colgroup");
@@ -452,7 +480,96 @@ export class DataTable {
       this.elements.scrollContainer.scrollTop = this.state.scrollPosition;
     }
 
-    this._updateLoadingClass();
+    this._syncBlockingState();
+  }
+
+  _normalizeBlockingState(config = {}) {
+    const variant = BLOCKING_STATE_VARIANTS.includes(config.variant)
+      ? config.variant
+      : "info";
+    const title = typeof config.title === "string" ? config.title : "";
+    const description = typeof config.description === "string" ? config.description : "";
+    const iconClass =
+      typeof config.icon === "string" && config.icon.trim().length > 0
+        ? config.icon.trim()
+        : BLOCKING_STATE_DEFAULT_ICONS[variant];
+    return {
+      variant,
+      title,
+      description,
+      icon: iconClass,
+    };
+  }
+
+  _syncBlockingState() {
+    const container = this.elements.blockingState;
+    if (!container) {
+      return;
+    }
+
+    const iconEl = this.elements.blockingStateIcon;
+    const titleEl = this.elements.blockingStateTitle;
+    const descEl = this.elements.blockingStateDescription;
+
+    const active = Boolean(this._blockingState);
+    container.classList.toggle("is-visible", active);
+    container.setAttribute("aria-hidden", active ? "false" : "true");
+
+    container.classList.remove(
+      "data-table-blocking-state--loading",
+      "data-table-blocking-state--info",
+      "data-table-blocking-state--warning",
+      "data-table-blocking-state--error"
+    );
+
+    if (!active) {
+      if (titleEl) titleEl.textContent = "";
+      if (descEl) descEl.textContent = "";
+      if (iconEl) iconEl.className = "data-table-blocking-state__icon";
+      return;
+    }
+
+    const state = this._blockingState;
+    container.classList.add(`data-table-blocking-state--${state.variant}`);
+    if (iconEl) {
+      iconEl.className = `data-table-blocking-state__icon ${state.icon}`.trim();
+    }
+    if (titleEl) {
+      titleEl.textContent = state.title;
+    }
+    if (descEl) {
+      descEl.textContent = state.description;
+    }
+  }
+
+  showBlockingState(config = {}) {
+    this._blockingState = this._normalizeBlockingState(config);
+    this._syncBlockingState();
+  }
+
+  updateBlockingState(config = {}) {
+    if (!this._blockingState) {
+      this.showBlockingState(config);
+      return;
+    }
+    const merged = {
+      ...this._blockingState,
+      ...config,
+    };
+    this._blockingState = this._normalizeBlockingState(merged);
+    this._syncBlockingState();
+  }
+
+  hideBlockingState() {
+    if (!this._blockingState) {
+      return;
+    }
+    this._blockingState = null;
+    this._syncBlockingState();
+  }
+
+  isBlockingStateVisible() {
+    return Boolean(this._blockingState);
   }
 
   /**
@@ -1999,8 +2116,6 @@ export class DataTable {
       }
     }
 
-    this._updateLoadingClass();
-
     if (this.elements.thead) {
       this.elements.thead.innerHTML = this._renderHeader();
     }
@@ -2833,24 +2948,12 @@ export class DataTable {
     return col ? col.visible !== false : true;
   }
 
-  _updateLoadingClass() {
-    // Removed: No longer show "is-refreshing" visual indicator on successful refresh
-    // Only errors are shown to users, successful refreshes are silent
-    const wrapper = this.elements.wrapper;
-    if (!wrapper) {
-      return;
-    }
-    // Intentionally empty - we don't show loading states for successful refreshes
-  }
-
   _setLoadingState(value) {
     const normalized = Boolean(value);
     if (this.state.isLoading === normalized) {
-      this._updateLoadingClass();
       return;
     }
     this.state.isLoading = normalized;
-    this._updateLoadingClass();
   }
 
   /**
