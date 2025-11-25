@@ -47,6 +47,9 @@ cache_tokens.db
 mcp/
 dist/
 analysis-exports/
+docs/
+scripts/
+public/
 
 # Dependencies
 node_modules/

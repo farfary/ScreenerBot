@@ -17,11 +17,11 @@ async fn main() {
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     println!();
 
-    // Test credentials (same as provided by user)
+    // Test credentials - replace with your actual credentials
     let private_key_str =
-        "REDACTED_PRIVATE_KEY";
+        "YOUR_WALLET_PRIVATE_KEY_BASE58_HERE";
     let rpc_urls = vec![
-        "https://mainnet.helius-rpc.com/?api-key=REDACTED_API_KEY_1".to_string(),
+        "https://mainnet.helius-rpc.com/?api-key=YOUR_API_KEY_HERE".to_string(),
     ];
 
     println!("📋 Test Configuration:");
