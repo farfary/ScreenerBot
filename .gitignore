@@ -37,5 +37,20 @@ cache_tokens.db
 *_backup.*
 *.backup
 
-.playwright-mcp
-node_modules
+# IDE/Editor folders
+.vscode/
+.idea/
+
+# Development tools (keep local, not tracked)
+.github/
+.playwright-mcp/
+mcp/
+dist/
+analysis-exports/
+
+# Dependencies
+node_modules/
+.venv/
+
+# Submodules removed - now separate repos
+repos/
