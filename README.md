@@ -12,11 +12,24 @@ Website: [screenerbot.io](https://screenerbot.io) | Documentation: [screenerbot.
 
 ---
 
-### Support Development
+<p align="center">
+  <strong>Support Open Source Development</strong>
+</p>
 
-If ScreenerBot has been valuable to you, consider supporting development:
+<p align="center">
+  ScreenerBot is built with thousands of hours of work.<br>
+  If this project helps you trade smarter, consider buying the developer a coffee.
+</p>
 
-**Solana**: `2Nr5M6TngMUPZRyW6yeN4GxLg53JwQSr5XTEMeeoTkMd`
+<p align="center">
+  <a href="https://solscan.io/account/2Nr5M6TngMUPZRyW6yeN4GxLg53JwQSr5XTEMeeoTkMd">
+    <img src="https://img.shields.io/badge/Donate-SOL-9945FF?style=for-the-badge&logo=solana&logoColor=white" alt="Donate SOL">
+  </a>
+</p>
+
+<p align="center">
+  <code>2Nr5M6TngMUPZRyW6yeN4GxLg53JwQSr5XTEMeeoTkMd</code>
+</p>
 
 ---
 
@@ -127,95 +140,82 @@ Level 4:
 
 ### Pool Service
 
-Real-time price calculation from on-chain liquidity pool data.
+Real-time price calculation directly from on-chain liquidity pool reserves.
 
-| Component | Description |
-|-----------|-------------|
-| Discovery | Multi-source pool discovery (DexScreener, GeckoTerminal, Raydium API) |
-| Fetcher | Batched RPC calls (50 accounts/request) with rate limiting |
-| Decoders | 12 DEX-specific decoders for pool state interpretation |
-| Calculator | Price derivation from pool reserves using constant product formula |
-| Cache | Price history with configurable retention |
+- **Discovery**: Finds pools from DexScreener, GeckoTerminal, and Raydium APIs
+- **Fetcher**: Batched RPC calls (50 accounts per request) with rate limiting
+- **Analyzer**: Classifies pools by DEX type and extracts metadata
+- **Decoders**: 11 native decoders for parsing pool state data
+- **Calculator**: Derives prices from reserves (SOL-based pricing)
+- **Cache**: In-memory price history with database persistence
 
 ### Token Service
 
-Unified token intelligence with multi-source data aggregation.
+Unified token database with multi-source data aggregation.
 
-| Table | Purpose |
-|-------|---------|
-| tokens | Core token metadata (mint, symbol, decimals) |
-| market_dexscreener | DexScreener market data |
-| market_geckoterminal | GeckoTerminal market data |
-| security_rugcheck | Rugcheck security analysis |
-| tracking | Update timestamps and priorities |
-| blacklist | Blocked tokens with reasons |
+- Core metadata (mint, symbol, decimals)
+- Market data from DexScreener and GeckoTerminal
+- Security analysis from Rugcheck
+- Priority-based background updates
+- Blacklist management
 
 ### Transaction Service
 
-Real-time wallet monitoring with comprehensive DEX analysis.
+Real-time wallet monitoring via WebSocket with DEX classification.
 
-- WebSocket streaming for instant transaction detection
-- Batch RPC fetching with 50-account limit compliance
-- Automatic DEX classification (Jupiter, Raydium, Orca, Meteora, Pumpfun)
+- Instant transaction detection
+- Automatic swap identification (Jupiter, Raydium, Orca, Meteora, Pumpfun)
 - P&L calculation per transaction
-- ATA operation tracking and rent calculation
+- SQLite caching with connection pooling
 
 ### Position Manager
 
-Complete position lifecycle management.
+Complete position lifecycle with DCA and partial exit support.
 
-| Feature | Description |
-|---------|-------------|
-| Entry Tracking | Multiple entries per position (DCA support) |
-| Exit Tracking | Partial exits with individual P&L |
-| Price Updates | Background price monitoring with peak tracking |
-| Loss Detection | Configurable loss thresholds with auto-blacklist |
-| Verification | Chain verification for entry/exit confirmation |
+- Multiple entries per position (DCA)
+- Partial exits with individual P&L tracking
+- Background price monitoring with peak tracking
+- Loss detection with configurable auto-blacklist
 
 ### Filtering Engine
 
-Multi-criteria token evaluation with concurrent processing.
+Multi-criteria token evaluation from multiple data sources.
 
-**Filter Sources:**
-- DexScreener: Liquidity, volume, price change, market cap
+- DexScreener: Liquidity, volume, price change
 - GeckoTerminal: Volume, FDV, reserve ratio
-- Rugcheck: Security risks, mint/freeze authority, top holders
-- Meta: Token age, name patterns, symbol validation
+- Rugcheck: Security risks, authorities, holder distribution
+- Meta: Token age, name patterns
 
 ### Strategy Engine
 
-Condition-based trading logic with rule tree evaluation.
+Condition-based trading logic with configurable rules.
 
-**Condition Types:**
-- Price: Change percent, breakout, MA crossover
-- Volume: Spike detection, level thresholds
-- Candle: Size, consecutive patterns
-- Time: Position holding duration
-- Liquidity: Level requirements
+- Price conditions (change percent, breakout, MA)
+- Volume conditions (spike, thresholds)
+- Candle patterns and time-based conditions
+- Rule tree evaluation with caching
 
 ---
 
 ## Supported DEXs
 
-ScreenerBot includes native decoders for direct pool state interpretation:
+Native decoders for direct pool state interpretation:
 
-| DEX | Programs | Description |
-|-----|----------|-------------|
-| **Raydium** | CLMM, CPMM, Legacy AMM | Largest Solana DEX, concentrated and standard liquidity |
-| **Orca** | Whirlpool | Concentrated liquidity with tick-based pricing |
-| **Meteora** | DAMM, DBC, DLMM | Dynamic AMM, dynamic bonding curve, dynamic liquidity |
-| **Pumpfun** | AMM, Legacy (Bonding Curve) | Bonding curve launches and graduated pools |
-| **Fluxbeam** | AMM | Standard constant product AMM |
-| **Moonit** | AMM | Emerging DEX support |
+| DEX | Programs |
+|-----|----------|
+| **Raydium** | CLMM, CPMM, Legacy AMM |
+| **Orca** | Whirlpool |
+| **Meteora** | DAMM, DBC, DLMM |
+| **Pumpfun** | AMM, Legacy (Bonding Curve) |
+| **Fluxbeam** | AMM |
+| **Moonit** | AMM |
 
 ### Swap Routers
 
-| Router | Features |
-|--------|----------|
-| **Jupiter V6** | Best-in-class aggregation, route optimization, slippage protection |
-| **GMGN** | Alternative router, concurrent quote comparison |
+- **Jupiter V6**: Aggregation with route optimization
+- **GMGN**: Alternative router for quote comparison
 
-Quotes are fetched concurrently from enabled routers, and the best route is selected automatically.
+Concurrent quote fetching with automatic best-route selection.
 
 ---
 
@@ -223,17 +223,17 @@ Quotes are fetched concurrently from enabled routers, and the best route is sele
 
 ### Entry Evaluation
 
-Safety checks performed in order:
-1. Connectivity health (RPC, DexScreener, Rugcheck)
-2. Position limits (configurable max open positions)
-3. Duplicate prevention (no existing position)
-4. Re-entry cooldown (configurable delay after exit)
+Safety checks in order:
+1. Connectivity health
+2. Position limits
+3. Duplicate prevention
+4. Re-entry cooldown
 5. Blacklist check
-6. Strategy signal evaluation
+6. Strategy signals
 
 ### Exit Evaluation
 
-Priority-ordered exit conditions:
+Priority-ordered conditions:
 1. **Blacklist** (emergency): Immediate exit if token blacklisted
 2. **Risk Limits** (emergency): >90% loss protection
 3. **Trailing Stop** (high): Dynamic stop-loss following price peaks
@@ -257,90 +257,49 @@ Priority-ordered exit conditions:
 
 ## Dashboard
 
-Web-based control interface accessible at `http://localhost:8080` after bot startup.
+Web interface at `http://localhost:8080` with 12 feature pages:
 
-| Page | Purpose |
-|------|---------|
-| **Home** | Overview with active positions, recent activity, system health |
-| **Positions** | Open/closed position management with P&L tracking |
-| **Tokens** | Token database browser with market and security data |
-| **Filtering** | Passed/rejected token lists with filter reasons |
-| **Trader** | Trading controls, active monitoring, entry/exit settings |
-| **Transactions** | Real-time transaction stream with classification |
-| **Strategies** | Strategy builder with condition configuration |
-| **Wallet** | Balance tracking, history, token holdings |
-| **Events** | System event log with category filtering |
-| **Services** | Service health, metrics, status monitoring |
-| **Config** | Hot-reload configuration editor |
-| **Initialization** | First-run setup wizard |
+- **Home**: Overview, positions, system health
+- **Positions**: Open/closed with P&L tracking
+- **Tokens**: Database browser with market and security data
+- **Filtering**: Passed/rejected tokens with reasons
+- **Trader**: Trading controls and monitoring
+- **Transactions**: Real-time stream with classification
+- **Strategies**: Strategy builder
+- **Wallet**: Balance and holdings
+- **Events**: System event log
+- **Services**: Health and metrics
+- **Config**: Hot-reload editor
 
 ---
 
 ## Configuration
 
-Configuration is managed through `data/config.toml` with hot-reload support.
+Managed through `data/config.toml` with hot-reload support. Key sections:
 
-### Key Sections
+- `[trader]` - Position limits, sizing, dry-run mode
+- `[trader.entry]` - Entry criteria (liquidity, age)
+- `[trader.exit]` - Exit strategies (trailing, ROI, time)
+- `[trader.dca]` - DCA settings
+- `[filtering]` - Token filtering criteria
+- `[swaps]` - Router configuration (Jupiter, GMGN)
+- `[rpc]` - RPC endpoints and rate limiting
 
-```toml
-[trader]
-enabled = true
-dry_run = false
-max_positions = 5
-position_size_sol = 0.1
-
-[trader.entry]
-min_liquidity_sol = 10.0
-max_token_age_hours = 24
-
-[trader.exit]
-trailing_stop_enabled = true
-trailing_stop_activation_percent = 20.0
-trailing_stop_distance_percent = 10.0
-roi_target_enabled = true
-roi_target_percent = 50.0
-time_override_enabled = true
-time_override_hours = 24
-
-[trader.dca]
-enabled = true
-max_rounds = 3
-price_drop_percent = 20.0
-
-[filtering]
-# Multi-source filtering criteria
-
-[swaps]
-[swaps.jupiter]
-enabled = true
-slippage_bps = 300
-
-[swaps.gmgn]
-enabled = true
-
-[tokens]
-# Token database settings
-
-[rpc]
-urls = ["https://api.mainnet-beta.solana.com"]
-rate_limit_per_second = 20
-```
+See full documentation at [screenerbot.io/docs](https://screenerbot.io/docs).
 
 ---
 
 ## Data Sources
 
-ScreenerBot aggregates data from multiple sources:
+| Source | Usage |
+|--------|-------|
+| **Solana RPC** | Pool reserves, balances, transactions |
+| **DexScreener** | Market data, pools |
+| **GeckoTerminal** | Alternative market metrics |
+| **Rugcheck** | Security analysis |
+| **Jupiter** | Swap routing |
 
-| Source | Data Type | Usage |
-|--------|-----------|-------|
-| **Solana RPC** | On-chain state | Pool reserves, balances, transactions |
-| **DexScreener** | Market data | Price, volume, liquidity, pools |
-| **GeckoTerminal** | Market data | Alternative market metrics |
-| **Rugcheck** | Security | Risk analysis, holder distribution |
-| **Jupiter** | Quotes | Swap routing and pricing |
-
-All data is cached locally in SQLite databases under the `data/` directory.
+All data cached locally in SQLite databases.
 
 ---
 
@@ -348,44 +307,28 @@ All data is cached locally in SQLite databases under the `data/` directory.
 
 ### Prerequisites
 
-- Rust 1.75+ (stable)
-- Node.js 18+ (for frontend validation)
-- macOS, Linux, or Windows
+- Rust 1.75+
+- Node.js 18+ (optional, for frontend tools)
 
-### Build Commands
+### Build
 
 ```bash
-# Clone repository
 git clone https://github.com/screenerbot/screenerbot.git
 cd screenerbot
-
-# Build (debug profile for development)
 cargo build
-
-# Build release
-cargo build --release
-
-# Run
-cargo run --bin screenerbot -- --run
-
-# Run with dry-run mode (no actual trades)
-cargo run --bin screenerbot -- --run --dry-run
-
-# Run with debug logging
-cargo run --bin screenerbot -- --run --debug-rpc --debug-transactions
 ```
 
-### Frontend Validation
+### Run
 
 ```bash
-# Install dependencies
-npm install
+# Normal mode
+cargo run --bin screenerbot -- --run
 
-# Validate all frontend code
-npm run check
+# Dry-run (no trades)
+cargo run --bin screenerbot -- --run --dry-run
 
-# Format all code
-npm run format
+# With debug logging
+cargo run --bin screenerbot -- --run --debug-rpc
 ```
 
 ---
@@ -393,93 +336,57 @@ npm run format
 ## Project Structure
 
 ```
-screenerbot/
-+-- src/
-|   +-- apis/              # External API clients (DexScreener, Jupiter, etc.)
-|   +-- config/            # Configuration system with hot-reload
-|   +-- connectivity/      # Endpoint health monitoring
-|   +-- errors/            # Structured error types
-|   +-- events/            # Event recording system
-|   +-- filtering/         # Token filtering engine
-|   +-- logger/            # Logging with per-module control
-|   +-- ohlcvs/            # OHLCV data management
-|   +-- pools/             # Pool service and DEX decoders
-|   +-- positions/         # Position lifecycle management
-|   +-- services/          # ServiceManager and implementations
-|   +-- strategies/        # Strategy engine and conditions
-|   +-- swaps/             # Swap router integration
-|   +-- tokens/            # Token database and updates
-|   +-- trader/            # Trading logic and evaluators
-|   +-- transactions/      # Transaction monitoring
-|   +-- wallet.rs          # Wallet balance tracking
-|   +-- webserver/         # Dashboard and REST API
-|   +-- main.rs            # Entry point
-|   +-- lib.rs             # Library exports
-|   +-- run.rs             # Bot lifecycle
-|
-+-- data/                  # Runtime data (databases, config)
-+-- Cargo.toml             # Rust dependencies
-+-- package.json           # Frontend tooling
+src/
++-- apis/           # External API clients
++-- config/         # Configuration system
++-- connectivity/   # Endpoint health monitoring
++-- events/         # Event recording system
++-- filtering/      # Token filtering engine
++-- pools/          # Pool service and DEX decoders
++-- positions/      # Position lifecycle management
++-- services/       # ServiceManager
++-- strategies/     # Strategy engine
++-- swaps/          # Swap router integration
++-- tokens/         # Token database
++-- trader/         # Trading logic
++-- transactions/   # Transaction monitoring
++-- webserver/      # Dashboard and REST API
 ```
 
 ---
 
 ## Contributing
 
-We welcome contributions from the community. Whether you are fixing bugs, improving documentation, or proposing new features, your help is appreciated.
-
-### How to Contribute
+Contributions welcome. See our guidelines:
 
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/your-feature`)
-3. Make your changes following existing code patterns
-4. Ensure all checks pass (`cargo check --lib && npm run check`)
-5. Commit with clear messages
-6. Open a pull request with a detailed description
+2. Create a feature branch
+3. Follow existing code patterns
+4. Ensure `cargo check --lib` passes
+5. Open a pull request
 
-### Code Standards
-
-- Follow existing Rust idioms and project patterns
-- Use the logging system with appropriate tags and levels
-- Add configuration options through the config system, not hardcoded values
-- Keep services independent with clear interfaces
-- Document public APIs
-
-### Areas for Contribution
-
-- Additional DEX decoder implementations
-- New strategy conditions
+**Areas for contribution:**
+- DEX decoder implementations
+- Strategy conditions
 - Dashboard improvements
-- Documentation and guides
-- Performance optimizations
-- Test coverage
+- Documentation
 
 ---
 
 ## Community
 
-Join our community for support, updates, and discussions:
-
 - **Telegram**: [t.me/screenerbotio](https://t.me/screenerbotio)
 - **X (Twitter)**: [x.com/screenerbotio](https://x.com/screenerbotio)
-- **GitHub**: [github.com/screenerbot](https://github.com/screenerbot)
 - **Website**: [screenerbot.io](https://screenerbot.io)
 - **Documentation**: [screenerbot.io/docs](https://screenerbot.io/docs)
-
-### Support
-
-For technical support and questions:
-- Check the [documentation](https://screenerbot.io/docs)
-- Join our [Telegram community](https://t.me/screenerbotio)
-- Contact support at [screenerbot.io/support](https://screenerbot.io/support)
 
 ---
 
 ## License
 
-This project is proprietary software. A valid license is required for operation.
+Proprietary software. License required for operation.
 
-Visit [screenerbot.io/pricing](https://screenerbot.io/pricing) to purchase a license.
+Visit [screenerbot.io/pricing](https://screenerbot.io/pricing) to purchase.
 
 ---
 
