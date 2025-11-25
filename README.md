@@ -2,23 +2,39 @@
   <img src="assets/banner.jpg" alt="ScreenerBot Banner" width="100%">
 </p>
 
-# ScreenerBot
+<h1 align="center">ScreenerBot</h1>
 
-**Native Solana Trading Engine**
+<p align="center">
+  <strong>Native Solana Trading Engine</strong>
+</p>
 
-A high-performance, local-first automated trading system for Solana DeFi. Built in Rust for native runtime performance and direct blockchain interaction.
+<p align="center">
+  <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Built%20with-Rust-000000?style=flat-square&logo=rust&logoColor=white" alt="Built with Rust"></a>
+  <a href="https://solana.com/"><img src="https://img.shields.io/badge/Powered%20by-Solana-9945FF?style=flat-square&logo=solana&logoColor=white" alt="Powered by Solana"></a>
+  <a href="https://tauri.app/"><img src="https://img.shields.io/badge/Desktop-Tauri-24C8D8?style=flat-square&logo=tauri&logoColor=white" alt="Tauri Desktop"></a>
+  <a href="https://screenerbot.io/docs"><img src="https://img.shields.io/badge/Docs-screenerbot.io-blue?style=flat-square" alt="Documentation"></a>
+  <a href="https://t.me/screenerbotio"><img src="https://img.shields.io/badge/Community-Telegram-26A5E4?style=flat-square&logo=telegram&logoColor=white" alt="Telegram"></a>
+</p>
 
-Website: [screenerbot.io](https://screenerbot.io) | Documentation: [screenerbot.io/docs](https://screenerbot.io/docs)
+<p align="center">
+  A high-performance, local-first automated trading system for Solana DeFi.<br>
+  Built in Rust for native runtime performance and direct blockchain interaction.
+</p>
+
+<p align="center">
+  <a href="https://screenerbot.io">Website</a> |
+  <a href="https://screenerbot.io/docs">Documentation</a> |
+  <a href="https://screenerbot.io/pricing">Get License</a>
+</p>
 
 ---
 
 <p align="center">
-  <strong>Support Open Source Development</strong>
+  <strong>Support Development</strong>
 </p>
 
 <p align="center">
-  ScreenerBot is built with thousands of hours of work.<br>
-  If this project helps you trade smarter, consider buying the developer a coffee.
+  If this project helps you trade smarter, consider supporting the developer.
 </p>
 
 <p align="center">
@@ -33,6 +49,19 @@ Website: [screenerbot.io](https://screenerbot.io) | Documentation: [screenerbot.
 
 ---
 
+## Why Rust?
+
+ScreenerBot is written in **Rust** - the same language Solana itself is built with. This isn't a coincidence:
+
+- **Native Performance**: Compiled to machine code, not interpreted. Executes as fast as C/C++.
+- **Memory Safety**: No garbage collector pauses. Predictable, consistent execution times.
+- **Concurrency**: Fearless parallelism with async/await. Handle thousands of tokens simultaneously.
+- **Reliability**: If it compiles, it runs. Strong type system catches bugs at compile time.
+
+Trading bots written in Python or JavaScript can't match the speed and reliability of native code. When milliseconds matter in DeFi, Rust delivers.
+
+---
+
 ## Table of Contents
 
 - [Overview](#overview)
@@ -43,6 +72,7 @@ Website: [screenerbot.io](https://screenerbot.io) | Documentation: [screenerbot.
 - [Dashboard](#dashboard)
 - [Configuration](#configuration)
 - [Data Sources](#data-sources)
+- [Desktop Application](#desktop-application)
 - [Building from Source](#building-from-source)
 - [Project Structure](#project-structure)
 - [Contributing](#contributing)
@@ -53,20 +83,20 @@ Website: [screenerbot.io](https://screenerbot.io) | Documentation: [screenerbot.
 
 ## Overview
 
-ScreenerBot is a professional-grade trading automation platform designed for serious Solana DeFi traders. Unlike cloud-based solutions, it runs entirely on your local machine, providing:
+ScreenerBot is a professional-grade trading automation platform for Solana DeFi. Unlike cloud-based solutions, it runs entirely on your local machine:
 
-- **Self-Custody Security**: Private keys never leave your computer
-- **Native Performance**: Rust implementation with direct RPC connections
-- **Real-Time Pricing**: Direct pool reserve calculations, not delayed API data
-- **Complete Control**: Full access to raw data, customizable strategies, no platform fees
-
-The system monitors thousands of tokens, evaluates them against configurable criteria, and executes trades automatically based on your strategies.
+| Feature | Benefit |
+|---------|---------|
+| **Self-Custody** | Private keys never leave your computer |
+| **Native Speed** | Rust performance with direct RPC connections |
+| **Real-Time Prices** | Direct pool reserve calculations, not delayed APIs |
+| **Full Control** | Raw data access, custom strategies, no platform fees |
 
 ---
 
 ## Architecture
 
-ScreenerBot employs a service-oriented architecture with 17 independent services orchestrated by a central ServiceManager. Services communicate through well-defined interfaces and are started in dependency order.
+17 independent services orchestrated by a central ServiceManager:
 
 ```
                                     ScreenerBot Architecture
@@ -81,7 +111,7 @@ ScreenerBot employs a service-oriented architecture with 17 independent services
     |                    | |                    | |                    | |   Service    |
     | - Discovery        | | - Database (6 tbl) | | - WebSocket stream | | - Entry eval |
     | - Fetcher (batch)  | | - Market data      | | - Batch processor  | | - Exit eval  |
-    | - Decoders (12)    | | - Security data    | | - Analyzer         | | - Executors  |
+    | - Decoders (11)    | | - Security data    | | - Analyzer         | | - Executors  |
     | - Calculator       | | - Priority updates | | - P&L calculation  | | - Safety     |
     | - Cache            | | - Blacklist        | | - SQLite cache     | | - DCA/Partial|
     +--------------------+ +--------------------+ +--------------------+ +--------------+
@@ -161,11 +191,13 @@ Unified token database with multi-source data aggregation.
 
 ### Transaction Service
 
-Real-time wallet monitoring via WebSocket with DEX classification.
+Real-time wallet monitoring via WebSocket with comprehensive DEX analysis.
 
-- Instant transaction detection
-- Automatic swap identification (Jupiter, Raydium, Orca, Meteora, Pumpfun)
-- P&L calculation per transaction
+- WebSocket streaming for instant detection
+- DEX classification (Jupiter, Raydium, Orca, Meteora, Pumpfun, GMGN, Fluxbeam, Moonshot)
+- Swap detection and P&L calculation
+- ATA operation tracking
+- Position entry/exit verification
 - SQLite caching with connection pooling
 
 ### Position Manager
@@ -257,7 +289,7 @@ Priority-ordered conditions:
 
 ## Dashboard
 
-Web interface at `http://localhost:8080` with 12 feature pages:
+Web interface at `http://localhost:8080` with 12 pages:
 
 - **Home**: Overview, positions, system health
 - **Positions**: Open/closed with P&L tracking
@@ -270,6 +302,7 @@ Web interface at `http://localhost:8080` with 12 feature pages:
 - **Events**: System event log
 - **Services**: Health and metrics
 - **Config**: Hot-reload editor
+- **Initialization**: First-run setup wizard
 
 ---
 
@@ -294,12 +327,44 @@ See full documentation at [screenerbot.io/docs](https://screenerbot.io/docs).
 | Source | Usage |
 |--------|-------|
 | **Solana RPC** | Pool reserves, balances, transactions |
-| **DexScreener** | Market data, pools |
+| **DexScreener** | Market data, pool discovery |
 | **GeckoTerminal** | Alternative market metrics |
 | **Rugcheck** | Security analysis |
-| **Jupiter** | Swap routing |
+| **Jupiter** | Swap routing and quotes |
+| **CoinGecko** | Token metadata |
+| **DefiLlama** | Token prices, DeFi protocols |
 
 All data cached locally in SQLite databases.
+
+---
+
+## Desktop Application
+
+Native desktop application built with **Tauri 2.1** - the same framework behind apps like 1Password and Notion.
+
+### Platform Support
+
+| Platform | Min Version | Package Format |
+|----------|-------------|----------------|
+| **macOS** | 10.13 (High Sierra) | `.app` / `.dmg` |
+| **Windows** | Windows 10 | `.exe` / `.msi` |
+| **Linux** | Ubuntu 18.04+ | `.deb` / `.AppImage` |
+
+### Desktop Features
+
+- **Native Window**: 1400x900 default, 1200x700 minimum, fully resizable
+- **Embedded Dashboard**: Webserver runs locally at `localhost:8080`
+- **Keyboard Shortcuts**: Zoom (Cmd/Ctrl +/-/0), Reload (Cmd/Ctrl + R)
+- **System Integration**: Native title bar, system tray, notifications
+
+### Why Tauri?
+
+| vs Electron | Benefit |
+|-------------|---------|
+| **Memory** | 10x smaller footprint |
+| **Binary Size** | ~10MB vs 150MB+ |
+| **Security** | No bundled Chromium, uses system webview |
+| **Startup** | Near-instant launch |
 
 ---
 
@@ -308,21 +373,33 @@ All data cached locally in SQLite databases.
 ### Prerequisites
 
 - Rust 1.75+
-- Node.js 18+ (optional, for frontend tools)
+- Node.js 18+ (for frontend validation tools)
+- Platform-specific:
+  - **macOS**: Xcode Command Line Tools
+  - **Windows**: Visual Studio Build Tools, WebView2
+  - **Linux**: `libwebkit2gtk-4.0-dev`, `libssl-dev`, `libgtk-3-dev`
 
-### Build
+### Build Options
 
 ```bash
-git clone https://github.com/screenerbot/screenerbot.git
-cd screenerbot
-cargo build
+git clone https://github.com/farfary/ScreenerBot.git
+cd ScreenerBot
+
+# Headless mode (server only)
+cargo build --bin screenerbot
+
+# Desktop application
+cargo tauri build
 ```
 
 ### Run
 
 ```bash
-# Normal mode
+# Headless mode (terminal)
 cargo run --bin screenerbot -- --run
+
+# Desktop application
+cargo tauri dev
 
 # Dry-run (no trades)
 cargo run --bin screenerbot -- --run --dry-run
@@ -330,6 +407,14 @@ cargo run --bin screenerbot -- --run --dry-run
 # With debug logging
 cargo run --bin screenerbot -- --run --debug-rpc
 ```
+
+### Build Artifacts
+
+After `cargo tauri build`:
+
+- **macOS**: `target/release/bundle/macos/ScreenerBot.app`
+- **Windows**: `target/release/bundle/msi/ScreenerBot_*.msi`
+- **Linux**: `target/release/bundle/deb/screenerbot_*.deb`
 
 ---
 
@@ -357,7 +442,7 @@ src/
 
 ## Contributing
 
-Contributions welcome. See our guidelines:
+Contributions welcome:
 
 1. Fork the repository
 2. Create a feature branch
@@ -365,20 +450,17 @@ Contributions welcome. See our guidelines:
 4. Ensure `cargo check --lib` passes
 5. Open a pull request
 
-**Areas for contribution:**
-- DEX decoder implementations
-- Strategy conditions
-- Dashboard improvements
-- Documentation
+**Areas for contribution:** DEX decoders, strategy conditions, dashboard improvements, documentation.
 
 ---
 
 ## Community
 
-- **Telegram**: [t.me/screenerbotio](https://t.me/screenerbotio)
-- **X (Twitter)**: [x.com/screenerbotio](https://x.com/screenerbotio)
-- **Website**: [screenerbot.io](https://screenerbot.io)
-- **Documentation**: [screenerbot.io/docs](https://screenerbot.io/docs)
+<p align="center">
+  <a href="https://t.me/screenerbotio"><img src="https://img.shields.io/badge/Telegram-Join%20Chat-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram"></a>
+  <a href="https://x.com/screenerbotio"><img src="https://img.shields.io/badge/X-Follow-000000?style=for-the-badge&logo=x&logoColor=white" alt="X (Twitter)"></a>
+  <a href="https://screenerbot.io"><img src="https://img.shields.io/badge/Website-screenerbot.io-9945FF?style=for-the-badge" alt="Website"></a>
+</p>
 
 ---
 
@@ -386,8 +468,14 @@ Contributions welcome. See our guidelines:
 
 Proprietary software. License required for operation.
 
-Visit [screenerbot.io/pricing](https://screenerbot.io/pricing) to purchase.
+<p align="center">
+  <a href="https://screenerbot.io/pricing"><img src="https://img.shields.io/badge/Get%20License-screenerbot.io-9945FF?style=for-the-badge" alt="Get License"></a>
+</p>
 
 ---
 
-Built with Rust. Powered by Solana.
+<p align="center">
+  <img src="https://img.shields.io/badge/Built%20with-Rust-000000?style=flat-square&logo=rust&logoColor=white" alt="Rust">
+  <img src="https://img.shields.io/badge/Powered%20by-Solana-9945FF?style=flat-square&logo=solana&logoColor=white" alt="Solana">
+  <img src="https://img.shields.io/badge/Desktop-Tauri-24C8D8?style=flat-square&logo=tauri&logoColor=white" alt="Tauri">
+</p>
