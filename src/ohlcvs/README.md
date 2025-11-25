@@ -324,7 +324,7 @@ cargo test --lib ohlcvs::cache
 cargo test --lib ohlcvs::gaps
 
 # Integration test with API
-cargo run --bin screenerbot -- --dry-run
+cargo run --bin screenerbot
 # Then: curl http://localhost:8080/api/ohlcv/metrics
 ```
 

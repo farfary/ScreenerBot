@@ -396,17 +396,16 @@ cargo tauri build
 
 ```bash
 # Headless mode (terminal)
-cargo run --bin screenerbot -- --run
+cargo run --bin screenerbot
 
 # Desktop application
 cargo tauri dev
 
-# Dry-run (no trades)
-cargo run --bin screenerbot -- --run --dry-run
-
 # With debug logging
-cargo run --bin screenerbot -- --run --debug-rpc
+cargo run --bin screenerbot -- --debug-rpc
 ```
+
+Bot starts automatically - no `--run` flag needed. Trading is controlled via `trader.enabled` in config.
 
 ### Build Artifacts
 
@@ -427,6 +426,7 @@ src/
 +-- connectivity/   # Endpoint health monitoring
 +-- events/         # Event recording system
 +-- filtering/      # Token filtering engine
++-- ohlcvs/         # OHLCV candlestick data (7 timeframes)
 +-- pools/          # Pool service and DEX decoders
 +-- positions/      # Position lifecycle management
 +-- services/       # ServiceManager
