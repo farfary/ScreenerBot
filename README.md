@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/banner.jpg" alt="ScreenerBot Banner" width="100%">
+</p>
+
 # ScreenerBot
 
 **Native Solana Trading Engine**
@@ -5,6 +9,14 @@
 A high-performance, local-first automated trading system for Solana DeFi. Built in Rust for native runtime performance and direct blockchain interaction.
 
 Website: [screenerbot.io](https://screenerbot.io) | Documentation: [screenerbot.io/docs](https://screenerbot.io/docs)
+
+---
+
+### Support Development
+
+If ScreenerBot has been valuable to you, consider supporting development:
+
+**Solana**: `2Nr5M6TngMUPZRyW6yeN4GxLg53JwQSr5XTEMeeoTkMd`
 
 ---
 
@@ -460,12 +472,6 @@ For technical support and questions:
 - Check the [documentation](https://screenerbot.io/docs)
 - Join our [Telegram community](https://t.me/screenerbotio)
 - Contact support at [screenerbot.io/support](https://screenerbot.io/support)
-
-### Donations
-
-If ScreenerBot has been valuable to you, consider supporting development:
-
-**Solana**: `2Nr5M6TngMUPZRyW6yeN4GxLg53JwQSr5XTEMeeoTkMd`
 
 ---
 
