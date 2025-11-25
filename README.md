@@ -308,17 +308,28 @@ Web interface at `http://localhost:8080` with 12 pages:
 
 ## Configuration
 
-Managed through `data/config.toml` with hot-reload support. Key sections:
+Managed through `data/config.toml` with hot-reload support. 16 config sections:
 
-- `[trader]` - Position limits, sizing, dry-run mode
-- `[trader.entry]` - Entry criteria (liquidity, age)
-- `[trader.exit]` - Exit strategies (trailing, ROI, time)
-- `[trader.dca]` - DCA settings
-- `[filtering]` - Token filtering criteria
-- `[swaps]` - Router configuration (Jupiter, GMGN)
-- `[rpc]` - RPC endpoints and rate limiting
+| Section | Purpose |
+|---------|---------|
+| `[trader]` | Position limits, sizing, ROI targets, DCA, trailing stop |
+| `[positions]` | Position tracking, partial exits, cooldowns |
+| `[filtering]` | Token filtering with nested DexScreener/GeckoTerminal/Rugcheck |
+| `[swaps]` | Router configuration (Jupiter, GMGN) |
+| `[tokens]` | Token database, update intervals |
+| `[pools]` | Pool discovery, caching |
+| `[rpc]` | RPC endpoints and rate limiting |
+| `[ohlcv]` | Candlestick data settings |
+| `[strategies]` | Strategy engine configuration |
+| `[wallet]` | Wallet monitoring |
+| `[events]` | Event system settings |
+| `[services]` | Service manager settings |
+| `[monitoring]` | System metrics |
+| `[connectivity]` | Endpoint health monitoring |
+| `[sol_price]` | SOL/USD price service |
+| `[gui]` | Desktop application settings |
 
-See full documentation at [screenerbot.io/docs](https://screenerbot.io/docs).
+Access via `with_config(|cfg| cfg.trader.max_open_positions)`. Hot-reload with `reload_config()`.
 
 ---
 
@@ -355,16 +366,7 @@ Native desktop application built with **Tauri 2.1** - the same framework behind 
 - **Native Window**: 1400x900 default, 1200x700 minimum, fully resizable
 - **Embedded Dashboard**: Webserver runs locally at `localhost:8080`
 - **Keyboard Shortcuts**: Zoom (Cmd/Ctrl +/-/0), Reload (Cmd/Ctrl + R)
-- **System Integration**: Native title bar, system tray, notifications
-
-### Why Tauri?
-
-| vs Electron | Benefit |
-|-------------|---------|
-| **Memory** | 10x smaller footprint |
-| **Binary Size** | ~10MB vs 150MB+ |
-| **Security** | No bundled Chromium, uses system webview |
-| **Startup** | Near-instant launch |
+- **System Integration**: Native title bar, notifications
 
 ---
 
@@ -404,8 +406,6 @@ cargo tauri dev
 # With debug logging
 cargo run --bin screenerbot -- --debug-rpc
 ```
-
-Bot starts automatically - no `--run` flag needed. Trading is controlled via `trader.enabled` in config.
 
 ### Build Artifacts
 
