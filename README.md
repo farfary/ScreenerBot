@@ -23,8 +23,7 @@
 
 <p align="center">
   <a href="https://screenerbot.io">Website</a> |
-  <a href="https://screenerbot.io/docs">Documentation</a> |
-  <a href="https://screenerbot.io/pricing">Get License</a>
+  <a href="https://screenerbot.io/docs">Documentation</a>
 </p>
 
 ---
@@ -34,7 +33,7 @@
 </p>
 
 <p align="center">
-  If this project helps you trade smarter, consider supporting the developer.
+  
 </p>
 
 <p align="center">
@@ -77,7 +76,6 @@ Trading bots written in Python or JavaScript can't match the speed and reliabili
 - [Project Structure](#project-structure)
 - [Contributing](#contributing)
 - [Community](#community)
-- [License](#license)
 
 ---
 
@@ -461,16 +459,6 @@ Contributions welcome:
   <a href="https://t.me/screenerbotio"><img src="https://img.shields.io/badge/Telegram-Join%20Chat-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram"></a>
   <a href="https://x.com/screenerbotio"><img src="https://img.shields.io/badge/X-Follow-000000?style=for-the-badge&logo=x&logoColor=white" alt="X (Twitter)"></a>
   <a href="https://screenerbot.io"><img src="https://img.shields.io/badge/Website-screenerbot.io-9945FF?style=for-the-badge" alt="Website"></a>
-</p>
-
----
-
-## License
-
-Proprietary software. License required for operation.
-
-<p align="center">
-  <a href="https://screenerbot.io/pricing"><img src="https://img.shields.io/badge/Get%20License-screenerbot.io-9945FF?style=for-the-badge" alt="Get License"></a>
 </p>
 
 ---
