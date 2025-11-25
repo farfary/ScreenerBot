@@ -465,7 +465,7 @@ For technical support and questions:
 
 If ScreenerBot has been valuable to you, consider supporting development:
 
-**Solana**: `[Your Solana Address]`
+**Solana**: `2Nr5M6TngMUPZRyW6yeN4GxLg53JwQSr5XTEMeeoTkMd`
 
 ---
 
