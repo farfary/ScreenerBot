@@ -213,10 +213,10 @@ Complete position lifecycle with DCA and partial exit support.
 
 Multi-criteria token evaluation from multiple data sources.
 
-- DexScreener: Liquidity, volume, price change
-- GeckoTerminal: Volume, FDV, reserve ratio
-- Rugcheck: Security risks, authorities, holder distribution
-- Meta: Token age, name patterns
+- DexScreener: Liquidity, volume, price change, transactions, FDV, market cap
+- GeckoTerminal: Liquidity, volume, price change, market cap, reserve
+- Rugcheck: Security risks, authorities, holder distribution, insider detection
+- Meta: Token age, decimals validation, cooldown check
 
 ### Strategy Engine
 
