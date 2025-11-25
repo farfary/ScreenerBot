@@ -54,6 +54,7 @@
 
 <p align="center">
   Cryptocurrency trading involves substantial risk of loss and is not suitable for every investor.<br>
+  This software may contain bugs or issues that could result in financial losses.<br>
   The developers are not responsible for any financial losses incurred through use of this software.<br>
   Trade at your own risk. Never invest more than you can afford to lose.
 </p>
