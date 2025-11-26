@@ -18,7 +18,6 @@ const state = {
   verification: {
     wallet: null,
     rpc: null,
-    license: null,
   },
   errors: [],
 };
@@ -285,8 +284,6 @@ async function runVerification() {
   const walletDetails = $("#wallet-details");
   const rpcStatus = $("#rpc-status");
   const rpcDetails = $("#rpc-details");
-  const licenseStatus = $("#license-status");
-  const licenseDetails = $("#license-details");
 
   try {
     // Call validate API
@@ -326,13 +323,7 @@ async function runVerification() {
     // Small delay for visual effect
     await new Promise((resolve) => setTimeout(resolve, 500));
 
-    // Now complete initialization (which verifies license)
-    if (licenseStatus) {
-      licenseStatus.className = "init-verification-status loading";
-      licenseStatus.innerHTML =
-        '<span class="init-spinner"></span><span>Verifying license...</span>';
-    }
-
+    // Complete initialization
     const completeResult = await completeInitialization();
 
     // Backend returns flat structure with success at top level
@@ -340,35 +331,15 @@ async function runVerification() {
       const errorMsg =
         completeResult.errors?.length > 0
           ? completeResult.errors.join("; ")
-          : "License verification failed";
+          : "Initialization failed";
       throw new Error(errorMsg);
     }
 
-    const licenseData = completeResult.license_status;
-
-    if (licenseData && licenseData.valid) {
-      if (licenseStatus) {
-        licenseStatus.className = "init-verification-status success";
-        licenseStatus.innerHTML = "<span>✓</span><span>License verified successfully</span>";
-      }
-      if (licenseDetails) {
-        licenseDetails.classList.add("show");
-        const tier = licenseData.tier || "Unknown";
-        // Backend uses expiry_ts (UNIX timestamp), format it
-        const expiryDate = licenseData.expiry_ts
-          ? new Date(licenseData.expiry_ts * 1000).toLocaleDateString()
-          : "N/A";
-        licenseDetails.textContent = `Tier: ${tier} | Expires: ${expiryDate}`;
-      }
-
-      // Move to step 3
-      setTimeout(() => {
-        setStep(3);
-        startServicesProgress();
-      }, 1000);
-    } else {
-      throw new Error(licenseData?.reason || "No valid license found");
-    }
+    // Move to step 3
+    setTimeout(() => {
+      setStep(3);
+      startServicesProgress();
+    }, 1000);
   } catch (error) {
     // Show error
     showError(error.message);
@@ -450,7 +421,7 @@ function showError(message) {
   if (errorMessages) errorMessages.textContent = message;
 
   // Set all verification to error state
-  ["wallet-status", "rpc-status", "license-status"].forEach((id) => {
+  ["wallet-status", "rpc-status"].forEach((id) => {
     const el = $(`#${id}`);
     if (el) {
       el.className = "init-verification-status error";
@@ -466,7 +437,7 @@ function hideError() {
 
 function resetVerificationStates() {
   // Reset all verification status indicators
-  ["wallet-status", "rpc-status", "license-status"].forEach((id) => {
+  ["wallet-status", "rpc-status"].forEach((id) => {
     const el = $(`#${id}`);
     if (el) {
       el.className = "init-verification-status";

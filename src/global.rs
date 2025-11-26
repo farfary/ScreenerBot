@@ -11,17 +11,16 @@ pub static STARTUP_TIME: Lazy<DateTime<Utc>> = Lazy::new(|| Utc::now());
 // ================================================================================================
 
 // ──────────────────────────────────────────────────────────────────────────────────────────────
-// 🔐 LICENSE-GATED INITIALIZATION FLAGS
+// 🔐 INITIALIZATION FLAGS
 // ──────────────────────────────────────────────────────────────────────────────────────────────
 
 /// Master initialization gate - all services (except webserver) wait for this flag
-/// Set to true only after: credentials validated + RPC tested + license verified + config saved
+/// Set to true only after: credentials validated + RPC tested + config saved
 pub static INITIALIZATION_COMPLETE: AtomicBool = AtomicBool::new(false);
 
 /// Optional health monitoring flags (for UI/observability, not for gating service startup)
 pub static CREDENTIALS_VALID: AtomicBool = AtomicBool::new(false);
 pub static RPC_VALID: AtomicBool = AtomicBool::new(false);
-pub static LICENSE_VALID: AtomicBool = AtomicBool::new(false);
 
 /// Check if initialization is complete and services can start
 /// This is the single source of truth for service enablement (except webserver)

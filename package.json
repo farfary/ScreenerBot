@@ -1,7 +1,6 @@
 {
   "type": "module",
   "dependencies": {
-    "nft.storage": "^7.2.0",
     "progress": "^2.0.3",
     "sqlite3": "^5.1.7"
   },

@@ -15,10 +15,6 @@ name = "verify_transactions_from_csv"
 path = "../../src/bin/verify_transactions_from_csv.rs"
 
 [[bin]]
-name = "test_license_verification"
-path = "../../src/bin/test_license_verification.rs"
-
-[[bin]]
 name = "analyze_mismatch_patterns"
 path = "../../src/bin/analyze_mismatch_patterns.rs"
 

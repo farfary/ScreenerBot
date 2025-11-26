@@ -5,19 +5,11 @@
 /// blockchain addresses, program IDs, and system-wide configuration.
 
 // ============================================================================
-// LICENSE SYSTEM CONSTANTS (Metaplex NFT-based)
+// SOLANA BLOCKCHAIN & TOKEN CONSTANTS
 // ============================================================================
 
 /// Metaplex Token Metadata Program ID (standard, already deployed)
 pub const METAPLEX_PROGRAM_ID: &str = "metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s";
-
-/// ScreenerBot license issuer (creator/authority for all licenses)
-/// This wallet from config.toml mints and verifies all licenses
-pub const LICENSE_ISSUER_PUBKEY: &str = "8o8yXpESV1JKdZGtWqSRCWownK3RSCUK76LvA3uwC6CZ";
-
-// ============================================================================
-// SOLANA BLOCKCHAIN & TOKEN CONSTANTS
-// ============================================================================
 
 /// SOL token mint address (wrapped SOL = SOL on Solana)
 pub const SOL_MINT: &str = "So11111111111111111111111111111111111111112";

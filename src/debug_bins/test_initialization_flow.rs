@@ -1,8 +1,7 @@
 /// Test initialization flow - mimics the exact flow from webserver initialization
 ///
-/// This tests the complete validation + license verification flow that happens
+/// This tests the complete validation flow that happens
 /// during bot initialization via the web UI.
-use screenerbot::license;
 use screenerbot::logger;
 use screenerbot::rpc;
 use solana_sdk::signature::Keypair;
@@ -18,8 +17,7 @@ async fn main() {
     println!();
 
     // Test credentials - replace with your actual credentials
-    let private_key_str =
-        "YOUR_WALLET_PRIVATE_KEY_BASE58_HERE";
+    let private_key_str = "YOUR_WALLET_PRIVATE_KEY_BASE58_HERE";
     let rpc_urls = vec![
         "https://mainnet.helius-rpc.com/?api-key=YOUR_API_KEY_HERE".to_string(),
     ];
@@ -62,7 +60,7 @@ async fn main() {
         }
     };
 
-    let wallet_address = keypair.pubkey();
+    let _wallet_address = keypair.pubkey();
 
     // ============================================================================
     // STEP 2: Test RPC Endpoints
@@ -145,117 +143,13 @@ async fn main() {
     println!();
 
     // ============================================================================
-    // STEP 3: Verify License
-    // ============================================================================
-    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!("STEP 3: Verify License");
-    println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-    println!();
-
-    println!(
-        "🎫 Verifying ScreenerBot license for wallet: {}",
-        wallet_address
-    );
-    println!(
-        "   Using {} working RPC endpoint(s)",
-        working_endpoints.len()
-    );
-    println!();
-
-    let start = std::time::Instant::now();
-    let license_status = match license::verify_license_for_wallet_with_endpoints(
-        &wallet_address,
-        &working_endpoints,
-    )
-    .await
-    {
-        Ok(status) => {
-            let duration = start.elapsed();
-            println!(
-                "⏱️  License verification completed in {:.2}s",
-                duration.as_secs_f64()
-            );
-            println!();
-            status
-        }
-        Err(e) => {
-            eprintln!("❌ License verification failed: {}", e);
-            return;
-        }
-    };
-
-    // Print license status
-    println!("📊 License Status:");
-    println!(
-        "   Valid: {}",
-        if license_status.valid {
-            "✅ Yes"
-        } else {
-            "❌ No"
-        }
-    );
-
-    if let Some(tier) = &license_status.tier {
-        println!("   Tier: {}", tier);
-    }
-
-    if let Some(mint) = &license_status.mint {
-        println!("   NFT Mint: {}", mint);
-        println!("   Solscan: https://solscan.io/token/{}", mint);
-    }
-
-    if let Some(start_ts) = license_status.start_ts {
-        let start_time = chrono::DateTime::from_timestamp(start_ts as i64, 0)
-            .map(|dt| dt.format("%Y-%m-%d %H:%M:%S UTC").to_string())
-            .unwrap_or_else(|| format!("{}", start_ts));
-        println!("   Start: {}", start_time);
-    }
-
-    if let Some(expiry_ts) = license_status.expiry_ts {
-        let expiry_time = chrono::DateTime::from_timestamp(expiry_ts as i64, 0)
-            .map(|dt| dt.format("%Y-%m-%d %H:%M:%S UTC").to_string())
-            .unwrap_or_else(|| format!("{}", expiry_ts));
-        println!("   Expiry: {}", expiry_time);
-
-        let now = std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
-        let remaining = expiry_ts.saturating_sub(now);
-        let days_remaining = remaining / 86400;
-        println!("   Remaining: {} days", days_remaining);
-    }
-
-    if let Some(reason) = &license_status.reason {
-        println!("   Reason: {}", reason);
-    }
-
-    println!();
-
-    // ============================================================================
     // FINAL RESULT
     // ============================================================================
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-
-    if license_status.valid {
-        println!("✅ INITIALIZATION WOULD SUCCEED");
-        println!();
-        println!("   The bot would successfully initialize with these credentials.");
-        println!("   License is valid and all checks passed.");
-    } else {
-        println!("❌ INITIALIZATION WOULD FAIL");
-        println!();
-        println!(
-            "   Reason: {}",
-            license_status
-                .reason
-                .unwrap_or_else(|| "Unknown".to_string())
-        );
-        println!();
-        println!("   The bot cannot start without a valid license.");
-        println!("   Visit https://screenerbot.io to purchase a license.");
-    }
-
+    println!("✅ INITIALIZATION WOULD SUCCEED");
+    println!();
+    println!("   The bot would successfully initialize with these credentials.");
+    println!("   Wallet is valid and RPC endpoints are working.");
     println!("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
 }
 

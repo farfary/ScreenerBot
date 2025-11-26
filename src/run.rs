@@ -95,53 +95,7 @@ pub async fn run_bot() -> Result<(), String> {
 
         logger::info(LogTag::System, "Configuration loaded successfully");
 
-        // 5. Verify license
-        logger::info(LogTag::System, "🔐 Verifying ScreenerBot license...");
-
-        let wallet_keypair = crate::config::utils::get_wallet_keypair()
-            .map_err(|e| format!("Failed to get wallet keypair: {}", e))?;
-        let wallet_pubkey = wallet_keypair.pubkey();
-
-        let license_status = crate::license::verify_license_for_wallet(&wallet_pubkey)
-            .await
-            .map_err(|e| format!("License verification failed: {}", e))?;
-
-        if !license_status.valid {
-            let reason = license_status.reason.as_deref().unwrap_or("Unknown reason");
-            logger::error(
-                LogTag::System,
-                &format!(
-                    "❌ Invalid license for wallet {}: {}",
-                    wallet_pubkey, reason
-                ),
-            );
-            return Err(format!(
-                "Cannot start bot: Invalid license ({}). Visit https://screenerbot.com to purchase or renew your license.",
-                reason
-            ));
-        }
-
-        logger::info(
-            LogTag::System,
-            &format!(
-                "✅ License verified successfully: tier={}, expiry={}",
-                license_status.tier.as_deref().unwrap_or("Unknown"),
-                license_status
-                    .expiry_ts
-                    .map(|ts| {
-                        use chrono::{DateTime, TimeZone, Utc};
-                        let dt = Utc
-                            .timestamp_opt(ts as i64, 0)
-                            .single()
-                            .map(|dt| dt.format("%Y-%m-%d").to_string())
-                            .unwrap_or_else(|| "N/A".to_string());
-                        dt
-                    })
-                    .unwrap_or_else(|| "N/A".to_string())
-            ),
-        );
-
-        // 6. Validate wallet consistency
+        // 5. Validate wallet consistency
         logger::info(LogTag::System, "🔍 Validating wallet consistency...");
 
         match crate::wallet_validation::WalletValidator::validate_wallet_consistency().await? {

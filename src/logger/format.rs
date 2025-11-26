@@ -197,9 +197,6 @@ fn format_tag(tag: &LogTag) -> ColoredString {
         LogTag::Positions => format!("{:<width$}", "Positions", width = TAG_WIDTH)
             .bright_yellow()
             .bold(),
-        LogTag::License => format!("{:<width$}", "LICENSE", width = TAG_WIDTH)
-            .bright_magenta()
-            .bold(),
         LogTag::Unknown => format!("{:<width$}", "UNKNOWN", width = TAG_WIDTH)
             .white()
             .dimmed(),

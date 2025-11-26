@@ -144,9 +144,6 @@ function createLifecycle() {
     // Update token statistics
     updateTokenStats(data.tokens);
 
-    // Update license info
-    updateLicenseInfo(data.license);
-
     // Update charts
     updateCharts(data);
   }
@@ -298,49 +295,6 @@ function createLifecycle() {
     if (foundWeekEl) animateValue(foundWeekEl, tokens.found_this_week);
     if (foundMonthEl) animateValue(foundMonthEl, tokens.found_this_month);
     if (foundAllTimeEl) animateValue(foundAllTimeEl, tokens.found_all_time);
-  }
-
-  // Update license information
-  function updateLicenseInfo(license) {
-    if (!license) return;
-
-    const statusEl = document.getElementById("licenseStatus");
-    const tierEl = document.getElementById("licenseTier");
-    const daysEl = document.getElementById("licenseDaysRemaining");
-    const mintEl = document.getElementById("licenseMint");
-    const cardEl = document.getElementById("licenseCard");
-
-    if (statusEl) {
-      if (license.valid) {
-        statusEl.innerHTML =
-          '<span class="license-badge valid"><i class="icon-check"></i> VALID</span>';
-        if (cardEl) cardEl.classList.add("valid");
-      } else {
-        statusEl.innerHTML =
-          '<span class="license-badge invalid"><i class="icon-x"></i> INVALID</span>';
-        if (cardEl) cardEl.classList.add("invalid");
-      }
-    }
-
-    if (tierEl) tierEl.textContent = license.tier || "—";
-    if (daysEl) {
-      if (license.days_remaining !== null && license.days_remaining !== undefined) {
-        const days = license.days_remaining;
-        daysEl.textContent = `${days} days`;
-        if (days < 7) daysEl.classList.add("expiring-soon");
-      } else {
-        daysEl.textContent = "—";
-      }
-    }
-    if (mintEl) {
-      if (license.mint) {
-        const shortMint = `${license.mint.slice(0, 8)}...${license.mint.slice(-8)}`;
-        mintEl.textContent = shortMint;
-        mintEl.title = license.mint;
-      } else {
-        mintEl.textContent = "—";
-      }
-    }
   }
 
   // Animate number value changes

@@ -12,7 +12,6 @@ pub mod events;
 pub mod filtering;
 pub mod global;
 pub mod gui;
-pub mod license;
 pub mod logger;
 pub mod ohlcvs;
 pub mod paths;

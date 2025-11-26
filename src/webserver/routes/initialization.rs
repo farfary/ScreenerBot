@@ -13,7 +13,6 @@ use std::sync::Arc;
 use crate::{
     config::{self, schemas::Config},
     global,
-    license::LicenseStatus,
     logger::{self, LogTag},
     rpc::{self, RpcEndpointTestResult},
     services,
@@ -60,7 +59,6 @@ pub struct CompleteInitializationRequest {
 pub struct InitializationCompleteResponse {
     pub success: bool,
     pub wallet_address: String,
-    pub license_status: LicenseStatus,
     pub services_started: usize,
     pub errors: Vec<String>,
 }
@@ -248,7 +246,7 @@ async fn validate_credentials(Json(request): Json<ValidateCredentialsRequest>) -
 }
 
 /// POST /api/initialization/complete
-/// Complete initialization (validate + verify license + persist + start services)
+/// Complete initialization (validate + persist + start services)
 async fn complete_initialization(Json(request): Json<CompleteInitializationRequest>) -> Response {
     logger::info(
         LogTag::Webserver,
@@ -317,57 +315,7 @@ async fn complete_initialization(Json(request): Json<CompleteInitializationReque
         ),
     );
 
-    // Step 3: Verify license
-    logger::info(LogTag::Webserver, "Verifying ScreenerBot license...");
-    let license_status = match crate::license::verify_license_for_wallet_with_endpoints(
-        &wallet_address,
-        &working_rpc_urls,
-    )
-    .await
-    {
-        Ok(status) => status,
-        Err(e) => {
-            errors.push(format!("License verification failed: {}", e));
-            return error_response(
-                StatusCode::BAD_REQUEST,
-                "LICENSE_VERIFICATION_FAILED",
-                &errors.join("; "),
-                None,
-            );
-        }
-    };
-
-    if !license_status.valid {
-        logger::warning(
-            LogTag::Webserver,
-            &format!(
-                "License invalid for wallet {}: {}",
-                wallet_address,
-                license_status.reason.as_deref().unwrap_or("Unknown reason")
-            ),
-        );
-        errors.push(format!(
-            "No valid ScreenerBot license found: {}",
-            license_status.reason.as_deref().unwrap_or("Unknown reason")
-        ));
-        return error_response(
-            StatusCode::FORBIDDEN,
-            "INVALID_LICENSE",
-            &errors.join("; "),
-            Some("Purchase a license at https://screenerbot.com"),
-        );
-    }
-
-    logger::info(
-        LogTag::Webserver,
-        &format!(
-            "License verified: tier={} expiry={}",
-            license_status.tier.as_deref().unwrap_or("Unknown"),
-            license_status.expiry_ts.unwrap_or(0)
-        ),
-    );
-
-    // Step 4: Create and save config
+    // Step 3: Create and save config
     logger::info(LogTag::Webserver, "Creating configuration...");
 
     let config = Config {
@@ -393,14 +341,13 @@ async fn complete_initialization(Json(request): Json<CompleteInitializationReque
 
     logger::info(LogTag::Webserver, "Configuration saved successfully");
 
-    // Step 5: Set credential/license flags (but NOT initialization complete yet)
+    // Step 4: Set credential flags (but NOT initialization complete yet)
     global::CREDENTIALS_VALID.store(true, Ordering::SeqCst);
     global::RPC_VALID.store(true, Ordering::SeqCst);
-    global::LICENSE_VALID.store(true, Ordering::SeqCst);
 
     logger::info(LogTag::Webserver, "Credential validation flags set");
 
-    // Step 6: Set initialization complete flag BEFORE starting services
+    // Step 5: Set initialization complete flag BEFORE starting services
     // (services check this flag in their is_enabled() method)
     global::INITIALIZATION_COMPLETE.store(true, Ordering::SeqCst);
     logger::info(
@@ -408,7 +355,7 @@ async fn complete_initialization(Json(request): Json<CompleteInitializationReque
         "Initialization complete flag set - services can now start",
     );
 
-    // Step 7: Start remaining services
+    // Step 6: Start remaining services
     logger::info(LogTag::Webserver, "Starting services...");
 
     let mut services_started = 0usize;
@@ -469,11 +416,10 @@ async fn complete_initialization(Json(request): Json<CompleteInitializationReque
         }
     }
 
-    // Step 8: Build and return response
+    // Step 7: Build and return response
     let response = InitializationCompleteResponse {
         success: errors.is_empty(),
         wallet_address: wallet_address.to_string(),
-        license_status,
         services_started,
         errors,
     };
