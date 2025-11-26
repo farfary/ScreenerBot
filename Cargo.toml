@@ -3,11 +3,13 @@ name = "screenerbot"
 version = "0.1.0"
 edition = "2021"
 default-run = "screenerbot"
+# Disable automatic binary discovery - we only want the main binary
+# Debug binaries are in src/debug_bins/ (NOT src/bin/ to avoid Tauri bundling them)
+autobins = false
 
-# Workspace optimization for faster builds
-[workspace]
-members = ["."]
-resolver = "2"
+# Note: We do NOT use a [workspace] here because Tauri bundles ALL workspace binaries.
+# Debug binaries are in src/debug_bins/ - Tauri only looks for src/bin/
+# Alternative: use crates/debug-tools/ standalone crate
 
 # Dev profile — fastest possible compile + good debugging
 [profile.dev]
@@ -20,12 +22,12 @@ panic = "abort"          # simpler codegen, faster builds
 debug-assertions = false  # skip extra checks for speed
 overflow-checks = false   # skip integer overflow checks
 
-# Release profile — optimized but still fast to compile
+# Release profile — optimized but FASTER compilation
 [profile.release]
 opt-level = 3         # Full optimizations for runtime speed
 lto = "thin"          # Faster LTO than "fat"
-codegen-units = 1     # Better runtime perf (slower compile, but still reasonable)
-incremental = false   # Avoids some LTO instability
+codegen-units = 16    # More parallelism = faster compile (was 1, very slow!)
+incremental = true    # Enable incremental for faster rebuilds
 debug = false         # Smaller binary, faster link
 panic = "abort"       # Reduces binary size
 strip = "debuginfo"   # Strips symbols except needed for backtraces
@@ -34,7 +36,7 @@ strip = "debuginfo"   # Strips symbols except needed for backtraces
 [profile.fast-release]
 inherits = "release"
 lto = false
-codegen-units = 8
+codegen-units = 16
 opt-level = 2
 
 [lib]
@@ -42,139 +44,19 @@ name = "screenerbot"
 path = "src/lib.rs"
 doctest = false
 
+# Main binary - this is the ONLY binary included in Tauri bundle
 [[bin]]
 name = "screenerbot"
 path = "src/main.rs"
 
-[[bin]]
-name = "debug_decimals"
-path = "src/bin/debug_decimals.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "verify_transactions_from_csv"
-path = "src/bin/verify_transactions_from_csv.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "test_license_verification"
-path = "src/bin/test_license_verification.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "analyze_mismatch_patterns"
-path = "src/bin/analyze_mismatch_patterns.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "analyze_transaction_patterns"
-path = "src/bin/analyze_transaction_patterns.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "debug_coingecko"
-path = "src/bin/debug_coingecko.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "debug_defillama"
-path = "src/bin/debug_defillama.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "debug_dexscreener"
-path = "src/bin/debug_dexscreener.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "debug_events"
-path = "src/bin/debug_events.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "debug_geckoterminal"
-path = "src/bin/debug_geckoterminal.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "debug_jupiter"
-path = "src/bin/debug_jupiter.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "debug_manual_trading"
-path = "src/bin/debug_manual_trading.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "debug_ohlcv"
-path = "src/bin/debug_ohlcv.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "debug_pool_decoders"
-path = "src/bin/debug_pool_decoders.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "debug_positions_semaphore"
-path = "src/bin/debug_positions_semaphore.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "debug_pumpfun_pool"
-path = "src/bin/debug_pumpfun_pool.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "debug_pumpfun_structure"
-path = "src/bin/debug_pumpfun_structure.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "debug_rugcheck"
-path = "src/bin/debug_rugcheck.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "debug_strategies"
-path = "src/bin/debug_strategies.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "debug_tokens"
-path = "src/bin/debug_tokens.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "debug_websocket"
-path = "src/bin/debug_websocket.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "main_sell_all_and_reset"
-path = "src/bin/main_sell_all_and_reset.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "test_bonding_curve_decoder"
-path = "src/bin/test_bonding_curve_decoder.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "test_initialization_flow"
-path = "src/bin/test_initialization_flow.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "test_webserver"
-path = "src/bin/test_webserver.rs"
-required-features = ["debug-tools"]
-
-[[bin]]
-name = "trace_filtering"
-path = "src/bin/trace_filtering.rs"
-required-features = ["debug-tools"]
+# =============================================================================
+# NOTE: Debug/test binaries have been moved to src/debug_bins/
+# Tauri only scans src/bin/ for extra binaries to bundle, so debug_bins/ is ignored.
+# To run a debug binary:
+#   cargo run --bin <name>  # Won't work because autobins=false
+# Instead, add a [[bin]] entry temporarily or use:
+#   cargo build --release -p screenerbot-debug-tools --bin <name>
+# =============================================================================
 
 [dependencies]
 # Core async runtime with minimal features for faster builds
@@ -273,7 +155,7 @@ tauri-build = { version = "2.1", features = [] }
 # Features — keep placeholders but no dependencies by default
 [features]
 default = []
-debug-tools = []  # Enable all debug/test binaries
+# debug-tools feature removed - debug binaries are now in crates/debug-tools
 web = []
 telegram = []
 # Profiling features that can be enabled with --features

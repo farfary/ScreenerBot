@@ -1,0 +1,49 @@
+# ============================================================================
+# Windows-Specific Cargo Configuration for ScreenerBot
+# ============================================================================
+# To use this config on Windows, either:
+#   1. Copy this file to .cargo/config.toml
+#   2. Or set CARGO_HOME to a directory containing this as config.toml
+#
+# Prerequisites:
+#   - OpenSSL 3.x: Download from https://slproweb.com/products/Win32OpenSSL.html
+#   - Visual Studio Build Tools 2022+
+#   - (Optional) LLVM for LLD linker: winget install LLVM.LLVM
+#   - (Optional) sccache: cargo install sccache
+# ============================================================================
+
+[build]
+# Parallel jobs - 16 works well on modern CPUs
+# Reduce to 8-12 if you experience memory issues
+jobs = 16
+
+# sccache is DISABLED by default on Windows
+# It can crash with "os error 10054" when running many parallel jobs
+# If you want to try it, uncomment this line:
+# rustc-wrapper = "sccache"
+
+[target.x86_64-pc-windows-msvc]
+# Native CPU optimizations
+rustflags = ["-C", "target-cpu=native"]
+
+# LLD linker (faster linking) - DISABLED by default
+# To enable:
+#   1. Install LLVM: winget install LLVM.LLVM
+#   2. Uncomment: linker = "lld-link"
+# linker = "lld-link"
+
+[profile.dev.package."*"]
+opt-level = 2
+
+# =============================================================================
+# Environment Variables for Windows
+# =============================================================================
+# Set these in PowerShell before building, or add to System Environment Variables:
+#
+#   $env:OPENSSL_DIR = "C:\Program Files\OpenSSL-Win64"
+#   $env:OPENSSL_LIB_DIR = "C:\Program Files\OpenSSL-Win64\lib\VC\x64\MD"
+#   $env:OPENSSL_INCLUDE_DIR = "C:\Program Files\OpenSSL-Win64\include"
+#
+# Or set permanently:
+#   [Environment]::SetEnvironmentVariable("OPENSSL_DIR", "C:\Program Files\OpenSSL-Win64", "User")
+# =============================================================================

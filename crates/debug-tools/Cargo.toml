@@ -1,0 +1,115 @@
+[package]
+name = "screenerbot-debug-tools"
+version = "0.1.0"
+edition = "2021"
+description = "Debug and testing tools for ScreenerBot"
+publish = false
+
+# All debug binaries - these are NOT included in Tauri bundle
+[[bin]]
+name = "debug_decimals"
+path = "../../src/bin/debug_decimals.rs"
+
+[[bin]]
+name = "verify_transactions_from_csv"
+path = "../../src/bin/verify_transactions_from_csv.rs"
+
+[[bin]]
+name = "test_license_verification"
+path = "../../src/bin/test_license_verification.rs"
+
+[[bin]]
+name = "analyze_mismatch_patterns"
+path = "../../src/bin/analyze_mismatch_patterns.rs"
+
+[[bin]]
+name = "analyze_transaction_patterns"
+path = "../../src/bin/analyze_transaction_patterns.rs"
+
+[[bin]]
+name = "debug_coingecko"
+path = "../../src/bin/debug_coingecko.rs"
+
+[[bin]]
+name = "debug_defillama"
+path = "../../src/bin/debug_defillama.rs"
+
+[[bin]]
+name = "debug_dexscreener"
+path = "../../src/bin/debug_dexscreener.rs"
+
+[[bin]]
+name = "debug_events"
+path = "../../src/bin/debug_events.rs"
+
+[[bin]]
+name = "debug_geckoterminal"
+path = "../../src/bin/debug_geckoterminal.rs"
+
+[[bin]]
+name = "debug_jupiter"
+path = "../../src/bin/debug_jupiter.rs"
+
+[[bin]]
+name = "debug_manual_trading"
+path = "../../src/bin/debug_manual_trading.rs"
+
+[[bin]]
+name = "debug_ohlcv"
+path = "../../src/bin/debug_ohlcv.rs"
+
+[[bin]]
+name = "debug_pool_decoders"
+path = "../../src/bin/debug_pool_decoders.rs"
+
+[[bin]]
+name = "debug_positions_semaphore"
+path = "../../src/bin/debug_positions_semaphore.rs"
+
+[[bin]]
+name = "debug_pumpfun_pool"
+path = "../../src/bin/debug_pumpfun_pool.rs"
+
+[[bin]]
+name = "debug_pumpfun_structure"
+path = "../../src/bin/debug_pumpfun_structure.rs"
+
+[[bin]]
+name = "debug_rugcheck"
+path = "../../src/bin/debug_rugcheck.rs"
+
+[[bin]]
+name = "debug_strategies"
+path = "../../src/bin/debug_strategies.rs"
+
+[[bin]]
+name = "debug_tokens"
+path = "../../src/bin/debug_tokens.rs"
+
+[[bin]]
+name = "debug_websocket"
+path = "../../src/bin/debug_websocket.rs"
+
+[[bin]]
+name = "main_sell_all_and_reset"
+path = "../../src/bin/main_sell_all_and_reset.rs"
+
+[[bin]]
+name = "test_bonding_curve_decoder"
+path = "../../src/bin/test_bonding_curve_decoder.rs"
+
+[[bin]]
+name = "test_initialization_flow"
+path = "../../src/bin/test_initialization_flow.rs"
+
+[[bin]]
+name = "test_webserver"
+path = "../../src/bin/test_webserver.rs"
+
+[[bin]]
+name = "trace_filtering"
+path = "../../src/bin/trace_filtering.rs"
+
+[dependencies]
+# Use the main screenerbot library
+screenerbot = { path = "../.." }

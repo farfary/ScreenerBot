@@ -1,14 +1,55 @@
-# Build configuration for parallel compilation
+# ============================================================================
+# Cargo Build Configuration for ScreenerBot
+# ============================================================================
+# This is the base configuration with platform-specific settings.
+# See: https://doc.rust-lang.org/cargo/reference/config.html
+#
+# Platform-specific config files are available in .cargo/:
+#   - config.windows.toml  (Windows-specific settings)
+#   - config.macos.toml    (macOS-specific settings)  
+#   - config.linux.toml    (Linux-specific settings)
+# ============================================================================
+
+# =============================================================================
+# Build Settings
+# =============================================================================
 [build]
-jobs = 8
-rustc-wrapper = "sccache"
+# Number of parallel jobs - adjust based on your CPU cores
+jobs = 16
 
-# Target-specific optimization for better performance
-[target.x86_64-unknown-linux-gnu]
+# =============================================================================
+# Windows (x86_64-pc-windows-msvc)
+# =============================================================================
+[target.x86_64-pc-windows-msvc]
+# Native CPU optimizations for best performance
 rustflags = ["-C", "target-cpu=native"]
+# Note: sccache can be unstable on Windows with many parallel jobs
+# Note: LLD linker requires LLVM: winget install LLVM.LLVM
+# linker = "lld-link"
 
+# =============================================================================
+# Linux (x86_64-unknown-linux-gnu)
+# =============================================================================
+[target.x86_64-unknown-linux-gnu]
+# Use LLD linker for faster linking (install: sudo apt install lld clang)
+rustflags = ["-C", "target-cpu=native", "-C", "link-arg=-fuse-ld=lld"]
+linker = "clang"
+
+# =============================================================================
+# macOS Intel (x86_64-apple-darwin)
+# =============================================================================
 [target.x86_64-apple-darwin]
 rustflags = ["-C", "target-cpu=native"]
 
+# =============================================================================
+# macOS Apple Silicon (aarch64-apple-darwin)
+# =============================================================================
 [target.aarch64-apple-darwin]
 rustflags = ["-C", "target-cpu=native"]
+
+# =============================================================================
+# Development Optimization
+# =============================================================================
+# Optimize dependencies in dev builds for faster iteration
+[profile.dev.package."*"]
+opt-level = 2

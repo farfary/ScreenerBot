@@ -1,0 +1,61 @@
+# ============================================================================
+# Linux-Specific Cargo Configuration for ScreenerBot
+# ============================================================================
+# To use this config on Linux, either:
+#   1. Copy this file to .cargo/config.toml
+#   2. Or set CARGO_HOME to a directory containing this as config.toml
+#
+# Prerequisites (Ubuntu/Debian):
+#   sudo apt update
+#   sudo apt install build-essential pkg-config libssl-dev clang lld
+#   cargo install sccache
+#
+# Prerequisites (Fedora/RHEL):
+#   sudo dnf install gcc openssl-devel clang lld
+#   cargo install sccache
+#
+# Prerequisites (Arch):
+#   sudo pacman -S base-devel openssl clang lld
+#   cargo install sccache
+# ============================================================================
+
+[build]
+# Parallel jobs - adjust based on CPU cores
+# For servers/workstations with many cores, increase to 16-32
+jobs = 16
+
+# sccache is ENABLED on Linux - works well and speeds up rebuilds significantly
+# Install with: cargo install sccache
+rustc-wrapper = "sccache"
+
+# =============================================================================
+# Linux x86_64 (x86_64-unknown-linux-gnu)
+# =============================================================================
+[target.x86_64-unknown-linux-gnu]
+# Use LLD linker for much faster linking
+# Use clang for better optimization
+rustflags = ["-C", "target-cpu=native", "-C", "link-arg=-fuse-ld=lld"]
+linker = "clang"
+
+# =============================================================================
+# Linux ARM64 (aarch64-unknown-linux-gnu)
+# =============================================================================
+[target.aarch64-unknown-linux-gnu]
+rustflags = ["-C", "target-cpu=native", "-C", "link-arg=-fuse-ld=lld"]
+linker = "clang"
+
+[profile.dev.package."*"]
+opt-level = 2
+
+# =============================================================================
+# Environment Variables for Linux
+# =============================================================================
+# OpenSSL is usually auto-detected on Linux via pkg-config
+# If not, set these environment variables:
+#
+#   export OPENSSL_DIR=/usr
+#   export OPENSSL_LIB_DIR=/usr/lib/x86_64-linux-gnu
+#   export OPENSSL_INCLUDE_DIR=/usr/include/openssl
+#
+# For custom OpenSSL installations, adjust paths accordingly
+# =============================================================================

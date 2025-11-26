@@ -1,0 +1,49 @@
+# ============================================================================
+# macOS-Specific Cargo Configuration for ScreenerBot
+# ============================================================================
+# To use this config on macOS, either:
+#   1. Copy this file to .cargo/config.toml
+#   2. Or set CARGO_HOME to a directory containing this as config.toml
+#
+# Prerequisites:
+#   - Xcode Command Line Tools: xcode-select --install
+#   - OpenSSL: brew install openssl@3
+#   - sccache (recommended): cargo install sccache
+# ============================================================================
+
+[build]
+# Parallel jobs - adjust based on CPU cores
+# M1/M2/M3: 8-10 is usually optimal
+# Intel Mac: 8-16 depending on model
+jobs = 10
+
+# sccache is ENABLED on macOS - works well and speeds up rebuilds significantly
+# Install with: cargo install sccache
+rustc-wrapper = "sccache"
+
+# =============================================================================
+# macOS Intel (x86_64-apple-darwin)
+# =============================================================================
+[target.x86_64-apple-darwin]
+rustflags = ["-C", "target-cpu=native"]
+
+# =============================================================================
+# macOS Apple Silicon (aarch64-apple-darwin)
+# =============================================================================
+[target.aarch64-apple-darwin]
+rustflags = ["-C", "target-cpu=native"]
+
+[profile.dev.package."*"]
+opt-level = 2
+
+# =============================================================================
+# Environment Variables for macOS
+# =============================================================================
+# If using Homebrew OpenSSL, set these before building:
+#
+#   export OPENSSL_DIR=$(brew --prefix openssl@3)
+#   export OPENSSL_LIB_DIR=$(brew --prefix openssl@3)/lib
+#   export OPENSSL_INCLUDE_DIR=$(brew --prefix openssl@3)/include
+#
+# Or add to ~/.zshrc or ~/.bash_profile for persistence
+# =============================================================================

@@ -174,16 +174,19 @@ impl PoolAnalyzer {
                                             }
                                         }
 
+                                        let base_mint_str = descriptor.base_mint.to_string();
+                                        let quote_mint_str = descriptor.quote_mint.to_string();
+                                        let token_mint = if is_sol_mint(&base_mint_str) {
+                                            &quote_mint_str
+                                        } else {
+                                            &base_mint_str
+                                        };
                                         logger::debug(
                                             LogTag::PoolAnalyzer,
                                             &format!(
                                                 "Analyzed pool {} for token {} ({}) - {}/{}",
                                                 pool_id,
-                                                if is_sol_mint(&descriptor.base_mint.to_string()) {
-                                                    &descriptor.quote_mint.to_string()
-                                                } else {
-                                                    &descriptor.base_mint.to_string()
-                                                },
+                                                token_mint,
                                                 descriptor.program_kind.display_name(),
                                                 base_mint,
                                                 quote_mint
