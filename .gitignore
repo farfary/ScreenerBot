@@ -48,7 +48,7 @@ mcp/
 dist/
 analysis-exports/
 docs/
-scripts/
+/scripts/
 public/
 
 # Dependencies
