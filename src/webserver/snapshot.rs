@@ -626,12 +626,14 @@ async fn collect_system_metrics_snapshot(
         sys.refresh_all();
 
         let cpu_system_percent = sys.global_cpu_info().cpu_usage();
-        let system_memory_total_mb = (sys.total_memory() / 1024) as u64;
-        let system_memory_used_mb = (sys.used_memory() / 1024) as u64;
+        // sysinfo returns memory in bytes, convert to MB (bytes / 1024 / 1024)
+        let system_memory_total_mb = (sys.total_memory() / 1024 / 1024) as u64;
+        let system_memory_used_mb = (sys.used_memory() / 1024 / 1024) as u64;
 
         let (process_memory_mb, cpu_process_percent) = match sysinfo::get_current_pid() {
             Ok(pid) => match sys.process(pid) {
-                Some(process) => ((process.memory() / 1024) as u64, process.cpu_usage()),
+                // process.memory() returns bytes, convert to MB
+                Some(process) => ((process.memory() / 1024 / 1024) as u64, process.cpu_usage()),
                 None => (0, 0.0),
             },
             Err(_) => (0, 0.0),

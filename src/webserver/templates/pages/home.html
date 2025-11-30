@@ -1,6 +1,6 @@
 <div class="home-dashboard">
   <!-- Hero Wallet Section - Full Width -->
-  <div class="wallet-section">
+  <section class="wallet-section">
     <div class="wallet-hero">
       <div class="hero-main">
         <div class="hero-label">Current Balance</div>
@@ -23,154 +23,153 @@
         <div class="hero-stat-value" id="walletStartDay">0.00</div>
       </div>
     </div>
-  </div>
+  </section>
 
-  <!-- Left Column: Trader Analytics -->
-  <div class="trader-section">
-    <div class="dashboard-section">
-      <div class="section-header">
-        <h2><i class="icon-bar-chart-2"></i> Trader Analytics</h2>
-        <span class="section-badge" id="traderStatus">ACTIVE</span>
+  <!-- Main Content - 3 Column Layout -->
+  <section class="content-grid">
+    <!-- Column 1: Trader Analytics -->
+    <div class="dashboard-card trader-card">
+      <div class="card-header">
+        <h2><i class="icon-bar-chart-2"></i> Analytics</h2>
+        <span class="status-badge" id="traderStatus">ACTIVE</span>
       </div>
       <div class="period-tabs" id="periodTabs">
         <button type="button" class="period-tab active" data-period="today">Today</button>
         <button type="button" class="period-tab" data-period="yesterday">Yesterday</button>
         <button type="button" class="period-tab" data-period="this_week">Week</button>
         <button type="button" class="period-tab" data-period="this_month">Month</button>
-        <button type="button" class="period-tab" data-period="all_time">All Time</button>
+        <button type="button" class="period-tab" data-period="all_time">All</button>
       </div>
-
-      <!-- Primary Stats: Large 2x2 Grid -->
-      <div class="stats-primary">
-        <div class="stat-card-large">
-          <div class="stat-label">Net P&amp;L</div>
-          <div class="stat-value" id="statNetPnl">0.00</div>
+      <div class="analytics-grid">
+        <div class="analytics-item primary">
+          <span class="analytics-label">Net P&L</span>
+          <span class="analytics-value" id="statNetPnl">0.00</span>
         </div>
-        <div class="stat-card-large">
-          <div class="stat-label">Win Rate</div>
-          <div class="stat-value" id="statWinRate">0%</div>
+        <div class="analytics-item">
+          <span class="analytics-label">Win Rate</span>
+          <span class="analytics-value" id="statWinRate">0%</span>
         </div>
-        <div class="stat-card-large">
-          <div class="stat-label">Profit</div>
-          <div class="stat-value profit" id="statProfit">0.00</div>
+        <div class="analytics-item">
+          <span class="analytics-label">Profit</span>
+          <span class="analytics-value profit" id="statProfit">0.00</span>
         </div>
-        <div class="stat-card-large">
-          <div class="stat-label">Loss</div>
-          <div class="stat-value loss" id="statLoss">0.00</div>
+        <div class="analytics-item">
+          <span class="analytics-label">Loss</span>
+          <span class="analytics-value loss" id="statLoss">0.00</span>
         </div>
       </div>
-
-      <!-- Secondary Stats: Compact 3-Column Grid -->
-      <div class="stats-secondary">
-        <div class="stat-card-small">
-          <div class="stat-label">Buys</div>
-          <div class="stat-value" id="statBuys">0</div>
+      <div class="analytics-secondary">
+        <div class="secondary-stat">
+          <span class="secondary-label">Buys</span>
+          <span class="secondary-value" id="statBuys">0</span>
         </div>
-        <div class="stat-card-small">
-          <div class="stat-label">Sells</div>
-          <div class="stat-value" id="statSells">0</div>
+        <div class="secondary-stat">
+          <span class="secondary-label">Sells</span>
+          <span class="secondary-value" id="statSells">0</span>
         </div>
-        <div class="stat-card-small">
-          <div class="stat-label">Max Drawdown</div>
-          <div class="stat-value" id="statDrawdown">0%</div>
+        <div class="secondary-stat">
+          <span class="secondary-label">Drawdown</span>
+          <span class="secondary-value" id="statDrawdown">0%</span>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- Right Column: Positions, System, Tokens -->
-  <div class="right-column">
-    <!-- Open Positions -->
-    <div class="dashboard-section positions-section">
-      <div class="section-header">
+    <!-- Column 2: Positions -->
+    <div class="dashboard-card positions-card">
+      <div class="card-header">
         <h2><i class="icon-trending-up"></i> Positions</h2>
       </div>
-      <div class="positions-grid">
-        <div class="position-card">
-          <div class="position-label">Count</div>
-          <div class="position-value" id="positionsCount">0</div>
+      <div class="positions-list">
+        <div class="position-row">
+          <span class="position-label">Count</span>
+          <span class="position-value" id="positionsCount">0</span>
         </div>
-        <div class="position-card">
-          <div class="position-label">Invested</div>
-          <div class="position-value" id="positionsInvested">0.00</div>
+        <div class="position-row">
+          <span class="position-label">Invested</span>
+          <span class="position-value" id="positionsInvested">0.00</span>
         </div>
-        <div class="position-card">
-          <div class="position-label">P&amp;L</div>
-          <div class="position-value" id="positionsUnrealizedPnl">0.00</div>
+        <div class="position-row highlight">
+          <span class="position-label">P&L</span>
+          <span class="position-value" id="positionsUnrealizedPnl">0.00</span>
         </div>
-        <div class="position-card">
-          <div class="position-label">P&amp;L %</div>
-          <div class="position-value" id="positionsUnrealizedPercent">0.00%</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- System Metrics -->
-    <div class="dashboard-section system-section">
-      <div class="section-header">
-        <h2><i class="icon-settings"></i> System</h2>
-      </div>
-      <div class="system-grid">
-        <div class="system-card">
-          <div class="system-label">Uptime</div>
-          <div class="system-value" id="systemUptime">0s</div>
-        </div>
-        <div class="system-card">
-          <div class="system-label">Memory</div>
-          <div class="system-value" id="systemMemory">0 MB</div>
-          <div class="system-chart-container">
-            <canvas id="memoryChart"></canvas>
-          </div>
-        </div>
-        <div class="system-card">
-          <div class="system-label">CPU</div>
-          <div class="system-value" id="systemCpu">0%</div>
-          <div class="system-chart-container">
-            <canvas id="cpuChart"></canvas>
-          </div>
+        <div class="position-row">
+          <span class="position-label">P&L %</span>
+          <span class="position-value" id="positionsUnrealizedPercent">0.00%</span>
         </div>
       </div>
     </div>
 
-    <!-- Token Statistics -->
-    <div class="dashboard-section tokens-section">
-      <div class="section-header">
-        <h2><i class="icon-coins"></i> Tokens</h2>
+    <!-- Column 3: System & Tokens -->
+    <div class="right-stack">
+      <!-- System Metrics -->
+      <div class="dashboard-card system-card">
+        <div class="card-header">
+          <h2><i class="icon-cpu"></i> System</h2>
+        </div>
+        <div class="system-metrics">
+          <div class="system-row">
+            <span class="system-label">Uptime</span>
+            <span class="system-value" id="systemUptime">0s</span>
+          </div>
+          <div class="system-row with-chart">
+            <div class="system-info">
+              <span class="system-label">Memory</span>
+              <span class="system-value" id="systemMemory">0 MB</span>
+            </div>
+            <div class="mini-chart"><canvas id="memoryChart"></canvas></div>
+          </div>
+          <div class="system-row with-chart">
+            <div class="system-info">
+              <span class="system-label">CPU</span>
+              <span class="system-value" id="systemCpu">0%</span>
+            </div>
+            <div class="mini-chart"><canvas id="cpuChart"></canvas></div>
+          </div>
+        </div>
       </div>
-      <div class="tokens-grid">
-        <div class="token-stat-card">
-          <div class="token-stat-label">Total</div>
-          <div class="token-stat-value" id="tokensTotal">0</div>
+
+      <!-- Token Statistics -->
+      <div class="dashboard-card tokens-card">
+        <div class="card-header">
+          <h2><i class="icon-coins"></i> Tokens</h2>
         </div>
-        <div class="token-stat-card">
-          <div class="token-stat-label">Priced</div>
-          <div class="token-stat-value" id="tokensWithPrices">0</div>
+        <div class="tokens-stats">
+          <div class="token-row">
+            <span class="token-label">Total</span>
+            <span class="token-value" id="tokensTotal">0</span>
+          </div>
+          <div class="token-row">
+            <span class="token-label">Priced</span>
+            <span class="token-value" id="tokensWithPrices">0</span>
+          </div>
+          <div class="token-row">
+            <span class="token-label">Passed</span>
+            <span class="token-value success" id="tokensPassed">0</span>
+          </div>
+          <div class="token-row">
+            <span class="token-label">Rejected</span>
+            <span class="token-value danger" id="tokensRejected">0</span>
+          </div>
         </div>
-        <div class="token-stat-card">
-          <div class="token-stat-label">Passed</div>
-          <div class="token-stat-value success" id="tokensPassed">0</div>
-        </div>
-        <div class="token-stat-card">
-          <div class="token-stat-label">Rejected</div>
-          <div class="token-stat-value danger" id="tokensRejected">0</div>
-        </div>
-        <div class="token-stat-card">
-          <div class="token-stat-label">Today</div>
-          <div class="token-stat-value" id="tokensFoundToday">0</div>
-        </div>
-        <div class="token-stat-card">
-          <div class="token-stat-label">Week</div>
-          <div class="token-stat-value" id="tokensFoundWeek">0</div>
-        </div>
-        <div class="token-stat-card">
-          <div class="token-stat-label">Month</div>
-          <div class="token-stat-value" id="tokensFoundMonth">0</div>
-        </div>
-        <div class="token-stat-card">
-          <div class="token-stat-label">All Time</div>
-          <div class="token-stat-value" id="tokensFoundAllTime">0</div>
+        <div class="tokens-timeline">
+          <div class="timeline-item">
+            <span class="timeline-label">Today</span>
+            <span class="timeline-value" id="tokensFoundToday">0</span>
+          </div>
+          <div class="timeline-item">
+            <span class="timeline-label">Week</span>
+            <span class="timeline-value" id="tokensFoundWeek">0</span>
+          </div>
+          <div class="timeline-item">
+            <span class="timeline-label">Month</span>
+            <span class="timeline-value" id="tokensFoundMonth">0</span>
+          </div>
+          <div class="timeline-item">
+            <span class="timeline-label">All</span>
+            <span class="timeline-value" id="tokensFoundAllTime">0</span>
+          </div>
         </div>
       </div>
     </div>
-  </div>
+  </section>
 </div>

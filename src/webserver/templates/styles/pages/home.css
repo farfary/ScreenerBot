@@ -1,86 +1,74 @@
-/* Home Dashboard - Complete Redesign for Optimal UX */
+/* Home Dashboard - Compact 3-Column Layout */
 
-/* Main Dashboard Container - 3-Column Layout (Hero full width, then 3 equal columns) */
+/* ===== Layout Variables ===== */
 .home-dashboard {
-  --home-display-font: "Inter", "Segoe UI", sans-serif;
-  --home-data-font: "Inter", "Segoe UI", sans-serif;
-  --home-mono-font: "SFMono-Regular", "JetBrains Mono", monospace;
-  --home-label-spacing: 0.08em;
-  --home-number-spacing: 0.02em;
-  --home-column-gap: clamp(0.75rem, 1.8vw, 1.5rem);
-  --home-side-width: clamp(320px, 32vw, 480px);
+  --home-gap: clamp(0.75rem, 1.5vw, 1.25rem);
+  --home-padding: clamp(0.75rem, 1.5vw, 1.25rem);
+  --card-radius: 10px;
+  --card-padding: 0.875rem;
 
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, var(--home-side-width));
-  grid-auto-rows: minmax(0, auto);
-  align-items: start;
-  gap: var(--home-column-gap);
-  padding: clamp(0.85rem, 1.8vw, 1.5rem);
-  padding-bottom: clamp(4rem, 9vh, 6rem); /* Extra space at bottom for scrolling */
-  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: var(--home-gap);
+  padding: var(--home-padding);
   min-width: 0;
+  width: 100%;
+  overflow-x: hidden;
+}
+
+/* ===== Wallet Hero Section ===== */
+.wallet-section {
   width: 100%;
 }
 
-/* TODO: Wire the live activity feed into this layout once backend endpoint is ready. */
-
-/* Hero Wallet Card - THE Key Metric */
-.wallet-section {
-  grid-column: 1 / -1;
-}
-
 .wallet-hero {
-  background: linear-gradient(135deg, #1565c0 0%, #0f4c81 100%);
-  border-radius: 12px;
-  padding: 1.5rem;
+  background: linear-gradient(135deg, #1565c0 0%, #0d47a1 100%);
+  border-radius: var(--card-radius);
+  padding: 1.25rem 1.5rem;
   color: #fff;
-  box-shadow: 0 4px 12px rgb(0 0 0 / 0.15);
+  box-shadow: 0 4px 12px rgb(0 0 0 / 0.2);
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr 1fr;
-  gap: 2rem;
+  grid-template-columns: minmax(200px, 2fr) repeat(3, minmax(100px, 1fr));
+  gap: 1.5rem;
   align-items: center;
 }
 
 .hero-main {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.25rem;
 }
 
 .hero-label {
-  font-size: clamp(0.75rem, 1.4vw, 0.9rem);
+  font-size: 0.7rem;
   font-weight: 600;
-  opacity: 0.85;
+  opacity: 0.9;
   text-transform: uppercase;
-  letter-spacing: var(--home-label-spacing);
+  letter-spacing: 0.08em;
 }
 
 .hero-balance {
-  font-family: var(--home-display-font);
-  font-size: clamp(2.4rem, 4vw, 3.2rem);
+  font-size: clamp(2rem, 3.5vw, 2.8rem);
   font-weight: 800;
-  line-height: 1.05;
-  letter-spacing: var(--home-number-spacing);
-  text-shadow: 0 2px 4px rgb(0 0 0 / 0.2);
-  font-feature-settings:
-    "tnum" 1,
-    "lnum" 1;
+  line-height: 1.1;
+  letter-spacing: 0.01em;
+  text-shadow: 0 2px 4px rgb(0 0 0 / 0.15);
+  font-feature-settings: "tnum" 1, "lnum" 1;
 }
 
 .hero-change {
   display: flex;
-  gap: 0.75rem;
+  gap: 0.5rem;
   align-items: baseline;
-  font-size: clamp(0.95rem, 1.5vw, 1.15rem);
+  font-size: 0.95rem;
   font-weight: 600;
-  margin-top: 0.25rem;
+  margin-top: 0.125rem;
   font-feature-settings: "tnum" 1;
 }
 
 .hero-change-value {
-  font-family: var(--home-display-font);
-  font-size: clamp(1.1rem, 2vw, 1.4rem);
-  letter-spacing: var(--home-number-spacing);
+  font-size: 1.1rem;
+  letter-spacing: 0.01em;
 }
 
 .hero-change-value.profit,
@@ -95,287 +83,231 @@
 
 .hero-stat {
   text-align: center;
+  padding: 0.5rem;
+  background: rgb(255 255 255 / 0.08);
+  border-radius: 8px;
 }
 
 .hero-stat-label {
-  font-size: clamp(0.7rem, 1vw, 0.8rem);
-  opacity: 0.85;
-  margin-bottom: 0.5rem;
-  padding-bottom: 0.4rem;
+  font-size: 0.65rem;
+  opacity: 0.9;
+  margin-bottom: 0.35rem;
   font-weight: 500;
-  border-bottom: 1px solid rgb(255, 255, 255, 0.15);
-  letter-spacing: var(--home-label-spacing);
+  letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .hero-stat-value {
-  font-family: var(--home-display-font);
-  font-size: clamp(1rem, 1.5vw, 1.3rem);
+  font-size: clamp(1rem, 1.4vw, 1.2rem);
   font-weight: 700;
-  padding-top: 0.2rem;
-  letter-spacing: var(--home-number-spacing);
-  font-feature-settings:
-    "tnum" 1,
-    "lnum" 1;
+  font-feature-settings: "tnum" 1, "lnum" 1;
 }
 
-/* Trader Analytics Section - Full Width */
-.trader-section {
-  grid-column: 1;
-  display: flex;
-  flex-direction: column;
-  gap: clamp(0.75rem, 1.2vw, 1.3rem);
-  align-self: stretch;
+/* ===== Content Grid - 3 Columns ===== */
+.content-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.2fr) minmax(200px, 0.8fr) minmax(240px, 1fr);
+  gap: var(--home-gap);
+  align-items: start;
 }
 
-.dashboard-section {
+/* ===== Dashboard Cards ===== */
+.dashboard-card {
   background: var(--bg-card);
-  border-radius: 8px;
-  padding: 1rem;
+  border-radius: var(--card-radius);
+  padding: var(--card-padding);
   box-shadow: 0 2px 8px var(--shadow-md);
   min-width: 0;
-  overflow: hidden;
-  font-family: var(--home-data-font);
 }
 
-.section-header {
+.card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
-  padding-bottom: 0.75rem;
-  border-bottom: 2px solid var(--border-color);
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
 }
 
-.section-header h2 {
-  font-size: clamp(1.05rem, 1.6vw, 1.3rem);
+.card-header h2 {
+  font-size: 0.95rem;
   font-weight: 700;
   color: var(--text-primary);
   margin: 0;
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  letter-spacing: 0.02em;
+  gap: 0.4rem;
 }
 
-.section-badge {
-  padding: 3px 10px;
-  border-radius: 12px;
-  font-size: 0.7rem;
+.card-header h2 i {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.status-badge {
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.6rem;
   font-weight: 700;
   background: var(--badge-online);
   color: #fff;
-  letter-spacing: var(--home-label-spacing);
+  letter-spacing: 0.06em;
 }
 
-/* Period Tabs */
+/* ===== Period Tabs ===== */
 .period-tabs {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
   flex-wrap: wrap;
 }
 
 .period-tab {
-  padding: 0.5rem 1rem;
-  border: 2px solid var(--border-color);
-  border-radius: 6px;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
   background: var(--bg-secondary);
-  color: var(--text-primary);
-  font-size: 0.82rem;
+  color: var(--text-secondary);
+  font-size: 0.7rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
-  letter-spacing: 0.04em;
+  transition: all 0.15s ease;
 }
 
 .period-tab:hover {
   background: var(--bg-card-hover);
   border-color: var(--link-color);
-  transform: translateY(-1px);
 }
 
 .period-tab.active {
   background: var(--link-color);
   color: #fff;
   border-color: var(--link-color);
-  box-shadow: 0 2px 6px rgb(0, 0, 0, 0.15);
 }
 
-/* Main Trading Stats - 2x2 Grid for Primary Metrics */
-.stats-primary {
+/* ===== Analytics Grid (Trader Card) ===== */
+.analytics-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: clamp(0.75rem, 1.4vw, 1.25rem);
-  margin-bottom: 1rem;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.5rem;
+  margin-bottom: 0.625rem;
 }
 
-.stat-card-large {
+.analytics-item {
   background: var(--bg-secondary);
-  border-radius: 10px;
-  padding: 0.75rem 0.875rem;
-  transition: all 0.2s ease;
-  border: 1px solid rgb(255, 255, 255, 0.06);
-  min-width: 0;
-  display: grid;
-  grid-template-columns: 1fr auto;
+  border-radius: 6px;
+  padding: 0.5rem 0.625rem;
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 0.5rem 0.75rem;
+  border: 1px solid rgb(255 255 255 / 0.04);
+  transition: border-color 0.15s ease;
 }
 
-.stat-card-large:hover {
-  border-color: rgb(59, 130, 246, 0.35);
-  box-shadow: 0 6px 16px rgb(0, 0, 0, 0.25);
-  transform: translateY(-1px);
+.analytics-item:hover {
+  border-color: rgb(59 130 246 / 0.25);
 }
 
-.stat-card-large .stat-label {
-  font-size: clamp(0.72rem, 1vw, 0.82rem);
+.analytics-item.primary {
+  grid-column: 1 / -1;
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, rgb(59 130 246 / 0.08) 100%);
+}
+
+.analytics-label {
+  font-size: 0.68rem;
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: var(--home-label-spacing);
-  padding-right: 0.5rem;
-  border-right: 1px dashed rgb(255, 255, 255, 0.08);
+  letter-spacing: 0.06em;
 }
 
-.stat-card-large .stat-value {
-  font-family: var(--home-display-font);
-  font-size: clamp(1.05rem, 1.8vw, 1.4rem);
+.analytics-value {
+  font-size: 1rem;
   font-weight: 700;
   color: var(--text-primary);
-  line-height: 1.2;
-
-  /* Removed obsolete word-break declaration */
-  justify-self: end;
-  letter-spacing: var(--home-number-spacing);
-  font-feature-settings:
-    "tnum" 1,
-    "lnum" 1;
+  font-feature-settings: "tnum" 1;
   white-space: nowrap;
-  word-break: normal;
 }
 
-.stat-card-large .stat-value.profit {
+.analytics-item.primary .analytics-value {
+  font-size: 1.15rem;
+}
+
+.analytics-value.profit {
   color: var(--badge-online);
 }
 
-.stat-card-large .stat-value.loss {
+.analytics-value.loss {
   color: var(--badge-error);
 }
 
-/* Secondary Trading Stats - Compact Grid */
-.stats-secondary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: clamp(0.65rem, 1vw, 1rem);
+/* ===== Analytics Secondary Stats ===== */
+.analytics-secondary {
+  display: flex;
+  gap: 0.5rem;
 }
 
-.stat-card-small {
+.secondary-stat {
+  flex: 1;
   background: var(--bg-secondary);
-  border-radius: 10px;
-  padding: 0.5rem 0.75rem;
-  transition: all 0.2s ease;
-  min-width: 0;
-  display: grid;
-  grid-template-columns: 1fr auto;
+  border-radius: 5px;
+  padding: 0.4rem 0.5rem;
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 0.25rem 0.5rem;
-  border: 1px solid rgb(255, 255, 255, 0.06);
+  border: 1px solid rgb(255 255 255 / 0.03);
 }
 
-.stat-card-small:hover {
-  background: var(--bg-card-hover);
-  transform: translateY(-1px);
-  border-color: rgb(59, 130, 246, 0.25);
-}
-
-.stat-card-small .stat-label {
-  font-size: clamp(0.68rem, 1vw, 0.78rem);
+.secondary-label {
+  font-size: 0.6rem;
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: var(--home-label-spacing);
-  padding-right: 0.5rem;
-  border-right: 1px dashed rgb(255, 255, 255, 0.07);
+  letter-spacing: 0.05em;
 }
 
-.stat-card-small .stat-value {
-  font-family: var(--home-display-font);
-  font-size: clamp(0.95rem, 1.6vw, 1.2rem);
+.secondary-value {
+  font-size: 0.85rem;
   font-weight: 700;
   color: var(--text-primary);
-  justify-self: end;
-  letter-spacing: var(--home-number-spacing);
   font-feature-settings: "tnum" 1;
-  white-space: nowrap;
-  word-break: normal;
 }
 
-/* Right Column - Full Width with Internal Grid */
-.right-column {
-  grid-column: 2;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--home-column-gap);
-  min-width: 0;
-  overflow: hidden;
-  align-content: start;
+/* ===== Positions Card ===== */
+.positions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
 }
 
-/* Make Tokens section span full width */
-.right-column .tokens-section {
-  grid-column: 1 / -1;
-}
-
-/* Positions Section */
-.positions-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.75rem;
-  min-width: 0;
-}
-
-.position-card {
-  background: var(--bg-secondary);
-  border-radius: 10px;
-  padding: 0.5rem 0.75rem;
-  transition: all 0.2s ease;
-  min-width: 0;
-  display: grid;
-  grid-template-columns: 1fr auto;
+.position-row {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 0.25rem 0.5rem;
-  border: 1px solid rgb(255, 255, 255, 0.06);
-  overflow: hidden;
+  padding: 0.45rem 0.6rem;
+  background: var(--bg-secondary);
+  border-radius: 5px;
+  border: 1px solid rgb(255 255 255 / 0.03);
 }
 
-.position-card:hover {
-  background: var(--bg-card-hover);
-  transform: translateY(-1px);
-  border-color: rgb(59, 130, 246, 0.25);
+.position-row.highlight {
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, rgb(16 185 129 / 0.08) 100%);
 }
 
 .position-label {
-  font-size: clamp(0.68rem, 1vw, 0.78rem);
+  font-size: 0.68rem;
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: var(--home-label-spacing);
-  padding-right: 0.5rem;
-  border-right: 1px dashed rgb(255, 255, 255, 0.07);
+  letter-spacing: 0.05em;
 }
 
 .position-value {
-  font-family: var(--home-display-font);
-  font-size: clamp(0.95rem, 1.6vw, 1.2rem);
+  font-size: 0.95rem;
   font-weight: 700;
   color: var(--text-primary);
-  justify-self: end;
-  letter-spacing: var(--home-number-spacing);
   font-feature-settings: "tnum" 1;
   white-space: nowrap;
-  word-break: normal;
 }
 
 .position-value.profit {
@@ -386,229 +318,224 @@
   color: var(--badge-error);
 }
 
-/* System Section - Compact */
-.system-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.75rem;
-  min-width: 0;
+/* ===== Right Stack (System + Tokens) ===== */
+.right-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--home-gap);
 }
 
-.system-card {
-  background: var(--bg-secondary);
-  border-radius: 10px;
-  padding: 0.5rem 0.75rem;
-  display: grid;
-  grid-template-columns: 1fr auto;
+/* ===== System Card ===== */
+.system-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.system-row {
+  display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 0.25rem 0.5rem;
-  border: 1px solid rgb(255, 255, 255, 0.06);
-  min-width: 0;
-  overflow: hidden;
+  padding: 0.4rem 0.5rem;
+  background: var(--bg-secondary);
+  border-radius: 5px;
+  border: 1px solid rgb(255 255 255 / 0.03);
+}
+
+.system-row.with-chart {
+  flex-wrap: wrap;
+}
+
+.system-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
 }
 
 .system-label {
-  font-size: clamp(0.68rem, 1vw, 0.78rem);
+  font-size: 0.65rem;
   font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: var(--home-label-spacing);
-  padding-right: 0.5rem;
-  border-right: 1px dashed rgb(255, 255, 255, 0.07);
+  letter-spacing: 0.05em;
 }
 
 .system-value {
-  font-family: var(--home-display-font);
-  font-size: clamp(0.95rem, 1.6vw, 1.2rem);
+  font-size: 0.85rem;
   font-weight: 700;
   color: var(--text-primary);
-  justify-self: end;
-  letter-spacing: var(--home-number-spacing);
   font-feature-settings: "tnum" 1;
   white-space: nowrap;
-  word-break: normal;
 }
 
-.system-chart-container {
-  grid-column: 1 / -1;
-  height: 30px;
+.mini-chart {
+  width: 100%;
+  height: 22px;
   margin-top: 0.25rem;
-}
-
-/* Tokens Section - Compact Grid */
-.tokens-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: 0.75rem;
-  min-width: 0;
-}
-
-.token-stat-card {
-  background: var(--bg-secondary);
-  border-radius: 10px;
-  padding: 0.5rem 0.75rem;
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: center;
-  gap: 0.25rem 0.5rem;
-  border: 1px solid rgb(255, 255, 255, 0.06);
-  transition: all 0.2s ease;
-  min-width: 0;
+  position: relative;
   overflow: hidden;
 }
 
-.token-stat-card:hover {
-  background: var(--bg-card-hover);
+.mini-chart canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100% !important;
+  height: 100% !important;
 }
 
-.token-stat-label {
-  font-size: clamp(0.68rem, 1vw, 0.78rem);
+/* ===== Tokens Card ===== */
+.tokens-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+}
+
+.token-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.35rem 0.5rem;
+  background: var(--bg-secondary);
+  border-radius: 5px;
+  border: 1px solid rgb(255 255 255 / 0.03);
+}
+
+.token-label {
+  font-size: 0.6rem;
   font-weight: 600;
   color: var(--text-secondary);
-  margin-bottom: 0.35rem;
-  letter-spacing: var(--home-label-spacing);
   text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-.token-stat-value {
-  font-family: var(--home-display-font);
-  font-size: clamp(1rem, 1.8vw, 1.35rem);
+.token-value {
+  font-size: 0.85rem;
   font-weight: 700;
   color: var(--text-primary);
-  letter-spacing: var(--home-number-spacing);
-  font-feature-settings:
-    "tnum" 1,
-    "lnum" 1;
-  white-space: nowrap;
-  word-break: normal;
+  font-feature-settings: "tnum" 1;
 }
 
-.token-stat-value.success {
+.token-value.success {
   color: var(--badge-online);
 }
 
-.token-stat-value.danger {
+.token-value.danger {
   color: var(--badge-error);
 }
 
-/* Animations */
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
+.tokens-timeline {
+  display: flex;
+  gap: 0.25rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border-color);
+}
 
-  50% {
-    opacity: 0.6;
+.timeline-item {
+  flex: 1;
+  text-align: center;
+  padding: 0.3rem 0.25rem;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+}
+
+.timeline-label {
+  display: block;
+  font-size: 0.55rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 0.15rem;
+}
+
+.timeline-value {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-feature-settings: "tnum" 1;
+}
+
+/* ===== Responsive Design ===== */
+@media (width <= 1280px) {
+  .content-grid {
+    grid-template-columns: minmax(260px, 1.1fr) minmax(180px, 0.9fr) minmax(220px, 1fr);
   }
 }
 
-/* Responsive Design */
-@media (width <= 1480px) {
-  .home-dashboard {
-    --home-side-width: clamp(280px, 36vw, 360px);
+@media (width <= 1100px) {
+  .content-grid {
+    grid-template-columns: 1fr 1fr;
   }
 
-  .right-column {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .right-column .tokens-section {
-    grid-column: 1;
+  .right-stack {
+    grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--home-gap);
   }
 }
 
-@media (width <= 1200px) {
-  .home-dashboard {
-    grid-template-columns: minmax(0, 1fr);
-
-    --home-side-width: 100%;
+@media (width <= 800px) {
+  .wallet-hero {
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
   }
 
-  .wallet-section,
-  .trader-section,
-  .right-column {
+  .hero-main {
     grid-column: 1 / -1;
   }
 
-  .right-column {
-    grid-template-columns: minmax(0, 1fr);
+  .content-grid {
+    grid-template-columns: 1fr;
   }
 
-  .wallet-hero {
-    grid-template-columns: 2fr 1fr 1fr;
-    gap: 1.5rem;
-  }
-
-  .hero-stat:last-child {
-    display: none;
+  .right-stack {
+    grid-template-columns: 1fr;
   }
 }
 
-@media (width <= 900px) {
-  .wallet-hero {
-    grid-template-columns: 1fr;
-    gap: 1rem;
-    padding: 1.25rem;
+@media (width <= 500px) {
+  .home-dashboard {
+    --home-gap: 0.625rem;
+    --home-padding: 0.625rem;
+    --card-padding: 0.75rem;
   }
 
-  .hero-balance {
-    font-size: 2.5rem;
+  .wallet-hero {
+    grid-template-columns: 1fr;
+    padding: 1rem;
   }
 
   .hero-stat {
     display: none;
   }
 
-  .stats-primary {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (width <= 600px) {
-  .home-dashboard {
-    padding: 0.75rem;
-    gap: 0.75rem;
+  .hero-stat:first-of-type {
+    display: block;
+    grid-column: 1 / -1;
   }
 
-  .wallet-hero {
-    padding: 1rem;
-  }
-
-  .hero-balance {
-    font-size: 2rem;
-  }
-
-  .stats-secondary {
+  .analytics-grid {
     grid-template-columns: 1fr;
   }
 
-  .stat-card-large .stat-value {
-    font-size: 1.5rem;
+  .analytics-secondary {
+    flex-direction: column;
   }
 
-  .position-value {
-    font-size: 1.25rem;
-  }
-
-  .positions-grid,
-  .system-grid,
-  .tokens-grid {
+  .tokens-stats {
     grid-template-columns: 1fr;
   }
 
-  .period-tabs {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    padding-bottom: 0.25rem;
-    scrollbar-width: thin;
+  .tokens-timeline {
+    flex-wrap: wrap;
   }
 
-  .period-tabs::-webkit-scrollbar {
-    height: 6px;
-  }
-
-  .period-tab {
-    flex: 0 0 auto;
+  .timeline-item {
+    flex: 1 1 45%;
   }
 }
