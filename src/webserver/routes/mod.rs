@@ -25,6 +25,7 @@ pub mod tokens;
 pub mod trader;
 pub mod trading;
 pub mod transactions;
+pub mod updates;
 pub mod wallet;
 
 pub fn create_router(state: Arc<AppState>) -> Router {
@@ -42,6 +43,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/strategies", axum::routing::get(strategies_page))
         .route("/trader", axum::routing::get(trader_page))
         .route("/initialization", axum::routing::get(initialization_page))
+        .route("/updates", axum::routing::get(updates_page))
         .route("/scripts/core/:file", axum::routing::get(get_core_script))
         .route("/scripts/pages/:file", axum::routing::get(get_page_script))
         .route("/scripts/ui/:file", axum::routing::get(get_ui_script))
@@ -135,6 +137,12 @@ async fn initialization_page() -> Html<String> {
     ))
 }
 
+/// Updates page handler
+async fn updates_page() -> Html<String> {
+    let content = templates::updates_content();
+    Html(templates::base_template("Updates", "updates", &content))
+}
+
 fn api_routes() -> Router<Arc<AppState>> {
     Router::new()
         .merge(status::routes())
@@ -157,6 +165,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .nest("/system", system::routes())
         .nest("/transactions", transactions::routes())
         .nest("/strategies", strategies::routes())
+        .merge(updates::routes())
         .route("/pages/:page", axum::routing::get(get_page_content))
 }
 
@@ -241,6 +250,7 @@ async fn get_page_script(axum::extract::Path(file): axum::extract::Path<String>)
         "trader.js" => Some(templates::TRADER_PAGE_SCRIPT),
         "wallet.js" => Some(templates::WALLET_PAGE_SCRIPT),
         "initialization.js" => Some(templates::INITIALIZATION_PAGE_SCRIPT),
+        "updates.js" => Some(templates::UPDATES_PAGE_SCRIPT),
         _ => None,
     };
 

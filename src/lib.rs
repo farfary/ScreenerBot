@@ -31,6 +31,7 @@ pub mod tokens;
 pub mod trader;
 pub mod transactions;
 pub mod utils;
+pub mod version;
 pub mod wallet;
 pub mod wallet_validation;
 pub mod webserver;
