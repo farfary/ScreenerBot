@@ -278,7 +278,9 @@ function updateBotCard(trader) {
       : `${trader.today_pnl_sol.toFixed(3)} SOL`;
 
   pnl.textContent = pnlText;
-  pnl.className = `card-value ${trader.today_pnl_sol >= 0 ? "positive" : "negative"}`;
+  // Use classList to avoid className replacement flash
+  pnl.classList.remove("positive", "negative");
+  pnl.classList.add(trader.today_pnl_sol >= 0 ? "positive" : "negative");
 }
 
 function updateWalletCard(wallet) {
@@ -300,7 +302,9 @@ function updateWalletCard(wallet) {
         : `↓${Math.abs(wallet.change_24h_percent).toFixed(1)}%`;
 
     change.textContent = changeText;
-    change.className = `card-change ${wallet.change_24h_percent >= 0 ? "positive" : "negative"}`;
+    // Use classList to avoid className replacement flash
+    change.classList.remove("positive", "negative");
+    change.classList.add(wallet.change_24h_percent >= 0 ? "positive" : "negative");
   }
 
   // Update token count

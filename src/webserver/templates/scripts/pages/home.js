@@ -187,7 +187,7 @@ function createLifecycle() {
     if (!wallet) return;
 
     const balanceEl = document.getElementById("walletBalance");
-    const changeEl = document.getElementById("walletChange");
+    const changeEl = document.getElementById("homeWalletChange");
     const tokensEl = document.getElementById("walletTokens");
     const tokensWorthEl = document.getElementById("walletTokensWorth");
     const startDayEl = document.getElementById("walletStartDay");

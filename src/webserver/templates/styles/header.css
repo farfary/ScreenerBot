@@ -138,6 +138,16 @@
   color: var(--text-primary, #fff);
 }
 
+.card-value.positive {
+  font-size: 18px;
+  color: #10b981;
+}
+
+.card-value.negative {
+  font-size: 18px;
+  color: #ef4444;
+}
+
 .card-change {
   font-size: 13px;
   font-weight: 600;
@@ -147,11 +157,13 @@
 }
 
 .card-change.positive {
+  font-size: 13px;
   color: #10b981;
   background: rgba(16, 185, 129, 0.15);
 }
 
 .card-change.negative {
+  font-size: 13px;
   color: #ef4444;
   background: rgba(239, 68, 68, 0.15);
 }
