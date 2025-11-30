@@ -1,12 +1,13 @@
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use once_cell::sync::Lazy;
 use serde_json::json;
-use tokio::sync::RwLock;
+use tokio::sync::{Mutex, RwLock};
 
 use crate::events::{record_filtering_event, Severity};
 use crate::logger::{self, LogTag};
@@ -23,103 +24,92 @@ use super::types::{
 static GLOBAL_STORE: Lazy<Arc<FilteringStore>> = Lazy::new(|| Arc::new(FilteringStore::new()));
 
 // Timing constants
-const FILTER_CACHE_TTL_SECS: u64 = 30;
+const FILTER_CACHE_TTL_SECS: u64 = 60; // Increased from 30s to reduce refresh frequency
 const STALE_MULTIPLIER: u64 = 3;
 const TOKENS_TAB_MAX_PAGE_SIZE: usize = 200;
 const TOKENS_TAB_RECENT_TOKEN_HOURS: i64 = 24;
 
 pub struct FilteringStore {
     snapshot: RwLock<Option<Arc<FilteringSnapshot>>>,
+    /// Prevents multiple concurrent refresh operations
+    refresh_in_progress: AtomicBool,
+    /// Mutex to serialize refresh attempts
+    refresh_lock: Mutex<()>,
 }
 
 impl FilteringStore {
     fn new() -> Self {
         Self {
             snapshot: RwLock::new(None),
+            refresh_in_progress: AtomicBool::new(false),
+            refresh_lock: Mutex::new(()),
         }
     }
 
+    /// Non-blocking snapshot access - returns cached snapshot immediately if available,
+    /// or triggers background refresh if stale. Never blocks waiting for refresh.
     async fn ensure_snapshot(&self) -> Result<Arc<FilteringSnapshot>, String> {
         let max_age = FILTER_CACHE_TTL_SECS;
         let stale_snapshot = self.snapshot.read().await.clone();
 
+        // If we have any snapshot (even stale), return it immediately
         if let Some(existing) = stale_snapshot.as_ref() {
-            if !is_snapshot_stale(existing, max_age) {
-                // DEBUG: Record cache hit (sampled)
-                if existing.filtered_mints.len() % 50 == 0 {
-                    let age_secs = snapshot_age_secs(existing.as_ref());
-                    let passed_count = existing.filtered_mints.len();
-                    tokio::spawn(async move {
-                        record_filtering_event(
-                            "snapshot_cache_hit",
-                            Severity::Debug,
-                            None,
-                            None,
-                            json!({
-                                "age_secs": age_secs,
-                                "passed_count": passed_count,
-                            }),
-                        )
-                        .await
-                    });
-                }
-                return Ok(existing.clone());
+            let is_stale = is_snapshot_stale(existing, max_age);
+            
+            // Trigger background refresh if stale and not already refreshing
+            if is_stale && !self.refresh_in_progress.load(AtomicOrdering::Relaxed) {
+                let store = global_store();
+                tokio::spawn(async move {
+                    let _ = store.try_refresh_background().await;
+                });
             }
+            
+            return Ok(existing.clone());
         }
 
-        match self.try_refresh().await {
-            Ok(snapshot) => Ok(snapshot),
-            Err(err) => {
-                if let Some(existing) = stale_snapshot {
-                    let age_secs = snapshot_age_secs(existing.as_ref());
-                    logger::info(
-                        LogTag::Filtering,
-                        &format!(
-                            "refresh_failed={} using_stale_snapshot age_secs={}",
-                            err, age_secs
-                        ),
-                    );
-
-                    // WARN: Record using stale snapshot
-                    let err_clone = err.clone();
-                    tokio::spawn(async move {
-                        record_filtering_event(
-                            "snapshot_using_stale",
-                            Severity::Warn,
-                            None,
-                            None,
-                            json!({
-                                "error": err_clone,
-                                "age_secs": age_secs,
-                            }),
-                        )
-                        .await
-                    });
-
-                    Ok(existing)
-                } else {
-                    // ERROR: Record no snapshot available
-                    let err_clone = err.clone();
-                    tokio::spawn(async move {
-                        record_filtering_event(
-                            "snapshot_unavailable",
-                            Severity::Error,
-                            None,
-                            None,
-                            json!({
-                                "error": err_clone,
-                            }),
-                        )
-                        .await
-                    });
-
-                    Err(err)
-                }
-            }
+        // No snapshot exists - must wait for first refresh
+        // But use a timeout to avoid blocking indefinitely
+        match tokio::time::timeout(Duration::from_secs(30), self.try_refresh()).await {
+            Ok(Ok(snapshot)) => Ok(snapshot),
+            Ok(Err(err)) => Err(err),
+            Err(_) => Err("Snapshot refresh timed out after 30 seconds".to_string()),
         }
     }
 
+    /// Background refresh - doesn't block, logs errors instead of returning them
+    async fn try_refresh_background(&self) -> Result<(), String> {
+        // Check if refresh is already in progress
+        if self.refresh_in_progress.swap(true, AtomicOrdering::SeqCst) {
+            logger::debug(LogTag::Filtering, "Skipping refresh - already in progress");
+            return Ok(());
+        }
+
+        let result = self.try_refresh_inner().await;
+        self.refresh_in_progress.store(false, AtomicOrdering::SeqCst);
+        
+        if let Err(ref err) = result {
+            logger::warning(LogTag::Filtering, &format!("Background refresh failed: {}", err));
+        }
+        
+        result.map(|_| ())
+    }
+
     async fn try_refresh(&self) -> Result<Arc<FilteringSnapshot>, String> {
+        // Acquire refresh lock to prevent concurrent refreshes
+        let _guard = self.refresh_lock.lock().await;
+        
+        // Check again if snapshot is still stale (another refresh might have completed)
+        let existing = self.snapshot.read().await.clone();
+        if let Some(ref snapshot) = existing {
+            if !is_snapshot_stale(snapshot, FILTER_CACHE_TTL_SECS) {
+                return Ok(snapshot.clone());
+            }
+        }
+
+        self.try_refresh_inner().await
+    }
+
+    async fn try_refresh_inner(&self) -> Result<Arc<FilteringSnapshot>, String> {
         let config = crate::config::with_config(|cfg| cfg.filtering.clone());
         let previous_snapshot = {
             let guard = self.snapshot.read().await;

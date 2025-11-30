@@ -1,7 +1,10 @@
 use chrono::{DateTime, Utc};
+use once_cell::sync::Lazy;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;
+use std::sync::RwLock;
+use std::time::{Duration, Instant};
 use sysinfo::System;
 use tokio::task::spawn_blocking;
 
@@ -20,6 +23,18 @@ use crate::{
 
 const MAX_WALLET_TOKENS: usize = 128;
 const MAX_PENDING_QUEUE_SAMPLE: usize = 10;
+
+/// Cache duration for system metrics (expensive sysinfo calls)
+const SYSTEM_METRICS_CACHE_SECS: u64 = 5;
+
+/// Cached system metrics to avoid expensive sysinfo calls on every request
+struct CachedSystemMetrics {
+    metrics: SystemMetricsSnapshot,
+    last_updated: Instant,
+}
+
+static SYSTEM_METRICS_CACHE: Lazy<RwLock<Option<CachedSystemMetrics>>> =
+    Lazy::new(|| RwLock::new(None));
 
 #[derive(Clone, Copy, Debug, Default)]
 struct RpcMetricsSummary {
@@ -578,10 +593,35 @@ impl ServiceStateSnapshot {
     }
 }
 
+/// Get cached system metrics for dashboard endpoints
+/// Uses the same 5-second cache as collect_system_metrics_snapshot
+pub async fn get_cached_system_metrics() -> SystemMetricsSnapshot {
+    collect_system_metrics_snapshot(None).await
+}
+
 async fn collect_system_metrics_snapshot(
     rpc_metrics: Option<RpcMetricsSummary>,
 ) -> SystemMetricsSnapshot {
-    spawn_blocking(move || {
+    // Check cache first
+    {
+        let cache = SYSTEM_METRICS_CACHE.read().unwrap();
+        if let Some(ref cached) = *cache {
+            if cached.last_updated.elapsed() < Duration::from_secs(SYSTEM_METRICS_CACHE_SECS) {
+                // Return cached metrics with updated RPC stats
+                let mut metrics = cached.metrics.clone();
+                if let Some(rpc) = rpc_metrics {
+                    metrics.rpc_calls_total = rpc.total_calls;
+                    metrics.rpc_calls_failed = rpc.total_errors;
+                    metrics.rpc_success_rate = rpc.success_rate;
+                    metrics.rpc_calls_per_minute_recent = rpc.recent_calls_per_minute;
+                }
+                return metrics;
+            }
+        }
+    }
+
+    // Cache miss or stale - compute fresh metrics
+    let fresh_metrics = spawn_blocking(move || {
         let mut sys = System::new_all();
         sys.refresh_all();
 
@@ -601,18 +641,6 @@ async fn collect_system_metrics_snapshot(
             .map(|n| n.get())
             .unwrap_or(1);
 
-        let (rpc_calls_total, rpc_calls_failed, rpc_success_rate, rpc_calls_per_minute_recent) =
-            rpc_metrics
-                .map(|summary| {
-                    (
-                        summary.total_calls,
-                        summary.total_errors,
-                        summary.success_rate,
-                        summary.recent_calls_per_minute,
-                    )
-                })
-                .unwrap_or((0, 0, 100.0, 0.0));
-
         SystemMetricsSnapshot {
             memory_usage_mb: system_memory_used_mb,
             cpu_usage_percent: cpu_system_percent,
@@ -622,14 +650,34 @@ async fn collect_system_metrics_snapshot(
             cpu_system_percent,
             cpu_process_percent,
             active_threads: thread_count,
-            rpc_calls_total,
-            rpc_calls_failed,
-            rpc_success_rate,
-            rpc_calls_per_minute_recent,
+            rpc_calls_total: 0,
+            rpc_calls_failed: 0,
+            rpc_success_rate: 100.0,
+            rpc_calls_per_minute_recent: 0.0,
         }
     })
     .await
-    .unwrap_or_default()
+    .unwrap_or_default();
+
+    // Update cache
+    {
+        let mut cache = SYSTEM_METRICS_CACHE.write().unwrap();
+        *cache = Some(CachedSystemMetrics {
+            metrics: fresh_metrics.clone(),
+            last_updated: Instant::now(),
+        });
+    }
+
+    // Apply RPC metrics
+    let mut result = fresh_metrics;
+    if let Some(rpc) = rpc_metrics {
+        result.rpc_calls_total = rpc.total_calls;
+        result.rpc_calls_failed = rpc.total_errors;
+        result.rpc_success_rate = rpc.success_rate;
+        result.rpc_calls_per_minute_recent = rpc.recent_calls_per_minute;
+    }
+
+    result
 }
 
 async fn collect_wallet_snapshot() -> Option<WalletStatusSnapshot> {

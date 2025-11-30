@@ -10,6 +10,7 @@ use crate::rpc::get_global_rpc_stats;
 use crate::tokens::cleanup::get_blacklist_summary;
 use crate::tokens::database::get_global_database;
 use crate::wallet::get_current_wallet_status;
+use crate::webserver::snapshot::get_cached_system_metrics;
 use crate::webserver::state::AppState;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -204,15 +205,12 @@ async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<Dash
     let uptime_seconds = state.uptime_seconds();
     let uptime_formatted = format_uptime(uptime_seconds);
 
-    // Get system metrics (simplified version)
-    let mut sys = sysinfo::System::new_all();
-    sys.refresh_all();
+    // Get cached system metrics (5s cache, non-blocking)
+    let cached_metrics = get_cached_system_metrics().await;
 
-    let memory_mb = (sys.used_memory() as f64) / 1024.0 / 1024.0;
-    let cpu_percent = sys.global_cpu_info().cpu_usage() as f64;
-    let active_threads = std::thread::available_parallelism()
-        .map(|n| n.get())
-        .unwrap_or(1);
+    let memory_mb = cached_metrics.system_memory_used_mb as f64;
+    let cpu_percent = cached_metrics.cpu_system_percent as f64;
+    let active_threads = cached_metrics.active_threads;
 
     let system_info = SystemInfo {
         all_services_ready,
@@ -540,17 +538,20 @@ async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<HomeDash
         unrealized_pnl_percent,
     };
 
-    // Get system metrics
+    // Get system metrics (cached, non-blocking)
     let uptime_seconds = state.uptime_seconds();
     let uptime_formatted = format_uptime(uptime_seconds);
 
-    let mut sys = sysinfo::System::new_all();
-    sys.refresh_all();
+    let cached_metrics = get_cached_system_metrics().await;
 
-    let memory_mb = (sys.used_memory() as f64) / 1024.0 / 1024.0;
-    let memory_total_mb = (sys.total_memory() as f64) / 1024.0 / 1024.0;
-    let memory_percent = (memory_mb / memory_total_mb) * 100.0;
-    let cpu_percent = sys.global_cpu_info().cpu_usage() as f64;
+    let memory_mb = cached_metrics.system_memory_used_mb as f64;
+    let memory_total_mb = cached_metrics.system_memory_total_mb as f64;
+    let memory_percent = if memory_total_mb > 0.0 {
+        (memory_mb / memory_total_mb) * 100.0
+    } else {
+        0.0
+    };
+    let cpu_percent = cached_metrics.cpu_system_percent as f64;
 
     // Generate simple history for charts (last 20 data points)
     let cpu_history = vec![cpu_percent; 20];
