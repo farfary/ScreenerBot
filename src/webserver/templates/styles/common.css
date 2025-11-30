@@ -7,17 +7,83 @@
   flex: 1 1 auto;
   min-height: 0;
   height: 100%;
-  padding: 10px;
-  gap: 8px;
+  padding: var(--spacing-sm);
+  gap: var(--spacing-sm);
   min-width: 0;
   overflow-x: hidden;
 }
 
 /* Content Page Pattern: Standard scrolling content */
 .page-content {
-  padding: 10px;
+  padding: var(--spacing-lg);
   flex: 1 1 auto;
   overflow: hidden auto;
   min-height: 0;
   min-width: 0;
+  background: var(--bg-primary);
+}
+
+/* DESKTOP APP PATTERNS ------------------------------------------ */
+
+/* Section Pattern: Full-width sections with dividers */
+.page-section {
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.page-section:last-child {
+  border-bottom: none;
+}
+
+/* Section Header: Consistent header with title and optional actions */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.section-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.section-title i {
+  font-size: 1em;
+  color: var(--link-color);
+}
+
+/* Split Layout Pattern: Sidebar + Main Content */
+.page-split {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.page-split-sidebar {
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  overflow-y: auto;
+  padding: var(--spacing-lg);
+}
+
+.page-split-main {
+  overflow-y: auto;
+  padding: var(--spacing-lg);
+}
+
+/* Grid Layout Pattern: Multi-column responsive grid */
+.page-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--spacing-lg);
+  padding: var(--spacing-lg);
 }

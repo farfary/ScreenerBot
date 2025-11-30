@@ -160,9 +160,26 @@
           </button>
 
           <!-- Settings -->
-          <button class="header-action-btn" id="settingsBtn" aria-label="Settings">
-            <i class="action-icon icon-settings"></i>
-          </button>
+          <div class="header-action-dropdown">
+            <button class="header-action-btn" id="settingsBtn" aria-label="Settings">
+              <i class="action-icon icon-settings"></i>
+            </button>
+            <div class="dropdown-menu" id="settingsDropdown" data-align="right">
+              <div class="dropdown-item" data-action="config">
+                <i class="icon icon-sliders"></i>
+                <span class="label">Settings</span>
+              </div>
+              <div class="dropdown-item" data-action="updates">
+                <i class="icon icon-download"></i>
+                <span class="label">Check for Updates</span>
+              </div>
+              <div class="dropdown-divider"></div>
+              <div class="dropdown-item" data-action="about">
+                <i class="icon icon-info"></i>
+                <span class="label">About ScreenerBot</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 

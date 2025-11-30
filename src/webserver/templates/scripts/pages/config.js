@@ -1000,7 +1000,7 @@ function renderSectionSummary(metadata) {
     );
   }
   if (!summaryItems.length) {
-    summaryItems.push("<span class=\"config-summary-badge\">No metadata summary</span>");
+    summaryItems.push('<span class="config-summary-badge">No metadata summary</span>');
   }
   return summaryItems.join("\n");
 }

@@ -194,11 +194,17 @@ class RequestManager {
           }
 
           // Check if this is a connection error and we should retry
-          if (retryOnConnectionError && this._isConnectionError(error) && retryCount < MAX_CONNECTION_RETRIES) {
+          if (
+            retryOnConnectionError &&
+            this._isConnectionError(error) &&
+            retryCount < MAX_CONNECTION_RETRIES
+          ) {
             this.activeCount--;
             // Wait before retry (progressive delay)
             const retryDelay = CONNECTION_RETRY_DELAY_MS * (retryCount + 1);
-            console.debug(`[RequestManager] Connection failed for ${endpoint}, retry ${retryCount + 1}/${MAX_CONNECTION_RETRIES} in ${retryDelay}ms`);
+            console.debug(
+              `[RequestManager] Connection failed for ${endpoint}, retry ${retryCount + 1}/${MAX_CONNECTION_RETRIES} in ${retryDelay}ms`
+            );
             await new Promise((r) => setTimeout(r, retryDelay));
             return executeWithRetry(retryCount + 1);
           }

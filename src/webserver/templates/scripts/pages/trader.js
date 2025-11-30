@@ -360,7 +360,8 @@ function createLifecycle() {
               onClick: async () => {
                 const { confirmed } = await ConfirmationDialog.show({
                   title: "Reset ROI Exit",
-                  message: "This will reset ROI exit settings to default values:\n• Enabled\n• Target: 20%",
+                  message:
+                    "This will reset ROI exit settings to default values:\n• Enabled\n• Target: 20%",
                   confirmLabel: "Reset",
                   cancelLabel: "Cancel",
                   variant: "warning",
@@ -786,7 +787,6 @@ function createLifecycle() {
 
     const entryConcurrencyEl = $("#config-entry-concurrency");
     if (entryConcurrencyEl) entryConcurrencyEl.textContent = trader.entry_monitor_concurrency || 10;
-
   }
 
   /**

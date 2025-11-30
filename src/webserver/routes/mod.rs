@@ -44,6 +44,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/trader", axum::routing::get(trader_page))
         .route("/initialization", axum::routing::get(initialization_page))
         .route("/updates", axum::routing::get(updates_page))
+        .route("/about", axum::routing::get(about_page))
         .route("/scripts/core/:file", axum::routing::get(get_core_script))
         .route("/scripts/pages/:file", axum::routing::get(get_page_script))
         .route("/scripts/ui/:file", axum::routing::get(get_ui_script))
@@ -143,6 +144,12 @@ async fn updates_page() -> Html<String> {
     Html(templates::base_template("Updates", "updates", &content))
 }
 
+/// About page handler
+async fn about_page() -> Html<String> {
+    let content = templates::about_content();
+    Html(templates::base_template("About", "about", &content))
+}
+
 fn api_routes() -> Router<Arc<AppState>> {
     Router::new()
         .merge(status::routes())
@@ -184,6 +191,8 @@ async fn get_page_content(axum::extract::Path(page): axum::extract::Path<String>
         "strategies" => templates::strategies_content(),
         "trader" => templates::trader_content(),
         "initialization" => templates::initialization_content(),
+        "updates" => templates::updates_content(),
+        "about" => templates::about_content(),
         _ => {
             // Escape page name to prevent XSS
             let escaped_page = page
@@ -251,6 +260,7 @@ async fn get_page_script(axum::extract::Path(file): axum::extract::Path<String>)
         "wallet.js" => Some(templates::WALLET_PAGE_SCRIPT),
         "initialization.js" => Some(templates::INITIALIZATION_PAGE_SCRIPT),
         "updates.js" => Some(templates::UPDATES_PAGE_SCRIPT),
+        "about.js" => Some(templates::ABOUT_PAGE_SCRIPT),
         _ => None,
     };
 

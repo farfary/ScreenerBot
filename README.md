@@ -96,12 +96,12 @@ Trading bots written in Python or JavaScript can't match the speed and reliabili
 
 ScreenerBot is a professional-grade trading automation platform for Solana DeFi. Unlike cloud-based solutions, it runs entirely on your local machine:
 
-| Feature | Benefit |
-|---------|---------|
-| **Self-Custody** | Private keys never leave your computer |
-| **Native Speed** | Rust performance with direct RPC connections |
-| **Real-Time Prices** | Direct pool reserve calculations, not delayed APIs |
-| **Full Control** | Raw data access, custom strategies, no platform fees |
+| Feature              | Benefit                                              |
+| -------------------- | ---------------------------------------------------- |
+| **Self-Custody**     | Private keys never leave your computer               |
+| **Native Speed**     | Rust performance with direct RPC connections         |
+| **Real-Time Prices** | Direct pool reserve calculations, not delayed APIs   |
+| **Full Control**     | Raw data access, custom strategies, no platform fees |
 
 ---
 
@@ -245,14 +245,14 @@ Condition-based trading logic with configurable rules.
 
 Native decoders for direct pool state interpretation:
 
-| DEX | Programs |
-|-----|----------|
-| **Raydium** | CLMM, CPMM, Legacy AMM |
-| **Orca** | Whirlpool |
-| **Meteora** | DAMM, DBC, DLMM |
-| **Pumpfun** | AMM, Legacy (Bonding Curve) |
-| **Fluxbeam** | AMM |
-| **Moonit** | AMM |
+| DEX          | Programs                    |
+| ------------ | --------------------------- |
+| **Raydium**  | CLMM, CPMM, Legacy AMM      |
+| **Orca**     | Whirlpool                   |
+| **Meteora**  | DAMM, DBC, DLMM             |
+| **Pumpfun**  | AMM, Legacy (Bonding Curve) |
+| **Fluxbeam** | AMM                         |
+| **Moonit**   | AMM                         |
 
 ### Swap Routers
 
@@ -268,6 +268,7 @@ Concurrent quote fetching with automatic best-route selection.
 ### Entry Evaluation
 
 Safety checks in order:
+
 1. Connectivity health
 2. Position limits
 3. Duplicate prevention
@@ -278,6 +279,7 @@ Safety checks in order:
 ### Exit Evaluation
 
 Priority-ordered conditions:
+
 1. **Blacklist** (emergency): Immediate exit if token blacklisted
 2. **Risk Limits** (emergency): >90% loss protection
 3. **Trailing Stop** (high): Dynamic stop-loss following price peaks
@@ -322,24 +324,24 @@ Web interface at `http://localhost:8080` with 12 pages:
 
 Managed through `data/config.toml` with hot-reload support. 16 config sections:
 
-| Section | Purpose |
-|---------|---------|
-| `[trader]` | Position limits, sizing, ROI targets, DCA, trailing stop |
-| `[positions]` | Position tracking, partial exits, cooldowns |
-| `[filtering]` | Token filtering with nested DexScreener/GeckoTerminal/Rugcheck |
-| `[swaps]` | Router configuration (Jupiter, GMGN) |
-| `[tokens]` | Token database, update intervals |
-| `[pools]` | Pool discovery, caching |
-| `[rpc]` | RPC endpoints and rate limiting |
-| `[ohlcv]` | Candlestick data settings |
-| `[strategies]` | Strategy engine configuration |
-| `[wallet]` | Wallet monitoring |
-| `[events]` | Event system settings |
-| `[services]` | Service manager settings |
-| `[monitoring]` | System metrics |
-| `[connectivity]` | Endpoint health monitoring |
-| `[sol_price]` | SOL/USD price service |
-| `[gui]` | Desktop application settings |
+| Section          | Purpose                                                        |
+| ---------------- | -------------------------------------------------------------- |
+| `[trader]`       | Position limits, sizing, ROI targets, DCA, trailing stop       |
+| `[positions]`    | Position tracking, partial exits, cooldowns                    |
+| `[filtering]`    | Token filtering with nested DexScreener/GeckoTerminal/Rugcheck |
+| `[swaps]`        | Router configuration (Jupiter, GMGN)                           |
+| `[tokens]`       | Token database, update intervals                               |
+| `[pools]`        | Pool discovery, caching                                        |
+| `[rpc]`          | RPC endpoints and rate limiting                                |
+| `[ohlcv]`        | Candlestick data settings                                      |
+| `[strategies]`   | Strategy engine configuration                                  |
+| `[wallet]`       | Wallet monitoring                                              |
+| `[events]`       | Event system settings                                          |
+| `[services]`     | Service manager settings                                       |
+| `[monitoring]`   | System metrics                                                 |
+| `[connectivity]` | Endpoint health monitoring                                     |
+| `[sol_price]`    | SOL/USD price service                                          |
+| `[gui]`          | Desktop application settings                                   |
 
 Access via `with_config(|cfg| cfg.trader.max_open_positions)`. Hot-reload with `reload_config()`.
 
@@ -347,15 +349,15 @@ Access via `with_config(|cfg| cfg.trader.max_open_positions)`. Hot-reload with `
 
 ## Data Sources
 
-| Source | Usage |
-|--------|-------|
-| **Solana RPC** | Pool reserves, balances, transactions |
-| **DexScreener** | Market data, pool discovery |
-| **GeckoTerminal** | Alternative market metrics |
-| **Rugcheck** | Security analysis |
-| **Jupiter** | Swap routing and quotes |
-| **CoinGecko** | Token metadata |
-| **DefiLlama** | Token prices, DeFi protocols |
+| Source            | Usage                                 |
+| ----------------- | ------------------------------------- |
+| **Solana RPC**    | Pool reserves, balances, transactions |
+| **DexScreener**   | Market data, pool discovery           |
+| **GeckoTerminal** | Alternative market metrics            |
+| **Rugcheck**      | Security analysis                     |
+| **Jupiter**       | Swap routing and quotes               |
+| **CoinGecko**     | Token metadata                        |
+| **DefiLlama**     | Token prices, DeFi protocols          |
 
 All data cached locally in SQLite databases.
 
@@ -367,11 +369,11 @@ Native desktop application built with **Tauri 2.1** - the same framework behind 
 
 ### Platform Support
 
-| Platform | Min Version | Package Format |
-|----------|-------------|----------------|
-| **macOS** | 10.13 (High Sierra) | `.app` / `.dmg` |
-| **Windows** | Windows 10 | `.exe` / `.msi` |
-| **Linux** | Ubuntu 18.04+ | `.deb` / `.AppImage` |
+| Platform    | Min Version         | Package Format       |
+| ----------- | ------------------- | -------------------- |
+| **macOS**   | 10.13 (High Sierra) | `.app` / `.dmg`      |
+| **Windows** | Windows 10          | `.exe` / `.msi`      |
+| **Linux**   | Ubuntu 18.04+       | `.deb` / `.AppImage` |
 
 ### Desktop Features
 

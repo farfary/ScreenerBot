@@ -440,10 +440,7 @@ fn wait_for_bootstrap_ready(client: &reqwest::blocking::Client) {
 ///
 /// Minimum wait is 2.5 seconds to ensure frontend has initialized.
 fn wait_for_frontend_ready(window: &tauri::WebviewWindow) {
-    logger::info(
-        LogTag::System,
-        "⏳ Waiting for frontend to initialize...",
-    );
+    logger::info(LogTag::System, "⏳ Waiting for frontend to initialize...");
 
     let start = Instant::now();
     let min_wait = Duration::from_millis(2500); // Minimum 2.5 seconds for frontend init
@@ -472,10 +469,7 @@ fn wait_for_frontend_ready(window: &tauri::WebviewWindow) {
         if url_confirmed && start.elapsed() >= min_wait {
             logger::info(
                 LogTag::System,
-                &format!(
-                    "✅ Frontend ready after {:?}",
-                    start.elapsed()
-                ),
+                &format!("✅ Frontend ready after {:?}", start.elapsed()),
             );
             break;
         }

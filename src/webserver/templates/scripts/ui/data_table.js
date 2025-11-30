@@ -445,12 +445,8 @@ export class DataTable {
     this.elements.thead = container.querySelector("thead");
     this.elements.tbody = container.querySelector("tbody");
     this.elements.blockingState = container.querySelector(".data-table-blocking-state");
-    this.elements.blockingStateIcon = container.querySelector(
-      ".data-table-blocking-state__icon"
-    );
-    this.elements.blockingStateTitle = container.querySelector(
-      ".data-table-blocking-state__title"
-    );
+    this.elements.blockingStateIcon = container.querySelector(".data-table-blocking-state__icon");
+    this.elements.blockingStateTitle = container.querySelector(".data-table-blocking-state__title");
     this.elements.blockingStateDescription = container.querySelector(
       ".data-table-blocking-state__description"
     );
@@ -484,9 +480,7 @@ export class DataTable {
   }
 
   _normalizeBlockingState(config = {}) {
-    const variant = BLOCKING_STATE_VARIANTS.includes(config.variant)
-      ? config.variant
-      : "info";
+    const variant = BLOCKING_STATE_VARIANTS.includes(config.variant) ? config.variant : "info";
     const title = typeof config.title === "string" ? config.title : "";
     const description = typeof config.description === "string" ? config.description : "";
     const iconClass =

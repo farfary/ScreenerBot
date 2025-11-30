@@ -71,7 +71,11 @@ async function startDownload() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({}),
   });
-  return await response.json(); // May return error with {error, code, message}
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error?.message || "Download request failed");
+  }
+  return await response.json();
 }
 
 async function fetchStatus() {
@@ -85,7 +89,11 @@ async function installUpdate() {
     method: "POST",
     headers: { "Content-Type": "application/json" },
   });
-  return await response.json(); // May return error with {error, code, message}
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error?.message || "Install request failed");
+  }
+  return await response.json();
 }
 
 // =============================================================================
@@ -228,15 +236,9 @@ async function handleDownload(els) {
   els.downloadBtn.disabled = true;
 
   try {
-    const result = await startDownload();
-    if (result.success) {
-      showSection(els, "downloading");
-      // Start polling for progress
-      statusPoller?.start();
-    } else {
-      showSection(els, "error");
-      els.errorMessage.textContent = result.error || "Download failed";
-    }
+    await startDownload();
+    showSection(els, "downloading");
+    // Poller is already managed by lifecycle, will be running
   } catch (err) {
     showSection(els, "error");
     els.errorMessage.textContent = err.message;
@@ -250,16 +252,13 @@ async function handleInstall(els) {
   els.installBtn.innerHTML = '<i class="icon-loader spinning"></i> Opening...';
 
   try {
-    const result = await installUpdate();
-    if (result.success) {
-      els.installBtn.innerHTML = '<i class="icon-check"></i> Opened';
-    } else {
-      showSection(els, "error");
-      els.errorMessage.textContent = result.error || "Install failed";
-    }
+    await installUpdate();
+    els.installBtn.innerHTML = '<i class="icon-check"></i> Opened';
   } catch (err) {
     showSection(els, "error");
     els.errorMessage.textContent = err.message;
+    els.installBtn.disabled = false;
+    els.installBtn.innerHTML = '<i class="icon-package"></i> Install Update';
   }
 }
 
@@ -281,10 +280,7 @@ function createLifecycle() {
             updateFromState(els, state);
 
             // Stop polling if download complete or error
-            if (
-              state.download_progress?.completed ||
-              state.download_progress?.error
-            ) {
+            if (state.download_progress?.completed || state.download_progress?.error) {
               statusPoller.stop();
             }
           }

@@ -97,6 +97,7 @@ pub const INITIALIZATION_PAGE_SCRIPT: &str =
     include_str!("templates/scripts/pages/initialization.js");
 pub const HOME_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/home.js");
 pub const UPDATES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/updates.js");
+pub const ABOUT_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/about.js");
 
 const TOKENS_PAGE: &str = include_str!("templates/pages/tokens.html");
 const EVENTS_PAGE: &str = include_str!("templates/pages/events.html");
@@ -111,6 +112,7 @@ const WALLET_PAGE: &str = include_str!("templates/pages/wallet.html");
 const INITIALIZATION_PAGE: &str = include_str!("templates/pages/initialization.html");
 const HOME_PAGE: &str = include_str!("templates/pages/home.html");
 const UPDATES_PAGE: &str = include_str!("templates/pages/updates.html");
+const ABOUT_PAGE: &str = include_str!("templates/pages/about.html");
 
 /// Render the base layout with shared chrome and inject the requested content.
 pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
@@ -297,6 +299,10 @@ pub fn initialization_content() -> String {
 
 pub fn updates_content() -> String {
     render_page(UPDATES_PAGE)
+}
+
+pub fn about_content() -> String {
+    render_page(ABOUT_PAGE)
 }
 
 pub fn home_content() -> String {

@@ -18,8 +18,7 @@ pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Update server base URL - configurable via UPDATE_SERVER_URL env var
 fn get_update_server_url() -> String {
-    std::env::var("UPDATE_SERVER_URL")
-        .unwrap_or_else(|_| "https://screenerbot.io/api".to_string())
+    std::env::var("UPDATE_SERVER_URL").unwrap_or_else(|_| "https://screenerbot.io/api".to_string())
 }
 
 /// Update check interval (6 hours)
@@ -144,10 +143,7 @@ pub async fn check_for_update() -> Result<Option<UpdateInfo>, String> {
         LogTag::System,
         &format!("Checking for updates at: {}", server_url),
     );
-    logger::debug(
-        LogTag::System,
-        &format!("Update check URL: {}", url),
-    );
+    logger::debug(LogTag::System, &format!("Update check URL: {}", url));
 
     let client = reqwest::Client::new();
     let response = client
@@ -167,7 +163,9 @@ pub async fn check_for_update() -> Result<Option<UpdateInfo>, String> {
         .map_err(|e| format!("Failed to parse update response: {}", e))?;
 
     if !api_response.success {
-        return Err(api_response.error.unwrap_or_else(|| "Unknown error".to_string()));
+        return Err(api_response
+            .error
+            .unwrap_or_else(|| "Unknown error".to_string()));
     }
 
     let check_data = api_response.data.ok_or("No data in response")?;
@@ -190,7 +188,7 @@ pub async fn check_for_update() -> Result<Option<UpdateInfo>, String> {
 
             UPDATE_AVAILABLE.store(true, Ordering::SeqCst);
             update_state.available_update = Some(update_info.clone());
-            
+
             logger::info(
                 LogTag::System,
                 &format!("Update available: v{} → v{}", VERSION, update_info.version),
@@ -202,7 +200,7 @@ pub async fn check_for_update() -> Result<Option<UpdateInfo>, String> {
 
     UPDATE_AVAILABLE.store(false, Ordering::SeqCst);
     update_state.available_update = None;
-    
+
     logger::debug(LogTag::System, "No updates available");
 
     Ok(None)
@@ -239,13 +237,13 @@ pub async fn download_update(update: &UpdateInfo) -> Result<String, String> {
     let download_path = download_dir.join(filename);
 
     // Construct full download URL (handle relative paths)
-    let download_url = if update.download_url.starts_with("http://") || update.download_url.starts_with("https://") {
+    let download_url = if update.download_url.starts_with("http://")
+        || update.download_url.starts_with("https://")
+    {
         update.download_url.clone()
     } else {
         // Relative path - prepend base URL
-        let base_url = get_update_server_url()
-            .trim_end_matches("/api")
-            .to_string();
+        let base_url = get_update_server_url().trim_end_matches("/api").to_string();
         format!("{}{}", base_url, update.download_url)
     };
 
@@ -256,14 +254,10 @@ pub async fn download_update(update: &UpdateInfo) -> Result<String, String> {
 
     // Download file
     let client = reqwest::Client::new();
-    let response = client
-        .get(&download_url)
-        .send()
-        .await
-        .map_err(|e| {
-            set_download_error(&format!("Download failed: {}", e));
-            format!("Download failed: {}", e)
-        })?;
+    let response = client.get(&download_url).send().await.map_err(|e| {
+        set_download_error(&format!("Download failed: {}", e));
+        format!("Download failed: {}", e)
+    })?;
 
     if !response.status().is_success() {
         let err = format!("Download failed: HTTP {}", response.status());
@@ -407,11 +401,11 @@ fn get_download_dir() -> Result<std::path::PathBuf, String> {
 
 /// Calculate SHA256 checksum of a file
 fn calculate_sha256(path: &std::path::Path) -> Result<String, String> {
-    use sha2::{Sha256, Digest};
+    use sha2::{Digest, Sha256};
     use std::io::Read;
 
-    let mut file =
-        std::fs::File::open(path).map_err(|e| format!("Failed to open file for checksum: {}", e))?;
+    let mut file = std::fs::File::open(path)
+        .map_err(|e| format!("Failed to open file for checksum: {}", e))?;
 
     let mut hasher = Sha256::new();
     let mut buffer = [0u8; 8192];
@@ -445,11 +439,8 @@ fn set_download_error(error: &str) {
 
 /// Compare versions (returns true if remote is newer)
 pub fn is_newer_version(current: &str, remote: &str) -> bool {
-    let parse_version = |v: &str| -> Vec<u32> {
-        v.split('.')
-            .filter_map(|s| s.parse::<u32>().ok())
-            .collect()
-    };
+    let parse_version =
+        |v: &str| -> Vec<u32> { v.split('.').filter_map(|s| s.parse::<u32>().ok()).collect() };
 
     let current_parts = parse_version(current);
     let remote_parts = parse_version(remote);

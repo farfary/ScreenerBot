@@ -4,7 +4,7 @@
 .header {
   background: var(--header-bg);
   color: var(--header-text);
-  padding: 6px 14px;
+  padding: var(--spacing-xs) var(--spacing-md);
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -34,13 +34,13 @@
 .header-controls {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--spacing-sm);
 }
 
 .status-indicator {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--spacing-xs);
 }
 
 /* Control Buttons */
@@ -48,8 +48,8 @@
   background: rgb(255, 255, 255, 0.2);
   border: none;
   color: var(--header-text);
-  padding: 4px 10px;
-  border-radius: 12px;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-xl);
   cursor: pointer;
   font-size: 0.85em;
   line-height: 1.3;
@@ -57,7 +57,7 @@
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--spacing-xs);
   transition:
     background 0.3s ease,
     opacity 0.3s ease,
@@ -80,8 +80,8 @@
 
 /* Trader button with embedded badge */
 .trader-btn {
-  gap: 8px;
-  padding: 4px 10px;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
 }
 
 .trader-btn.running {
@@ -94,8 +94,8 @@
 
 /* Refresh button with dropdown */
 .refresh-btn {
-  padding: 4px 10px;
-  gap: 6px;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  gap: var(--spacing-xs);
 }
 
 .refresh-btn:hover:not(:disabled) {
@@ -104,7 +104,7 @@
 
 /* Power button with dropdown */
 .power-btn {
-  gap: 6px;
+  gap: var(--spacing-xs);
 }
 
 .power-btn:hover:not(:disabled) {
@@ -124,8 +124,8 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 4px 10px;
-  border-radius: 12px;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-xl);
   font-size: 1em;
   line-height: 1.3;
   height: 32px;
@@ -150,8 +150,8 @@
   background: rgb(255, 255, 255, 0.2);
   border: none;
   color: var(--header-text);
-  padding: 4px 10px;
-  border-radius: 12px;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-xl);
   cursor: pointer;
   font-size: 0.85em;
   line-height: 1.3;
@@ -159,7 +159,7 @@
   box-sizing: border-box;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--spacing-xs);
   transition: background 0.3s ease;
 }
 

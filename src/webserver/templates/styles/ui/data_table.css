@@ -101,7 +101,9 @@ body.dt-column-resizing .data-table col {
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition: opacity 0.18s ease, visibility 0.18s ease;
+  transition:
+    opacity 0.18s ease,
+    visibility 0.18s ease;
 }
 
 .data-table-blocking-state.is-visible {

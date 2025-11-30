@@ -19,18 +19,18 @@ incremental = true
 codegen-units = 256
 lto = false
 panic = "abort"          # simpler codegen, faster builds
-debug-assertions = false  # skip extra checks for speed
-overflow-checks = false   # skip integer overflow checks
+debug-assertions = false # skip extra checks for speed
+overflow-checks = false  # skip integer overflow checks
 
 # Release profile — optimized but FASTER compilation
 [profile.release]
-opt-level = 3         # Full optimizations for runtime speed
-lto = "thin"          # Faster LTO than "fat"
-codegen-units = 16    # More parallelism = faster compile (was 1, very slow!)
-incremental = true    # Enable incremental for faster rebuilds
-debug = false         # Smaller binary, faster link
-panic = "abort"       # Reduces binary size
-strip = "debuginfo"   # Strips symbols except needed for backtraces
+opt-level = 3       # Full optimizations for runtime speed
+lto = "thin"        # Faster LTO than "fat"
+codegen-units = 16  # More parallelism = faster compile (was 1, very slow!)
+incremental = true  # Enable incremental for faster rebuilds
+debug = false       # Smaller binary, faster link
+panic = "abort"     # Reduces binary size
+strip = "debuginfo" # Strips symbols except needed for backtraces
 
 # Optional: profile for "fast-release" builds (good runtime perf, much faster than full release)
 [profile.fast-release]
@@ -61,7 +61,15 @@ path = "src/main.rs"
 [dependencies]
 # Core async runtime with minimal features for faster builds
 # Added tracing for tokio-console support
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "fs", "net", "tracing"] }
+tokio = { version = "1", features = [
+  "rt-multi-thread",
+  "macros",
+  "sync",
+  "time",
+  "fs",
+  "net",
+  "tracing",
+] }
 console-subscriber = { version = "0.2", optional = true }
 tokio-metrics = "0.3"
 
@@ -123,7 +131,9 @@ solana-account-decoder = { version = "2.3.1" }
 # SPL Token dependencies - minimal features
 spl-token-2022 = { version = "8.0.1", default-features = false, features = ["no-entrypoint"] }
 spl-token = { version = "8.0.0", default-features = false, features = ["no-entrypoint"] }
-spl-associated-token-account = { version = "6.0.0", default-features = false, features = ["no-entrypoint"] }
+spl-associated-token-account = { version = "6.0.0", default-features = false, features = [
+  "no-entrypoint",
+] }
 
 # Web and networking
 futures = "0.3"

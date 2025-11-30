@@ -894,7 +894,8 @@ export function createLifecycle() {
     const list = $("#conditions-list");
     if (!list) return;
     if (!conditions.length) {
-      list.innerHTML = "<div class=\"empty-state\"><i class=\"icon-puzzle\"></i><p>No conditions yet</p><small>Use \"Add Condition\" to start building</small></div>";
+      list.innerHTML =
+        '<div class="empty-state"><i class="icon-puzzle"></i><p>No conditions yet</p><small>Use "Add Condition" to start building</small></div>';
       return;
     }
 

@@ -3,9 +3,9 @@
 .badge {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 14px;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-xl);
   font-size: 0.8em;
   font-weight: 600;
 }
@@ -98,23 +98,23 @@
 }
 
 .progress-bar {
-  height: 8px;
-  background: #2d3748;
-  border-radius: 4px;
+  height: var(--spacing-sm);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
   overflow: hidden;
-  margin-top: 8px;
+  margin-top: var(--spacing-sm);
 }
 
 .progress-fill {
   height: 100%;
-  background: linear-gradient(90deg, #1565c0 0%, #0f4c81 100%);
+  background: linear-gradient(90deg, var(--primary-color) 0%, var(--primary-color-dark) 100%);
   transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .btn {
-  padding: 6px 12px;
+  padding: var(--spacing-xs) var(--spacing-md);
   border: none;
-  border-radius: 5px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-size: 0.85em;
   font-weight: 500;
@@ -140,7 +140,7 @@
 }
 
 .btn-sm {
-  padding: 4px 8px;
+  padding: var(--spacing-xs) var(--spacing-sm);
   font-size: 0.9em;
 }
 
@@ -148,8 +148,8 @@
 .links-dropdown-trigger {
   background: transparent;
   border: 1px solid var(--border-color);
-  border-radius: 4px;
-  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
   font-size: 1.1em;
   cursor: pointer;
   color: var(--text-primary);
@@ -186,13 +186,13 @@
 
 .empty-state {
   text-align: center;
-  padding: 40px;
+  padding: var(--spacing-2xl);
   color: var(--text-muted);
 }
 
 .empty-state-icon {
   font-size: 3em;
-  margin-bottom: 10px;
+  margin-bottom: var(--spacing-sm);
 }
 
 /* Dropdown Menu Styles */
@@ -204,8 +204,8 @@
 .dropdown-btn {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
-  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
   font-size: 1.2em;
   font-weight: bold;
   cursor: pointer;
@@ -223,10 +223,10 @@
   position: absolute;
   right: 0;
   top: 100%;
-  margin-top: 4px;
+  margin-top: var(--spacing-xs);
   background: var(--bg-card);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   box-shadow: 0 4px 12px var(--shadow-lg);
   min-width: 200px;
   z-index: 1000;
@@ -240,7 +240,7 @@
 .dropdown-item {
   display: block;
   width: 100%;
-  padding: 10px 16px;
+  padding: var(--spacing-sm) var(--spacing-md);
   text-align: left;
   background: var(--bg-card);
   border: none;
@@ -278,7 +278,7 @@
 
 .modal-content {
   background: var(--bg-card);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   width: 90%;
   max-width: 900px;
   max-height: 90vh;
@@ -303,7 +303,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 24px;
+  padding: var(--spacing-lg) var(--spacing-lg);
   border-bottom: 2px solid var(--border-color);
   background: var(--table-header-bg);
 }
@@ -326,7 +326,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   transition: all 0.2s ease;
 }
 
@@ -336,20 +336,20 @@
 }
 
 .modal-body {
-  padding: 24px;
+  padding: var(--spacing-lg);
   max-height: calc(90vh - 140px);
   overflow-y: auto;
 }
 
 .modal-tabs {
   display: flex;
-  gap: 8px;
-  margin-bottom: 20px;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-lg);
   border-bottom: 2px solid var(--border-color);
 }
 
 .modal-tab {
-  padding: 10px 20px;
+  padding: var(--spacing-sm) var(--spacing-lg);
   background: none;
   border: none;
   border-bottom: 3px solid transparent;
@@ -379,22 +379,22 @@
 }
 
 .debug-section {
-  margin-bottom: 24px;
+  margin-bottom: var(--spacing-lg);
 }
 
 .debug-section-title {
   font-size: 1.1em;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 12px;
-  padding-bottom: 8px;
+  margin-bottom: var(--spacing-md);
+  padding-bottom: var(--spacing-sm);
   border-bottom: 1px solid var(--border-color);
 }
 
 .debug-row {
   display: flex;
   justify-content: space-between;
-  padding: 8px 0;
+  padding: var(--spacing-sm) 0;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -410,14 +410,14 @@
 
 .debug-value {
   color: var(--text-primary);
-  font-family: "Courier New", monospace;
+  font-family: var(--font-mono);
   flex: 1;
   text-align: right;
   word-break: break-all;
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--spacing-sm);
 }
 
 .debug-value-text {
@@ -428,8 +428,8 @@
 .copy-btn-small {
   background: var(--bg-card-hover);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
-  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  padding: 2px var(--spacing-xs);
   font-size: 0.75em;
   cursor: pointer;
   color: var(--text-secondary);
@@ -445,7 +445,7 @@
 }
 
 .scroll-guard-row .scroll-guard-cell {
-  padding: 12px 16px;
+  padding: var(--spacing-md) var(--spacing-md);
   text-align: center;
   color: var(--text-secondary);
   font-size: 0.85em;
@@ -455,6 +455,142 @@
 .scroll-guard-cell.loading {
   font-style: italic;
   color: var(--text-secondary);
+}
+
+/* Status Cards ---------------------------------------------------- */
+
+/* Status Card: For displaying update status, system states, etc. */
+.status-card {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease;
+}
+
+.status-card:hover {
+  border-color: var(--link-color);
+  box-shadow: 0 2px 8px var(--shadow-sm);
+}
+
+.status-card-icon {
+  font-size: 1.8rem;
+  flex-shrink: 0;
+}
+
+.status-card-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.status-card-title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.status-card-description {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* Status Card Variants */
+.status-card.status-success .status-card-icon {
+  color: var(--success-color);
+}
+
+.status-card.status-warning .status-card-icon {
+  color: var(--warning-color);
+}
+
+.status-card.status-danger .status-card-icon,
+.status-card.status-error .status-card-icon {
+  color: var(--error-color);
+}
+
+.status-card.status-info .status-card-icon {
+  color: var(--link-color);
+}
+
+.status-card.status-current .status-card-icon {
+  color: var(--success-color);
+}
+
+.status-card.status-available .status-card-icon {
+  color: var(--link-color);
+}
+
+.status-card.status-downloading .status-card-icon {
+  color: var(--warning-color);
+}
+
+.status-card.status-complete .status-card-icon {
+  color: var(--success-color);
+}
+
+/* Metric Cards ---------------------------------------------------- */
+
+/* Metric Card: For displaying key metrics, statistics, values */
+.metric-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.metric-card:hover {
+  border-color: var(--link-color);
+  box-shadow: 0 2px 8px var(--shadow-sm);
+}
+
+.metric-card-label {
+  font-size: var(--font-size-xs);
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--spacing-xs);
+  font-weight: 600;
+}
+
+.metric-card-value {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  word-break: break-word;
+}
+
+/* Metric Card Grid Layout Helper */
+.metric-grid {
+  display: grid;
+  gap: var(--spacing-md);
+}
+
+.metric-grid-2 {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+.metric-grid-3 {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.metric-grid-4 {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 768px) {
+  .metric-grid-2,
+  .metric-grid-3,
+  .metric-grid-4 {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Image Lightbox -------------------------------------------------- */

@@ -223,6 +223,10 @@
   padding-left: 24px;
 }
 
+.header-action-dropdown {
+  position: relative;
+}
+
 .header-action-btn {
   position: relative;
   display: flex;

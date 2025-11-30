@@ -1,245 +1,141 @@
-<div class="updates-page">
-  <!-- Header Section -->
-  <div class="page-header">
-    <h1><i class="icon-download"></i> Updates</h1>
-    <p class="page-description">Check for and install ScreenerBot updates</p>
-  </div>
-
-  <!-- Current Version Card -->
-  <div class="dashboard-section">
+<div class="page-content">
+  <!-- Current Version Section -->
+  <section class="page-section">
     <div class="section-header">
-      <h2><i class="icon-info"></i> Current Version</h2>
+      <h2 class="section-title"><i class="icon-info"></i> Current Version</h2>
     </div>
-    <div class="version-info-grid">
-      <div class="version-card">
-        <div class="version-label">Version</div>
-        <div class="version-value" id="currentVersion">--</div>
+    <div class="metric-grid metric-grid-3">
+      <div class="metric-card">
+        <div class="metric-card-label">Version</div>
+        <div class="metric-card-value" id="currentVersion">--</div>
       </div>
-      <div class="version-card">
-        <div class="version-label">Platform</div>
-        <div class="version-value" id="platform">--</div>
+      <div class="metric-card">
+        <div class="metric-card-label">Platform</div>
+        <div class="metric-card-value" id="platform">--</div>
       </div>
-      <div class="version-card">
-        <div class="version-label">Last Check</div>
-        <div class="version-value" id="lastCheck">Never</div>
+      <div class="metric-card">
+        <div class="metric-card-label">Last Check</div>
+        <div class="metric-card-value" id="lastCheck">Never</div>
       </div>
     </div>
-  </div>
+  </section>
 
-  <!-- Update Status Card -->
-  <div class="dashboard-section">
+  <!-- Update Status Section -->
+  <section class="page-section">
     <div class="section-header">
-      <h2><i class="icon-refresh-cw"></i> Update Status</h2>
+      <h2 class="section-title"><i class="icon-refresh-cw"></i> Update Status</h2>
       <button type="button" class="btn btn-primary" id="checkUpdatesBtn">
         <i class="icon-refresh-cw"></i> Check for Updates
       </button>
     </div>
 
     <!-- No Update Available -->
-    <div id="noUpdateSection" class="update-status-box status-current">
-      <i class="icon-check-circle"></i>
-      <div class="status-text">
-        <h3>You're up to date!</h3>
-        <p>ScreenerBot is running the latest version.</p>
+    <div id="noUpdateSection" class="status-card status-current">
+      <i class="status-card-icon icon-check-circle"></i>
+      <div class="status-card-content">
+        <h3 class="status-card-title">You're up to date!</h3>
+        <p class="status-card-description">ScreenerBot is running the latest version.</p>
       </div>
     </div>
 
     <!-- Update Available -->
-    <div id="updateAvailableSection" class="update-status-box status-available" style="display: none;">
-      <i class="icon-arrow-up-circle"></i>
-      <div class="status-text">
-        <h3>Update Available</h3>
-        <p>Version <span id="newVersion">--</span> is available for download.</p>
+    <div id="updateAvailableSection" class="status-card status-available" style="display: none">
+      <i class="status-card-icon icon-arrow-up-circle"></i>
+      <div class="status-card-content">
+        <h3 class="status-card-title">Update Available</h3>
+        <p class="status-card-description">
+          Version <span id="newVersion">--</span> is available for download.
+        </p>
       </div>
-      <button type="button" class="btn btn-success" id="downloadBtn">
-        <i class="icon-download"></i> Download Update
-      </button>
+      <div class="status-card-action">
+        <button type="button" class="btn btn-success" id="downloadBtn">
+          <i class="icon-download"></i> Download Update
+        </button>
+      </div>
     </div>
 
     <!-- Downloading -->
-    <div id="downloadingSection" class="update-status-box status-downloading" style="display: none;">
-      <i class="icon-loader spinning"></i>
-      <div class="status-text">
-        <h3>Downloading...</h3>
-        <p id="downloadStatus">Preparing download...</p>
-        <div class="progress-bar-container">
-          <div class="progress-bar" id="downloadProgress" style="width: 0%"></div>
+    <div id="downloadingSection" class="status-card status-downloading" style="display: none">
+      <i class="status-card-icon icon-loader spinning"></i>
+      <div class="status-card-content">
+        <h3 class="status-card-title">Downloading...</h3>
+        <p class="status-card-description" id="downloadStatus">Preparing download...</p>
+        <div class="progress-bar">
+          <div class="progress-fill" id="downloadProgress" style="width: 0%"></div>
         </div>
-        <p class="progress-text"><span id="downloadPercent">0</span>% complete</p>
+        <p class="status-card-description" style="margin-top: 8px">
+          <span id="downloadPercent">0</span>% complete
+        </p>
       </div>
     </div>
 
     <!-- Download Complete -->
-    <div id="downloadCompleteSection" class="update-status-box status-complete" style="display: none;">
-      <i class="icon-check-circle"></i>
-      <div class="status-text">
-        <h3>Download Complete</h3>
-        <p>Ready to install version <span id="downloadedVersion">--</span></p>
+    <div id="downloadCompleteSection" class="status-card status-complete" style="display: none">
+      <i class="status-card-icon icon-check-circle"></i>
+      <div class="status-card-content">
+        <h3 class="status-card-title">Download Complete</h3>
+        <p class="status-card-description">
+          Ready to install version <span id="downloadedVersion">--</span>
+        </p>
       </div>
-      <button type="button" class="btn btn-success" id="installBtn">
-        <i class="icon-package"></i> Install Update
-      </button>
+      <div class="status-card-action">
+        <button type="button" class="btn btn-success" id="installBtn">
+          <i class="icon-package"></i> Install Update
+        </button>
+      </div>
     </div>
 
     <!-- Error -->
-    <div id="errorSection" class="update-status-box status-error" style="display: none;">
-      <i class="icon-alert-circle"></i>
-      <div class="status-text">
-        <h3>Error</h3>
-        <p id="errorMessage">An error occurred.</p>
+    <div id="errorSection" class="status-card status-error" style="display: none">
+      <i class="status-card-icon icon-alert-circle"></i>
+      <div class="status-card-content">
+        <h3 class="status-card-title">Error</h3>
+        <p class="status-card-description" id="errorMessage">An error occurred.</p>
       </div>
-      <button type="button" class="btn btn-secondary" id="retryBtn">
-        <i class="icon-refresh-cw"></i> Retry
-      </button>
+      <div class="status-card-action">
+        <button type="button" class="btn btn-primary" id="retryBtn">
+          <i class="icon-refresh-cw"></i> Retry
+        </button>
+      </div>
     </div>
-  </div>
+  </section>
 
-  <!-- Release Notes (shown when update available) -->
-  <div id="releaseNotesSection" class="dashboard-section" style="display: none;">
+  <!-- Release Notes Section -->
+  <section id="releaseNotesSection" class="page-section" style="display: none">
     <div class="section-header">
-      <h2><i class="icon-file-text"></i> Release Notes</h2>
+      <h2 class="section-title"><i class="icon-file-text"></i> Release Notes</h2>
     </div>
-    <div class="release-notes-content" id="releaseNotes">
+    <div
+      style="
+        background: var(--bg-secondary);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-md);
+        padding: var(--spacing-md);
+        color: var(--text-secondary);
+        line-height: 1.6;
+        white-space: pre-wrap;
+        font-family: var(--font-mono);
+        font-size: var(--font-size-sm);
+      "
+      id="releaseNotes"
+    >
       No release notes available.
     </div>
-  </div>
+  </section>
 </div>
 
 <style>
-.updates-page {
-  padding: var(--spacing-lg);
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.page-header {
-  margin-bottom: var(--spacing-xl);
-}
-
-.page-header h1 {
-  font-size: 1.75rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-}
-
-.page-description {
-  color: var(--text-secondary);
-  margin-top: var(--spacing-xs);
-}
-
-.version-info-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--spacing-md);
-}
-
-.version-card {
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-md);
-  text-align: center;
-}
-
-.version-label {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: var(--spacing-xs);
-}
-
-.version-value {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-}
-
-.update-status-box {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-md);
-  padding: var(--spacing-lg);
-  border-radius: var(--radius-md);
-  background: var(--bg-tertiary);
-}
-
-.update-status-box > i {
-  font-size: 2.5rem;
-  flex-shrink: 0;
-}
-
-.status-text {
-  flex: 1;
-}
-
-.status-text h3 {
-  font-size: 1.125rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: var(--spacing-xs);
-}
-
-.status-text p {
-  color: var(--text-secondary);
-  margin: 0;
-}
-
-.status-current > i { color: var(--color-success); }
-.status-available > i { color: var(--color-info); }
-.status-downloading > i { color: var(--color-warning); }
-.status-complete > i { color: var(--color-success); }
-.status-error > i { color: var(--color-error); }
-
-.progress-bar-container {
-  height: 8px;
-  background: var(--bg-secondary);
-  border-radius: 4px;
-  margin-top: var(--spacing-sm);
-  overflow: hidden;
-}
-
-.progress-bar {
-  height: 100%;
-  background: var(--color-primary);
-  border-radius: 4px;
-  transition: width 0.3s ease;
-}
-
-.progress-text {
-  font-size: 0.875rem;
-  margin-top: var(--spacing-xs) !important;
-}
-
-.spinning {
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
-.release-notes-content {
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-md);
-  padding: var(--spacing-md);
-  color: var(--text-secondary);
-  line-height: 1.6;
-  white-space: pre-wrap;
-}
-
-@media (max-width: 640px) {
-  .version-info-grid {
-    grid-template-columns: 1fr;
+  /* Spinning animation for loading icon */
+  .spinning {
+    animation: spin 1s linear infinite;
   }
-  
-  .update-status-box {
-    flex-direction: column;
-    text-align: center;
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
   }
-}
 </style>

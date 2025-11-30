@@ -165,7 +165,7 @@ function createLifecycle() {
 
   function renderOverview(container, data) {
     if (!data) {
-      container.innerHTML = "<div class=\"empty-state\">No wallet data available</div>";
+      container.innerHTML = '<div class="empty-state">No wallet data available</div>';
       return;
     }
 
@@ -273,7 +273,7 @@ function createLifecycle() {
 
   function renderFlows(container, data) {
     if (!data) {
-      container.innerHTML = "<div class=\"empty-state\">No flow data available</div>";
+      container.innerHTML = '<div class="empty-state">No flow data available</div>';
       return;
     }
 
@@ -399,7 +399,7 @@ function createLifecycle() {
 
   function renderHoldings(container, data) {
     if (!data) {
-      container.innerHTML = "<div class=\"empty-state\">No token holdings available</div>";
+      container.innerHTML = '<div class="empty-state">No token holdings available</div>';
       return;
     }
 

@@ -186,7 +186,9 @@ export class ActionBar {
     // Left section: Title/subtitle
     if (title || subtitle) {
       const iconHtml = icon ? `<i class="${escapeHtml(icon)}"></i>` : "";
-      const titleHtml = title ? `<span class="action-bar-title-text">${escapeHtml(title)}</span>` : "";
+      const titleHtml = title
+        ? `<span class="action-bar-title-text">${escapeHtml(title)}</span>`
+        : "";
       const subtitleHtml = subtitle
         ? `<span class="action-bar-subtitle">${escapeHtml(subtitle)}</span>`
         : "";
@@ -205,7 +207,11 @@ export class ActionBar {
     }
 
     // Center section: Window selector
-    if (windowSelector && Array.isArray(windowSelector.options) && windowSelector.options.length > 0) {
+    if (
+      windowSelector &&
+      Array.isArray(windowSelector.options) &&
+      windowSelector.options.length > 0
+    ) {
       const buttonsHtml = windowSelector.options
         .map((opt) => {
           const isActive = opt.value === windowSelector.active;

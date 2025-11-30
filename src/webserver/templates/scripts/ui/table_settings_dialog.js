@@ -298,7 +298,7 @@ export class TableSettingsDialog {
     const visibility = this._workingState.visibility;
 
     if (!columns || columns.length === 0) {
-      this.columnListEl.innerHTML = "<div class=\"table-settings-empty\">No columns available.</div>";
+      this.columnListEl.innerHTML = '<div class="table-settings-empty">No columns available.</div>';
       return;
     }
 

@@ -1,4 +1,5 @@
 // Header controls for global dashboard interactions (trader toggle + metrics)
+import { loadPage } from "./router.js";
 import {
   Poller,
   getInterval as getGlobalPollingInterval,
@@ -23,8 +24,8 @@ const state = {
   fetching: false,
   connected: false,
   bootstrapping: true,
-   uiReady: false,
-   coreReady: false,
+  uiReady: false,
+  coreReady: false,
   bootstrapStatus: null,
 };
 
@@ -35,6 +36,7 @@ let currentController = null;
 let powerDropdown = null;
 let refreshDropdown = null;
 let traderDropdown = null;
+let settingsDropdown = null;
 let bootstrapUnsubscribe = null;
 
 function getElements() {
@@ -596,6 +598,9 @@ function initTraderControls() {
   // Initialize card click handlers
   initCardHandlers();
 
+  // Initialize settings menu
+  initSettingsMenu();
+
   // Initialize power menu dropdown
   initPowerMenu();
 
@@ -686,6 +691,44 @@ function initCardHandlers() {
       window.location.hash = "#services";
     });
   }
+}
+
+function initSettingsMenu() {
+  const settingsBtn = document.getElementById("settingsBtn");
+  const settingsMenu = document.getElementById("settingsDropdown");
+  if (!settingsBtn || !settingsMenu) return;
+
+  // Handle button click to toggle menu
+  settingsBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const isOpen = settingsMenu.classList.contains("open");
+
+    // Close all other dropdowns
+    document.querySelectorAll(".dropdown-menu.open").forEach((menu) => {
+      menu.classList.remove("open");
+    });
+
+    if (!isOpen) {
+      settingsMenu.classList.add("open");
+    }
+  });
+
+  // Handle menu item clicks
+  settingsMenu.addEventListener("click", (e) => {
+    const item = e.target.closest(".dropdown-item");
+    if (!item) return;
+
+    const action = item.dataset.action;
+    settingsMenu.classList.remove("open");
+    handleSettingsMenuAction(action);
+  });
+
+  // Close menu when clicking outside
+  document.addEventListener("click", (e) => {
+    if (!settingsBtn.contains(e.target) && !settingsMenu.contains(e.target)) {
+      settingsMenu.classList.remove("open");
+    }
+  });
 }
 
 function initPowerMenu() {
@@ -895,6 +938,20 @@ async function handlePowerMenuAction(action) {
       break;
     case "system-info":
       Utils.showToast('<i class="icon-info"></i> System Info panel coming soon', "info");
+      break;
+  }
+}
+
+function handleSettingsMenuAction(action) {
+  switch (action) {
+    case "config":
+      loadPage("config");
+      break;
+    case "updates":
+      loadPage("updates");
+      break;
+    case "about":
+      loadPage("about");
       break;
   }
 }

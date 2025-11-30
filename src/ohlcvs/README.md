@@ -22,11 +22,13 @@ src/ohlcvs/
 ## 🎯 Features
 
 ### Multi-Timeframe Support
+
 - **Supported**: 1m, 5m, 15m, 1h, 4h, 12h, 1d
 - **Base Data**: Always fetch 1-minute data, aggregate to higher timeframes
 - **Storage**: Raw 1m data in SQLite, aggregated data cached
 
 ### Multi-Pool Architecture
+
 ```
 Token → Multiple Pools → Priority Selection
          ├── Pool A (highest liquidity) ← DEFAULT
@@ -40,12 +42,12 @@ Token → Multiple Pools → Priority Selection
 
 ### Smart Priority System
 
-| Priority | Base Interval | Use Case |
-|----------|--------------|----------|
-| **Critical** | 30s | Open positions |
-| **High** | 1m | Recently viewed tokens |
-| **Medium** | 5m | Watched tokens |
-| **Low** | 15m | Historical/inactive |
+| Priority     | Base Interval | Use Case               |
+| ------------ | ------------- | ---------------------- |
+| **Critical** | 30s           | Open positions         |
+| **High**     | 1m            | Recently viewed tokens |
+| **Medium**   | 5m            | Watched tokens         |
+| **Low**      | 15m           | Historical/inactive    |
 
 ### Adaptive Throttling
 
@@ -83,7 +85,7 @@ Max Interval = Base Interval * 10 (capped)
 
 ```rust
 use screenerbot::ohlcvs::{
-    get_ohlcv_data, get_available_pools, get_data_gaps, 
+    get_ohlcv_data, get_available_pools, get_data_gaps,
     request_refresh, add_token_monitoring, Priority, Timeframe
 };
 
@@ -147,6 +149,7 @@ GET /api/ohlcv/metrics
 ### Response Examples
 
 **OHLCV Data Response:**
+
 ```json
 {
   "success": true,
@@ -160,7 +163,7 @@ GET /api/ohlcv/metrics
         "timestamp": 1234567890,
         "open": 1.23,
         "high": 1.25,
-        "low": 1.20,
+        "low": 1.2,
         "close": 1.24,
         "volume": 10000.0
       }
@@ -170,6 +173,7 @@ GET /api/ohlcv/metrics
 ```
 
 **Pools Response:**
+
 ```json
 {
   "success": true,
@@ -192,6 +196,7 @@ GET /api/ohlcv/metrics
 ```
 
 **Metrics Response:**
+
 ```json
 {
   "success": true,
@@ -354,6 +359,7 @@ Monitor system health via:
 3. **Logs**: Tagged with `[OHLCV Monitor]`
 
 Key metrics:
+
 - Tokens monitored
 - Pools tracked
 - API calls/minute
@@ -365,21 +371,25 @@ Key metrics:
 ## 🔧 Troubleshooting
 
 ### High API usage
+
 - Check `api_calls_per_minute` in metrics
 - Increase fetch intervals in config
 - Reduce `max_monitored_tokens`
 
 ### Low cache hit rate
+
 - Increase `cache_size`
 - Increase `cache_retention_hours`
 - Check for excessive timeframe switching
 
 ### Data gaps
+
 - Check pool health: `GET /api/ohlcv/{mint}/pools`
 - Enable `auto_fill_gaps` in config
 - Manually trigger refresh: `POST /api/ohlcv/{mint}/refresh`
 
 ### Pool failures
+
 - Verify pool addresses are correct
 - Check `pool_failover_enabled` is true
 - Manually reset failures via pool manager

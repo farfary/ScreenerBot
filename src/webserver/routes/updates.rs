@@ -2,14 +2,22 @@
 //!
 //! Provides endpoints for version info, update checking, downloading, and status.
 
-use axum::{http::StatusCode, response::Response, routing::{get, post}, Json, Router};
+use axum::{
+    http::StatusCode,
+    response::Response,
+    routing::{get, post},
+    Json, Router,
+};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
 use crate::{
     logger::{self, LogTag},
     version::{self, DownloadProgress, UpdateInfo, UpdateState, VersionInfo},
-    webserver::{state::AppState, utils::{error_response, success_response}},
+    webserver::{
+        state::AppState,
+        utils::{error_response, success_response},
+    },
 };
 
 // =============================================================================
