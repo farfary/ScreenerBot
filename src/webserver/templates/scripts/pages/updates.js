@@ -205,7 +205,8 @@ async function handleCheckUpdates(els) {
       // No update available
       showSection(els, "noUpdate");
       if (result.last_check) {
-        els.lastCheck.textContent = Utils.formatRelativeTime(result.last_check);
+        const date = new Date(result.last_check);
+        els.lastCheck.textContent = date.toLocaleString();
       } else {
         els.lastCheck.textContent = "Just now";
       }
