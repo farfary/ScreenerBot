@@ -208,8 +208,10 @@ async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<Dash
     // Get cached system metrics (5s cache, non-blocking)
     let cached_metrics = get_cached_system_metrics().await;
 
-    let memory_mb = cached_metrics.system_memory_used_mb as f64;
-    let cpu_percent = cached_metrics.cpu_system_percent as f64;
+    // Use process memory (bot only) instead of system memory
+    let memory_mb = cached_metrics.process_memory_mb as f64;
+    // Use process CPU instead of system CPU
+    let cpu_percent = cached_metrics.cpu_process_percent as f64;
     let active_threads = cached_metrics.active_threads;
 
     let system_info = SystemInfo {
@@ -544,14 +546,16 @@ async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<HomeDash
 
     let cached_metrics = get_cached_system_metrics().await;
 
-    let memory_mb = cached_metrics.system_memory_used_mb as f64;
+    // Use process memory (bot only) instead of system memory
+    let memory_mb = cached_metrics.process_memory_mb as f64;
     let memory_total_mb = cached_metrics.system_memory_total_mb as f64;
     let memory_percent = if memory_total_mb > 0.0 {
         (memory_mb / memory_total_mb) * 100.0
     } else {
         0.0
     };
-    let cpu_percent = cached_metrics.cpu_system_percent as f64;
+    // Use process CPU instead of system CPU
+    let cpu_percent = cached_metrics.cpu_process_percent as f64;
 
     // Generate simple history for charts (last 20 data points)
     let cpu_history = vec![cpu_percent; 20];
