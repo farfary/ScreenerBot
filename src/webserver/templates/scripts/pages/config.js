@@ -149,11 +149,17 @@ function renderObjectWithChildren({
     return null;
   }
 
-  const wrapper = create("div", { className: "config-object-wrapper" });
+  const wrapper = create("div", { className: "config-object-wrapper collapsed" });
 
   if (parentLabel) {
-    const header = create("div", { className: "config-object-header" });
-    header.textContent = parentLabel;
+    const header = create("button", {
+      type: "button",
+      className: "config-object-header",
+    });
+    header.innerHTML = `<i class="config-object-chevron icon-chevron-down"></i><span>${Utils.escapeHtml(parentLabel)}</span>`;
+    on(header, "click", () => {
+      wrapper.classList.toggle("collapsed");
+    });
     wrapper.appendChild(header);
   }
 
@@ -1072,7 +1078,15 @@ function renderCategories(sectionId) {
   categories.sort(([a], [b]) => a.localeCompare(b));
 
   for (const [category, fieldsList] of categories) {
-    fieldsList.sort(([keyA], [keyB]) => keyA.localeCompare(keyB));
+    // Sort fields: simple types first, then object types (with sub-configs), alphabetically within each group
+    fieldsList.sort(([keyA, metaA], [keyB, metaB]) => {
+      const isObjectA = metaA.type === "object";
+      const isObjectB = metaB.type === "object";
+      if (isObjectA !== isObjectB) {
+        return isObjectA ? 1 : -1; // Simple types first
+      }
+      return keyA.localeCompare(keyB);
+    });
 
     const categoryEl = create("div", { className: "config-category collapsed" });
     const header = create("button", {

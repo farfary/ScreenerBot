@@ -640,7 +640,15 @@
   gap: 10px;
 }
 
+.config-object-wrapper.collapsed .config-object-group {
+  display: none;
+}
+
 .config-object-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-primary);
@@ -648,6 +656,25 @@
   background: linear-gradient(135deg, rgb(59 130 246 / 0.12), rgb(59 130 246 / 0.06));
   border-radius: 8px;
   border: 1px solid rgb(59 130 246 / 0.3);
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease;
+}
+
+.config-object-header:hover {
+  background: linear-gradient(135deg, rgb(59 130 246 / 0.18), rgb(59 130 246 / 0.1));
+  border-color: rgb(59 130 246 / 0.45);
+}
+
+.config-object-chevron {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  transition: transform 0.2s ease;
+}
+
+.config-object-wrapper.collapsed .config-object-chevron {
+  transform: rotate(-90deg);
 }
 
 .config-object-group {
