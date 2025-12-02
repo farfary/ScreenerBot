@@ -57,15 +57,4 @@ node_modules/
 
 # Submodules removed - now separate repos
 repos/
-builds/linux/x86_64-unknown-linux-gnu/ScreenerBot_0.1.0_amd64.AppImage
-builds/linux/x86_64-unknown-linux-gnu/ScreenerBot_0.1.0_amd64.deb
-builds/macos/x86_64-apple-darwin/screenerbot
-builds/macos/x86_64-apple-darwin/ScreenerBot_0.1.0_x64.dmg
-builds/macos/x86_64-apple-darwin/ScreenerBot.app/Contents/Info.plist
-builds/macos/x86_64-apple-darwin/ScreenerBot.app/Contents/MacOS/screenerbot
-builds/macos/x86_64-apple-darwin/ScreenerBot.app/Contents/Resources/icon.icns
-builds/macos/x86_64-apple-darwin/ScreenerBot.app/Contents/Resources/icons/macos-tahoe/assets-manifest.json
-builds/macos/x86_64-apple-darwin/ScreenerBot.app/Contents/Resources/icons/macos-tahoe/Assets.car
-builds/macos/x86_64-apple-darwin/ScreenerBot.app/Contents/Resources/icons/macos-tahoe/IconInfo.plist
-builds/windows/x86_64-pc-windows-msvc/ScreenerBot_0.1.0_x64-setup.exe
-builds/windows/x86_64-pc-windows-msvc/screenerbot.exe
+builds/
