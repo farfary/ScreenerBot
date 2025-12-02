@@ -57,7 +57,10 @@ fn is_category_enabled(category: &EventCategory) -> bool {
 pub async fn start_maintenance_task() {
     // Only start maintenance if events are enabled
     if !is_events_enabled() {
-        logger::info(LogTag::System, "Events system disabled - skipping maintenance task");
+        logger::info(
+            LogTag::System,
+            "Events system disabled - skipping maintenance task",
+        );
         return;
     }
 
@@ -656,12 +659,7 @@ pub async fn record_trader_event(
 // =============================================================================
 
 /// Record an RPC client event (Solana RPC requests, responses, errors)
-pub async fn record_rpc_event(
-    method: &str,
-    action: &str,
-    severity: Severity,
-    payload: Value,
-) {
+pub async fn record_rpc_event(method: &str, action: &str, severity: Severity, payload: Value) {
     if !is_category_enabled(&EventCategory::Rpc) {
         return;
     }
@@ -706,12 +704,7 @@ pub async fn record_rpc_event(
 // =============================================================================
 
 /// Record an external API event (DexScreener, GeckoTerminal, Jupiter API, RugCheck, etc.)
-pub async fn record_api_event(
-    api_name: &str,
-    action: &str,
-    severity: Severity,
-    payload: Value,
-) {
+pub async fn record_api_event(api_name: &str, action: &str, severity: Severity, payload: Value) {
     if !is_category_enabled(&EventCategory::Api) {
         return;
     }

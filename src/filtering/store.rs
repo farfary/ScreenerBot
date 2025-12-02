@@ -55,7 +55,7 @@ impl FilteringStore {
         // If we have any snapshot (even stale), return it immediately
         if let Some(existing) = stale_snapshot.as_ref() {
             let is_stale = is_snapshot_stale(existing, max_age);
-            
+
             // Trigger background refresh if stale and not already refreshing
             if is_stale && !self.refresh_in_progress.load(AtomicOrdering::Relaxed) {
                 let store = global_store();
@@ -63,7 +63,7 @@ impl FilteringStore {
                     let _ = store.try_refresh_background().await;
                 });
             }
-            
+
             return Ok(existing.clone());
         }
 
@@ -85,19 +85,23 @@ impl FilteringStore {
         }
 
         let result = self.try_refresh_inner().await;
-        self.refresh_in_progress.store(false, AtomicOrdering::SeqCst);
-        
+        self.refresh_in_progress
+            .store(false, AtomicOrdering::SeqCst);
+
         if let Err(ref err) = result {
-            logger::warning(LogTag::Filtering, &format!("Background refresh failed: {}", err));
+            logger::warning(
+                LogTag::Filtering,
+                &format!("Background refresh failed: {}", err),
+            );
         }
-        
+
         result.map(|_| ())
     }
 
     async fn try_refresh(&self) -> Result<Arc<FilteringSnapshot>, String> {
         // Acquire refresh lock to prevent concurrent refreshes
         let _guard = self.refresh_lock.lock().await;
-        
+
         // Check again if snapshot is still stale (another refresh might have completed)
         let existing = self.snapshot.read().await.clone();
         if let Some(ref snapshot) = existing {
