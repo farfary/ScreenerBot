@@ -18,10 +18,9 @@ body.dt-column-resizing .data-table col {
   display: flex;
   flex-direction: column;
   height: 100%;
+  flex: 1 1 auto;
   background: var(--bg-primary);
-  border-radius: 8px;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.1);
   position: relative;
 }
 
@@ -85,7 +84,6 @@ body.dt-column-resizing .data-table col {
   overflow: auto; /* Allow both horizontal and vertical scrolling when needed */
   position: relative;
   min-height: 0; /* Critical for flex scrolling */
-  max-height: 600px; /* Default max height for scrolling */
 }
 
 .data-table-blocking-state {

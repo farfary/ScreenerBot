@@ -118,6 +118,7 @@
   padding: var(--card-padding);
   box-shadow: 0 2px 8px var(--shadow-md);
   min-width: 0;
+  overflow: hidden;
 }
 
 .card-header {
