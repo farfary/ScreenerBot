@@ -34,17 +34,17 @@ pub enum EventCategory {
     /// Wallet events (balance changes, ATA management)
     Wallet,
 
-    /// Entry signal and trading decision events
-    Entry,
-
     /// Trader orchestration events (lifecycle, decision-making, coordination)
     Trader,
 
     /// OHLCV monitoring events (discovery, fetch, gaps, backfills)
     Ohlcv,
 
-    /// RPC and external API interaction events
+    /// RPC client events (Solana RPC requests, responses, errors)
     Rpc,
+
+    /// External API events (DexScreener, GeckoTerminal, Jupiter API, RugCheck, etc.)
+    Api,
 
     /// Security and risk assessment events
     Security,
@@ -70,10 +70,10 @@ impl EventCategory {
             EventCategory::System => "system".to_string(),
             EventCategory::Position => "position".to_string(),
             EventCategory::Wallet => "wallet".to_string(),
-            EventCategory::Entry => "entry".to_string(),
             EventCategory::Trader => "trader".to_string(),
             EventCategory::Ohlcv => "ohlcv".to_string(),
             EventCategory::Rpc => "rpc".to_string(),
+            EventCategory::Api => "api".to_string(),
             EventCategory::Security => "security".to_string(),
             EventCategory::Connectivity => "connectivity".to_string(),
             EventCategory::Filtering => "filtering".to_string(),
@@ -91,10 +91,11 @@ impl EventCategory {
             "system" => EventCategory::System,
             "position" => EventCategory::Position,
             "wallet" => EventCategory::Wallet,
-            "entry" => EventCategory::Entry,
+            "entry" => EventCategory::Trader, // Legacy: entry events are now Trader events
             "trader" => EventCategory::Trader,
             "ohlcv" => EventCategory::Ohlcv,
             "rpc" => EventCategory::Rpc,
+            "api" => EventCategory::Api,
             "security" => EventCategory::Security,
             "connectivity" => EventCategory::Connectivity,
             "filtering" => EventCategory::Filtering,

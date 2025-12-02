@@ -379,20 +379,17 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                 let now = chrono::Utc::now();
                 if (now - last_summary).num_seconds() >= 30 {
                     let (q_size_after, _) = super::queue::get_queue_status().await;
-                    crate::events::record_safe(
-                        crate::events::Event::new(
-                            crate::events::EventCategory::Position,
-                            Some("verification_worker_summary".to_string()),
-                            crate::events::Severity::Debug,
-                            None,
-                            None,
-                            serde_json::json!({
-                                "queue_size_before": queue_size_before,
-                                "queue_size_after": q_size_after,
-                                "requeued_count": requeued_count,
-                                "batch_size": VERIFICATION_BATCH_SIZE
-                            })
-                        )
+                    crate::events::record_position_event_flexible(
+                        "verification_worker_summary",
+                        crate::events::Severity::Debug,
+                        None,
+                        None,
+                        serde_json::json!({
+                            "queue_size_before": queue_size_before,
+                            "queue_size_after": q_size_after,
+                            "requeued_count": requeued_count,
+                            "batch_size": VERIFICATION_BATCH_SIZE
+                        }),
                     ).await;
                     last_summary = now;
                 }
@@ -446,23 +443,20 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                         // Emit a verification_started event and take timing baselines
                         let started_at = chrono::Utc::now();
                         let timer = Instant::now();
-                        crate::events::record_safe(
-                            crate::events::Event::new(
-                                crate::events::EventCategory::Position,
-                                Some("verification_started".to_string()),
-                                crate::events::Severity::Debug,
-                                Some(item.mint.clone()),
-                                Some(item.signature.clone()),
-                                json!({
-                                    "kind": format!("{:?}", item.kind),
-                                    "attempts": item.attempts,
-                                    "created_at": item.created_at.to_rfc3339(),
-                                    "last_attempt_at": item.last_attempt_at.map(|t| t.to_rfc3339()),
-                                    "next_retry_at": item.next_retry_at.map(|t| t.to_rfc3339()),
-                                    "expiry_height": item.expiry_height,
-                                    "position_id": item.position_id,
-                                })
-                            )
+                        crate::events::record_position_event_flexible(
+                            "verification_started",
+                            crate::events::Severity::Debug,
+                            Some(&item.mint),
+                            Some(&item.signature),
+                            json!({
+                                "kind": format!("{:?}", item.kind),
+                                "attempts": item.attempts,
+                                "created_at": item.created_at.to_rfc3339(),
+                                "last_attempt_at": item.last_attempt_at.map(|t| t.to_rfc3339()),
+                                "next_retry_at": item.next_retry_at.map(|t| t.to_rfc3339()),
+                                "expiry_height": item.expiry_height,
+                                "position_id": item.position_id,
+                            }),
                         ).await;
 
                         match verify_transaction(&item).await {
@@ -506,24 +500,21 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                         }
 
                                         // Emit verification_finished (success/transition)
-                                        crate::events::record_safe(
-                                            crate::events::Event::new(
-                                                crate::events::EventCategory::Position,
-                                                Some("verification_finished".to_string()),
-                                                crate::events::Severity::Info,
-                                                Some(item.mint.clone()),
-                                                Some(item.signature.clone()),
-                                                json!({
-                                                    "kind": format!("{:?}", item.kind),
-                                                    "attempts": item.attempts,
-                                                    "duration_ms": timer.elapsed().as_millis() as u64,
-                                                    "started_at": started_at.to_rfc3339(),
-                                                    "result": "transition",
-                                                    "db_updated": effects.db_updated,
-                                                    "position_closed": effects.position_closed,
-                                                    "position_id": item.position_id,
-                                                })
-                                            )
+                                        crate::events::record_position_event_flexible(
+                                            "verification_finished",
+                                            crate::events::Severity::Info,
+                                            Some(&item.mint),
+                                            Some(&item.signature),
+                                            json!({
+                                                "kind": format!("{:?}", item.kind),
+                                                "attempts": item.attempts,
+                                                "duration_ms": timer.elapsed().as_millis() as u64,
+                                                "started_at": started_at.to_rfc3339(),
+                                                "result": "transition",
+                                                "db_updated": effects.db_updated,
+                                                "position_closed": effects.position_closed,
+                                                "position_id": item.position_id,
+                                            }),
                                         ).await;
 
                                         logger::debug(
@@ -560,23 +551,20 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                             )
                                         );
                                         // Emit verification_finished (apply_error)
-                                        crate::events::record_safe(
-                                            crate::events::Event::new(
-                                                crate::events::EventCategory::Position,
-                                                Some("verification_finished".to_string()),
-                                                crate::events::Severity::Warn,
-                                                Some(item.mint.clone()),
-                                                Some(item.signature.clone()),
-                                                json!({
-                                                    "kind": format!("{:?}", item.kind),
-                                                    "attempts": item.attempts,
-                                                    "duration_ms": timer.elapsed().as_millis() as u64,
-                                                    "started_at": started_at.to_rfc3339(),
-                                                    "result": "apply_error",
-                                                    "error": e,
-                                                    "position_id": item.position_id
-                                                })
-                                            )
+                                        crate::events::record_position_event_flexible(
+                                            "verification_finished",
+                                            crate::events::Severity::Warn,
+                                            Some(&item.mint),
+                                            Some(&item.signature),
+                                            json!({
+                                                "kind": format!("{:?}", item.kind),
+                                                "attempts": item.attempts,
+                                                "duration_ms": timer.elapsed().as_millis() as u64,
+                                                "started_at": started_at.to_rfc3339(),
+                                                "result": "apply_error",
+                                                "error": e,
+                                                "position_id": item.position_id
+                                            }),
                                         ).await;
                                         requeue_verification(item).await;
                                     }
@@ -611,23 +599,20 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                     );
 
                                     // Record abandoned verification event with detailed reason
-                                    crate::events::record_safe(
-                                        crate::events::Event::new(
-                                            crate::events::EventCategory::Position,
-                                            Some("verification_abandoned".to_string()),
-                                            crate::events::Severity::Error,
-                                            Some(item.mint.clone()),
-                                            Some(item.signature.clone()),
-                                            serde_json::json!({
-                                                "give_up_reason": give_up_reason,
-                                                "last_error": reason,
-                                                "attempts": item.attempts,
-                                                "age_hours": (chrono::Utc::now() - item.created_at).num_hours(),
-                                                "kind": format!("{:?}", item.kind),
-                                                "position_id": item.position_id,
-                                                "created_at": item.created_at.to_rfc3339()
-                                            })
-                                        )
+                                    crate::events::record_position_event_flexible(
+                                        "verification_abandoned",
+                                        crate::events::Severity::Error,
+                                        Some(&item.mint),
+                                        Some(&item.signature),
+                                        serde_json::json!({
+                                            "give_up_reason": give_up_reason,
+                                            "last_error": reason,
+                                            "attempts": item.attempts,
+                                            "age_hours": (chrono::Utc::now() - item.created_at).num_hours(),
+                                            "kind": format!("{:?}", item.kind),
+                                            "position_id": item.position_id,
+                                            "created_at": item.created_at.to_rfc3339()
+                                        }),
                                     ).await;
 
                                     // Handle abandoned verification based on kind
@@ -697,24 +682,21 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                     )
                                 );
                                 // Emit verification_finished (retry)
-                                crate::events::record_safe(
-                                    crate::events::Event::new(
-                                        crate::events::EventCategory::Position,
-                                        Some("verification_finished".to_string()),
-                                        crate::events::Severity::Warn,
-                                        Some(item.mint.clone()),
-                                        Some(item.signature.clone()),
-                                        json!({
-                                            "kind": format!("{:?}", item.kind),
-                                            "attempts": item.attempts,
-                                            "duration_ms": timer.elapsed().as_millis() as u64,
-                                            "started_at": started_at.to_rfc3339(),
-                                            "result": "retry",
-                                            "reason": reason,
-                                            "position_id": item.position_id,
-                                            "next_retry_at": item.next_retry_at.map(|t| t.to_rfc3339())
-                                        })
-                                    )
+                                crate::events::record_position_event_flexible(
+                                    "verification_finished",
+                                    crate::events::Severity::Warn,
+                                    Some(&item.mint),
+                                    Some(&item.signature),
+                                    json!({
+                                        "kind": format!("{:?}", item.kind),
+                                        "attempts": item.attempts,
+                                        "duration_ms": timer.elapsed().as_millis() as u64,
+                                        "started_at": started_at.to_rfc3339(),
+                                        "result": "retry",
+                                        "reason": reason,
+                                        "position_id": item.position_id,
+                                        "next_retry_at": item.next_retry_at.map(|t| t.to_rfc3339())
+                                    }),
                                 ).await;
                                 requeue_verification(item).await;
                             }
@@ -737,22 +719,19 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                 remove_verification(&item.signature).await;
 
                                 // Emit verification_finished (permanent_failure)
-                                crate::events::record_safe(
-                                    crate::events::Event::new(
-                                        crate::events::EventCategory::Position,
-                                        Some("verification_finished".to_string()),
-                                        crate::events::Severity::Warn,
-                                        Some(item.mint.clone()),
-                                        Some(item.signature.clone()),
-                                        json!({
-                                            "kind": format!("{:?}", item.kind),
-                                            "attempts": item.attempts,
-                                            "duration_ms": timer.elapsed().as_millis() as u64,
-                                            "started_at": started_at.to_rfc3339(),
-                                            "result": "permanent_failure",
-                                            "position_id": item.position_id
-                                        })
-                                    )
+                                crate::events::record_position_event_flexible(
+                                    "verification_finished",
+                                    crate::events::Severity::Warn,
+                                    Some(&item.mint),
+                                    Some(&item.signature),
+                                    json!({
+                                        "kind": format!("{:?}", item.kind),
+                                        "attempts": item.attempts,
+                                        "duration_ms": timer.elapsed().as_millis() as u64,
+                                        "started_at": started_at.to_rfc3339(),
+                                        "result": "permanent_failure",
+                                        "position_id": item.position_id
+                                    }),
                                 ).await;
                             }
                         }

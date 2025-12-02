@@ -83,11 +83,10 @@ pub async fn evaluate_exit_for_position(
             );
 
             // Record exit signal event
-            crate::events::record_safe(crate::events::Event::new(
-                crate::events::EventCategory::Trader,
-                Some("exit_signal_trailing_stop".to_string()),
+            crate::events::record_trader_event(
+                "exit_signal_trailing_stop",
                 crate::events::Severity::Info,
-                Some(fresh_position.mint.clone()),
+                Some(&fresh_position.mint),
                 None,
                 serde_json::json!({
                     "exit_type": "trailing_stop",
@@ -95,7 +94,7 @@ pub async fn evaluate_exit_for_position(
                     "symbol": fresh_position.symbol,
                     "current_price": current_price,
                 }),
-            ))
+            )
             .await;
 
             return Ok(Some(decision));
@@ -121,11 +120,10 @@ pub async fn evaluate_exit_for_position(
             );
 
             // Record ROI exit signal event
-            crate::events::record_safe(crate::events::Event::new(
-                crate::events::EventCategory::Trader,
-                Some("exit_signal_roi_target".to_string()),
+            crate::events::record_trader_event(
+                "exit_signal_roi_target",
                 crate::events::Severity::Info,
-                Some(fresh_position.mint.clone()),
+                Some(&fresh_position.mint),
                 None,
                 serde_json::json!({
                     "exit_type": "roi_target",
@@ -133,7 +131,7 @@ pub async fn evaluate_exit_for_position(
                     "symbol": fresh_position.symbol,
                     "current_price": current_price,
                 }),
-            ))
+            )
             .await;
 
             return Ok(Some(decision));
@@ -159,11 +157,10 @@ pub async fn evaluate_exit_for_position(
             );
 
             // Record time override exit signal event
-            crate::events::record_safe(crate::events::Event::new(
-                crate::events::EventCategory::Trader,
-                Some("exit_signal_time_override".to_string()),
+            crate::events::record_trader_event(
+                "exit_signal_time_override",
                 crate::events::Severity::Info,
-                Some(fresh_position.mint.clone()),
+                Some(&fresh_position.mint),
                 None,
                 serde_json::json!({
                     "exit_type": "time_override",
@@ -171,7 +168,7 @@ pub async fn evaluate_exit_for_position(
                     "symbol": fresh_position.symbol,
                     "current_price": current_price,
                 }),
-            ))
+            )
             .await;
 
             return Ok(Some(decision));
@@ -201,11 +198,10 @@ pub async fn evaluate_exit_for_position(
             );
 
             // Record strategy exit signal event
-            crate::events::record_safe(crate::events::Event::new(
-                crate::events::EventCategory::Trader,
-                Some("exit_signal_strategy".to_string()),
+            crate::events::record_trader_event(
+                "exit_signal_strategy",
                 crate::events::Severity::Info,
-                Some(fresh_position.mint.clone()),
+                Some(&fresh_position.mint),
                 None,
                 serde_json::json!({
                     "exit_type": "strategy",
@@ -214,7 +210,7 @@ pub async fn evaluate_exit_for_position(
                     "strategy_id": decision.strategy_id,
                     "current_price": current_price,
                 }),
-            ))
+            )
             .await;
 
             return Ok(Some(decision));

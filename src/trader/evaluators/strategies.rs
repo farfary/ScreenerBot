@@ -155,17 +155,16 @@ impl StrategyEvaluator {
                 );
 
                 // Record event for metrics tracking
-                crate::events::record_safe(crate::events::Event::new(
-                    crate::events::EventCategory::Entry,
-                    Some("strategy_evaluation_timeout".to_string()),
-                    crate::events::Severity::Error,
-                    Some(token_mint.to_string()),
+                crate::events::record_trader_event(
+                    "strategy_evaluation_timeout",
+                    crate::events::Severity::Warn,
+                    Some(token_mint),
                     None,
                     serde_json::json!({
                         "timeout_seconds": strategy_timeout.as_secs(),
                         "evaluation_type": "entry",
                     }),
-                ))
+                )
                 .await;
 
                 Ok(None) // Skip this token on timeout
@@ -333,18 +332,17 @@ impl StrategyEvaluator {
                 );
 
                 // Record event for metrics tracking
-                crate::events::record_safe(crate::events::Event::new(
-                    crate::events::EventCategory::Position,
-                    Some("strategy_evaluation_timeout".to_string()),
-                    crate::events::Severity::Error,
-                    Some(position.mint.clone()),
+                crate::events::record_position_event_flexible(
+                    "strategy_evaluation_timeout",
+                    crate::events::Severity::Warn,
+                    Some(&position.mint),
                     None,
                     serde_json::json!({
                         "timeout_seconds": strategy_timeout.as_secs(),
                         "evaluation_type": "exit",
                         "position_id": position.id,
                     }),
-                ))
+                )
                 .await;
 
                 Ok(None) // Skip this position on timeout

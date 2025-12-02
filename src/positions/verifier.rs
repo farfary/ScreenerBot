@@ -730,17 +730,16 @@ pub async fn verify_transaction(item: &VerificationItem) -> VerificationOutcome 
                                 ),
                             );
 
-                            crate::events::record_safe(crate::events::Event::new(
-                                crate::events::EventCategory::Position,
-                                Some("exit_residual_detected".to_string()),
+                            crate::events::record_position_event_flexible(
+                                "exit_residual_detected",
                                 crate::events::Severity::Warn,
-                                Some(item.mint.clone()),
-                                item.position_id.map(|id| id.to_string()),
+                                Some(&item.mint),
+                                item.position_id.map(|id| id.to_string()).as_deref(),
                                 serde_json::json!({
                                     "position_id": item.position_id,
                                     "remaining_balance": remaining_balance
                                 }),
-                            ))
+                            )
                             .await;
 
                             return VerificationOutcome::Transition(

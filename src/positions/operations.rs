@@ -68,20 +68,17 @@ async fn persist_position_with_retry(position: &Position) -> i64 {
                 );
 
                 if attempt >= POSITION_SAVE_MAX_RETRIES {
-                    let payload = json!({
-                        "mint": position.mint,
-                        "attempts": attempt,
-                        "error": err,
-                    });
-
-                    crate::events::record_safe(crate::events::Event::new(
-                        crate::events::EventCategory::Position,
-                        Some("open_persist_failed".to_string()),
+                    crate::events::record_position_event_flexible(
+                        "open_persist_failed",
                         crate::events::Severity::Error,
-                        Some(position.mint.clone()),
+                        Some(&position.mint),
                         None,
-                        payload,
-                    ))
+                        json!({
+                            "mint": position.mint,
+                            "attempts": attempt,
+                            "error": err,
+                        }),
+                    )
                     .await;
 
                     let fatal = format!(
@@ -146,17 +143,16 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
         )
         .await;
 
-        crate::events::record_safe(crate::events::Event::new(
-            crate::events::EventCategory::Position,
-            Some("open_blocked_in_memory".to_string()),
+        crate::events::record_position_event_flexible(
+            "open_blocked_in_memory",
             crate::events::Severity::Warn,
-            Some(api_token.mint.clone()),
+            Some(&api_token.mint),
             None,
             json!({
                 "reason": "is_open_position_guard",
                 "mint": api_token.mint,
             }),
-        ))
+        )
         .await;
         return Err("Already have open position for this token".to_string());
     }
@@ -194,19 +190,18 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
                 )
                 .await;
 
-                crate::events::record_safe(crate::events::Event::new(
-                    crate::events::EventCategory::Position,
-                    Some("open_blocked_db_guard".to_string()),
+                crate::events::record_position_event_flexible(
+                    "open_blocked_db_guard",
                     crate::events::Severity::Warn,
-                    Some(api_token.mint.clone()),
-                    db_pos.entry_transaction_signature.clone(),
+                    Some(&api_token.mint),
+                    db_pos.entry_transaction_signature.as_deref(),
                     json!({
                         "db_position_id": db_pos.id,
                         "entry_sig": db_pos.entry_transaction_signature,
                         "exit_sig": db_pos.exit_transaction_signature,
                         "has_exit_verified": db_pos.transaction_exit_verified,
                     }),
-                ))
+                )
                 .await;
                 return Err("Open position already exists in DB".to_string());
             }
@@ -248,16 +243,15 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
 
     // Mark mint as pending-open BEFORE submitting the swap to avoid duplicate attempts
     super::state::set_pending_open(&api_token.mint, super::state::PENDING_OPEN_TTL_SECS).await;
-    crate::events::record_safe(crate::events::Event::new(
-        crate::events::EventCategory::Position,
-        Some("pending_open_set".to_string()),
+    crate::events::record_position_event_flexible(
+        "pending_open_set",
         crate::events::Severity::Debug,
-        Some(api_token.mint.clone()),
+        Some(&api_token.mint),
         None,
         json!({
             "ttl_secs": super::state::PENDING_OPEN_TTL_SECS,
         }),
-    ))
+    )
     .await;
 
     let slippage_quote_default = with_config(|cfg| cfg.swaps.slippage.quote_default_pct);
@@ -386,14 +380,13 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
 
     // We successfully created the position; clear pending-open now
     super::state::clear_pending_open(&api_token.mint).await;
-    crate::events::record_safe(crate::events::Event::new(
-        crate::events::EventCategory::Position,
-        Some("pending_open_cleared".to_string()),
+    crate::events::record_position_event_flexible(
+        "pending_open_cleared",
         crate::events::Severity::Debug,
-        Some(api_token.mint.clone()),
-        Some(transaction_signature.clone()),
+        Some(&api_token.mint),
+        Some(&transaction_signature),
         json!({}),
-    ))
+    )
     .await;
 
     logger::info(
@@ -464,16 +457,15 @@ pub async fn close_position_direct(
                     &pending_sig[..8]
                 ),
             );
-            crate::events::record_safe(crate::events::Event::new(
-                crate::events::EventCategory::Position,
-                Some("exit_blocked_pending_sig".to_string()),
+            crate::events::record_position_event_flexible(
+                "exit_blocked_pending_sig",
                 crate::events::Severity::Warn,
-                Some(api_token.mint.clone()),
-                Some(pending_sig.clone()),
+                Some(&api_token.mint),
+                Some(pending_sig),
                 json!({
                     "reason": "pending_exit_tx_present"
                 }),
-            ))
+            )
             .await;
 
             // Record structured position event

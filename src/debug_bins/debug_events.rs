@@ -118,15 +118,19 @@ async fn test_event_recording() -> Result<(), Box<dyn std::error::Error>> {
     )
     .await;
 
-    // Test entry signal event
-    events::record_entry_event(
-        test_mint,
+    // Test trader signal event
+    events::record_trader_event(
         "momentum_spike",
-        "buy",
-        0.00001234, // Price in SOL
-        "5m",
-        0.85, // Signal strength
-        Some("Strong momentum with volume confirmation"),
+        Severity::Info,
+        Some(test_mint),
+        None,
+        json!({
+            "decision": "buy",
+            "price_sol": 0.00001234,
+            "timeframe": "5m",
+            "strength": 0.85,
+            "reason": "Strong momentum with volume confirmation",
+        }),
     )
     .await;
 

@@ -22,9 +22,8 @@ pub async fn monitor_positions(
     logger::info(LogTag::Trader, "Starting position monitor");
 
     // Record monitor start event
-    crate::events::record_safe(crate::events::Event::new(
-        crate::events::EventCategory::Trader,
-        Some("exit_monitor_started".to_string()),
+    crate::events::record_trader_event(
+        "exit_monitor_started",
         crate::events::Severity::Info,
         None,
         None,
@@ -32,7 +31,7 @@ pub async fn monitor_positions(
             "monitor": "exit",
             "message": "Exit/position monitor started",
         }),
-    ))
+    )
     .await;
 
     loop {

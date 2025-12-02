@@ -1,9 +1,10 @@
-/// Events Maintenance and MCP Integration
+/// Events Maintenance and Recording Functions
 ///
-/// This module provides maintenance functions and MCP server integration
-/// for the events system.
+/// This module provides maintenance functions and specialized event recording
+/// functions for each event category. All recording functions check the config
+/// before recording to allow per-category enable/disable control.
+use crate::config;
 use crate::constants::SOL_MINT;
-use crate::events::db::EventsDatabase;
 use crate::events::{Event, EventCategory, Severity};
 use crate::logger::{self, LogTag};
 use chrono::Utc;
@@ -12,17 +13,64 @@ use std::collections::HashMap;
 use tokio::time::{interval, Duration};
 
 // =============================================================================
+// CONFIG HELPERS
+// =============================================================================
+
+/// Check if events system is globally enabled
+#[inline]
+fn is_events_enabled() -> bool {
+    config::with_config(|c| c.events.enabled)
+}
+
+/// Check if a specific category is enabled for recording
+#[inline]
+fn is_category_enabled(category: &EventCategory) -> bool {
+    if !is_events_enabled() {
+        return false;
+    }
+
+    config::with_config(|c| match category {
+        EventCategory::Swap => c.events.record_swap,
+        EventCategory::Transaction => c.events.record_transaction,
+        EventCategory::Pool => c.events.record_pool,
+        EventCategory::Token => c.events.record_token,
+        EventCategory::System => c.events.record_system,
+        EventCategory::Position => c.events.record_position,
+        EventCategory::Wallet => c.events.record_wallet,
+        EventCategory::Trader => c.events.record_trader,
+        EventCategory::Ohlcv => c.events.record_ohlcv,
+        EventCategory::Rpc => c.events.record_rpc,
+        EventCategory::Api => c.events.record_api,
+        EventCategory::Security => c.events.record_security,
+        EventCategory::Connectivity => c.events.record_connectivity,
+        EventCategory::Filtering => c.events.record_filtering,
+        EventCategory::Other(_) => true, // Always allow custom categories when enabled
+    })
+}
+
+// =============================================================================
 // MAINTENANCE FUNCTIONS
 // =============================================================================
 
 /// Start background maintenance task for events
 /// Cleans up old events and performs database optimization
 pub async fn start_maintenance_task() {
+    // Only start maintenance if events are enabled
+    if !is_events_enabled() {
+        logger::info(LogTag::System, "Events system disabled - skipping maintenance task");
+        return;
+    }
+
     let mut cleanup_interval = interval(Duration::from_secs(6 * 60 * 60)); // Every 6 hours
 
     tokio::spawn(async move {
         loop {
             cleanup_interval.tick().await;
+
+            // Check if still enabled (config may have changed)
+            if !is_events_enabled() {
+                continue;
+            }
 
             if let Err(e) = perform_maintenance().await {
                 logger::info(LogTag::System, &format!("Events maintenance failed: {}", e));
@@ -68,7 +116,7 @@ async fn perform_maintenance() -> Result<(), String> {
 }
 
 // =============================================================================
-// HELPER FUNCTIONS FOR COMMON EVENT RECORDING
+// TRANSACTION EVENTS
 // =============================================================================
 
 /// Record a transaction event (submission/confirmation/failure)
@@ -80,6 +128,10 @@ pub async fn record_transaction_event(
     slot: Option<u64>,
     error_message: Option<&str>,
 ) {
+    if !is_category_enabled(&EventCategory::Transaction) {
+        return;
+    }
+
     let payload = json!({
         "signature": signature,
         "confirmation_status": confirmation_status,
@@ -108,6 +160,10 @@ pub async fn record_transaction_event(
     crate::events::record_safe(event).await;
 }
 
+// =============================================================================
+// SWAP EVENTS
+// =============================================================================
+
 /// Record a swap event with standardized payload
 pub async fn record_swap_event(
     signature: &str,
@@ -118,6 +174,10 @@ pub async fn record_swap_event(
     success: bool,
     error_message: Option<&str>,
 ) {
+    if !is_category_enabled(&EventCategory::Swap) {
+        return;
+    }
+
     let payload = json!({
         "signature": signature,
         "input_mint": input_mint,
@@ -142,7 +202,7 @@ pub async fn record_swap_event(
 
     let event = Event::new(
         EventCategory::Swap,
-        Some("JupiterSwap".to_string()),
+        Some("swap".to_string()),
         severity,
         mint,
         Some(signature.to_string()),
@@ -151,6 +211,10 @@ pub async fn record_swap_event(
 
     crate::events::record_safe(event).await;
 }
+
+// =============================================================================
+// POOL EVENTS
+// =============================================================================
 
 /// Record a pool discovery or analysis event
 pub async fn record_pool_event(
@@ -161,6 +225,10 @@ pub async fn record_pool_event(
     action: &str,
     details: Value,
 ) {
+    if !is_category_enabled(&EventCategory::Pool) {
+        return;
+    }
+
     let payload = json!({
         "pool_address": pool_address,
         "program_id": program_id,
@@ -182,6 +250,10 @@ pub async fn record_pool_event(
     crate::events::record_safe(event).await;
 }
 
+// =============================================================================
+// POSITION EVENTS
+// =============================================================================
+
 /// Record a position lifecycle event
 pub async fn record_position_event(
     position_id: &str,
@@ -194,6 +266,10 @@ pub async fn record_position_event(
     pnl_sol: Option<f64>,
     pnl_percent: Option<f64>,
 ) {
+    if !is_category_enabled(&EventCategory::Position) {
+        return;
+    }
+
     let payload = json!({
         "position_id": position_id,
         "action": action,
@@ -220,43 +296,50 @@ pub async fn record_position_event(
     crate::events::record_safe(event).await;
 }
 
-/// Record an entry signal event
-pub async fn record_entry_event(
-    mint: &str,
-    signal_type: &str,
-    decision: &str,
-    price_sol: f64,
-    timeframe: &str,
-    strength: f64,
-    reason: Option<&str>,
+/// Record a position event with flexible payload (for complex position operations)
+pub async fn record_position_event_flexible(
+    subtype: &str,
+    severity: Severity,
+    mint: Option<&str>,
+    reference_id: Option<&str>,
+    payload: Value,
 ) {
-    let payload = json!({
-        "signal_type": signal_type,
-        "decision": decision,
-        "price_sol": price_sol,
-        "timeframe": timeframe,
-        "strength": strength,
-        "reason": reason,
-        "event_time": Utc::now().to_rfc3339()
-    });
+    if !is_category_enabled(&EventCategory::Position) {
+        return;
+    }
 
-    let severity = match decision {
-        "buy" => Severity::Info,
-        "skip" => Severity::Debug,
-        _ => Severity::Info,
+    let mut payload_obj: Map<String, Value> = match payload {
+        Value::Object(obj) => obj,
+        Value::Null => Map::new(),
+        other => {
+            let mut map = Map::new();
+            map.insert("details".to_string(), other);
+            map
+        }
     };
 
+    payload_obj
+        .entry("subtype".to_string())
+        .or_insert_with(|| Value::String(subtype.to_string()));
+    payload_obj
+        .entry("event_time".to_string())
+        .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
+
     let event = Event::new(
-        EventCategory::Entry,
-        Some(signal_type.to_string()),
+        EventCategory::Position,
+        Some(subtype.to_string()),
         severity,
-        Some(mint.to_string()),
-        None,
-        payload,
+        mint.map(|m| m.to_string()),
+        reference_id.map(|r| r.to_string()),
+        Value::Object(payload_obj),
     );
 
     crate::events::record_safe(event).await;
 }
+
+// =============================================================================
+// SYSTEM EVENTS
+// =============================================================================
 
 /// Record a system lifecycle event
 pub async fn record_system_event(
@@ -265,6 +348,10 @@ pub async fn record_system_event(
     severity: Severity,
     details: Option<Value>,
 ) {
+    if !is_category_enabled(&EventCategory::System) {
+        return;
+    }
+
     let payload = json!({
         "component": component,
         "action": action,
@@ -285,8 +372,16 @@ pub async fn record_system_event(
     crate::events::record_safe(event).await;
 }
 
+// =============================================================================
+// TOKEN EVENTS
+// =============================================================================
+
 /// Record a token-related event (blacklist, metadata update, etc.)
 pub async fn record_token_event(mint: &str, action: &str, severity: Severity, details: Value) {
+    if !is_category_enabled(&EventCategory::Token) {
+        return;
+    }
+
     let payload = json!({
         "action": action,
         "details": details,
@@ -305,6 +400,43 @@ pub async fn record_token_event(mint: &str, action: &str, severity: Severity, de
     crate::events::record_safe(event).await;
 }
 
+// =============================================================================
+// WALLET EVENTS
+// =============================================================================
+
+/// Record a wallet event (balance changes, ATA management, etc.)
+pub async fn record_wallet_event(
+    action: &str,
+    severity: Severity,
+    mint: Option<&str>,
+    details: Value,
+) {
+    if !is_category_enabled(&EventCategory::Wallet) {
+        return;
+    }
+
+    let payload = json!({
+        "action": action,
+        "details": details,
+        "event_time": Utc::now().to_rfc3339()
+    });
+
+    let event = Event::new(
+        EventCategory::Wallet,
+        Some(action.to_string()),
+        severity,
+        mint.map(|m| m.to_string()),
+        None,
+        payload,
+    );
+
+    crate::events::record_safe(event).await;
+}
+
+// =============================================================================
+// SECURITY EVENTS
+// =============================================================================
+
 /// Record a security analysis event
 pub async fn record_security_event(
     mint: &str,
@@ -312,6 +444,10 @@ pub async fn record_security_event(
     risk_level: &str,
     findings: Value,
 ) {
+    if !is_category_enabled(&EventCategory::Security) {
+        return;
+    }
+
     let payload = json!({
         "analysis_type": analysis_type,
         "risk_level": risk_level,
@@ -337,6 +473,10 @@ pub async fn record_security_event(
     crate::events::record_safe(event).await;
 }
 
+// =============================================================================
+// CONNECTIVITY EVENTS
+// =============================================================================
+
 /// Record a connectivity/endpoint health event
 pub async fn record_connectivity_event(
     endpoint_name: &str,
@@ -344,6 +484,10 @@ pub async fn record_connectivity_event(
     severity: Severity,
     details: Value,
 ) {
+    if !is_category_enabled(&EventCategory::Connectivity) {
+        return;
+    }
+
     let payload = json!({
         "endpoint": endpoint_name,
         "action": action,
@@ -363,6 +507,10 @@ pub async fn record_connectivity_event(
     crate::events::record_safe(event).await;
 }
 
+// =============================================================================
+// OHLCV EVENTS
+// =============================================================================
+
 /// Record an OHLCV monitoring event with flexible payload metadata
 pub async fn record_ohlcv_event(
     subtype: &str,
@@ -371,6 +519,10 @@ pub async fn record_ohlcv_event(
     reference_id: Option<&str>,
     payload: Value,
 ) {
+    if !is_category_enabled(&EventCategory::Ohlcv) {
+        return;
+    }
+
     let mut payload_obj: Map<String, Value> = match payload {
         Value::Object(obj) => obj,
         Value::Null => Map::new(),
@@ -403,6 +555,10 @@ pub async fn record_ohlcv_event(
     crate::events::record_safe(event).await;
 }
 
+// =============================================================================
+// FILTERING EVENTS
+// =============================================================================
+
 /// Record a filtering event with flexible payload metadata
 pub async fn record_filtering_event(
     subtype: &str,
@@ -411,6 +567,10 @@ pub async fn record_filtering_event(
     reference_id: Option<&str>,
     payload: Value,
 ) {
+    if !is_category_enabled(&EventCategory::Filtering) {
+        return;
+    }
+
     let mut payload_obj: Map<String, Value> = match payload {
         Value::Object(obj) => obj,
         Value::Null => Map::new(),
@@ -443,6 +603,10 @@ pub async fn record_filtering_event(
     crate::events::record_safe(event).await;
 }
 
+// =============================================================================
+// TRADER EVENTS
+// =============================================================================
+
 /// Record a trader event with flexible payload metadata
 pub async fn record_trader_event(
     subtype: &str,
@@ -451,6 +615,10 @@ pub async fn record_trader_event(
     reference_id: Option<&str>,
     payload: Value,
 ) {
+    if !is_category_enabled(&EventCategory::Trader) {
+        return;
+    }
+
     let mut payload_obj: Map<String, Value> = match payload {
         Value::Object(obj) => obj,
         Value::Null => Map::new(),
@@ -483,8 +651,71 @@ pub async fn record_trader_event(
     crate::events::record_safe(event).await;
 }
 
-/// Record an API/RPC event with flexible payload metadata
-pub async fn record_api_event(api_name: &str, action: &str, severity: Severity, payload: Value) {
+// =============================================================================
+// RPC EVENTS (Solana RPC client)
+// =============================================================================
+
+/// Record an RPC client event (Solana RPC requests, responses, errors)
+pub async fn record_rpc_event(
+    method: &str,
+    action: &str,
+    severity: Severity,
+    payload: Value,
+) {
+    if !is_category_enabled(&EventCategory::Rpc) {
+        return;
+    }
+
+    let mut payload_obj: Map<String, Value> = match payload {
+        Value::Object(obj) => obj,
+        Value::Null => Map::new(),
+        other => {
+            let mut map = Map::new();
+            map.insert("details".to_string(), other);
+            map
+        }
+    };
+
+    payload_obj
+        .entry("method".to_string())
+        .or_insert_with(|| Value::String(method.to_string()));
+    payload_obj
+        .entry("action".to_string())
+        .or_insert_with(|| Value::String(action.to_string()));
+    payload_obj
+        .entry("event_time".to_string())
+        .or_insert_with(|| Value::String(Utc::now().to_rfc3339()));
+    payload_obj
+        .entry("message".to_string())
+        .or_insert_with(|| Value::String(format!("RPC {} - {}", method, action)));
+
+    let event = Event::new(
+        EventCategory::Rpc,
+        Some(action.to_string()),
+        severity,
+        None,
+        None,
+        Value::Object(payload_obj),
+    );
+
+    crate::events::record_safe(event).await;
+}
+
+// =============================================================================
+// API EVENTS (External APIs - DexScreener, GeckoTerminal, Jupiter API, etc.)
+// =============================================================================
+
+/// Record an external API event (DexScreener, GeckoTerminal, Jupiter API, RugCheck, etc.)
+pub async fn record_api_event(
+    api_name: &str,
+    action: &str,
+    severity: Severity,
+    payload: Value,
+) {
+    if !is_category_enabled(&EventCategory::Api) {
+        return;
+    }
+
     let mut payload_obj: Map<String, Value> = match payload {
         Value::Object(obj) => obj,
         Value::Null => Map::new(),
@@ -509,7 +740,7 @@ pub async fn record_api_event(api_name: &str, action: &str, severity: Severity, 
         .or_insert_with(|| Value::String(format!("{} - {}", api_name, action)));
 
     let event = Event::new(
-        EventCategory::Rpc,
+        EventCategory::Api,
         Some(action.to_string()),
         severity,
         None,

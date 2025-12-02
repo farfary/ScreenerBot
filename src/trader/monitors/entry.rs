@@ -53,9 +53,8 @@ pub async fn monitor_entries(
     logger::info(LogTag::Trader, "Starting entry opportunity monitor");
 
     // Record monitor start event
-    crate::events::record_safe(crate::events::Event::new(
-        crate::events::EventCategory::Trader,
-        Some("entry_monitor_started".to_string()),
+    crate::events::record_trader_event(
+        "entry_monitor_started",
         crate::events::Severity::Info,
         None,
         None,
@@ -63,7 +62,7 @@ pub async fn monitor_entries(
             "monitor": "entry",
             "message": "Entry opportunity monitor started",
         }),
-    ))
+    )
     .await;
 
     // Create semaphore for concurrent entry checks
@@ -167,11 +166,10 @@ pub async fn monitor_entries(
             match future.await {
                 Ok(Some(decision)) => {
                     // Record entry signal event
-                    crate::events::record_safe(crate::events::Event::new(
-                        crate::events::EventCategory::Trader,
-                        Some("entry_signal_generated".to_string()),
+                    crate::events::record_trader_event(
+                        "entry_signal_generated",
                         crate::events::Severity::Info,
-                        Some(decision.mint.clone()),
+                        Some(&decision.mint),
                         None,
                         serde_json::json!({
                             "action": "entry_signal",
@@ -180,7 +178,7 @@ pub async fn monitor_entries(
                             "reason": format!("{:?}", decision.reason),
                             "priority": format!("{:?}", decision.priority),
                         }),
-                    ))
+                    )
                     .await;
 
                     // Execute the trade
@@ -202,18 +200,17 @@ pub async fn monitor_entries(
                                 );
 
                                 // Record successful entry event
-                                crate::events::record_safe(crate::events::Event::new(
-                                    crate::events::EventCategory::Trader,
-                                    Some("entry_executed".to_string()),
+                                crate::events::record_trader_event(
+                                    "entry_executed",
                                     crate::events::Severity::Info,
-                                    Some(decision.mint.clone()),
-                                    tx_sig.clone(),
+                                    Some(&decision.mint),
+                                    tx_sig.as_deref(),
                                     serde_json::json!({
                                         "success": true,
                                         "mint": decision.mint,
                                         "tx_signature": tx_sig,
                                     }),
-                                ))
+                                )
                                 .await;
                             } else {
                                 let error_msg = result.error.clone().unwrap_or_default();
@@ -228,18 +225,17 @@ pub async fn monitor_entries(
                                         ),
                                     );
 
-                                    crate::events::record_safe(crate::events::Event::new(
-                                        crate::events::EventCategory::Trader,
-                                        Some("entry_capacity_guard".to_string()),
+                                    crate::events::record_trader_event(
+                                        "entry_capacity_guard",
                                         crate::events::Severity::Info,
-                                        Some(decision.mint.clone()),
+                                        Some(&decision.mint),
                                         None,
                                         serde_json::json!({
                                             "mint": decision.mint,
                                             "reason": error_msg,
                                             "remaining_permits": remaining,
                                         }),
-                                    ))
+                                    )
                                     .await;
                                 } else {
                                     logger::error(
@@ -250,18 +246,17 @@ pub async fn monitor_entries(
                                         ),
                                     );
 
-                                    crate::events::record_safe(crate::events::Event::new(
-                                        crate::events::EventCategory::Trader,
-                                        Some("entry_failed".to_string()),
+                                    crate::events::record_trader_event(
+                                        "entry_failed",
                                         crate::events::Severity::Error,
-                                        Some(decision.mint.clone()),
+                                        Some(&decision.mint),
                                         None,
                                         serde_json::json!({
                                             "success": false,
                                             "mint": decision.mint,
                                             "error": result.error,
                                         }),
-                                    ))
+                                    )
                                     .await;
                                 }
                             }
@@ -276,17 +271,16 @@ pub async fn monitor_entries(
                             );
 
                             // Record execution error event
-                            crate::events::record_safe(crate::events::Event::new(
-                                crate::events::EventCategory::Trader,
-                                Some("entry_execution_error".to_string()),
+                            crate::events::record_trader_event(
+                                "entry_execution_error",
                                 crate::events::Severity::Error,
-                                Some(decision.mint.clone()),
+                                Some(&decision.mint),
                                 None,
                                 serde_json::json!({
                                     "mint": decision.mint,
                                     "error": e.to_string(),
                                 }),
-                            ))
+                            )
                             .await;
                         }
                     }
