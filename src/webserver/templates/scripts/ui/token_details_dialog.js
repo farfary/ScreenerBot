@@ -2,7 +2,7 @@
  * Token Details Dialog
  * Full-screen dialog showing comprehensive token information with multiple tabs
  */
-/* global LightweightCharts, ResizeObserver */
+/* global LightweightCharts */
 import * as Utils from "../core/utils.js";
 import { Poller } from "../core/poller.js";
 

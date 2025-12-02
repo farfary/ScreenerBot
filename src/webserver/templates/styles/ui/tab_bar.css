@@ -54,12 +54,13 @@
   display: flex;
   overflow-x: auto;
   flex: 0 0 auto;
-  scrollbar-width: thin;
+  scrollbar-width: none; /* Hide scrollbar Firefox */
+  -ms-overflow-style: none; /* Hide scrollbar IE/Edge */
 }
 
-/* Hide scrollbar on webkit browsers for cleaner look */
+/* Hide scrollbar on webkit browsers */
 .tabs::-webkit-scrollbar {
-  height: 4px;
+  display: none;
 }
 
 .tabs::-webkit-scrollbar-track {
@@ -115,8 +116,10 @@
   gap: var(--tab-bar-gap);
   overflow-x: auto;
   flex: 0 0 auto;
-  scrollbar-width: thin;
+  scrollbar-width: none; /* Hide scrollbar Firefox */
+  -ms-overflow-style: none; /* Hide scrollbar IE/Edge */
   min-height: 0; /* No minimum height needed */
+  position: relative;
 }
 
 .sub-tabs-container[data-ui="tab-bar"] {
@@ -125,16 +128,7 @@
 
 /* Hide scrollbar on webkit browsers */
 .sub-tabs-container::-webkit-scrollbar {
-  height: 4px;
-}
-
-.sub-tabs-container::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.sub-tabs-container::-webkit-scrollbar-thumb {
-  background: var(--tab-bar-border-color);
-  border-radius: 2px;
+  display: none;
 }
 
 /* ============================================================================
@@ -311,4 +305,153 @@
 .sub-tabs-container.compact .sub-tab {
   padding: 6px 12px;
   font-size: 0.85em;
+}
+
+/* ============================================================================
+   Scroll Navigation - Overflow indicators and scroll buttons
+   ============================================================================ */
+
+/* Wrapper for scrollable tab containers with navigation */
+.tab-scroll-wrapper {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  flex: 0 0 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* The scrollable content area */
+.tab-scroll-wrapper .sub-tabs-container,
+.tab-scroll-wrapper .tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* Scroll navigation buttons */
+.tab-scroll-btn {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(to right, var(--tab-bar-bg-secondary), var(--tab-bar-bg-secondary) 60%, transparent);
+  border: none;
+  cursor: pointer;
+  z-index: 10;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  padding: 0;
+  color: var(--text-secondary);
+  font-size: 1rem;
+}
+
+.tab-scroll-btn:hover {
+  color: var(--text-primary);
+}
+
+.tab-scroll-btn--left {
+  left: 0;
+  background: linear-gradient(to right, var(--tab-bar-bg-secondary) 50%, transparent);
+  padding-left: 4px;
+}
+
+.tab-scroll-btn--right {
+  right: 0;
+  background: linear-gradient(to left, var(--tab-bar-bg-secondary) 50%, transparent);
+  padding-right: 4px;
+}
+
+/* Show buttons when there's overflow */
+.tab-scroll-wrapper.can-scroll-left .tab-scroll-btn--left,
+.tab-scroll-wrapper.can-scroll-right .tab-scroll-btn--right {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Fade indicators (alternative to buttons, shows there's more content) */
+.tab-scroll-wrapper::before,
+.tab-scroll-wrapper::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 24px;
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.tab-scroll-wrapper::before {
+  left: 0;
+  background: linear-gradient(to right, var(--tab-bar-bg-secondary), transparent);
+}
+
+.tab-scroll-wrapper::after {
+  right: 0;
+  background: linear-gradient(to left, var(--tab-bar-bg-secondary), transparent);
+}
+
+.tab-scroll-wrapper.can-scroll-left::before {
+  opacity: 1;
+}
+
+.tab-scroll-wrapper.can-scroll-right::after {
+  opacity: 1;
+}
+
+/* Hide fade indicators when using buttons */
+.tab-scroll-wrapper.has-scroll-buttons::before,
+.tab-scroll-wrapper.has-scroll-buttons::after {
+  display: none;
+}
+
+/* For main tabs (header row) */
+.tabs-scroll-wrapper {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.tabs-scroll-wrapper .tabs {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.tabs-scroll-wrapper::before,
+.tabs-scroll-wrapper::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 32px;
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.tabs-scroll-wrapper::before {
+  left: 0;
+  background: linear-gradient(to right, var(--tab-bar-bg-primary), transparent);
+}
+
+.tabs-scroll-wrapper::after {
+  right: 0;
+  background: linear-gradient(to left, var(--tab-bar-bg-primary), transparent);
+}
+
+.tabs-scroll-wrapper.can-scroll-left::before {
+  opacity: 1;
+}
+
+.tabs-scroll-wrapper.can-scroll-right::after {
+  opacity: 1;
 }

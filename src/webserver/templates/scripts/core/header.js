@@ -620,6 +620,9 @@ function initTraderControls() {
   // Initialize notification panel UI
   NotificationPanel.init();
 
+  // Initialize scroll navigation for main header tabs
+  initHeaderTabsScroll();
+
   // Setup visibility handling for pollers
   setupVisibilityHandler();
 
@@ -853,6 +856,65 @@ function initTraderDropdown() {
   // Placeholder for future trader dropdown menu
   // Will add: Start, Stop, Restart, View Logs options
 }
+
+// ============================================================================
+// HEADER TABS SCROLL NAVIGATION
+// ============================================================================
+
+let headerTabsScrollCleanup = null;
+
+function initHeaderTabsScroll() {
+  const headerRow = document.querySelector(".header-row-2");
+  if (!headerRow) return;
+
+  // Update scroll indicators based on scroll position
+  const updateScrollIndicators = () => {
+    const { scrollLeft, scrollWidth, clientWidth } = headerRow;
+    const canScrollLeft = scrollLeft > 1;
+    const canScrollRight = scrollLeft < scrollWidth - clientWidth - 1;
+
+    headerRow.classList.toggle("can-scroll-left", canScrollLeft);
+    headerRow.classList.toggle("can-scroll-right", canScrollRight);
+  };
+
+  // Mouse wheel horizontal scroll support
+  const wheelHandler = (event) => {
+    // Only handle if there's horizontal overflow
+    if (headerRow.scrollWidth <= headerRow.clientWidth) return;
+
+    // Convert vertical scroll to horizontal
+    if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+      event.preventDefault();
+      headerRow.scrollLeft += event.deltaY;
+      updateScrollIndicators();
+    }
+  };
+
+  // Track scroll position for indicators
+  const scrollHandler = () => updateScrollIndicators();
+
+  // Attach event listeners
+  headerRow.addEventListener("wheel", wheelHandler, { passive: false });
+  headerRow.addEventListener("scroll", scrollHandler, { passive: true });
+
+  // Watch for resize to update indicators
+  const resizeObserver = new ResizeObserver(() => {
+    updateScrollIndicators();
+  });
+  resizeObserver.observe(headerRow);
+
+  // Initial update
+  requestAnimationFrame(updateScrollIndicators);
+
+  // Cleanup function
+  headerTabsScrollCleanup = () => {
+    headerRow.removeEventListener("wheel", wheelHandler);
+    headerRow.removeEventListener("scroll", scrollHandler);
+    resizeObserver.disconnect();
+  };
+}
+
+// END HEADER TABS SCROLL NAVIGATION
 
 let notificationsInitialized = false;
 let notificationUnsubscribe = null;

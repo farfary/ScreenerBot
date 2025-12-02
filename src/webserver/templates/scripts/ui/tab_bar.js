@@ -163,7 +163,83 @@ export class TabBar {
     this.keyboardHandler = (event) => this._handleKeyboard(event);
     this.container.addEventListener("keydown", this.keyboardHandler);
 
+    // Setup scroll navigation (mouse wheel + overflow detection)
+    this._setupScrollNavigation();
+
     this.mounted = true;
+  }
+
+  // --------------------------------------------------------------------------
+  // Private: Scroll Navigation
+  // --------------------------------------------------------------------------
+
+  _setupScrollNavigation() {
+    // Mouse wheel horizontal scroll support
+    this.wheelHandler = (event) => {
+      // Only handle if there's horizontal overflow
+      if (this.container.scrollWidth <= this.container.clientWidth) return;
+
+      // Convert vertical scroll to horizontal
+      if (Math.abs(event.deltaY) > Math.abs(event.deltaX)) {
+        event.preventDefault();
+        this.container.scrollLeft += event.deltaY;
+        this._updateScrollIndicators();
+      }
+    };
+    this.container.addEventListener("wheel", this.wheelHandler, { passive: false });
+
+    // Track scroll position for indicators
+    this.scrollHandler = () => this._updateScrollIndicators();
+    this.container.addEventListener("scroll", this.scrollHandler, { passive: true });
+
+    // Watch for resize to update indicators
+    this.resizeObserver = new ResizeObserver(() => {
+      this._updateScrollIndicators();
+    });
+    this.resizeObserver.observe(this.container);
+
+    // Initial update
+    requestAnimationFrame(() => this._updateScrollIndicators());
+  }
+
+  _updateScrollIndicators() {
+    const { scrollLeft, scrollWidth, clientWidth } = this.container;
+    const wrapper = this.container.parentElement;
+
+    // Check if wrapper has the scroll wrapper class
+    if (!wrapper || !wrapper.classList.contains("tab-scroll-wrapper")) {
+      // Add wrapper classes directly to container's parent if it exists
+      // or use container itself for indicator tracking
+      const target = wrapper || this.container;
+
+      const canScrollLeft = scrollLeft > 1;
+      const canScrollRight = scrollLeft < scrollWidth - clientWidth - 1;
+
+      target.classList.toggle("can-scroll-left", canScrollLeft);
+      target.classList.toggle("can-scroll-right", canScrollRight);
+      return;
+    }
+
+    const canScrollLeft = scrollLeft > 1;
+    const canScrollRight = scrollLeft < scrollWidth - clientWidth - 1;
+
+    wrapper.classList.toggle("can-scroll-left", canScrollLeft);
+    wrapper.classList.toggle("can-scroll-right", canScrollRight);
+  }
+
+  _cleanupScrollNavigation() {
+    if (this.wheelHandler) {
+      this.container.removeEventListener("wheel", this.wheelHandler);
+      this.wheelHandler = null;
+    }
+    if (this.scrollHandler) {
+      this.container.removeEventListener("scroll", this.scrollHandler);
+      this.scrollHandler = null;
+    }
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
   }
 
   _handleClick(event) {
@@ -442,6 +518,9 @@ export class TabBar {
       this.container.removeEventListener("keydown", this.keyboardHandler);
       this.keyboardHandler = null;
     }
+
+    // Cleanup scroll navigation
+    this._cleanupScrollNavigation();
 
     // Clear context
     this.context.clear();
