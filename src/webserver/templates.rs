@@ -225,27 +225,20 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
 }
 
 fn nav_tabs(active: &str) -> String {
-    let tabs = vec![
-        ("home", "icon-home", "Home"),
-        ("positions", "icon-chart-candlestick", "Positions"),
-        ("tokens", "icon-coins", "Tokens"),
-        ("filtering", "icon-list-filter", "Filtering"),
-        ("wallet", "icon-wallet", "Wallet"),
-        ("trader", "icon-bot", "Auto Trader"),
-        ("strategies", "icon-target", "Strategies"),
-        ("transactions", "icon-activity", "Transactions"),
-        ("services", "icon-server", "Services"),
-        ("config", "icon-settings", "Config"),
-        ("events", "icon-radio-tower", "Events"),
-    ];
+    use crate::config;
+
+    // Get tabs from config, filter enabled ones, and sort by order
+    let mut tabs = config::with_config(|cfg| cfg.gui.dashboard.navigation.tabs.clone());
+    tabs.retain(|t| t.enabled);
+    tabs.sort_by_key(|t| t.order);
 
     tabs.iter()
-        .map(|(name, icon_class, label)| {
-            let active_class = if *name == active { " active" } else { "" };
+        .map(|tab| {
+            let active_class = if tab.id == active { " active" } else { "" };
             // Use data-page attribute for client-side routing (SPA)
             format!(
                 "<a href=\"#\" data-page=\"{}\" class=\"tab{}\"><i class=\"{}\"></i> {}</a>",
-                name, active_class, icon_class, label
+                tab.id, active_class, tab.icon, tab.label
             )
         })
         .collect::<Vec<_>>()

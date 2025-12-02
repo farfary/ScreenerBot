@@ -3,6 +3,7 @@
  * Full-screen settings dialog with tabs for Interface, Startup, About, Updates
  */
 import * as Utils from "../core/utils.js";
+import { getCurrentPage } from "../core/router.js";
 
 const VERSION = "0.1.0";
 const BUILD_DATE = "2025-12-02";
@@ -108,8 +109,30 @@ export class SettingsDialog {
           check_updates_on_startup: false,
           show_background_notifications: true,
         },
+        navigation: {
+          tabs: this._getDefaultTabs(),
+        },
       },
     };
+  }
+
+  /**
+   * Get default tab configuration
+   */
+  _getDefaultTabs() {
+    return [
+      { id: "home", label: "Home", icon: "icon-house", order: 0, enabled: true },
+      { id: "positions", label: "Positions", icon: "icon-chart-candlestick", order: 1, enabled: true },
+      { id: "tokens", label: "Tokens", icon: "icon-coins", order: 2, enabled: true },
+      { id: "filtering", label: "Filtering", icon: "icon-list-filter", order: 3, enabled: true },
+      { id: "wallet", label: "Wallet", icon: "icon-wallet", order: 4, enabled: true },
+      { id: "trader", label: "Auto Trader", icon: "icon-bot", order: 5, enabled: true },
+      { id: "strategies", label: "Strategies", icon: "icon-target", order: 6, enabled: true },
+      { id: "transactions", label: "Transactions", icon: "icon-activity", order: 7, enabled: true },
+      { id: "services", label: "Services", icon: "icon-server", order: 8, enabled: true },
+      { id: "config", label: "Config", icon: "icon-settings", order: 9, enabled: true },
+      { id: "events", label: "Events", icon: "icon-radio-tower", order: 10, enabled: true },
+    ];
   }
 
   /**
@@ -136,13 +159,23 @@ export class SettingsDialog {
       this.hasChanges = false;
       this._updateSaveButton();
 
-      Utils.showToast('<i class="icon-check"></i> Settings saved successfully', "success");
+      Utils.showToast({
+        type: "success",
+        title: "Settings saved successfully",
+        icon: '<i class="icon-circle-check"></i>',
+      });
 
-      // Apply theme change immediately if changed
+      // Apply settings immediately
       this._applyInterfaceSettings();
+      this._applyNavigationSettings();
     } catch (error) {
       console.error("Failed to save settings:", error);
-      Utils.showToast(`<i class="icon-x"></i> ${error.message}`, "error");
+      Utils.showToast({
+        type: "error",
+        title: "Failed to save settings",
+        message: error.message,
+        icon: '<i class="icon-circle-x"></i>',
+      });
     } finally {
       this.isSaving = false;
       this._updateSaveButton();
@@ -175,6 +208,30 @@ export class SettingsDialog {
     if (typeof iface.compact_mode === "boolean") {
       document.documentElement.classList.toggle("compact-mode", iface.compact_mode);
     }
+  }
+
+  /**
+   * Apply navigation settings immediately (update nav bar without page reload)
+   */
+  _applyNavigationSettings() {
+    const navContainer = document.getElementById("navTabs");
+    if (!navContainer) return;
+
+    const tabs = this.settings?.dashboard?.navigation?.tabs || [];
+    const enabledTabs = tabs.filter((t) => t.enabled).sort((a, b) => a.order - b.order);
+
+    // Get current active page from router
+    const currentPage = getCurrentPage() || "home";
+
+    // Rebuild navigation HTML
+    const tabsHTML = enabledTabs
+      .map((tab) => {
+        const activeClass = tab.id === currentPage ? " active" : "";
+        return `<a href="#" data-page="${tab.id}" class="tab${activeClass}"><i class="${tab.icon}"></i> ${tab.label}</a>`;
+      })
+      .join("\n        ");
+
+    navContainer.innerHTML = tabsHTML;
   }
 
   /**
@@ -219,6 +276,10 @@ export class SettingsDialog {
               <i class="icon-palette"></i>
               <span>Interface</span>
             </button>
+            <button class="settings-nav-item" data-tab="navigation">
+              <i class="icon-layout-grid"></i>
+              <span>Navigation</span>
+            </button>
             <button class="settings-nav-item" data-tab="startup">
               <i class="icon-zap"></i>
               <span>Startup</span>
@@ -236,6 +297,9 @@ export class SettingsDialog {
 
           <div class="settings-content">
             <div class="settings-tab active" data-tab-content="interface">
+              <div class="settings-loading">Loading...</div>
+            </div>
+            <div class="settings-tab" data-tab-content="navigation">
               <div class="settings-loading">Loading...</div>
             </div>
             <div class="settings-tab" data-tab-content="startup">
@@ -318,6 +382,10 @@ export class SettingsDialog {
       case "interface":
         content.innerHTML = this._buildInterfaceTab();
         this._attachInterfaceHandlers(content);
+        break;
+      case "navigation":
+        content.innerHTML = this._buildNavigationTab();
+        this._attachNavigationHandlers(content);
         break;
       case "startup":
         content.innerHTML = this._buildStartupTab();
@@ -503,6 +571,226 @@ export class SettingsDialog {
         updateSetting("auto_expand_categories", e.target.checked)
       );
     }
+  }
+
+  /**
+   * Build Navigation tab content
+   */
+  _buildNavigationTab() {
+    const navigation = this.settings?.dashboard?.navigation || {};
+    const tabs = navigation.tabs || this._getDefaultTabs();
+
+    // Sort tabs by order for display
+    const sortedTabs = [...tabs].sort((a, b) => a.order - b.order);
+
+    const tabItems = sortedTabs
+      .map(
+        (tab, index) => `
+        <div class="settings-nav-tab-item" data-tab-id="${tab.id}" data-order="${tab.order}">
+          <div class="settings-nav-tab-handle">
+            <i class="icon-grip-vertical"></i>
+          </div>
+          <div class="settings-nav-tab-icon">
+            <i class="${tab.icon}"></i>
+          </div>
+          <div class="settings-nav-tab-info">
+            <span class="settings-nav-tab-label">${tab.label}</span>
+            <span class="settings-nav-tab-id">${tab.id}</span>
+          </div>
+          <div class="settings-nav-tab-actions">
+            <button class="settings-nav-tab-btn settings-nav-tab-up" ${index === 0 ? "disabled" : ""} title="Move up">
+              <i class="icon-chevron-up"></i>
+            </button>
+            <button class="settings-nav-tab-btn settings-nav-tab-down" ${index === sortedTabs.length - 1 ? "disabled" : ""} title="Move down">
+              <i class="icon-chevron-down"></i>
+            </button>
+          </div>
+          <div class="settings-nav-tab-toggle">
+            <label class="settings-toggle">
+              <input type="checkbox" ${tab.enabled ? "checked" : ""} ${tab.id === "home" ? "disabled" : ""}>
+              <span class="settings-toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      `
+      )
+      .join("");
+
+    return `
+      <div class="settings-section">
+        <h3 class="settings-section-title">Navigation Tabs</h3>
+        <p class="settings-section-hint">Reorder and toggle visibility of navigation tabs. Home tab cannot be disabled.</p>
+        <div class="settings-nav-tabs-list" id="navTabsList">
+          ${tabItems}
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title">Actions</h3>
+        <div class="settings-group">
+          <div class="settings-field">
+            <div class="settings-field-info">
+              <label>Reset to Defaults</label>
+              <span class="settings-field-hint">Restore default tab order and visibility</span>
+            </div>
+            <div class="settings-field-control">
+              <button class="settings-update-btn" id="resetNavTabs">
+                <i class="icon-rotate-ccw"></i>
+                <span>Reset</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="settings-nav-tabs-note">
+        <i class="icon-info"></i>
+        <span>Changes require a page refresh to take effect in the navigation bar.</span>
+      </div>
+    `;
+  }
+
+  /**
+   * Attach handlers for Navigation tab
+   */
+  _attachNavigationHandlers(content) {
+    const list = content.querySelector("#navTabsList");
+    if (!list) return;
+
+    // Ensure navigation config exists
+    if (!this.settings.dashboard) this.settings.dashboard = {};
+    if (!this.settings.dashboard.navigation) {
+      this.settings.dashboard.navigation = { tabs: this._getDefaultTabs() };
+    }
+
+    const getTabs = () => this.settings.dashboard.navigation.tabs;
+    const setTabs = (tabs) => {
+      this.settings.dashboard.navigation.tabs = tabs;
+      this._checkForChanges();
+    };
+
+    // Move up handler
+    list.addEventListener("click", (e) => {
+      const upBtn = e.target.closest(".settings-nav-tab-up");
+      if (upBtn && !upBtn.disabled) {
+        const item = upBtn.closest(".settings-nav-tab-item");
+        const tabId = item.dataset.tabId;
+        this._moveTab(tabId, -1);
+        this._refreshNavigationList(content);
+      }
+    });
+
+    // Move down handler
+    list.addEventListener("click", (e) => {
+      const downBtn = e.target.closest(".settings-nav-tab-down");
+      if (downBtn && !downBtn.disabled) {
+        const item = downBtn.closest(".settings-nav-tab-item");
+        const tabId = item.dataset.tabId;
+        this._moveTab(tabId, 1);
+        this._refreshNavigationList(content);
+      }
+    });
+
+    // Toggle handler
+    list.addEventListener("change", (e) => {
+      if (e.target.type === "checkbox") {
+        const item = e.target.closest(".settings-nav-tab-item");
+        const tabId = item.dataset.tabId;
+        if (tabId !== "home") {
+          const tabs = getTabs();
+          const tab = tabs.find((t) => t.id === tabId);
+          if (tab) {
+            tab.enabled = e.target.checked;
+            setTabs(tabs);
+          }
+        }
+      }
+    });
+
+    // Reset button handler
+    const resetBtn = content.querySelector("#resetNavTabs");
+    if (resetBtn) {
+      resetBtn.addEventListener("click", () => {
+        this.settings.dashboard.navigation.tabs = this._getDefaultTabs();
+        this._checkForChanges();
+        this._refreshNavigationList(content);
+        Utils.showToast({
+          type: "info",
+          title: "Navigation reset to defaults",
+          icon: '<i class="icon-rotate-ccw"></i>',
+        });
+      });
+    }
+  }
+
+  /**
+   * Move a tab up or down in the order
+   */
+  _moveTab(tabId, direction) {
+    const tabs = this.settings.dashboard.navigation.tabs;
+    const sortedTabs = [...tabs].sort((a, b) => a.order - b.order);
+    const currentIndex = sortedTabs.findIndex((t) => t.id === tabId);
+
+    if (currentIndex === -1) return;
+
+    const newIndex = currentIndex + direction;
+    if (newIndex < 0 || newIndex >= sortedTabs.length) return;
+
+    // Swap orders
+    const currentTab = sortedTabs[currentIndex];
+    const swapTab = sortedTabs[newIndex];
+
+    const tempOrder = currentTab.order;
+    currentTab.order = swapTab.order;
+    swapTab.order = tempOrder;
+
+    this._checkForChanges();
+  }
+
+  /**
+   * Refresh the navigation list after reordering
+   */
+  _refreshNavigationList(content) {
+    const listContainer = content.querySelector("#navTabsList");
+    if (!listContainer) return;
+
+    const tabs = this.settings?.dashboard?.navigation?.tabs || this._getDefaultTabs();
+    const sortedTabs = [...tabs].sort((a, b) => a.order - b.order);
+
+    const tabItems = sortedTabs
+      .map(
+        (tab, index) => `
+        <div class="settings-nav-tab-item" data-tab-id="${tab.id}" data-order="${tab.order}">
+          <div class="settings-nav-tab-handle">
+            <i class="icon-grip-vertical"></i>
+          </div>
+          <div class="settings-nav-tab-icon">
+            <i class="${tab.icon}"></i>
+          </div>
+          <div class="settings-nav-tab-info">
+            <span class="settings-nav-tab-label">${tab.label}</span>
+            <span class="settings-nav-tab-id">${tab.id}</span>
+          </div>
+          <div class="settings-nav-tab-actions">
+            <button class="settings-nav-tab-btn settings-nav-tab-up" ${index === 0 ? "disabled" : ""} title="Move up">
+              <i class="icon-chevron-up"></i>
+            </button>
+            <button class="settings-nav-tab-btn settings-nav-tab-down" ${index === sortedTabs.length - 1 ? "disabled" : ""} title="Move down">
+              <i class="icon-chevron-down"></i>
+            </button>
+          </div>
+          <div class="settings-nav-tab-toggle">
+            <label class="settings-toggle">
+              <input type="checkbox" ${tab.enabled ? "checked" : ""} ${tab.id === "home" ? "disabled" : ""}>
+              <span class="settings-toggle-slider"></span>
+            </label>
+          </div>
+        </div>
+      `
+      )
+      .join("");
+
+    listContainer.innerHTML = tabItems;
   }
 
   /**

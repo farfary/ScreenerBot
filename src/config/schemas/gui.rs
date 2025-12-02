@@ -21,6 +21,9 @@ config_struct! {
 
         /// Startup behavior settings
         startup: StartupConfig = StartupConfig::default(),
+
+        /// Navigation tab settings
+        navigation: NavigationConfig = NavigationConfig::default(),
     }
 }
 
@@ -66,3 +69,45 @@ config_struct! {
         show_background_notifications: bool = true,
     }
 }
+
+config_struct! {
+    /// Navigation configuration for dashboard tabs
+    pub struct NavigationConfig {
+        /// List of navigation tabs with order and visibility
+        tabs: Vec<TabConfig> = default_tabs(),
+    }
+}
+
+config_struct! {
+    /// Single navigation tab configuration
+    pub struct TabConfig {
+        /// Tab identifier (e.g., "home", "positions")
+        id: String = "".to_string(),
+        /// Display label
+        label: String = "".to_string(),
+        /// Icon class name (e.g., "icon-home")
+        icon: String = "".to_string(),
+        /// Sort order (lower = first)
+        order: u32 = 0,
+        /// Whether tab is visible/enabled
+        enabled: bool = true,
+    }
+}
+
+/// Returns the default tab configuration
+pub fn default_tabs() -> Vec<TabConfig> {
+    vec![
+        TabConfig { id: "home".into(), label: "Home".into(), icon: "icon-house".into(), order: 0, enabled: true },
+        TabConfig { id: "positions".into(), label: "Positions".into(), icon: "icon-chart-candlestick".into(), order: 1, enabled: true },
+        TabConfig { id: "tokens".into(), label: "Tokens".into(), icon: "icon-coins".into(), order: 2, enabled: true },
+        TabConfig { id: "filtering".into(), label: "Filtering".into(), icon: "icon-list-filter".into(), order: 3, enabled: true },
+        TabConfig { id: "wallet".into(), label: "Wallet".into(), icon: "icon-wallet".into(), order: 4, enabled: true },
+        TabConfig { id: "trader".into(), label: "Auto Trader".into(), icon: "icon-bot".into(), order: 5, enabled: true },
+        TabConfig { id: "strategies".into(), label: "Strategies".into(), icon: "icon-target".into(), order: 6, enabled: true },
+        TabConfig { id: "transactions".into(), label: "Transactions".into(), icon: "icon-activity".into(), order: 7, enabled: true },
+        TabConfig { id: "services".into(), label: "Services".into(), icon: "icon-server".into(), order: 8, enabled: true },
+        TabConfig { id: "config".into(), label: "Config".into(), icon: "icon-settings".into(), order: 9, enabled: true },
+        TabConfig { id: "events".into(), label: "Events".into(), icon: "icon-radio-tower".into(), order: 10, enabled: true },
+    ]
+}
+

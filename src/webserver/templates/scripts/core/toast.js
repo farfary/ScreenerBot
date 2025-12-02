@@ -29,11 +29,11 @@ const DEFAULT_DURATIONS = {
 const LOADING_TIMEOUT = 60000; // 60 seconds maximum for loading toasts
 
 const ICONS = {
-  success: "✓",
-  error: "✕",
-  warning: "⚠",
-  info: "ℹ",
-  loading: "⟳",
+  success: '<i class="icon-circle-check"></i>',
+  error: '<i class="icon-circle-x"></i>',
+  warning: '<i class="icon-triangle-alert"></i>',
+  info: '<i class="icon-info"></i>',
+  loading: '<i class="icon-loader-circle"></i>',
   action: '<i class="icon-zap"></i>',
 };
 

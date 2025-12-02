@@ -518,12 +518,6 @@
 
     // Backwards compatibility: showToast("message", "type")
     if (typeof messageOrConfig === "string") {
-      // Deprecation warning (only in development)
-      if (typeof console !== "undefined" && console.warn) {
-        console.warn(
-          "[DEPRECATED] showToast(message, type) is deprecated. Use showToast(config) instead."
-        );
-      }
       return toastManager.show({
         type: type,
         title: messageOrConfig,

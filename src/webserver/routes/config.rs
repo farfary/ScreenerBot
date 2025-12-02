@@ -320,6 +320,7 @@ where
             "ServicesConfig" => serde_json::to_value(&cfg.services).ok(),
             "MonitoringConfig" => serde_json::to_value(&cfg.monitoring).ok(),
             "OhlcvConfig" => serde_json::to_value(&cfg.ohlcv).ok(),
+            "GuiConfig" => serde_json::to_value(&cfg.gui).ok(),
             _ => None,
         });
 
@@ -446,6 +447,16 @@ where
                 config::update_config_section(
                     |cfg| {
                         cfg.ohlcv = new_config;
+                    },
+                    true,
+                )?;
+            }
+            "GuiConfig" => {
+                let new_config: config::GuiConfig = serde_json::from_value(section_json)
+                    .map_err(|e| format!("Invalid GuiConfig: {}", e))?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.gui = new_config;
                     },
                     true,
                 )?;
