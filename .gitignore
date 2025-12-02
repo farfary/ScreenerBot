@@ -42,12 +42,9 @@ cache_tokens.db
 .idea/
 
 # Development tools (keep local, not tracked)
-.github/
 .playwright-mcp/
-mcp/
 dist/
 analysis-exports/
-/scripts/
 public/
 
 # Dependencies
