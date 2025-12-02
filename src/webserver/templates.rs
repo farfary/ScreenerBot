@@ -39,6 +39,7 @@ const TABLE_SETTINGS_DIALOG_STYLES: &str =
 const CONFIRMATION_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/confirmation_dialog.css");
 const TOKEN_DETAILS_DIALOG_STYLES: &str = include_str!("templates/styles/token_details_dialog.css");
+const SETTINGS_DIALOG_STYLES: &str = include_str!("templates/styles/settings_dialog.css");
 
 // Assets (logos, icons)
 pub const LOGO_SVG: &str = include_str!("assets/logo.svg");
@@ -81,6 +82,7 @@ pub const TABLE_SETTINGS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/table_settings_dialog.js");
 pub const TOKEN_DETAILS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/token_details_dialog.js");
+pub const SETTINGS_DIALOG_UI: &str = include_str!("templates/scripts/ui/settings_dialog.js");
 pub const NOTIFICATION_PANEL_UI: &str = include_str!("templates/scripts/ui/notification_panel.js");
 
 pub const SERVICES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/services.js");
@@ -147,6 +149,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         TABLE_SETTINGS_DIALOG_STYLES,
         CONFIRMATION_DIALOG_STYLES,
         TOKEN_DETAILS_DIALOG_STYLES,
+        SETTINGS_DIALOG_STYLES,
     ];
     if active_tab == "services" {
         combined_styles.push(SERVICES_PAGE_STYLES);

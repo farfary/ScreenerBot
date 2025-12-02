@@ -40,7 +40,6 @@
   width: 340px;
   background: linear-gradient(135deg, rgb(18, 24, 39, 0.95) 0%, rgb(24, 32, 52, 0.92) 100%);
   backdrop-filter: blur(24px) saturate(180%);
-  backdrop-filter: blur(24px) saturate(180%);
   border: 1px solid rgb(255, 255, 255, 0.1);
   border-left: 3px solid var(--toast-accent);
   border-radius: 12px;
@@ -633,7 +632,6 @@
 @media (prefers-reduced-transparency: reduce) {
   .toast {
     background: rgb(18, 24, 39);
-    backdrop-filter: none;
     backdrop-filter: none;
   }
 

@@ -13,7 +13,6 @@
   inset: 0;
   background: rgb(0, 0, 0, 0.6);
   backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
   z-index: 3000;
   opacity: 0;
   transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -35,7 +34,6 @@
   width: 90%;
   max-width: 440px;
   background: rgb(18, 24, 39, 0.95);
-  backdrop-filter: blur(20px);
   backdrop-filter: blur(20px);
   border: 1px solid rgb(255, 255, 255, 0.1);
   border-radius: 12px;

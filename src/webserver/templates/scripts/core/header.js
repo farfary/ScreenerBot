@@ -12,6 +12,7 @@ import * as NotificationPanel from "../ui/notification_panel.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { requestManager } from "./request_manager.js";
 import { subscribeToBootstrap, waitForReady } from "./bootstrap.js";
+import { showSettingsDialog } from "../ui/settings_dialog.js";
 
 const MIN_STATUS_POLL_INTERVAL = 5000;
 const METRICS_POLL_INTERVAL = 5000; // Header metrics update every 5s
@@ -36,7 +37,6 @@ let currentController = null;
 let powerDropdown = null;
 let refreshDropdown = null;
 let traderDropdown = null;
-let settingsDropdown = null;
 let bootstrapUnsubscribe = null;
 
 function getElements() {
@@ -602,8 +602,8 @@ function initTraderControls() {
   // Initialize card click handlers
   initCardHandlers();
 
-  // Initialize settings menu
-  initSettingsMenu();
+  // Initialize settings button
+  initSettingsButton();
 
   // Initialize power menu dropdown
   initPowerMenu();
@@ -700,41 +700,12 @@ function initCardHandlers() {
   }
 }
 
-function initSettingsMenu() {
+function initSettingsButton() {
   const settingsBtn = document.getElementById("settingsBtn");
-  const settingsMenu = document.getElementById("settingsDropdown");
-  if (!settingsBtn || !settingsMenu) return;
+  if (!settingsBtn) return;
 
-  // Handle button click to toggle menu
-  settingsBtn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    const isOpen = settingsMenu.classList.contains("open");
-
-    // Close all other dropdowns
-    document.querySelectorAll(".dropdown-menu.open").forEach((menu) => {
-      menu.classList.remove("open");
-    });
-
-    if (!isOpen) {
-      settingsMenu.classList.add("open");
-    }
-  });
-
-  // Handle menu item clicks
-  settingsMenu.addEventListener("click", (e) => {
-    const item = e.target.closest(".dropdown-item");
-    if (!item) return;
-
-    const action = item.dataset.action;
-    settingsMenu.classList.remove("open");
-    handleSettingsMenuAction(action);
-  });
-
-  // Close menu when clicking outside
-  document.addEventListener("click", (e) => {
-    if (!settingsBtn.contains(e.target) && !settingsMenu.contains(e.target)) {
-      settingsMenu.classList.remove("open");
-    }
+  settingsBtn.addEventListener("click", () => {
+    showSettingsDialog();
   });
 }
 
@@ -1008,19 +979,7 @@ async function handlePowerMenuAction(action) {
   }
 }
 
-function handleSettingsMenuAction(action) {
-  switch (action) {
-    case "config":
-      loadPage("config");
-      break;
-    case "updates":
-      loadPage("updates");
-      break;
-    case "about":
-      loadPage("about");
-      break;
-  }
-}
+
 
 async function handleRestart() {
   const { confirmed } = await ConfirmationDialog.show({

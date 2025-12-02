@@ -40,6 +40,7 @@ pub struct FullConfigResponse {
     pub services: config::ServicesConfig,
     pub monitoring: config::MonitoringConfig,
     pub ohlcv: config::OhlcvConfig,
+    pub gui: config::GuiConfig,
     pub timestamp: String,
 }
 
@@ -69,6 +70,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/config/services", get(get_services_config))
         .route("/config/monitoring", get(get_monitoring_config))
         .route("/config/ohlcv", get(get_ohlcv_config))
+        .route("/config/gui", get(get_gui_config))
         .route("/config/metadata", get(get_config_metadata))
         // PATCH endpoints - Partial updates (use JSON with only fields to update)
         .route(
@@ -112,6 +114,10 @@ pub fn routes() -> Router<Arc<AppState>> {
             "/config/ohlcv",
             patch(patch_any_config::<config::OhlcvConfig>),
         )
+        .route(
+            "/config/gui",
+            patch(patch_any_config::<config::GuiConfig>),
+        )
         // Utility endpoints
         .route("/config/reload", post(reload_config_from_disk))
         .route("/config/reset", post(reset_config_to_defaults))
@@ -136,6 +142,7 @@ async fn get_full_config() -> Response {
         services: cfg.services.clone(),
         monitoring: cfg.monitoring.clone(),
         ohlcv: cfg.ohlcv.clone(),
+        gui: cfg.gui.clone(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     });
 
@@ -256,6 +263,16 @@ async fn get_monitoring_config() -> Response {
 async fn get_ohlcv_config() -> Response {
     let data = config::with_config(|cfg| ConfigResponse {
         data: cfg.ohlcv.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    });
+
+    success_response(data)
+}
+
+/// GET /api/config/gui - Get GUI/Dashboard configuration
+async fn get_gui_config() -> Response {
+    let data = config::with_config(|cfg| ConfigResponse {
+        data: cfg.gui.clone(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     });
 
