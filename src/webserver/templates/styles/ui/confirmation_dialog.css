@@ -10,13 +10,10 @@
 
 .confirmation-dialog-backdrop {
   position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  inset: 0;
+  background: rgb(0, 0, 0, 0.6);
   backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
   z-index: 3000;
   opacity: 0;
   transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -37,14 +34,14 @@
   transform: translate(-50%, -50%) scale(0.9);
   width: 90%;
   max-width: 440px;
-  background: rgba(18, 24, 39, 0.95);
+  background: rgb(18, 24, 39, 0.95);
   backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgb(255, 255, 255, 0.1);
   border-radius: 12px;
   box-shadow:
-    0 20px 60px rgba(0, 0, 0, 0.5),
-    0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+    0 20px 60px rgb(0, 0, 0, 0.5),
+    0 0 0 1px rgb(255, 255, 255, 0.05) inset;
   z-index: 3001;
   padding: 24px;
   opacity: 0;
@@ -78,29 +75,29 @@
   justify-content: center;
   font-size: 24px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgb(255, 255, 255, 0.05);
 }
 
 .confirmation-dialog--danger .confirmation-dialog__icon {
   color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
+  background: rgb(239, 68, 68, 0.1);
 }
 
 .confirmation-dialog--warning .confirmation-dialog__icon {
   color: #f59e0b;
-  background: rgba(245, 158, 11, 0.1);
+  background: rgb(245, 158, 11, 0.1);
 }
 
 .confirmation-dialog--info .confirmation-dialog__icon {
   color: #3b82f6;
-  background: rgba(59, 130, 246, 0.1);
+  background: rgb(59, 130, 246, 0.1);
 }
 
 .confirmation-dialog__title {
   margin: 0;
   font-size: 18px;
   font-weight: 600;
-  color: rgba(255, 255, 255, 0.95);
+  color: rgb(255, 255, 255, 0.95);
   line-height: 1.4;
   letter-spacing: -0.01em;
 }
@@ -116,7 +113,7 @@
 .confirmation-dialog__message {
   margin: 0;
   font-size: 14px;
-  color: rgba(255, 255, 255, 0.75);
+  color: rgb(255, 255, 255, 0.75);
   line-height: 1.6;
 }
 
@@ -126,16 +123,16 @@
   gap: 10px;
   margin-top: 16px;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgb(255, 255, 255, 0.03);
+  border: 1px solid rgb(255, 255, 255, 0.08);
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
 }
 
 .confirmation-dialog__checkbox:hover {
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.12);
+  background: rgb(255, 255, 255, 0.05);
+  border-color: rgb(255, 255, 255, 0.12);
 }
 
 .confirmation-dialog__checkbox input[type="checkbox"] {
@@ -148,7 +145,7 @@
 
 .confirmation-dialog__checkbox span {
   font-size: 13px;
-  color: rgba(255, 255, 255, 0.8);
+  color: rgb(255, 255, 255, 0.8);
   line-height: 1.5;
 }
 
@@ -176,22 +173,22 @@
 }
 
 .confirmation-dialog__button--cancel {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgb(255, 255, 255, 0.08);
+  color: rgb(255, 255, 255, 0.9);
+  border: 1px solid rgb(255, 255, 255, 0.15);
 }
 
 .confirmation-dialog__button--cancel:hover {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.25);
+  background: rgb(255, 255, 255, 0.12);
+  border-color: rgb(255, 255, 255, 0.25);
 }
 
 .confirmation-dialog__button--cancel:active {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgb(255, 255, 255, 0.06);
 }
 
 .confirmation-dialog__button--cancel:focus {
-  outline: 2px solid rgba(255, 255, 255, 0.3);
+  outline: 2px solid rgb(255, 255, 255, 0.3);
   outline-offset: 2px;
 }
 
@@ -215,12 +212,12 @@
 .confirmation-dialog__button--confirm:hover {
   filter: brightness(1.1);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.3);
 }
 
 .confirmation-dialog__button--confirm:active {
   transform: translateY(0);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 2px 6px rgb(0, 0, 0, 0.3);
 }
 
 .confirmation-dialog__button--confirm:focus {
@@ -264,7 +261,7 @@
 @media (prefers-contrast: high) {
   .confirmation-dialog {
     border: 2px solid var(--confirm-color, #fff);
-    background: rgba(0, 0, 0, 0.98);
+    background: rgb(0, 0, 0, 0.98);
   }
 
   .confirmation-dialog__title,
@@ -291,7 +288,7 @@
 
 /* Focus visible (keyboard navigation) */
 .confirmation-dialog__button:focus-visible {
-  outline: 2px solid var(--confirm-color, rgba(255, 255, 255, 0.5));
+  outline: 2px solid var(--confirm-color, rgb(255, 255, 255, 0.5));
   outline-offset: 2px;
 }
 
@@ -300,46 +297,46 @@
    ============================================ */
 
 body.light-theme .confirmation-dialog {
-  background: rgba(255, 255, 255, 0.98);
-  border-color: rgba(0, 0, 0, 0.15);
+  background: rgb(255, 255, 255, 0.98);
+  border-color: rgb(0, 0, 0, 0.15);
   box-shadow:
-    0 20px 60px rgba(0, 0, 0, 0.2),
-    0 0 0 1px rgba(0, 0, 0, 0.05) inset;
+    0 20px 60px rgb(0, 0, 0, 0.2),
+    0 0 0 1px rgb(0, 0, 0, 0.05) inset;
 }
 
 body.light-theme .confirmation-dialog__title {
-  color: rgba(0, 0, 0, 0.95);
+  color: rgb(0, 0, 0, 0.95);
 }
 
 body.light-theme .confirmation-dialog__message {
-  color: rgba(0, 0, 0, 0.75);
+  color: rgb(0, 0, 0, 0.75);
 }
 
 body.light-theme .confirmation-dialog__checkbox {
-  background: rgba(0, 0, 0, 0.03);
-  border-color: rgba(0, 0, 0, 0.1);
+  background: rgb(0, 0, 0, 0.03);
+  border-color: rgb(0, 0, 0, 0.1);
 }
 
 body.light-theme .confirmation-dialog__checkbox:hover {
-  background: rgba(0, 0, 0, 0.05);
-  border-color: rgba(0, 0, 0, 0.15);
+  background: rgb(0, 0, 0, 0.05);
+  border-color: rgb(0, 0, 0, 0.15);
 }
 
 body.light-theme .confirmation-dialog__checkbox span {
-  color: rgba(0, 0, 0, 0.8);
+  color: rgb(0, 0, 0, 0.8);
 }
 
 body.light-theme .confirmation-dialog__button--cancel {
-  background: rgba(0, 0, 0, 0.06);
-  color: rgba(0, 0, 0, 0.9);
-  border-color: rgba(0, 0, 0, 0.15);
+  background: rgb(0, 0, 0, 0.06);
+  color: rgb(0, 0, 0, 0.9);
+  border-color: rgb(0, 0, 0, 0.15);
 }
 
 body.light-theme .confirmation-dialog__button--cancel:hover {
-  background: rgba(0, 0, 0, 0.1);
-  border-color: rgba(0, 0, 0, 0.2);
+  background: rgb(0, 0, 0, 0.1);
+  border-color: rgb(0, 0, 0, 0.2);
 }
 
 body.light-theme .confirmation-dialog__icon {
-  background: rgba(0, 0, 0, 0.05);
+  background: rgb(0, 0, 0, 0.05);
 }

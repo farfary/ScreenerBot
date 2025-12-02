@@ -46,6 +46,7 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -153,7 +154,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--trader-vertical-gap);
-  padding: 1rem 0 0 0;
+  padding: 1rem 0 0;
 }
 
 /* ============================================================================
@@ -217,7 +218,7 @@
 .section-subtitle {
   font-size: 0.6875rem; /* Reduced from 0.8rem */
   color: var(--text-muted);
-  margin: 0.125rem 0 0 0; /* Reduced from 0.25rem */
+  margin: 0.125rem 0 0; /* Reduced from 0.25rem */
   line-height: 1.4;
 }
 
@@ -634,7 +635,7 @@
 
 /* Unified Section Base Class - replaces stats-section, config-section, form-section */
 .config-section {
-  padding: 0 1rem 1rem 1rem;
+  padding: 0 1rem 1rem;
 }
 
 /* Unified Card Container */
@@ -660,7 +661,7 @@
 
 /* Card Header - Internal title for config cards */
 .card-header {
-  margin: -1.25rem -1.25rem 1rem -1.25rem;
+  margin: -1.25rem -1.25rem 1rem;
   padding: 1rem 1.25rem;
   background: linear-gradient(135deg, var(--primary-alpha-5), transparent);
   border-bottom: 1px solid var(--border-color);
@@ -683,7 +684,7 @@
 }
 
 .card-subtitle {
-  margin: 0.25rem 0 0 0;
+  margin: 0.25rem 0 0;
   font-size: 0.8125rem;
   color: var(--text-secondary);
   font-weight: 400;
@@ -1379,7 +1380,7 @@
   background: var(--primary-alpha-10);
   border: 1px solid var(--primary-alpha-30);
   padding: 0.875rem;
-  margin: 0 1rem 1rem 1rem;
+  margin: 0 1rem 1rem;
   display: flex;
   align-items: center;
   gap: 0.625rem;

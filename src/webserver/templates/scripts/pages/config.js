@@ -11,7 +11,7 @@ const DEFAULT_SECTION = "trader";
 const SECTION_ICONS = {
   rpc: "icon-satellite",
   trader: "icon-briefcase",
-  positions: "icon-bar-chart-2",
+  positions: "icon-chart-candlestick",
   filtering: "icon-target",
   swaps: "icon-repeat",
   tokens: "icon-coins",

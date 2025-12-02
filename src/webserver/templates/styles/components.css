@@ -585,7 +585,7 @@
   grid-template-columns: repeat(4, 1fr);
 }
 
-@media (max-width: 768px) {
+@media (width <= 768px) {
   .metric-grid-2,
   .metric-grid-3,
   .metric-grid-4 {

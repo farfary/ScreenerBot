@@ -88,7 +88,7 @@
 .strategy-item.active {
   background: var(--primary-color-light);
   border-color: var(--primary-color);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 6px rgb(0, 0, 0, 0.05);
 }
 
 .strategy-item-title {
@@ -264,14 +264,14 @@
 
 .strategy-type-toggle .type-option:hover {
   color: var(--text-color);
-  background: rgba(0, 0, 0, 0.03);
+  background: rgb(0, 0, 0, 0.03);
 }
 
 .strategy-type-toggle .type-option.active {
   background: var(--surface-color);
   color: var(--primary-color);
   font-weight: 600;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 2px rgb(0, 0, 0, 0.1);
 }
 
 .strategy-type-toggle .type-option:active {
@@ -284,12 +284,12 @@
 }
 
 [data-theme="dark"] .strategy-type-toggle .type-option:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgb(255, 255, 255, 0.05);
 }
 
 [data-theme="dark"] .strategy-type-toggle .type-option.active {
   background: var(--bg-primary);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 1px 2px rgb(0, 0, 0, 0.3);
 }
 
 /* Scrollable Content */
@@ -332,13 +332,14 @@
 /* ==========================================================================
    Condition Cards (Wide & Inline)
    ========================================================================== */
+
 /* Condition Cards - Enhanced Design */
 .condition-card {
   background: var(--surface-color);
   border: 2px solid var(--border-color);
   border-radius: 10px;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.04);
   overflow: hidden;
   position: relative;
 }
@@ -357,7 +358,7 @@
 
 .condition-card:hover {
   border-color: var(--primary-color);
-  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 8px 16px rgb(0, 0, 0, 0.1);
   transform: translateY(-2px);
 }
 
@@ -392,7 +393,7 @@
   gap: 1rem;
   cursor: pointer;
   user-select: none;
-  background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.01));
+  background: linear-gradient(to bottom, transparent, rgb(0, 0, 0, 0.01));
 }
 
 .card-header-left {
@@ -483,32 +484,32 @@
 
 /* Category Color Coding */
 .category-price-analysis {
-  background: rgba(59, 130, 246, 0.1);
-  border-color: rgba(59, 130, 246, 0.3);
+  background: rgb(59, 130, 246, 0.1);
+  border-color: rgb(59, 130, 246, 0.3);
   color: rgb(59, 130, 246);
 }
 
 .category-position-performance {
-  background: rgba(16, 185, 129, 0.1);
-  border-color: rgba(16, 185, 129, 0.3);
+  background: rgb(16, 185, 129, 0.1);
+  border-color: rgb(16, 185, 129, 0.3);
   color: rgb(16, 185, 129);
 }
 
 .category-market-context {
-  background: rgba(245, 158, 11, 0.1);
-  border-color: rgba(245, 158, 11, 0.3);
+  background: rgb(245, 158, 11, 0.1);
+  border-color: rgb(245, 158, 11, 0.3);
   color: rgb(245, 158, 11);
 }
 
 .category-candle-patterns {
-  background: rgba(139, 92, 246, 0.1);
-  border-color: rgba(139, 92, 246, 0.3);
+  background: rgb(139, 92, 246, 0.1);
+  border-color: rgb(139, 92, 246, 0.3);
   color: rgb(139, 92, 246);
 }
 
 .category-volume-analysis {
-  background: rgba(236, 72, 153, 0.1);
-  border-color: rgba(236, 72, 153, 0.3);
+  background: rgb(236, 72, 153, 0.1);
+  border-color: rgb(236, 72, 153, 0.3);
   color: rgb(236, 72, 153);
 }
 
@@ -534,16 +535,13 @@
 
 .status-indicator {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   background-color: var(--border-color);
   border-radius: 22px;
   transition: all 0.3s ease;
 }
 
-.status-indicator:before {
+.status-indicator::before {
   content: "";
   position: absolute;
   height: 16px;
@@ -553,14 +551,14 @@
   background-color: white;
   border-radius: 50%;
   transition: transform 0.3s ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.2);
 }
 
 .status-toggle input:checked + .status-indicator {
   background-color: var(--success-color, #10b981);
 }
 
-.status-toggle input:checked + .status-indicator:before {
+.status-toggle input:checked + .status-indicator::before {
   transform: translateX(18px);
 }
 
@@ -583,7 +581,7 @@
 
 /* Card Summary */
 .card-summary {
-  padding: 0 1.25rem 0.75rem 1.25rem;
+  padding: 0 1.25rem 0.75rem;
   border-bottom: 1px solid transparent;
   transition: all 0.3s ease;
 }
@@ -597,8 +595,8 @@
   font-size: 0.85rem;
   color: var(--text-muted);
   line-height: 1.5;
-  font-family: "SF Mono", "Monaco", "Consolas", monospace;
-  background: rgba(0, 0, 0, 0.02);
+  font-family: "SF Mono", Monaco, Consolas, monospace;
+  background: rgb(0, 0, 0, 0.02);
   padding: 0.5rem 0.75rem;
   border-radius: 6px;
   border-left: 3px solid var(--primary-color-alpha);
@@ -631,7 +629,7 @@
   border-color: var(--primary-color);
   color: white;
   transform: translateY(-1px);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.1);
 }
 
 .condition-actions .btn-icon:active {
@@ -641,7 +639,7 @@
 /* Card Body */
 .card-body {
   padding: 1.25rem;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.01), transparent);
+  background: linear-gradient(to bottom, rgb(0, 0, 0, 0.01), transparent);
   border-bottom-left-radius: 8px;
   border-bottom-right-radius: 8px;
   display: none;
@@ -653,6 +651,7 @@
     opacity: 0;
     transform: translateY(-10px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -721,16 +720,13 @@
 
 .toggle-slider {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   background-color: var(--border-color);
   border-radius: 24px;
   transition: background-color 0.2s ease;
 }
 
-.toggle-slider:before {
+.toggle-slider::before {
   content: \"\";
   position: absolute;
   height: 18px;
@@ -746,7 +742,7 @@
   background-color: var(--primary-color);
 }
 
-.toggle-switch input:checked + .toggle-slider:before {
+.toggle-switch input:checked + .toggle-slider::before {
   transform: translateX(20px);
 }
 
@@ -1700,7 +1696,7 @@
   background: var(--hover-color);
   border-color: var(--primary-color);
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 8px rgb(0, 0, 0, 0.08);
 }
 
 .btn:active {
@@ -1765,7 +1761,7 @@
   color: var(--text-color);
   border-color: var(--primary-color);
   transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 2px 6px rgb(0, 0, 0, 0.08);
 }
 
 .btn-icon:active {

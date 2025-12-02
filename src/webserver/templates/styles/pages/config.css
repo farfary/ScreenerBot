@@ -6,10 +6,10 @@
 
   display: grid;
   grid-template-columns: var(--config-sidebar-width) minmax(0, 1fr);
-  gap: 16px;
+  gap: 0;
   height: 100%;
   min-height: 0;
-  padding: 8px;
+  padding: 0;
 }
 
 .config-sidebar {
@@ -19,8 +19,8 @@
   flex-direction: column;
   align-self: stretch;
   height: 100%;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-right: 1px solid var(--border-color);
+  border-radius: 0;
   background: var(--card-bg);
   overflow: hidden;
   min-height: 0;
@@ -196,8 +196,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border: none;
+  border-radius: 0;
   background: var(--card-bg);
   overflow: hidden;
 }
@@ -809,8 +809,6 @@
   .config-page {
     --config-sidebar-width: clamp(208px, 30vw, 276px);
     --config-field-control-width: clamp(230px, 42vw, 360px);
-
-    padding: 6px;
   }
 }
 

@@ -26,7 +26,6 @@
   text-transform: uppercase;
   background: linear-gradient(135deg, #fff 0%, #e0f2fe 100%);
   background-clip: text;
-  background-clip: text;
   -webkit-text-fill-color: transparent;
   text-shadow: 0 2px 10px rgb(255 255 255 / 0.3);
 }
