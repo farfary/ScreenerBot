@@ -129,7 +129,7 @@ function createLifecycle() {
   function updateUI(data) {
     if (!data) return;
 
-    // Update trader analytics for current period
+    // Update trading analytics for current period
     updateTraderStats(data.trader[currentPeriod]);
 
     // Update wallet analytics
@@ -148,7 +148,7 @@ function createLifecycle() {
     updateCharts(data);
   }
 
-  // Update trader statistics
+  // Update trading statistics
   function updateTraderStats(stats) {
     if (!stats) return;
 

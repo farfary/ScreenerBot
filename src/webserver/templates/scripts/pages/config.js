@@ -26,7 +26,7 @@ const SECTION_ICONS = {
 
 const SECTION_LABEL_OVERRIDES = {
   rpc: "RPC",
-  trader: "Trader",
+  trader: "Auto Trader",
   positions: "Positions",
   filtering: "Filtering",
   swaps: "Swaps",

@@ -228,7 +228,7 @@ fn nav_tabs(active: &str) -> String {
         ("tokens", "icon-coins", "Tokens"),
         ("filtering", "icon-list-filter", "Filtering"),
         ("wallet", "icon-wallet", "Wallet"),
-        ("trader", "icon-bot", "Trader"),
+        ("trader", "icon-bot", "Auto Trader"),
         ("strategies", "icon-target", "Strategies"),
         ("transactions", "icon-activity", "Transactions"),
         ("services", "icon-server", "Services"),

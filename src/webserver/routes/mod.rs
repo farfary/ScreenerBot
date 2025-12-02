@@ -116,10 +116,10 @@ async fn strategies_page() -> Html<String> {
     ))
 }
 
-/// Trader page handler
+/// Auto Trader page handler
 async fn trader_page() -> Html<String> {
     let content = templates::trader_content();
-    Html(templates::base_template("Trader", "trader", &content))
+    Html(templates::base_template("Auto Trader", "trader", &content))
 }
 
 /// Wallet page handler
