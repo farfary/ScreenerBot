@@ -18,7 +18,7 @@ const SECTION_ICONS = {
   sol_price: "icon-sun",
   events: "icon-radio",
   webserver: "icon-network",
-  services: "icon-tool",
+  services: "icon-wrench",
   monitoring: "icon-trending-up",
   ohlcv: "icon-clock",
   summary: "icon-file-text",
@@ -635,6 +635,33 @@ function metadataMatchesSearch(fieldKey, fieldMeta, term) {
   return false;
 }
 
+function sectionHasMatchingFields(sectionId, term) {
+  if (!term || term.length === 0) {
+    return true;
+  }
+  const metadata = state.metadata?.[sectionId];
+  if (!metadata) {
+    return false;
+  }
+
+  const label = metadata.label ?? formatSectionLabel(sectionId);
+  if (sectionId.toLowerCase().includes(term) || label.toLowerCase().includes(term)) {
+    return true;
+  }
+
+  const fields = metadata.fields ?? {};
+  for (const [fieldKey, fieldMeta] of Object.entries(fields)) {
+    const category = fieldMeta.category ?? "General";
+    if (category.toLowerCase().includes(term)) {
+      return true;
+    }
+    if (metadataMatchesSearch(fieldKey, fieldMeta, term)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 function transformMetadata(raw) {
   const sections = {};
   for (const [sectionId, fields] of Object.entries(raw || {})) {
@@ -811,6 +838,12 @@ function renderSidebar() {
     const label = metadata.label ?? formatSectionLabel(sectionId);
     const sectionPending = countPendingChanges(sectionId);
     const icon = SECTION_ICONS[sectionId] || "icon-settings";
+
+    // Hide sections that don't have matching fields when searching
+    if (searchTerm.length > 0 && !sectionHasMatchingFields(sectionId, searchTerm)) {
+      continue;
+    }
+
     const button = create("button", {
       type: "button",
       className: "config-section-item" + (state.activeSection === sectionId ? " active" : ""),
@@ -1048,7 +1081,7 @@ function renderCategories(sectionId) {
     });
     header.innerHTML = `
       <div class="config-category-label">
-        <span class="chevron">▶</span>
+        <i class="chevron icon-chevron-down"></i>
         <span>${Utils.escapeHtml(category)}</span>
       </div>
       <div class="config-category-meta">
@@ -1073,6 +1106,11 @@ function renderCategories(sectionId) {
       const fieldPathLabel = fieldPath.join(".");
 
       const matchesSearch = metadataMatchesSearch(fieldKey, fieldMeta, searchTerm);
+
+      // Hide fields that don't match when searching
+      if (searchTerm.length > 0 && !matchesSearch) {
+        continue;
+      }
 
       const fieldEl = create("div", { className: "config-field" });
       if (matchesSearch) {
@@ -1194,13 +1232,28 @@ function renderCategories(sectionId) {
       }
     }
 
-    if (categoryHasMatch) {
+    // Check if category matches search term directly
+    const categoryMatchesSearch =
+      searchTerm.length > 0 && category.toLowerCase().includes(searchTerm);
+
+    // Hide categories with no visible fields when searching
+    const visibleFieldCount = body.querySelectorAll(".config-field").length;
+    if (searchTerm.length > 0 && visibleFieldCount === 0 && !categoryMatchesSearch) {
+      continue;
+    }
+
+    // Update chip to show visible field count when filtering
+    if (searchTerm.length > 0 && visibleFieldCount !== fieldsList.length) {
+      const chipEl = header.querySelector(".config-category-chip");
+      if (chipEl) {
+        chipEl.textContent = `${visibleFieldCount} of ${fieldsList.length} fields`;
+      }
+    }
+
+    if (categoryHasMatch || categoryMatchesSearch) {
       categoryEl.classList.add("has-match");
-      // Auto-expand matched categories if collapsed by default
+      // Auto-expand matched categories
       categoryEl.classList.remove("collapsed");
-    } else if (searchTerm.length > 0) {
-      // When searching, collapse categories without matches to reduce scroll
-      categoryEl.classList.add("collapsed");
     }
 
     categoryEl.appendChild(header);

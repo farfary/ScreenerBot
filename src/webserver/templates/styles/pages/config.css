@@ -452,10 +452,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
-  border: 1px solid rgb(148, 163, 184, 0.35);
-  font-size: 0.65rem;
-  transition: transform 0.2s ease;
+  font-size: 1rem;
+  color: var(--text-secondary);
+  transition:
+    transform 0.2s ease,
+    color 0.2s ease;
+}
+
+.config-category-header:hover .chevron {
+  color: var(--text-primary);
 }
 
 .config-category.collapsed .config-category-label .chevron {
@@ -882,5 +887,5 @@
 }
 
 .config-category.has-match .config-category-label .chevron {
-  border-color: rgb(34 197 94 / 0.5);
+  color: rgb(34 197 94);
 }
