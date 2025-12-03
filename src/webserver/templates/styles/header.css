@@ -13,9 +13,9 @@
   left: 0;
   right: 0;
   z-index: 1000;
-  background: var(--header-bg, linear-gradient(135deg, #0a192f 0%, #1e3a5f 50%, #0e2a47 100%));
-  border-bottom: 2px solid var(--header-border, #2563eb);
-  box-shadow: 0 4px 20px rgb(0, 0, 0, 0.3);
+  background: var(--header-bg, linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1c2128 100%));
+  border-bottom: 1px solid var(--header-border, #30363d);
+  box-shadow: 0 4px 20px rgb(0, 0, 0, 0.4);
   font-family: var(--header-font, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
 }
 
@@ -50,12 +50,12 @@
 .brand-logo {
   height: 32px;
   width: auto;
-  filter: drop-shadow(0 0 8px rgb(59, 130, 246, 0.6));
+  filter: drop-shadow(0 0 8px rgb(255, 255, 255, 0.4));
 }
 
 .brand-icon {
   font-size: 28px;
-  filter: drop-shadow(0 0 12px rgb(59, 130, 246, 0.8));
+  filter: drop-shadow(0 0 12px rgb(255, 255, 255, 0.5));
 }
 
 .brand-text {
@@ -66,9 +66,8 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
   text-shadow:
-    0 0 10px rgb(59, 130, 246, 0.8),
-    0 0 20px rgb(59, 130, 246, 0.6),
-    0 0 30px rgb(59, 130, 246, 0.4),
+    0 0 10px rgb(255, 255, 255, 0.5),
+    0 0 20px rgb(147, 197, 253, 0.4),
     0 2px 4px rgb(0, 0, 0, 0.3);
   position: relative;
 }
@@ -76,10 +75,35 @@
 /* Subtle animated glow on hover */
 .header-brand:hover .brand-text {
   text-shadow:
-    0 0 15px rgb(96, 165, 250, 0.9),
-    0 0 30px rgb(59, 130, 246, 0.7),
-    0 0 45px rgb(59, 130, 246, 0.5),
+    0 0 15px rgb(255, 255, 255, 0.7),
+    0 0 30px rgb(147, 197, 253, 0.5),
     0 2px 4px rgb(0, 0, 0, 0.3);
+}
+
+/* Dark mode brand styling */
+[data-theme="dark"] .brand-logo {
+  filter: drop-shadow(0 0 8px rgb(88, 166, 255, 0.5));
+}
+
+[data-theme="dark"] .brand-icon {
+  filter: drop-shadow(0 0 12px rgb(88, 166, 255, 0.6));
+}
+
+[data-theme="dark"] .brand-text {
+  color: #e6edf3;
+  text-shadow:
+    0 0 10px rgb(88, 166, 255, 0.6),
+    0 0 20px rgb(88, 166, 255, 0.4),
+    0 0 30px rgb(88, 166, 255, 0.2),
+    0 2px 4px rgb(0, 0, 0, 0.4);
+}
+
+[data-theme="dark"] .header-brand:hover .brand-text {
+  text-shadow:
+    0 0 15px rgb(121, 192, 255, 0.8),
+    0 0 30px rgb(88, 166, 255, 0.5),
+    0 0 45px rgb(88, 166, 255, 0.3),
+    0 2px 4px rgb(0, 0, 0, 0.4);
 }
 
 /* Status Groups - No boxes, just clean spacing */
@@ -155,12 +179,12 @@
 
 .card-value.positive {
   font-size: 18px;
-  color: #10b981;
+  color: #3fb950;
 }
 
 .card-value.negative {
   font-size: 18px;
-  color: #ef4444;
+  color: #f85149;
 }
 
 .card-change {
@@ -174,14 +198,14 @@
 
 .card-change.positive {
   font-size: 13px;
-  color: #10b981;
-  background: rgb(16, 185, 129, 0.15);
+  color: #3fb950;
+  background: rgb(63, 185, 80, 0.15);
 }
 
 .card-change.negative {
   font-size: 13px;
-  color: #ef4444;
-  background: rgb(239, 68, 68, 0.15);
+  color: #f85149;
+  background: rgb(248, 81, 73, 0.15);
 }
 
 .card-sub {

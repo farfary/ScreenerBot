@@ -112,28 +112,28 @@
 }
 
 .toast--error {
-  --toast-accent: #ef4444;
-  --toast-accent-rgb: 239, 68, 68;
+  --toast-accent: #f85149;
+  --toast-accent-rgb: 248, 81, 73;
 }
 
 .toast--warning {
-  --toast-accent: #f59e0b;
-  --toast-accent-rgb: 245, 158, 11;
+  --toast-accent: #d29922;
+  --toast-accent-rgb: 210, 153, 34;
 }
 
 .toast--info {
-  --toast-accent: #3b82f6;
-  --toast-accent-rgb: 59, 130, 246;
+  --toast-accent: #58a6ff;
+  --toast-accent-rgb: 88, 166, 255;
 }
 
 .toast--loading {
-  --toast-accent: #3b82f6;
-  --toast-accent-rgb: 59, 130, 246;
+  --toast-accent: #58a6ff;
+  --toast-accent-rgb: 88, 166, 255;
 }
 
 .toast--action {
-  --toast-accent: #8b5cf6;
-  --toast-accent-rgb: 139, 92, 246;
+  --toast-accent: #a371f7;
+  --toast-accent-rgb: 163, 113, 247;
 }
 
 /* ============================================

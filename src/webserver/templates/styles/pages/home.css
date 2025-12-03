@@ -23,14 +23,23 @@
 
 .wallet-hero {
   background: linear-gradient(135deg, #1565c0 0%, #0d47a1 100%);
+  border: 1px solid #1976d2;
   border-radius: var(--card-radius);
   padding: 1.25rem 1.5rem;
   color: #fff;
-  box-shadow: 0 4px 12px rgb(0 0 0 / 0.2);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.2);
   display: grid;
   grid-template-columns: minmax(200px, 2fr) repeat(3, minmax(100px, 1fr));
   gap: 1.5rem;
   align-items: center;
+}
+
+/* Dark mode wallet hero */
+[data-theme="dark"] .wallet-hero {
+  background: linear-gradient(135deg, #161b22 0%, #0d1117 50%, #1c2128 100%);
+  border-color: #30363d;
+  color: #e6edf3;
+  box-shadow: 0 4px 16px rgb(0 0 0 / 0.4);
 }
 
 .hero-main {
@@ -85,11 +94,29 @@
   color: #fecaca;
 }
 
+/* Dark mode profit/loss in hero */
+[data-theme="dark"] .hero-change-value.profit,
+[data-theme="dark"] .change-percent.profit {
+  color: #7ee787;
+}
+
+[data-theme="dark"] .hero-change-value.loss,
+[data-theme="dark"] .change-percent.loss {
+  color: #ffa198;
+}
+
 .hero-stat {
   text-align: center;
   padding: 0.5rem;
-  background: rgb(255 255 255 / 0.08);
+  background: rgb(255 255 255 / 0.15);
+  border: 1px solid rgb(255 255 255 / 0.2);
   border-radius: 8px;
+}
+
+/* Dark mode hero stat */
+[data-theme="dark"] .hero-stat {
+  background: rgb(88 166 255 / 0.08);
+  border-color: rgb(88 166 255 / 0.15);
 }
 
 .hero-stat-label {

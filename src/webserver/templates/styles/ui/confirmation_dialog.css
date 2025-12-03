@@ -77,18 +77,18 @@
 }
 
 .confirmation-dialog--danger .confirmation-dialog__icon {
-  color: #ef4444;
-  background: rgb(239, 68, 68, 0.1);
+  color: #f85149;
+  background: rgb(248, 81, 73, 0.1);
 }
 
 .confirmation-dialog--warning .confirmation-dialog__icon {
-  color: #f59e0b;
-  background: rgb(245, 158, 11, 0.1);
+  color: #d29922;
+  background: rgb(210, 153, 34, 0.1);
 }
 
 .confirmation-dialog--info .confirmation-dialog__icon {
-  color: #3b82f6;
-  background: rgb(59, 130, 246, 0.1);
+  color: #58a6ff;
+  background: rgb(88, 166, 255, 0.1);
 }
 
 .confirmation-dialog__title {
@@ -196,15 +196,15 @@
 }
 
 .confirmation-dialog--danger .confirmation-dialog__button--confirm {
-  --confirm-color: #ef4444;
+  --confirm-color: #f85149;
 }
 
 .confirmation-dialog--warning .confirmation-dialog__button--confirm {
-  --confirm-color: #f59e0b;
+  --confirm-color: #d29922;
 }
 
 .confirmation-dialog--info .confirmation-dialog__button--confirm {
-  --confirm-color: #3b82f6;
+  --confirm-color: #58a6ff;
 }
 
 .confirmation-dialog__button--confirm:hover {

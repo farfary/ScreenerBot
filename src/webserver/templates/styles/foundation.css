@@ -159,49 +159,50 @@
 }
 
 [data-theme="dark"] {
-  /* Dark mode - Professional Graphite/Cyan */
-  --bg-primary: #111827;
-  --bg-secondary: #1f2937;
-  --bg-card: #1f2937;
-  --bg-card-hover: #273247;
-  --text-primary: #e5e7eb;
-  --text-secondary: #9ca3af;
-  --text-muted: #6b7280;
-  --border-color: #334155;
-  --header-bg: linear-gradient(135deg, #0d324d 0%, #0e4e6d 100%);
-  --header-text: #fff;
-  --link-color: #8bb4d9;
-  --link-hover: #0ea5e9;
-  --badge-online: #10b981;
-  --badge-error: #ef4444;
-  --badge-loading: #eab308;
-  --shadow-sm: rgb(0, 0, 0, 0.2);
-  --shadow-md: rgb(0, 0, 0, 0.3);
-  --shadow-lg: rgb(0, 0, 0, 0.5);
-  --table-header-bg: #273247;
-  --table-header-text: #d1d5db;
-  --service-item-bg: #273247;
+  /* Dark mode - Modern Graphite with Cyan accents */
+  --bg-primary: #0d1117;
+  --bg-secondary: #161b22;
+  --bg-card: #161b22;
+  --bg-card-hover: #1c2128;
+  --text-primary: #e6edf3;
+  --text-secondary: #8b949e;
+  --text-muted: #6e7681;
+  --border-color: #30363d;
+  --header-bg: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1c2128 100%);
+  --header-border: #30363d;
+  --header-text: #e6edf3;
+  --link-color: #58a6ff;
+  --link-hover: #79c0ff;
+  --badge-online: #3fb950;
+  --badge-error: #f85149;
+  --badge-loading: #d29922;
+  --shadow-sm: rgb(0, 0, 0, 0.3);
+  --shadow-md: rgb(0, 0, 0, 0.4);
+  --shadow-lg: rgb(0, 0, 0, 0.6);
+  --table-header-bg: #1c2128;
+  --table-header-text: #c9d1d9;
+  --service-item-bg: #1c2128;
 
-  /* Primary Color System */
-  --primary-color: #3b82f6;
-  --primary-color-light: #1e3a8a20;
-  --primary-color-dark: #1e40af;
-  --primary-hover: #60a5fa;
+  /* Primary Color System - Cyan accent */
+  --primary-color: #58a6ff;
+  --primary-color-light: #388bfd15;
+  --primary-color-dark: #1f6feb;
+  --primary-hover: #79c0ff;
 
-  /* Success Color System */
-  --success-color: #10b981;
-  --success-color-light: #05402820;
-  --success-color-dark: #047857;
+  /* Success Color System - Vibrant green */
+  --success-color: #3fb950;
+  --success-color-light: #23863515;
+  --success-color-dark: #238636;
 
-  /* Warning Color System */
-  --warning-color: #f59e0b;
-  --warning-color-light: #78350f20;
-  --warning-color-dark: #b45309;
+  /* Warning Color System - Golden amber */
+  --warning-color: #d29922;
+  --warning-color-light: #9e6a0315;
+  --warning-color-dark: #9e6a03;
 
-  /* Error Color System */
-  --error-color: #ef4444;
-  --error-color-light: #7f1d1d20;
-  --error-color-dark: #b91c1c;
+  /* Error Color System - Clear red */
+  --error-color: #f85149;
+  --error-color-light: #da363315;
+  --error-color-dark: #da3633;
 
   /* Semantic Aliases */
   --surface-color: var(--bg-card);
@@ -212,7 +213,7 @@
   --text-color: var(--text-primary);
   --text-tertiary: var(--text-muted);
   --input-bg: var(--bg-secondary);
-  --active-bg: #1e3a8a40;
+  --active-bg: #388bfd30;
   --hover-bg: var(--bg-card-hover);
   --card-bg: var(--bg-card);
 
@@ -221,23 +222,23 @@
   --success: var(--success-color);
   --warning: var(--warning-color);
   --danger: var(--error-color);
-  --success-hover: #047857;
-  --danger-hover: #b91c1c;
+  --success-hover: #2ea043;
+  --danger-hover: #da3633;
 
   /* Alpha color variants for layering */
-  --primary-alpha-5: rgb(59, 130, 246, 0.05);
-  --primary-alpha-10: rgb(59, 130, 246, 0.1);
-  --primary-alpha-20: rgb(59, 130, 246, 0.2);
-  --primary-alpha-30: rgb(59, 130, 246, 0.3);
-  --success-alpha-10: rgb(16, 185, 129, 0.1);
-  --success-alpha-20: rgb(16, 185, 129, 0.2);
-  --success-alpha-30: rgb(16, 185, 129, 0.3);
-  --warning-alpha-10: rgb(245, 158, 11, 0.1);
-  --warning-alpha-20: rgb(245, 158, 11, 0.2);
-  --warning-alpha-30: rgb(245, 158, 11, 0.3);
-  --danger-alpha-10: rgb(239, 68, 68, 0.1);
-  --danger-alpha-20: rgb(239, 68, 68, 0.2);
-  --danger-alpha-30: rgb(239, 68, 68, 0.3);
+  --primary-alpha-5: rgb(88, 166, 255, 0.05);
+  --primary-alpha-10: rgb(88, 166, 255, 0.1);
+  --primary-alpha-20: rgb(88, 166, 255, 0.2);
+  --primary-alpha-30: rgb(88, 166, 255, 0.3);
+  --success-alpha-10: rgb(63, 185, 80, 0.1);
+  --success-alpha-20: rgb(63, 185, 80, 0.2);
+  --success-alpha-30: rgb(63, 185, 80, 0.3);
+  --warning-alpha-10: rgb(210, 153, 34, 0.1);
+  --warning-alpha-20: rgb(210, 153, 34, 0.2);
+  --warning-alpha-30: rgb(210, 153, 34, 0.3);
+  --danger-alpha-10: rgb(248, 81, 73, 0.1);
+  --danger-alpha-20: rgb(248, 81, 73, 0.2);
+  --danger-alpha-30: rgb(248, 81, 73, 0.3);
 
   /* Spacing Scale (8px base) */
   --spacing-xs: 4px;
