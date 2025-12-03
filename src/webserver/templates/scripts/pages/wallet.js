@@ -1045,8 +1045,11 @@ function createLifecycle() {
         // Register with TabBarManager for page-switch coordination
         TabBarManager.register("wallet", tabBar);
 
+        // Integrate with lifecycle for auto-cleanup
         ctx.manageTabBar(tabBar);
-        subTabsContainer.style.display = "flex";
+
+        // Show the tab bar (must use show() to set visible flag for proper hide() behavior)
+        tabBar.show();
 
         // Trigger initial view
         const activeTab = tabBar.getActiveTab() || "overview";
