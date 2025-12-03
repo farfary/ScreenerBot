@@ -136,9 +136,9 @@ const validateWalletKey = debounce(async () => {
 
   // Basic format check
   if (value.startsWith("[") && value.endsWith("]")) {
-    showValidation("wallet", "success", "✓ Valid JSON array format");
+    showValidation("wallet", "success", '<i class="icon-check"></i> Valid JSON array format');
   } else if (value.length >= 32) {
-    showValidation("wallet", "success", "✓ Valid base58 format");
+    showValidation("wallet", "success", '<i class="icon-check"></i> Valid base58 format');
   } else {
     showValidation("wallet", "error", "Invalid key format. Must be base58 string or JSON array.");
   }
@@ -177,12 +177,12 @@ const validateRpcUrls = debounce(async () => {
     showValidation(
       "rpc",
       "error",
-      '<i class="icon-alert-triangle"></i> Default Solana RPC will not work. Please use a premium provider.'
+      '<i class="icon-triangle-alert"></i> Default Solana RPC will not work. Please use a premium provider.'
     );
     return;
   }
 
-  showValidation("rpc", "success", `✓ ${urls.length} valid URL${urls.length > 1 ? "s" : ""}`);
+  showValidation("rpc", "success", `<i class="icon-check"></i> ${urls.length} valid URL${urls.length > 1 ? "s" : ""}`);
 }, 500);
 
 // Toggle password visibility
@@ -300,7 +300,7 @@ async function runVerification() {
     // Update wallet validation
     if (walletStatus) {
       walletStatus.className = "init-verification-status success";
-      walletStatus.innerHTML = "<span>✓</span><span>Wallet validated successfully</span>";
+      walletStatus.innerHTML = '<i class="icon-check"></i><span>Wallet validated successfully</span>';
     }
     if (walletDetails && data.wallet_address) {
       walletDetails.classList.add("show");
@@ -310,7 +310,7 @@ async function runVerification() {
     // Update RPC validation
     if (rpcStatus) {
       rpcStatus.className = "init-verification-status success";
-      rpcStatus.innerHTML = "<span>✓</span><span>RPC connections verified</span>";
+      rpcStatus.innerHTML = '<i class="icon-check"></i><span>RPC connections verified</span>';
     }
     if (rpcDetails && data.warnings && data.warnings.length > 0) {
       rpcDetails.classList.add("show");
@@ -425,7 +425,7 @@ function showError(message) {
     const el = $(`#${id}`);
     if (el) {
       el.className = "init-verification-status error";
-      el.innerHTML = "<span>❌</span><span>Verification failed</span>";
+      el.innerHTML = '<i class="icon-x"></i><span>Verification failed</span>';
     }
   });
 }

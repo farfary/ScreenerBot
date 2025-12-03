@@ -543,18 +543,18 @@
 
   function copyMint(mint) {
     return copyToClipboard(mint)
-      .then(() => showToast("✅ Mint address copied to clipboard!"))
+      .then(() => showToast({ type: "success", title: "Mint address copied to clipboard" }))
       .catch((err) => {
-        showToast(`❌ Failed to copy: ${err}`, "error");
+        showToast({ type: "error", title: "Failed to copy", message: String(err) });
         throw err;
       });
   }
 
   function copyDebugValue(value, label) {
     return copyToClipboard(value)
-      .then(() => showToast(`✅ ${label} copied to clipboard!`))
+      .then(() => showToast({ type: "success", title: `${label} copied to clipboard` }))
       .catch((err) => {
-        showToast(`❌ Failed to copy: ${err}`, "error");
+        showToast({ type: "error", title: "Failed to copy", message: String(err) });
         throw err;
       });
   }
@@ -570,10 +570,10 @@
       const data = await res.json();
       const text = generateDebugText(data, type);
       await copyToClipboard(text);
-      showToast("✅ Debug info copied to clipboard!");
+      showToast({ type: "success", title: "Debug info copied to clipboard" });
     } catch (err) {
       console.error("copyDebugInfo error:", err);
-      showToast(`❌ Failed to copy debug info: ${err}`, "error");
+      showToast({ type: "error", title: "Failed to copy debug info", message: String(err) });
       throw err;
     }
   }

@@ -37,7 +37,7 @@ const ACTION_CONFIG = {
     ],
   },
   add: {
-    title: "<i class='icon-plus-circle'></i> Add to Position",
+    title: "<i class='icon-circle-plus'></i> Add to Position",
     confirmLabel: "Confirm Add",
     inputLabel: "Or Custom Amount (SOL):",
     inputHint: "Leave empty for default (50%)",

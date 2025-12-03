@@ -9,7 +9,7 @@ import { ActionBar, ActionBarManager } from "../ui/action_bar.js";
 
 // Sub-tabs configuration
 const SUB_TABS = [
-  { id: "stats", label: '<i class="icon-bar-chart-2"></i> Stats' },
+  { id: "stats", label: '<i class="icon-chart-bar"></i> Stats' },
   { id: "trailing-stop", label: '<i class="icon-trending-up"></i> Trailing Stop' },
   { id: "roi", label: '<i class="icon-target"></i> Take Profit' },
   { id: "time-rules", label: '<i class="icon-timer"></i> Time Rules' },
@@ -228,8 +228,8 @@ function createLifecycle() {
     if (activationIndicator) {
       activationIndicator.innerHTML =
         activation >= 20
-          ? '<i class="icon-alert-triangle"></i>'
-          : '<i class="icon-check-circle"></i>';
+          ? '<i class="icon-triangle-alert"></i>'
+          : '<i class="icon-circle-check"></i>';
       activationIndicator.style.background =
         activation >= 20 ? "var(--warning-alpha-10)" : "var(--success-alpha-10)";
       activationIndicator.style.color = activation >= 20 ? "var(--warning)" : "var(--success)";
@@ -248,8 +248,8 @@ function createLifecycle() {
     if (distanceIndicator) {
       distanceIndicator.innerHTML =
         distance >= 10
-          ? '<i class="icon-alert-triangle"></i>'
-          : '<i class="icon-check-circle"></i>';
+          ? '<i class="icon-triangle-alert"></i>'
+          : '<i class="icon-circle-check"></i>';
       distanceIndicator.style.background =
         distance >= 10 ? "var(--warning-alpha-10)" : "var(--success-alpha-10)";
       distanceIndicator.style.color = distance >= 10 ? "var(--warning)" : "var(--success)";
@@ -797,7 +797,7 @@ function createLifecycle() {
     if (!el) return;
 
     const icon = enabled
-      ? '<i class="icon-check-circle status-icon enabled"></i>'
+      ? '<i class="icon-circle-check status-icon enabled"></i>'
       : '<i class="icon-circle status-icon disabled"></i>';
     const displayValue = enabled ? value : "Disabled";
     const labelEl = el.querySelector(".label");
@@ -1065,7 +1065,7 @@ function createLifecycle() {
       console.error("[Trader] Failed to load positions summary:", error);
       positionsSummary.innerHTML = `
         <div class="info-state">
-          <i class="icon-alert-circle"></i>
+          <i class="icon-circle-alert"></i>
           <span>Failed to load positions</span>
         </div>
       `;

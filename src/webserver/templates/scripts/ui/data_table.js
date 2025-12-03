@@ -132,8 +132,8 @@ const BLOCKING_STATE_VARIANTS = ["loading", "info", "warning", "error"];
 const BLOCKING_STATE_DEFAULT_ICONS = {
   loading: "icon-loader",
   info: "icon-info",
-  warning: "icon-alert-triangle",
-  error: "icon-alert-triangle",
+  warning: "icon-triangle-alert",
+  error: "icon-triangle-alert",
 };
 
 export class DataTable {
@@ -960,7 +960,7 @@ export class DataTable {
 
     // Dropdown menu style
     if (config.dropdown && config.items) {
-      const icon = config.icon || '<i class="icon-more-vertical"></i>';
+      const icon = config.icon || '<i class="icon-ellipsis-vertical"></i>';
       const menuPosition = config.menuPosition || "right";
       const menuClass = menuPosition === "left" ? "menu-left" : "";
 

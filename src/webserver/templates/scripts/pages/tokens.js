@@ -13,9 +13,9 @@ const TOKEN_VIEWS = [
   { id: "no_market", label: '<i class="icon-trending-down"></i> No Market Data' },
   { id: "all", label: '<i class="icon-list"></i> All Tokens' },
   { id: "passed", label: '<i class="icon-check"></i> Passed' },
-  { id: "rejected", label: '<i class="icon-x-circle"></i> Rejected' },
+  { id: "rejected", label: '<i class="icon-circle-x"></i> Rejected' },
   { id: "blacklisted", label: '<i class="icon-ban"></i> Blacklisted' },
-  { id: "positions", label: '<i class="icon-bar-chart-2"></i> Positions' },
+  { id: "positions", label: '<i class="icon-chart-bar"></i> Positions' },
   { id: "recent", label: '<i class="icon-clock"></i> Recent' },
 ];
 
@@ -1226,7 +1226,7 @@ function createLifecycle() {
       menu.setAttribute("data-align", "left");
       menu.innerHTML = `
         <button class="dropdown-item" data-action="dexscreener" type="button">
-          <i class="icon-bar-chart-2"></i>
+          <i class="icon-chart-bar"></i>
           <span class="label">DexScreener</span>
         </button>
         <button class="dropdown-item" data-action="gmgn" type="button">
@@ -1238,7 +1238,7 @@ function createLifecycle() {
           <span class="label">Solscan</span>
         </button>
         <button class="dropdown-item" data-action="birdeye" type="button">
-          <span class="icon"><i class="icon-bar-chart-2"></i></span>
+          <span class="icon"><i class="icon-chart-bar"></i></span>
           <span class="label">Birdeye</span>
         </button>
         <button class="dropdown-item" data-action="rugcheck" type="button">

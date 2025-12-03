@@ -4,6 +4,7 @@
  */
 import * as Utils from "../core/utils.js";
 import { getCurrentPage } from "../core/router.js";
+import { setInterval as setPollingInterval } from "../core/poller.js";
 
 const VERSION = "0.1.0";
 const BUILD_DATE = "2025-12-02";
@@ -162,7 +163,6 @@ export class SettingsDialog {
       Utils.showToast({
         type: "success",
         title: "Settings saved successfully",
-        icon: '<i class="icon-circle-check"></i>',
       });
 
       // Apply settings immediately
@@ -174,7 +174,6 @@ export class SettingsDialog {
         type: "error",
         title: "Failed to save settings",
         message: error.message,
-        icon: '<i class="icon-circle-x"></i>',
       });
     } finally {
       this.isSaving = false;
@@ -207,6 +206,11 @@ export class SettingsDialog {
     // Apply compact mode
     if (typeof iface.compact_mode === "boolean") {
       document.documentElement.classList.toggle("compact-mode", iface.compact_mode);
+    }
+
+    // Apply polling/refresh interval
+    if (iface.polling_interval_ms && iface.polling_interval_ms > 0) {
+      setPollingInterval(iface.polling_interval_ms);
     }
   }
 
@@ -457,7 +461,7 @@ export class SettingsDialog {
         <div class="settings-group">
           <div class="settings-field">
             <div class="settings-field-info">
-              <label>Polling Interval</label>
+              <label>Refresh Interval</label>
               <span class="settings-field-hint">How often to refresh data</span>
             </div>
             <div class="settings-field-control">
@@ -717,7 +721,6 @@ export class SettingsDialog {
         Utils.showToast({
           type: "info",
           title: "Navigation reset to defaults",
-          icon: '<i class="icon-rotate-ccw"></i>',
         });
       });
     }
@@ -949,10 +952,10 @@ export class SettingsDialog {
     const checkBtn = content.querySelector("#checkUpdatesBtn");
     if (checkBtn) {
       checkBtn.addEventListener("click", () => {
-        Utils.showToast(
-          '<i class="icon-info"></i> Update checking is not available yet',
-          "info"
-        );
+        Utils.showToast({
+          type: "info",
+          title: "Update checking is not available yet",
+        });
       });
     }
   }
@@ -990,7 +993,7 @@ export class SettingsDialog {
         </div>
 
         <div class="settings-about-credits">
-          <p>Built with ❤️ for Solana traders</p>
+          <p>Built with <i class="icon-heart" style="color: #ef4444;"></i> for Solana traders</p>
           <p class="settings-about-copyright">© 2025 ScreenerBot. All rights reserved.</p>
         </div>
       </div>

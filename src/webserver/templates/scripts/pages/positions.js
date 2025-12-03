@@ -375,7 +375,7 @@ function createLifecycle() {
         },
         toolbar: {
           title: {
-            icon: "icon-bar-chart-2",
+            icon: "icon-chart-bar",
             text: `Positions: ${viewLabel}`,
             meta: [{ id: "positions-last-update", lines: ["Last Update", "—"] }],
           },

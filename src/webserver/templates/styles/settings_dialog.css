@@ -7,22 +7,28 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  opacity: 0;
-  transition: opacity 0.3s ease;
   pointer-events: none;
+  visibility: hidden;
 }
 
 .settings-dialog.active {
-  opacity: 1;
   pointer-events: auto;
+  visibility: visible;
 }
 
 .settings-backdrop {
   position: absolute;
   inset: 0;
   background: rgb(0 0 0 / 0.7);
-  backdrop-filter: blur(12px);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.25s ease-out;
+}
+
+.settings-dialog.active .settings-backdrop {
+  opacity: 1;
 }
 
 .settings-container {
@@ -40,19 +46,16 @@
   box-shadow:
     0 25px 50px -12px rgb(0 0 0 / 0.25),
     0 0 0 1px rgb(255 255 255 / 0.05);
-  animation: settingsSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  opacity: 0;
+  transform: translateY(16px) scale(0.97);
+  transition:
+    opacity 0.28s ease-out,
+    transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes settingsSlideUp {
-  0% {
-    transform: translateY(20px) scale(0.98);
-    opacity: 0;
-  }
-
-  100% {
-    transform: translateY(0) scale(1);
-    opacity: 1;
-  }
+.settings-dialog.active .settings-container {
+  opacity: 1;
+  transform: translateY(0) scale(1);
 }
 
 /* Header */

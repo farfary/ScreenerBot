@@ -4,10 +4,10 @@ import * as Utils from "../core/utils.js";
 // EventDetailsDialog renders a modal overlay for inspecting full event data.
 const SEVERITY_BADGES = {
   info: '<span class="badge"><i class="icon-info"></i> Info</span>',
-  warn: '<span class="badge warning"><i class="icon-alert-triangle"></i> Warning</span>',
-  warning: '<span class="badge warning"><i class="icon-alert-triangle"></i> Warning</span>',
+  warn: '<span class="badge warning"><i class="icon-triangle-alert"></i> Warning</span>',
+  warning: '<span class="badge warning"><i class="icon-triangle-alert"></i> Warning</span>',
   error: '<span class="badge error"><i class="icon-x"></i> Error</span>',
-  critical: '<span class="badge error"><i class="icon-alert-circle"></i> Critical</span>',
+  critical: '<span class="badge error"><i class="icon-circle-alert"></i> Critical</span>',
   debug: '<span class="badge secondary"><i class="icon-bug"></i> Debug</span>',
 };
 

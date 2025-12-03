@@ -9,7 +9,7 @@ import { TokenDetailsDialog } from "../ui/token_details_dialog.js";
 import { ActionBar, ActionBarManager } from "../ui/action_bar.js";
 
 const SUB_TABS = [
-  { id: "overview", label: '<i class="icon-bar-chart-2"></i> Overview' },
+  { id: "overview", label: '<i class="icon-chart-bar"></i> Overview' },
   { id: "flows", label: '<i class="icon-arrow-right-left"></i> Flows' },
   { id: "holdings", label: '<i class="icon-coins"></i> Holdings' },
   { id: "history", label: '<i class="icon-history"></i> History' },
@@ -67,7 +67,7 @@ function createLifecycle() {
 
     root.innerHTML = `
       <div class="empty-state wallet-error-state">
-        <i class="icon-alert-triangle"></i>
+        <i class="icon-triangle-alert"></i>
         <div class="wallet-error-title">${escapeHtml(message)}</div>
       </div>
     `;
@@ -722,7 +722,7 @@ function createLifecycle() {
     const configs = {
       overview: {
         title: "Balance Overview",
-        icon: "icon-bar-chart-2",
+        icon: "icon-chart-bar",
         windowSelector: windowSelectorConfig,
         actions: [
           {

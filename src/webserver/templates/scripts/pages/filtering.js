@@ -33,7 +33,7 @@ const state = {
 };
 
 const FILTER_TABS = [
-  { id: "status", label: '<i class="icon-bar-chart-2"></i> Status' },
+  { id: "status", label: '<i class="icon-chart-bar"></i> Status' },
   { id: "meta", label: '<i class="icon-settings"></i> Core' },
   { id: "dexscreener", label: '<i class="icon-trending-up"></i> DexScreener' },
   { id: "geckoterminal", label: '<i class="icon-trending-up"></i> GeckoTerminal' },

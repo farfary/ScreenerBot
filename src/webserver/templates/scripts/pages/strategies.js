@@ -458,9 +458,9 @@ export function createLifecycle() {
             ${Utils.escapeHtml(strategy.name)}
           </div>
           <div class="strategy-item-actions">
-            <button class="btn-icon" data-action="edit" title="Edit"><i class="icon-edit"></i></button>
+            <button class="btn-icon" data-action="edit" title="Edit"><i class="icon-pencil"></i></button>
             <button class="btn-icon" data-action="toggle" title="${strategy.enabled ? "Disable" : "Enable"}">
-              ${strategy.enabled ? "✓" : "○"}
+              ${strategy.enabled ? '<i class="icon-check"></i>' : '<i class="icon-circle"></i>'}
             </button>
             <button class="btn-icon" data-action="delete" title="Delete"><i class="icon-trash-2"></i></button>
           </div>
@@ -1127,7 +1127,9 @@ export function createLifecycle() {
 
     // Handle boolean
     if (spec.type === "boolean") {
-      return value ? "✓ Yes" : "✗ No";
+      return value
+        ? '<i class="icon-check" style="color: var(--success);"></i> Yes'
+        : '<i class="icon-x" style="color: var(--error);"></i> No';
     }
 
     // Handle numbers with units
@@ -1279,7 +1281,7 @@ export function createLifecycle() {
     if (!schema) {
       editor.innerHTML = `
         <div class="empty-state">
-          <i class="icon-alert-triangle"></i>
+          <i class="icon-triangle-alert"></i>
           <p>Unknown condition type</p>
         </div>
       `;
@@ -1994,11 +1996,11 @@ export function createLifecycle() {
     if (valid) {
       status.classList.remove("invalid");
       status.classList.add("valid");
-      if (icon) icon.textContent = "✓";
+      if (icon) icon.innerHTML = '<i class="icon-check"></i>';
     } else {
       status.classList.remove("valid");
       status.classList.add("invalid");
-      if (icon) icon.textContent = "✗";
+      if (icon) icon.innerHTML = '<i class="icon-x"></i>';
     }
 
     if (text) text.textContent = message;

@@ -64,9 +64,9 @@ function formatStatusBadge(status, success) {
   if (!status) return "—";
   const map = {
     Pending: { text: '<i class="icon-loader"></i> Pending', variant: "warning" },
-    Confirmed: { text: "✓ Confirmed", variant: "success" },
-    Finalized: { text: "✓✓ Finalized", variant: "success" },
-    Failed: { text: "✗ Failed", variant: "error" },
+    Confirmed: { text: '<i class="icon-check"></i> Confirmed', variant: "success" },
+    Finalized: { text: '<i class="icon-check-check"></i> Finalized', variant: "success" },
+    Failed: { text: '<i class="icon-x"></i> Failed', variant: "error" },
   };
   const info = map[status];
   if (!info) {

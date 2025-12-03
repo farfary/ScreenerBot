@@ -15,7 +15,7 @@ function getHealthBadge(health) {
   const badges = {
     healthy: '<span class="badge success"><i class="icon-check"></i> Healthy</span>',
     starting: '<span class="badge warning"><i class="icon-loader"></i> Starting</span>',
-    degraded: '<span class="badge warning"><i class="icon-alert-triangle"></i> Degraded</span>',
+    degraded: '<span class="badge warning"><i class="icon-triangle-alert"></i> Degraded</span>',
     unhealthy: '<span class="badge error"><i class="icon-x"></i> Unhealthy</span>',
   };
   return (
@@ -187,7 +187,10 @@ function createLifecycle() {
           label: "Enabled",
           sortable: true,
           minWidth: 72,
-          render: (v) => (v ? "✅" : "❌"),
+          render: (v) =>
+            v
+              ? '<i class="icon-circle-check" style="color: var(--success);"></i>'
+              : '<i class="icon-circle-x" style="color: var(--error);"></i>',
         },
         {
           id: "uptime",

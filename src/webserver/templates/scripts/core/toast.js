@@ -548,10 +548,10 @@ class ToastManager {
     typeClasses.forEach((cls) => toast.element.classList.remove(cls));
     toast.element.classList.add(`toast--${toast.config.type}`);
 
-    // Update icon
+    // Update icon (use innerHTML since icons are HTML strings like '<i class="icon-..."></i>')
     const iconEl = toast.element.querySelector(".toast__icon");
     if (iconEl && toast.config.icon) {
-      iconEl.textContent = toast.config.icon;
+      iconEl.innerHTML = toast.config.icon;
     }
 
     // Update aria-live for dynamic content changes

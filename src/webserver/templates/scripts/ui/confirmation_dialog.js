@@ -74,12 +74,12 @@ class ConfirmationDialog {
     };
 
     const variantIcons = {
-      danger: "⚠",
-      warning: '<i class="icon-alert-circle"></i>',
-      info: "ℹ",
+      danger: '<i class="icon-triangle-alert"></i>',
+      warning: '<i class="icon-circle-alert"></i>',
+      info: '<i class="icon-info"></i>',
     };
 
-    const icon = variantIcons[this.config.variant] || '<i class="icon-alert-circle"></i>';
+    const icon = variantIcons[this.config.variant] || '<i class="icon-circle-alert"></i>';
 
     this.element.innerHTML = `
 			<div class="confirmation-dialog__header">

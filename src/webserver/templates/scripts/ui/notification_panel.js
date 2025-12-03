@@ -297,7 +297,7 @@ function setupActions() {
   if (markAllReadBtn) {
     handlers.markAllRead = () => {
       notificationManager.markAllAsRead();
-      Utils.showToast("✓ All notifications marked as read", "success");
+      Utils.showToast({ type: "success", title: "All notifications marked as read" });
     };
     markAllReadBtn.addEventListener("click", handlers.markAllRead);
   }
@@ -516,7 +516,7 @@ async function renderNotifications() {
       isLoadingHistory = false;
       list.innerHTML = `
         <div class="notification-empty">
-          <span><i class="icon-alert-triangle"></i></span>
+          <span><i class="icon-triangle-alert"></i></span>
           <p>Failed to load history</p>
           <small>${error.message}</small>
         </div>
@@ -625,9 +625,9 @@ function renderNotification(notification) {
   const statusIcon = isInProgress
     ? '<i class="icon-loader"></i>'
     : isCompleted
-      ? "✅"
+      ? '<i class="icon-circle-check"></i>'
       : isFailed
-        ? "❌"
+        ? '<i class="icon-circle-x"></i>'
         : isCancelled
           ? '<i class="icon-ban"></i>'
           : "";

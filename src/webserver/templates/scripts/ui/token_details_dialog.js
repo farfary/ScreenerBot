@@ -663,9 +663,9 @@ export class TokenDetailsDialog {
 
     // Status flags
     const badges = [];
-    if (token.verified) badges.push('<span class="badge-success">✓ Verified</span>');
+    if (token.verified) badges.push('<span class="badge-success"><i class="icon-badge-check"></i> Verified</span>');
     if (token.has_open_position)
-      badges.push('<span class="badge-info"><i class="icon-bar-chart-2"></i> Position Open</span>');
+      badges.push('<span class="badge-info"><i class="icon-chart-bar"></i> Position Open</span>');
     if (token.blacklisted)
       badges.push('<span class="badge-danger"><i class="icon-ban"></i> Blacklisted</span>');
     if (token.has_ohlcv)
@@ -893,7 +893,7 @@ export class TokenDetailsDialog {
       rows.push(
         this._buildDataRow(
           "Status",
-          '<span class="badge-danger"><i class="icon-alert-triangle"></i> Flagged as Rugged</span>'
+          '<span class="badge-danger"><i class="icon-triangle-alert"></i> Flagged as Rugged</span>'
         )
       );
     }
@@ -1215,7 +1215,7 @@ export class TokenDetailsDialog {
         if (response.status === 404) {
           content.innerHTML = `
             <div class="tab-placeholder">
-              <div class="placeholder-icon"><i class="icon-bar-chart-2"></i></div>
+              <div class="placeholder-icon"><i class="icon-chart-bar"></i></div>
               <div>No DexScreener data available for this token</div>
               <div class="placeholder-hint">Data may not be synced yet</div>
             </div>
@@ -1233,7 +1233,7 @@ export class TokenDetailsDialog {
       console.error("Error loading DexScreener data:", error);
       content.innerHTML = `
         <div class="tab-placeholder error">
-          <div class="placeholder-icon"><i class="icon-alert-triangle"></i></div>
+          <div class="placeholder-icon"><i class="icon-triangle-alert"></i></div>
           <div>Failed to load DexScreener data</div>
           <div class="placeholder-hint">${this._escapeHtml(error.message)}</div>
         </div>
@@ -1384,7 +1384,7 @@ export class TokenDetailsDialog {
     if (hasVolume) {
       sections.push(`
         <div class="dex-section">
-          <h3 class="dex-section-title"><i class="icon-bar-chart-2"></i> Volume</h3>
+          <h3 class="dex-section-title"><i class="icon-chart-bar"></i> Volume</h3>
           <div class="dex-grid">
             ${
               data.volume_5m !== null
