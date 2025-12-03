@@ -6,106 +6,114 @@ description = "Debug and testing tools for ScreenerBot"
 publish = false
 
 # All debug binaries - these are NOT included in Tauri bundle
+# Note: Files are in src/debug_bins/ (not src/bin/) to avoid Tauri bundling
 [[bin]]
 name = "debug_decimals"
-path = "../../src/bin/debug_decimals.rs"
+path = "../../src/debug_bins/debug_decimals.rs"
 
 [[bin]]
 name = "verify_transactions_from_csv"
-path = "../../src/bin/verify_transactions_from_csv.rs"
+path = "../../src/debug_bins/verify_transactions_from_csv.rs"
 
 [[bin]]
 name = "analyze_mismatch_patterns"
-path = "../../src/bin/analyze_mismatch_patterns.rs"
+path = "../../src/debug_bins/analyze_mismatch_patterns.rs"
 
 [[bin]]
 name = "analyze_transaction_patterns"
-path = "../../src/bin/analyze_transaction_patterns.rs"
+path = "../../src/debug_bins/analyze_transaction_patterns.rs"
 
 [[bin]]
 name = "debug_coingecko"
-path = "../../src/bin/debug_coingecko.rs"
+path = "../../src/debug_bins/debug_coingecko.rs"
 
 [[bin]]
 name = "debug_defillama"
-path = "../../src/bin/debug_defillama.rs"
+path = "../../src/debug_bins/debug_defillama.rs"
 
 [[bin]]
 name = "debug_dexscreener"
-path = "../../src/bin/debug_dexscreener.rs"
+path = "../../src/debug_bins/debug_dexscreener.rs"
 
 [[bin]]
 name = "debug_events"
-path = "../../src/bin/debug_events.rs"
+path = "../../src/debug_bins/debug_events.rs"
 
 [[bin]]
 name = "debug_geckoterminal"
-path = "../../src/bin/debug_geckoterminal.rs"
+path = "../../src/debug_bins/debug_geckoterminal.rs"
 
 [[bin]]
 name = "debug_jupiter"
-path = "../../src/bin/debug_jupiter.rs"
+path = "../../src/debug_bins/debug_jupiter.rs"
 
 [[bin]]
 name = "debug_manual_trading"
-path = "../../src/bin/debug_manual_trading.rs"
+path = "../../src/debug_bins/debug_manual_trading.rs"
 
 [[bin]]
 name = "debug_ohlcv"
-path = "../../src/bin/debug_ohlcv.rs"
+path = "../../src/debug_bins/debug_ohlcv.rs"
 
 [[bin]]
 name = "debug_pool_decoders"
-path = "../../src/bin/debug_pool_decoders.rs"
+path = "../../src/debug_bins/debug_pool_decoders.rs"
 
 [[bin]]
 name = "debug_positions_semaphore"
-path = "../../src/bin/debug_positions_semaphore.rs"
+path = "../../src/debug_bins/debug_positions_semaphore.rs"
 
 [[bin]]
 name = "debug_pumpfun_pool"
-path = "../../src/bin/debug_pumpfun_pool.rs"
+path = "../../src/debug_bins/debug_pumpfun_pool.rs"
 
 [[bin]]
 name = "debug_pumpfun_structure"
-path = "../../src/bin/debug_pumpfun_structure.rs"
+path = "../../src/debug_bins/debug_pumpfun_structure.rs"
 
 [[bin]]
 name = "debug_rugcheck"
-path = "../../src/bin/debug_rugcheck.rs"
+path = "../../src/debug_bins/debug_rugcheck.rs"
 
 [[bin]]
 name = "debug_strategies"
-path = "../../src/bin/debug_strategies.rs"
+path = "../../src/debug_bins/debug_strategies.rs"
+
+[[bin]]
+name = "debug_swap_test"
+path = "../../src/debug_bins/debug_swap_test.rs"
 
 [[bin]]
 name = "debug_tokens"
-path = "../../src/bin/debug_tokens.rs"
+path = "../../src/debug_bins/debug_tokens.rs"
 
 [[bin]]
 name = "debug_websocket"
-path = "../../src/bin/debug_websocket.rs"
+path = "../../src/debug_bins/debug_websocket.rs"
 
 [[bin]]
 name = "main_sell_all_and_reset"
-path = "../../src/bin/main_sell_all_and_reset.rs"
+path = "../../src/debug_bins/main_sell_all_and_reset.rs"
 
 [[bin]]
 name = "test_bonding_curve_decoder"
-path = "../../src/bin/test_bonding_curve_decoder.rs"
+path = "../../src/debug_bins/test_bonding_curve_decoder.rs"
 
 [[bin]]
 name = "test_initialization_flow"
-path = "../../src/bin/test_initialization_flow.rs"
+path = "../../src/debug_bins/test_initialization_flow.rs"
 
 [[bin]]
 name = "test_webserver"
-path = "../../src/bin/test_webserver.rs"
+path = "../../src/debug_bins/test_webserver.rs"
 
 [[bin]]
 name = "trace_filtering"
-path = "../../src/bin/trace_filtering.rs"
+path = "../../src/debug_bins/trace_filtering.rs"
 
 [dependencies]
 # Use the main screenerbot library
 screenerbot = { path = "../.." }
+tokio = { version = "1", features = ["full"] }
+clap = { version = "4", features = ["derive"] }
+chrono = { version = "0.4", features = ["serde"] }

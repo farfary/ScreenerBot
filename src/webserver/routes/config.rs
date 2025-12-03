@@ -114,10 +114,7 @@ pub fn routes() -> Router<Arc<AppState>> {
             "/config/ohlcv",
             patch(patch_any_config::<config::OhlcvConfig>),
         )
-        .route(
-            "/config/gui",
-            patch(patch_any_config::<config::GuiConfig>),
-        )
+        .route("/config/gui", patch(patch_any_config::<config::GuiConfig>))
         // Utility endpoints
         .route("/config/reload", post(reload_config_from_disk))
         .route("/config/reset", post(reset_config_to_defaults))

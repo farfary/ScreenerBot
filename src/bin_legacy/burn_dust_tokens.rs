@@ -304,7 +304,7 @@ async fn burn_dust_tokens(
         };
 
         // Get quote using ExactOut mode for complete liquidation
-        match get_best_quote(
+        match get_best_quote_legacy(
             &dust.mint,       // input_mint (token)
             SOL_MINT,         // output_mint (SOL)
             dust.balance,     // input_amount (all tokens)
@@ -324,7 +324,7 @@ async fn burn_dust_tokens(
                 );
 
                 // Execute the swap
-                match execute_best_swap(&token, &dust.mint, SOL_MINT, dust.balance, quote).await {
+                match execute_best_swap_legacy(&token, &dust.mint, SOL_MINT, dust.balance, quote).await {
                     Ok(swap_result) => {
                         if swap_result.success {
                             let sol_received =

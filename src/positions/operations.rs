@@ -22,7 +22,10 @@ use crate::{
     pools::get_pool_price,
     pools::PriceResult,
     rpc::get_rpc_client,
-    swaps::{execute_best_swap, get_best_quote, get_best_quote_for_opening},
+    swaps::{
+        execute_swap_with_fallback, get_best_quote, get_best_quote_for_opening, QuoteRequest,
+        SwapMode,
+    },
     utils::{get_token_balance, get_total_token_balance, get_wallet_address, sol_to_lamports},
 };
 use chrono::Utc;
@@ -256,30 +259,24 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
 
     let slippage_quote_default = with_config(|cfg| cfg.swaps.slippage.quote_default_pct);
 
-    let quote = get_best_quote_for_opening(
-        SOL_MINT,
-        &api_token.mint,
-        sol_to_lamports(trade_size_sol),
-        &wallet_address,
-        slippage_quote_default, // Use configured slippage for opening
-        &api_token.symbol,
-    )
-    .await
-    .map_err(|e| format!("Quote failed: {}", e))?;
+    let quote_request = QuoteRequest {
+        input_mint: SOL_MINT.to_string(),
+        output_mint: api_token.mint.clone(),
+        input_amount: sol_to_lamports(trade_size_sol),
+        wallet_address: wallet_address.clone(),
+        slippage_pct: slippage_quote_default,
+        swap_mode: SwapMode::ExactIn,
+    };
 
-    let swap_result = execute_best_swap(
-        &api_token,
-        SOL_MINT,
-        &api_token.mint,
-        sol_to_lamports(trade_size_sol),
-        quote,
-    )
-    .await
-    .map_err(|e| format!("Swap failed: {}", e))?;
+    let quote = get_best_quote_for_opening(quote_request, &api_token.symbol)
+        .await
+        .map_err(|e| format!("Quote failed: {}", e))?;
 
-    let transaction_signature = swap_result
-        .transaction_signature
-        .ok_or("No transaction signature")?;
+    let swap_result = execute_swap_with_fallback(&api_token, quote)
+        .await
+        .map_err(|e| format!("Swap failed: {}", e))?;
+
+    let transaction_signature = swap_result.transaction_signature;
 
     // Create position
     let position = Position {
@@ -354,7 +351,7 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
         Some(&transaction_signature),
         None,
         trade_size_sol,
-        swap_result.output_amount.parse().unwrap_or(0),
+        swap_result.output_amount,
         None,
         None,
     )
@@ -569,16 +566,16 @@ pub async fn close_position_direct(
     let mut last_err: Option<String> = None;
     let mut swap_result = None;
     for (i, slippage) in slippage_exit_retry_steps.iter().enumerate() {
-        let quote = match get_best_quote(
-            token_mint,
-            SOL_MINT,
-            sell_amount,
-            &wallet_address,
-            *slippage,
-            "ExactIn",
-        )
-        .await
-        {
+        let quote_request = QuoteRequest {
+            input_mint: token_mint.to_string(),
+            output_mint: SOL_MINT.to_string(),
+            input_amount: sell_amount,
+            wallet_address: wallet_address.clone(),
+            slippage_pct: *slippage,
+            swap_mode: SwapMode::ExactIn,
+        };
+
+        let quote = match get_best_quote(quote_request).await {
             Ok(q) => q,
             Err(e) => {
                 last_err = Some(format!(
@@ -591,7 +588,7 @@ pub async fn close_position_direct(
             }
         };
 
-        match execute_best_swap(&api_token, token_mint, SOL_MINT, sell_amount, quote).await {
+        match execute_swap_with_fallback(&api_token, quote).await {
             Ok(res) => {
                 swap_result = Some(res);
                 last_err = None;
@@ -623,38 +620,27 @@ pub async fn close_position_direct(
     let swap_result =
         swap_result.ok_or_else(|| last_err.unwrap_or_else(|| "Exit swap failed".to_string()))?;
 
-    let transaction_signature = swap_result
-        .transaction_signature
-        .ok_or("No transaction signature")?;
+    let transaction_signature = swap_result.transaction_signature.clone();
 
     // CRITICAL: Log execution vs requested amounts to detect partial execution
-    if let Ok(executed_amount) = swap_result.input_amount.parse::<u64>() {
-        if executed_amount < sell_amount {
-            logger::warning(
-                LogTag::Positions,
-                &format!(
-                    "⚠️ PARTIAL SWAP DETECTED for {}: Requested {} tokens, executed {} tokens, shortfall: {}",
-                    api_token.symbol,
-                    sell_amount,
-                    executed_amount,
-                    sell_amount - executed_amount
-                ),
-            );
-        } else {
-            logger::info(
-                LogTag::Positions,
-                &format!(
-                    "✅ Full swap executed for {}: {} tokens",
-                    api_token.symbol, executed_amount
-                ),
-            );
-        }
-    } else {
+    let executed_amount = swap_result.input_amount;
+    if executed_amount < sell_amount {
         logger::warning(
             LogTag::Positions,
             &format!(
-                "⚠️ Could not parse executed amount '{}' for {}",
-                swap_result.input_amount, api_token.symbol
+                "⚠️ PARTIAL SWAP DETECTED for {}: Requested {} tokens, executed {} tokens, shortfall: {}",
+                api_token.symbol,
+                sell_amount,
+                executed_amount,
+                sell_amount - executed_amount
+            ),
+        );
+    } else {
+        logger::info(
+            LogTag::Positions,
+            &format!(
+                "✅ Full swap executed for {}: {} tokens",
+                api_token.symbol, executed_amount
             ),
         );
     }
@@ -799,16 +785,15 @@ pub async fn partial_close_position(
     let mut last_err: Option<String> = None;
     let mut quote_opt = None;
     for (i, slippage) in slippage_exit_retry_steps.iter().enumerate() {
-        match get_best_quote(
-            token_mint,
-            SOL_MINT,
-            exit_amount,
-            &wallet_address,
-            *slippage,
-            "ExactIn",
-        )
-        .await
-        {
+        let quote_request = QuoteRequest {
+            input_mint: token_mint.to_string(),
+            output_mint: SOL_MINT.to_string(),
+            input_amount: exit_amount,
+            wallet_address: wallet_address.clone(),
+            slippage_pct: *slippage,
+            swap_mode: SwapMode::ExactIn,
+        };
+        match get_best_quote(quote_request).await {
             Ok(q) => {
                 quote_opt = Some(q);
                 last_err = None;
@@ -840,24 +825,21 @@ pub async fn partial_close_position(
     // Mark pending partial BEFORE executing swap to serialize concurrent attempts
     super::state::mark_partial_exit_pending(token_mint).await;
 
-    // Execute swap
-    // Try execute with the selected quote; if it fails, iterate remaining slippage steps
-    let mut swap_result = execute_best_swap(&api_token, token_mint, SOL_MINT, exit_amount, quote)
+    // Execute swap with retry on different slippage levels
+    let mut swap_result = execute_swap_with_fallback(&api_token, quote)
         .await
         .map_err(|e| e.to_string());
     if swap_result.is_err() {
         for (i, slippage) in slippage_exit_retry_steps.iter().enumerate() {
-            // We already tried first successful quote attempt; attempt new quotes with higher slippage
-            let q = match get_best_quote(
-                token_mint,
-                SOL_MINT,
-                exit_amount,
-                &wallet_address,
-                *slippage,
-                "ExactIn",
-            )
-            .await
-            {
+            let quote_request = QuoteRequest {
+                input_mint: token_mint.to_string(),
+                output_mint: SOL_MINT.to_string(),
+                input_amount: exit_amount,
+                wallet_address: wallet_address.clone(),
+                slippage_pct: *slippage,
+                swap_mode: SwapMode::ExactIn,
+            };
+            let q = match get_best_quote(quote_request).await {
                 Ok(q) => q,
                 Err(e) => {
                     last_err = Some(format!(
@@ -869,7 +851,7 @@ pub async fn partial_close_position(
                     continue;
                 }
             };
-            match execute_best_swap(&api_token, token_mint, SOL_MINT, exit_amount, q).await {
+            match execute_swap_with_fallback(&api_token, q).await {
                 Ok(res) => {
                     swap_result = Ok(res);
                     last_err = None;
@@ -909,9 +891,7 @@ pub async fn partial_close_position(
         }
     };
 
-    let transaction_signature = swap_result
-        .transaction_signature
-        .ok_or("No transaction signature")?;
+    let transaction_signature = swap_result.transaction_signature.clone();
 
     let expiry_height =
         get_rpc_client().get_block_height().await.unwrap_or(0) + SOLANA_BLOCKHASH_VALIDITY_SLOTS;
@@ -1078,16 +1058,17 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
     // Get quote for DCA entry
     let wallet_address = get_wallet_address().map_err(|e| e.to_string())?;
     let slippage = with_config(|cfg| cfg.swaps.slippage.quote_default_pct);
-    let quote = get_best_quote_for_opening(
-        SOL_MINT,
-        token_mint,
-        sol_to_lamports(dca_amount_sol),
-        &wallet_address,
-        slippage,
-        &api_token.symbol,
-    )
-    .await
-    .map_err(|e| format!("Failed to get DCA quote: {}", e))?;
+    let quote_request = QuoteRequest {
+        input_mint: SOL_MINT.to_string(),
+        output_mint: token_mint.to_string(),
+        input_amount: sol_to_lamports(dca_amount_sol),
+        wallet_address: wallet_address.clone(),
+        slippage_pct: slippage,
+        swap_mode: SwapMode::ExactIn,
+    };
+    let quote = get_best_quote_for_opening(quote_request, &api_token.symbol)
+        .await
+        .map_err(|e| format!("Failed to get DCA quote: {}", e))?;
 
     logger::info(
         LogTag::Positions,
@@ -1099,19 +1080,11 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
     );
 
     // Execute swap
-    let swap_result = execute_best_swap(
-        &api_token,
-        SOL_MINT,
-        token_mint,
-        sol_to_lamports(dca_amount_sol),
-        quote,
-    )
-    .await
-    .map_err(|e| format!("DCA swap failed: {}", e))?;
+    let swap_result = execute_swap_with_fallback(&api_token, quote)
+        .await
+        .map_err(|e| format!("DCA swap failed: {}", e))?;
 
-    let transaction_signature = swap_result
-        .transaction_signature
-        .ok_or("No transaction signature")?;
+    let transaction_signature = swap_result.transaction_signature.clone();
 
     // Pre-compute expiry height for verification + persistence
     let expiry_height = get_rpc_client()

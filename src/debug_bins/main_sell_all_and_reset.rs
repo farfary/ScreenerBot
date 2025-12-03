@@ -1470,7 +1470,7 @@ async fn attempt_single_sell(account: &TokenAccountInfo) -> Result<String, Strin
 
     // Get quote and execute swap
     let quote_slippage = with_config(|cfg| cfg.swaps.slippage.quote_default_pct);
-    let best_quote = get_best_quote(
+    let best_quote = get_best_quote_legacy(
         &token.mint,
         SOL_MINT,
         actual_balance,
@@ -1481,7 +1481,7 @@ async fn attempt_single_sell(account: &TokenAccountInfo) -> Result<String, Strin
     .await
     .map_err(|e| format!("Failed to get quote: {}", e))?;
 
-    let swap_result = execute_best_swap(&token, &token.mint, SOL_MINT, actual_balance, best_quote)
+    let swap_result = execute_best_swap_legacy(&token, &token.mint, SOL_MINT, actual_balance, best_quote)
         .await
         .map_err(|e| format!("Failed to execute swap: {}", e))?;
 

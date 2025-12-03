@@ -297,12 +297,12 @@ pub fn collect_config_metadata() -> ConfigMetadata {
 
     for section in map.values_mut() {
         section.retain(|_, field| !field.hidden.unwrap_or(false));
-        
+
         for field in section.values_mut() {
             if let Some(ref mut children) = field.children {
                 children.retain(|_, child| !child.hidden.unwrap_or(false));
             }
-            
+
             let normalized = field.category.map(normalize_category).unwrap_or("General");
             field.category = Some(normalized);
         }

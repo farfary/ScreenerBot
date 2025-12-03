@@ -422,4 +422,20 @@ impl ScreenerBotError {
             operation: message.into(),
         })
     }
+
+    /// Create a configuration error
+    pub fn configuration_error(message: impl Into<String>) -> Self {
+        ScreenerBotError::Configuration(ConfigurationError::Generic {
+            message: message.into(),
+        })
+    }
+
+    /// Create an internal error
+    pub fn internal_error(message: impl Into<String>) -> Self {
+        ScreenerBotError::Data(DataError::ValidationError {
+            field: "internal".to_string(),
+            value: "error".to_string(),
+            reason: message.into(),
+        })
+    }
 }

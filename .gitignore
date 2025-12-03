@@ -1,4 +1,5 @@
-/target
+target/*
+crates/*
 **/.DS_Store
 
 # Log files
