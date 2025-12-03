@@ -134,7 +134,13 @@ pub async fn init() -> Result<(), String> {
 
 /// Record an event asynchronously
 /// Non-blocking: events are queued and written by background task
+/// Returns Ok(()) silently if events system is disabled in config
 pub async fn record(event: Event) -> Result<(), String> {
+    // Silently skip if events system is disabled
+    if !crate::config::with_config(|c| c.events.enabled) {
+        return Ok(());
+    }
+
     let writer_guard = EVENT_WRITER.lock().await;
 
     if let Some(ref writer) = *writer_guard {
@@ -151,7 +157,13 @@ pub async fn record(event: Event) -> Result<(), String> {
 
 /// Record an event with automatic error handling
 /// Logs errors instead of propagating them to avoid disrupting main operations
+/// Silently returns if events system is disabled in config
 pub async fn record_safe(event: Event) {
+    // Silently skip if events system is disabled
+    if !crate::config::with_config(|c| c.events.enabled) {
+        return;
+    }
+
     if let Err(e) = record(event).await {
         logger::warning(LogTag::System, &format!("Failed to record event: {}", e));
     }
