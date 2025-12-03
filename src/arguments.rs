@@ -87,6 +87,12 @@ pub fn is_reset_enabled() -> bool {
     has_arg("--reset")
 }
 
+/// Dashboard demo mode - show hardcoded showcase data for screenshots/marketing
+/// Use with: --gui --dashboard-demo
+pub fn is_dashboard_demo_enabled() -> bool {
+    has_arg("--dashboard-demo")
+}
+
 // =============================================================================
 // MODIFIER FLAGS
 // =============================================================================
@@ -185,6 +191,7 @@ pub fn print_help() {
     println!(
         "                                Without --gui, runs headless with webserver on port 8080"
     );
+    println!("    --dashboard-demo            Show hardcoded demo data for screenshots/marketing");
     println!();
     println!("MODIFIERS:");
     println!("    --force                     Skip confirmation prompts (with --reset)");
@@ -212,6 +219,7 @@ pub fn print_help() {
     println!(
         "    screenerbot --gui                            # Start bot with desktop GUI window"
     );
+    println!("    screenerbot --gui --dashboard-demo           # Demo mode for screenshots");
     println!("    screenerbot --debug-trader                   # Start bot with trader debug logs");
     println!("    screenerbot --reset                          # Reset with confirmation prompt");
     println!("    screenerbot --reset --force                  # Reset without confirmation");
@@ -250,6 +258,9 @@ pub fn get_enabled_debug_modes() -> Vec<String> {
     }
     if is_gui_enabled() {
         modes.push("gui".to_string());
+    }
+    if is_dashboard_demo_enabled() {
+        modes.push("dashboard-demo".to_string());
     }
 
     // Include active modifiers

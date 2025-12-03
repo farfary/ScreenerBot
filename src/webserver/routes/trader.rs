@@ -87,21 +87,21 @@ struct ManualTradeSuccess {
 }
 
 #[derive(Debug, Serialize)]
-struct TraderStatsResponse {
-    open_positions_count: usize,
-    locked_sol: f64,
-    win_rate_pct: f64,
-    total_trades: usize,
-    avg_hold_time_hours: f64,
-    best_trade_pct: f64,
-    exit_breakdown: Vec<ExitBreakdown>,
+pub struct TraderStatsResponse {
+    pub open_positions_count: usize,
+    pub locked_sol: f64,
+    pub win_rate_pct: f64,
+    pub total_trades: usize,
+    pub avg_hold_time_hours: f64,
+    pub best_trade_pct: f64,
+    pub exit_breakdown: Vec<ExitBreakdown>,
 }
 
 #[derive(Debug, Serialize)]
-struct ExitBreakdown {
-    exit_type: String,
-    count: usize,
-    avg_profit_pct: f64,
+pub struct ExitBreakdown {
+    pub exit_type: String,
+    pub count: usize,
+    pub avg_profit_pct: f64,
 }
 
 // =============================================================================
@@ -251,6 +251,13 @@ async fn stop_trader_handler() -> Response {
 
 /// GET /api/trader/stats - Get trader performance statistics
 async fn get_trader_stats() -> Response {
+    // Return demo data if demo mode is enabled
+    if crate::webserver::demo::is_demo_mode() {
+        return crate::webserver::utils::success_response(
+            crate::webserver::demo::get_demo_trader_stats(),
+        );
+    }
+
     // Get open positions
     let open_positions = positions::get_open_positions().await;
     let open_positions_count = open_positions.len();

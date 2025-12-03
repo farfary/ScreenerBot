@@ -45,6 +45,11 @@ pub fn routes() -> Router<Arc<AppState>> {
 
 /// Get current wallet balance
 async fn get_wallet_current() -> Json<Option<WalletCurrentResponse>> {
+    // Return demo data if demo mode is enabled
+    if crate::webserver::demo::is_demo_mode() {
+        return Json(Some(crate::webserver::demo::get_demo_wallet_current()));
+    }
+
     match get_current_wallet_status().await {
         Ok(Some(snapshot)) => {
             let token_balances = snapshot

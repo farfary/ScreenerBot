@@ -164,6 +164,12 @@ pub fn routes() -> Router<Arc<AppState>> {
 }
 
 async fn get_positions(Query(params): Query<PositionsQuery>) -> Json<Vec<PositionResponse>> {
+    // Return demo data if demo mode is enabled
+    if crate::webserver::demo::is_demo_mode() {
+        let status = params.status.as_deref();
+        return Json(crate::webserver::demo::get_demo_positions(status));
+    }
+
     let status = params.status.as_deref().unwrap_or("all");
     let limit = params.limit.unwrap_or(100);
     let mint_filter = params.mint.as_deref();
@@ -628,6 +634,11 @@ fn lamports_option_to_sol(value: Option<u64>) -> Option<f64> {
 }
 
 async fn get_positions_stats() -> Json<PositionsStatsResponse> {
+    // Return demo data if demo mode is enabled
+    if crate::webserver::demo::is_demo_mode() {
+        return Json(crate::webserver::demo::get_demo_positions_stats());
+    }
+
     let open_positions = positions::get_open_positions().await;
     let closed_positions = positions::get_closed_positions().await;
 

@@ -79,6 +79,11 @@ pub fn routes() -> Router<Arc<AppState>> {
 }
 
 async fn get_header_metrics() -> Json<HeaderMetricsResponse> {
+    // Return demo data if demo mode is enabled
+    if crate::webserver::demo::is_demo_mode() {
+        return Json(crate::webserver::demo::get_demo_header_metrics());
+    }
+
     let now = chrono::Utc::now();
 
     // Trader info

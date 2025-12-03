@@ -10,6 +10,7 @@ use crate::rpc::get_global_rpc_stats;
 use crate::tokens::cleanup::get_blacklist_summary;
 use crate::tokens::database::get_global_database;
 use crate::wallet::get_current_wallet_status;
+use crate::webserver::demo;
 use crate::webserver::snapshot::get_cached_system_metrics;
 use crate::webserver::state::AppState;
 
@@ -101,6 +102,11 @@ pub fn routes() -> Router<Arc<AppState>> {
 
 /// Get comprehensive dashboard overview
 async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<DashboardOverview> {
+    // Return demo data if demo mode is enabled
+    if demo::is_demo_mode() {
+        return Json(demo::get_demo_dashboard_overview());
+    }
+
     // Get wallet info
     let wallet_info = match get_current_wallet_status().await {
         Ok(Some(snapshot)) => WalletInfo {
@@ -401,6 +407,11 @@ pub struct TokenStatistics {
 /// GET /api/dashboard/home
 /// Comprehensive home dashboard with all analytics
 async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<HomeDashboardResponse> {
+    // Return demo data if demo mode is enabled
+    if demo::is_demo_mode() {
+        return Json(demo::get_demo_home_dashboard());
+    }
+
     use chrono::{DateTime, Duration, TimeZone};
 
     let now = chrono::Utc::now();

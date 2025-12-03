@@ -30,6 +30,11 @@ impl Service for WebserverService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
+        // Enable demo mode if --dashboard-demo flag is present
+        if crate::arguments::is_dashboard_demo_enabled() {
+            crate::webserver::demo::enable_demo_mode();
+            logger::info(LogTag::Webserver, "📸 Dashboard demo mode enabled for screenshots");
+        }
         Ok(())
     }
 
