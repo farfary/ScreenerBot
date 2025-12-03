@@ -337,7 +337,12 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(to right, var(--tab-bar-bg-secondary), var(--tab-bar-bg-secondary) 60%, transparent);
+  background: linear-gradient(
+    to right,
+    var(--tab-bar-bg-secondary),
+    var(--tab-bar-bg-secondary) 60%,
+    transparent
+  );
   border: none;
   cursor: pointer;
   z-index: 10;

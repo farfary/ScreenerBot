@@ -182,7 +182,11 @@ const validateRpcUrls = debounce(async () => {
     return;
   }
 
-  showValidation("rpc", "success", `<i class="icon-check"></i> ${urls.length} valid URL${urls.length > 1 ? "s" : ""}`);
+  showValidation(
+    "rpc",
+    "success",
+    `<i class="icon-check"></i> ${urls.length} valid URL${urls.length > 1 ? "s" : ""}`
+  );
 }, 500);
 
 // Toggle password visibility
@@ -300,7 +304,8 @@ async function runVerification() {
     // Update wallet validation
     if (walletStatus) {
       walletStatus.className = "init-verification-status success";
-      walletStatus.innerHTML = '<i class="icon-check"></i><span>Wallet validated successfully</span>';
+      walletStatus.innerHTML =
+        '<i class="icon-check"></i><span>Wallet validated successfully</span>';
     }
     if (walletDetails && data.wallet_address) {
       walletDetails.classList.add("show");

@@ -898,8 +898,6 @@ async function handlePowerMenuAction(action) {
   }
 }
 
-
-
 async function handleRestart() {
   const { confirmed } = await ConfirmationDialog.show({
     title: "Restart Bot",

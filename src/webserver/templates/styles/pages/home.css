@@ -53,7 +53,9 @@
   line-height: 1.1;
   letter-spacing: 0.01em;
   text-shadow: 0 2px 4px rgb(0 0 0 / 0.15);
-  font-feature-settings: "tnum" 1, "lnum" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "lnum" 1;
 }
 
 .hero-change {
@@ -100,7 +102,9 @@
 .hero-stat-value {
   font-size: clamp(1rem, 1.4vw, 1.2rem);
   font-weight: 700;
-  font-feature-settings: "tnum" 1, "lnum" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "lnum" 1;
 }
 
 /* ===== Content Grid - 3 Columns ===== */

@@ -663,7 +663,8 @@ export class TokenDetailsDialog {
 
     // Status flags
     const badges = [];
-    if (token.verified) badges.push('<span class="badge-success"><i class="icon-badge-check"></i> Verified</span>');
+    if (token.verified)
+      badges.push('<span class="badge-success"><i class="icon-badge-check"></i> Verified</span>');
     if (token.has_open_position)
       badges.push('<span class="badge-info"><i class="icon-chart-bar"></i> Position Open</span>');
     if (token.blacklisted)
