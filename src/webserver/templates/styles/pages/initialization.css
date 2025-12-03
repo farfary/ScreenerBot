@@ -59,13 +59,16 @@
 }
 
 .init-logo {
-  font-family: Orbitron, monospace;
+  font-family: var(--font-brand);
   font-size: 2.5rem;
   font-weight: 900;
   margin-bottom: 1rem;
   color: var(--primary-color);
-  letter-spacing: 0.05em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
+  text-shadow:
+    0 0 10px rgb(59, 130, 246, 0.5),
+    0 0 20px rgb(59, 130, 246, 0.3);
 }
 
 .init-title {
@@ -211,7 +214,7 @@
   border-radius: 8px;
   background: var(--bg-secondary);
   color: var(--text-primary);
-  font-family: "Courier New", monospace;
+  font-family: var(--font-mono);
   font-size: 0.875rem;
   resize: vertical;
   transition: all 0.2s ease;
@@ -440,7 +443,7 @@
   padding: 0.75rem;
   background: var(--bg-primary);
   border-radius: 6px;
-  font-family: "Courier New", monospace;
+  font-family: var(--font-mono);
   word-break: break-all;
   display: none;
 }

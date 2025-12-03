@@ -325,6 +325,8 @@
   font-size: 1rem;
   color: var(--text-primary);
   font-weight: 600;
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
 .metric-empty {
@@ -459,8 +461,9 @@
 }
 
 .data-value.mono {
-  font-family: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", monospace;
+  font-family: var(--font-data);
   font-size: 0.85rem;
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
 .data-value .positive {
@@ -621,8 +624,9 @@
 }
 
 .dex-address {
-  font-family: "SF Mono", Monaco, "Courier New", monospace;
+  font-family: var(--font-data);
   font-size: 13px;
+  font-feature-settings: "tnum" 1, "zero" 1;
   background: var(--bg-primary);
   padding: 8px 12px;
   border-radius: 4px;

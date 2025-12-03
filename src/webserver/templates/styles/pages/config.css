@@ -561,7 +561,7 @@
 
 .config-field-key {
   font-size: 0.7rem;
-  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-family: var(--font-mono);
   color: var(--text-secondary);
   letter-spacing: 0.3px;
 }
@@ -775,11 +775,13 @@
 
 .config-field-control input[type="number"] {
   text-align: right;
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
 .config-field-control textarea {
   min-height: 100px;
-  font-family: "JetBrains Mono", "Fira Code", monospace;
+  font-family: var(--font-mono);
   resize: vertical;
 }
 

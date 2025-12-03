@@ -53,6 +53,14 @@ pub const LUCIDE_FONT_TTF: &[u8] = include_bytes!("assets/lucide-font/lucide.ttf
 pub const LUCIDE_FONT_EOT: &[u8] = include_bytes!("assets/lucide-font/lucide.eot");
 pub const LUCIDE_FONT_SVG: &str = include_str!("assets/lucide-font/lucide.svg");
 
+// Trading terminal fonts - JetBrains Mono (tabular numbers) and Orbitron (branding)
+pub const JETBRAINS_MONO_REGULAR: &[u8] =
+    include_bytes!("assets/fonts/JetBrainsMono-Regular.woff2");
+pub const JETBRAINS_MONO_MEDIUM: &[u8] =
+    include_bytes!("assets/fonts/JetBrainsMono-Medium.woff2");
+pub const JETBRAINS_MONO_BOLD: &[u8] = include_bytes!("assets/fonts/JetBrainsMono-Bold.woff2");
+pub const ORBITRON_VARIABLE: &[u8] = include_bytes!("assets/fonts/Orbitron-Variable.woff2");
+
 pub const CORE_LIFECYCLE: &str = include_str!("templates/scripts/core/lifecycle.js");
 pub const CORE_APP_STATE: &str = include_str!("templates/scripts/core/app_state.js");
 pub const CORE_POLLER: &str = include_str!("templates/scripts/core/poller.js");

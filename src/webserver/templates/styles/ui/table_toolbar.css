@@ -218,6 +218,8 @@
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--text-primary);
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
 /* Variant colors - subtle, no backgrounds */

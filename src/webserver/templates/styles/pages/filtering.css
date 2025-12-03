@@ -206,6 +206,8 @@
   font-size: 1.8rem;
   font-weight: 600;
   color: var(--text-primary);
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
 .status-card .metric-meta {

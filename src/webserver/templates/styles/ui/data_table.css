@@ -440,6 +440,8 @@ body.dt-column-resizing * {
   box-sizing: border-box; /* Make width include padding and borders */
   min-height: inherit;
   vertical-align: middle; /* Center content vertically */
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
 /* Uniform row height mode */
@@ -492,16 +494,7 @@ body.dt-column-resizing * {
 }
 
 .data-table td .mono-text {
-  font-family: var(
-    --font-mono,
-    "SFMono-Regular",
-    Menlo,
-    Monaco,
-    Consolas,
-    "Liberation Mono",
-    "Courier New",
-    monospace
-  );
+  font-family: var(--font-mono);
   word-break: break-all;
   display: inline;
 }
@@ -1082,4 +1075,96 @@ body.dt-column-resizing * {
     width: 28px;
     height: 28px;
   }
+}
+
+/* =============================================================================
+   Trading Terminal Numeric Styles
+   ============================================================================= */
+
+/* Numeric cells in tables - using JetBrains Mono for tabular figures */
+.data-table td[data-type="number"],
+.data-table td[data-type="price"],
+.data-table td[data-type="percent"],
+.data-table td[data-type="sol"],
+.data-table td[data-type="currency"],
+.data-table .dt-cell-numeric {
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-align: right;
+}
+
+/* Positive values (profit, gain) */
+.data-table .dt-positive,
+.data-table td.positive,
+.data-table [data-value-type="positive"] {
+  color: var(--success-color);
+}
+
+/* Negative values (loss) */
+.data-table .dt-negative,
+.data-table td.negative,
+.data-table [data-value-type="negative"] {
+  color: var(--error-color);
+}
+
+/* Price display with emphasis */
+.data-table .dt-price {
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-weight: 600;
+}
+
+/* Percentage with background indicator */
+.data-table .dt-pnl {
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.data-table .dt-pnl.positive {
+  color: var(--success-color);
+  background: var(--success-alpha-10);
+}
+
+.data-table .dt-pnl.negative {
+  color: var(--error-color);
+  background: var(--danger-alpha-10);
+}
+
+/* SOL amount display */
+.data-table .dt-sol {
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-weight: 500;
+}
+
+.data-table .dt-sol::after {
+  content: " SOL";
+  font-size: 0.8em;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* Time/duration display */
+.data-table .dt-time {
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1;
+  color: var(--text-secondary);
+}
+
+/* Address/signature truncated display */
+.data-table .dt-address {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--text-secondary);
+}
+
+/* Token symbol in tables */
+.data-table .dt-symbol {
+  font-weight: 600;
+  color: var(--text-primary);
 }

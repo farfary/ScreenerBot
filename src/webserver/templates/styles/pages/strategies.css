@@ -595,7 +595,8 @@
   font-size: 0.85rem;
   color: var(--text-muted);
   line-height: 1.5;
-  font-family: "SF Mono", Monaco, Consolas, monospace;
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
   background: rgb(0, 0, 0, 0.02);
   padding: 0.5rem 0.75rem;
   border-radius: 6px;

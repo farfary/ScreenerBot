@@ -1,4 +1,47 @@
 /* Foundations -------------------------------------------------- */
+
+/* =============================================================================
+   @font-face - Trading Terminal Fonts (embedded at compile time)
+   ============================================================================= */
+
+/* JetBrains Mono - Monospace font with tabular figures for trading data */
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("/assets/fonts/JetBrainsMono-Regular.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("/assets/fonts/JetBrainsMono-Medium.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("/assets/fonts/JetBrainsMono-Bold.woff2") format("woff2");
+}
+
+/* Orbitron - Futuristic display font for branding */
+@font-face {
+  font-family: "Orbitron";
+  font-style: normal;
+  font-weight: 400 900;
+  font-display: swap;
+  src: url("/assets/fonts/Orbitron-Variable.woff2") format("woff2-variations");
+}
+
+/* =============================================================================
+   CSS Custom Properties
+   ============================================================================= */
+
 :root {
   /* Light mode (default) - Professional Navy/Steel Blue */
   --bg-primary: #f8f9fb;
@@ -96,7 +139,9 @@
 
   /* Typography System */
   --font-sans: -apple-system, blinkmacsystemfont, "Segoe UI", roboto, sans-serif;
-  --font-mono: "SF Mono", monaco, "Cascadia Code", "Roboto Mono", "Courier New", monospace;
+  --font-mono: "JetBrains Mono", "SF Mono", monaco, "Cascadia Code", "Roboto Mono", monospace;
+  --font-data: "JetBrains Mono", "SF Mono", monaco, monospace;
+  --font-brand: "Orbitron", -apple-system, sans-serif;
   --font-size-xs: 0.75rem; /* 12px */
   --font-size-sm: 0.875rem; /* 14px */
   --font-size-base: 1rem; /* 16px */
@@ -254,7 +299,7 @@ html {
 
 /* CLEAN FOUNDATION - Single viewport scroll model */
 body {
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--font-sans);
   background: var(--bg-primary);
   color: var(--text-primary);
   line-height: 1.6;
@@ -262,4 +307,87 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+/* =============================================================================
+   Trading Terminal Typography Utilities
+   ============================================================================= */
+
+/* Numeric data display - tabular figures for perfect column alignment */
+.data-numeric,
+.font-data {
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
+  letter-spacing: -0.01em;
+}
+
+/* Price display - slightly larger, emphasized */
+.data-price {
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
+  font-weight: 500;
+}
+
+/* Percentage display with proper alignment */
+.data-percent {
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1;
+  font-weight: 500;
+}
+
+/* Positive/negative value styling */
+.data-positive {
+  color: var(--success-color);
+}
+
+.data-negative {
+  color: var(--error-color);
+}
+
+/* PnL (Profit & Loss) classes - used by formatPnL() and formatPercent() in utils.js */
+.pnl-positive {
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
+  color: var(--success-color);
+  font-weight: 600;
+}
+
+.pnl-negative {
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
+  color: var(--error-color);
+  font-weight: 600;
+}
+
+.pnl-neutral {
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* Value classes for positive/negative styling in tables */
+.value-positive {
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
+  color: var(--success-color);
+}
+
+.value-negative {
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
+  color: var(--error-color);
+}
+
+/* Brand text using Orbitron */
+.font-brand {
+  font-family: var(--font-brand);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+/* Monospace for addresses, hashes, signatures */
+.font-mono {
+  font-family: var(--font-mono);
+  font-size: 0.9em;
 }

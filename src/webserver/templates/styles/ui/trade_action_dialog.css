@@ -112,6 +112,8 @@ body.trade-action-dialog-open {
 .trade-action-context-value {
   color: var(--text-primary, #f9fafb);
   font-weight: 600;
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
 /* Preset Buttons Section */

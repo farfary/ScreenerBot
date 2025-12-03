@@ -325,7 +325,8 @@ body.notification-drawer-open {
   font-size: 1.4rem;
   font-weight: 700;
   color: var(--text-primary);
-  font-feature-settings: "tnum" 1;
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
   line-height: 1;
 }
 

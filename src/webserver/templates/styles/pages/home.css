@@ -48,14 +48,13 @@
 }
 
 .hero-balance {
+  font-family: var(--font-data);
   font-size: clamp(2rem, 3.5vw, 2.8rem);
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.1;
   letter-spacing: 0.01em;
   text-shadow: 0 2px 4px rgb(0 0 0 / 0.15);
-  font-feature-settings:
-    "tnum" 1,
-    "lnum" 1;
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
 .hero-change {
@@ -65,12 +64,15 @@
   font-size: 0.95rem;
   font-weight: 600;
   margin-top: 0.125rem;
+  font-family: var(--font-data);
   font-feature-settings: "tnum" 1;
 }
 
 .hero-change-value {
   font-size: 1.1rem;
   letter-spacing: 0.01em;
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
 .hero-change-value.profit,
@@ -100,11 +102,10 @@
 }
 
 .hero-stat-value {
+  font-family: var(--font-data);
   font-size: clamp(1rem, 1.4vw, 1.2rem);
-  font-weight: 700;
-  font-feature-settings:
-    "tnum" 1,
-    "lnum" 1;
+  font-weight: 600;
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
 /* ===== Content Grid - 3 Columns ===== */
@@ -227,10 +228,11 @@
 }
 
 .analytics-value {
+  font-family: var(--font-data);
   font-size: 1rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
-  font-feature-settings: "tnum" 1;
+  font-feature-settings: "tnum" 1, "zero" 1;
   white-space: nowrap;
 }
 
@@ -275,7 +277,8 @@
   font-size: 0.85rem;
   font-weight: 700;
   color: var(--text-primary);
-  font-feature-settings: "tnum" 1;
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
 /* ===== Positions Card ===== */
@@ -308,10 +311,11 @@
 }
 
 .position-value {
+  font-family: var(--font-data);
   font-size: 0.95rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
-  font-feature-settings: "tnum" 1;
+  font-feature-settings: "tnum" 1, "zero" 1;
   white-space: nowrap;
 }
 
@@ -370,7 +374,8 @@
   font-size: 0.85rem;
   font-weight: 700;
   color: var(--text-primary);
-  font-feature-settings: "tnum" 1;
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
   white-space: nowrap;
 }
 
@@ -420,7 +425,8 @@
   font-size: 0.85rem;
   font-weight: 700;
   color: var(--text-primary);
-  font-feature-settings: "tnum" 1;
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
 .token-value.success {
@@ -461,7 +467,8 @@
   font-size: 0.8rem;
   font-weight: 700;
   color: var(--text-primary);
-  font-feature-settings: "tnum" 1;
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
 /* ===== Responsive Design ===== */

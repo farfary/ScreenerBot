@@ -46,9 +46,11 @@
 }
 
 .summary-value {
+  font-family: var(--font-data);
   font-size: 1.3rem;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
 .summary-hint {
@@ -150,6 +152,8 @@
   font-size: 1.3rem;
   font-weight: 700;
   color: var(--text-primary);
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
 /* Holdings section */

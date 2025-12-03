@@ -330,9 +330,10 @@ async fn get_asset(axum::extract::Path(file): axum::extract::Path<String>) -> Re
     }
 }
 
-/// Serve Lucide icon fonts
+/// Serve fonts (Lucide icons, JetBrains Mono, Orbitron)
 async fn get_font(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
     match file.as_str() {
+        // Lucide icon font
         "lucide.woff2" => (
             StatusCode::OK,
             [(http_header::CONTENT_TYPE, "font/woff2")],
@@ -361,6 +362,32 @@ async fn get_font(axum::extract::Path(file): axum::extract::Path<String>) -> Res
             StatusCode::OK,
             [(http_header::CONTENT_TYPE, "image/svg+xml; charset=utf-8")],
             templates::LUCIDE_FONT_SVG,
+        )
+            .into_response(),
+        // JetBrains Mono - tabular numbers for trading data
+        "JetBrainsMono-Regular.woff2" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "font/woff2")],
+            templates::JETBRAINS_MONO_REGULAR,
+        )
+            .into_response(),
+        "JetBrainsMono-Medium.woff2" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "font/woff2")],
+            templates::JETBRAINS_MONO_MEDIUM,
+        )
+            .into_response(),
+        "JetBrainsMono-Bold.woff2" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "font/woff2")],
+            templates::JETBRAINS_MONO_BOLD,
+        )
+            .into_response(),
+        // Orbitron - futuristic branding font
+        "Orbitron-Variable.woff2" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "font/woff2")],
+            templates::ORBITRON_VARIABLE,
         )
             .into_response(),
         _ => (StatusCode::NOT_FOUND, "Font not found").into_response(),
