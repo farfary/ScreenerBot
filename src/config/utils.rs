@@ -264,9 +264,9 @@ fn validate_config(config: &Config) -> Result<(), String> {
         return Err("swaps.slippage.exit_retry_steps_pct cannot be empty - at least one slippage step is required".to_string());
     }
 
-    // Router availability check
-    if !config.swaps.gmgn.enabled && !config.swaps.jupiter.enabled {
-        return Err("At least one swap router (GMGN or Jupiter) must be enabled".to_string());
+    // Router availability check - Jupiter is the primary user-configurable router
+    if !config.swaps.jupiter.enabled {
+        return Err("Jupiter router must be enabled (primary swap router)".to_string());
     }
 
     // RPC validation

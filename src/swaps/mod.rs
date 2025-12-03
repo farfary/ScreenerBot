@@ -313,11 +313,19 @@ pub async fn get_best_quote(
 
     // Check if we have any quotes
     if quotes.is_empty() {
-        let error_msg = "No routers available for quote - GMGN and Jupiter all failed";
+        let error_msg = if gmgn_enabled && jupiter_enabled {
+            "No swap routes available - all routers failed to find a route"
+        } else if jupiter_enabled {
+            "No swap routes available - Jupiter router failed to find a route"
+        } else if gmgn_enabled {
+            "No swap routes available - GMGN router failed to find a route"
+        } else {
+            "No swap routers enabled"
+        };
         logger::error(LogTag::Swap, &format!("❌ {}", error_msg));
 
         // Log detailed failure summary for debugging
-        logger::info(LogTag::Swap, &format!("🔍 Quote failure summary - GMGN: {}, Jupiter: {} (check token liquidity and API status)",
+        logger::debug(LogTag::Swap, &format!("🔍 Quote failure summary - GMGN: {}, Jupiter: {} (check token liquidity and API status)",
                 if gmgn_enabled {
                     "enabled but failed"
                 } else {

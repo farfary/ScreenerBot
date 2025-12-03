@@ -36,6 +36,7 @@ macro_rules! config_struct {
         $vis:vis struct $name:ident {
             $(
                 $(#[doc = $doc:expr])*
+                $(#[serde($($serde_attr:tt)*)])?
                 $(#[metadata($metadata:expr)])?
                 $field_name:ident: $field_type:ty = $default_value:expr
             ),*
@@ -48,6 +49,7 @@ macro_rules! config_struct {
         $vis struct $name {
             $(
                 $(#[doc = $doc])*
+                $(#[serde($($serde_attr)*)])?
                 pub $field_name: $field_type,
             )*
         }

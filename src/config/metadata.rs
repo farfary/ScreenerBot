@@ -50,6 +50,8 @@ pub struct FieldMetadata {
     pub default: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub children: Option<SectionMetadata>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hidden: Option<bool>,
 }
 
 impl FieldMetadata {
@@ -79,6 +81,7 @@ impl FieldMetadata {
             docs,
             default,
             children: None,
+            hidden: if extras.hidden { Some(true) } else { None },
         }
     }
 }
@@ -95,6 +98,7 @@ pub struct FieldMetadataExtras {
     pub max: Option<f64>,
     pub step: Option<f64>,
     pub placeholder: Option<&'static str>,
+    pub hidden: bool,
 }
 
 /// Trait implemented for every supported config field type to expose rendering hints.
@@ -292,7 +296,13 @@ pub fn collect_config_metadata() -> ConfigMetadata {
     map.insert("ohlcv", super::OhlcvConfig::field_metadata());
 
     for section in map.values_mut() {
+        section.retain(|_, field| !field.hidden.unwrap_or(false));
+        
         for field in section.values_mut() {
+            if let Some(ref mut children) = field.children {
+                children.retain(|_, child| !child.hidden.unwrap_or(false));
+            }
+            
             let normalized = field.category.map(normalize_category).unwrap_or("General");
             field.category = Some(normalized);
         }
@@ -362,6 +372,10 @@ macro_rules! field_metadata {
     }};
     (@assign $meta:ident, placeholder: $value:expr $(, $($rest:tt)*)?) => {{
         $meta.placeholder = Some($value);
+        $crate::field_metadata!(@assign $meta $(, $($rest)*)?);
+    }};
+    (@assign $meta:ident, hidden: $value:expr $(, $($rest:tt)*)?) => {{
+        $meta.hidden = $value;
         $crate::field_metadata!(@assign $meta $(, $($rest)*)?);
     }};
     (@assign $meta:ident, $unexpected:ident : $_value:expr $(, $($rest:tt)*)?) => {{

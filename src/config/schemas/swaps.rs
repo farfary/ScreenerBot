@@ -14,7 +14,7 @@ config_struct! {
             impact: "high",
             category: "Router",
         })]
-        enabled: bool = true,
+        enabled: bool = false,
         #[metadata(field_metadata! {
             label: "Partner",
             hint: "Partner identifier for GMGN",
@@ -163,11 +163,13 @@ config_struct! {
     /// Swap router configuration
     pub struct SwapsConfig {
         /// GMGN router configuration
+        #[serde(skip_serializing)]
         #[metadata(field_metadata! {
             label: "GMGN",
             hint: "GMGN router with MEV protection",
             impact: "high",
             category: "Routers",
+            hidden: true,
         })]
         gmgn: GmgnConfig = GmgnConfig::default(),
 
@@ -181,11 +183,13 @@ config_struct! {
         jupiter: JupiterConfig = JupiterConfig::default(),
 
         /// Raydium direct swap configuration
+        #[serde(skip_serializing)]
         #[metadata(field_metadata! {
             label: "Raydium",
             hint: "Direct Raydium swaps",
             impact: "medium",
             category: "Routers",
+            hidden: true,
         })]
         raydium: RaydiumConfig = RaydiumConfig::default(),
 

@@ -38,6 +38,8 @@ impl EndpointMonitor for GmgnMonitor {
 
     fn is_enabled(&self) -> bool {
         let cfg = get_config_clone();
+        // GMGN monitor only enabled if swap router is explicitly enabled
+        // (GMGN router is hidden from users, so this will be false by default)
         cfg.connectivity.enabled
             && cfg.connectivity.endpoints.gmgn.enabled
             && cfg.swaps.gmgn.enabled
