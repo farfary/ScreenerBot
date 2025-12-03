@@ -190,8 +190,12 @@
 .wallet-history {
   display: flex;
   flex-direction: column;
-  gap: 12px;
   height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  /* Counteract #wallet-root padding for edge-to-edge table */
+  margin: -16px;
+  padding: 0;
 }
 
 .history-toolbar {
