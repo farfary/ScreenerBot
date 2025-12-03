@@ -3,12 +3,15 @@
 use crate::{
     global,
     logger::{self, LogTag},
+    process_lock::ProcessLock,
     profiling,
     services::ServiceManager,
 };
 use solana_sdk::signature::Signer;
 
 /// Main bot execution function - handles the full bot lifecycle with ServiceManager
+///
+/// Acquires process lock and runs the bot. For GUI mode, use `run_bot_with_lock()` instead.
 pub async fn run_bot() -> Result<(), String> {
     // 0. Initialize profiling if requested (must be done before any tokio tasks)
     profiling::init_profiling();
@@ -18,8 +21,30 @@ pub async fn run_bot() -> Result<(), String> {
         .map_err(|e| format!("Failed to create required directories: {}", e))?;
 
     // 2. Acquire process lock to prevent multiple instances
-    let _process_lock = crate::process_lock::ProcessLock::acquire()?;
+    let process_lock = ProcessLock::acquire()?;
 
+    // Run bot with the acquired lock
+    run_bot_internal(process_lock).await
+}
+
+/// Run bot with a pre-acquired process lock
+///
+/// Used by GUI mode which acquires the lock before starting Tauri to ensure
+/// the window doesn't open if another instance is running.
+pub async fn run_bot_with_lock(process_lock: ProcessLock) -> Result<(), String> {
+    // 0. Initialize profiling if requested (must be done before any tokio tasks)
+    profiling::init_profiling();
+
+    // 1. Ensure all required directories exist (safety backup, already done in main.rs)
+    crate::paths::ensure_all_directories()
+        .map_err(|e| format!("Failed to create required directories: {}", e))?;
+
+    // Lock already acquired, run bot directly
+    run_bot_internal(process_lock).await
+}
+
+/// Internal bot execution with pre-acquired lock
+async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
     logger::info(LogTag::System, "🚀 ScreenerBot starting up...");
 
     // 3. Check if config.toml exists (determines initialization mode)

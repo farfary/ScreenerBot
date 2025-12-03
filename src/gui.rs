@@ -4,6 +4,7 @@
 /// The GUI mode embeds the webserver dashboard (localhost:8080) in a native window.
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
+use crate::process_lock::ProcessLock;
 use serde::Deserialize;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -13,23 +14,33 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut}
 /// Run bot in GUI mode with Tauri window
 ///
 /// This function:
-/// 1. Spawns the ScreenerBot backend in a background task
-/// 2. Builds and runs the Tauri desktop application
-/// 3. Registers global keyboard shortcuts for zoom (Ctrl/Cmd +/-/0) and reload (Ctrl/Cmd + R)
-/// 4. Waits for the webserver to be ready
-/// 5. Shows the window with the dashboard loaded
+/// 1. **Acquires process lock FIRST** - prevents window from opening if another instance runs
+/// 2. Spawns the ScreenerBot backend in a background task (with the lock)
+/// 3. Builds and runs the Tauri desktop application
+/// 4. Registers global keyboard shortcuts for zoom (Ctrl/Cmd +/-/0) and reload (Ctrl/Cmd + R)
+/// 5. Waits for the webserver to be ready
+/// 6. Shows the window with the dashboard loaded
 ///
 /// The window is initially hidden and only shown after the dashboard HTML is ready,
 /// ensuring a smooth user experience without showing loading states.
 pub async fn run_gui_mode() -> Result<(), String> {
     logger::info(LogTag::System, "🖥️  Initializing Tauri desktop application");
 
-    // Start the ScreenerBot backend in a background task
+    // 1. Acquire process lock BEFORE starting anything
+    // This ensures we don't open a GUI window if another instance is running
+    let process_lock = ProcessLock::acquire()?;
+    logger::info(
+        LogTag::System,
+        "✅ Process lock acquired - no other instance running",
+    );
+
+    // Start the ScreenerBot backend in a background task (pass the lock to keep it alive)
     tokio::spawn(async move {
         logger::info(LogTag::System, "Starting ScreenerBot backend services...");
 
         // Start the full ScreenerBot system (includes webserver on :8080)
-        match crate::run::run_bot().await {
+        // Use run_bot_with_lock since we already acquired the lock
+        match crate::run::run_bot_with_lock(process_lock).await {
             Ok(_) => {
                 logger::info(
                     LogTag::System,
