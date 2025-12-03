@@ -846,6 +846,74 @@ impl TokenDatabase {
     }
 
     // ========================================================================
+    // BATCH IMAGE OPERATIONS (performance-optimized)
+    // ========================================================================
+
+    /// Get image URLs for multiple tokens in a single query
+    /// Returns HashMap<mint, image_url> - only includes mints that have images
+    /// Prioritizes DexScreener images, falls back to GeckoTerminal
+    pub fn get_token_images_batch(&self, mints: &[String]) -> TokenResult<HashMap<String, String>> {
+        if mints.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        // Build placeholders for IN clause
+        let placeholders: String = mints.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+
+        // Query: DexScreener images first, then GeckoTerminal for any missing
+        // Uses UNION to combine results, with DexScreener taking priority
+        let query = format!(
+            r#"
+            SELECT mint, image_url FROM market_dexscreener 
+            WHERE mint IN ({}) AND image_url IS NOT NULL AND image_url != ''
+            UNION ALL
+            SELECT g.mint, g.image_url FROM market_geckoterminal g
+            WHERE g.mint IN ({}) 
+              AND g.image_url IS NOT NULL AND g.image_url != ''
+              AND g.mint NOT IN (
+                SELECT mint FROM market_dexscreener 
+                WHERE mint IN ({}) AND image_url IS NOT NULL AND image_url != ''
+              )
+            "#,
+            placeholders, placeholders, placeholders
+        );
+
+        let mut stmt = conn
+            .prepare(&query)
+            .map_err(|e| TokenError::Database(format!("Failed to prepare batch image query: {}", e)))?;
+
+        // Build params: mints repeated 3 times for the 3 IN clauses
+        let all_mints: Vec<&str> = mints
+            .iter()
+            .chain(mints.iter())
+            .chain(mints.iter())
+            .map(|s| s.as_str())
+            .collect();
+
+        let rows = stmt
+            .query_map(params_from_iter(all_mints), |row| {
+                let mint: String = row.get(0)?;
+                let image_url: String = row.get(1)?;
+                Ok((mint, image_url))
+            })
+            .map_err(|e| TokenError::Database(format!("Batch image query failed: {}", e)))?;
+
+        let mut result = HashMap::with_capacity(mints.len());
+        for row in rows {
+            let (mint, image_url) =
+                row.map_err(|e| TokenError::Database(format!("Row parse failed: {}", e)))?;
+            result.insert(mint, image_url);
+        }
+
+        Ok(result)
+    }
+
+    // ========================================================================
     // POOL DATA OPERATIONS
     // ========================================================================
 
@@ -3087,6 +3155,17 @@ pub async fn get_token_async(mint: &str) -> TokenResult<Option<TokenMetadata>> {
 
     let mint = mint.to_string();
     tokio::task::spawn_blocking(move || db.get_token(&mint))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async wrapper for get_token_images_batch (returns HashMap<mint, image_url>)
+/// Fetches image URLs for multiple tokens in a single query - use for batch operations
+pub async fn get_token_images_batch_async(mints: Vec<String>) -> TokenResult<HashMap<String, String>> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+
+    tokio::task::spawn_blocking(move || db.get_token_images_batch(&mints))
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
 }

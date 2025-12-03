@@ -7,6 +7,7 @@ use axum::{
 };
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::logger::{self, LogTag};
@@ -205,33 +206,27 @@ pub async fn load_positions_with_filters(
         filtered_positions.truncate(limit);
     }
 
-    // Map positions to responses with logo fetching
-    let mut responses = Vec::new();
-    for position in filtered_positions.iter() {
-        let response = map_position_to_response_async(position).await;
-        responses.push(response);
-    }
-    responses
+    // Batch fetch all logo URLs in a single query (performance optimization)
+    let mints: Vec<String> = filtered_positions.iter().map(|p| p.mint.clone()).collect();
+    let logo_map = tokens::database::get_token_images_batch_async(mints)
+        .await
+        .unwrap_or_default();
+
+    // Map positions to responses using pre-fetched logos
+    filtered_positions
+        .iter()
+        .map(|p| map_position_to_response_with_logo(p, logo_map.get(&p.mint).cloned()))
+        .collect()
 }
 
-async fn map_position_to_response_async(p: &positions::Position) -> PositionResponse {
-    // Fetch logo from tokens database
-    let logo_url = match tokens::database::get_full_token_async(&p.mint).await {
-        Ok(Some(token)) => token.image_url.clone(),
-        Ok(None) => None,
-        Err(_) => None,
-    };
-
+/// Map position to response with a pre-fetched logo URL (used for batch operations)
+fn map_position_to_response_with_logo(
+    p: &positions::Position,
+    logo_url: Option<String>,
+) -> PositionResponse {
     let entry_time_ts = p.entry_time.timestamp();
     let exit_time_ts = p.exit_time.map(|dt| dt.timestamp());
     let current_price_updated_ts = p.current_price_updated.map(|dt| dt.timestamp());
-
-    // NO CALCULATIONS - just read pre-calculated values from position object
-    // Positions system maintains these values automatically
-    let pnl = p.pnl;
-    let pnl_percent = p.pnl_percent;
-    let unrealized_pnl = p.unrealized_pnl;
-    let unrealized_pnl_percent = p.unrealized_pnl_percent;
 
     PositionResponse {
         id: p.id,
@@ -266,10 +261,10 @@ async fn map_position_to_response_async(p: &positions::Position) -> PositionResp
         phantom_confirmations: p.phantom_confirmations,
         synthetic_exit: p.synthetic_exit,
         closed_reason: p.closed_reason.clone(),
-        pnl,
-        pnl_percent,
-        unrealized_pnl,
-        unrealized_pnl_percent,
+        pnl: p.pnl,
+        pnl_percent: p.pnl_percent,
+        unrealized_pnl: p.unrealized_pnl,
+        unrealized_pnl_percent: p.unrealized_pnl_percent,
         dca_count: p.dca_count,
         average_entry_price: p.average_entry_price,
         partial_exit_count: p.partial_exit_count,
@@ -277,6 +272,18 @@ async fn map_position_to_response_async(p: &positions::Position) -> PositionResp
         remaining_token_amount: p.remaining_token_amount,
         total_exited_amount: p.total_exited_amount,
     }
+}
+
+/// Map position to response with async logo fetch (used for single position lookups)
+async fn map_position_to_response_async(p: &positions::Position) -> PositionResponse {
+    // Fetch logo from tokens database
+    let logo_url = match tokens::database::get_full_token_async(&p.mint).await {
+        Ok(Some(token)) => token.image_url.clone(),
+        Ok(None) => None,
+        Err(_) => None,
+    };
+
+    map_position_to_response_with_logo(p, logo_url)
 }
 
 async fn get_position_details(Path(key): Path<String>) -> Response {
