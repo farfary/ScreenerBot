@@ -27,13 +27,14 @@ use tokio::sync::{Mutex, Notify, RwLock};
 
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
+use crate::nfts::fetch_nft_metadata_batch;
 use crate::rpc::{get_rpc_client, TokenAccountInfo};
 // Use tokens::store accessors directly when needed
 use crate::transactions::get_transaction_database;
 use crate::utils::get_wallet_address;
 
 // Database schema version
-const WALLET_SCHEMA_VERSION: u32 = 2;
+const WALLET_SCHEMA_VERSION: u32 = 3;
 
 // =============================================================================
 // DATABASE SCHEMA DEFINITIONS
@@ -47,6 +48,7 @@ CREATE TABLE IF NOT EXISTS wallet_snapshots (
     sol_balance REAL NOT NULL,
     sol_balance_lamports INTEGER NOT NULL,
     total_tokens_count INTEGER NOT NULL DEFAULT 0,
+    total_nfts_count INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 "#;
@@ -58,7 +60,22 @@ CREATE TABLE IF NOT EXISTS token_balances (
     mint TEXT NOT NULL,
     balance INTEGER NOT NULL,
     balance_ui REAL NOT NULL,
-    decimals INTEGER,
+    decimals INTEGER NOT NULL DEFAULT 0,
+    is_token_2022 BOOLEAN NOT NULL DEFAULT false,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (snapshot_id) REFERENCES wallet_snapshots(id) ON DELETE CASCADE
+);
+"#;
+
+const SCHEMA_NFT_BALANCES: &str = r#"
+CREATE TABLE IF NOT EXISTS nft_balances (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    snapshot_id INTEGER NOT NULL,
+    mint TEXT NOT NULL,
+    account_address TEXT NOT NULL,
+    name TEXT,
+    symbol TEXT,
+    image_url TEXT,
     is_token_2022 BOOLEAN NOT NULL DEFAULT false,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     FOREIGN KEY (snapshot_id) REFERENCES wallet_snapshots(id) ON DELETE CASCADE
@@ -117,6 +134,8 @@ const WALLET_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_token_balances_snapshot_id ON token_balances(snapshot_id);",
     "CREATE INDEX IF NOT EXISTS idx_token_balances_mint ON token_balances(mint);",
     "CREATE INDEX IF NOT EXISTS idx_token_balances_snapshot_mint ON token_balances(snapshot_id, mint);",
+    "CREATE INDEX IF NOT EXISTS idx_nft_balances_snapshot_id ON nft_balances(snapshot_id);",
+    "CREATE INDEX IF NOT EXISTS idx_nft_balances_mint ON nft_balances(mint);",
 ];
 
 const DEFAULT_PRECOMPUTED_SNAPSHOT_LIMIT: usize = 600;
@@ -124,7 +143,7 @@ const DEFAULT_PRECOMPUTED_TOKEN_LIMIT: usize = 250;
 const MAX_API_CACHE_ENTRIES: usize = 128;
 const CIRCUIT_BREAKER_THRESHOLD: u32 = 3;
 const CIRCUIT_BREAKER_COOLDOWN_SECS: u64 = 300;
-const TOKEN_METADATA_CONCURRENCY: usize = 8;
+const TOKEN_METADATA_CONCURRENCY: usize = 20;
 
 // =============================================================================
 // DATA STRUCTURES
@@ -139,10 +158,12 @@ pub struct WalletSnapshot {
     pub sol_balance: f64,
     pub sol_balance_lamports: u64,
     pub total_tokens_count: u32,
+    pub total_nfts_count: u32,
     pub token_balances: Vec<TokenBalance>,
+    pub nft_balances: Vec<NftBalance>,
 }
 
-/// Token balance record
+/// Token balance record (fungible tokens only)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TokenBalance {
     pub id: Option<i64>,
@@ -150,7 +171,20 @@ pub struct TokenBalance {
     pub mint: String,
     pub balance: u64,    // Raw token amount
     pub balance_ui: f64, // UI amount (adjusted for decimals)
-    pub decimals: Option<u8>,
+    pub decimals: u8,
+    pub is_token_2022: bool,
+}
+
+/// NFT balance record (non-fungible tokens)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct NftBalance {
+    pub id: Option<i64>,
+    pub snapshot_id: Option<i64>,
+    pub mint: String,
+    pub account_address: String,
+    pub name: Option<String>,
+    pub symbol: Option<String>,
+    pub image_url: Option<String>,
     pub is_token_2022: bool,
 }
 
@@ -212,9 +246,10 @@ pub struct WalletTokenOverview {
     pub mint: String,
     pub symbol: String,
     pub name: Option<String>,
+    pub image_url: Option<String>,
     pub balance_ui: f64,
     pub balance_raw: u64,
-    pub decimals: Option<u8>,
+    pub decimals: u8,
     pub is_token_2022: bool,
     pub price_sol: Option<f64>,
     pub price_usd: Option<f64>,
@@ -225,14 +260,26 @@ pub struct WalletTokenOverview {
     pub dex_id: Option<String>,
 }
 
+/// NFT overview for wallet display
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct WalletNftOverview {
+    pub mint: String,
+    pub account_address: String,
+    pub name: Option<String>,
+    pub symbol: Option<String>,
+    pub image_url: Option<String>,
+    pub is_token_2022: bool,
+}
+
 /// Complete dashboard payload for wallet UI
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalletDashboardData {
     pub summary: WalletSummarySnapshot,
     pub flows: WalletFlowMetrics,
     pub balance_trend: Vec<WalletBalancePoint>,
-    pub daily_flows: Vec<DailyFlowPoint>, // NEW: Time-series flow data
+    pub daily_flows: Vec<DailyFlowPoint>,
     pub tokens: Vec<WalletTokenOverview>,
+    pub nfts: Vec<WalletNftOverview>,
     pub last_updated: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cache_metadata: Option<DashboardCacheMetadata>,
@@ -956,7 +1003,7 @@ async fn enrich_token_overview(
     for balance in balances {
         let token_meta = metadata_map.get(&balance.mint);
 
-        let (symbol, name, price_sol, price_usd, liquidity_usd, volume_24h, last_updated, dex_id) =
+        let (symbol, name, image_url, price_sol, price_usd, liquidity_usd, volume_24h, last_updated, dex_id) =
             if let Some(meta) = token_meta {
                 let price_sol = if meta.price_sol > 0.0 {
                     Some(meta.price_sol)
@@ -982,6 +1029,7 @@ async fn enrich_token_overview(
                 (
                     symbol,
                     Some(meta.name.clone()),
+                    meta.image_url.clone(),
                     price_sol,
                     price_usd,
                     liquidity_usd,
@@ -999,6 +1047,7 @@ async fn enrich_token_overview(
                     None,
                     None,
                     None,
+                    None,
                 )
             };
 
@@ -1008,6 +1057,7 @@ async fn enrich_token_overview(
             mint: balance.mint.clone(),
             symbol,
             name,
+            image_url,
             balance_ui: balance.balance_ui,
             balance_raw: balance.balance,
             decimals: balance.decimals,
@@ -1088,6 +1138,7 @@ async fn compute_dashboard_payload_realtime(
             balance_trend: Vec::new(),
             daily_flows,
             tokens: Vec::new(),
+            nfts: Vec::new(),
             last_updated: None,
             cache_metadata: None,
         });
@@ -1138,9 +1189,24 @@ async fn compute_dashboard_payload_realtime(
     }
 
     let mut tokens = Vec::new();
+    let mut nfts = Vec::new();
     if let Some(snapshot_id) = latest_snapshot.id {
         let balances = get_snapshot_token_balances(snapshot_id).await?;
         tokens = enrich_token_overview(balances, max_tokens).await;
+
+        // Get NFT balances
+        let nft_balances = get_snapshot_nft_balances(snapshot_id).await.unwrap_or_default();
+        nfts = nft_balances
+            .into_iter()
+            .map(|nft| WalletNftOverview {
+                mint: nft.mint,
+                account_address: nft.account_address,
+                name: nft.name,
+                symbol: nft.symbol,
+                image_url: nft.image_url,
+                is_token_2022: nft.is_token_2022,
+            })
+            .collect();
     }
 
     let flows = compute_flow_metrics(window_hours).await?;
@@ -1170,6 +1236,7 @@ async fn compute_dashboard_payload_realtime(
         balance_trend: trend,
         daily_flows,
         tokens,
+        nfts,
         last_updated: Some(latest_snapshot.snapshot_time.to_rfc3339()),
         cache_metadata: None,
     })
@@ -1465,6 +1532,9 @@ impl WalletDatabase {
         conn.execute(SCHEMA_TOKEN_BALANCES, [])
             .map_err(|e| format!("Failed to create token_balances table: {}", e))?;
 
+        conn.execute(SCHEMA_NFT_BALANCES, [])
+            .map_err(|e| format!("Failed to create nft_balances table: {}", e))?;
+
         conn.execute(SCHEMA_WALLET_METADATA, [])
             .map_err(|e| format!("Failed to create wallet_metadata table: {}", e))?;
 
@@ -1474,6 +1544,13 @@ impl WalletDatabase {
 
         conn.execute(SCHEMA_WALLET_DASHBOARD_METRICS, [])
             .map_err(|e| format!("Failed to create wallet_dashboard_metrics table: {}", e))?;
+
+        // Migrate existing schema if needed (add missing columns)
+        conn.execute(
+            "ALTER TABLE wallet_snapshots ADD COLUMN total_nfts_count INTEGER NOT NULL DEFAULT 0",
+            [],
+        )
+        .ok(); // Ignore error if column already exists
 
         // Create all indexes
         for index_sql in WALLET_INDEXES {
@@ -1775,15 +1852,16 @@ impl WalletDatabase {
             .query_row(
                 r#"
             INSERT INTO wallet_snapshots (
-                wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_tokens_count
-            ) VALUES (?1, ?2, ?3, ?4, ?5) RETURNING id
+                wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_tokens_count, total_nfts_count
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6) RETURNING id
             "#,
                 params![
                     snapshot.wallet_address,
                     snapshot.snapshot_time.to_rfc3339(),
                     snapshot.sol_balance,
                     snapshot.sol_balance_lamports as i64,
-                    snapshot.total_tokens_count as i64
+                    snapshot.total_tokens_count as i64,
+                    snapshot.total_nfts_count as i64
                 ],
                 |row| row.get::<_, i64>(0),
             )
@@ -1809,12 +1887,34 @@ impl WalletDatabase {
             .map_err(|e| format!("Failed to insert token balance: {}", e))?;
         }
 
+        // Insert NFT balances
+        for nft_balance in &snapshot.nft_balances {
+            conn.execute(
+                r#"
+                INSERT INTO nft_balances (
+                    snapshot_id, mint, account_address, name, symbol, image_url, is_token_2022
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                "#,
+                params![
+                    snapshot_id,
+                    nft_balance.mint,
+                    nft_balance.account_address,
+                    nft_balance.name,
+                    nft_balance.symbol,
+                    nft_balance.image_url,
+                    nft_balance.is_token_2022
+                ],
+            )
+            .map_err(|e| format!("Failed to insert NFT balance: {}", e))?;
+        }
+
         logger::debug(
             LogTag::Wallet,
             &format!(
-                "Saved wallet snapshot ID {} with {} tokens for {}",
+                "Saved wallet snapshot ID {} with {} tokens, {} NFTs for {}",
                 snapshot_id,
                 snapshot.token_balances.len(),
+                snapshot.nft_balances.len(),
                 &snapshot.wallet_address[..8]
             ),
         );
@@ -1833,15 +1933,16 @@ impl WalletDatabase {
             .query_row(
                 r#"
             INSERT INTO wallet_snapshots (
-                wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_tokens_count
-            ) VALUES (?1, ?2, ?3, ?4, ?5) RETURNING id
+                wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_tokens_count, total_nfts_count
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6) RETURNING id
             "#,
                 params![
                     snapshot.wallet_address,
                     snapshot.snapshot_time.to_rfc3339(),
                     snapshot.sol_balance,
                     snapshot.sol_balance_lamports as i64,
-                    snapshot.total_tokens_count as i64
+                    snapshot.total_tokens_count as i64,
+                    snapshot.total_nfts_count as i64
                 ],
                 |row| row.get::<_, i64>(0),
             )
@@ -1867,12 +1968,34 @@ impl WalletDatabase {
             .map_err(|e| format!("Failed to insert token balance: {}", e))?;
         }
 
+        // Insert NFT balances
+        for nft_balance in &snapshot.nft_balances {
+            conn.execute(
+                r#"
+                INSERT INTO nft_balances (
+                    snapshot_id, mint, account_address, name, symbol, image_url, is_token_2022
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                "#,
+                params![
+                    snapshot_id,
+                    nft_balance.mint,
+                    nft_balance.account_address,
+                    nft_balance.name,
+                    nft_balance.symbol,
+                    nft_balance.image_url,
+                    nft_balance.is_token_2022
+                ],
+            )
+            .map_err(|e| format!("Failed to insert NFT balance: {}", e))?;
+        }
+
         logger::debug(
             LogTag::Wallet,
             &format!(
-                "Saved wallet snapshot ID {} with {} tokens for {}",
+                "Saved wallet snapshot ID {} with {} tokens, {} NFTs for {}",
                 snapshot_id,
                 snapshot.token_balances.len(),
+                snapshot.nft_balances.len(),
                 &snapshot.wallet_address[..8]
             ),
         );
@@ -1943,7 +2066,7 @@ impl WalletDatabase {
         let mut stmt = conn
             .prepare(
                 r#"
-            SELECT id, wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_tokens_count
+            SELECT id, wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_tokens_count, COALESCE(total_nfts_count, 0)
             FROM wallet_snapshots 
             ORDER BY snapshot_time DESC 
             LIMIT ?1
@@ -1971,7 +2094,9 @@ impl WalletDatabase {
                     sol_balance: row.get(3)?,
                     sol_balance_lamports: row.get::<_, i64>(4)? as u64,
                     total_tokens_count: row.get::<_, i64>(5)? as u32,
-                    token_balances: Vec::new(), // Will be loaded separately if needed
+                    total_nfts_count: row.get::<_, i64>(6)? as u32,
+                    token_balances: Vec::new(), // Loaded separately if needed
+                    nft_balances: Vec::new(),   // Loaded separately if needed
                 })
             })
             .map_err(|e| format!("Failed to execute snapshots query: {}", e))?;
@@ -1992,7 +2117,7 @@ impl WalletDatabase {
         let mut stmt = conn
             .prepare(
                 r#"
-            SELECT id, wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_tokens_count
+            SELECT id, wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_tokens_count, COALESCE(total_nfts_count, 0)
             FROM wallet_snapshots 
             ORDER BY snapshot_time DESC 
             LIMIT ?1
@@ -2020,7 +2145,9 @@ impl WalletDatabase {
                     sol_balance: row.get(3)?,
                     sol_balance_lamports: row.get::<_, i64>(4)? as u64,
                     total_tokens_count: row.get::<_, i64>(5)? as u32,
-                    token_balances: Vec::new(), // Will be loaded separately if needed
+                    total_nfts_count: row.get::<_, i64>(6)? as u32,
+                    token_balances: Vec::new(), // Loaded separately if needed
+                    nft_balances: Vec::new(),   // Loaded separately if needed
                 })
             })
             .map_err(|e| format!("Failed to execute snapshots query: {}", e))?;
@@ -2143,7 +2270,7 @@ impl WalletDatabase {
         let mut stmt = conn
             .prepare(
                 r#"
-            SELECT id, snapshot_id, mint, balance, balance_ui, decimals, is_token_2022
+            SELECT id, snapshot_id, mint, balance, balance_ui, COALESCE(decimals, 0), is_token_2022
             FROM token_balances 
             WHERE snapshot_id = ?1
             ORDER BY balance_ui DESC
@@ -2159,7 +2286,7 @@ impl WalletDatabase {
                     mint: row.get(2)?,
                     balance: row.get::<_, i64>(3)? as u64,
                     balance_ui: row.get(4)?,
-                    decimals: row.get(5)?,
+                    decimals: row.get::<_, i64>(5)? as u8,
                     is_token_2022: row.get(6)?,
                 })
             })
@@ -2175,6 +2302,46 @@ impl WalletDatabase {
         Ok(balances)
     }
 
+    /// Get NFT balances for a specific snapshot (synchronous version)
+    pub fn get_nft_balances_sync(&self, snapshot_id: i64) -> Result<Vec<NftBalance>, String> {
+        let conn = self.get_connection()?;
+
+        let mut stmt = conn
+            .prepare(
+                r#"
+            SELECT id, snapshot_id, mint, account_address, name, symbol, image_url, is_token_2022
+            FROM nft_balances 
+            WHERE snapshot_id = ?1
+            ORDER BY name ASC
+            "#,
+            )
+            .map_err(|e| format!("Failed to prepare nft balances query: {}", e))?;
+
+        let balances_iter = stmt
+            .query_map(params![snapshot_id], |row| {
+                Ok(NftBalance {
+                    id: Some(row.get(0)?),
+                    snapshot_id: Some(row.get(1)?),
+                    mint: row.get(2)?,
+                    account_address: row.get(3)?,
+                    name: row.get(4)?,
+                    symbol: row.get(5)?,
+                    image_url: row.get(6)?,
+                    is_token_2022: row.get(7)?,
+                })
+            })
+            .map_err(|e| format!("Failed to execute nft balances query: {}", e))?;
+
+        let mut balances = Vec::new();
+        for balance_result in balances_iter {
+            balances.push(
+                balance_result.map_err(|e| format!("Failed to parse nft balance row: {}", e))?,
+            );
+        }
+
+        Ok(balances)
+    }
+
     /// Get token balances for a specific snapshot (async version)
     pub async fn get_token_balances(&self, snapshot_id: i64) -> Result<Vec<TokenBalance>, String> {
         let conn = self.get_connection()?;
@@ -2182,7 +2349,7 @@ impl WalletDatabase {
         let mut stmt = conn
             .prepare(
                 r#"
-            SELECT id, snapshot_id, mint, balance, balance_ui, decimals, is_token_2022
+            SELECT id, snapshot_id, mint, balance, balance_ui, COALESCE(decimals, 0), is_token_2022
             FROM token_balances 
             WHERE snapshot_id = ?1
             ORDER BY balance_ui DESC
@@ -2198,7 +2365,7 @@ impl WalletDatabase {
                     mint: row.get(2)?,
                     balance: row.get::<_, i64>(3)? as u64,
                     balance_ui: row.get(4)?,
-                    decimals: row.get(5)?,
+                    decimals: row.get::<_, i64>(5)? as u8,
                     is_token_2022: row.get(6)?,
                 })
             })
@@ -2351,45 +2518,95 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
     // Add another small delay before token accounts fetch
     tokio::time::sleep(Duration::from_millis(500)).await;
 
-    // Get all token accounts
+    // Get all token accounts (includes both tokens and NFTs)
     let token_accounts = rpc_client
         .get_all_token_accounts(&wallet_address)
         .await
         .map_err(|e| format!("Failed to get token accounts: {}", e))?;
 
-    // Convert to TokenBalance format
+    // Separate fungible tokens and NFTs
     let mut token_balances = Vec::new();
+    let mut nft_mints_with_accounts: Vec<(String, String, bool)> = Vec::new(); // (mint, account, is_token_2022)
+
     for account_info in &token_accounts {
         // Skip accounts with zero balance
         if account_info.balance == 0 {
             continue;
         }
 
-        let balance_ui =
-            if let Some(decimals) = crate::tokens::get_cached_decimals(&account_info.mint) {
-                (account_info.balance as f64) / (10_f64).powi(decimals as i32)
-            } else {
-                account_info.balance as f64 // Fallback without decimals
-            };
+        // Check if this is an NFT (decimals=0 and balance=1)
+        if account_info.is_nft {
+            nft_mints_with_accounts.push((
+                account_info.mint.clone(),
+                account_info.account.clone(),
+                account_info.is_token_2022,
+            ));
+        } else {
+            // Fungible token - use decimals from RPC response
+            let decimals = account_info.decimals;
+            let balance_ui = (account_info.balance as f64) / (10_f64).powi(decimals as i32);
 
-        token_balances.push(TokenBalance {
-            id: None,
-            snapshot_id: None,
-            mint: account_info.mint.clone(),
-            balance: account_info.balance,
-            balance_ui,
-            decimals: crate::tokens::get_cached_decimals(&account_info.mint),
-            is_token_2022: account_info.is_token_2022,
-        });
+            token_balances.push(TokenBalance {
+                id: None,
+                snapshot_id: None,
+                mint: account_info.mint.clone(),
+                balance: account_info.balance,
+                balance_ui,
+                decimals,
+                is_token_2022: account_info.is_token_2022,
+            });
+        }
+    }
+
+    // Fetch NFT metadata from Metaplex
+    let mut nft_balances = Vec::new();
+    if !nft_mints_with_accounts.is_empty() {
+        let nft_mints: Vec<String> = nft_mints_with_accounts
+            .iter()
+            .map(|(mint, _, _)| mint.clone())
+            .collect();
+
+        logger::debug(
+            LogTag::Wallet,
+            &format!("Fetching metadata for {} NFTs", nft_mints.len()),
+        );
+
+        let metadata_results = fetch_nft_metadata_batch(&nft_mints).await;
+
+        for (mint, account, is_token_2022) in nft_mints_with_accounts {
+            let (name, symbol, image_url) = metadata_results
+                .get(&mint)
+                .and_then(|result| result.as_ref().ok())
+                .map(|meta| {
+                    (
+                        meta.name.clone(),
+                        meta.symbol.clone(),
+                        meta.image_url.clone(),
+                    )
+                })
+                .unwrap_or((None, None, None));
+
+            nft_balances.push(NftBalance {
+                id: None,
+                snapshot_id: None,
+                mint,
+                account_address: account,
+                name,
+                symbol,
+                image_url,
+                is_token_2022,
+            });
+        }
     }
 
     let total_tokens_count = token_balances.len() as u32;
+    let total_nfts_count = nft_balances.len() as u32;
 
     logger::debug(
         LogTag::Wallet,
         &format!(
-            "Collected snapshot: SOL {:.6}, {} tokens",
-            sol_balance, total_tokens_count
+            "Collected snapshot: SOL {:.6}, {} tokens, {} NFTs",
+            sol_balance, total_tokens_count, total_nfts_count
         ),
     );
 
@@ -2400,7 +2617,9 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
         sol_balance,
         sol_balance_lamports,
         total_tokens_count,
+        total_nfts_count,
         token_balances,
+        nft_balances,
     })
 }
 
@@ -2614,6 +2833,15 @@ pub async fn get_snapshot_token_balances(snapshot_id: i64) -> Result<Vec<TokenBa
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_token_balances_sync(snapshot_id),
+        None => Err("Wallet database not initialized".to_string()),
+    }
+}
+
+/// Get NFT balances for a snapshot
+pub async fn get_snapshot_nft_balances(snapshot_id: i64) -> Result<Vec<NftBalance>, String> {
+    let db_guard = GLOBAL_WALLET_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.get_nft_balances_sync(snapshot_id),
         None => Err("Wallet database not initialized".to_string()),
     }
 }

@@ -67,12 +67,14 @@ use url::Url;
 use uuid::Uuid;
 
 /// Structure to hold token account information
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TokenAccountInfo {
     pub account: String,
     pub mint: String,
     pub balance: u64,
+    pub decimals: u8,
     pub is_token_2022: bool,
+    pub is_nft: bool,
 }
 
 /// Transaction details from RPC
@@ -5859,6 +5861,7 @@ pub struct BackwardCompatibleConfig {
 }
 
 /// Extracts token account information from RPC response
+/// Now includes decimals and NFT detection
 fn extract_token_account_info(
     account: &serde_json::Value,
     is_token_2022: bool,
@@ -5873,34 +5876,19 @@ fn extract_token_account_info(
     let amount_str = token_amount.get("amount")?.as_str()?;
     let balance = amount_str.parse::<u64>().ok()?;
 
+    // Extract decimals from RPC response
+    let decimals = token_amount.get("decimals")?.as_u64()? as u8;
+
+    // Check if this is an NFT (decimals=0 AND amount=1)
+    let ui_amount = token_amount.get("uiAmount").and_then(|v| v.as_f64());
+    let is_nft = decimals == 0 && ui_amount.map(|amt| (amt - 1.0).abs() < 0.0001).unwrap_or(false);
+
     Some(TokenAccountInfo {
         account: pubkey.to_string(),
         mint: mint.to_string(),
         balance,
+        decimals,
         is_token_2022,
+        is_nft,
     })
-}
-
-/// Extracts NFT mint address if token account is an NFT (decimals=0, amount=1)
-fn extract_nft_mint_if_valid(account: &serde_json::Value) -> Option<String> {
-    let account_data = account.get("account")?;
-    let parsed = account_data.get("data")?.get("parsed")?;
-    let info = parsed.get("info")?;
-
-    let mint = info.get("mint")?.as_str()?;
-    let token_amount = info.get("tokenAmount")?;
-
-    // Check decimals = 0
-    let decimals = token_amount.get("decimals")?.as_u64()?;
-    if decimals != 0 {
-        return None;
-    }
-
-    // Check amount = 1 (use uiAmount which is already adjusted for decimals)
-    let ui_amount = token_amount.get("uiAmount")?.as_f64()?;
-    if (ui_amount - 1.0).abs() > 0.0001 {
-        return None;
-    }
-
-    Some(mint.to_string())
 }

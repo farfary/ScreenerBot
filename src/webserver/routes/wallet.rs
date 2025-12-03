@@ -28,7 +28,7 @@ pub struct TokenBalanceInfo {
     pub mint: String,
     pub balance: u64,
     pub balance_ui: f64,
-    pub decimals: Option<u8>,
+    pub decimals: u8,
     pub is_token_2022: bool,
 }
 

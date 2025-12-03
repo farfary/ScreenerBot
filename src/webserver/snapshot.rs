@@ -132,8 +132,7 @@ pub struct WalletTokenBalanceSnapshot {
     pub mint: String,
     pub balance: u64,
     pub balance_ui: f64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub decimals: Option<u8>,
+    pub decimals: u8,
     pub is_token_2022: bool,
 }
 

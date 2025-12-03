@@ -12,6 +12,7 @@ const SUB_TABS = [
   { id: "overview", label: '<i class="icon-chart-bar"></i> Overview' },
   { id: "flows", label: '<i class="icon-arrow-right-left"></i> Flows' },
   { id: "holdings", label: '<i class="icon-coins"></i> Holdings' },
+  { id: "nfts", label: '<i class="icon-image"></i> NFTs' },
   { id: "history", label: '<i class="icon-history"></i> History' },
 ];
 
@@ -85,11 +86,11 @@ function createLifecycle() {
   const escapeHtml = (str) => Utils.escapeHtml(str);
 
   const tokenCell = (row) => {
-    const logo = row.logo_url || row.image_url || "";
+    const logo = row.image_url || "";
     const symbol = row.symbol || "?";
     const name = row.name || "";
     const logoHtml = logo
-      ? `<img class="token-logo" src="${escapeHtml(logo)}" alt="${escapeHtml(symbol)}"/>`
+      ? `<img class="token-logo" src="${escapeHtml(logo)}" alt="${escapeHtml(symbol)}" loading="lazy"/>`
       : '<i class="token-logo icon-coins"></i>';
     return `<div class="position-token">${logoHtml}<div>
       <div class="token-symbol">${escapeHtml(symbol)}</div>
@@ -436,7 +437,11 @@ function createLifecycle() {
         label: "Balance",
         sortable: true,
         minWidth: 120,
-        render: (v) => (v != null ? v.toFixed(6) : "—"),
+        render: (v, row) => {
+          if (v == null) return "—";
+          const decimals = row.decimals != null ? Math.min(row.decimals, 9) : 6;
+          return Utils.formatNumber(v, { decimals, fallback: "—" });
+        },
       },
       {
         id: "price_sol",
@@ -552,6 +557,97 @@ function createLifecycle() {
         "Last Updated",
       ],
       "wallet_holdings.csv"
+    );
+  }
+
+  // ============================================================================
+  // NFT SUBTAB
+  // ============================================================================
+
+  function renderNfts(container, data) {
+    const nfts = data?.nfts || [];
+
+    if (nfts.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <i class="icon-image empty-state-icon"></i>
+          <p>No NFTs found in wallet</p>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = `
+      <div class="wallet-nfts">
+        <div class="nfts-grid" id="nftsGrid"></div>
+      </div>
+    `;
+
+    const grid = container.querySelector("#nftsGrid");
+    if (!grid) return;
+
+    nfts.forEach((nft) => {
+      const card = document.createElement("div");
+      card.className = "nft-card";
+      card.dataset.mint = nft.mint;
+
+      const imageUrl = nft.image_url || "";
+      const name = nft.name || Utils.formatAddressCompact(nft.mint, { start: 6, end: 4 });
+      const symbol = nft.symbol || "";
+
+      card.innerHTML = `
+        <div class="nft-image-wrapper">
+          ${
+            imageUrl
+              ? `<img class="nft-image" src="${escapeHtml(imageUrl)}" alt="${escapeHtml(name)}" loading="lazy" onerror="this.parentElement.innerHTML='<div class=\\'nft-placeholder\\'><i class=\\'icon-image\\'></i></div>'">`
+              : `<div class="nft-placeholder"><i class="icon-image"></i></div>`
+          }
+        </div>
+        <div class="nft-info">
+          <div class="nft-name" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+          ${symbol ? `<div class="nft-symbol">${escapeHtml(symbol)}</div>` : ""}
+        </div>
+        <div class="nft-actions">
+          <button class="btn btn-sm" data-action="copy-mint" title="Copy Mint Address">
+            <i class="icon-copy"></i>
+          </button>
+          <a href="https://solscan.io/token/${escapeHtml(nft.mint)}" target="_blank" rel="noopener noreferrer" class="btn btn-sm" title="View on Solscan">
+            <i class="icon-external-link"></i>
+          </a>
+        </div>
+      `;
+
+      // Handle copy mint
+      card.addEventListener("click", (e) => {
+        const btn = e.target.closest("[data-action='copy-mint']");
+        if (btn) {
+          e.stopPropagation();
+          navigator.clipboard.writeText(nft.mint).then(() => {
+            Utils.showToast("Mint address copied", "success");
+          });
+        }
+      });
+
+      grid.appendChild(card);
+    });
+  }
+
+  function exportNfts(nfts) {
+    if (!nfts || nfts.length === 0) return;
+
+    const csvData = nfts.map((nft) => ({
+      Mint: nft.mint,
+      Name: nft.name || "",
+      Symbol: nft.symbol || "",
+      "Account Address": nft.account_address || "",
+      "Image URL": nft.image_url || "",
+      "Is Token 2022": nft.is_token_2022 ? "Yes" : "No",
+    }));
+
+    Utils.exportToCSV(
+      csvData,
+      ["Mint", "Name", "Symbol", "Account Address", "Image URL", "Is Token 2022"],
+      "wallet_nfts.csv"
     );
   }
 
@@ -791,6 +887,26 @@ function createLifecycle() {
           },
         ],
       },
+      nfts: {
+        title: "NFT Collection",
+        subtitle: state.dashboardData?.nfts
+          ? `${state.dashboardData.nfts.length} NFT${state.dashboardData.nfts.length !== 1 ? "s" : ""}`
+          : null,
+        icon: "icon-image",
+        actions: [
+          {
+            id: "export",
+            label: "Export CSV",
+            icon: "icon-download",
+            variant: "secondary",
+            onClick: () => {
+              if (state.dashboardData?.nfts) {
+                exportNfts(state.dashboardData.nfts);
+              }
+            },
+          },
+        ],
+      },
       history: {
         title: "Historical Snapshots",
         icon: "icon-history",
@@ -859,6 +975,9 @@ function createLifecycle() {
         break;
       case "holdings":
         renderHoldings(root, state.dashboardData);
+        break;
+      case "nfts":
+        renderNfts(root, state.dashboardData);
         break;
       case "history":
         renderHistory(root);
