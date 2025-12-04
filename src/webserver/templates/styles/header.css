@@ -10,13 +10,13 @@
 .modern-header {
   position: sticky;
   top: 0;
-  left: 0;
-  right: 0;
+  width: 100%;
   z-index: 1000;
   background: var(--header-bg, linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1c2128 100%));
   border-bottom: 1px solid var(--header-border, #30363d);
   box-shadow: 0 4px 20px rgb(0, 0, 0, 0.4);
   font-family: var(--header-font, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
+  flex-shrink: 0;
 }
 
 /* ============================================================================
