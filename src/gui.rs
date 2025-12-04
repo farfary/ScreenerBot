@@ -66,6 +66,7 @@ pub async fn run_gui_mode() -> Result<(), String> {
   // Build and run Tauri application
   tauri::Builder::default()
     .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+    .plugin(tauri_plugin_window_state::Builder::default().build())
     .setup({
       let zoom_level_clone = Arc::clone(&zoom_level);
       move |app| {

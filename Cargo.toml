@@ -159,6 +159,7 @@ sysinfo = "0.30"
 tauri = { version = "2.1", features = ["devtools"] }
 tauri-plugin-shell = "2.0"
 tauri-plugin-global-shortcut = "2.0"
+tauri-plugin-window-state = "2.0"
 
 [build-dependencies]
 tauri-build = { version = "2.1", features = [] }
