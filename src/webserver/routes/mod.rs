@@ -227,6 +227,9 @@ async fn get_core_script(axum::extract::Path(file): axum::extract::Path<String>)
         "notifications.js" => Some(templates::CORE_NOTIFICATIONS),
         "toast.js" => Some(templates::CORE_TOAST),
         "request_manager.js" => Some(templates::CORE_REQUEST_MANAGER),
+        "splash.js" => Some(templates::CORE_SPLASH),
+        "onboarding.js" => Some(templates::CORE_ONBOARDING),
+        "setup.js" => Some(templates::CORE_SETUP),
         _ => None,
     };
 
@@ -258,7 +261,6 @@ async fn get_page_script(axum::extract::Path(file): axum::extract::Path<String>)
         "strategies.js" => Some(templates::STRATEGIES_PAGE_SCRIPT),
         "trader.js" => Some(templates::TRADER_PAGE_SCRIPT),
         "wallet.js" => Some(templates::WALLET_PAGE_SCRIPT),
-        "initialization.js" => Some(templates::INITIALIZATION_PAGE_SCRIPT),
         "updates.js" => Some(templates::UPDATES_PAGE_SCRIPT),
         "about.js" => Some(templates::ABOUT_PAGE_SCRIPT),
         _ => None,

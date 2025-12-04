@@ -24,9 +24,11 @@ const CONFIG_PAGE_STYLES: &str = include_str!("templates/styles/pages/config.css
 const STRATEGIES_PAGE_STYLES: &str = include_str!("templates/styles/pages/strategies.css");
 const TRADER_PAGE_STYLES: &str = include_str!("templates/styles/pages/trader.css");
 const WALLET_PAGE_STYLES: &str = include_str!("templates/styles/pages/wallet.css");
-const INITIALIZATION_PAGE_STYLES: &str = include_str!("templates/styles/pages/initialization.css");
 const HOME_PAGE_STYLES: &str = include_str!("templates/styles/pages/home.css");
 const UPDATES_PAGE_STYLES: &str = include_str!("templates/styles/pages/updates.css");
+const SPLASH_PAGE_STYLES: &str = include_str!("templates/styles/pages/splash.css");
+const ONBOARDING_PAGE_STYLES: &str = include_str!("templates/styles/pages/onboarding.css");
+const SETUP_PAGE_STYLES: &str = include_str!("templates/styles/pages/setup.css");
 const DATA_TABLE_STYLES: &str = include_str!("templates/styles/ui/data_table.css");
 const TABLE_TOOLBAR_STYLES: &str = include_str!("templates/styles/ui/table_toolbar.css");
 const EVENTS_DIALOG_STYLES: &str = include_str!("templates/styles/ui/events_dialog.css");
@@ -72,6 +74,9 @@ pub const CORE_HEADER: &str = include_str!("templates/scripts/core/header.js");
 pub const CORE_NOTIFICATIONS: &str = include_str!("templates/scripts/core/notifications.js");
 pub const CORE_TOAST: &str = include_str!("templates/scripts/core/toast.js");
 pub const CORE_REQUEST_MANAGER: &str = include_str!("templates/scripts/core/request_manager.js");
+pub const CORE_SPLASH: &str = include_str!("templates/scripts/core/splash.js");
+pub const CORE_ONBOARDING: &str = include_str!("templates/scripts/core/onboarding.js");
+pub const CORE_SETUP: &str = include_str!("templates/scripts/core/setup.js");
 
 const THEME_SCRIPTS: &str = include_str!("templates/scripts/theme.js");
 
@@ -103,8 +108,6 @@ pub const CONFIG_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/confi
 pub const STRATEGIES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/strategies.js");
 pub const TRADER_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/trader.js");
 pub const WALLET_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/wallet.js");
-pub const INITIALIZATION_PAGE_SCRIPT: &str =
-    include_str!("templates/scripts/pages/initialization.js");
 pub const HOME_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/home.js");
 pub const UPDATES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/updates.js");
 pub const ABOUT_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/about.js");
@@ -119,16 +122,23 @@ const CONFIG_PAGE: &str = include_str!("templates/pages/config.html");
 const STRATEGIES_PAGE: &str = include_str!("templates/pages/strategies.html");
 const TRADER_PAGE: &str = include_str!("templates/pages/trader.html");
 const WALLET_PAGE: &str = include_str!("templates/pages/wallet.html");
-const INITIALIZATION_PAGE: &str = include_str!("templates/pages/initialization.html");
 const HOME_PAGE: &str = include_str!("templates/pages/home.html");
 const UPDATES_PAGE: &str = include_str!("templates/pages/updates.html");
 const ABOUT_PAGE: &str = include_str!("templates/pages/about.html");
+const SPLASH_PAGE: &str = include_str!("templates/pages/splash.html");
+const ONBOARDING_PAGE: &str = include_str!("templates/pages/onboarding.html");
+const SETUP_PAGE: &str = include_str!("templates/pages/setup.html");
 
 /// Render the base layout with shared chrome and inject the requested content.
 pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     let mut html = BASE_TEMPLATE.replace("{{TITLE}}", title);
     html = html.replace("{{NAV_TABS}}", &nav_tabs(active_tab));
     html = html.replace("{{CONTENT}}", content);
+
+    // Inject splash, onboarding, and setup screens
+    html = html.replace("{{SPLASH_SCREEN}}", SPLASH_PAGE);
+    html = html.replace("{{ONBOARDING_SCREEN}}", ONBOARDING_PAGE);
+    html = html.replace("{{SETUP_SCREEN}}", SETUP_PAGE);
 
     // Prepare Lucide icon font CSS with corrected paths
     let lucide_css = LUCIDE_ICON_CSS
@@ -158,6 +168,10 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         CONFIRMATION_DIALOG_STYLES,
         TOKEN_DETAILS_DIALOG_STYLES,
         SETTINGS_DIALOG_STYLES,
+        // Splash, onboarding, and setup screens (always included for proper transitions)
+        SPLASH_PAGE_STYLES,
+        ONBOARDING_PAGE_STYLES,
+        SETUP_PAGE_STYLES,
     ];
     if active_tab == "services" {
         combined_styles.push(SERVICES_PAGE_STYLES);
@@ -189,9 +203,6 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     if active_tab == "wallet" {
         combined_styles.push(WALLET_PAGE_STYLES);
     }
-    if active_tab == "initialization" {
-        combined_styles.push(INITIALIZATION_PAGE_STYLES);
-    }
     if active_tab == "home" {
         combined_styles.push(HOME_PAGE_STYLES);
     }
@@ -211,7 +222,6 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         ("strategies", STRATEGIES_PAGE_STYLES),
         ("trader", TRADER_PAGE_STYLES),
         ("wallet", WALLET_PAGE_STYLES),
-        ("initialization", INITIALIZATION_PAGE_STYLES),
         ("home", HOME_PAGE_STYLES),
         ("updates", UPDATES_PAGE_STYLES),
     ] {
@@ -313,7 +323,8 @@ pub fn wallet_content() -> String {
 }
 
 pub fn initialization_content() -> String {
-    render_page(INITIALIZATION_PAGE)
+    // Legacy redirect - initialization now uses the setup screen
+    render_page(SETUP_PAGE)
 }
 
 pub fn updates_content() -> String {
@@ -326,4 +337,16 @@ pub fn about_content() -> String {
 
 pub fn home_content() -> String {
     render_page(HOME_PAGE)
+}
+
+pub fn splash_content() -> String {
+    render_page(SPLASH_PAGE)
+}
+
+pub fn onboarding_content() -> String {
+    render_page(ONBOARDING_PAGE)
+}
+
+pub fn setup_content() -> String {
+    render_page(SETUP_PAGE)
 }

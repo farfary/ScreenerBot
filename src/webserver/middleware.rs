@@ -43,6 +43,11 @@ pub async fn initialization_gate(request: Request, next: Next) -> Response {
         return next.run(request).await;
     }
 
+    // Allow actions endpoints (actions system works independently)
+    if path.starts_with("/api/actions") {
+        return next.run(request).await;
+    }
+
     // Allow static resources (scripts, styles, page HTML)
     if path.starts_with("/scripts/")
         || path.starts_with("/styles/")

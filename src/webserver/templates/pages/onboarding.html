@@ -1,0 +1,125 @@
+<!-- Onboarding Flow - First-time user introduction -->
+<div id="onboardingScreen" class="onboarding-screen" style="display: none">
+  <!-- Header -->
+  <header class="onboarding-header">
+    <img src="/assets/logo.svg" alt="ScreenerBot" class="onboarding-logo" />
+    <span class="onboarding-brand">ScreenerBot</span>
+  </header>
+
+  <!-- Main content with slides -->
+  <main class="onboarding-content">
+    <div class="onboarding-slides">
+      <!-- Slide 1: Welcome -->
+      <div class="onboarding-slide active" data-slide="0">
+        <i class="slide-icon icon-rocket"></i>
+        <h2 class="slide-title">Welcome to ScreenerBot</h2>
+        <p class="slide-description">
+          Your advanced Solana trading companion. Automate your DeFi trading with powerful tools
+          for token discovery, position management, and real-time market analysis.
+        </p>
+        <div class="slide-features">
+          <div class="slide-feature">
+            <i class="slide-feature-icon icon-scan"></i>
+            <div class="slide-feature-text">
+              <h4>Smart Discovery</h4>
+              <p>Automatically find and analyze new tokens across multiple DEXs</p>
+            </div>
+          </div>
+          <div class="slide-feature">
+            <i class="slide-feature-icon icon-shield-check"></i>
+            <div class="slide-feature-text">
+              <h4>Security First</h4>
+              <p>Built-in security analysis to protect your investments</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Slide 2: Features -->
+      <div class="onboarding-slide" data-slide="1">
+        <i class="slide-icon icon-chart-bar"></i>
+        <h2 class="slide-title">Powerful Trading Tools</h2>
+        <p class="slide-description">
+          Take control of your trading with comprehensive tools designed for both manual and
+          automated strategies.
+        </p>
+        <div class="slide-features">
+          <div class="slide-feature">
+            <i class="slide-feature-icon icon-trending-up"></i>
+            <div class="slide-feature-text">
+              <h4>Position Management</h4>
+              <p>Track, DCA, and manage your positions with precision</p>
+            </div>
+          </div>
+          <div class="slide-feature">
+            <i class="slide-feature-icon icon-bot"></i>
+            <div class="slide-feature-text">
+              <h4>Auto Trading</h4>
+              <p>Configure automated entry and exit strategies</p>
+            </div>
+          </div>
+          <div class="slide-feature">
+            <i class="slide-feature-icon icon-activity"></i>
+            <div class="slide-feature-text">
+              <h4>Real-time Analytics</h4>
+              <p>Live P&amp;L tracking and performance metrics</p>
+            </div>
+          </div>
+          <div class="slide-feature">
+            <i class="slide-feature-icon icon-list-filter"></i>
+            <div class="slide-feature-text">
+              <h4>Smart Filtering</h4>
+              <p>Custom filters to find the best opportunities</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Slide 3: Get Started -->
+      <div class="onboarding-slide" data-slide="2">
+        <i class="slide-icon icon-settings"></i>
+        <h2 class="slide-title">Let's Get Started</h2>
+        <p class="slide-description">
+          You're almost ready! Next, we'll set up your wallet connection and RPC endpoints. This
+          only takes a minute.
+        </p>
+        <div class="slide-features">
+          <div class="slide-feature">
+            <i class="slide-feature-icon icon-key"></i>
+            <div class="slide-feature-text">
+              <h4>Wallet Setup</h4>
+              <p>Connect your Solana wallet securely</p>
+            </div>
+          </div>
+          <div class="slide-feature">
+            <i class="slide-feature-icon icon-globe"></i>
+            <div class="slide-feature-text">
+              <h4>RPC Connection</h4>
+              <p>Configure your premium RPC endpoints</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Progress dots -->
+    <div class="onboarding-progress">
+      <button type="button" class="progress-dot active" data-dot="0" aria-label="Go to slide 1"></button>
+      <button type="button" class="progress-dot" data-dot="1" aria-label="Go to slide 2"></button>
+      <button type="button" class="progress-dot" data-dot="2" aria-label="Go to slide 3"></button>
+    </div>
+  </main>
+
+  <!-- Footer navigation -->
+  <footer class="onboarding-footer">
+    <button type="button" class="onboarding-skip" id="onboardingSkip">Skip introduction</button>
+    <div class="onboarding-nav">
+      <button type="button" class="onboarding-btn onboarding-btn-secondary" id="onboardingPrev" disabled>
+        <i class="icon-chevron-left"></i> Back
+      </button>
+      <button type="button" class="onboarding-btn onboarding-btn-primary" id="onboardingNext">
+        Next <i class="icon-chevron-right"></i>
+      </button>
+    </div>
+  </footer>
+</div>

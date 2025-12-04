@@ -67,6 +67,9 @@ config_struct! {
 
         /// Show notifications for background events
         show_background_notifications: bool = true,
+
+        /// Whether onboarding has been completed (set true after first-time onboarding)
+        onboarding_complete: bool = false,
     }
 }
 

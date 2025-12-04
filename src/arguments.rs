@@ -93,6 +93,12 @@ pub fn is_dashboard_demo_enabled() -> bool {
     has_arg("--dashboard-demo")
 }
 
+/// Force onboarding display - show onboarding even if already completed
+/// Use with: --dashboard-onboarding
+pub fn is_dashboard_onboarding_forced() -> bool {
+    has_arg("--dashboard-onboarding")
+}
+
 // =============================================================================
 // MODIFIER FLAGS
 // =============================================================================
@@ -192,6 +198,7 @@ pub fn print_help() {
         "                                Without --gui, runs headless with webserver on port 8080"
     );
     println!("    --dashboard-demo            Show hardcoded demo data for screenshots/marketing");
+    println!("    --dashboard-onboarding      Force show onboarding screens (resets onboarding state)");
     println!();
     println!("MODIFIERS:");
     println!("    --force                     Skip confirmation prompts (with --reset)");

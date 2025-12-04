@@ -1,0 +1,198 @@
+<!-- Setup Screen - Compact Professional Layout -->
+<div id="setupScreen" class="setup-screen">
+  <!-- Compact Header with Progress -->
+  <header class="setup-header">
+    <div class="setup-header-left">
+      <img src="/assets/logo.svg" alt="ScreenerBot" class="setup-logo" />
+      <span class="setup-brand">ScreenerBot</span>
+    </div>
+
+    <!-- Progress steps -->
+    <div class="setup-progress">
+      <div class="setup-step active" data-step="1">
+        <div class="setup-step-number"><span>1</span></div>
+        <span class="setup-step-label">Credentials</span>
+      </div>
+      <div class="setup-step-connector"></div>
+      <div class="setup-step" data-step="2">
+        <div class="setup-step-number"><span>2</span></div>
+        <span class="setup-step-label">Verification</span>
+      </div>
+      <div class="setup-step-connector"></div>
+      <div class="setup-step" data-step="3">
+        <div class="setup-step-number"><span>3</span></div>
+        <span class="setup-step-label">Complete</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="setup-content">
+    <div class="setup-form-container">
+      <!-- Step 1: Credentials - Grid Layout -->
+      <div class="setup-step-content active" data-step="1">
+        <div class="setup-credentials-grid">
+          <!-- Header -->
+          <div class="setup-step-header">
+            <div>
+              <h2 class="setup-step-title">Configure Credentials</h2>
+              <p class="setup-step-description">
+                Connect ScreenerBot to Solana network with your wallet and RPC endpoints.
+              </p>
+            </div>
+          </div>
+
+          <!-- Wallet Card -->
+          <div class="setup-card">
+            <div class="setup-card-header">
+              <i class="setup-card-icon icon-key"></i>
+              <span class="setup-card-title">Wallet Private Key</span>
+              <span class="setup-card-required">*</span>
+            </div>
+            <div class="setup-field">
+              <div class="setup-input-wrapper">
+                <textarea
+                  class="setup-input"
+                  id="wallet-private-key"
+                  placeholder="Base58 or JSON array format"
+                  spellcheck="false"
+                  autocomplete="off"
+                ></textarea>
+                <button
+                  class="setup-input-toggle"
+                  type="button"
+                  data-toggle="wallet-private-key"
+                  title="Toggle visibility"
+                  aria-label="Toggle password visibility"
+                >
+                  <i class="toggle-icon icon-eye"></i>
+                  <span class="visually-hidden">Toggle visibility</span>
+                </button>
+              </div>
+              <div class="setup-hint">5Jv8...xyz or [1,2,3,...]</div>
+              <div class="setup-validation" id="wallet-validation"></div>
+            </div>
+          </div>
+
+          <!-- RPC Card -->
+          <div class="setup-card">
+            <div class="setup-card-header">
+              <i class="setup-card-icon icon-globe"></i>
+              <span class="setup-card-title">RPC Endpoints</span>
+              <span class="setup-card-required">*</span>
+            </div>
+            <div class="setup-field">
+              <div class="setup-input-wrapper">
+                <textarea
+                  class="setup-input"
+                  id="rpc-urls"
+                  placeholder="One URL per line"
+                ></textarea>
+              </div>
+              <div class="setup-hint">Multiple endpoints for round-robin</div>
+              <div class="setup-validation" id="rpc-validation"></div>
+            </div>
+          </div>
+
+          <!-- Warning Box -->
+          <div class="setup-warning">
+            <i class="setup-warning-icon icon-triangle-alert"></i>
+            <div class="setup-warning-content">
+              <div class="setup-warning-main">
+                <span class="setup-warning-title">Premium RPC Required</span>
+                <span class="setup-warning-divider">—</span>
+                <span class="setup-warning-text">Default Solana RPC <strong>will not work</strong>.</span>
+              </div>
+              <div class="setup-warning-providers">
+                <span class="setup-providers-label">Recommended:</span>
+                <a href="https://www.helius.dev" target="_blank" rel="noopener noreferrer" class="setup-provider-chip">
+                  <span class="provider-name">Helius</span>
+                  <span class="provider-tag">DeFi</span>
+                </a>
+                <a href="https://www.quicknode.com" target="_blank" rel="noopener noreferrer" class="setup-provider-chip">
+                  <span class="provider-name">QuickNode</span>
+                  <span class="provider-tag">Fast</span>
+                </a>
+                <a href="https://www.alchemy.com" target="_blank" rel="noopener noreferrer" class="setup-provider-chip">
+                  <span class="provider-name">Alchemy</span>
+                  <span class="provider-tag">Reliable</span>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Error display - positioned outside grid -->
+      <div class="setup-error" id="setup-error">
+        <i class="setup-error-icon icon-circle-x"></i>
+        <h4 class="setup-error-title">Setup Failed</h4>
+        <div class="setup-error-messages" id="setup-error-messages"></div>
+        <button type="button" class="setup-btn setup-btn-secondary" id="setup-retry">Try Again</button>
+      </div>
+
+      <!-- Step 2: Verification -->
+      <div class="setup-step-content" data-step="2">
+        <div class="setup-step-header" style="margin-bottom: 1.5rem; border-bottom: 1px solid var(--border-color, #30363d); padding-bottom: 1rem;">
+          <div>
+            <h2 class="setup-step-title">Verifying Configuration</h2>
+            <p class="setup-step-description">Testing credentials and RPC connections...</p>
+          </div>
+        </div>
+
+        <div class="setup-verification">
+          <div class="setup-verification-item">
+            <div class="setup-verification-icon"><i class="icon-key"></i></div>
+            <div class="setup-verification-content">
+              <h4>Wallet Validation</h4>
+              <div class="setup-verification-status" id="wallet-status">
+                <span class="setup-spinner"></span>
+                <span>Validating private key...</span>
+              </div>
+              <div class="setup-verification-details" id="wallet-details"></div>
+            </div>
+          </div>
+
+          <div class="setup-verification-item">
+            <div class="setup-verification-icon"><i class="icon-globe"></i></div>
+            <div class="setup-verification-content">
+              <h4>RPC Connection</h4>
+              <div class="setup-verification-status" id="rpc-status">
+                <span class="setup-spinner"></span>
+                <span>Testing endpoints...</span>
+              </div>
+              <div class="setup-verification-details" id="rpc-details"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: Complete -->
+      <div class="setup-step-content" data-step="3">
+        <div class="setup-complete">
+          <div class="setup-complete-icon"><i class="icon-circle-check"></i></div>
+          <h3 class="setup-complete-title">Setup Complete!</h3>
+          <p class="setup-complete-text">Starting ScreenerBot services...</p>
+          <div class="setup-complete-progress">
+            <div class="setup-progress-bar">
+              <div class="setup-progress-fill" id="services-progress"></div>
+            </div>
+            <div class="setup-progress-text" id="services-status">
+              Initializing (0/20)...
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Compact Footer -->
+  <footer class="setup-footer">
+    <button type="button" class="setup-btn setup-btn-secondary" id="setup-back" disabled>
+      <i class="icon-chevron-left"></i> Back
+    </button>
+    <button type="button" class="setup-btn setup-btn-primary" id="setup-next">
+      Continue <i class="icon-chevron-right"></i>
+    </button>
+  </footer>
+</div>

@@ -11,6 +11,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 
 use crate::{
+    arguments,
     config::{self, schemas::Config},
     global,
     logger::{self, LogTag},
@@ -32,6 +33,8 @@ pub struct InitializationStatusResponse {
     pub reason: String,
     pub config_exists: bool,
     pub initialization_complete: bool,
+    pub onboarding_complete: bool,
+    pub force_onboarding: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -83,6 +86,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/validate", post(validate_credentials))
         .route("/complete", post(complete_initialization))
         .route("/progress", get(initialization_progress))
+        .route("/onboarding/complete", post(complete_onboarding))
 }
 
 // ============================================================================
@@ -97,6 +101,15 @@ async fn initialization_status() -> Response {
     let config_path = crate::paths::get_config_path();
     let config_exists = config_path.exists();
     let initialization_complete = global::is_initialization_complete();
+    let force_onboarding = arguments::is_dashboard_onboarding_forced();
+    
+    let onboarding_complete = if force_onboarding {
+        false
+    } else if !config_exists {
+        false
+    } else {
+        config::with_config(|cfg| cfg.gui.dashboard.startup.onboarding_complete)
+    };
 
     let (required, reason) = if !config_exists {
         (
@@ -117,9 +130,37 @@ async fn initialization_status() -> Response {
         reason,
         config_exists,
         initialization_complete,
+        onboarding_complete,
+        force_onboarding,
     };
 
     success_response(response)
+}
+
+/// POST /api/initialization/onboarding/complete
+/// Mark onboarding as complete and persist to config
+async fn complete_onboarding() -> Response {
+    logger::info(LogTag::Webserver, "Marking onboarding as complete");
+
+    if let Err(e) = config::update_config_section(
+        |cfg| {
+            cfg.gui.dashboard.startup.onboarding_complete = true;
+        },
+        true,
+    ) {
+        logger::error(
+            LogTag::Webserver,
+            &format!("Failed to persist onboarding state: {}", e),
+        );
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "CONFIG_ERROR",
+            "Failed to save onboarding state",
+            Some(&e),
+        );
+    }
+
+    success_response(serde_json::json!({ "success": true }))
 }
 
 /// POST /api/initialization/validate
