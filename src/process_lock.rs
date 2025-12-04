@@ -22,83 +22,83 @@ use std::path::PathBuf;
 /// The lock is automatically released when this struct is dropped (RAII pattern).
 /// If the process crashes, the OS automatically releases the lock.
 pub struct ProcessLock {
-    _lock: LockFile,
-    lock_path: PathBuf,
+  _lock: LockFile,
+  lock_path: PathBuf,
 }
 
 impl ProcessLock {
-    /// Acquire the process lock
-    ///
-    /// Returns error if another instance is already running or if lock file cannot be created.
-    ///
-    /// **Lock file location:** `data/.screenerbot.lock`
-    ///
-    /// **Error cases:**
-    /// - Another instance is running (lock is held)
-    /// - Cannot create lock file (permission/path issues)
-    pub fn acquire() -> Result<Self, String> {
-        let lock_path = crate::paths::get_process_lock_path();
+  /// Acquire the process lock
+  ///
+  /// Returns error if another instance is already running or if lock file cannot be created.
+  ///
+  /// **Lock file location:** `data/.screenerbot.lock`
+  ///
+  /// **Error cases:**
+  /// - Another instance is running (lock is held)
+  /// - Cannot create lock file (permission/path issues)
+  pub fn acquire() -> Result<Self, String> {
+    let lock_path = crate::paths::get_process_lock_path();
 
-        logger::info(
-            LogTag::System,
-            &format!("🔒 Acquiring process lock: {:?}", lock_path),
-        );
+    logger::info(
+      LogTag::System,
+ &format!("Acquiring process lock: {:?}", lock_path),
+    );
 
-        // Open lock file (directory creation handled by paths module)
-        let mut lock = LockFile::open(&lock_path).map_err(|e| {
-            format!(
-                "Failed to open lock file {:?}: {}\n\
-                 Hint: Check directory permissions",
-                lock_path, e
-            )
-        })?;
+    // Open lock file (directory creation handled by paths module)
+    let mut lock = LockFile::open(&lock_path).map_err(|e| {
+      format!(
+        "Failed to open lock file {:?}: {}\n\
+         Hint: Check directory permissions",
+        lock_path, e
+      )
+    })?;
 
-        // Try to acquire exclusive lock (non-blocking)
-        if !lock
-            .try_lock()
-            .map_err(|e| format!("Failed to acquire lock on {:?}: {}", lock_path, e))?
-        {
-            return Err(format!(
-                "❌ Another instance of ScreenerBot is already running.\n\
-                 \n\
-                 The process lock file is held by another process:\n\
-                   Lock file: {:?}\n\
-                 \n\
-                 To stop the running instance:\n\
-                   1. Find process: ps aux | grep screenerbot | grep -v grep\n\
-                   2. Stop process: pkill -f screenerbot\n\
-                   3. Verify stopped: ps aux | grep screenerbot | grep -v grep\n\
-                 \n\
-                 If no process is found but lock persists, it may be stale.\n\
-                 In that case, manually remove: rm {:?}",
-                lock_path, lock_path
-            ));
-        }
-
-        logger::info(
-            LogTag::System,
-            &format!("✅ Process lock acquired: {:?}", lock_path),
-        );
-
-        Ok(Self {
-            _lock: lock,
-            lock_path,
-        })
+    // Try to acquire exclusive lock (non-blocking)
+    if !lock
+      .try_lock()
+      .map_err(|e| format!("Failed to acquire lock on {:?}: {}", lock_path, e))?
+    {
+      return Err(format!(
+ "Another instance of ScreenerBot is already running.\n\
+         \n\
+         The process lock file is held by another process:\n\
+          Lock file: {:?}\n\
+         \n\
+         To stop the running instance:\n\
+          1. Find process: ps aux | grep screenerbot | grep -v grep\n\
+          2. Stop process: pkill -f screenerbot\n\
+          3. Verify stopped: ps aux | grep screenerbot | grep -v grep\n\
+         \n\
+         If no process is found but lock persists, it may be stale.\n\
+         In that case, manually remove: rm {:?}",
+        lock_path, lock_path
+      ));
     }
 
-    /// Get the path to the lock file
-    pub fn lock_path(&self) -> &PathBuf {
-        &self.lock_path
-    }
+    logger::info(
+      LogTag::System,
+ &format!("Process lock acquired: {:?}", lock_path),
+    );
+
+    Ok(Self {
+      _lock: lock,
+      lock_path,
+    })
+  }
+
+  /// Get the path to the lock file
+  pub fn lock_path(&self) -> &PathBuf {
+    &self.lock_path
+  }
 }
 
 impl Drop for ProcessLock {
-    fn drop(&mut self) {
-        logger::info(
-            LogTag::System,
-            &format!("🔓 Releasing process lock: {:?}", self.lock_path),
-        );
-        // Lock is automatically released when _lock is dropped
-        // fslock handles the file unlocking
-    }
+  fn drop(&mut self) {
+    logger::info(
+      LogTag::System,
+ &format!("Releasing process lock: {:?}", self.lock_path),
+    );
+    // Lock is automatically released when _lock is dropped
+    // fslock handles the file unlocking
+  }
 }

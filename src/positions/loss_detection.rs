@@ -34,82 +34,82 @@ const MIN_LOSS_PERCENT_THRESHOLD: f64 = -15.0;
 /// * `Ok(())` - Processing completed successfully
 /// * `Err(String)` - Error during P&L calculation or blacklisting
 pub async fn process_position_loss_detection(position: &Position) -> Result<(), String> {
-    // Check if loss-based blacklisting is enabled
-    if !ENABLE_LOSS_BASED_BLACKLISTING {
-        return Ok(());
-    }
+  // Check if loss-based blacklisting is enabled
+  if !ENABLE_LOSS_BASED_BLACKLISTING {
+    return Ok(());
+  }
 
-    // Calculate final P&L for loss detection
-    let (net_pnl_sol, net_pnl_percent) = calculate_position_pnl(position, None).await;
+  // Calculate final P&L for loss detection
+  let (net_pnl_sol, net_pnl_percent) = calculate_position_pnl(position, None).await;
 
-    // Process loss detection
-    if net_pnl_sol < 0.0 {
-        let loss_sol = net_pnl_sol.abs();
-        logger::warning(
-            LogTag::Positions,
-            &format!(
-                "💸 Loss detected for {} ({}): -{:.3} SOL ({:.1}%)",
-                position.symbol, &position.mint, loss_sol, net_pnl_percent
-            ),
-        );
+  // Process loss detection
+  if net_pnl_sol < 0.0 {
+    let loss_sol = net_pnl_sol.abs();
+    logger::warning(
+      LogTag::Positions,
+      &format!(
+ "Loss detected for {} ({}): -{:.3} SOL ({:.1}%)",
+        position.symbol, &position.mint, loss_sol, net_pnl_percent
+      ),
+    );
 
-        // Only blacklist for significant losses to avoid being too aggressive
-        if should_blacklist_for_loss(net_pnl_percent) {
-            // Add to database-backed blacklist
-            if let Some(db) = get_global_database() {
-                match cleanup::blacklist_token(&position.mint, "PoorPerformance", &db) {
-                    Ok(_) => {
-                        logger::info(
-                            LogTag::Positions,
-                            &format!(
-                                "🚫 Auto-blacklisted {} due to significant loss: -{:.3} SOL ({:.1}%)",
-                                position.symbol, loss_sol, net_pnl_percent
-                            ),
-                        );
-                    }
-                    Err(e) => {
-                        logger::warning(
-                            LogTag::Positions,
-                            &format!(
-                                "⚠️ Failed to blacklist {} after significant loss: {}",
-                                position.symbol, e
-                            ),
-                        );
-                    }
-                }
-            } else {
-                logger::warning(
-                    LogTag::Positions,
-                    &format!(
-                        "⚠️ Failed to blacklist {} - database not initialized",
-                        position.symbol
-                    ),
-                );
-                return Err(format!(
-                    "Failed to blacklist token {} after loss",
-                    position.symbol
-                ));
-            }
-        } else {
+    // Only blacklist for significant losses to avoid being too aggressive
+    if should_blacklist_for_loss(net_pnl_percent) {
+      // Add to database-backed blacklist
+      if let Some(db) = get_global_database() {
+        match cleanup::blacklist_token(&position.mint, "PoorPerformance", &db) {
+          Ok(_) => {
             logger::info(
-                LogTag::Positions,
-                &format!(
-                    "📊 Minor loss for {} not blacklisted: -{:.3} SOL ({:.1}%)",
-                    position.symbol, loss_sol, net_pnl_percent
-                ),
+              LogTag::Positions,
+              &format!(
+ "Auto-blacklisted {} due to significant loss: -{:.3} SOL ({:.1}%)",
+                position.symbol, loss_sol, net_pnl_percent
+              ),
             );
+          }
+          Err(e) => {
+            logger::warning(
+              LogTag::Positions,
+              &format!(
+ "Failed to blacklist {} after significant loss: {}",
+                position.symbol, e
+              ),
+            );
+          }
         }
-    } else if net_pnl_sol > 0.0 {
-        logger::info(
-            LogTag::Positions,
-            &format!(
-                "💰 Profit recorded for {} ({}): +{:.3} SOL ({:.1}%)",
-                position.symbol, &position.mint, net_pnl_sol, net_pnl_percent
-            ),
+      } else {
+        logger::warning(
+          LogTag::Positions,
+          &format!(
+ "Failed to blacklist {} - database not initialized",
+            position.symbol
+          ),
         );
+        return Err(format!(
+          "Failed to blacklist token {} after loss",
+          position.symbol
+        ));
+      }
+    } else {
+      logger::info(
+        LogTag::Positions,
+        &format!(
+ "Minor loss for {} not blacklisted: -{:.3} SOL ({:.1}%)",
+          position.symbol, loss_sol, net_pnl_percent
+        ),
+      );
     }
+  } else if net_pnl_sol > 0.0 {
+    logger::info(
+      LogTag::Positions,
+      &format!(
+ "Profit recorded for {} ({}): +{:.3} SOL ({:.1}%)",
+        position.symbol, &position.mint, net_pnl_sol, net_pnl_percent
+      ),
+    );
+  }
 
-    Ok(())
+  Ok(())
 }
 
 /// Determine if a position should be blacklisted based on loss threshold
@@ -121,7 +121,7 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<(), 
 /// * `true` - Should be blacklisted
 /// * `false` - Should not be blacklisted
 fn should_blacklist_for_loss(loss_percent: f64) -> bool {
-    loss_percent <= MIN_LOSS_PERCENT_THRESHOLD
+  loss_percent <= MIN_LOSS_PERCENT_THRESHOLD
 }
 
 /// Get current loss detection threshold (for debugging/monitoring)
@@ -129,7 +129,7 @@ fn should_blacklist_for_loss(loss_percent: f64) -> bool {
 /// # Returns
 /// * `percent_threshold` - Current percentage threshold
 pub fn get_loss_thresholds() -> f64 {
-    MIN_LOSS_PERCENT_THRESHOLD
+  MIN_LOSS_PERCENT_THRESHOLD
 }
 
 /// Check if loss-based blacklisting is currently enabled
@@ -138,5 +138,5 @@ pub fn get_loss_thresholds() -> f64 {
 /// * `true` - Feature is enabled
 /// * `false` - Feature is disabled
 pub fn is_loss_blacklisting_enabled() -> bool {
-    ENABLE_LOSS_BASED_BLACKLISTING
+  ENABLE_LOSS_BASED_BLACKLISTING
 }

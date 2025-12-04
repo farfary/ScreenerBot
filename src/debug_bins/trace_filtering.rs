@@ -3,25 +3,25 @@ use screenerbot::filtering::get_filtered_token_mints;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    println!("🔍 Testing new filtering system");
+ println!("Testing new filtering system");
 
-    screenerbot::logger::init();
+  screenerbot::logger::init();
 
-    let filtered_tokens = get_filtered_token_mints().await?;
+  let filtered_tokens = get_filtered_token_mints().await?;
 
-    println!(
-        "✅ Filtering complete: {} tokens returned",
-        filtered_tokens.len()
-    );
+  println!(
+ "Filtering complete: {} tokens returned",
+    filtered_tokens.len()
+  );
 
-    // Show first 10 tokens
-    for (i, mint) in filtered_tokens.iter().take(10).enumerate() {
-        println!("  {}: {}", i + 1, &mint);
-    }
+  // Show first 10 tokens
+  for (i, mint) in filtered_tokens.iter().take(10).enumerate() {
+ println!("{}: {}", i + 1, &mint);
+  }
 
-    if filtered_tokens.len() > 10 {
-        println!("  ... and {} more tokens", filtered_tokens.len() - 10);
-    }
+  if filtered_tokens.len() > 10 {
+ println!("... and {} more tokens", filtered_tokens.len() - 10);
+  }
 
-    Ok(())
+  Ok(())
 }

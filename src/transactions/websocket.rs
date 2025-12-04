@@ -16,383 +16,383 @@ use crate::logger::{self, LogTag};
 /// - Graceful shutdown handling with proper cleanup
 /// - Debug logging for connection monitoring and troubleshooting
 pub struct SolanaWebSocketClient {
-    wallet_address: String,
-    tx_sender: mpsc::UnboundedSender<String>, // Channel to send new transaction signatures
+  wallet_address: String,
+  tx_sender: mpsc::UnboundedSender<String>, // Channel to send new transaction signatures
 }
 
 /// WebSocket subscription message for account changes
 #[derive(Serialize)]
 struct AccountSubscribe {
-    jsonrpc: String,
-    id: u64,
-    method: String,
-    params: Vec<serde_json::Value>,
+  jsonrpc: String,
+  id: u64,
+  method: String,
+  params: Vec<serde_json::Value>,
 }
 
 /// WebSocket notification response for account changes
 #[derive(Deserialize, Debug)]
 struct AccountNotification {
-    jsonrpc: String,
-    method: Option<String>,
-    params: Option<AccountNotificationParams>,
+  jsonrpc: String,
+  method: Option<String>,
+  params: Option<AccountNotificationParams>,
 }
 
 #[derive(Deserialize, Debug)]
 struct AccountNotificationParams {
-    result: Option<AccountChangeResult>,
-    subscription: Option<u64>,
+  result: Option<AccountChangeResult>,
+  subscription: Option<u64>,
 }
 
 #[derive(Deserialize, Debug)]
 struct AccountChangeResult {
-    context: Option<serde_json::Value>,
-    value: Option<AccountChangeValue>,
+  context: Option<serde_json::Value>,
+  value: Option<AccountChangeValue>,
 }
 
 #[derive(Deserialize, Debug)]
 struct AccountChangeValue {
-    account: Option<serde_json::Value>,
-    pubkey: Option<String>,
+  account: Option<serde_json::Value>,
+  pubkey: Option<String>,
 }
 
 /// WebSocket subscription for signature notifications (better for transaction monitoring)
 #[derive(Serialize)]
 struct SignatureSubscribe {
-    jsonrpc: String,
-    id: u64,
-    method: String,
-    params: Vec<serde_json::Value>,
+  jsonrpc: String,
+  id: u64,
+  method: String,
+  params: Vec<serde_json::Value>,
 }
 
 /// Signature notification for confirmed transactions
 #[derive(Deserialize, Debug)]
 struct SignatureNotification {
-    jsonrpc: String,
-    method: Option<String>,
-    params: Option<SignatureNotificationParams>,
+  jsonrpc: String,
+  method: Option<String>,
+  params: Option<SignatureNotificationParams>,
 }
 
 #[derive(Deserialize, Debug)]
 struct SignatureNotificationParams {
-    result: Option<SignatureResult>,
-    subscription: Option<u64>,
+  result: Option<SignatureResult>,
+  subscription: Option<u64>,
 }
 
 #[derive(Deserialize, Debug)]
 struct SignatureResult {
-    context: Option<serde_json::Value>,
-    value: Option<serde_json::Value>,
+  context: Option<serde_json::Value>,
+  value: Option<serde_json::Value>,
 }
 
 impl SolanaWebSocketClient {
-    /// Create new WebSocket client for monitoring wallet transactions
-    pub fn new(wallet_address: String) -> (Self, mpsc::UnboundedReceiver<String>) {
-        let (tx_sender, tx_receiver) = mpsc::unbounded_channel();
+  /// Create new WebSocket client for monitoring wallet transactions
+  pub fn new(wallet_address: String) -> (Self, mpsc::UnboundedReceiver<String>) {
+    let (tx_sender, tx_receiver) = mpsc::unbounded_channel();
 
-        let client = Self {
-            wallet_address,
-            tx_sender,
-        };
+    let client = Self {
+      wallet_address,
+      tx_sender,
+    };
 
-        (client, tx_receiver)
-    }
+    (client, tx_receiver)
+  }
 
-    /// Start WebSocket connection and monitor for new transactions
-    pub async fn start_monitoring(
-        &self,
-        ws_url: &str,
-        shutdown: Arc<Notify>,
-    ) -> Result<(), String> {
-        logger::info(
-            LogTag::Websocket,
-            &format!(
-                "🔌 Starting WebSocket monitoring for wallet: {}",
-                &self.wallet_address
-            ),
-        );
+  /// Start WebSocket connection and monitor for new transactions
+  pub async fn start_monitoring(
+    &self,
+    ws_url: &str,
+    shutdown: Arc<Notify>,
+  ) -> Result<(), String> {
+    logger::info(
+      LogTag::Websocket,
+      &format!(
+ "Starting WebSocket monitoring for wallet: {}",
+        &self.wallet_address
+      ),
+    );
 
-        // Connect to WebSocket endpoint
-        let (ws_stream, _) = connect_async(ws_url)
-            .await
-            .map_err(|e| format!("Failed to connect to WebSocket: {}", e))?;
+    // Connect to WebSocket endpoint
+    let (ws_stream, _) = connect_async(ws_url)
+      .await
+      .map_err(|e| format!("Failed to connect to WebSocket: {}", e))?;
 
-        let (mut ws_sender, mut ws_receiver) = ws_stream.split();
+    let (mut ws_sender, mut ws_receiver) = ws_stream.split();
 
-        // Subscribe to logs for the wallet address to catch all transactions
-        // This method catches both incoming and outgoing transactions
-        let subscribe_message = AccountSubscribe {
-            jsonrpc: "2.0".to_string(),
-            id: 1,
-            method: "logsSubscribe".to_string(),
-            params: vec![
-                serde_json::json!({
-                    "mentions": [self.wallet_address]
-                }),
-                serde_json::json!({
-                    "commitment": "confirmed"
-                }),
-            ],
-        };
+    // Subscribe to logs for the wallet address to catch all transactions
+    // This method catches both incoming and outgoing transactions
+    let subscribe_message = AccountSubscribe {
+      jsonrpc: "2.0".to_string(),
+      id: 1,
+      method: "logsSubscribe".to_string(),
+      params: vec![
+        serde_json::json!({
+          "mentions": [self.wallet_address]
+        }),
+        serde_json::json!({
+          "commitment": "confirmed"
+        }),
+      ],
+    };
 
-        let subscribe_text = serde_json::to_string(&subscribe_message)
-            .map_err(|e| format!("Failed to serialize subscription: {}", e))?;
+    let subscribe_text = serde_json::to_string(&subscribe_message)
+      .map_err(|e| format!("Failed to serialize subscription: {}", e))?;
 
-        logger::info(
-            LogTag::Websocket,
-            &format!(
-                "📡 Subscribing to logs for wallet: {}",
-                &self.wallet_address
-            ),
-        );
+    logger::info(
+      LogTag::Websocket,
+      &format!(
+ "Subscribing to logs for wallet: {}",
+        &self.wallet_address
+      ),
+    );
 
-        // Send subscription
-        ws_sender
-            .send(Message::Text(subscribe_text))
-            .await
-            .map_err(|e| format!("Failed to send subscription: {}", e))?;
+    // Send subscription
+    ws_sender
+      .send(Message::Text(subscribe_text))
+      .await
+      .map_err(|e| format!("Failed to send subscription: {}", e))?;
 
-        // Create heartbeat timer (ping every 30 seconds to prevent server timeout)
-        let mut heartbeat_interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
-        heartbeat_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    // Create heartbeat timer (ping every 30 seconds to prevent server timeout)
+    let mut heartbeat_interval = tokio::time::interval(tokio::time::Duration::from_secs(5));
+    heartbeat_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
-        logger::info(
-            LogTag::Websocket,
-            "📡 Heartbeat timer initialized (30s interval)",
-        );
+    logger::info(
+      LogTag::Websocket,
+ "Heartbeat timer initialized (30s interval)",
+    );
 
-        // Listen for messages with shutdown and heartbeat handling
-        loop {
-            tokio::select! {
-                _ = shutdown.notified() => {
-                    logger::info(LogTag::Websocket, "WebSocket monitoring received shutdown signal");
+    // Listen for messages with shutdown and heartbeat handling
+    loop {
+      tokio::select! {
+        _ = shutdown.notified() => {
+          logger::info(LogTag::Websocket, "WebSocket monitoring received shutdown signal");
 
-                    // Send close message to server
-                    if let Err(e) = ws_sender.send(Message::Close(None)).await {
-                        logger::info(LogTag::Websocket, &format!("Failed to send close message: {}", e));
-                    }
+          // Send close message to server
+          if let Err(e) = ws_sender.send(Message::Close(None)).await {
+            logger::info(LogTag::Websocket, &format!("Failed to send close message: {}", e));
+          }
 
-                    break;
-                }
-                _ = heartbeat_interval.tick() => {
-                    // Send periodic ping to keep connection alive
-                    if let Err(e) = ws_sender.send(Message::Ping(vec![])).await {
-                        logger::info(LogTag::Websocket, &format!("Failed to send heartbeat ping: {}", e));
-                        break; // Connection failed, exit to trigger reconnect
-                    } else {
-                        logger::verbose(LogTag::Websocket, "💓 Sent heartbeat ping to keep connection alive");
-                    }
-                }
-                message = ws_receiver.next() => {
-                    match message {
-                        Some(Ok(Message::Text(text))) => {
-                            if let Err(e) = self.handle_websocket_message(&text).await {
-                                logger::info(
-                                    LogTag::Websocket,
-                                    &format!("Failed to handle WebSocket message: {}", e)
-                                );
-                            }
-                        }
-                        Some(Ok(Message::Ping(payload))) => {
-                            // Respond to server ping with pong to keep connection alive
-                            if let Err(e) = ws_sender.send(Message::Pong(payload)).await {
-                                logger::info(LogTag::Websocket, &format!("Failed to respond to ping: {}", e));
-                                break; // Connection failed, exit to trigger reconnect
-                            } else {
-                                logger::verbose(LogTag::Websocket, "🏓 Responded to server ping with pong");
-                            }
-                        }
-                        Some(Ok(Message::Pong(_))) => {
-                            // Server responded to our ping - connection is alive
-                            logger::verbose(LogTag::Websocket, "🏓 Received pong response - connection alive");
-                        }
-                        Some(Ok(Message::Close(_))) => {
-                            logger::info(LogTag::Websocket, "WebSocket connection closed by server");
-                            break;
-                        }
-                        Some(Ok(Message::Binary(_))) => {
-                            // Ignore binary messages
-                            logger::info(LogTag::Websocket, "Received binary message (ignored)");
-                        }
-                        Some(Ok(Message::Frame(_))) => {
-                            // Ignore raw frame messages (handled by tungstenite internally)
-                            logger::info(LogTag::Websocket, "Received raw frame message (ignored)");
-                        }
-                        Some(Err(e)) => {
-                            logger::info(LogTag::Websocket, &format!("WebSocket error: {}", e));
-                            break;
-                        }
-                        None => {
-                            logger::info(LogTag::Websocket, "WebSocket stream ended");
-                            break;
-                        }
-                    }
-                }
-            }
+          break;
         }
-
-        logger::info(LogTag::Websocket, "WebSocket monitoring stopped");
-
-        Ok(())
+        _ = heartbeat_interval.tick() => {
+          // Send periodic ping to keep connection alive
+          if let Err(e) = ws_sender.send(Message::Ping(vec![])).await {
+            logger::info(LogTag::Websocket, &format!("Failed to send heartbeat ping: {}", e));
+            break; // Connection failed, exit to trigger reconnect
+          } else {
+ logger::verbose(LogTag::Websocket, "Sent heartbeat ping to keep connection alive");
+          }
+        }
+        message = ws_receiver.next() => {
+          match message {
+            Some(Ok(Message::Text(text))) => {
+              if let Err(e) = self.handle_websocket_message(&text).await {
+                logger::info(
+                  LogTag::Websocket,
+                  &format!("Failed to handle WebSocket message: {}", e)
+                );
+              }
+            }
+            Some(Ok(Message::Ping(payload))) => {
+              // Respond to server ping with pong to keep connection alive
+              if let Err(e) = ws_sender.send(Message::Pong(payload)).await {
+                logger::info(LogTag::Websocket, &format!("Failed to respond to ping: {}", e));
+                break; // Connection failed, exit to trigger reconnect
+              } else {
+ logger::verbose(LogTag::Websocket, "Responded to server ping with pong");
+              }
+            }
+            Some(Ok(Message::Pong(_))) => {
+              // Server responded to our ping - connection is alive
+ logger::verbose(LogTag::Websocket, "Received pong response - connection alive");
+            }
+            Some(Ok(Message::Close(_))) => {
+              logger::info(LogTag::Websocket, "WebSocket connection closed by server");
+              break;
+            }
+            Some(Ok(Message::Binary(_))) => {
+              // Ignore binary messages
+              logger::info(LogTag::Websocket, "Received binary message (ignored)");
+            }
+            Some(Ok(Message::Frame(_))) => {
+              // Ignore raw frame messages (handled by tungstenite internally)
+              logger::info(LogTag::Websocket, "Received raw frame message (ignored)");
+            }
+            Some(Err(e)) => {
+              logger::info(LogTag::Websocket, &format!("WebSocket error: {}", e));
+              break;
+            }
+            None => {
+              logger::info(LogTag::Websocket, "WebSocket stream ended");
+              break;
+            }
+          }
+        }
+      }
     }
 
-    /// Handle incoming WebSocket messages and extract transaction signatures
-    async fn handle_websocket_message(&self, message: &str) -> Result<(), String> {
-        // Try to parse as a logs notification
-        if let Ok(notification) = serde_json::from_str::<serde_json::Value>(message) {
-            // Check if this is a logs notification
-            if let Some(method) = notification.get("method").and_then(|v| v.as_str()) {
-                if method == "logsNotification" {
-                    if let Some(params) = notification.get("params") {
-                        if let Some(result) = params.get("result") {
-                            if let Some(value) = result.get("value") {
-                                // Extract signature from the logs notification
-                                if let Some(signature) =
-                                    value.get("signature").and_then(|v| v.as_str())
-                                {
-                                    logger::info(
-                                        LogTag::Websocket,
-                                        &format!("🆕 New transaction detected: {}", signature),
-                                    );
+    logger::info(LogTag::Websocket, "WebSocket monitoring stopped");
 
-                                    // Send signature to transaction processor
-                                    if let Err(_) = self.tx_sender.send(signature.to_string()) {
-                                        logger::info(
-                                            LogTag::Websocket,
-                                            "Failed to send signature to processor - channel closed"
-                                        );
-                                        return Err("Transaction channel closed".to_string());
-                                    }
+    Ok(())
+  }
 
-                                    return Ok(());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+  /// Handle incoming WebSocket messages and extract transaction signatures
+  async fn handle_websocket_message(&self, message: &str) -> Result<(), String> {
+    // Try to parse as a logs notification
+    if let Ok(notification) = serde_json::from_str::<serde_json::Value>(message) {
+      // Check if this is a logs notification
+      if let Some(method) = notification.get("method").and_then(|v| v.as_str()) {
+ if method == "logsNotification"{
+          if let Some(params) = notification.get("params") {
+            if let Some(result) = params.get("result") {
+              if let Some(value) = result.get("value") {
+                // Extract signature from the logs notification
+                if let Some(signature) =
+                  value.get("signature").and_then(|v| v.as_str())
+                {
+                  logger::info(
+                    LogTag::Websocket,
+ &format!("New transaction detected: {}", signature),
+                  );
 
-            // Check if this is a subscription confirmation
-            if let Some(result) = notification.get("result") {
-                if result.is_number() {
+                  // Send signature to transaction processor
+                  if let Err(_) = self.tx_sender.send(signature.to_string()) {
                     logger::info(
-                        LogTag::Websocket,
-                        &format!("✅ WebSocket subscription confirmed: {}", result),
+                      LogTag::Websocket,
+                      "Failed to send signature to processor - channel closed"
                     );
-                    return Ok(());
+                    return Err("Transaction channel closed".to_string());
+                  }
+
+                  return Ok(());
                 }
+              }
             }
+          }
         }
+      }
 
-        // If we get here, it's likely a message we don't need to handle
-        // (subscription confirmations, heartbeats, etc.)
-        Ok(())
+      // Check if this is a subscription confirmation
+      if let Some(result) = notification.get("result") {
+        if result.is_number() {
+          logger::info(
+            LogTag::Websocket,
+ &format!("WebSocket subscription confirmed: {}", result),
+          );
+          return Ok(());
+        }
+      }
     }
 
-    /// Get the default Solana WebSocket URL (mainnet)
-    pub fn get_default_ws_url() -> String {
-        "wss://api.mainnet-beta.solana.com/".to_string()
-    }
+    // If we get here, it's likely a message we don't need to handle
+    // (subscription confirmations, heartbeats, etc.)
+    Ok(())
+  }
 
-    /// Get Helius WebSocket URL with API key
-    pub fn get_helius_ws_url(api_key: &str) -> String {
-        format!("wss://mainnet.helius-rpc.com/?api-key={}", api_key)
-    }
+  /// Get the default Solana WebSocket URL (mainnet)
+  pub fn get_default_ws_url() -> String {
+    "wss://api.mainnet-beta.solana.com/".to_string()
+  }
+
+  /// Get Helius WebSocket URL with API key
+  pub fn get_helius_ws_url(api_key: &str) -> String {
+    format!("wss://mainnet.helius-rpc.com/?api-key={}", api_key)
+  }
 }
 
 /// Start WebSocket monitoring as a background task
 pub async fn start_websocket_monitoring(
-    wallet_address: String,
-    ws_url: Option<String>,
-    shutdown: Arc<Notify>,
+  wallet_address: String,
+  ws_url: Option<String>,
+  shutdown: Arc<Notify>,
 ) -> Result<mpsc::UnboundedReceiver<String>, String> {
-    let (client, tx_receiver) = SolanaWebSocketClient::new(wallet_address.clone());
+  let (client, tx_receiver) = SolanaWebSocketClient::new(wallet_address.clone());
 
-    let ws_url = ws_url.unwrap_or_else(|| SolanaWebSocketClient::get_default_ws_url());
+  let ws_url = ws_url.unwrap_or_else(|| SolanaWebSocketClient::get_default_ws_url());
 
-    // Start monitoring in background task
-    let monitoring_client = Arc::new(client);
-    let ws_url_clone = ws_url.clone();
-    let shutdown_clone = shutdown.clone();
+  // Start monitoring in background task
+  let monitoring_client = Arc::new(client);
+  let ws_url_clone = ws_url.clone();
+  let shutdown_clone = shutdown.clone();
 
-    tokio::spawn(async move {
-        let mut reconnect_attempts = 0u32;
-        let max_reconnect_delay = 60; // Maximum delay of 60 seconds
+  tokio::spawn(async move {
+    let mut reconnect_attempts = 0u32;
+    let max_reconnect_delay = 60; // Maximum delay of 60 seconds
 
-        loop {
-            // Check for shutdown before attempting connection
-            tokio::select! {
-                _ = shutdown_clone.notified() => {
-                    logger::info(LogTag::Websocket, "WebSocket background task received shutdown signal");
-                    break;
-                }
-                _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {
-                    // Continue with connection attempt
-                }
-            }
-
-            logger::info(
-                LogTag::Websocket,
-                &format!(
-                    "🔄 Connecting to WebSocket: {} (attempt {})",
-                    ws_url_clone,
-                    reconnect_attempts + 1
-                ),
-            );
-
-            // Create a shutdown signal for this connection attempt
-            let connection_shutdown = Arc::new(Notify::new());
-            let connection_shutdown_clone = connection_shutdown.clone();
-            let main_shutdown_clone = shutdown_clone.clone();
-
-            // Forward main shutdown to connection shutdown
-            tokio::spawn(async move {
-                main_shutdown_clone.notified().await;
-                connection_shutdown_clone.notify_waiters();
-            });
-
-            match monitoring_client
-                .start_monitoring(&ws_url_clone, connection_shutdown)
-                .await
-            {
-                Ok(_) => {
-                    // Normal exit (shutdown received) or successful long-running connection
-                    reconnect_attempts = 0; // Reset attempt counter on successful connection
-                    logger::info(LogTag::Websocket, "WebSocket monitoring exited normally");
-                    break;
-                }
-                Err(e) => {
-                    reconnect_attempts += 1;
-
-                    // Exponential backoff: 2^attempt seconds, capped at max_reconnect_delay
-                    let delay_seconds = std::cmp::min(
-                        (2u64).pow(std::cmp::min(reconnect_attempts, 6)), // Cap at 2^6 = 64, but we'll limit to max_reconnect_delay
-                        max_reconnect_delay,
-                    );
-
-                    logger::info(
-                        LogTag::Websocket,
-                        &format!(
-                            "WebSocket disconnected: {} - Reconnecting in {}s (attempt {})",
-                            e, delay_seconds, reconnect_attempts
-                        ),
-                    );
-
-                    // Wait for calculated delay or shutdown signal
-                    tokio::select! {
-                        _ = shutdown_clone.notified() => {
-                            logger::info(LogTag::Websocket, "Shutdown received during reconnection wait");
-                            break;
-                        }
-                        _ = tokio::time::sleep(tokio::time::Duration::from_secs(delay_seconds)) => {
-                            // Continue reconnection loop
-                        }
-                    }
-                }
-            }
+    loop {
+      // Check for shutdown before attempting connection
+      tokio::select! {
+        _ = shutdown_clone.notified() => {
+          logger::info(LogTag::Websocket, "WebSocket background task received shutdown signal");
+          break;
         }
+        _ = tokio::time::sleep(tokio::time::Duration::from_millis(100)) => {
+          // Continue with connection attempt
+        }
+      }
 
-        logger::info(LogTag::Websocket, "WebSocket background task exiting");
-    });
+      logger::info(
+        LogTag::Websocket,
+        &format!(
+ "Connecting to WebSocket: {} (attempt {})",
+          ws_url_clone,
+          reconnect_attempts + 1
+        ),
+      );
 
-    Ok(tx_receiver)
+      // Create a shutdown signal for this connection attempt
+      let connection_shutdown = Arc::new(Notify::new());
+      let connection_shutdown_clone = connection_shutdown.clone();
+      let main_shutdown_clone = shutdown_clone.clone();
+
+      // Forward main shutdown to connection shutdown
+      tokio::spawn(async move {
+        main_shutdown_clone.notified().await;
+        connection_shutdown_clone.notify_waiters();
+      });
+
+      match monitoring_client
+        .start_monitoring(&ws_url_clone, connection_shutdown)
+        .await
+      {
+        Ok(_) => {
+          // Normal exit (shutdown received) or successful long-running connection
+          reconnect_attempts = 0; // Reset attempt counter on successful connection
+          logger::info(LogTag::Websocket, "WebSocket monitoring exited normally");
+          break;
+        }
+        Err(e) => {
+          reconnect_attempts += 1;
+
+          // Exponential backoff: 2^attempt seconds, capped at max_reconnect_delay
+          let delay_seconds = std::cmp::min(
+            (2u64).pow(std::cmp::min(reconnect_attempts, 6)), // Cap at 2^6 = 64, but we'll limit to max_reconnect_delay
+            max_reconnect_delay,
+          );
+
+          logger::info(
+            LogTag::Websocket,
+            &format!(
+              "WebSocket disconnected: {} - Reconnecting in {}s (attempt {})",
+              e, delay_seconds, reconnect_attempts
+            ),
+          );
+
+          // Wait for calculated delay or shutdown signal
+          tokio::select! {
+            _ = shutdown_clone.notified() => {
+              logger::info(LogTag::Websocket, "Shutdown received during reconnection wait");
+              break;
+            }
+            _ = tokio::time::sleep(tokio::time::Duration::from_secs(delay_seconds)) => {
+              // Continue reconnection loop
+            }
+          }
+        }
+      }
+    }
+
+    logger::info(LogTag::Websocket, "WebSocket background task exiting");
+  });
+
+  Ok(tx_receiver)
 }

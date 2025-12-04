@@ -26,8 +26,8 @@ use screenerbot::pools::discovery::PoolDiscovery;
 use screenerbot::pools::types::ProgramKind;
 use screenerbot::pools::utils::is_stablecoin_mint;
 use screenerbot::pools::{
-    get_pool_price,
-    set_debug_token_override, // start_pool_service, stop_pool_service,
+  get_pool_price,
+  set_debug_token_override, // start_pool_service, stop_pool_service,
 };
 use screenerbot::rpc::get_rpc_client;
 use screenerbot::tokens::dexscreener::{get_global_dexscreener_api, init_dexscreener_api};
@@ -39,535 +39,535 @@ use tokio::time::{interval, Duration};
 
 #[derive(Parser, Debug)]
 #[command(
-    name = "debug_pool_service_single_token",
-    about = "Monitor a single token with pool service"
+  name = "debug_pool_service_single_token",
+  about = "Monitor a single token with pool service"
 )]
 struct Args {
-    /// Token mint address to monitor
-    #[arg(short, long)]
-    token: String,
+  /// Token mint address to monitor
+  #[arg(short, long)]
+  token: String,
 
-    /// Monitoring interval in seconds
-    #[arg(short, long, default_value = "5")]
-    interval: u64,
+  /// Monitoring interval in seconds
+  #[arg(short, long, default_value = "5")]
+  interval: u64,
 
-    /// Duration to run in seconds
-    #[arg(short, long, default_value = "60")]
-    duration: u64,
+  /// Duration to run in seconds
+  #[arg(short, long, default_value = "60")]
+  duration: u64,
 
-    /// Enable debug mode for pool calculator
-    #[arg(long)]
-    debug_pool_calculator: bool,
+  /// Enable debug mode for pool calculator
+  #[arg(long)]
+  debug_pool_calculator: bool,
 
-    /// Enable debug mode for pool discovery
-    #[arg(long)]
-    debug_pool_discovery: bool,
+  /// Enable debug mode for pool discovery
+  #[arg(long)]
+  debug_pool_discovery: bool,
 
-    /// Enable debug mode for pool service
-    #[arg(long)]
-    debug_pool_service: bool,
+  /// Enable debug mode for pool service
+  #[arg(long)]
+  debug_pool_service: bool,
 
-    /// Enable debug mode for pool decoders
-    #[arg(long)]
-    debug_pool_decoders: bool,
+  /// Enable debug mode for pool decoders
+  #[arg(long)]
+  debug_pool_decoders: bool,
 
-    /// Enable debug mode for pool fetcher
-    #[arg(long)]
-    debug_pool_fetcher: bool,
+  /// Enable debug mode for pool fetcher
+  #[arg(long)]
+  debug_pool_fetcher: bool,
 
-    /// Enable debug mode for pool cache
-    #[arg(long)]
-    debug_pool_cache: bool,
+  /// Enable debug mode for pool cache
+  #[arg(long)]
+  debug_pool_cache: bool,
 
-    /// Enable debug mode for pool analyzer
-    #[arg(long)]
-    debug_pool_analyzer: bool,
+  /// Enable debug mode for pool analyzer
+  #[arg(long)]
+  debug_pool_analyzer: bool,
 
-    /// Enable all pool debug modes
-    #[arg(long)]
-    debug_all_pools: bool,
+  /// Enable all pool debug modes
+  #[arg(long)]
+  debug_all_pools: bool,
 }
 
 /// Get program type from pool address by fetching the account owner
 async fn get_pool_program_info(pool_address: &str) -> (String, String) {
-    let pool_pubkey = match Pubkey::from_str(pool_address) {
-        Ok(pubkey) => pubkey,
-        Err(_) => {
-            return ("INVALID_ADDRESS".to_string(), "unknown".to_string());
-        }
-    };
-
-    let rpc_client = get_rpc_client();
-    match rpc_client.get_account(&pool_pubkey).await {
-        Ok(account) => {
-            let program_id = account.owner.to_string();
-            let program_kind = ProgramKind::from_program_id(&program_id);
-            (program_id, program_kind.display_name().to_string())
-        }
-        Err(_) => ("FETCH_ERROR".to_string(), "unknown".to_string()),
+  let pool_pubkey = match Pubkey::from_str(pool_address) {
+    Ok(pubkey) => pubkey,
+    Err(_) => {
+      return ("INVALID_ADDRESS".to_string(), "unknown".to_string());
     }
+  };
+
+  let rpc_client = get_rpc_client();
+  match rpc_client.get_account(&pool_pubkey).await {
+    Ok(account) => {
+      let program_id = account.owner.to_string();
+      let program_kind = ProgramKind::from_program_id(&program_id);
+      (program_id, program_kind.display_name().to_string())
+    }
+    Err(_) => ("FETCH_ERROR".to_string(), "unknown".to_string()),
+  }
 }
 
 /// Discover pools using proper discovery module and identify the biggest SOL pool by liquidity
 async fn discover_and_identify_biggest_pool(
-    token_address: &str,
+  token_address: &str,
 ) -> Result<Option<(String, f64, String)>, String> {
+  logger::info(
+    LogTag::PoolService,
+    &format!("Discovering pools for token: {}", token_address),
+  );
+
+  // Use the proper discovery module which already filters for SOL-only pools
+  let discovery = PoolDiscovery::new();
+  let pool_descriptors = discovery.discover_pools_for_token(token_address).await;
+
+  if pool_descriptors.is_empty() {
     logger::info(
-        LogTag::PoolService,
-        &format!("Discovering pools for token: {}", token_address),
+    LogTag::PoolService,
+      "No SOL-based pools found for token",
+    );
+    return Ok(None);
+  }
+
+  logger::info(
+    LogTag::PoolService,
+    &format!(
+      "Found {} SOL-based pools for token {}",
+      pool_descriptors.len(),
+      token_address
+    ),
+  );
+
+  // Find the biggest pool by liquidity from the already-filtered SOL pools
+  let mut biggest_pool = None;
+  let mut highest_liquidity = -1.0;
+
+  for descriptor in &pool_descriptors {
+    let liquidity = descriptor.liquidity_usd;
+
+    if liquidity > highest_liquidity {
+      highest_liquidity = liquidity;
+      biggest_pool = Some(descriptor);
+    }
+  }
+
+  if let Some(pool) = biggest_pool {
+    // Get program info for the biggest pool
+    let (program_id, program_name) = get_pool_program_info(&pool.pool_id.to_string()).await;
+    let program_display = format!("{} ({})", program_name, &program_id[..8]);
+
+    logger::info(
+    LogTag::PoolService,
+      &format!(
+        "Selected biggest SOL pool: {} | {} | Liquidity: ${:.2}",
+        &pool.pool_id.to_string()[..8],
+        program_display,
+        highest_liquidity
+      ),
     );
 
-    // Use the proper discovery module which already filters for SOL-only pools
-    let discovery = PoolDiscovery::new();
-    let pool_descriptors = discovery.discover_pools_for_token(token_address).await;
-
-    if pool_descriptors.is_empty() {
-        logger::info(
-        LogTag::PoolService,
-            "No SOL-based pools found for token",
-        );
-        return Ok(None);
-    }
-
+    // Log summary of all pools for reference
     logger::info(
-        LogTag::PoolService,
-        &format!(
-            "Found {} SOL-based pools for token {}",
-            pool_descriptors.len(),
-            token_address
-        ),
+    LogTag::PoolService,
+      &format!(
+        "All SOL pools: {} total, focusing on highest liquidity pool",
+        pool_descriptors.len()
+      ),
     );
 
-    // Find the biggest pool by liquidity from the already-filtered SOL pools
-    let mut biggest_pool = None;
-    let mut highest_liquidity = -1.0;
-
-    for descriptor in &pool_descriptors {
-        let liquidity = descriptor.liquidity_usd;
-
-        if liquidity > highest_liquidity {
-            highest_liquidity = liquidity;
-            biggest_pool = Some(descriptor);
-        }
-    }
-
-    if let Some(pool) = biggest_pool {
-        // Get program info for the biggest pool
-        let (program_id, program_name) = get_pool_program_info(&pool.pool_id.to_string()).await;
-        let program_display = format!("{} ({})", program_name, &program_id[..8]);
-
-        logger::info(
-        LogTag::PoolService,
-            &format!(
-                "Selected biggest SOL pool: {} | {} | Liquidity: ${:.2}",
-                &pool.pool_id.to_string()[..8],
-                program_display,
-                highest_liquidity
-            ),
-        );
-
-        // Log summary of all pools for reference
-        logger::info(
-        LogTag::PoolService,
-            &format!(
-                "All SOL pools: {} total, focusing on highest liquidity pool",
-                pool_descriptors.len()
-            ),
-        );
-
-        Ok(Some((
-            pool.pool_id.to_string(),
-            highest_liquidity,
-            program_display,
-        )))
-    } else {
-        logger::info(
-        LogTag::PoolService,
-            "No valid SOL pools found",
-        );
-        Ok(None)
-    }
+    Ok(Some((
+      pool.pool_id.to_string(),
+      highest_liquidity,
+      program_display,
+    )))
+  } else {
+    logger::info(
+    LogTag::PoolService,
+      "No valid SOL pools found",
+    );
+    Ok(None)
+  }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args = Args::parse();
+  let args = Args::parse();
 
-    // Build command line arguments with debug flags based on user input
-    let mut cmd_args = vec!["debug_pool_service_single_token".to_string()];
+  // Build command line arguments with debug flags based on user input
+  let mut cmd_args = vec!["debug_pool_service_single_token".to_string()];
 
-    // Add debug flags based on command line arguments
-    if args.debug_all_pools {
-        cmd_args.push("--debug-pool-calculator".to_string());
-        cmd_args.push("--debug-pool-discovery".to_string());
-        cmd_args.push("--debug-pool-service".to_string());
-        cmd_args.push("--debug-pool-decoders".to_string());
-        cmd_args.push("--debug-pool-fetcher".to_string());
-        cmd_args.push("--debug-pool-cache".to_string());
-        cmd_args.push("--debug-pool-analyzer".to_string());
-    } else {
-        // Add individual debug flags if specified
-        if args.debug_pool_calculator {
-            cmd_args.push("--debug-pool-calculator".to_string());
-        }
-        if args.debug_pool_discovery {
-            cmd_args.push("--debug-pool-discovery".to_string());
-        }
-        if args.debug_pool_service {
-            cmd_args.push("--debug-pool-service".to_string());
-        }
-        if args.debug_pool_decoders {
-            cmd_args.push("--debug-pool-decoders".to_string());
-        }
-        if args.debug_pool_fetcher {
-            cmd_args.push("--debug-pool-fetcher".to_string());
-        }
-        if args.debug_pool_cache {
-            cmd_args.push("--debug-pool-cache".to_string());
-        }
-        if args.debug_pool_analyzer {
-            cmd_args.push("--debug-pool-analyzer".to_string());
-        }
+  // Add debug flags based on command line arguments
+  if args.debug_all_pools {
+    cmd_args.push("--debug-pool-calculator".to_string());
+    cmd_args.push("--debug-pool-discovery".to_string());
+    cmd_args.push("--debug-pool-service".to_string());
+    cmd_args.push("--debug-pool-decoders".to_string());
+    cmd_args.push("--debug-pool-fetcher".to_string());
+    cmd_args.push("--debug-pool-cache".to_string());
+    cmd_args.push("--debug-pool-analyzer".to_string());
+  } else {
+    // Add individual debug flags if specified
+    if args.debug_pool_calculator {
+      cmd_args.push("--debug-pool-calculator".to_string());
     }
-
-    // Set the global command arguments so all parts of the system recognize debug modes
-    set_cmd_args(cmd_args.clone());
-
-    // Log which debug modes are enabled
-    let enabled_modes: Vec<&str> = cmd_args
-        .iter()
-        .filter(|arg| arg.starts_with("--debug-"))
-        .map(|arg| arg.as_str())
-        .collect();
-
-    if !enabled_modes.is_empty() {
-        logger::info(
-        LogTag::PoolService,
-            &format!("Debug modes enabled: {}", enabled_modes.join(", ")),
-        );
-    } else {
-        logger::info(
-        LogTag::PoolService, "No debug modes enabled");
+    if args.debug_pool_discovery {
+      cmd_args.push("--debug-pool-discovery".to_string());
     }
-
-    logger::info(
-        LogTag::PoolService,
-        &format!("Starting pool service for single token: {}", args.token),
-    );
-
-    // Initialize DexScreener API
-    logger::info(
-        LogTag::PoolService,
-        "Initializing DexScreener API...",
-    );
-    if let Err(e) = init_dexscreener_api().await {
-        logger::info(
-        LogTag::PoolService,
-            &format!("Failed to initialize DexScreener API: {}", e),
-        );
-        return Err(e.into());
+    if args.debug_pool_service {
+      cmd_args.push("--debug-pool-service".to_string());
     }
-
-    // Pre-fetch token decimals to ensure they're cached
-    logger::info(
-        LogTag::PoolService,
-        "Pre-fetching token decimals...",
-    );
-
-    // Early stablecoin validation - reject stablecoin tokens immediately
-    if is_stablecoin_mint(&args.token) {
-        logger::info(
-        LogTag::PoolService,
-            &format!(
-                "Token {} is a stablecoin (USDC/USDT) - not supported for price monitoring",
-                &args.token[..8]
-            ),
-        );
-        return Err("Stablecoin tokens are not supported for price monitoring".into());
+    if args.debug_pool_decoders {
+      cmd_args.push("--debug-pool-decoders".to_string());
     }
-
-    match screenerbot::tokens::decimals::get_token_decimals_from_chain(&args.token).await {
-        Ok(decimals) => {
-            logger::info(
-        LogTag::PoolService,
-                &format!("Token decimals fetched: {} decimals", decimals),
-            );
-        }
-        Err(e) => {
-            logger::info(
-        LogTag::PoolService,
-                &format!("Failed to fetch token decimals: {}", e),
-            );
-        }
+    if args.debug_pool_fetcher {
+      cmd_args.push("--debug-pool-fetcher".to_string());
     }
+    if args.debug_pool_cache {
+      cmd_args.push("--debug-pool-cache".to_string());
+    }
+    if args.debug_pool_analyzer {
+      cmd_args.push("--debug-pool-analyzer".to_string());
+    }
+  }
 
-    // Set debug override to monitor only our target token
-    set_debug_token_override(Some(vec![args.token.clone()]));
+  // Set the global command arguments so all parts of the system recognize debug modes
+  set_cmd_args(cmd_args.clone());
 
-    // NOTE: start_pool_service() is now part of ServiceManager, not a standalone function
-    // This debug tool needs to be updated to use the service architecture
+  // Log which debug modes are enabled
+  let enabled_modes: Vec<&str> = cmd_args
+    .iter()
+    .filter(|arg| arg.starts_with("--debug-"))
+    .map(|arg| arg.as_str())
+    .collect();
+
+  if !enabled_modes.is_empty() {
     logger::info(
-        LogTag::PoolService,
-        "⚠️ Pool service API has changed - this tool needs updating",
+    LogTag::PoolService,
+      &format!("Debug modes enabled: {}", enabled_modes.join(", ")),
     );
+  } else {
     logger::info(
-        LogTag::PoolService,
-        "Use ServiceManager to start pool service in the new architecture",
-    );
+    LogTag::PoolService, "No debug modes enabled");
+  }
 
-    // For now, just do a manual discovery and price fetch
+  logger::info(
+    LogTag::PoolService,
+    &format!("Starting pool service for single token: {}", args.token),
+  );
+
+  // Initialize DexScreener API
+  logger::info(
+    LogTag::PoolService,
+    "Initializing DexScreener API...",
+  );
+  if let Err(e) = init_dexscreener_api().await {
     logger::info(
-        LogTag::PoolService,
-        "Performing manual pool discovery...",
+    LogTag::PoolService,
+      &format!("Failed to initialize DexScreener API: {}", e),
     );
+    return Err(e.into());
+  }
+
+  // Pre-fetch token decimals to ensure they're cached
+  logger::info(
+    LogTag::PoolService,
+    "Pre-fetching token decimals...",
+  );
+
+  // Early stablecoin validation - reject stablecoin tokens immediately
+  if is_stablecoin_mint(&args.token) {
     logger::info(
-        LogTag::PoolService,
-        &format!("Monitoring token: {}", args.token),
+    LogTag::PoolService,
+      &format!(
+        "Token {} is a stablecoin (USDC/USDT) - not supported for price monitoring",
+        &args.token[..8]
+      ),
     );
+    return Err("Stablecoin tokens are not supported for price monitoring".into());
+  }
+
+  match screenerbot::tokens::decimals::get_token_decimals_from_chain(&args.token).await {
+    Ok(decimals) => {
+      logger::info(
+    LogTag::PoolService,
+        &format!("Token decimals fetched: {} decimals", decimals),
+      );
+    }
+    Err(e) => {
+      logger::info(
+    LogTag::PoolService,
+        &format!("Failed to fetch token decimals: {}", e),
+      );
+    }
+  }
+
+  // Set debug override to monitor only our target token
+  set_debug_token_override(Some(vec![args.token.clone()]));
+
+  // NOTE: start_pool_service() is now part of ServiceManager, not a standalone function
+  // This debug tool needs to be updated to use the service architecture
+  logger::info(
+    LogTag::PoolService,
+ "Pool service API has changed - this tool needs updating",
+  );
+  logger::info(
+    LogTag::PoolService,
+    "Use ServiceManager to start pool service in the new architecture",
+  );
+
+  // For now, just do a manual discovery and price fetch
+  logger::info(
+    LogTag::PoolService,
+    "Performing manual pool discovery...",
+  );
+  logger::info(
+    LogTag::PoolService,
+    &format!("Monitoring token: {}", args.token),
+  );
+  logger::info(
+    LogTag::PoolService,
+    &format!(
+      "Will run for {} seconds, checking every {} seconds",
+      args.duration, args.interval
+    ),
+  );
+
+  // Discover pools and identify the biggest one
+  let biggest_pool_info = match discover_and_identify_biggest_pool(&args.token).await {
+    Ok(Some(info)) => {
+      logger::info(
+    LogTag::PoolService,
+        "Biggest pool identified successfully",
+      );
+      Some(info)
+    }
+    Ok(None) => {
+      logger::info(
+    LogTag::PoolService,
+        "No pools found, will monitor anyway",
+      );
+      None
+    }
+    Err(e) => {
+      logger::info(
+    LogTag::PoolService,
+        &format!("Pool discovery failed: {}", e),
+      );
+      None
+    }
+  };
+
+  logger::info(
+    LogTag::PoolService,
+    "Starting price change monitoring (biggest pool only)...",
+  );
+
+  // Create shutdown notification for clean exit
+  let shutdown = Arc::new(Notify::new());
+  let shutdown_clone = shutdown.clone();
+
+  // Set up signal handling for graceful shutdown
+  tokio::spawn(async move {
+    tokio::signal::ctrl_c()
+      .await
+      .expect("Failed to listen for Ctrl+C");
     logger::info(
-        LogTag::PoolService,
-        &format!(
-            "Will run for {} seconds, checking every {} seconds",
-            args.duration, args.interval
-        ),
+    LogTag::PoolService,
+      "Received Ctrl+C, shutting down...",
     );
+    shutdown_clone.notify_one();
+  });
 
-    // Discover pools and identify the biggest one
-    let biggest_pool_info = match discover_and_identify_biggest_pool(&args.token).await {
-        Ok(Some(info)) => {
-            logger::info(
-        LogTag::PoolService,
-                "Biggest pool identified successfully",
-            );
-            Some(info)
-        }
-        Ok(None) => {
-            logger::info(
-        LogTag::PoolService,
-                "No pools found, will monitor anyway",
-            );
-            None
-        }
-        Err(e) => {
-            logger::info(
-        LogTag::PoolService,
-                &format!("Pool discovery failed: {}", e),
-            );
-            None
-        }
-    };
-
+  // Set up timer for automatic shutdown
+  let shutdown_timer = shutdown.clone();
+  let run_duration = args.duration;
+  tokio::spawn(async move {
+    tokio::time::sleep(Duration::from_secs(run_duration)).await;
     logger::info(
-        LogTag::PoolService,
-        "Starting price change monitoring (biggest pool only)...",
+    LogTag::PoolService,
+      "Time limit reached, shutting down...",
     );
+    shutdown_timer.notify_one();
+  });
 
-    // Create shutdown notification for clean exit
-    let shutdown = Arc::new(Notify::new());
-    let shutdown_clone = shutdown.clone();
+  // Price monitoring loop with change detection
+  let mut price_interval = interval(Duration::from_secs(args.interval));
+  let mut last_price: Option<f64> = None;
+  let mut last_api_price: Option<f64> = None;
+  let mut check_count = 0;
 
-    // Set up signal handling for graceful shutdown
-    tokio::spawn(async move {
-        tokio::signal::ctrl_c()
-            .await
-            .expect("Failed to listen for Ctrl+C");
-        logger::info(
-        LogTag::PoolService,
-            "Received Ctrl+C, shutting down...",
-        );
-        shutdown_clone.notify_one();
-    });
+  loop {
+    tokio::select! {
+      _ = price_interval.tick() => {
+        check_count += 1;
 
-    // Set up timer for automatic shutdown
-    let shutdown_timer = shutdown.clone();
-    let run_duration = args.duration;
-    tokio::spawn(async move {
-        tokio::time::sleep(Duration::from_secs(run_duration)).await;
-        logger::info(
-        LogTag::PoolService,
-            "Time limit reached, shutting down...",
-        );
-        shutdown_timer.notify_one();
-    });
+        // Get calculated price from pool service
+        let pool_price = get_pool_price(&args.token);
 
-    // Price monitoring loop with change detection
-    let mut price_interval = interval(Duration::from_secs(args.interval));
-    let mut last_price: Option<f64> = None;
-    let mut last_api_price: Option<f64> = None;
-    let mut check_count = 0;
+        // Get DexScreener API price for comparison
+        let api_price = {
+          if let Ok(api) = get_global_dexscreener_api().await {
+            if let Ok(mut guard) = tokio::time::timeout(std::time::Duration::from_millis(8000), api.lock()).await {
+              guard.get_price(&args.token).await
+            } else { None }
+          } else { None }
+        };
 
-    loop {
-        tokio::select! {
-            _ = price_interval.tick() => {
-                check_count += 1;
+        // Check if we have a price from the pool service
+        if let Some(price) = &pool_price {
+          // Check if this price is from the biggest pool (if we identified one)
+          let is_biggest_pool = if let Some((biggest_pool_address, _, _)) = &biggest_pool_info {
+            price.pool_address == *biggest_pool_address
+          } else {
+            true // If no biggest pool identified, accept any pool
+          };
 
-                // Get calculated price from pool service
-                let pool_price = get_pool_price(&args.token);
+          if is_biggest_pool {
+            // Check for price changes
+            let price_changed = match last_price {
+              Some(last) => (price.price_sol - last).abs() > 0.000000001, // Very small threshold for SOL prices
+              None => true, // First price is always a "change"
+            };
 
-                // Get DexScreener API price for comparison
-                let api_price = {
-                    if let Ok(api) = get_global_dexscreener_api().await {
-                        if let Ok(mut guard) = tokio::time::timeout(std::time::Duration::from_millis(8000), api.lock()).await {
-                            guard.get_price(&args.token).await
-                        } else { None }
-                    } else { None }
+            let api_price_changed = match (&api_price, &last_api_price) {
+              (Some(current), Some(last)) => (current - last).abs() > 0.000000001,
+              (Some(_), None) => true,
+              _ => false,
+            };
+
+            if price_changed || api_price_changed {
+              let price_comparison = match api_price {
+                Some(api_val) => format!("| API: {:.12} SOL", api_val),
+                None => "| API: unavailable".to_string(),
+              };
+
+              // Show price change information
+              let change_info = if let Some(last) = last_price {
+                let change = price.price_sol - last;
+                let change_pct = (change / last) * 100.0;
+ format!("(Change: {:+.9} SOL, {:+.4}%)", change, change_pct)
+              } else {
+ "(Initial price)".to_string()
+              };
+
+              // Get program information for this pool
+              let program_display = if let Some((_, _, program_info)) = &biggest_pool_info {
+                program_info.clone()
+              } else {
+                let (program_id, program_name) = get_pool_program_info(&price.pool_address).await;
+                if program_id.len() > 8 && !program_id.starts_with("INVALID") && !program_id.starts_with("FETCH") {
+                  format!("{} ({}...{})", program_name, &program_id[..8], &program_id[program_id.len()-8..])
+                } else {
+                  program_name
+                }
+              };
+
+              logger::info(
+    LogTag::PoolService,
+                &format!("[{}] {:.12} SOL{} {}{} | Confidence: {:.2}",
+                  check_count,
+                  price.price_sol,
+                  change_info,
+                  price_comparison,
+                  match api_price {
+                    Some(api) if api > 0.0 => {
+                      let diff_pct = ((price.price_sol - api) / api) * 100.0;
+ format!("| Diff vs API: {:+.2}%", diff_pct)
+                    },
+                    _ => String::new()
+                  },
+                  price.confidence)
+              );
+              logger::info(
+    LogTag::PoolService,
+ &format!("Biggest Pool: {} | Program: {}", price.pool_address, program_display)
+              );
+              logger::info(
+    LogTag::PoolService,
+ &format!("Reserves: {:.6} SOL / {:.6} tokens", price.sol_reserves, price.token_reserves)
+              );
+
+              // Update last prices
+              last_price = Some(price.price_sol);
+              last_api_price = api_price;
+            } else {
+              // No change, just log a brief status every 10 checks
+              if check_count % 10 == 0 {
+                logger::info(
+    LogTag::PoolService,
+                  &format!("[{}] Price stable: {:.12} SOL (no changes)", check_count, price.price_sol)
+                );
+              }
+            }
+          } else {
+            // Price is not from the biggest pool, ignore it
+            if check_count % 10 == 0 {
+              logger::info(
+    LogTag::PoolService,
+                &format!("[{}] Price from different pool ({}), waiting for biggest pool", check_count, &price.pool_address[..8])
+              );
+            }
+          }
+        } else {
+          // No pool price available
+          match api_price {
+            Some(api_val) => {
+              // Check if API price changed
+              let api_changed = match last_api_price {
+                Some(last) => (api_val - last).abs() > 0.000000001,
+                None => true,
+              };
+
+              if api_changed {
+                let change_info = if let Some(last) = last_api_price {
+                  let change = api_val - last;
+                  let change_pct = (change / last) * 100.0;
+ format!("(Change: {:+.9} SOL, {:+.4}%)", change, change_pct)
+                } else {
+ "(Initial API price)".to_string()
                 };
 
-                // Check if we have a price from the pool service
-                if let Some(price) = &pool_price {
-                    // Check if this price is from the biggest pool (if we identified one)
-                    let is_biggest_pool = if let Some((biggest_pool_address, _, _)) = &biggest_pool_info {
-                        price.pool_address == *biggest_pool_address
-                    } else {
-                        true // If no biggest pool identified, accept any pool
-                    };
-
-                    if is_biggest_pool {
-                        // Check for price changes
-                        let price_changed = match last_price {
-                            Some(last) => (price.price_sol - last).abs() > 0.000000001, // Very small threshold for SOL prices
-                            None => true, // First price is always a "change"
-                        };
-
-                        let api_price_changed = match (&api_price, &last_api_price) {
-                            (Some(current), Some(last)) => (current - last).abs() > 0.000000001,
-                            (Some(_), None) => true,
-                            _ => false,
-                        };
-
-                        if price_changed || api_price_changed {
-                            let price_comparison = match api_price {
-                                Some(api_val) => format!("| API: {:.12} SOL", api_val),
-                                None => "| API: unavailable".to_string(),
-                            };
-
-                            // Show price change information
-                            let change_info = if let Some(last) = last_price {
-                                let change = price.price_sol - last;
-                                let change_pct = (change / last) * 100.0;
-                                format!(" (Change: {:+.9} SOL, {:+.4}%)", change, change_pct)
-                            } else {
-                                " (Initial price)".to_string()
-                            };
-
-                            // Get program information for this pool
-                            let program_display = if let Some((_, _, program_info)) = &biggest_pool_info {
-                                program_info.clone()
-                            } else {
-                                let (program_id, program_name) = get_pool_program_info(&price.pool_address).await;
-                                if program_id.len() > 8 && !program_id.starts_with("INVALID") && !program_id.starts_with("FETCH") {
-                                    format!("{} ({}...{})", program_name, &program_id[..8], &program_id[program_id.len()-8..])
-                                } else {
-                                    program_name
-                                }
-                            };
-
-                            logger::info(
-        LogTag::PoolService,
-                                &format!("[{}] {:.12} SOL{} {}{} | Confidence: {:.2}",
-                                    check_count,
-                                    price.price_sol,
-                                    change_info,
-                                    price_comparison,
-                                    match api_price {
-                                        Some(api) if api > 0.0 => {
-                                            let diff_pct = ((price.price_sol - api) / api) * 100.0;
-                                            format!(" | Diff vs API: {:+.2}%", diff_pct)
-                                        },
-                                        _ => String::new()
-                                    },
-                                    price.confidence)
-                            );
-                            logger::info(
-        LogTag::PoolService,
-                                &format!("    Biggest Pool: {} | Program: {}", price.pool_address, program_display)
-                            );
-                            logger::info(
-        LogTag::PoolService,
-                                &format!("    Reserves: {:.6} SOL / {:.6} tokens", price.sol_reserves, price.token_reserves)
-                            );
-
-                            // Update last prices
-                            last_price = Some(price.price_sol);
-                            last_api_price = api_price;
-                        } else {
-                            // No change, just log a brief status every 10 checks
-                            if check_count % 10 == 0 {
-                                logger::info(
-        LogTag::PoolService,
-                                    &format!("[{}] Price stable: {:.12} SOL (no changes)", check_count, price.price_sol)
-                                );
-                            }
-                        }
-                    } else {
-                        // Price is not from the biggest pool, ignore it
-                        if check_count % 10 == 0 {
-                            logger::info(
-        LogTag::PoolService,
-                                &format!("[{}] Price from different pool ({}), waiting for biggest pool", check_count, &price.pool_address[..8])
-                            );
-                        }
-                    }
-                } else {
-                    // No pool price available
-                    match api_price {
-                        Some(api_val) => {
-                            // Check if API price changed
-                            let api_changed = match last_api_price {
-                                Some(last) => (api_val - last).abs() > 0.000000001,
-                                None => true,
-                            };
-
-                            if api_changed {
-                                let change_info = if let Some(last) = last_api_price {
-                                    let change = api_val - last;
-                                    let change_pct = (change / last) * 100.0;
-                                    format!(" (Change: {:+.9} SOL, {:+.4}%)", change, change_pct)
-                                } else {
-                                    " (Initial API price)".to_string()
-                                };
-
-                                logger::info(
-        LogTag::PoolService,
-                                    &format!("[{}] Pool unavailable | API: {:.12} SOL{}", check_count, api_val, change_info)
-                                );
-                                last_api_price = Some(api_val);
-                            } else if check_count % 10 == 0 {
-                                logger::info(
-        LogTag::PoolService,
-                                    &format!("[{}] Pool price unavailable | API stable: {:.12} SOL", check_count, api_val)
-                                );
-                            }
-                        }
-                        None => {
-                            if check_count % 10 == 0 {
-                                logger::info(
-        LogTag::PoolService,
-                                    &format!("[{}] No price available from pool or API", check_count)
-                                );
-                            }
-                        }
-                    };
-                }
+                logger::info(
+    LogTag::PoolService,
+                  &format!("[{}] Pool unavailable | API: {:.12} SOL{}", check_count, api_val, change_info)
+                );
+                last_api_price = Some(api_val);
+              } else if check_count % 10 == 0 {
+                logger::info(
+    LogTag::PoolService,
+                  &format!("[{}] Pool price unavailable | API stable: {:.12} SOL", check_count, api_val)
+                );
+              }
             }
-            _ = shutdown.notified() => {
-                break;
+            None => {
+              if check_count % 10 == 0 {
+                logger::info(
+    LogTag::PoolService,
+                  &format!("[{}] No price available from pool or API", check_count)
+                );
+              }
             }
+          };
         }
+      }
+      _ = shutdown.notified() => {
+        break;
+      }
     }
+  }
 
-    logger::info(
-        LogTag::PoolService, "Stopping...");
+  logger::info(
+    LogTag::PoolService, "Stopping...");
 
-    // Clear debug override
-    set_debug_token_override(None);
+  // Clear debug override
+  set_debug_token_override(None);
 
-    logger::info(
-        LogTag::PoolService, "Debug session complete");
-    logger::info(
-        LogTag::PoolService,
-        &format!("Total price checks performed: {}", check_count),
-    );
+  logger::info(
+    LogTag::PoolService, "Debug session complete");
+  logger::info(
+    LogTag::PoolService,
+    &format!("Total price checks performed: {}", check_count),
+  );
 
-    Ok(())
+  Ok(())
 }
