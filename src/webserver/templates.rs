@@ -234,6 +234,21 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
 
 fn nav_tabs(active: &str) -> String {
     use crate::config;
+    use crate::global;
+
+    // In initialization mode (before config is loaded), return minimal nav
+    if !global::is_initialization_complete() {
+        // Only show initialization tab during setup
+        let active_class = if active == "initialization" {
+            " active"
+        } else {
+            ""
+        };
+        return format!(
+            "<a href=\"#\" data-page=\"initialization\" class=\"tab{}\"><i class=\"icon-settings\"></i> Setup</a>",
+            active_class
+        );
+    }
 
     // Get tabs from config, filter enabled ones, and sort by order
     let mut tabs = config::with_config(|cfg| cfg.gui.dashboard.navigation.tabs.clone());

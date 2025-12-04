@@ -7,6 +7,15 @@ use tokio::task::JoinHandle;
 
 pub struct EventsService;
 
+/// Check if events are enabled in config (safe to call even when config not loaded)
+fn is_events_enabled_in_config() -> bool {
+    // MUST check initialization first - config may not be loaded yet
+    if !crate::global::is_initialization_complete() {
+        return false;
+    }
+    config::with_config(|c| c.events.enabled)
+}
+
 #[async_trait]
 impl Service for EventsService {
     fn name(&self) -> &'static str {
@@ -22,13 +31,14 @@ impl Service for EventsService {
     }
 
     fn is_enabled(&self) -> bool {
-        // Events system must be explicitly enabled in config
-        config::with_config(|c| c.events.enabled) && crate::global::is_initialization_complete()
+        // Events system requires both initialization complete AND config enabled
+        // MUST check is_initialization_complete() FIRST to avoid panic when config not loaded
+        is_events_enabled_in_config()
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
         // Check if events are enabled before initializing
-        if !config::with_config(|c| c.events.enabled) {
+        if !is_events_enabled_in_config() {
             crate::logger::info(
                 crate::logger::LogTag::System,
                 "Events system disabled in config - skipping initialization",
@@ -49,7 +59,7 @@ impl Service for EventsService {
         monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
         // If events are disabled, just wait for shutdown
-        if !config::with_config(|c| c.events.enabled) {
+        if !is_events_enabled_in_config() {
             let handle = tokio::spawn(monitor.instrument(async move {
                 shutdown.notified().await;
             }));
@@ -69,7 +79,7 @@ impl Service for EventsService {
 
     async fn health(&self) -> ServiceHealth {
         // If disabled, report as healthy (not an error)
-        if !config::with_config(|c| c.events.enabled) {
+        if !is_events_enabled_in_config() {
             return ServiceHealth::Healthy;
         }
 
