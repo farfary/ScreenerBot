@@ -578,3 +578,120 @@
     flex: 1 1 45%;
   }
 }
+
+/* ===== Loading State - Skeleton Animation ===== */
+
+/* Shimmer animation for loading cards */
+@keyframes home-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Loading state for wallet hero section */
+.wallet-hero.loading {
+  position: relative;
+  overflow: hidden;
+}
+
+.wallet-hero.loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(255 255 255 / 0.1) 50%,
+    transparent 100%
+  );
+  animation: home-shimmer 1.5s ease-in-out infinite;
+}
+
+[data-theme="dark"] .wallet-hero.loading::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(88 166 255 / 0.08) 50%,
+    transparent 100%
+  );
+}
+
+/* Loading state for dashboard cards */
+.dashboard-card.loading {
+  position: relative;
+  overflow: hidden;
+}
+
+.dashboard-card.loading::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(0 0 0 / 0.04) 50%,
+    transparent 100%
+  );
+  animation: home-shimmer 1.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+[data-theme="dark"] .dashboard-card.loading::after {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgb(255 255 255 / 0.03) 50%,
+    transparent 100%
+  );
+}
+
+/* Pulsing placeholder for values in loading state */
+.loading .hero-balance,
+.loading .hero-stat-value,
+.loading .hero-change-value,
+.loading .change-percent,
+.loading .analytics-value,
+.loading .secondary-value,
+.loading .position-value,
+.loading .system-value,
+.loading .token-value,
+.loading .timeline-value {
+  color: transparent;
+  background: var(--bg-secondary);
+  border-radius: 4px;
+  min-width: 3ch;
+  animation: pulse-subtle 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-subtle {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 0.3;
+  }
+}
+
+/* Smooth transition when data loads */
+.wallet-hero,
+.dashboard-card {
+  transition: opacity 0.2s ease;
+}
+
+.wallet-hero.loaded,
+.dashboard-card.loaded {
+  animation: fade-in 0.3s ease;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0.8;
+  }
+  to {
+    opacity: 1;
+  }
+}

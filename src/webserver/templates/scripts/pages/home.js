@@ -11,6 +11,7 @@ function createLifecycle() {
   let cpuChart = null;
   let currentPeriod = "today";
   let cachedData = null;
+  let hasLoadedOnce = false;
 
   // Event cleanup tracking
   const eventCleanups = [];
@@ -24,6 +25,29 @@ function createLifecycle() {
     if (!element) return;
     element.addEventListener(event, handler);
     eventCleanups.push(() => element.removeEventListener(event, handler));
+  }
+
+  /**
+   * Set loading state on dashboard sections
+   */
+  function setLoadingState(isLoading) {
+    const walletHero = document.querySelector(".wallet-hero");
+    const dashboardCards = document.querySelectorAll(".dashboard-card");
+
+    if (isLoading && !hasLoadedOnce) {
+      // Only show loading state on first load
+      walletHero?.classList.add("loading");
+      dashboardCards.forEach((card) => card.classList.add("loading"));
+    } else {
+      // Remove loading state and add loaded animation
+      walletHero?.classList.remove("loading");
+      walletHero?.classList.add("loaded");
+      dashboardCards.forEach((card) => {
+        card.classList.remove("loading");
+        card.classList.add("loaded");
+      });
+      hasLoadedOnce = true;
+    }
   }
 
   // Initialize Chart.js instances
@@ -117,11 +141,15 @@ function createLifecycle() {
       });
       cachedData = data;
       updateUI(data);
+      // Remove loading state after successful data fetch
+      setLoadingState(false);
     } catch (error) {
       if (error?.name === "AbortError") {
         return;
       }
       console.error("Error fetching dashboard data:", error);
+      // Remove loading state on error to avoid stuck loading
+      setLoadingState(false);
     }
   }
 
@@ -349,6 +377,10 @@ function createLifecycle() {
     init: (ctx) => {
       console.log("[Home] Initializing dashboard");
       scopedFetch = createScopedFetcher(ctx, { latestOnly: true });
+
+      // Note: Loading state is already applied via HTML classes
+      // Data fetch happens in activate() to avoid double call
+
       setupPeriodTabs();
       initCharts();
 
@@ -363,8 +395,6 @@ function createLifecycle() {
         )
       );
       chartUpdatePoller.start();
-
-      fetchData();
     },
 
     activate: (ctx) => {
@@ -372,6 +402,13 @@ function createLifecycle() {
 
       if (!scopedFetch) {
         scopedFetch = createScopedFetcher(ctx, { latestOnly: true });
+      }
+
+      // If we have cached data from a previous visit, show it immediately
+      // This provides instant feedback while fresh data loads
+      if (cachedData) {
+        updateUI(cachedData);
+        setLoadingState(false);
       }
 
       if (!poller) {
@@ -398,6 +435,14 @@ function createLifecycle() {
     dispose: () => {
       console.log("[Home] Disposing dashboard");
       scopedFetch = null;
+      // Note: Don't reset hasLoadedOnce or cachedData here
+      // Preserving them allows instant display on page revisit
+
+      // Remove loaded class so HTML loading state works on next init
+      const walletHero = document.querySelector(".wallet-hero");
+      const dashboardCards = document.querySelectorAll(".dashboard-card");
+      walletHero?.classList.remove("loaded");
+      dashboardCards.forEach((card) => card.classList.remove("loaded"));
 
       // Clean up all tracked event listeners
       eventCleanups.forEach((cleanup) => cleanup());
