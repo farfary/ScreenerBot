@@ -16,6 +16,9 @@ use crate::logger::{self, LogTag};
 /// Compile-time version from Cargo.toml
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// Compile-time build number from build_number.txt (incremented by build scripts)
+pub const BUILD_NUMBER: &str = env!("BUILD_NUMBER");
+
 /// Update server base URL - configurable via UPDATE_SERVER_URL env var
 fn get_update_server_url() -> String {
     std::env::var("UPDATE_SERVER_URL").unwrap_or_else(|_| "https://screenerbot.io/api".to_string())
@@ -32,7 +35,7 @@ const UPDATE_CHECK_INTERVAL_SECS: u64 = 6 * 60 * 60;
 #[derive(Debug, Clone, Serialize)]
 pub struct VersionInfo {
     pub version: String,
-    pub build_date: String,
+    pub build_number: String,
 }
 
 /// Information about an available update
@@ -116,7 +119,7 @@ pub fn get_version() -> &'static str {
 pub fn get_version_info() -> VersionInfo {
     VersionInfo {
         version: VERSION.to_string(),
-        build_date: env!("CARGO_PKG_VERSION").to_string(), // Could add build timestamp
+        build_number: BUILD_NUMBER.to_string(),
     }
 }
 

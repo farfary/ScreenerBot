@@ -42,6 +42,7 @@ const CONFIRMATION_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/confirmation_dialog.css");
 const TOKEN_DETAILS_DIALOG_STYLES: &str = include_str!("templates/styles/token_details_dialog.css");
 const SETTINGS_DIALOG_STYLES: &str = include_str!("templates/styles/settings_dialog.css");
+const STATUS_BAR_STYLES: &str = include_str!("templates/styles/status_bar.css");
 
 // Assets (logos, icons)
 pub const LOGO_SVG: &str = include_str!("assets/logo.svg");
@@ -77,6 +78,7 @@ pub const CORE_REQUEST_MANAGER: &str = include_str!("templates/scripts/core/requ
 pub const CORE_SPLASH: &str = include_str!("templates/scripts/core/splash.js");
 pub const CORE_ONBOARDING: &str = include_str!("templates/scripts/core/onboarding.js");
 pub const CORE_SETUP: &str = include_str!("templates/scripts/core/setup.js");
+pub const CORE_STATUS_BAR: &str = include_str!("templates/scripts/core/status_bar.js");
 
 const THEME_SCRIPTS: &str = include_str!("templates/scripts/theme.js");
 
@@ -172,6 +174,8 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         SPLASH_PAGE_STYLES,
         ONBOARDING_PAGE_STYLES,
         SETUP_PAGE_STYLES,
+        // Status bar (always visible at bottom)
+        STATUS_BAR_STYLES,
     ];
     if active_tab == "services" {
         combined_styles.push(SERVICES_PAGE_STYLES);

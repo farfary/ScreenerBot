@@ -230,6 +230,7 @@ async fn get_core_script(axum::extract::Path(file): axum::extract::Path<String>)
         "splash.js" => Some(templates::CORE_SPLASH),
         "onboarding.js" => Some(templates::CORE_ONBOARDING),
         "setup.js" => Some(templates::CORE_SETUP),
+        "status_bar.js" => Some(templates::CORE_STATUS_BAR),
         _ => None,
     };
 

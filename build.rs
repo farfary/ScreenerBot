@@ -1,4 +1,19 @@
 fn main() {
+    // ==========================================================================
+    // Build Number - Read from build_number.txt and inject as compile-time env
+    // ==========================================================================
+    let build_number_path = std::path::Path::new("build_number.txt");
+    let build_number = if build_number_path.exists() {
+        std::fs::read_to_string(build_number_path)
+            .unwrap_or_else(|_| "0".to_string())
+            .trim()
+            .to_string()
+    } else {
+        "0".to_string()
+    };
+    println!("cargo:rustc-env=BUILD_NUMBER={}", build_number);
+    println!("cargo:rerun-if-changed=build_number.txt");
+
     // macOS 26 Tahoe icon support: Track Assets.car for rebuild triggers
     #[cfg(target_os = "macos")]
     {

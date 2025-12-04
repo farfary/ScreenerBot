@@ -1,0 +1,52 @@
+/* ============================================================================
+   STATUS BAR - Fixed bottom bar with version and system info
+   ============================================================================ */
+
+.status-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 24px;
+  z-index: 999;
+  background: var(--header-bg, linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1c2128 100%));
+  border-top: 1px solid var(--header-border, #30363d);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 16px;
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 11px;
+  color: var(--text-muted, #8b949e);
+  box-shadow: 0 -2px 10px rgb(0, 0, 0, 0.3);
+}
+
+.status-bar-left,
+.status-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.status-bar-version {
+  color: var(--text-secondary, #c9d1d9);
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+/* Ensure main content doesn't get hidden behind status bar */
+.content {
+  padding-bottom: 32px;
+}
+
+/* Light theme adjustments */
+[data-theme="light"] .status-bar {
+  background: linear-gradient(135deg, #f0f2f6 0%, #e8eaee 100%);
+  border-top-color: #d1d5db;
+  color: #6b7280;
+  box-shadow: 0 -2px 10px rgb(0, 0, 0, 0.1);
+}
+
+[data-theme="light"] .status-bar-version {
+  color: #374151;
+}

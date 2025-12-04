@@ -402,6 +402,13 @@
 
     <main class="content">{{CONTENT}}</main>
 
+    <!-- Status Bar - Fixed bottom bar with version info -->
+    <footer class="status-bar" id="statusBar">
+      <div class="status-bar-left">
+        <span class="status-bar-version" id="statusBarVersion">v—</span>
+      </div>
+    </footer>
+
     <script>
       window.__PAGE_STYLES__ = {};
       /*__PAGE_STYLES__*/
@@ -420,6 +427,7 @@
     <script src="/scripts/core/splash.js"></script>
     <script src="/scripts/core/onboarding.js"></script>
     <script src="/scripts/core/setup.js"></script>
+    <script src="/scripts/core/status_bar.js"></script>
 
     <!-- Theme toggle (non-module) -->
     <script>

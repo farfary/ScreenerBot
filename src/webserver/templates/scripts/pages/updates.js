@@ -56,7 +56,7 @@ const getElements = () => ({
 async function fetchVersion() {
   const response = await fetch("/api/version");
   const data = await response.json();
-  return data; // Returns {version, build_date, platform} directly
+  return data; // Returns {version, build_number, platform} directly
 }
 
 async function checkForUpdates() {
@@ -132,7 +132,13 @@ function showSection(els, sectionName) {
 
 function updateVersionInfo(els, versionData) {
   if (!versionData) return;
-  els.currentVersion.textContent = versionData.version || "--";
+  const version = versionData.version || "--";
+  const buildNumber = versionData.build_number;
+  if (buildNumber && buildNumber !== "0") {
+    els.currentVersion.textContent = `${version} (build ${buildNumber})`;
+  } else {
+    els.currentVersion.textContent = version;
+  }
   els.platform.textContent = versionData.platform || "--";
 }
 

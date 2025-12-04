@@ -6,9 +6,6 @@ import * as Utils from "../core/utils.js";
 import { getCurrentPage } from "../core/router.js";
 import { setInterval as setPollingInterval } from "../core/poller.js";
 
-const VERSION = "0.1.0";
-const BUILD_DATE = "2025-12-02";
-
 export class SettingsDialog {
   constructor(options = {}) {
     this.onClose = options.onClose || (() => {});
@@ -18,6 +15,8 @@ export class SettingsDialog {
     this.originalSettings = null;
     this.hasChanges = false;
     this.isSaving = false;
+    // Version info fetched from /api/version
+    this.versionInfo = { version: "...", build_number: "..." };
   }
 
   /**
@@ -30,7 +29,7 @@ export class SettingsDialog {
 
     this._createDialog();
     this._attachEventHandlers();
-    await this._loadSettings();
+    await Promise.all([this._loadSettings(), this._loadVersionInfo()]);
     this._loadTabContent("interface");
 
     requestAnimationFrame(() => {
@@ -38,6 +37,24 @@ export class SettingsDialog {
         this.dialogEl.classList.add("active");
       }
     });
+  }
+
+  /**
+   * Load version info from API
+   */
+  async _loadVersionInfo() {
+    try {
+      const response = await fetch("/api/version");
+      if (response.ok) {
+        const data = await response.json();
+        this.versionInfo = {
+          version: data.version || "0.0.0",
+          build_number: data.build_number || "?",
+        };
+      }
+    } catch (error) {
+      console.error("Failed to load version info:", error);
+    }
   }
 
   /**
@@ -914,6 +931,7 @@ export class SettingsDialog {
    * Build Updates tab content
    */
   _buildUpdatesTab() {
+    const { version, build_number } = this.versionInfo;
     return `
       <div class="settings-updates-section">
         <div class="settings-section">
@@ -924,7 +942,7 @@ export class SettingsDialog {
             </div>
             <div class="settings-update-info">
               <h4>You're up to date!</h4>
-              <p>ScreenerBot ${VERSION} is the latest version.</p>
+              <p>ScreenerBot v${version} (build ${build_number}) is the latest version.</p>
             </div>
             <button class="settings-update-btn" id="checkUpdatesBtn">
               <i class="icon-refresh-cw"></i>
@@ -938,8 +956,8 @@ export class SettingsDialog {
           <div class="settings-release-notes">
             <div class="settings-release">
               <div class="settings-release-header">
-                <span class="settings-release-version">v${VERSION}</span>
-                <span class="settings-release-date">${BUILD_DATE}</span>
+                <span class="settings-release-version">v${version}</span>
+                <span class="settings-release-date">Build ${build_number}</span>
                 <span class="settings-release-badge">Current</span>
               </div>
               <ul class="settings-release-changes">
@@ -974,6 +992,7 @@ export class SettingsDialog {
    * Build About tab content
    */
   _buildAboutTab() {
+    const { version, build_number } = this.versionInfo;
     return `
       <div class="settings-about">
         <div class="settings-about-logo">
@@ -982,9 +1001,9 @@ export class SettingsDialog {
         <h2 class="settings-about-name">ScreenerBot</h2>
         <p class="settings-about-tagline">Advanced Solana Trading Automation</p>
         <div class="settings-about-version">
-          <span>Version ${VERSION}</span>
+          <span>v${version}</span>
           <span class="settings-about-separator">•</span>
-          <span>Build ${BUILD_DATE}</span>
+          <span>Build ${build_number}</span>
         </div>
 
         <div class="settings-about-links">
