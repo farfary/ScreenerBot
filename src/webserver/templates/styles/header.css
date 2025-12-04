@@ -11,9 +11,10 @@
   right: 0;
   height: 28px; /* Standard macOS title bar height */
   z-index: 999;
-  background: #0d1117; /* Solid color to match header exactly */
+  background: var(--titlebar-bg, #0d1117);
   user-select: none;
   -webkit-user-select: none;
+  transition: background-color 0.3s ease;
 }
 
 /* Show title bar background on macOS in Tauri */
@@ -30,11 +31,12 @@
   top: 0;
   width: 100%;
   z-index: 1000;
-  background: #0d1117; /* Solid color - same as title bar */
+  background: var(--header-solid-bg, #0d1117);
   border-bottom: 1px solid var(--header-border, #30363d);
-  box-shadow: 0 4px 20px rgb(0, 0, 0, 0.4);
+  box-shadow: var(--header-shadow, 0 4px 20px rgb(0, 0, 0, 0.4));
   font-family: var(--header-font, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   flex-shrink: 0;
+  transition: background-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 /* Tauri macOS: Push header down to sit below title bar area */
@@ -651,13 +653,19 @@
 
 [data-theme="light"] {
   --header-bg: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #f1f5f9 100%);
-  --header-border: #3b82f6;
+  --header-solid-bg: #f1f5f9;
+  --titlebar-bg: #f1f5f9;
+  --header-border: #d1d5db;
+  --header-shadow: 0 4px 20px rgb(0, 0, 0, 0.08);
   --ticker-bg: rgb(241, 245, 249, 0.9);
 }
 
 [data-theme="dark"] {
   --header-bg: linear-gradient(135deg, #0a192f 0%, #1e3a5f 50%, #0e2a47 100%);
-  --header-border: #2563eb;
+  --header-solid-bg: #0d1117;
+  --titlebar-bg: #0d1117;
+  --header-border: #30363d;
+  --header-shadow: 0 4px 20px rgb(0, 0, 0, 0.4);
   --ticker-bg: rgb(15, 23, 42, 0.7);
 }
 
