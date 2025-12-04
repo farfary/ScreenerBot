@@ -18,8 +18,9 @@ use chrono::{Duration, Utc};
 
 use crate::webserver::routes::dashboard::{
     BlacklistInfo, DashboardOverview, HomeDashboardResponse, MonitoringInfo, OpenPositionDetail,
-    PositionsSummary, PositionsSnapshot, RpcInfo, ServiceStatus, SystemInfo, SystemMetrics,
-    TokenStatistics, TraderAnalytics, TradingPeriodStats, WalletAnalytics, WalletInfo,
+    PositionPerformer, PositionsSummary, PositionsSnapshot, RpcInfo, ServiceStatus, SystemInfo,
+    SystemMetrics, TokenStatistics, TraderAnalytics, TradingPeriodStats, WalletAnalytics,
+    WalletInfo,
 };
 use crate::webserver::routes::header::{
     FilteringHeaderInfo, HeaderMetricsResponse, PositionsHeaderInfo, RpcHeaderInfo,
@@ -465,6 +466,17 @@ pub fn get_demo_home_dashboard() -> HomeDashboardResponse {
         total_invested_sol: DEMO_INVESTED_SOL,
         unrealized_pnl_sol: DEMO_UNREALIZED_PNL,
         unrealized_pnl_percent: (DEMO_UNREALIZED_PNL / DEMO_INVESTED_SOL) * 100.0,
+        avg_position_size_sol: DEMO_INVESTED_SOL / DEMO_OPEN_POSITIONS as f64,
+        avg_hold_duration_mins: 47,
+        best_performer: Some(PositionPerformer {
+            symbol: "BONK".to_string(),
+            pnl_percent: 23.5,
+        }),
+        worst_performer: Some(PositionPerformer {
+            symbol: "MEME".to_string(),
+            pnl_percent: -8.2,
+        }),
+        dca_count: 1,
     };
 
     let uptime_secs = 3 * 24 * 3600 + 7 * 3600 + 23 * 60 + 45; // 3d 7h 23m 45s
@@ -474,10 +486,11 @@ pub fn get_demo_home_dashboard() -> HomeDashboardResponse {
         memory_mb: DEMO_MEMORY_MB,
         memory_percent: 2.4,
         cpu_percent: DEMO_CPU_PERCENT,
-        cpu_history: vec![11.2, 13.5, 12.8, 10.9, 14.2, 12.3, 11.8, 13.1, 12.5, 11.7, 
-                         12.9, 13.4, 11.5, 12.1, 13.8, 12.3, 11.9, 12.7, 13.2, 12.3],
-        memory_history: vec![2.3, 2.4, 2.4, 2.3, 2.5, 2.4, 2.3, 2.4, 2.4, 2.3,
-                            2.4, 2.5, 2.4, 2.3, 2.4, 2.4, 2.5, 2.4, 2.3, 2.4],
+        rpc_calls_per_min: 847.3,
+        rpc_success_rate: 99.7,
+        websocket_connected: true,
+        services_healthy: 12,
+        services_total: 12,
     };
 
     let tokens = TokenStatistics {
@@ -485,6 +498,8 @@ pub fn get_demo_home_dashboard() -> HomeDashboardResponse {
         with_prices: 8923,
         passed_filters: 347,
         rejected_filters: 8576,
+        blacklisted: 1924,
+        with_ohlcv: 2847,
         found_today: 234,
         found_this_week: 1523,
         found_this_month: 4892,

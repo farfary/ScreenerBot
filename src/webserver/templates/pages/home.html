@@ -81,7 +81,7 @@
       </div>
       <div class="positions-list">
         <div class="position-row">
-          <span class="position-label">Count</span>
+          <span class="position-label">Open</span>
           <span class="position-value" id="positionsCount">0</span>
         </div>
         <div class="position-row">
@@ -95,6 +95,22 @@
         <div class="position-row">
           <span class="position-label">P&L %</span>
           <span class="position-value" id="positionsUnrealizedPercent">0.00%</span>
+        </div>
+        <div class="position-row">
+          <span class="position-label">Avg Size</span>
+          <span class="position-value" id="positionsAvgSize">0.00</span>
+        </div>
+        <div class="position-row">
+          <span class="position-label">Avg Hold</span>
+          <span class="position-value" id="positionsAvgHold">0m</span>
+        </div>
+        <div class="position-row">
+          <span class="position-label">Best</span>
+          <span class="position-value profit" id="positionsBest">—</span>
+        </div>
+        <div class="position-row">
+          <span class="position-label">Worst</span>
+          <span class="position-value loss" id="positionsWorst">—</span>
         </div>
       </div>
     </div>
@@ -111,19 +127,25 @@
             <span class="system-label">Uptime</span>
             <span class="system-value" id="systemUptime">0s</span>
           </div>
-          <div class="system-row with-chart">
-            <div class="system-info">
-              <span class="system-label">Memory</span>
-              <span class="system-value" id="systemMemory">0 MB</span>
-            </div>
-            <div class="mini-chart"><canvas id="memoryChart"></canvas></div>
+          <div class="system-row">
+            <span class="system-label">Memory</span>
+            <span class="system-value" id="systemMemory">0 MB</span>
           </div>
-          <div class="system-row with-chart">
-            <div class="system-info">
-              <span class="system-label">CPU</span>
-              <span class="system-value" id="systemCpu">0%</span>
-            </div>
-            <div class="mini-chart"><canvas id="cpuChart"></canvas></div>
+          <div class="system-row">
+            <span class="system-label">CPU</span>
+            <span class="system-value" id="systemCpu">0%</span>
+          </div>
+          <div class="system-row">
+            <span class="system-label">RPC/min</span>
+            <span class="system-value" id="systemRpcRate">0</span>
+          </div>
+          <div class="system-row">
+            <span class="system-label">RPC OK</span>
+            <span class="system-value" id="systemRpcSuccess">100%</span>
+          </div>
+          <div class="system-row">
+            <span class="system-label">Services</span>
+            <span class="system-value" id="systemServices">0/0</span>
           </div>
         </div>
       </div>
@@ -150,23 +172,13 @@
             <span class="token-label">Rejected</span>
             <span class="token-value danger" id="tokensRejected">0</span>
           </div>
-        </div>
-        <div class="tokens-timeline">
-          <div class="timeline-item">
-            <span class="timeline-label">Today</span>
-            <span class="timeline-value" id="tokensFoundToday">0</span>
+          <div class="token-row">
+            <span class="token-label">Blacklist</span>
+            <span class="token-value" id="tokensBlacklisted">0</span>
           </div>
-          <div class="timeline-item">
-            <span class="timeline-label">Week</span>
-            <span class="timeline-value" id="tokensFoundWeek">0</span>
-          </div>
-          <div class="timeline-item">
-            <span class="timeline-label">Month</span>
-            <span class="timeline-value" id="tokensFoundMonth">0</span>
-          </div>
-          <div class="timeline-item">
-            <span class="timeline-label">All</span>
-            <span class="timeline-value" id="tokensFoundAllTime">0</span>
+          <div class="token-row">
+            <span class="token-label">OHLCV</span>
+            <span class="token-value" id="tokensOhlcv">0</span>
           </div>
         </div>
       </div>

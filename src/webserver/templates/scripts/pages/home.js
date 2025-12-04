@@ -1,4 +1,4 @@
-/* global Chart */
+/* global */
 import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";
@@ -7,8 +7,6 @@ import { requestManager, createScopedFetcher } from "../core/request_manager.js"
 function createLifecycle() {
   let poller = null;
   let scopedFetch = null;
-  let memoryChart = null;
-  let cpuChart = null;
   let currentPeriod = "today";
   let cachedData = null;
   let hasLoadedOnce = false;
@@ -47,83 +45,6 @@ function createLifecycle() {
         card.classList.add("loaded");
       });
       hasLoadedOnce = true;
-    }
-  }
-
-  // Initialize Chart.js instances
-  function initCharts() {
-    const memoryCtx = document.getElementById("memoryChart");
-    const cpuCtx = document.getElementById("cpuChart");
-
-    if (memoryCtx && typeof Chart !== "undefined") {
-      memoryChart = new Chart(memoryCtx, {
-        type: "line",
-        data: {
-          labels: Array(20).fill(""),
-          datasets: [
-            {
-              data: Array(20).fill(0),
-              borderColor: "#10b981",
-              backgroundColor: "rgba(16, 185, 129, 0.1)",
-              borderWidth: 2,
-              tension: 0.4,
-              fill: true,
-            },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: {
-            y: { display: false, min: 0, max: 100 },
-            x: { display: false },
-          },
-          elements: { point: { radius: 0 } },
-        },
-      });
-    }
-
-    if (cpuCtx && typeof Chart !== "undefined") {
-      cpuChart = new Chart(cpuCtx, {
-        type: "line",
-        data: {
-          labels: Array(20).fill(""),
-          datasets: [
-            {
-              data: Array(20).fill(0),
-              borderColor: "#3b82f6",
-              backgroundColor: "rgba(59, 130, 246, 0.1)",
-              borderWidth: 2,
-              tension: 0.4,
-              fill: true,
-            },
-          ],
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: { legend: { display: false } },
-          scales: {
-            y: { display: false, min: 0, max: 100 },
-            x: { display: false },
-          },
-          elements: { point: { radius: 0 } },
-        },
-      });
-    }
-  }
-
-  // Update charts with new data
-  function updateCharts(data) {
-    if (memoryChart && data.system?.memory_history) {
-      memoryChart.data.datasets[0].data = data.system.memory_history;
-      memoryChart.update("none");
-    }
-
-    if (cpuChart && data.system?.cpu_history) {
-      cpuChart.data.datasets[0].data = data.system.cpu_history;
-      cpuChart.update("none");
     }
   }
 
@@ -171,9 +92,6 @@ function createLifecycle() {
 
     // Update token statistics
     updateTokenStats(data.tokens);
-
-    // Update charts
-    updateCharts(data);
   }
 
   // Update trading statistics
@@ -260,6 +178,10 @@ function createLifecycle() {
     const investedEl = document.getElementById("positionsInvested");
     const unrealizedPnlEl = document.getElementById("positionsUnrealizedPnl");
     const unrealizedPercentEl = document.getElementById("positionsUnrealizedPercent");
+    const avgSizeEl = document.getElementById("positionsAvgSize");
+    const avgHoldEl = document.getElementById("positionsAvgHold");
+    const bestEl = document.getElementById("positionsBest");
+    const worstEl = document.getElementById("positionsWorst");
 
     if (countEl) animateValue(countEl, positions.open_count);
     if (investedEl)
@@ -283,6 +205,44 @@ function createLifecycle() {
         positions.unrealized_pnl_percent >= 0 ? "profit" : "loss"
       }`;
     }
+    if (avgSizeEl)
+      avgSizeEl.textContent = Utils.formatSol(positions.avg_position_size_sol, {
+        decimals: 4,
+      });
+    if (avgHoldEl) {
+      const mins = positions.avg_hold_duration_mins || 0;
+      if (mins >= 60) {
+        const hours = Math.floor(mins / 60);
+        const remainingMins = mins % 60;
+        avgHoldEl.textContent = remainingMins > 0 ? `${hours}h ${remainingMins}m` : `${hours}h`;
+      } else {
+        avgHoldEl.textContent = `${mins}m`;
+      }
+    }
+    if (bestEl) {
+      if (positions.best_performer) {
+        bestEl.textContent = `${positions.best_performer.symbol} +${Utils.formatNumber(
+          positions.best_performer.pnl_percent,
+          1
+        )}%`;
+        bestEl.className = "position-value profit";
+      } else {
+        bestEl.textContent = "—";
+        bestEl.className = "position-value";
+      }
+    }
+    if (worstEl) {
+      if (positions.worst_performer) {
+        worstEl.textContent = `${positions.worst_performer.symbol} ${Utils.formatNumber(
+          positions.worst_performer.pnl_percent,
+          1
+        )}%`;
+        worstEl.className = "position-value loss";
+      } else {
+        worstEl.textContent = "—";
+        worstEl.className = "position-value";
+      }
+    }
   }
 
   // Update system statistics
@@ -292,6 +252,9 @@ function createLifecycle() {
     const uptimeEl = document.getElementById("systemUptime");
     const memoryEl = document.getElementById("systemMemory");
     const cpuEl = document.getElementById("systemCpu");
+    const rpcRateEl = document.getElementById("systemRpcRate");
+    const rpcSuccessEl = document.getElementById("systemRpcSuccess");
+    const servicesEl = document.getElementById("systemServices");
 
     if (uptimeEl) uptimeEl.textContent = system.uptime_formatted;
     if (memoryEl)
@@ -300,6 +263,9 @@ function createLifecycle() {
         1
       )}%)`;
     if (cpuEl) cpuEl.textContent = `${Utils.formatNumber(system.cpu_percent, 1)}%`;
+    if (rpcRateEl) rpcRateEl.textContent = Utils.formatNumber(system.rpc_calls_per_min, 1);
+    if (rpcSuccessEl) rpcSuccessEl.textContent = `${Utils.formatNumber(system.rpc_success_rate, 1)}%`;
+    if (servicesEl) servicesEl.textContent = `${system.services_healthy}/${system.services_total}`;
   }
 
   // Update token statistics
@@ -310,19 +276,15 @@ function createLifecycle() {
     const withPricesEl = document.getElementById("tokensWithPrices");
     const passedEl = document.getElementById("tokensPassed");
     const rejectedEl = document.getElementById("tokensRejected");
-    const foundTodayEl = document.getElementById("tokensFoundToday");
-    const foundWeekEl = document.getElementById("tokensFoundWeek");
-    const foundMonthEl = document.getElementById("tokensFoundMonth");
-    const foundAllTimeEl = document.getElementById("tokensFoundAllTime");
+    const blacklistedEl = document.getElementById("tokensBlacklisted");
+    const ohlcvEl = document.getElementById("tokensOhlcv");
 
     if (totalEl) animateValue(totalEl, tokens.total_in_database);
     if (withPricesEl) animateValue(withPricesEl, tokens.with_prices);
     if (passedEl) animateValue(passedEl, tokens.passed_filters);
     if (rejectedEl) animateValue(rejectedEl, tokens.rejected_filters);
-    if (foundTodayEl) animateValue(foundTodayEl, tokens.found_today);
-    if (foundWeekEl) animateValue(foundWeekEl, tokens.found_this_week);
-    if (foundMonthEl) animateValue(foundMonthEl, tokens.found_this_month);
-    if (foundAllTimeEl) animateValue(foundAllTimeEl, tokens.found_all_time);
+    if (blacklistedEl) animateValue(blacklistedEl, tokens.blacklisted);
+    if (ohlcvEl) animateValue(ohlcvEl, tokens.with_ohlcv);
   }
 
   // Animate number value changes
@@ -382,19 +344,6 @@ function createLifecycle() {
       // Data fetch happens in activate() to avoid double call
 
       setupPeriodTabs();
-      initCharts();
-
-      // Chart update interval - managed by lifecycle context
-      const chartUpdatePoller = ctx.managePoller(
-        new Poller(
-          () => {
-            if (memoryChart) memoryChart.update();
-            if (cpuChart) cpuChart.update();
-          },
-          { label: "ChartUpdate", interval: 1000 }
-        )
-      );
-      chartUpdatePoller.start();
     },
 
     activate: (ctx) => {
@@ -451,15 +400,6 @@ function createLifecycle() {
       // Clear all animation intervals
       animationIntervals.forEach((interval) => clearInterval(interval));
       animationIntervals.length = 0;
-
-      if (memoryChart) {
-        memoryChart.destroy();
-        memoryChart = null;
-      }
-      if (cpuChart) {
-        cpuChart.destroy();
-        cpuChart = null;
-      }
     },
   };
 }

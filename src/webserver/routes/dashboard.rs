@@ -379,6 +379,18 @@ pub struct PositionsSnapshot {
     pub total_invested_sol: f64,
     pub unrealized_pnl_sol: f64,
     pub unrealized_pnl_percent: f64,
+    // Enhanced metrics
+    pub avg_position_size_sol: f64,
+    pub avg_hold_duration_mins: i64,
+    pub best_performer: Option<PositionPerformer>,
+    pub worst_performer: Option<PositionPerformer>,
+    pub dca_count: i64,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct PositionPerformer {
+    pub symbol: String,
+    pub pnl_percent: f64,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -388,8 +400,13 @@ pub struct SystemMetrics {
     pub memory_mb: f64,
     pub memory_percent: f64,
     pub cpu_percent: f64,
-    pub cpu_history: Vec<f64>,
-    pub memory_history: Vec<f64>,
+    // RPC metrics
+    pub rpc_calls_per_min: f64,
+    pub rpc_success_rate: f64,
+    // Connectivity
+    pub websocket_connected: bool,
+    pub services_healthy: usize,
+    pub services_total: usize,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -398,6 +415,8 @@ pub struct TokenStatistics {
     pub with_prices: usize,
     pub passed_filters: usize,
     pub rejected_filters: usize,
+    pub blacklisted: usize,
+    pub with_ohlcv: usize,
     pub found_today: usize,
     pub found_this_week: usize,
     pub found_this_month: usize,
@@ -543,28 +562,102 @@ async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<HomeDash
 
     // Process positions snapshot from parallel results
     let open_positions = open_positions_result.unwrap_or_default();
+    let open_count = open_positions.len() as i64;
     let total_invested_sol: f64 = open_positions.iter().map(|p| p.entry_size_sol).sum();
+
+    // Calculate position P&L with performers
+    let mut best_performer: Option<PositionPerformer> = None;
+    let mut worst_performer: Option<PositionPerformer> = None;
+    let mut total_hold_duration_mins: i64 = 0;
+    let mut dca_count: i64 = 0;
+
     let unrealized_pnl_sol: f64 = open_positions
         .iter()
         .filter_map(|p| {
+            // Track DCA positions
+            if p.dca_count > 0 {
+                dca_count += 1;
+            }
+
+            // Calculate hold duration
+            let hold_mins = (now - p.entry_time).num_minutes();
+            total_hold_duration_mins += hold_mins;
+
             if let (Some(current), entry) = (p.current_price, p.entry_price) {
-                Some((current - entry) * entry * p.entry_size_sol / entry)
+                let pnl_pct = if entry > 0.0 {
+                    ((current - entry) / entry) * 100.0
+                } else {
+                    0.0
+                };
+
+                // Track best/worst performers
+                match &best_performer {
+                    None => {
+                        best_performer = Some(PositionPerformer {
+                            symbol: p.symbol.clone(),
+                            pnl_percent: pnl_pct,
+                        });
+                    }
+                    Some(best) if pnl_pct > best.pnl_percent => {
+                        best_performer = Some(PositionPerformer {
+                            symbol: p.symbol.clone(),
+                            pnl_percent: pnl_pct,
+                        });
+                    }
+                    _ => {}
+                }
+
+                match &worst_performer {
+                    None => {
+                        worst_performer = Some(PositionPerformer {
+                            symbol: p.symbol.clone(),
+                            pnl_percent: pnl_pct,
+                        });
+                    }
+                    Some(worst) if pnl_pct < worst.pnl_percent => {
+                        worst_performer = Some(PositionPerformer {
+                            symbol: p.symbol.clone(),
+                            pnl_percent: pnl_pct,
+                        });
+                    }
+                    _ => {}
+                }
+
+                Some((current - entry) * p.entry_size_sol / entry)
             } else {
                 None
             }
         })
         .sum();
+
     let unrealized_pnl_percent = if total_invested_sol > 0.0 {
         (unrealized_pnl_sol / total_invested_sol) * 100.0
     } else {
         0.0
     };
 
+    let avg_position_size_sol = if open_count > 0 {
+        total_invested_sol / open_count as f64
+    } else {
+        0.0
+    };
+
+    let avg_hold_duration_mins = if open_count > 0 {
+        total_hold_duration_mins / open_count
+    } else {
+        0
+    };
+
     let positions_snapshot = PositionsSnapshot {
-        open_count: open_positions.len() as i64,
+        open_count,
         total_invested_sol,
         unrealized_pnl_sol,
         unrealized_pnl_percent,
+        avg_position_size_sol,
+        avg_hold_duration_mins,
+        best_performer,
+        worst_performer,
+        dca_count,
     };
 
     // Process system metrics (already fetched in parallel)
@@ -580,8 +673,37 @@ async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<HomeDash
     };
     let cpu_percent = cached_metrics.cpu_process_percent as f64;
 
-    let cpu_history = vec![cpu_percent; 20];
-    let memory_history = vec![memory_percent; 20];
+    // Get RPC stats
+    let rpc_stats = get_global_rpc_stats();
+    let (rpc_calls_per_min, rpc_success_rate) = match rpc_stats {
+        Some(stats) => {
+            let calls_per_min = stats.calls_per_second() * 60.0;
+            let total = stats.total_calls();
+            let errors = stats.total_errors();
+            let success_rate = if total > 0 {
+                ((total - errors) as f64 / total as f64) * 100.0
+            } else {
+                100.0
+            };
+            (calls_per_min, success_rate)
+        }
+        None => (0.0, 100.0),
+    };
+
+    // Get service health - use global flags for simplicity
+    let services_healthy = [
+        TOKENS_SYSTEM_READY.load(std::sync::atomic::Ordering::Relaxed),
+        POSITIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::Relaxed),
+        POOL_SERVICE_READY.load(std::sync::atomic::Ordering::Relaxed),
+        TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::Relaxed),
+    ]
+    .iter()
+    .filter(|&&x| x)
+    .count();
+    let services_total = 4;
+
+    // Check WebSocket status (transactions system ready implies WebSocket connected)
+    let websocket_connected = TRANSACTIONS_SYSTEM_READY.load(std::sync::atomic::Ordering::Relaxed);
 
     let system = SystemMetrics {
         uptime_seconds,
@@ -589,27 +711,48 @@ async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<HomeDash
         memory_mb,
         memory_percent,
         cpu_percent,
-        cpu_history,
-        memory_history,
+        rpc_calls_per_min,
+        rpc_success_rate,
+        websocket_connected,
+        services_healthy,
+        services_total,
     };
 
     // Process token statistics (filtering already fetched in parallel)
     let db = crate::tokens::database::get_global_database();
     let total_in_database = db.as_ref().and_then(|d| d.count_tokens().ok()).unwrap_or(0) as usize;
 
-    let passed_filters = filtering_stats_result
-        .map(|stats| stats.passed_filtering)
+    // Get filtering stats from the already fetched result
+    let filtering_stats = filtering_stats_result.ok();
+
+    let passed_filters = filtering_stats
+        .as_ref()
+        .map(|s| s.passed_filtering)
         .unwrap_or(0);
-    let rejected_filters = 0; // TODO: Calculate rejected count
+    let with_prices = filtering_stats
+        .as_ref()
+        .map(|s| s.with_pool_price)
+        .unwrap_or(0);
+    let blacklisted = filtering_stats.as_ref().map(|s| s.blacklisted).unwrap_or(0);
+    let with_ohlcv = filtering_stats.as_ref().map(|s| s.with_ohlcv).unwrap_or(0);
+
+    // Calculate rejected as total - passed - blacklisted
+    let rejected_filters = if total_in_database > passed_filters + blacklisted {
+        total_in_database - passed_filters - blacklisted
+    } else {
+        0
+    };
 
     let tokens = TokenStatistics {
         total_in_database,
-        with_prices: 0, // TODO: Count tokens with prices
+        with_prices,
         passed_filters,
         rejected_filters,
-        found_today: 0,      // TODO: Implement
-        found_this_week: 0,  // TODO: Implement
-        found_this_month: 0, // TODO: Implement
+        blacklisted,
+        with_ohlcv,
+        found_today: 0,      // Would need timestamp tracking in DB
+        found_this_week: 0,  // Would need timestamp tracking in DB
+        found_this_month: 0, // Would need timestamp tracking in DB
         found_all_time: total_in_database,
     };
 
