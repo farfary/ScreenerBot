@@ -67,6 +67,7 @@ pub async fn run_gui_mode() -> Result<(), String> {
   tauri::Builder::default()
     .plugin(tauri_plugin_global_shortcut::Builder::new().build())
     .plugin(tauri_plugin_window_state::Builder::default().build())
+    .invoke_handler(tauri::generate_handler![smart_maximize])
     .setup({
       let zoom_level_clone = Arc::clone(&zoom_level);
       move |app| {
@@ -612,5 +613,33 @@ fn navigate_and_show_window(window: tauri::WebviewWindow, zoom_level: Arc<Mutex<
     Err(e) => {
  logger::error(LogTag::System, &format!("Failed to show window: {}", e));
     }
+  }
+}
+
+// ============================================================================
+// TAURI COMMANDS
+// ============================================================================
+
+/// Smart maximize command - maximizes window to available screen space
+///
+/// On macOS: Uses Cocoa APIs to detect available screen area and resize window
+/// to fill it, respecting other tiled windows and the menu bar.
+///
+/// On other platforms: Falls back to standard toggle maximize behavior.
+#[tauri::command]
+fn smart_maximize(window: tauri::WebviewWindow) -> Result<(), String> {
+  logger::info(LogTag::System, "Smart maximize command invoked");
+
+  #[cfg(target_os = "macos")]
+  {
+    crate::macos_window::smart_maximize_macos(&window)
+  }
+
+  #[cfg(not(target_os = "macos"))]
+  {
+    // Fallback for non-macOS: toggle maximize
+    window
+      .toggle_maximize()
+      .map_err(|e| format!("Failed to toggle maximize: {}", e))
   }
 }

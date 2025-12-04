@@ -130,4 +130,80 @@
       }
     }
   }
+
+  // ============================================================================
+  // CUSTOM TITLE BAR DOUBLE-CLICK HANDLER (macOS smart maximize)
+  // ============================================================================
+
+  // Only set up double-click handler in Tauri on macOS
+  if (isTauri && isMacOS) {
+    setupSmartMaximizeHandler();
+  }
+
+  /**
+   * Set up double-click handler for custom title bar
+   * 
+   * This intercepts double-clicks on data-tauri-drag-region elements and calls
+   * our custom smart_maximize Rust command instead of the default macOS zoom behavior.
+   */
+  function setupSmartMaximizeHandler() {
+    console.log("[Theme] Setting up smart maximize handler for macOS");
+
+    // Find all drag region elements
+    const dragRegions = document.querySelectorAll("[data-tauri-drag-region]");
+    
+    if (dragRegions.length === 0) {
+      console.warn("[Theme] No drag regions found for smart maximize handler");
+      return;
+    }
+
+    console.log(`[Theme] Found ${dragRegions.length} drag regions`);
+
+    // Track double-click timing manually to intercept before Tauri's handler
+    let lastClickTime = 0;
+    const DOUBLE_CLICK_THRESHOLD = 300; // ms
+
+    dragRegions.forEach((region) => {
+      // Use mousedown to intercept before Tauri's drag handler
+      region.addEventListener("mousedown", async (e) => {
+        // Only handle left-click
+        if (e.button !== 0) return;
+
+        const now = Date.now();
+        const timeSinceLastClick = now - lastClickTime;
+        lastClickTime = now;
+
+        // Check if this is a double-click
+        if (timeSinceLastClick < DOUBLE_CLICK_THRESHOLD) {
+          console.log("[Theme] Double-click detected on drag region");
+          
+          // Prevent default behavior and Tauri's drag handler
+          e.preventDefault();
+          e.stopPropagation();
+          e.stopImmediatePropagation();
+
+          // Call our smart maximize command
+          try {
+            if (window.__TAURI__?.core?.invoke) {
+              await window.__TAURI__.core.invoke("smart_maximize");
+              console.log("[Theme] Smart maximize command executed");
+            } else if (window.__TAURI_INTERNALS__?.invoke) {
+              await window.__TAURI_INTERNALS__.invoke("smart_maximize");
+              console.log("[Theme] Smart maximize command executed (via internals)");
+            } else {
+              console.warn("[Theme] Tauri invoke not available");
+            }
+          } catch (error) {
+            console.error("[Theme] Smart maximize failed:", error);
+          }
+          
+          // Reset click time to prevent triple-click triggering
+          lastClickTime = 0;
+        }
+      }, { capture: true }); // Use capture phase to intercept early
+    });
+
+    console.log("[Theme] Smart maximize handler installed");
+  }
 })();
+

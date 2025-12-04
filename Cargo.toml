@@ -160,6 +160,13 @@ tauri = { version = "2.1", features = ["devtools"] }
 tauri-plugin-shell = "2.0"
 tauri-plugin-global-shortcut = "2.0"
 tauri-plugin-window-state = "2.0"
+raw-window-handle = "0.6"
+
+# macOS window management (Cocoa APIs for smart maximize)
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSGeometry", "NSArray", "NSObject"] }
+objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSScreen", "NSApplication", "NSRunningApplication", "NSWorkspace"] }
 
 [build-dependencies]
 tauri-build = { version = "2.1", features = [] }

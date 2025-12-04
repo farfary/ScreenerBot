@@ -13,6 +13,8 @@ pub mod filtering;
 pub mod global;
 pub mod gui;
 pub mod logger;
+#[cfg(target_os = "macos")]
+pub mod macos_window;
 pub mod ohlcvs;
 pub mod paths;
 pub mod pools;
