@@ -16,6 +16,8 @@ class SplashController {
     this.startTime = Date.now();
     this.statusIndex = 0;
     this.statusInterval = null;
+    this.forceOnboarding = false;
+    this.initializationRequired = false;
   }
 
   init() {
@@ -58,6 +60,8 @@ class SplashController {
       }
 
       const result = await response.json();
+      this.forceOnboarding = !!result.force_onboarding;
+      this.initializationRequired = !!result.required;
       const elapsed = Date.now() - this.startTime;
       const remainingTime = Math.max(0, SPLASH_MIN_DURATION - elapsed);
 
@@ -65,6 +69,11 @@ class SplashController {
       await new Promise((resolve) => setTimeout(resolve, remainingTime));
 
       this.stopStatusRotation();
+
+      if (this.forceOnboarding) {
+        this.transitionTo("onboarding");
+        return;
+      }
 
       // Determine next destination
       if (result.required) {
@@ -140,6 +149,10 @@ class SplashController {
         window.SetupController.init();
       }
     }
+  }
+
+  needsSetupAfterOnboarding() {
+    return this.initializationRequired;
   }
 }
 

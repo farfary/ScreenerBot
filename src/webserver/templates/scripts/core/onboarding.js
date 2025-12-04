@@ -131,16 +131,19 @@ class OnboardingControllerClass {
       onboardingScreen.style.display = "none";
     }
 
-    // Show setup screen (wrapper contains the screen)
-    const setupWrapper = document.getElementById("setupScreenWrapper");
-    if (setupWrapper) {
-      setupWrapper.style.display = "block";
-      const setupScreen = document.getElementById("setupScreen");
-      if (setupScreen) {
-        setupScreen.style.display = "grid";
-      }
-      if (window.SetupController) {
-        window.SetupController.init();
+    const shouldShowSetup = window.SplashController?.needsSetupAfterOnboarding?.() ?? true;
+
+    if (shouldShowSetup) {
+      const setupWrapper = document.getElementById("setupScreenWrapper");
+      if (setupWrapper) {
+        setupWrapper.style.display = "block";
+        const setupScreen = document.getElementById("setupScreen");
+        if (setupScreen) {
+          setupScreen.style.display = "grid";
+        }
+        if (window.SetupController) {
+          window.SetupController.init();
+        }
       }
     }
   }
