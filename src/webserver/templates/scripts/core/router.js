@@ -167,7 +167,9 @@ export async function loadPage(pageName) {
     ActionBarManager.onPageSwitch(pageName, previousPage);
   }
 
-  const mainContent = document.querySelector("main");
+  // Select main.content specifically - there are multiple <main> elements
+  // (onboarding-content, setup-content, content) and we need the visible one
+  const mainContent = document.querySelector("main.content");
   if (!mainContent) {
     console.error("[Router] Main content container not found");
     return;
@@ -296,7 +298,8 @@ export function initRouter() {
   setActiveTab(initialPage);
 
   // Check if content is already server-rendered
-  const mainContent = document.querySelector("main");
+  // Select main.content specifically - there are multiple <main> elements
+  const mainContent = document.querySelector("main.content");
   if (
     mainContent &&
     mainContent.children.length > 0 &&
