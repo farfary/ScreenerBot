@@ -72,6 +72,12 @@
   --primary-color-dark: #0d47a1;
   --primary-hover: #1e88e5;
 
+  /* Brand Identity Colors */
+  --brand-navy: #0d3b66;
+  --brand-cyan: #06b6d4;
+  --brand-blue: #3b82f6;
+  --brand-cyan-light: #e0f7ff;
+
   /* Success Color System */
   --success-color: #10b981;
   --success-color-light: #d1fae5;
@@ -141,7 +147,8 @@
   --font-sans: -apple-system, blinkmacsystemfont, "Segoe UI", roboto, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", monaco, "Cascadia Code", "Roboto Mono", monospace;
   --font-data: "JetBrains Mono", "SF Mono", monaco, monospace;
-  --font-brand: "Orbitron", -apple-system, sans-serif;
+    /* Font Families */
+  --font-brand: "Rajdhani", -apple-system, sans-serif;
   --font-size-xs: 0.75rem; /* 12px */
   --font-size-sm: 0.875rem; /* 14px */
   --font-size-base: 1rem; /* 16px */

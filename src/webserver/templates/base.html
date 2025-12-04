@@ -37,7 +37,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@600;700&display=swap"
       rel="stylesheet"
     />
     <script src="https://unpkg.com/lightweight-charts@4.2.1/dist/lightweight-charts.standalone.production.js"></script>
@@ -56,10 +56,13 @@
     <!-- Setup Screen - Initial configuration (hidden by default) -->
     <div id="setupScreenWrapper" style="display: none">{{SETUP_SCREEN}}</div>
 
+    <!-- Tauri: Title bar background area (matches header color behind traffic lights) -->
+    <div class="tauri-titlebar-bg" data-tauri-drag-region></div>
+
     <!-- THREE-ROW HEADER: Main Control + Tabs + Live Ticker -->
     <header class="modern-header">
       <!-- Row 1: Main Control Bar -->
-      <div class="header-row header-row-1">
+      <div class="header-row header-row-1" data-tauri-drag-region>
         <!-- Logo & Brand -->
         <div class="header-brand" id="headerBrand">
           <img src="/assets/logo.svg" alt="ScreenerBot" class="brand-logo" />

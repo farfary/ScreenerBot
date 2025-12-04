@@ -5,16 +5,36 @@
   const themeIcon = document.getElementById("themeIcon");
   const themeText = document.getElementById("themeText");
 
-  // Check if running in Tauri
-  const isTauri = window.__TAURI__ !== undefined;
+  // Check if running in Tauri (v2 uses __TAURI_INTERNALS__)
+  const isTauri =
+    window.__TAURI__ !== undefined ||
+    window.__TAURI_INTERNALS__ !== undefined;
   let tauriWindow = null;
+  let platform = null;
 
   console.log("[Theme] Initializing theme system...");
   console.log("[Theme] Running in Tauri:", isTauri);
   console.log("[Theme] window.__TAURI__:", window.__TAURI__);
+  console.log("[Theme] window.__TAURI_INTERNALS__:", window.__TAURI_INTERNALS__);
+
+  // Detect platform - check user agent for macOS detection (works without Tauri API)
+  const isMacOS =
+    navigator.platform.toUpperCase().indexOf("MAC") >= 0 ||
+    navigator.userAgent.toUpperCase().indexOf("MAC") >= 0;
+
+  // Apply macOS styling if running in Tauri on macOS
+  if (isTauri && isMacOS) {
+    console.log("[Theme] Detected macOS in Tauri - applying platform styles");
+    document.body.classList.add("tauri-macos");
+    const header = document.querySelector(".modern-header");
+    if (header) {
+      header.classList.add("tauri-macos");
+      console.log("[Theme] Added macOS-specific styling classes");
+    }
+  }
 
   // Initialize Tauri window API if available
-  if (isTauri) {
+  if (isTauri && window.__TAURI__) {
     try {
       // Try multiple API access patterns
       if (window.__TAURI__.window) {
@@ -25,11 +45,6 @@
         const { getCurrentWebviewWindow } = window.__TAURI__.webviewWindow;
         tauriWindow = getCurrentWebviewWindow();
         console.log("[Theme] Using window.__TAURI__.webviewWindow API");
-      } else if (window.__TAURI_INTERNALS__) {
-        console.log(
-          "[Theme] Found __TAURI_INTERNALS__, checking structure:",
-          Object.keys(window.__TAURI_INTERNALS__)
-        );
       }
 
       if (tauriWindow) {
@@ -43,6 +58,12 @@
           "[Theme] Could not initialize Tauri window - API structure:",
           Object.keys(window.__TAURI__)
         );
+      }
+
+      // Detect platform via Tauri API if available
+      if (window.__TAURI__.os) {
+        platform = await window.__TAURI__.os.platform();
+        console.log("[Theme] Detected platform via Tauri API:", platform);
       }
     } catch (error) {
       console.warn("[Theme] Failed to initialize Tauri window API:", error);
@@ -97,18 +118,16 @@
       if (themeText) themeText.textContent = "Dark";
     }
 
-    // Sync with Tauri window title bar theme
+    // Sync with Tauri window theme (native title bar color on supported platforms)
     if (tauriWindow) {
       try {
-        console.log("[Theme] Calling tauriWindow.setTheme with:", theme);
-        const result = await tauriWindow.setTheme(theme);
-        console.log("[Theme] setTheme result:", result);
+        console.log("[Theme] Syncing Tauri window theme to:", theme);
+        await tauriWindow.setTheme(theme);
+        console.log("[Theme] Successfully synced window theme");
       } catch (error) {
-        console.error("[Theme] Failed to set Tauri window theme:", error);
-        console.error("[Theme] Error details:", error.message, error.stack);
+        // setTheme may not be available on all platforms
+        console.log("[Theme] Window theme sync not supported on this platform:", error.message);
       }
-    } else {
-      console.log("[Theme] Skipping Tauri window theme (not in Tauri environment)");
     }
   }
 })();

@@ -72,12 +72,44 @@ pub async fn run_gui_mode() -> Result<(), String> {
       move |app| {
         let app_handle = app.handle().clone();
 
+        // Configure window theme and title bar style programmatically
+        if let Some(window) = app.get_webview_window("main") {
+          logger::info(LogTag::System, "Configuring window theme and title bar...");
+
+          // Set initial theme to dark (will be synced by JavaScript theme.js later)
+          if let Err(e) = window.set_theme(Some(tauri::Theme::Dark)) {
+            logger::warning(
+              LogTag::System,
+              &format!("Failed to set window theme: {}", e),
+            );
+          } else {
+            logger::info(LogTag::System, "Window theme set to Dark");
+          }
+
+          // macOS: Set overlay title bar style to hide title bar but keep traffic lights
+          #[cfg(target_os = "macos")]
+          {
+            if let Err(e) = window.set_title_bar_style(tauri::TitleBarStyle::Overlay) {
+              logger::warning(
+                LogTag::System,
+                &format!("Failed to set title bar style: {}", e),
+              );
+            } else {
+              logger::info(LogTag::System, "macOS title bar set to Overlay");
+            }
+          }
+
+          logger::info(LogTag::System, "Window configuration complete");
+        } else {
+          logger::warning(LogTag::System, "Main window not found during setup");
+        }
+
         // Register global keyboard shortcuts for zoom + reload
         register_window_shortcuts(app, Arc::clone(&zoom_level_clone))?;
 
         logger::info(
           LogTag::System,
- "Tauri setup started - window created but hidden",
+          "Tauri setup started - window created but hidden",
         );
 
         // Spawn thread to wait for dashboard to be fully loaded, then show window

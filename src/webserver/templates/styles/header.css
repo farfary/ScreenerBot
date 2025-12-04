@@ -1,7 +1,25 @@
 /* ============================================================================
-   MODERN HEADER - Professional Trading Terminal Design
-   Clean layout with dividers, larger fonts, no card boxes
+   TAURI TITLE BAR AREA - macOS/Windows/Linux Native Integration
    ============================================================================ */
+
+/* Title bar background area - matches header color, sits behind traffic lights */
+.tauri-titlebar-bg {
+  display: none; /* Hidden by default (browser mode) */
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px; /* Standard macOS title bar height */
+  z-index: 999;
+  background: #0d1117; /* Solid color to match header exactly */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Show title bar background on macOS in Tauri */
+.tauri-macos .tauri-titlebar-bg {
+  display: block;
+}
 
 /* ============================================================================
    HEADER CONTAINER
@@ -12,16 +30,17 @@
   top: 0;
   width: 100%;
   z-index: 1000;
-  background: var(--header-bg, linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1c2128 100%));
+  background: #0d1117; /* Solid color - same as title bar */
   border-bottom: 1px solid var(--header-border, #30363d);
   box-shadow: 0 4px 20px rgb(0, 0, 0, 0.4);
   font-family: var(--header-font, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   flex-shrink: 0;
 }
 
-/* ============================================================================
-   ROW 1: MAIN CONTROL BAR (60px)
-   ============================================================================ */
+/* Tauri macOS: Push header down to sit below title bar area */
+.tauri-macos .modern-header {
+  margin-top: 28px; /* Height of title bar area */
+}
 
 .header-row-1 {
   display: flex;
@@ -29,103 +48,155 @@
   gap: 32px;
   padding: 12px 24px;
   height: 60px;
-  background: var(--header-bg);
+  background: transparent; /* Inherit from .modern-header */
+  user-select: none; /* Prevent text selection when dragging */
+  -webkit-user-select: none;
 }
 
-/* Brand/Logo */
+/* Brand/Logo - unified container */
 .header-brand {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 8px 0;
   cursor: pointer;
-  transition: opacity 0.2s ease;
   flex-shrink: 0;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .header-brand:hover {
-  opacity: 0.8;
+  transform: translateY(-2px);
 }
 
 .brand-logo {
   height: 32px;
   width: auto;
-  filter: drop-shadow(0 0 8px rgb(255, 255, 255, 0.4));
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .brand-icon {
   font-size: 28px;
-  filter: drop-shadow(0 0 12px rgb(255, 255, 255, 0.5));
+  filter: drop-shadow(0 2px 4px rgb(0, 0, 0, 0.2));
+  transition: filter 0.3s ease;
 }
 
 .brand-text {
   font-family: var(--font-brand);
-  font-size: 24px;
-  font-weight: 900;
-  color: #fff;
-  letter-spacing: 0.12em;
+  font-size: 26px;
+  font-weight: 700;
+  color: var(--brand-navy);
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  text-shadow:
-    0 0 10px rgb(255, 255, 255, 0.5),
-    0 0 20px rgb(147, 197, 253, 0.4),
-    0 2px 4px rgb(0, 0, 0, 0.3);
+  text-shadow: 
+    0 2px 4px rgba(13, 59, 102, 0.15),
+    0 4px 12px rgba(6, 182, 212, 0.08),
+    0 1px 2px rgba(0, 0, 0, 0.25);
   position: relative;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-text-stroke: 0.6px var(--brand-navy);
+  paint-order: stroke fill;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Subtle animated glow on hover */
-.header-brand:hover .brand-text {
-  text-shadow:
-    0 0 15px rgb(255, 255, 255, 0.7),
-    0 0 30px rgb(147, 197, 253, 0.5),
-    0 2px 4px rgb(0, 0, 0, 0.3);
+/* Logo hover effects */
+[data-theme="light"] .header-brand:hover .brand-logo {
+  filter: 
+    drop-shadow(0 4px 10px rgba(13, 59, 102, 0.3))
+    drop-shadow(0 2px 5px rgba(59, 130, 246, 0.2))
+    drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+  transform: scale(1.03);
 }
+
+[data-theme="dark"] .header-brand:hover .brand-logo {
+  filter:
+    drop-shadow(0 0 8px rgba(6, 182, 212, 0.5))
+    drop-shadow(0 2px 6px rgba(0, 0, 0, 0.7));
+  transform: scale(1.03);
+}
+
+/* Hover states are theme-specific, see below */
 
 /* Dark mode brand styling */
 [data-theme="dark"] .brand-logo {
-  filter: drop-shadow(0 0 8px rgb(88, 166, 255, 0.5));
+  filter:
+    drop-shadow(0 0 4px rgba(6, 182, 212, 0.4))
+    drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6));
 }
 
 [data-theme="dark"] .brand-icon {
-  filter: drop-shadow(0 0 12px rgb(88, 166, 255, 0.6));
+  filter:
+    drop-shadow(0 0 6px rgba(59, 130, 246, 0.5))
+    drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
 }
 
 [data-theme="dark"] .brand-text {
-  color: #e6edf3;
+  color: var(--brand-cyan-light);
   text-shadow:
-    0 0 10px rgb(88, 166, 255, 0.6),
-    0 0 20px rgb(88, 166, 255, 0.4),
-    0 0 30px rgb(88, 166, 255, 0.2),
-    0 2px 4px rgb(0, 0, 0, 0.4);
+    0 0 6px rgba(6, 182, 212, 0.5),
+    0 0 12px rgba(6, 182, 212, 0.3),
+    0 2px 4px rgba(0, 0, 0, 0.6);
+  -webkit-text-stroke: 0.6px rgba(224, 247, 255, 0.9);
+}
+
+/* Light mode brand styling */
+[data-theme="light"] .brand-logo {
+  filter: 
+    drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3))
+    drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
+}
+
+[data-theme="light"] .brand-icon {
+  filter:
+    drop-shadow(0 2px 4px rgb(0, 0, 0, 0.2))
+    drop-shadow(0 1px 2px rgb(0, 0, 0, 0.15));
+}
+
+[data-theme="light"] .brand-text {
+  color: var(--brand-navy);
+  text-shadow:
+    0 2px 4px rgba(13, 59, 102, 0.15),
+    0 4px 12px rgba(6, 182, 212, 0.08),
+    0 1px 2px rgba(0, 0, 0, 0.25);
+  -webkit-text-stroke: 0.6px var(--brand-navy);
+}
+
+[data-theme="light"] .header-brand:hover .brand-text {
+  color: #0d3b66;
+  text-shadow:
+    0 2px 6px rgba(13, 59, 102, 0.3),
+    0 4px 12px rgba(59, 130, 246, 0.2),
+    0 1px 3px rgba(0, 0, 0, 0.35);
+  -webkit-text-stroke: 0.7px #0d3b66;
+  transform: scale(1.02);
 }
 
 [data-theme="dark"] .header-brand:hover .brand-text {
+  color: #ffffff;
   text-shadow:
-    0 0 15px rgb(121, 192, 255, 0.8),
-    0 0 30px rgb(88, 166, 255, 0.5),
-    0 0 45px rgb(88, 166, 255, 0.3),
-    0 2px 4px rgb(0, 0, 0, 0.4);
+    0 0 10px rgba(6, 182, 212, 0.7),
+    0 0 20px rgba(6, 182, 212, 0.5),
+    0 2px 6px rgba(0, 0, 0, 0.7);
+  -webkit-text-stroke: 0.7px #ffffff;
+  transform: scale(1.02);
 }
 
-/* Status Groups - No boxes, just clean spacing */
+/* Status Groups - Clean flat design, no card styling */
 .header-card {
+  position: relative;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 0;
+  align-items: center;
+  padding: 8px 12px;
+  background: transparent;
+  border-radius: 0;
+  border: none;
   cursor: pointer;
-  transition: opacity 0.2s ease;
-  border-left: 2px solid rgb(255, 255, 255, 0.1);
-  padding-left: 24px;
-  flex-shrink: 0;
-}
-
-.header-card:first-of-type {
-  border-left: none;
-  padding-left: 0;
+  transition: all 0.2s ease;
 }
 
 .header-card:hover {
-  opacity: 0.85;
+  background: transparent;
 }
 
 .card-content {
@@ -358,6 +429,9 @@
 }
 
 .nav-tabs a {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   padding: 10px 20px;
   font-size: 14px;
   font-weight: 600;
