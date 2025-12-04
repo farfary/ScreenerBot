@@ -2,10 +2,10 @@
 
 /* ===== Layout Variables ===== */
 .home-dashboard {
-  --home-gap: clamp(0.75rem, 1.5vw, 1.25rem);
-  --home-padding: clamp(0.75rem, 1.5vw, 1.25rem);
+  --home-gap: clamp(0.625rem, 1.2vw, 1rem);
+  --home-padding: clamp(0.625rem, 1.2vw, 1rem);
   --card-radius: 10px;
-  --card-padding: 0.875rem;
+  --card-padding: 0.75rem;
 
   display: flex;
   flex-direction: column;
@@ -14,6 +14,9 @@
   min-width: 0;
   width: 100%;
   overflow-x: hidden;
+  /* Fill available viewport height */
+  min-height: 100%;
+  height: 100%;
 }
 
 /* ===== Wallet Hero Section ===== */
@@ -25,12 +28,12 @@
   background: linear-gradient(135deg, #1565c0 0%, #0d47a1 100%);
   border: 1px solid #1976d2;
   border-radius: var(--card-radius);
-  padding: 1.25rem 1.5rem;
+  padding: 1rem 1.25rem;
   color: #fff;
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.2);
   display: grid;
-  grid-template-columns: minmax(200px, 2fr) repeat(3, minmax(100px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(90px, 1fr));
+  gap: 1rem;
   align-items: center;
 }
 
@@ -58,7 +61,7 @@
 
 .hero-balance {
   font-family: var(--font-data);
-  font-size: clamp(2rem, 3.5vw, 2.8rem);
+  font-size: clamp(1.75rem, 3vw, 2.4rem);
   font-weight: 700;
   line-height: 1.1;
   letter-spacing: 0.01em;
@@ -138,9 +141,11 @@
 /* ===== Content Grid - 3 Columns ===== */
 .content-grid {
   display: grid;
-  grid-template-columns: minmax(280px, 1.2fr) minmax(200px, 0.8fr) minmax(240px, 1fr);
+  grid-template-columns: minmax(260px, 1.2fr) minmax(180px, 0.8fr) minmax(220px, 1fr);
   gap: var(--home-gap);
-  align-items: start;
+  align-items: stretch; /* Equal height cards in same row */
+  flex: 1 1 auto; /* Fill remaining vertical space */
+  min-height: 0;
 }
 
 /* ===== Dashboard Cards ===== */
@@ -151,6 +156,9 @@
   box-shadow: 0 2px 8px var(--shadow-md);
   min-width: 0;
   overflow: hidden;
+  /* Flex layout for content distribution */
+  display: flex;
+  flex-direction: column;
 }
 
 .card-header {
@@ -223,7 +231,8 @@
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 0.5rem;
-  margin-bottom: 0.625rem;
+  margin-bottom: 0.5rem;
+  flex: 1 1 auto; /* Fill available space */
 }
 
 .analytics-item {
@@ -312,7 +321,9 @@
 .positions-list {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.5rem;
+  flex: 1 1 auto; /* Fill available card space */
+  justify-content: flex-start; /* Start from top */
 }
 
 .position-row {
@@ -359,13 +370,21 @@
   display: flex;
   flex-direction: column;
   gap: var(--home-gap);
+  height: 100%; /* Fill the grid cell height */
+}
+
+.right-stack > .dashboard-card {
+  flex: 1 1 50%; /* Equal height distribution */
+  min-height: 0;
 }
 
 /* ===== System Card ===== */
 .system-metrics {
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
+  gap: 0.5rem;
+  flex: 1 1 auto; /* Fill available card space */
+  justify-content: flex-start; /* Start from top */
 }
 
 .system-row {
@@ -426,8 +445,10 @@
 .tokens-stats {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
-  gap: 0.35rem;
-  margin-bottom: 0.5rem;
+  gap: 0.4rem;
+  margin-bottom: 0.4rem;
+  flex: 1 1 auto; /* Fill available space */
+  align-content: start; /* Start from top */
 }
 
 .token-row {
@@ -501,7 +522,7 @@
 /* ===== Responsive Design ===== */
 @media (width <= 1280px) {
   .content-grid {
-    grid-template-columns: minmax(260px, 1.1fr) minmax(180px, 0.9fr) minmax(220px, 1fr);
+    grid-template-columns: minmax(240px, 1.1fr) minmax(160px, 0.9fr) minmax(200px, 1fr);
   }
 }
 
