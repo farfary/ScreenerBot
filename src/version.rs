@@ -138,8 +138,8 @@ pub async fn check_for_update() -> Result<Option<UpdateInfo>, String> {
     let platform = get_platform();
     let server_url = get_update_server_url();
     let url = format!(
-        "{}/releases/check?version={}&platform={}",
-        server_url, VERSION, platform
+        "{}/releases/check?version={}&buildNumber={}&platform={}",
+        server_url, VERSION, BUILD_NUMBER, platform
     );
 
     logger::info(
