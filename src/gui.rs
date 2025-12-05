@@ -637,9 +637,19 @@ fn smart_maximize(window: tauri::WebviewWindow) -> Result<(), String> {
 
   #[cfg(not(target_os = "macos"))]
   {
-    // Fallback for non-macOS: toggle maximize
-    window
-      .toggle_maximize()
-      .map_err(|e| format!("Failed to toggle maximize: {}", e))
+    // Fallback for non-macOS: toggle maximize using is_maximized check
+    let is_maximized = window
+      .is_maximized()
+      .map_err(|e| format!("Failed to check maximize state: {}", e))?;
+
+    if is_maximized {
+      window
+        .unmaximize()
+        .map_err(|e| format!("Failed to unmaximize: {}", e))
+    } else {
+      window
+        .maximize()
+        .map_err(|e| format!("Failed to maximize: {}", e))
+    }
   }
 }
