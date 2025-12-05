@@ -318,6 +318,17 @@ export class SettingsDialog {
               <i class="icon-info"></i>
               <span>About</span>
             </button>
+            <div class="settings-nav-divider"></div>
+            <a href="https://screenerbot.io/privacy" target="_blank" rel="noopener" class="settings-nav-item settings-nav-link">
+              <i class="icon-shield"></i>
+              <span>Privacy Policy</span>
+              <i class="icon-external-link settings-nav-external"></i>
+            </a>
+            <a href="https://screenerbot.io/terms" target="_blank" rel="noopener" class="settings-nav-item settings-nav-link">
+              <i class="icon-file-text"></i>
+              <span>Terms of Service</span>
+              <i class="icon-external-link settings-nav-external"></i>
+            </a>
           </nav>
 
           <div class="settings-content">

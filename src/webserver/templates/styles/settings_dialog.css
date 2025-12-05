@@ -224,6 +224,21 @@
   opacity: 0.6;
 }
 
+/* External link nav items */
+.settings-nav-link {
+  text-decoration: none;
+}
+
+.settings-nav-external {
+  margin-left: auto;
+  font-size: 0.75rem;
+  opacity: 0.5;
+}
+
+.settings-nav-link:hover .settings-nav-external {
+  opacity: 0.8;
+}
+
 /* Content */
 .settings-content {
   flex: 1;
