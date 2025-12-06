@@ -317,6 +317,7 @@ function createLifecycle() {
         console.error("Failed to fetch version:", err);
         showSection(els, "error");
         els.errorMessage.textContent = `Failed to load version info: ${err.message}`;
+        return; // Don't continue if version fetch failed
       }
 
       // Fetch initial status
@@ -325,16 +326,21 @@ function createLifecycle() {
         if (state) {
           updateState = state;
           updateFromState(els, state);
+
+          // Auto-start poller if download is in progress
+          if (state.download_progress?.downloading) {
+            statusPoller?.start();
+          }
         } else {
-          // No error but no state - show no update section
-          showSection(els, "noUpdate");
+          // No cached state - automatically check for updates on page load
+          await handleCheckUpdates(els);
         }
       } catch (err) {
         console.error("Failed to fetch status:", err);
         // Don't overwrite existing error from version fetch
         if (els.errorSection.style.display !== "flex") {
-          showSection(els, "error");
-          els.errorMessage.textContent = `Failed to check update status: ${err.message}`;
+          // Auto-check for updates since status fetch failed
+          await handleCheckUpdates(els);
         }
       }
     },

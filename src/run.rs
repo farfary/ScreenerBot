@@ -274,9 +274,12 @@ fn register_all_services(manager: &mut ServiceManager) {
   manager.register(Box::new(crate::trader::TraderService::new()));
   manager.register(Box::new(WebserverService));
 
+  // Background utility services
+  manager.register(Box::new(UpdateCheckService));
+
   logger::info(
     LogTag::System,
-    "All services registered (21 total - includes ConnectivityService)",
+    "All services registered (22 total - includes ConnectivityService and UpdateCheckService)",
   );
 }
 

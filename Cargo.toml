@@ -85,7 +85,7 @@ sha2 = "0.10"
 flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }
 
 # HTTP client and websockets
-reqwest = { version = "0.11", features = ["json", "rustls-tls", "blocking"] }
+reqwest = { version = "0.11", features = ["json", "rustls-tls", "blocking", "stream"] }
 tokio-tungstenite = { version = "0.21", features = ["connect", "rustls-tls-native-roots"] }
 
 # Database with bundled sqlite for faster builds

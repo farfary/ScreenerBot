@@ -7,6 +7,7 @@ pub mod positions_service;
 pub mod rpc_stats_service;
 pub mod sol_price_service;
 pub mod transactions_service;
+pub mod update_check_service;
 pub mod wallet_service;
 pub mod webserver_service;
 
@@ -28,6 +29,7 @@ pub use positions_service::PositionsService;
 pub use rpc_stats_service::RpcStatsService;
 pub use sol_price_service::SolPriceService;
 pub use transactions_service::TransactionsService;
+pub use update_check_service::UpdateCheckService;
 pub use wallet_service::WalletService;
 pub use webserver_service::WebserverService;
 

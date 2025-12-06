@@ -216,23 +216,28 @@ async fn install_update() -> Response {
 // =============================================================================
 
 fn get_platform() -> &'static str {
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    return "macos-arm64";
-
-    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
-    return "macos-x64";
+    // macOS always uses universal builds (Intel + Apple Silicon combined)
+    #[cfg(target_os = "macos")]
+    return "macos-universal";
 
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     return "linux-x64";
 
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    return "linux-arm64";
+
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
     return "windows-x64";
 
+    #[cfg(all(target_os = "windows", target_arch = "aarch64"))]
+    return "windows-arm64";
+
     #[cfg(not(any(
-        all(target_os = "macos", target_arch = "aarch64"),
-        all(target_os = "macos", target_arch = "x86_64"),
+        target_os = "macos",
         all(target_os = "linux", target_arch = "x86_64"),
+        all(target_os = "linux", target_arch = "aarch64"),
         all(target_os = "windows", target_arch = "x86_64"),
+        all(target_os = "windows", target_arch = "aarch64"),
     )))]
     return "unknown";
 }

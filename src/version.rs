@@ -1,10 +1,14 @@
 //! Version management and update checking for ScreenerBot
 //!
 //! Provides version info from Cargo.toml and update checking via screenerbot.io API.
+//! Includes background periodic update checking service.
 
 use chrono::{DateTime, Utc};
+use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::Duration;
+use tokio::io::AsyncWriteExt;
 use tokio::sync::RwLock;
 
 use crate::logger::{self, LogTag};
@@ -26,6 +30,9 @@ fn get_update_server_url() -> String {
 
 /// Update check interval (6 hours)
 const UPDATE_CHECK_INTERVAL_SECS: u64 = 6 * 60 * 60;
+
+/// Download timeout (30 minutes for large files)
+const DOWNLOAD_TIMEOUT_SECS: u64 = 30 * 60;
 
 // =============================================================================
 // Types
@@ -133,6 +140,77 @@ pub async fn get_update_state() -> UpdateState {
     UPDATE_STATE.read().await.clone().unwrap_or_default()
 }
 
+/// Start the background update checking service
+///
+/// Periodically checks for updates every UPDATE_CHECK_INTERVAL_SECS (6 hours).
+/// Runs in the background and logs when updates are found.
+/// Returns a JoinHandle for the spawned task.
+pub fn start_update_check_service(
+    shutdown: std::sync::Arc<tokio::sync::Notify>,
+    monitor: tokio_metrics::TaskMonitor,
+) -> tokio::task::JoinHandle<()> {
+    tokio::spawn(monitor.instrument(async move {
+        logger::info(
+            LogTag::System,
+            &format!(
+                "Update check service started (interval: {} hours)",
+                UPDATE_CHECK_INTERVAL_SECS / 3600
+            ),
+        );
+
+        // Initial check after 30 seconds (allow bot to fully start)
+        tokio::select! {
+            _ = tokio::time::sleep(Duration::from_secs(30)) => {}
+            _ = shutdown.notified() => {
+                logger::debug(LogTag::System, "Update check service shutdown during initial delay");
+                return;
+            }
+        }
+
+        // Perform initial check
+        if let Err(e) = check_for_update().await {
+            logger::warning(LogTag::System, &format!("Initial update check failed: {}", e));
+        }
+
+        // Periodic check loop
+        let mut interval = tokio::time::interval(Duration::from_secs(UPDATE_CHECK_INTERVAL_SECS));
+        interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+        interval.tick().await; // Skip first immediate tick
+
+        loop {
+            tokio::select! {
+                _ = interval.tick() => {
+                    logger::debug(LogTag::System, "Running periodic update check...");
+                    match check_for_update().await {
+                        Ok(Some(update)) => {
+                            logger::info(
+                                LogTag::System,
+                                &format!(
+                                    "Update available: v{} (current: v{})",
+                                    update.version, VERSION
+                                ),
+                            );
+                        }
+                        Ok(None) => {
+                            logger::debug(LogTag::System, "No updates available");
+                        }
+                        Err(e) => {
+                            logger::warning(
+                                LogTag::System,
+                                &format!("Periodic update check failed: {}", e),
+                            );
+                        }
+                    }
+                }
+                _ = shutdown.notified() => {
+                    logger::debug(LogTag::System, "Update check service shutting down");
+                    break;
+                }
+            }
+        }
+    }))
+}
+
 /// Check for updates from the server
 pub async fn check_for_update() -> Result<Option<UpdateInfo>, String> {
     let platform = get_platform();
@@ -209,11 +287,8 @@ pub async fn check_for_update() -> Result<Option<UpdateInfo>, String> {
     Ok(None)
 }
 
-/// Download an update
+/// Download an update with streaming (memory efficient)
 pub async fn download_update(update: &UpdateInfo) -> Result<String, String> {
-    use std::io::Write;
-    use std::path::PathBuf;
-
     logger::info(
         LogTag::System,
         &format!("Downloading update v{}...", update.version),
@@ -255,60 +330,113 @@ pub async fn download_update(update: &UpdateInfo) -> Result<String, String> {
         &format!("Downloading from: {}", download_url),
     );
 
-    // Download file
-    let client = reqwest::Client::new();
+    // Download file with timeout
+    let client = reqwest::Client::builder()
+        .timeout(Duration::from_secs(DOWNLOAD_TIMEOUT_SECS))
+        .build()
+        .map_err(|e| {
+            let err = format!("Failed to create HTTP client: {}", e);
+            set_download_error_sync(&err);
+            err
+        })?;
+
     let response = client.get(&download_url).send().await.map_err(|e| {
-        set_download_error(&format!("Download failed: {}", e));
-        format!("Download failed: {}", e)
+        let err = format!("Download request failed: {}", e);
+        set_download_error_sync(&err);
+        err
     })?;
 
     if !response.status().is_success() {
         let err = format!("Download failed: HTTP {}", response.status());
-        set_download_error(&err);
+        set_download_error_sync(&err);
         return Err(err);
     }
 
     let total_size = response.content_length().unwrap_or(update.file_size);
 
-    // Download entire content (simpler approach without streaming)
-    let content = response.bytes().await.map_err(|e| {
-        let err = format!("Download error: {}", e);
-        set_download_error(&err);
+    // Stream download to file (memory efficient)
+    let mut file = tokio::fs::File::create(&download_path).await.map_err(|e| {
+        let err = format!("Failed to create file: {}", e);
+        set_download_error_sync(&err);
         err
     })?;
 
-    // Update progress to 100%
+    let mut stream = response.bytes_stream();
+    let mut downloaded: u64 = 0;
+    let mut last_progress_update = std::time::Instant::now();
+
+    while let Some(chunk_result) = stream.next().await {
+        let chunk = chunk_result.map_err(|e| {
+            let err = format!("Download stream error: {}", e);
+            set_download_error_sync(&err);
+            err
+        })?;
+
+        file.write_all(&chunk).await.map_err(|e| {
+            let err = format!("Write error: {}", e);
+            set_download_error_sync(&err);
+            err
+        })?;
+
+        downloaded += chunk.len() as u64;
+
+        // Update progress every 500ms to avoid lock contention
+        if last_progress_update.elapsed() > Duration::from_millis(500) {
+            let progress_percent = if total_size > 0 {
+                (downloaded as f32 / total_size as f32) * 100.0
+            } else {
+                0.0
+            };
+
+            let mut state = UPDATE_STATE.write().await;
+            if let Some(ref mut update_state) = *state {
+                update_state.download_progress.bytes_downloaded = downloaded;
+                update_state.download_progress.progress_percent = progress_percent;
+            }
+            last_progress_update = std::time::Instant::now();
+        }
+    }
+
+    // Ensure file is flushed
+    file.flush().await.map_err(|e| {
+        let err = format!("Failed to flush file: {}", e);
+        set_download_error_sync(&err);
+        err
+    })?;
+    drop(file);
+
+    // Final progress update
     {
         let mut state = UPDATE_STATE.write().await;
         if let Some(ref mut update_state) = *state {
-            update_state.download_progress.bytes_downloaded = content.len() as u64;
+            update_state.download_progress.bytes_downloaded = downloaded;
             update_state.download_progress.progress_percent = 100.0;
         }
     }
 
-    // Write to file
-    let mut file = std::fs::File::create(&download_path).map_err(|e| {
-        let err = format!("Failed to create file: {}", e);
-        set_download_error(&err);
-        err
-    })?;
+    // Verify checksum using spawn_blocking (avoid blocking async runtime)
+    let checksum_path = download_path.clone();
+    let expected_checksum = update.checksum.clone();
+    let file_checksum = tokio::task::spawn_blocking(move || calculate_sha256(&checksum_path))
+        .await
+        .map_err(|e| {
+            let err = format!("Checksum task failed: {}", e);
+            set_download_error_sync(&err);
+            err
+        })?
+        .map_err(|e| {
+            set_download_error_sync(&e);
+            e
+        })?;
 
-    file.write_all(&content).map_err(|e| {
-        let err = format!("Write error: {}", e);
-        set_download_error(&err);
-        err
-    })?;
-
-    // Verify checksum
-    let file_checksum = calculate_sha256(&download_path)?;
-    if file_checksum != update.checksum {
+    if file_checksum != expected_checksum {
         let err = format!(
             "Checksum mismatch: expected {}, got {}",
-            update.checksum, file_checksum
+            expected_checksum, file_checksum
         );
-        set_download_error(&err);
+        set_download_error_sync(&err);
         // Clean up bad file
-        let _ = std::fs::remove_file(&download_path);
+        let _ = tokio::fs::remove_file(&download_path).await;
         return Err(err);
     }
 
@@ -367,24 +495,34 @@ pub fn open_update(path: &str) -> Result<(), String> {
 // =============================================================================
 
 /// Get platform identifier
+/// 
+/// Platform identifiers must match what publish.sh registers:
+/// - macos-universal (universal binary for all macOS)
+/// - linux-x64, linux-arm64
+/// - windows-x64, windows-arm64
 fn get_platform() -> &'static str {
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    return "macos-arm64";
-
-    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
-    return "macos-x64";
+    // macOS always uses universal builds (Intel + Apple Silicon combined)
+    #[cfg(target_os = "macos")]
+    return "macos-universal";
 
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     return "linux-x64";
 
+    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
+    return "linux-arm64";
+
     #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
     return "windows-x64";
 
+    #[cfg(all(target_os = "windows", target_arch = "aarch64"))]
+    return "windows-arm64";
+
     #[cfg(not(any(
-        all(target_os = "macos", target_arch = "aarch64"),
-        all(target_os = "macos", target_arch = "x86_64"),
+        target_os = "macos",
         all(target_os = "linux", target_arch = "x86_64"),
+        all(target_os = "linux", target_arch = "aarch64"),
         all(target_os = "windows", target_arch = "x86_64"),
+        all(target_os = "windows", target_arch = "aarch64"),
     )))]
     return "unknown";
 }
@@ -426,18 +564,28 @@ fn calculate_sha256(path: &std::path::Path) -> Result<String, String> {
     Ok(format!("{:x}", hasher.finalize()))
 }
 
-/// Set download error in state
-fn set_download_error(error: &str) {
-    tokio::spawn({
-        let error = error.to_string();
-        async move {
+/// Set download error in state (synchronous version using blocking task)
+///
+/// Uses tokio::task::block_in_place to immediately update state without fire-and-forget.
+fn set_download_error_sync(error: &str) {
+    let error = error.to_string();
+    // Use Handle::try_current to check if we're in async context
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        // We're in async context - spawn and block briefly to ensure state is set
+        let _ = handle.block_on(async {
             let mut state = UPDATE_STATE.write().await;
             if let Some(ref mut update_state) = *state {
                 update_state.download_progress.downloading = false;
                 update_state.download_progress.error = Some(error);
             }
-        }
-    });
+        });
+    } else {
+        // Not in async context - just log the error
+        logger::warning(
+            LogTag::System,
+            &format!("Download error (state not updated): {}", error),
+        );
+    }
 }
 
 /// Compare versions (returns true if remote is newer)
