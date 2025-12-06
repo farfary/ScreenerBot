@@ -947,23 +947,36 @@ export class SettingsDialog {
       <div class="settings-updates-section">
         <div class="settings-section">
           <h3 class="settings-section-title">Software Updates</h3>
-          <div class="settings-update-card">
-            <div class="settings-update-icon">
+          <div class="settings-update-card" id="updateStatusCard">
+            <div class="settings-update-icon" id="updateStatusIcon">
               <i class="icon-circle-check"></i>
             </div>
-            <div class="settings-update-info">
-              <h4>You're up to date!</h4>
-              <p>ScreenerBot v${version} (build ${build_number}) is the latest version.</p>
+            <div class="settings-update-info" id="updateStatusInfo">
+              <h4 id="updateStatusTitle">You're up to date!</h4>
+              <p id="updateStatusMessage">ScreenerBot v${version} (build ${build_number}) is the latest version.</p>
             </div>
             <button class="settings-update-btn" id="checkUpdatesBtn">
               <i class="icon-refresh-cw"></i>
               <span>Check for Updates</span>
             </button>
           </div>
+          <div class="settings-update-card" id="updateAvailableCard" style="display: none; border-color: var(--warning-color);">
+            <div class="settings-update-icon" style="color: var(--warning-color);">
+              <i class="icon-arrow-up-circle"></i>
+            </div>
+            <div class="settings-update-info">
+              <h4 style="color: var(--warning-color);">Update Available!</h4>
+              <p id="updateAvailableMessage">A new version is available.</p>
+            </div>
+            <a href="/updates" class="settings-update-btn" style="text-decoration: none;">
+              <i class="icon-download"></i>
+              <span>View Update</span>
+            </a>
+          </div>
         </div>
 
         <div class="settings-section">
-          <h3 class="settings-section-title">Release Notes</h3>
+          <h3 class="settings-section-title">Current Release</h3>
           <div class="settings-release-notes">
             <div class="settings-release">
               <div class="settings-release-header">
@@ -971,12 +984,9 @@ export class SettingsDialog {
                 <span class="settings-release-date">Build ${build_number}</span>
                 <span class="settings-release-badge">Current</span>
               </div>
-              <ul class="settings-release-changes">
-                <li>Full-featured settings dialog</li>
-                <li>Interface customization options</li>
-                <li>Startup behavior configuration</li>
-                <li>Theme and animation controls</li>
-              </ul>
+              <p id="currentReleaseNotes" style="color: var(--text-secondary); font-size: var(--font-size-sm); margin-top: var(--spacing-sm);">
+                Visit the Updates page for full release notes and download options.
+              </p>
             </div>
           </div>
         </div>
@@ -990,11 +1000,61 @@ export class SettingsDialog {
   _attachUpdatesHandlers(content) {
     const checkBtn = content.querySelector("#checkUpdatesBtn");
     if (checkBtn) {
-      checkBtn.addEventListener("click", () => {
-        Utils.showToast({
-          type: "info",
-          title: "Update checking is not available yet",
-        });
+      checkBtn.addEventListener("click", async () => {
+        // Update button state
+        checkBtn.disabled = true;
+        checkBtn.innerHTML = '<i class="icon-loader spinning"></i><span>Checking...</span>';
+
+        try {
+          const response = await fetch("/api/updates/check");
+          const data = await response.json();
+
+          const statusCard = content.querySelector("#updateStatusCard");
+          const availableCard = content.querySelector("#updateAvailableCard");
+          const statusIcon = content.querySelector("#updateStatusIcon");
+          const statusTitle = content.querySelector("#updateStatusTitle");
+          const statusMessage = content.querySelector("#updateStatusMessage");
+
+          if (data.update_available && data.update) {
+            // Update available
+            statusCard.style.display = "none";
+            availableCard.style.display = "flex";
+            
+            const availableMsg = content.querySelector("#updateAvailableMessage");
+            if (availableMsg) {
+              availableMsg.textContent = `Version ${data.update.version} is now available!`;
+            }
+
+            Utils.showToast({
+              type: "warning",
+              title: "Update Available",
+              message: `Version ${data.update.version} is ready to download`,
+            });
+          } else {
+            // No update
+            statusCard.style.display = "flex";
+            availableCard.style.display = "none";
+            statusIcon.innerHTML = '<i class="icon-circle-check"></i>';
+            statusTitle.textContent = "You're up to date!";
+            statusMessage.textContent = `ScreenerBot v${this.versionInfo.version} (build ${this.versionInfo.build_number}) is the latest version.`;
+
+            Utils.showToast({
+              type: "success",
+              title: "No updates available",
+              message: "You're running the latest version",
+            });
+          }
+        } catch (err) {
+          console.error("Update check failed:", err);
+          Utils.showToast({
+            type: "error",
+            title: "Update check failed",
+            message: err.message || "Could not connect to update server",
+          });
+        } finally {
+          checkBtn.disabled = false;
+          checkBtn.innerHTML = '<i class="icon-refresh-cw"></i><span>Check for Updates</span>';
+        }
       });
     }
   }
