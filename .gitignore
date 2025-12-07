@@ -55,4 +55,7 @@ node_modules/
 
 # Submodules removed - now separate repos
 repos/
+
+# Build artifacts and temporary files
 builds/
+.build.lock
