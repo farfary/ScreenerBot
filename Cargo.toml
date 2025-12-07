@@ -22,22 +22,24 @@ panic = "abort"          # simpler codegen, faster builds
 debug-assertions = false # skip extra checks for speed
 overflow-checks = false  # skip integer overflow checks
 
-# Release profile — optimized but FASTER compilation
+# Release profile — FAST compilation, good runtime performance, no debug info
 [profile.release]
-opt-level = 3       # Full optimizations for runtime speed
-lto = "thin"        # Faster LTO than "fat"
-codegen-units = 16  # More parallelism = faster compile (was 1, very slow!)
-incremental = true  # Enable incremental for faster rebuilds
-debug = false       # Smaller binary, faster link
-panic = "abort"     # Reduces binary size
-strip = "debuginfo" # Strips symbols except needed for backtraces
+opt-level = 2           # Good performance, much faster compile than opt-level 3
+lto = false             # NO LTO = saves 5-10 minutes per build
+codegen-units = 256     # Maximum parallelism for fastest compilation
+incremental = true      # Faster rebuilds when code changes
+debug = false           # No debug info in binary
+panic = "abort"         # Security: no stack unwinding, smaller binary
+strip = "symbols"       # Strip ALL symbols (no function names leak)
+debug-assertions = false  # No debug assertions in release
+overflow-checks = false   # No overflow checks (performance)
 
-# Optional: profile for "fast-release" builds (good runtime perf, much faster than full release)
-[profile.fast-release]
+# Optional: profile for maximum optimization (slow compile, best runtime)
+[profile.max-release]
 inherits = "release"
-lto = false
-codegen-units = 16
-opt-level = 2
+opt-level = 3           # Maximum optimizations
+lto = "thin"            # Link-time optimization
+codegen-units = 1       # Best optimization (slow compile)
 
 [lib]
 name = "screenerbot"
