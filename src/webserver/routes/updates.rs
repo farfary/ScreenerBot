@@ -27,6 +27,7 @@ use crate::{
 #[derive(Debug, Serialize)]
 struct VersionResponse {
     version: String,
+    build_number: String,
     platform: String,
 }
 
@@ -86,7 +87,8 @@ async fn get_version() -> Response {
     let info = version::get_version_info();
     let response = VersionResponse {
         version: info.version,
-        platform: get_platform().to_string(),
+        build_number: info.build_number,
+        platform: info.platform,
     };
 
     success_response(response)

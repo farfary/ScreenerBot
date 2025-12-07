@@ -42,6 +42,8 @@ const DOWNLOAD_TIMEOUT_SECS: u64 = 30 * 60;
 #[derive(Debug, Clone, Serialize)]
 pub struct VersionInfo {
     pub version: String,
+    pub build_number: String,
+    pub platform: String,
 }
 
 /// Information about an available update
@@ -123,8 +125,38 @@ pub fn get_version() -> &'static str {
 
 /// Get full version info
 pub fn get_version_info() -> VersionInfo {
+    // Build number is embedded at compile time via build.rs
+    let build_number = env!("BUILD_NUMBER");
+    
+    // Detect platform
+    let platform = if cfg!(target_os = "macos") {
+        if cfg!(target_arch = "aarch64") {
+            "macOS (Apple Silicon)"
+        } else if cfg!(target_arch = "x86_64") {
+            "macOS (Intel)"
+        } else {
+            "macOS (Universal)"
+        }
+    } else if cfg!(target_os = "windows") {
+        if cfg!(target_arch = "aarch64") {
+            "Windows (ARM64)"
+        } else {
+            "Windows (x64)"
+        }
+    } else if cfg!(target_os = "linux") {
+        if cfg!(target_arch = "aarch64") {
+            "Linux (ARM64)"
+        } else {
+            "Linux (x64)"
+        }
+    } else {
+        "Unknown"
+    };
+
     VersionInfo {
         version: VERSION.to_string(),
+        build_number: build_number.to_string(),
+        platform: platform.to_string(),
     }
 }
 

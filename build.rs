@@ -1,4 +1,14 @@
 fn main() {
+  // Read and embed build number at compile time
+  let build_number = std::fs::read_to_string("build_number.txt")
+    .ok()
+    .and_then(|s| s.trim().parse::<u32>().ok())
+    .map(|n| n.to_string())
+    .unwrap_or_else(|| "0".to_string());
+  
+  println!("cargo:rustc-env=BUILD_NUMBER={}", build_number);
+  println!("cargo:rerun-if-changed=build_number.txt");
+  
   // macOS 26 Tahoe icon support: Track Assets.car for rebuild triggers
   #[cfg(target_os = "macos")]
   {
