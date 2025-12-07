@@ -1,6 +1,6 @@
 [package]
 name = "screenerbot"
-version = "0.1.34"
+version = "0.1.36"
 edition = "2021"
 default-run = "screenerbot"
 # Disable automatic binary discovery - we only want the main binary
