@@ -647,6 +647,68 @@
   justify-content: center;
 }
 
+.settings-about-path-card {
+  width: 100%;
+  max-width: 760px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  margin-bottom: 28px;
+}
+
+.settings-about-path-icon {
+  width: 46px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(59 130 246 / 0.12);
+  color: var(--link-color);
+  border-radius: 12px;
+  font-size: 1.2rem;
+}
+
+.settings-about-path-details {
+  flex: 1;
+  text-align: left;
+}
+
+.settings-about-path-label {
+  margin: 0 0 6px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-about-path-value {
+  margin: 0;
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+.settings-about-path-hint {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+}
+
+.settings-about-path-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.settings-about-path-actions .settings-update-btn {
+  background: var(--bg-primary);
+}
+
 .settings-about-link {
   display: flex;
   align-items: center;

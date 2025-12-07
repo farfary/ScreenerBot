@@ -14,6 +14,7 @@ use std::time::Duration;
 use tokio::task;
 
 use crate::logger::{self, LogTag};
+use crate::paths;
 // TODO: Re-enable when trader module is fully integrated
 // use crate::trader::CRITICAL_OPERATIONS_IN_PROGRESS;
 use crate::webserver::state::AppState;
@@ -62,6 +63,23 @@ pub struct BootStatusResponse {
     pub message: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub retry_after_ms: Option<u64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PathsResponse {
+    pub base_directory: String,
+    pub data_directory: String,
+    pub logs_directory: String,
+    pub cache_pool_directory: String,
+    pub analysis_exports_directory: String,
+    pub config_path: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct OpenPathResponse {
+    pub opened: bool,
+    pub message: String,
+    pub path: String,
 }
 
 // =============================================================================
@@ -176,7 +194,9 @@ async fn reboot_system() -> Response {
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/reboot", post(reboot_system))
-        .route("/bootstrap", get(boot_status))
+    .route("/bootstrap", get(boot_status))
+    .route("/paths", get(get_paths))
+    .route("/paths/open-data", post(open_data_directory))
 }
 
 /// GET /api/system/bootstrap - Report real-time boot status for GUI/frontend gating
@@ -282,4 +302,57 @@ async fn boot_status(State(state): State<Arc<AppState>>) -> Response {
     };
 
     success_response(response)
+}
+
+/// GET /api/system/paths - Return key filesystem locations
+async fn get_paths() -> Response {
+    if let Err(err) = paths::ensure_all_directories() {
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "PATHS_INIT_FAILED",
+            &err,
+            None,
+        );
+    }
+
+    let response = PathsResponse {
+        base_directory: paths::get_base_directory_display(),
+        data_directory: paths::get_data_directory().display().to_string(),
+        logs_directory: paths::get_logs_directory().display().to_string(),
+        cache_pool_directory: paths::get_cache_pool_directory().display().to_string(),
+        analysis_exports_directory: paths::get_analysis_exports_directory()
+            .display()
+            .to_string(),
+        config_path: paths::get_config_path().display().to_string(),
+    };
+
+    success_response(response)
+}
+
+/// POST /api/system/paths/open-data - Open the data directory in the OS file manager
+async fn open_data_directory() -> Response {
+    if let Err(err) = paths::ensure_all_directories() {
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "PATHS_INIT_FAILED",
+            &err,
+            None,
+        );
+    }
+
+    let data_dir = paths::get_data_directory();
+
+    match paths::open_directory_in_file_manager(&data_dir) {
+        Ok(_) => success_response(OpenPathResponse {
+            opened: true,
+            message: "Data folder opened in your file manager".to_string(),
+            path: data_dir.display().to_string(),
+        }),
+        Err(err) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "OPEN_DATA_FAILED",
+            &err,
+            None,
+        ),
+    }
 }

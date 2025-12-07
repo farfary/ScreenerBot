@@ -5,10 +5,11 @@
 //!
 //! ## Path Strategy
 //!
-//! Both terminal and bundle execution use the same base directory:
-//! - **macOS**: `~/ScreenerBot/`
-//! - **Windows**: `%USERPROFILE%\ScreenerBot\`
-//! - **Linux**: `~/.screenerbot/`
+//! Both terminal and bundle execution use the same base directory following
+//! platform standards:
+//! - **macOS**: `~/Library/Application Support/ScreenerBot/`
+//! - **Windows**: `%LOCALAPPDATA%\ScreenerBot\`
+//! - **Linux**: `$XDG_DATA_HOME/ScreenerBot/` (fallback `~/.local/share/ScreenerBot/`)
 //!
 //! ## Directory Structure
 //!
@@ -27,7 +28,7 @@
 //! ```
 
 use once_cell::sync::Lazy;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::logger::{self, LogTag};
@@ -48,26 +49,26 @@ static BASE_DIRECTORY: Lazy<PathBuf> = Lazy::new(|| {
 
 /// Resolves the base directory for all ScreenerBot data
 ///
-/// Uses platform-specific user directories:
-/// - macOS: ~/ScreenerBot
-/// - Windows: %USERPROFILE%\ScreenerBot
-/// - Linux: ~/.screenerbot
+/// Uses platform-specific application data locations:
+/// - macOS: ~/Library/Application Support/ScreenerBot
+/// - Windows: %LOCALAPPDATA%\ScreenerBot
+/// - Linux: $XDG_DATA_HOME/ScreenerBot (fallback ~/.local/share/ScreenerBot)
 fn resolve_base_directory() -> PathBuf {
-  let home = dirs::home_dir().expect("Failed to determine home directory");
+  const APP_DIR: &str = "ScreenerBot";
 
-  #[cfg(target_os = "macos")]
-  let base = home.join("ScreenerBot");
+  if let Some(dir) = dirs::data_local_dir() {
+    return dir.join(APP_DIR);
+  }
 
-  #[cfg(target_os = "windows")]
-  let base = home.join("ScreenerBot");
+  if let Some(dir) = dirs::data_dir() {
+    return dir.join(APP_DIR);
+  }
 
-  #[cfg(target_os = "linux")]
-  let base = home.join(".screenerbot");
+  if let Some(home) = dirs::home_dir() {
+    return home.join(APP_DIR);
+  }
 
-  #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
-  let base = home.join("ScreenerBot");
-
-  base
+  PathBuf::from(APP_DIR)
 }
 
 // =============================================================================
@@ -236,7 +237,7 @@ pub fn get_db_with_wal_files(db_path: PathBuf) -> Vec<PathBuf> {
 ///
 /// ## Created Directories
 ///
-/// - Base directory (~/ScreenerBot or platform equivalent)
+/// - Base directory (platform data dir/ScreenerBot)
 /// - data/
 /// - logs/
 /// - data/cache_pool/
@@ -249,7 +250,7 @@ pub fn get_db_with_wal_files(db_path: PathBuf) -> Vec<PathBuf> {
 pub fn ensure_all_directories() -> Result<(), String> {
   // Log base directory initialization (safe to log now, outside of lazy init)
   if !is_initialized() {
- eprintln!("Base directory: {}", get_base_directory().display());
+    eprintln!("Base directory: {}", get_base_directory().display());
   }
 
   let dirs_to_create = vec![
@@ -271,7 +272,7 @@ pub fn ensure_all_directories() -> Result<(), String> {
         )
       })?;
 
- eprintln!("Created directory: {}", dir.display());
+      eprintln!("Created directory: {}", dir.display());
     }
   }
 
@@ -285,6 +286,52 @@ pub fn ensure_all_directories() -> Result<(), String> {
 /// Returns a display string for the base directory (for user-facing messages)
 pub fn get_base_directory_display() -> String {
   BASE_DIRECTORY.display().to_string()
+}
+
+/// Opens a directory in the platform's file manager, creating it if needed
+pub fn open_directory_in_file_manager(path: &Path) -> Result<(), String> {
+  if !path.exists() {
+    std::fs::create_dir_all(path)
+      .map_err(|e| format!("Failed to create directory {}: {}", path.display(), e))?;
+  }
+
+  logger::info(LogTag::System, &format!("Opening directory: {}", path.display()));
+
+  #[cfg(target_os = "macos")]
+  {
+    std::process::Command::new("open")
+      .arg(path)
+      .spawn()
+      .map_err(|e| format!("Failed to open directory {}: {}", path.display(), e))?;
+    return Ok(());
+  }
+
+  #[cfg(target_os = "linux")]
+  {
+    std::process::Command::new("xdg-open")
+      .arg(path)
+      .spawn()
+      .map_err(|e| format!("Failed to open directory {}: {}", path.display(), e))?;
+    return Ok(());
+  }
+
+  #[cfg(target_os = "windows")]
+  {
+    std::process::Command::new("explorer")
+      .arg(path)
+      .spawn()
+      .map_err(|e| format!("Failed to open directory {}: {}", path.display(), e))?;
+    return Ok(());
+  }
+
+  #[cfg(not(any(target_os = "macos", target_os = "windows", target_os = "linux")))]
+  {
+    let unsupported = format!(
+      "Opening directories is not supported on this platform ({})",
+      std::env::consts::OS
+    );
+    return Err(unsupported);
+  }
 }
 
 /// Checks if the base directory has been initialized
