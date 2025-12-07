@@ -1,7 +1,7 @@
 //! Version management and update checking for ScreenerBot
 //!
-//! Version format: MAJOR.MINOR.PATCH (e.g., 0.1.24)
-//! The PATCH number is effectively the build number, incremented each publish.
+//! Version format: MAJOR.MINOR.BUILD_NUMBER (e.g., 0.1.34)
+//! The version patch number IS the build number, auto-incremented each publish.
 //! Provides version info from Cargo.toml and update checking via screenerbot.io API.
 //! Includes background periodic update checking service.
 
@@ -19,8 +19,8 @@ use crate::logger::{self, LogTag};
 // Constants
 // =============================================================================
 
-/// Compile-time version from Cargo.toml (format: MAJOR.MINOR.PATCH)
-/// The PATCH number is the build number, incremented each publish.
+/// Compile-time version from Cargo.toml (format: MAJOR.MINOR.BUILD_NUMBER)
+/// The patch number IS the build number, incremented each publish.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Update server base URL - configurable via UPDATE_SERVER_URL env var
@@ -42,7 +42,6 @@ const DOWNLOAD_TIMEOUT_SECS: u64 = 30 * 60;
 #[derive(Debug, Clone, Serialize)]
 pub struct VersionInfo {
     pub version: String,
-    pub build_number: String,
     pub platform: String,
 }
 
@@ -125,9 +124,6 @@ pub fn get_version() -> &'static str {
 
 /// Get full version info
 pub fn get_version_info() -> VersionInfo {
-    // Build number is embedded at compile time via build.rs
-    let build_number = env!("BUILD_NUMBER");
-    
     // Detect platform
     let platform = if cfg!(target_os = "macos") {
         if cfg!(target_arch = "aarch64") {
@@ -155,7 +151,6 @@ pub fn get_version_info() -> VersionInfo {
 
     VersionInfo {
         version: VERSION.to_string(),
-        build_number: build_number.to_string(),
         platform: platform.to_string(),
     }
 }

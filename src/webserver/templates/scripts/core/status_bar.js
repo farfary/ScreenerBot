@@ -11,9 +11,9 @@
     try {
       const cached = localStorage.getItem(CACHE_KEY);
       if (cached) {
-        const { version, buildNumber, timestamp } = JSON.parse(cached);
+        const { version, timestamp } = JSON.parse(cached);
         if (Date.now() - timestamp < CACHE_DURATION_MS) {
-          return { version, buildNumber };
+          return { version };
         }
       }
     } catch {
@@ -22,13 +22,12 @@
     return null;
   }
 
-  function setCachedVersionInfo(version, buildNumber) {
+  function setCachedVersionInfo(version) {
     try {
       localStorage.setItem(
         CACHE_KEY,
         JSON.stringify({
           version,
-          buildNumber,
           timestamp: Date.now(),
         })
       );
@@ -37,14 +36,10 @@
     }
   }
 
-  function updateVersionDisplay(version, buildNumber) {
+  function updateVersionDisplay(version) {
     const el = document.getElementById("statusBarVersion");
     if (el) {
-      if (buildNumber && buildNumber !== "0") {
-        el.textContent = `v${version} (build ${buildNumber})`;
-      } else {
-        el.textContent = `v${version}`;
-      }
+      el.textContent = `v${version}`;
     }
   }
 
@@ -56,8 +51,7 @@
       }
       const data = await response.json();
       const version = data.version || data.data?.version;
-      const buildNumber = data.build_number || data.data?.build_number;
-      return { version, buildNumber };
+      return { version };
     } catch (err) {
       console.warn("Failed to fetch version:", err);
       return null;
@@ -68,17 +62,17 @@
     // Try cache first for instant display
     const cached = getCachedVersionInfo();
     if (cached) {
-      updateVersionDisplay(cached.version, cached.buildNumber);
+      updateVersionDisplay(cached.version);
     }
 
     // Fetch fresh version (updates cache)
     const info = await fetchVersionInfo();
     if (info && info.version) {
-      updateVersionDisplay(info.version, info.buildNumber);
-      setCachedVersionInfo(info.version, info.buildNumber);
+      updateVersionDisplay(info.version);
+      setCachedVersionInfo(info.version);
     } else if (!cached) {
       // Fallback if no cache and fetch failed
-      updateVersionDisplay("—", null);
+      updateVersionDisplay("—");
     }
   }
 

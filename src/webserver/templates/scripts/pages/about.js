@@ -28,7 +28,6 @@ async function fetchVersion() {
 function updateVersionInfo(versionData) {
   const versionEl = $("#appVersion");
   const platformEl = $("#appPlatform");
-  const buildEl = $("#appBuildNumber");
 
   if (versionEl && versionData?.version) {
     versionEl.textContent = versionData.version;
@@ -36,11 +35,6 @@ function updateVersionInfo(versionData) {
 
   if (platformEl && versionData?.platform) {
     platformEl.textContent = versionData.platform;
-  }
-
-  if (buildEl && versionData?.build_number && versionData.build_number !== "0") {
-    buildEl.textContent = `Build ${versionData.build_number}`;
-    buildEl.style.display = "inline";
   }
 }
 
