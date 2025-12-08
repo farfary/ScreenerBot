@@ -58,38 +58,53 @@
 }
 
 /* =============================================================================
-   HEADER
+   HEADER - Modern Glassmorphism Design
    ============================================================================= */
 
 .dialog-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: var(--spacing-md) var(--spacing-lg);
-  background: var(--bg-secondary);
+  padding: 12px 20px;
+  background: linear-gradient(
+    180deg,
+    var(--bg-secondary) 0%,
+    rgb(from var(--bg-secondary) r g b / 0.95) 100%
+  );
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
   gap: var(--spacing-lg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
+/* Left section - Token identity */
 .header-left {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
+  gap: 12px;
   flex: 0 0 auto;
+  min-width: 200px;
 }
 
 .header-logo {
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
   overflow: hidden;
   background: var(--bg-primary);
-  border: 2px solid var(--border-color);
+  border: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  box-shadow: 0 2px 8px rgb(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
+}
+
+.header-logo:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.25);
 }
 
 .header-logo img {
@@ -99,9 +114,9 @@
 }
 
 .logo-placeholder {
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 700;
-  color: var(--text-secondary);
+  color: var(--text-muted);
   text-transform: uppercase;
 }
 
@@ -114,21 +129,21 @@
 .title-row {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  gap: 6px;
 }
 
 .title-main {
-  font-size: 1.25rem;
+  font-size: 1.1rem;
   font-weight: 700;
   color: var(--text-primary);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 
 .title-sub {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--text-secondary);
-  font-weight: 500;
-  max-width: 200px;
+  font-weight: 400;
+  max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -142,12 +157,12 @@
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
-  border-radius: 10px;
-  font-size: 0.65rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.6rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
 }
 
 .badge-success {
@@ -170,20 +185,19 @@
   color: var(--warning-color);
 }
 
-/* Header Center - Price Display */
+/* Center section - Price & metrics */
 .header-center {
   flex: 1 1 auto;
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: var(--spacing-xs);
+  justify-content: center;
+  gap: var(--spacing-xl);
 }
 
 #headerPrice {
   display: flex;
-  flex-direction: column;
   align-items: center;
-  gap: var(--spacing-xs);
+  gap: var(--spacing-md);
 }
 
 .price-loading {
@@ -194,11 +208,11 @@
 .price-main {
   display: flex;
   align-items: baseline;
-  gap: var(--spacing-sm);
+  gap: 8px;
 }
 
 .price-sol {
-  font-size: 1.5rem;
+  font-size: 1.4rem;
   font-weight: 700;
   color: var(--text-primary);
   font-family: var(--font-data);
@@ -206,46 +220,49 @@
 }
 
 .price-usd {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: var(--text-secondary);
   font-family: var(--font-data);
 }
 
 .price-change {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 600;
   font-family: var(--font-data);
-  padding: 2px 8px;
-  border-radius: 4px;
+  padding: 4px 10px;
+  border-radius: 6px;
 }
 
 .price-change.positive {
   color: var(--success-color);
-  background: var(--success-alpha-10);
+  background: var(--success-alpha-15, rgb(63, 185, 80, 0.15));
 }
 
 .price-change.negative {
   color: var(--danger);
-  background: var(--danger-alpha-10);
+  background: var(--danger-alpha-15, rgb(248, 81, 73, 0.15));
 }
 
 .price-metrics {
   display: flex;
-  gap: var(--spacing-lg);
+  gap: 20px;
+  padding-left: 20px;
+  border-left: 1px solid var(--border-color);
 }
 
 .metric-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 1px;
+  gap: 2px;
 }
 
 .metric-label {
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
+  font-weight: 500;
 }
 
 .metric-value {
@@ -256,24 +273,24 @@
   font-feature-settings: "tnum" 1, "zero" 1;
 }
 
-/* Header Right - Actions */
+/* Right section - Trade actions & controls */
 .header-right {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
+  gap: 8px;
   flex: 0 0 auto;
 }
 
 .header-actions {
   display: flex;
-  gap: var(--spacing-xs);
+  gap: 4px;
 }
 
 .header-trade-actions {
   display: flex;
-  gap: var(--spacing-sm);
-  margin-right: var(--spacing-sm);
-  padding-right: var(--spacing-md);
+  gap: 8px;
+  margin-right: 8px;
+  padding-right: 12px;
   border-right: 1px solid var(--border-color);
 }
 
@@ -281,45 +298,51 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
-  font-size: 0.8rem;
+  padding: 8px 14px;
+  font-size: 0.75rem;
   font-weight: 600;
   border: 1px solid transparent;
-  border-radius: var(--radius-md);
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .trade-btn:disabled {
-  opacity: 0.5;
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
 .trade-btn.buy-btn {
   color: var(--success-color);
   background: var(--success-alpha-10);
-  border-color: var(--success-alpha-30);
+  border-color: var(--success-alpha-20);
 }
 
 .trade-btn.buy-btn:hover:not(:disabled) {
   background: var(--success-alpha-20);
-  box-shadow: 0 0 12px var(--success-alpha-30);
+  border-color: var(--success-color);
+  box-shadow: 0 0 16px var(--success-alpha-30);
+  transform: translateY(-1px);
 }
 
 .trade-btn.sell-btn {
   color: var(--danger);
   background: var(--danger-alpha-10);
-  border-color: var(--danger-alpha-30);
+  border-color: var(--danger-alpha-20);
 }
 
 .trade-btn.sell-btn:hover:not(:disabled) {
   background: var(--danger-alpha-20);
-  box-shadow: 0 0 12px var(--danger-alpha-30);
+  border-color: var(--danger);
+  box-shadow: 0 0 16px var(--danger-alpha-30);
+  transform: translateY(-1px);
 }
 
 .trade-btn svg {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
 }
 
 .action-btn {
@@ -328,9 +351,9 @@
   justify-content: center;
   width: 32px;
   height: 32px;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.2s ease;
@@ -339,17 +362,17 @@
 
 .action-btn:hover {
   background: var(--bg-card-hover);
-  border-color: var(--text-secondary);
+  border-color: var(--border-color);
   color: var(--text-primary);
 }
 
 .dialog-close {
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  width: 36px;
-  height: 36px;
-  border-radius: var(--radius-md);
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -359,24 +382,24 @@
 }
 
 .dialog-close:hover {
-  background: var(--danger-alpha-20);
-  border-color: var(--danger);
+  background: var(--danger-alpha-15, rgb(248, 81, 73, 0.15));
   color: var(--danger);
 }
 
 .dialog-close svg {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 
 /* =============================================================================
-   TABS
+   TAB BAR - Modern Pill Style Design
    ============================================================================= */
 
 .dialog-tabs {
   display: flex;
-  gap: 2px;
-  padding: var(--spacing-sm) var(--spacing-lg);
+  align-items: center;
+  gap: 4px;
+  padding: 8px 20px;
   background: var(--bg-primary);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
@@ -386,22 +409,26 @@
 .tab-button {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 16px;
+  gap: 8px;
+  padding: 8px 16px;
   background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
-  font-size: 0.85rem;
-  font-weight: 600;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.2s ease;
   white-space: nowrap;
   flex-shrink: 0;
+  position: relative;
 }
 
 .tab-button svg {
-  opacity: 0.7;
+  width: 16px;
+  height: 16px;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
 }
 
 .tab-button:hover {
@@ -410,16 +437,30 @@
 }
 
 .tab-button:hover svg {
-  opacity: 1;
+  opacity: 0.9;
 }
 
 .tab-button.active {
   color: var(--primary-color);
-  border-bottom-color: var(--primary-color);
+  background: var(--primary-alpha-10);
+  font-weight: 600;
 }
 
 .tab-button.active svg {
   opacity: 1;
+}
+
+/* Active indicator line */
+.tab-button.active::after {
+  content: "";
+  position: absolute;
+  bottom: -8px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 2px;
+  background: var(--primary-color);
+  border-radius: 2px;
 }
 
 /* =============================================================================
