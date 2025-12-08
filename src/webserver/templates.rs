@@ -133,9 +133,24 @@ const SETUP_PAGE: &str = include_str!("templates/pages/setup.html");
 
 /// Render the base layout with shared chrome and inject the requested content.
 pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
+    use crate::global;
+
     let mut html = BASE_TEMPLATE.replace("{{TITLE}}", title);
     html = html.replace("{{NAV_TABS}}", &nav_tabs(active_tab));
     html = html.replace("{{CONTENT}}", content);
+
+    // Inject security credentials for GUI mode
+    let is_gui = global::is_gui_mode();
+    let security_token = if is_gui {
+        global::get_security_token().unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let port = global::get_webserver_port();
+
+    html = html.replace("{{SECURITY_TOKEN}}", &security_token);
+    html = html.replace("{{WEBSERVER_PORT}}", &port.to_string());
+    html = html.replace("{{IS_GUI_MODE}}", if is_gui { "true" } else { "false" });
 
     // Inject splash, onboarding, and setup screens
     html = html.replace("{{SPLASH_SCREEN}}", SPLASH_PAGE);

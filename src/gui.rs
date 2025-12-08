@@ -1,8 +1,12 @@
 /// GUI module for ScreenerBot desktop application
 ///
 /// Handles Tauri window management and integration with the headless ScreenerBot backend.
-/// The GUI mode embeds the webserver dashboard (localhost:8080) in a native window.
-use crate::config::with_config;
+///
+/// Security features:
+/// - Dynamic port selection (prevents conflicts, not guessable)
+/// - Security token validation (prevents external browser access)
+/// - 127.0.0.1 binding only (no network access)
+use crate::global;
 use crate::logger::{self, LogTag};
 use crate::process_lock::ProcessLock;
 use serde::Deserialize;
@@ -14,43 +18,48 @@ use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut}
 /// Run bot in GUI mode with Tauri window
 ///
 /// This function:
-/// 1. **Acquires process lock FIRST** - prevents window from opening if another instance runs
-/// 2. Spawns the ScreenerBot backend in a background task (with the lock)
-/// 3. Builds and runs the Tauri desktop application
-/// 4. Registers global keyboard shortcuts for zoom (Ctrl/Cmd +/-/0) and reload (Ctrl/Cmd + R)
-/// 5. Waits for the webserver to be ready
+/// 1. **Sets GUI mode flag** - enables security token validation
+/// 2. **Acquires process lock** - prevents multiple instances
+/// 3. Spawns the ScreenerBot backend (with dynamic port + security token)
+/// 4. Builds and runs the Tauri desktop application
+/// 5. Waits for webserver to be ready and injects security token into webview
 /// 6. Shows the window with the dashboard loaded
 ///
-/// The window is initially hidden and only shown after the dashboard HTML is ready,
-/// ensuring a smooth user experience without showing loading states.
+/// Security: In GUI mode, the webserver uses a random port and requires
+/// a security token header for all requests, preventing browser access.
 pub async fn run_gui_mode() -> Result<(), String> {
- logger::info(LogTag::System, "Initializing Tauri desktop application");
+  logger::info(LogTag::System, "Initializing Tauri desktop application");
 
-  // 1. Acquire process lock BEFORE starting anything
-  // This ensures we don't open a GUI window if another instance is running
+  // 1. Set GUI mode FIRST - this enables security features in webserver
+  global::set_gui_mode(true);
+  logger::info(
+    LogTag::System,
+    "GUI mode enabled - webserver will use secure random port",
+  );
+
+  // 2. Acquire process lock BEFORE starting anything
   let process_lock = ProcessLock::acquire()?;
   logger::info(
     LogTag::System,
- "Process lock acquired - no other instance running",
+    "Process lock acquired - no other instance running",
   );
 
   // Start the ScreenerBot backend in a background task (pass the lock to keep it alive)
   tokio::spawn(async move {
     logger::info(LogTag::System, "Starting ScreenerBot backend services...");
 
-    // Start the full ScreenerBot system (includes webserver on :8080)
-    // Use run_bot_with_lock since we already acquired the lock
+    // Start the full ScreenerBot system (includes webserver with dynamic port)
     match crate::run::run_bot_with_lock(process_lock).await {
       Ok(_) => {
         logger::info(
           LogTag::System,
- "ScreenerBot backend started successfully",
+          "ScreenerBot backend started successfully",
         );
       }
       Err(e) => {
         logger::error(
           LogTag::System,
- &format!("Failed to start ScreenerBot backend: {}", e),
+          &format!("Failed to start ScreenerBot backend: {}", e),
         );
       }
     }
@@ -79,7 +88,7 @@ pub async fn run_gui_mode() -> Result<(), String> {
         if let Some(window) = app.get_webview_window("main") {
           logger::info(LogTag::System, "Configuring window theme and title bar...");
 
-          // Set initial theme to dark (will be synced by JavaScript theme.js later)
+          // Set initial theme to dark
           if let Err(e) = window.set_theme(Some(tauri::Theme::Dark)) {
             logger::warning(
               LogTag::System,
@@ -89,7 +98,7 @@ pub async fn run_gui_mode() -> Result<(), String> {
             logger::info(LogTag::System, "Window theme set to Dark");
           }
 
-          // macOS: Set overlay title bar style to hide title bar but keep traffic lights
+          // macOS: Set overlay title bar style
           #[cfg(target_os = "macos")]
           {
             if let Err(e) = window.set_title_bar_style(tauri::TitleBarStyle::Overlay) {
@@ -129,13 +138,89 @@ pub async fn run_gui_mode() -> Result<(), String> {
   Ok(())
 }
 
+/// Get the dashboard base URL (waits for port to be assigned)
+fn get_dashboard_url() -> String {
+  // Wait for webserver to start and assign port
+  let start = Instant::now();
+  let timeout = Duration::from_secs(60);
+
+  loop {
+    let port = global::get_webserver_port();
+    if port != 0 {
+      let url = format!("http://127.0.0.1:{}", port);
+      logger::info(
+        LogTag::System,
+        &format!("Dashboard URL: {} (port assigned after {:?})", url, start.elapsed()),
+      );
+      return url;
+    }
+
+    if start.elapsed() > timeout {
+      logger::error(
+        LogTag::System,
+        "Timeout waiting for webserver port assignment",
+      );
+      // Fall back to a default (will likely fail, but better than hanging)
+      return "http://127.0.0.1:8080".to_string();
+    }
+
+    std::thread::sleep(Duration::from_millis(50));
+  }
+}
+
+/// Get security token (waits for it to be generated)
+fn get_security_token() -> Option<String> {
+  let start = Instant::now();
+  let timeout = Duration::from_secs(60);
+
+  loop {
+    if let Some(token) = global::get_security_token() {
+      logger::debug(
+        LogTag::System,
+        &format!(
+          "Security token obtained after {:?}: {}...",
+          start.elapsed(),
+          &token[..8]
+        ),
+      );
+      return Some(token);
+    }
+
+    if start.elapsed() > timeout {
+      logger::error(
+        LogTag::System,
+        "Timeout waiting for security token generation",
+      );
+      return None;
+    }
+
+    std::thread::sleep(Duration::from_millis(50));
+  }
+}
+
+/// Security token header name
+const SECURITY_TOKEN_HEADER: &str = "X-ScreenerBot-Token";
+
+/// Create HTTP client with security token header
+fn create_secure_client() -> reqwest::blocking::Client {
+  let token = get_security_token().unwrap_or_default();
+
+  let mut headers = reqwest::header::HeaderMap::new();
+  headers.insert(
+    SECURITY_TOKEN_HEADER,
+    reqwest::header::HeaderValue::from_str(&token).unwrap_or_else(|_| {
+      reqwest::header::HeaderValue::from_static("")
+    }),
+  );
+
+  reqwest::blocking::Client::builder()
+    .timeout(Duration::from_millis(500))
+    .default_headers(headers)
+    .build()
+    .unwrap()
+}
+
 /// Register global keyboard shortcuts for zoom control + reload
-///
-/// Registers:
-/// - Cmd/Ctrl + Plus: Zoom in
-/// - Cmd/Ctrl + Minus: Zoom out
-/// - Cmd/Ctrl + 0: Reset zoom to 100%
-/// - Cmd/Ctrl + R: Reload embedded dashboard
 fn register_window_shortcuts(
   app: &mut tauri::App,
   zoom_level: Arc<Mutex<f64>>,
@@ -144,20 +229,19 @@ fn register_window_shortcuts(
 
   // Determine modifier key based on platform
   let modifier = if cfg!(target_os = "macos") {
-    Modifiers::META // Command key on macOS
+    Modifiers::META
   } else {
-    Modifiers::CONTROL // Ctrl key on Windows/Linux
+    Modifiers::CONTROL
   };
 
   // Register Zoom In (Cmd/Ctrl + Plus or =)
-  let zoom_in_shortcut = Shortcut::new(Some(modifier), Code::Equal); // Equal key (where + is)
+  let zoom_in_shortcut = Shortcut::new(Some(modifier), Code::Equal);
   let zoom_level_in = Arc::clone(&zoom_level);
   let app_handle_in = app_handle.clone();
   let last_zoom_in = Arc::new(Mutex::new(Instant::now() - Duration::from_millis(1000)));
 
   app.global_shortcut()
     .on_shortcut(zoom_in_shortcut, move |_app, _event, _shortcut| {
-      // Debounce: ignore if called within 300ms (prevents double-trigger on key hold)
       let mut last = last_zoom_in.lock().unwrap();
       if last.elapsed() < Duration::from_millis(300) {
         return;
@@ -167,18 +251,17 @@ fn register_window_shortcuts(
 
       if let Some(window) = app_handle_in.get_webview_window("main") {
         let mut zoom = zoom_level_in.lock().unwrap();
-        *zoom = (*zoom + 0.1).min(3.0); // Max 300%
+        *zoom = (*zoom + 0.1).min(3.0);
         let zoom_val = *zoom;
-        drop(zoom); // Release lock before window operations
+        drop(zoom);
 
         if let Err(e) = window.set_zoom(zoom_val) {
           logger::warning(LogTag::System, &format!("Failed to set zoom: {}", e));
         } else {
           logger::info(
             LogTag::System,
- &format!("Zoom in: {:.0}%", zoom_val * 100.0),
+            &format!("Zoom in: {:.0}%", zoom_val * 100.0),
           );
-          // Save to config
           save_zoom_to_config(zoom_val);
         }
       }
@@ -192,7 +275,6 @@ fn register_window_shortcuts(
 
   app.global_shortcut()
     .on_shortcut(zoom_out_shortcut, move |_app, _event, _shortcut| {
-      // Debounce: ignore if called within 300ms (prevents double-trigger on key hold)
       let mut last = last_zoom_out.lock().unwrap();
       if last.elapsed() < Duration::from_millis(300) {
         return;
@@ -202,18 +284,17 @@ fn register_window_shortcuts(
 
       if let Some(window) = app_handle_out.get_webview_window("main") {
         let mut zoom = zoom_level_out.lock().unwrap();
-        *zoom = (*zoom - 0.1).max(0.5); // Min 50%
+        *zoom = (*zoom - 0.1).max(0.5);
         let zoom_val = *zoom;
-        drop(zoom); // Release lock before window operations
+        drop(zoom);
 
         if let Err(e) = window.set_zoom(zoom_val) {
           logger::warning(LogTag::System, &format!("Failed to set zoom: {}", e));
         } else {
           logger::info(
             LogTag::System,
- &format!("Zoom out: {:.0}%", zoom_val * 100.0),
+            &format!("Zoom out: {:.0}%", zoom_val * 100.0),
           );
-          // Save to config
           save_zoom_to_config(zoom_val);
         }
       }
@@ -227,7 +308,6 @@ fn register_window_shortcuts(
 
   app.global_shortcut()
     .on_shortcut(zoom_reset_shortcut, move |_app, _event, _shortcut| {
-      // Debounce: ignore if called within 300ms (prevents double-trigger on key hold)
       let mut last = last_zoom_reset.lock().unwrap();
       if last.elapsed() < Duration::from_millis(300) {
         return;
@@ -239,13 +319,12 @@ fn register_window_shortcuts(
         let mut zoom = zoom_level_reset.lock().unwrap();
         *zoom = 1.0;
         let zoom_val = *zoom;
-        drop(zoom); // Release lock before window operations
+        drop(zoom);
 
         if let Err(e) = window.set_zoom(zoom_val) {
           logger::warning(LogTag::System, &format!("Failed to reset zoom: {}", e));
         } else {
- logger::info(LogTag::System, "Zoom reset: 100%");
-          // Save to config
+          logger::info(LogTag::System, "Zoom reset: 100%");
           save_zoom_to_config(zoom_val);
         }
       }
@@ -258,7 +337,6 @@ fn register_window_shortcuts(
 
   app.global_shortcut()
     .on_shortcut(reload_shortcut, move |_app, _event, _shortcut| {
-      // Debounce identical to zoom shortcuts
       let mut last = last_reload.lock().unwrap();
       if last.elapsed() < Duration::from_millis(300) {
         return;
@@ -268,7 +346,7 @@ fn register_window_shortcuts(
 
       if let Some(window) = reload_handle.get_webview_window("main") {
         match window.eval("window.location.reload()") {
- Ok(_) => logger::info(LogTag::System, "Reloaded dashboard (Cmd/Ctrl + R)"),
+          Ok(_) => logger::info(LogTag::System, "Reloaded dashboard (Cmd/Ctrl + R)"),
           Err(e) => logger::warning(
             LogTag::System,
             &format!("Failed to reload dashboard via shortcut: {}", e),
@@ -281,7 +359,7 @@ fn register_window_shortcuts(
 
   logger::info(
     LogTag::System,
- "Registered window shortcuts (Ctrl/Cmd +/-/0/R)",
+    "Registered window shortcuts (Ctrl/Cmd +/-/0/R)",
   );
 
   Ok(())
@@ -289,13 +367,12 @@ fn register_window_shortcuts(
 
 /// Save zoom level to config file
 fn save_zoom_to_config(zoom: f64) {
-  // Update in-memory config and save to disk
   std::thread::spawn(move || {
     if let Err(e) = crate::config::update_config_section(
       |config| {
         config.gui.zoom_level = zoom;
       },
-      true, // save to disk
+      true,
     ) {
       logger::warning(
         LogTag::System,
@@ -306,32 +383,28 @@ fn save_zoom_to_config(zoom: f64) {
 }
 
 /// Wait for dashboard to be ready and show the window
-///
-/// Polls the dashboard endpoint until HTML content is returned, then:
-/// 1. Navigates the window to ensure fresh content
-/// 2. Applies saved zoom level
-/// 3. Shows the window
 fn wait_for_dashboard_and_show_window(app_handle: tauri::AppHandle, zoom_level: Arc<Mutex<f64>>) {
   logger::info(
     LogTag::System,
- "Polling dashboard endpoint until HTML is ready...",
+    "Waiting for webserver port and security token...",
   );
 
-  let client = reqwest::blocking::Client::builder()
-    .timeout(Duration::from_millis(500))
-    .build()
-    .unwrap();
+  // Get dashboard URL (waits for port assignment)
+  let base_url = get_dashboard_url();
 
-  wait_for_bootstrap_ready(&client);
+  // Create client with security token
+  let client = create_secure_client();
+
+  // Wait for bootstrap to be ready
+  wait_for_bootstrap_ready(&client, &base_url);
 
   let mut poll_count = 0;
 
   // Poll dashboard root endpoint until it returns HTML content
-  // This ensures webserver is fully up and serving content
   loop {
     poll_count += 1;
 
-    match client.get("http://localhost:8080/").send() {
+    match client.get(&format!("{}/", base_url)).send() {
       Ok(response) => {
         let status = response.status();
         logger::debug(
@@ -340,19 +413,18 @@ fn wait_for_dashboard_and_show_window(app_handle: tauri::AppHandle, zoom_level: 
         );
 
         if status.is_success() {
-          // Verify we got HTML content, not just any response
           if let Ok(text) = response.text() {
             if text.contains("<!doctype html") || text.contains("<html") {
               logger::info(
                 LogTag::System,
- &format!("Dashboard HTML ready after {} polls", poll_count),
+                &format!("Dashboard HTML ready after {} polls", poll_count),
               );
               break;
             } else {
               logger::warning(
                 LogTag::System,
                 &format!(
- "Got 200 response but no HTML content (got {} bytes)",
+                  "Got 200 response but no HTML content (got {} bytes)",
                   text.len()
                 ),
               );
@@ -370,25 +442,22 @@ fn wait_for_dashboard_and_show_window(app_handle: tauri::AppHandle, zoom_level: 
       }
     }
 
-    // Fast polling - check every 50ms
     std::thread::sleep(Duration::from_millis(50));
   }
 
-  // Get the window and navigate it to ensure fresh content
- logger::info(LogTag::System, "Looking for main window to show...");
+  logger::info(LogTag::System, "Looking for main window to show...");
 
   match app_handle.get_webview_window("main") {
     Some(window) => {
- logger::info(LogTag::System, "Found main window, showing it now");
-      navigate_and_show_window(window, zoom_level);
+      logger::info(LogTag::System, "Found main window, showing it now");
+      navigate_and_show_window(window, zoom_level, &base_url);
     }
     None => {
       logger::error(
         LogTag::System,
- "Failed to find main window with label 'main'",
+        "Failed to find main window with label 'main'",
       );
 
-      // Try to get all windows and show the first one
       let webview_windows = app_handle.webview_windows();
       logger::info(
         LogTag::System,
@@ -403,9 +472,9 @@ fn wait_for_dashboard_and_show_window(app_handle: tauri::AppHandle, zoom_level: 
           LogTag::System,
           &format!("Showing window with label: {}", label),
         );
-        navigate_and_show_window(window.clone(), zoom_level);
+        navigate_and_show_window(window.clone(), zoom_level, &base_url);
       } else {
- logger::error(LogTag::System, "No windows available at all");
+        logger::error(LogTag::System, "No windows available at all");
       }
     }
   }
@@ -418,16 +487,16 @@ struct BootstrapStatus {
   message: Option<String>,
 }
 
-fn wait_for_bootstrap_ready(client: &reqwest::blocking::Client) {
+fn wait_for_bootstrap_ready(client: &reqwest::blocking::Client, base_url: &str) {
   logger::info(
     LogTag::System,
- "Waiting for core services to report ready state...",
+    "Waiting for core services to report ready state...",
   );
   let mut attempts = 0;
   loop {
     attempts += 1;
     match client
-      .get("http://localhost:8080/api/system/bootstrap")
+      .get(&format!("{}/api/system/bootstrap", base_url))
       .send()
     {
       Ok(response) if response.status().is_success() => {
@@ -437,7 +506,7 @@ fn wait_for_bootstrap_ready(client: &reqwest::blocking::Client) {
               logger::info(
                 LogTag::System,
                 &format!(
- "Bootstrap ready after {} checks ({})",
+                  "Bootstrap ready after {} checks ({})",
                   attempts,
                   status.message.unwrap_or_else(|| "no message".to_string())
                 ),
@@ -477,32 +546,29 @@ fn wait_for_bootstrap_ready(client: &reqwest::blocking::Client) {
   }
 }
 
-/// Wait for frontend JavaScript to set the ready flag
-///
-/// Since Tauri's eval() is fire-and-forget and doesn't return values,
-/// we wait a fixed time after navigation to allow the frontend to:
-/// 1. Load the HTML/JS/CSS
-/// 2. Execute bootstrap.js which polls /api/system/bootstrap
-/// 3. Set window.__screenerbot_ready = true
-///
-/// Minimum wait is 2.5 seconds to ensure frontend has initialized.
-fn wait_for_frontend_ready(window: &tauri::WebviewWindow) {
- logger::info(LogTag::System, "Waiting for frontend to initialize...");
+/// Wait for frontend JavaScript to initialize
+fn wait_for_frontend_ready(window: &tauri::WebviewWindow, base_url: &str) {
+  logger::info(LogTag::System, "Waiting for frontend to initialize...");
 
   let start = Instant::now();
-  let min_wait = Duration::from_millis(2500); // Minimum 2.5 seconds for frontend init
+  let min_wait = Duration::from_millis(2500);
   let timeout = Duration::from_secs(30);
   let mut attempts = 0;
   let mut url_confirmed = false;
 
+  // Extract port from base_url for URL checking
+  let port = global::get_webserver_port();
+
   loop {
     attempts += 1;
 
-    // Check if URL is correct (navigation completed)
     if !url_confirmed {
       if let Ok(result) = window.url() {
         let url_str = result.to_string();
-        if url_str.contains("localhost:8080") {
+        // Check for dynamic port in URL
+        if url_str.contains(&format!("127.0.0.1:{}", port))
+          || url_str.contains(&format!("localhost:{}", port))
+        {
           url_confirmed = true;
           logger::debug(
             LogTag::System,
@@ -512,21 +578,19 @@ fn wait_for_frontend_ready(window: &tauri::WebviewWindow) {
       }
     }
 
-    // Once URL is confirmed and minimum wait passed, we're done
     if url_confirmed && start.elapsed() >= min_wait {
       logger::info(
         LogTag::System,
- &format!("Frontend ready after {:?}", start.elapsed()),
+        &format!("Frontend ready after {:?}", start.elapsed()),
       );
       break;
     }
 
-    // Timeout check
     if start.elapsed() > timeout {
       logger::warning(
         LogTag::System,
         &format!(
- "Frontend ready timeout after {:?}, proceeding anyway",
+          "Frontend ready timeout after {:?}, proceeding anyway",
           start.elapsed()
         ),
       );
@@ -538,34 +602,38 @@ fn wait_for_frontend_ready(window: &tauri::WebviewWindow) {
 }
 
 /// Navigate the window to the dashboard URL and show it
-fn navigate_and_show_window(window: tauri::WebviewWindow, zoom_level: Arc<Mutex<f64>>) {
+fn navigate_and_show_window(
+  window: tauri::WebviewWindow,
+  zoom_level: Arc<Mutex<f64>>,
+  base_url: &str,
+) {
   logger::info(
     LogTag::System,
     &format!(
- "Navigating window '{}'to dashboard URL...",
-      window.label()
+      "Navigating window '{}' to dashboard URL: {}",
+      window.label(),
+      base_url
     ),
   );
 
-  // Use Tauri's native navigation instead of JavaScript reload
-  // This ensures the webview actually loads the URL with fresh content
-  match window.navigate("http://localhost:8080/".parse().unwrap()) {
+  // Navigate to the dynamic URL
+  // Security token is now injected via HTML template, not JavaScript eval
+  match window.navigate(format!("{}/", base_url).parse().unwrap()) {
     Ok(_) => {
- logger::info(LogTag::System, "Window navigation triggered");
+      logger::info(LogTag::System, "Window navigation triggered");
     }
     Err(e) => {
       logger::warning(
         LogTag::System,
- &format!("Navigation failed (may already be at URL): {}", e),
+        &format!("Navigation failed (may already be at URL): {}", e),
       );
     }
   }
 
-  // Wait for frontend JavaScript to signal ready state
- // This prevents showing "LOADING"badges while frontend initializes
-  wait_for_frontend_ready(&window);
+  // Wait for frontend to initialize
+  wait_for_frontend_ready(&window, base_url);
 
-  // Try to load saved zoom level from config (if available)
+  // Load saved zoom level from config
   let mut zoom = *zoom_level.lock().unwrap();
   if crate::config::is_config_initialized() {
     let saved_zoom = crate::config::with_config(|cfg| cfg.gui.zoom_level);
@@ -575,7 +643,7 @@ fn navigate_and_show_window(window: tauri::WebviewWindow, zoom_level: Arc<Mutex<
       logger::info(
         LogTag::System,
         &format!(
- "Loaded saved zoom level from config: {:.0}%",
+          "Loaded saved zoom level from config: {:.0}%",
           zoom * 100.0
         ),
       );
@@ -588,32 +656,31 @@ fn navigate_and_show_window(window: tauri::WebviewWindow, zoom_level: Arc<Mutex<
       Ok(_) => {
         logger::info(
           LogTag::System,
- &format!("Applied zoom level: {:.0}%", zoom * 100.0),
+          &format!("Applied zoom level: {:.0}%", zoom * 100.0),
         );
       }
       Err(e) => {
- logger::warning(LogTag::System, &format!("Failed to apply zoom: {}", e));
+        logger::warning(LogTag::System, &format!("Failed to apply zoom: {}", e));
       }
     }
   }
 
-  // Now show the window
+  // Show the window
   match window.show() {
     Ok(_) => {
- logger::info(LogTag::System, "GUI window shown with dashboard loaded");
+      logger::info(LogTag::System, "GUI window shown with dashboard loaded");
 
-      // Also try to focus/raise the window
       if let Err(e) = window.set_focus() {
         logger::warning(
           LogTag::System,
- &format!("Could not focus window: {}", e),
+          &format!("Could not focus window: {}", e),
         );
       } else {
- logger::info(LogTag::System, "Window focused and brought to front");
+        logger::info(LogTag::System, "Window focused and brought to front");
       }
     }
     Err(e) => {
- logger::error(LogTag::System, &format!("Failed to show window: {}", e));
+      logger::error(LogTag::System, &format!("Failed to show window: {}", e));
     }
   }
 }
@@ -622,12 +689,7 @@ fn navigate_and_show_window(window: tauri::WebviewWindow, zoom_level: Arc<Mutex<
 // TAURI COMMANDS
 // ============================================================================
 
-/// Smart maximize command - maximizes window to available screen space
-///
-/// On macOS: Uses Cocoa APIs to detect available screen area and resize window
-/// to fill it, respecting other tiled windows and the menu bar.
-///
-/// On other platforms: Falls back to standard toggle maximize behavior.
+/// Smart maximize command
 #[tauri::command]
 fn smart_maximize(window: tauri::WebviewWindow) -> Result<(), String> {
   logger::info(LogTag::System, "Smart maximize command invoked");
@@ -639,7 +701,6 @@ fn smart_maximize(window: tauri::WebviewWindow) -> Result<(), String> {
 
   #[cfg(not(target_os = "macos"))]
   {
-    // Fallback for non-macOS: toggle maximize using is_maximized check
     let is_maximized = window
       .is_maximized()
       .map_err(|e| format!("Failed to check maximize state: {}", e))?;

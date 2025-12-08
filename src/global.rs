@@ -68,5 +68,78 @@ pub fn get_pending_services() -> Vec<&'static str> {
     pending.push("Transactions System");
   }
 
+
   pending
 }
+
+// ================================================================================================
+// GUI MODE SECURITY - PREVENTS EXTERNAL ACCESS TO WEBSERVER WHEN RUNNING IN TAURI
+// ================================================================================================
+
+use std::sync::atomic::AtomicU16;
+use std::sync::RwLock;
+
+/// Whether the application is running in GUI (Tauri) mode
+/// When true, webserver requires security token validation
+pub static IS_GUI_MODE: AtomicBool = AtomicBool::new(false);
+
+/// Dynamic port the webserver is bound to (0 = not started yet)
+pub static WEBSERVER_PORT: AtomicU16 = AtomicU16::new(0);
+
+/// Security token required for all API requests in GUI mode
+/// Generated at startup, must be passed in X-ScreenerBot-Token header
+static SECURITY_TOKEN: RwLock<Option<String>> = RwLock::new(None);
+
+/// Set GUI mode flag (called from gui.rs before starting webserver)
+pub fn set_gui_mode(enabled: bool) {
+  IS_GUI_MODE.store(enabled, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Check if running in GUI mode
+pub fn is_gui_mode() -> bool {
+  IS_GUI_MODE.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Set the webserver port (called from server.rs after binding)
+pub fn set_webserver_port(port: u16) {
+  WEBSERVER_PORT.store(port, std::sync::atomic::Ordering::SeqCst);
+}
+
+/// Get the current webserver port (0 if not started)
+pub fn get_webserver_port() -> u16 {
+  WEBSERVER_PORT.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Generate and store a new security token (called at webserver startup in GUI mode)
+pub fn generate_security_token() -> String {
+  use rand::Rng;
+  use rand::distributions::Alphanumeric;
+  let token: String = rand::thread_rng()
+    .sample_iter(&Alphanumeric)
+    .take(64)
+    .map(char::from)
+    .collect();
+
+  let mut guard = SECURITY_TOKEN.write().unwrap();
+  *guard = Some(token.clone());
+  token
+}
+
+/// Get the current security token (None if not generated)
+pub fn get_security_token() -> Option<String> {
+  SECURITY_TOKEN.read().unwrap().clone()
+}
+
+/// Validate a token against the stored security token
+/// Returns true if tokens match, or if not in GUI mode (no validation needed)
+pub fn validate_security_token(token: &str) -> bool {
+  if !is_gui_mode() {
+    return true; // No validation in CLI mode
+  }
+
+  match SECURITY_TOKEN.read().unwrap().as_ref() {
+    Some(stored) => stored == token,
+    None => false, // No token generated yet
+  }
+}
+

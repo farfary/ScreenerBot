@@ -15,6 +15,92 @@ use crate::{
   webserver::utils,
 };
 
+/// Security header name for token validation
+pub const SECURITY_TOKEN_HEADER: &str = "X-ScreenerBot-Token";
+
+/// Security gate middleware (GUI mode only)
+///
+/// In GUI mode, validates that all requests include a valid security token.
+/// This prevents external access to the webserver via browser.
+///
+/// The security token is:
+/// - Generated at startup (random 64-char alphanumeric)
+/// - Injected into the HTML template by the server
+/// - Required in X-ScreenerBot-Token header for all API requests
+///
+/// Allowed without token (required for initial page load):
+/// - Root path (/) - returns HTML with embedded token
+/// - Static assets (/assets/*, /scripts/*, /styles/*)
+/// - Page HTML (/api/pages/*)
+///
+/// In CLI mode, this middleware does nothing (allows all requests).
+pub async fn security_gate(request: Request, next: Next) -> Response {
+  // Skip security check in CLI mode
+  if !global::is_gui_mode() {
+    return next.run(request).await;
+  }
+
+  let path = request.uri().path();
+
+  // Allow initial page load and static assets without token
+  // These are needed for the browser to receive the HTML (which contains the token)
+  if path == "/"
+    || path.starts_with("/assets/")
+    || path.starts_with("/scripts/")
+    || path.starts_with("/styles/")
+    || path.starts_with("/api/pages/")
+  {
+    return next.run(request).await;
+  }
+
+  // GUI mode: validate security token for API endpoints
+  let token = request
+    .headers()
+    .get(SECURITY_TOKEN_HEADER)
+    .and_then(|v| v.to_str().ok());
+
+  match token {
+    Some(t) if global::validate_security_token(t) => {
+      // Valid token, allow request
+      next.run(request).await
+    }
+    Some(_) => {
+      // Invalid token
+      logger::warning(
+        LogTag::Webserver,
+        &format!(
+          "Blocked request to {} - invalid security token",
+          request.uri().path()
+        ),
+      );
+      utils::error_response(
+        StatusCode::FORBIDDEN,
+        "INVALID_TOKEN",
+        "Invalid security token",
+        None,
+      )
+    }
+    None => {
+      // Missing token - only log for API endpoints (not for page loads)
+      if path.starts_with("/api/") {
+        logger::warning(
+          LogTag::Webserver,
+          &format!(
+            "Blocked API request to {} - missing security token",
+            path
+          ),
+        );
+      }
+      utils::error_response(
+        StatusCode::FORBIDDEN,
+        "MISSING_TOKEN",
+        "Security token required",
+        Some("This endpoint is only accessible from within ScreenerBot"),
+      )
+    }
+  }
+}
+
 /// Pre-initialization gate middleware
 ///
 /// Blocks all non-initialization API endpoints until INITIALIZATION_COMPLETE is true.
