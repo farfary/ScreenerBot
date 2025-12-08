@@ -2,6 +2,7 @@ import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { requestManager } from "../core/request_manager.js";
 import * as Utils from "../core/utils.js";
+import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { TradeActionDialog } from "../ui/trade_action_dialog.js";
@@ -77,6 +78,8 @@ const SORT_KEY_TO_COLUMN = Object.entries(COLUMN_TO_SORT_KEY).reduce((acc, [colu
   acc[sortKey] = columnId;
   return acc;
 }, {});
+
+const getTokensTableStateKey = (view) => `tokens-table-v2.${view}`;
 
 const PAGE_LIMIT = 100; // chunked fetch size for incremental scrolling
 const PRICE_HIGHLIGHT_DURATION_MS = 10_000;
@@ -209,6 +212,18 @@ function resolveSortKey(columnId) {
 
 function normalizeSortDirection(direction) {
   return direction === "desc" ? "desc" : "asc";
+}
+
+function loadPersistedSort(stateKey) {
+  if (!stateKey) return null;
+  const saved = AppState.load(stateKey);
+  if (saved && typeof saved === "object" && saved.sortColumn) {
+    return {
+      column: saved.sortColumn,
+      direction: normalizeSortDirection(saved.sortDirection),
+    };
+  }
+  return null;
 }
 
 function createLifecycle() {
@@ -1131,7 +1146,8 @@ function createLifecycle() {
 
     // Update table stateKey for per-tab state persistence
     if (table) {
-      table.setStateKey(`tokens-table-v2.${view}`, { render: false }); // v2: fixed column order
+      const nextStateKey = getTokensTableStateKey(view);
+      table.setStateKey(nextStateKey, { render: false }); // v2: fixed column order
 
       // Update columns for the new view (different views have different conditional columns)
       const newColumns = buildColumns();
@@ -1154,7 +1170,17 @@ function createLifecycle() {
           state.sort = { ...DEFAULT_SERVER_SORT };
         }
       } else {
-        state.sort = { ...DEFAULT_SERVER_SORT };
+        const persistedSort = loadPersistedSort(nextStateKey);
+        if (persistedSort) {
+          const persistedKey = resolveSortKey(persistedSort.column);
+          if (persistedKey) {
+            state.sort = { by: persistedKey, direction: persistedSort.direction };
+          } else {
+            state.sort = { ...DEFAULT_SERVER_SORT };
+          }
+        } else {
+          state.sort = { ...DEFAULT_SERVER_SORT };
+        }
       }
     } else {
       state.sort = { ...DEFAULT_SERVER_SORT };
@@ -1497,6 +1523,18 @@ function createLifecycle() {
         state.view = activeTab;
       }
 
+      const tableStateKey = getTokensTableStateKey(state.view);
+      const persistedSort = loadPersistedSort(tableStateKey);
+      if (persistedSort) {
+        const persistedSortKey = resolveSortKey(persistedSort.column);
+        if (persistedSortKey) {
+          state.sort = {
+            by: persistedSortKey,
+            direction: persistedSort.direction,
+          };
+        }
+      }
+
       state.filters = getDefaultFiltersForView(state.view);
       state.hasLoadedOnce = false;
 
@@ -1509,7 +1547,7 @@ function createLifecycle() {
         container: "#tokens-root",
         columns,
         rowIdField: "mint",
-        stateKey: `tokens-table-v2.${state.view}`, // v2: fixed column order (Actions before Links)
+        stateKey: tableStateKey, // v2: fixed column order (Actions before Links)
         enableLogging: false,
         sorting: {
           mode: "server",

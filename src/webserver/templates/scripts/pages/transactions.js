@@ -13,6 +13,19 @@ const DEFAULT_FILTERS = {
   status: "all",
 };
 
+const TRANSACTIONS_STATE_KEY = "transactions-table";
+const normalizeSortDirection = (direction) => (direction === "desc" ? "desc" : "asc");
+const loadPersistedSort = (stateKey) => {
+  const saved = AppState.load(stateKey);
+  if (saved && typeof saved === "object" && saved.sortColumn) {
+    return {
+      column: saved.sortColumn,
+      direction: normalizeSortDirection(saved.sortDirection),
+    };
+  }
+  return null;
+};
+
 function formatTimestamp(value) {
   if (!value) return "—";
   const date = new Date(value);
@@ -376,6 +389,9 @@ function createLifecycle() {
 
   return {
     init(_ctx) {
+      const initialSort =
+        loadPersistedSort(TRANSACTIONS_STATE_KEY) || { column: "timestamp", direction: "desc" };
+
       const columns = [
         {
           id: "timestamp",
@@ -453,8 +469,8 @@ function createLifecycle() {
         zebra: true,
         fitToContainer: true,
         sorting: {
-          column: "timestamp",
-          direction: "desc",
+          column: initialSort.column,
+          direction: initialSort.direction,
         },
         pagination: {
           threshold: 320,

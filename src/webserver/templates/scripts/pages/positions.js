@@ -2,6 +2,7 @@ import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { requestManager } from "../core/request_manager.js";
 import * as Utils from "../core/utils.js";
+import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { TradeActionDialog } from "../ui/trade_action_dialog.js";
@@ -10,6 +11,30 @@ const SUB_TABS = [
   { id: "open", label: '<i class="icon-trending-up"></i> Open' },
   { id: "closed", label: '<i class="icon-trending-down"></i> Closed' },
 ];
+
+const getPositionsTableStateKey = (view) => `positions-table.${view}`;
+const normalizeSortDirection = (direction) => (direction === "desc" ? "desc" : "asc");
+
+const loadPersistedSort = (stateKey) => {
+  if (!stateKey) return null;
+  const saved = AppState.load(stateKey);
+  if (saved && typeof saved === "object" && saved.sortColumn) {
+    return {
+      column: saved.sortColumn,
+      direction: normalizeSortDirection(saved.sortDirection),
+    };
+  }
+  return null;
+};
+
+const getInitialSortForView = (view) => {
+  const fallbackColumn = view === "closed" ? "exit_time" : "entry_time";
+  const persisted = loadPersistedSort(getPositionsTableStateKey(view));
+  if (persisted?.column) {
+    return { column: persisted.column, direction: persisted.direction || "desc" };
+  }
+  return { column: fallbackColumn, direction: "desc" };
+};
 
 function createLifecycle() {
   let table = null;
@@ -22,6 +47,7 @@ function createLifecycle() {
     view: "open", // 'open' | 'closed'
     total: 0,
     lastUpdate: null,
+    sort: getInitialSortForView("open"),
   };
 
   const tokenCell = (row) => {
@@ -296,7 +322,11 @@ function createLifecycle() {
   const switchView = (view) => {
     if (view !== "open" && view !== "closed") return;
     state.view = view;
+    state.sort = getInitialSortForView(view);
     if (table) {
+      const nextStateKey = getPositionsTableStateKey(view);
+      table.setStateKey(nextStateKey, { render: false });
+
       // Update columns for the new view using setColumns (systematic approach)
       const newColumns = buildColumns();
       table.setColumns(newColumns, {
@@ -304,9 +334,6 @@ function createLifecycle() {
         preserveScroll: false, // Reset scroll when switching views
         resetState: false, // Keep column widths/visibility preferences within each view
       });
-
-      // Update stateKey for per-view persistence
-      table.setStateKey(`positions-table.${view}`, { render: false });
 
       // Update toolbar title
       const viewLabel = view === "open" ? "Open" : "Closed";
@@ -318,8 +345,7 @@ function createLifecycle() {
       }
 
       // Update sorting for the new view
-      const sortColumn = view === "open" ? "entry_time" : "exit_time";
-      table.setSort(sortColumn, "desc");
+      table.setSortState(state.sort.column, state.sort.direction);
     }
     updateToolbar();
   };
@@ -344,6 +370,7 @@ function createLifecycle() {
 
       // Sync state.view with TabBar's restored state (from localStorage or URL)
       state.view = tabBar.getActiveTab() || state.view;
+      state.sort = getInitialSortForView(state.view);
 
       // Build columns based on current view
       const columns = buildColumns();
@@ -353,12 +380,12 @@ function createLifecycle() {
         container: "#positions-root",
         columns,
         rowIdField: "mint",
-        stateKey: `positions-table.${state.view}`,
+        stateKey: getPositionsTableStateKey(state.view),
         enableLogging: false,
         sorting: {
           mode: "client",
-          column: state.view === "open" ? "entry_time" : "exit_time",
-          direction: "desc",
+          column: state.sort.column,
+          direction: state.sort.direction,
         },
         compact: true,
         stickyHeader: true,
