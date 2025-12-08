@@ -4,7 +4,20 @@
  */
 import * as Utils from "../core/utils.js";
 import { getCurrentPage } from "../core/router.js";
-import { setInterval as setPollingInterval } from "../core/poller.js";
+import { setInterval as setPollingInterval, Poller } from "../core/poller.js";
+
+// Global update state to persist across dialog opens
+let globalUpdateState = {
+  checked: false,
+  checking: false,
+  available: false,
+  info: null, // { version, release_notes, download_url, ... }
+  downloading: false,
+  progress: 0,
+  downloaded: false,
+  error: null,
+  statusPoller: null
+};
 
 export class SettingsDialog {
   constructor(options = {}) {
@@ -17,7 +30,7 @@ export class SettingsDialog {
     this.isSaving = false;
     this.pathsInfo = null;
     // Version info fetched from /api/version
-    this.versionInfo = { version: "...", build_number: "..." };
+    this.versionInfo = { version: "...", build_number: "...", platform: "..." };
   }
 
   /**
@@ -33,11 +46,125 @@ export class SettingsDialog {
     await Promise.all([this._loadSettings(), this._loadVersionInfo(), this._loadPathsInfo()]);
     this._loadTabContent("interface");
 
+    // Sync update status with server (handles refreshes and background downloads)
+    this._syncUpdateStatus();
+
     requestAnimationFrame(() => {
       if (this.dialogEl) {
         this.dialogEl.classList.add("active");
       }
     });
+  }
+
+  /**
+   * Sync update status with server
+   */
+  async _syncUpdateStatus() {
+    // If we already know we are downloading, just resume polling
+    if (globalUpdateState.downloading) {
+      this._startDownloadPoller();
+      return;
+    }
+
+    // Otherwise check status from server
+    try {
+      const response = await fetch('/api/updates/status');
+      if (response.ok) {
+        const data = await response.json();
+        // API returns { state: { available_update, download_progress, ... } }
+        const state = data.state || data;
+        const progress = state.download_progress || {};
+        
+        if (progress.downloading) {
+          globalUpdateState.downloading = true;
+          globalUpdateState.progress = progress.progress_percent || 0;
+          globalUpdateState.available = true;
+          if (!globalUpdateState.info && state.available_update) {
+            globalUpdateState.info = state.available_update;
+          }
+          this._startDownloadPoller();
+        } else if (progress.completed && progress.downloaded_path) {
+          globalUpdateState.downloading = false;
+          globalUpdateState.downloaded = true;
+          globalUpdateState.progress = 100;
+          globalUpdateState.available = true;
+          if (!globalUpdateState.info && state.available_update) {
+            globalUpdateState.info = state.available_update;
+          }
+        } else if (state.available_update) {
+          // Update available but not downloading yet
+          globalUpdateState.available = true;
+          globalUpdateState.info = state.available_update;
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to sync update status:', err);
+    }
+
+    // If not downloading/ready, maybe check for updates if not checked yet
+    if (!globalUpdateState.checked && !globalUpdateState.checking && !globalUpdateState.downloading && !globalUpdateState.downloaded) {
+      this._performBackgroundUpdateCheck();
+    } else {
+      this._updateUpdatesBadge();
+      if (this.currentTab === 'updates') {
+        this._updateUpdatesTabUI();
+      }
+    }
+  }
+
+  /**
+   * Perform background update check
+   */
+  async _performBackgroundUpdateCheck() {
+    globalUpdateState.checking = true;
+    globalUpdateState.checked = true;
+    this._updateUpdatesBadge(); // Might show spinner or nothing
+
+    try {
+      const response = await fetch('/api/updates/check');
+      const data = await response.json();
+      
+      globalUpdateState.checking = false;
+      
+      if (data.update_available) {
+        globalUpdateState.available = true;
+        globalUpdateState.info = data.update;  // API returns 'update' not 'update_info'
+      } else {
+        globalUpdateState.available = false;
+      }
+    } catch (err) {
+      console.error('Background update check failed:', err);
+      globalUpdateState.checking = false;
+      globalUpdateState.error = err.message;
+    }
+    
+    this._updateUpdatesBadge();
+    
+    // If user is currently on updates tab, refresh it
+    if (this.currentTab === 'updates') {
+      this._updateUpdatesTabUI();
+    }
+  }
+
+  /**
+   * Update the badge on the Updates tab button
+   */
+  _updateUpdatesBadge() {
+    if (!this.dialogEl) return;
+    
+    const updatesBtn = this.dialogEl.querySelector('.settings-nav-item[data-tab="updates"]');
+    if (!updatesBtn) return;
+    
+    // Remove existing badge
+    const existingBadge = updatesBtn.querySelector('.settings-nav-badge');
+    if (existingBadge) existingBadge.remove();
+    
+    if (globalUpdateState.available) {
+      const badge = document.createElement('span');
+      badge.className = 'settings-nav-badge';
+      badge.textContent = '1';
+      updatesBtn.appendChild(badge);
+    }
   }
 
   /**
@@ -51,6 +178,7 @@ export class SettingsDialog {
         this.versionInfo = {
           version: data.version || "0.0.0",
           build_number: data.build_number || "?",
+          platform: data.platform || "Unknown",
         };
       }
     } catch (error) {
@@ -80,6 +208,12 @@ export class SettingsDialog {
    */
   close() {
     if (!this.dialogEl) return;
+
+    // Stop any active pollers
+    if (this.downloadPoller) {
+      this.downloadPoller.stop();
+      this.downloadPoller = null;
+    }
 
     this.dialogEl.classList.remove("active");
 
@@ -371,6 +505,17 @@ export class SettingsDialog {
           </div>
         </div>
       </div>
+      <style>
+        .settings-nav-badge {
+          background: var(--error-color);
+          color: white;
+          font-size: var(--font-size-xs);
+          font-weight: bold;
+          padding: 2px var(--spacing-xs);
+          border-radius: var(--radius-lg);
+          margin-left: auto;
+        }
+      </style>
     `;
   }
 
@@ -958,122 +1103,1103 @@ export class SettingsDialog {
   }
 
   /**
-   * Build Updates tab content
+   * Build Updates tab content - Modern design with version history
    */
   _buildUpdatesTab() {
-    const { version } = this.versionInfo;
+    const { version, build_number, platform } = this.versionInfo;
+    const state = globalUpdateState;
+
+    // Build status section based on current state
+    let statusSection = '';
+    
+    if (state.checking) {
+      statusSection = this._buildCheckingState();
+    } else if (state.error) {
+      statusSection = this._buildErrorState(state.error);
+    } else if (state.available && state.info) {
+      statusSection = this._buildUpdateAvailableState(state, version);
+    } else {
+      statusSection = this._buildUpToDateState(version);
+    }
+
     return `
-      <div class="settings-updates-section">
-        <div class="settings-section">
-          <h3 class="settings-section-title">Software Updates</h3>
-          <div class="settings-update-card" id="updateStatusCard">
-            <div class="settings-update-icon" id="updateStatusIcon">
-              <i class="icon-circle-check"></i>
+      <div class="updates-container">
+        <!-- Main Content -->
+        <div class="updates-main">
+          <!-- Status Card -->
+          ${statusSection}
+        </div>
+        
+        <!-- Sidebar -->
+        <div class="updates-sidebar">
+          <!-- Current Version Card -->
+          <div class="updates-version-card">
+            <div class="version-card-header">
+              <div class="version-icon">
+                <i class="icon-box"></i>
+              </div>
+              <div class="version-info">
+                <h4>Current Installation</h4>
+                <span class="version-number">v${version}</span>
+              </div>
             </div>
-            <div class="settings-update-info" id="updateStatusInfo">
-              <h4 id="updateStatusTitle">You're up to date!</h4>
-              <p id="updateStatusMessage">ScreenerBot v${version} is the latest version.</p>
+            <div class="version-details">
+              <div class="detail-row">
+                <span class="detail-label">Build</span>
+                <span class="detail-value">#${build_number || '?'}</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Platform</span>
+                <span class="detail-value">${platform || 'Unknown'}</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Channel</span>
+                <span class="detail-value channel-badge">Stable</span>
+              </div>
             </div>
-            <button class="settings-update-btn" id="checkUpdatesBtn">
-              <i class="icon-refresh-cw"></i>
-              <span>Check for Updates</span>
-            </button>
           </div>
-          <div class="settings-update-card" id="updateAvailableCard" style="display: none; border-color: var(--warning-color);">
-            <div class="settings-update-icon" style="color: var(--warning-color);">
-              <i class="icon-arrow-up-circle"></i>
+
+          <!-- Version History Section -->
+          <div class="updates-history-section">
+            <div class="history-header" id="historyToggle">
+              <div class="history-title">
+                <i class="icon-history"></i>
+                <span>Version History</span>
+              </div>
+              <i class="icon-chevron-down history-chevron"></i>
             </div>
-            <div class="settings-update-info">
-              <h4 style="color: var(--warning-color);">Update Available!</h4>
-              <p id="updateAvailableMessage">A new version is available.</p>
+            <div class="history-content" id="historyContent">
+              <div class="history-loading">
+                <div class="spinner-small"></div>
+                <span>Loading version history...</span>
+              </div>
             </div>
-            <a href="/updates" class="settings-update-btn" style="text-decoration: none;">
-              <i class="icon-download"></i>
-              <span>View Update</span>
-            </a>
           </div>
         </div>
+      </div>
+      ${this._getUpdatesStyles()}
+    `;
+  }
 
-        <div class="settings-section">
-          <h3 class="settings-section-title">Current Release</h3>
-          <div class="settings-release-notes">
-            <div class="settings-release">
-              <div class="settings-release-header">
-                <span class="settings-release-version">v${version}</span>
-                <span class="settings-release-badge">Current</span>
-              </div>
-              <p id="currentReleaseNotes" style="color: var(--text-secondary); font-size: var(--font-size-sm); margin-top: var(--spacing-sm);">
-                Visit the Updates page for full release notes and download options.
-              </p>
-            </div>
+  /**
+   * Build checking for updates state
+   */
+  _buildCheckingState() {
+    return `
+      <div class="updates-status-card checking">
+        <div class="status-visual">
+          <div class="pulse-ring"></div>
+          <div class="status-icon-wrapper">
+            <i class="icon-refresh-cw spinning"></i>
           </div>
+        </div>
+        <div class="status-content">
+          <h3>Checking for Updates</h3>
+          <p>Connecting to update server...</p>
         </div>
       </div>
     `;
   }
 
   /**
-   * Attach handlers for Updates tab
+   * Build error state
    */
-  _attachUpdatesHandlers(content) {
-    const checkBtn = content.querySelector("#checkUpdatesBtn");
-    if (checkBtn) {
-      checkBtn.addEventListener("click", async () => {
-        // Update button state
-        checkBtn.disabled = true;
-        checkBtn.innerHTML = '<i class="icon-loader spinning"></i><span>Checking...</span>';
+  _buildErrorState(error) {
+    return `
+      <div class="updates-status-card error">
+        <div class="status-visual">
+          <div class="status-icon-wrapper error">
+            <i class="icon-alert-triangle"></i>
+          </div>
+        </div>
+        <div class="status-content">
+          <h3>Update Check Failed</h3>
+          <p class="error-message">${Utils.escapeHtml(error)}</p>
+        </div>
+        <div class="status-actions">
+          <button class="updates-btn secondary" id="retryUpdateBtn">
+            <i class="icon-refresh-cw"></i>
+            <span>Try Again</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Build update available state
+   */
+  _buildUpdateAvailableState(state, currentVersion) {
+    const info = state.info;
+    const isDownloading = state.downloading;
+    const isDownloaded = state.downloaded;
+    const fileSize = info.file_size ? this._formatBytes(info.file_size) : null;
+
+    let actionContent = '';
+    
+    if (isDownloaded) {
+      actionContent = `
+        <div class="download-success">
+          <div class="success-badge">
+            <i class="icon-check-circle"></i>
+            <span>Ready to Install</span>
+          </div>
+          <p class="install-hint">${this._getInstallHint()}</p>
+        </div>
+        <div class="status-actions">
+          <button class="updates-btn success" id="installUpdateBtn">
+            <i class="icon-download"></i>
+            <span>Install & Restart</span>
+          </button>
+        </div>
+      `;
+    } else if (isDownloading) {
+      actionContent = `
+        <div class="download-progress">
+          <div class="progress-header">
+            <span class="progress-status" id="downloadStatusText">Downloading update...</span>
+            <span class="progress-stats">
+              <span id="downloadSpeedText"></span>
+              <span id="downloadPercentText">${Math.round(state.progress)}%</span>
+            </span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" id="downloadProgressBar" style="width: ${state.progress}%">
+              <div class="progress-glow"></div>
+            </div>
+          </div>
+          <div class="progress-footer">
+            <span id="downloadSizeText">${fileSize ? `0 / ${fileSize}` : ''}</span>
+            <span id="downloadEtaText"></span>
+          </div>
+        </div>
+      `;
+    } else {
+      actionContent = `
+        <div class="status-actions">
+          <button class="updates-btn primary" id="downloadUpdateBtn">
+            <i class="icon-download"></i>
+            <span>Download Update</span>
+            ${fileSize ? `<span class="btn-meta">(${fileSize})</span>` : ''}
+          </button>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="updates-status-card available">
+        <div class="update-badge">New Version Available</div>
+        <div class="status-visual">
+          <div class="version-transition">
+            <span class="old-version">v${currentVersion}</span>
+            <i class="icon-arrow-right"></i>
+            <span class="new-version">v${info.version}</span>
+          </div>
+        </div>
+        <div class="status-content">
+          ${info.release_notes ? `
+            <div class="release-notes-preview">
+              <h4>What's New</h4>
+              <div class="notes-text">${Utils.escapeHtml(info.release_notes)}</div>
+            </div>
+          ` : ''}
+        </div>
+        ${actionContent}
+      </div>
+    `;
+  }
+
+  /**
+   * Build up to date state
+   */
+  _buildUpToDateState(version) {
+    return `
+      <div class="updates-status-card success">
+        <div class="status-visual">
+          <div class="status-icon-wrapper success">
+            <i class="icon-check-circle"></i>
+          </div>
+        </div>
+        <div class="status-content">
+          <h3>You're Up to Date</h3>
+          <p>ScreenerBot v${version} is the latest version.</p>
+        </div>
+        <div class="status-actions">
+          <button class="updates-btn secondary" id="checkUpdatesBtn">
+            <i class="icon-refresh-cw"></i>
+            <span>Check Again</span>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Get platform-specific install hint
+   */
+  _getInstallHint() {
+    const platform = this.versionInfo.platform || '';
+    if (platform.toLowerCase().includes('macos') || platform.toLowerCase().includes('darwin')) {
+      return 'The installer will open. Drag ScreenerBot to your Applications folder.';
+    } else if (platform.toLowerCase().includes('windows')) {
+      return 'The installer will guide you through the update process.';
+    } else if (platform.toLowerCase().includes('linux')) {
+      return 'Run the AppImage or install the .deb package to update.';
+    }
+    return 'Follow the installer instructions to complete the update.';
+  }
+
+  /**
+   * Format bytes to human readable size
+   */
+  _formatBytes(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  /**
+   * Get styles for Updates tab
+   */
+  _getUpdatesStyles() {
+    return `
+      <style>
+        .updates-container {
+          display: grid;
+          grid-template-columns: 1fr 320px;
+          gap: var(--spacing-md);
+          height: 100%;
+          width: 100%;
+        }
+
+        @media (max-width: 900px) {
+          .updates-container {
+            grid-template-columns: 1fr;
+          }
+        }
+
+        /* Main Content Area */
+        .updates-main {
+          display: flex;
+          flex-direction: column;
+          gap: var(--spacing-md);
+          min-height: 0;
+        }
+
+        /* Sidebar */
+        .updates-sidebar {
+          display: flex;
+          flex-direction: column;
+          gap: var(--spacing-md);
+        }
+
+        @media (max-width: 900px) {
+          .updates-sidebar {
+            order: -1;
+          }
+        }
+
+        /* Status Cards */
+        .updates-status-card {
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg);
+          padding: var(--spacing-xl);
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          text-align: center;
+          gap: var(--spacing-lg);
+          position: relative;
+          overflow: hidden;
+          flex: 1;
+          min-height: 320px;
+          justify-content: center;
+        }
+
+        .updates-status-card.available {
+          border-color: var(--primary-color);
+          background: linear-gradient(135deg, var(--primary-alpha-5) 0%, var(--bg-secondary) 100%);
+        }
+
+        .updates-status-card.success {
+          border-color: var(--success-color);
+          background: linear-gradient(135deg, var(--success-alpha-5) 0%, var(--bg-secondary) 100%);
+        }
+
+        .updates-status-card.error {
+          border-color: var(--error-color);
+          background: linear-gradient(135deg, var(--danger-alpha-5) 0%, var(--bg-secondary) 100%);
+        }
+
+        .update-badge {
+          position: absolute;
+          top: var(--spacing-sm);
+          right: var(--spacing-sm);
+          background: var(--primary-color);
+          color: white;
+          font-size: 0.625rem;
+          font-weight: 700;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          padding: 4px 12px;
+          border-radius: var(--radius-xl);
+          box-shadow: 0 2px 8px var(--primary-alpha-30);
+        }
+
+        /* Status Visual */
+        .status-visual {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          position: relative;
+        }
+
+        .status-icon-wrapper {
+          width: 80px;
+          height: 80px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          background: var(--bg-card-hover);
+          font-size: 36px;
+          color: var(--text-secondary);
+          box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+        }
+
+        .status-icon-wrapper.success {
+          background: var(--success-alpha-10);
+          color: var(--success-color);
+          box-shadow: 0 4px 16px var(--success-alpha-20);
+        }
+
+        .status-icon-wrapper.error {
+          background: var(--danger-alpha-10);
+          color: var(--error-color);
+          box-shadow: 0 4px 16px var(--danger-alpha-20);
+        }
+
+        .pulse-ring {
+          position: absolute;
+          width: 100px;
+          height: 100px;
+          border-radius: 50%;
+          border: 2px solid var(--primary-color);
+          opacity: 0;
+          animation: pulse-ring 2s ease-out infinite;
+        }
+
+        @keyframes pulse-ring {
+          0% { transform: scale(0.8); opacity: 0.7; }
+          100% { transform: scale(1.4); opacity: 0; }
+        }
+
+        /* Version Transition */
+        .version-transition {
+          display: flex;
+          align-items: center;
+          gap: var(--spacing-md);
+          font-family: var(--font-mono);
+          font-size: 1.25rem;
+          margin: var(--spacing-md) 0;
+        }
+
+        .version-transition .old-version {
+          color: var(--text-muted);
+          text-decoration: line-through;
+          opacity: 0.6;
+          font-size: 1rem;
+        }
+
+        .version-transition .new-version {
+          color: var(--success-color);
+          font-weight: 700;
+          font-size: 1.5rem;
+        }
+
+        .version-transition i {
+          color: var(--primary-color);
+          font-size: 1.2rem;
+        }
+
+        /* Status Content */
+        .status-content h3 {
+          margin: 0;
+          font-size: 1.5rem;
+          font-weight: 600;
+          color: var(--text-primary);
+        }
+
+        .status-content p {
+          margin: var(--spacing-xs) 0 0;
+          color: var(--text-secondary);
+          font-size: var(--font-size-base);
+          max-width: 420px;
+        }
+
+        .error-message {
+          color: var(--error-color) !important;
+          font-family: var(--font-mono);
+          font-size: var(--font-size-sm) !important;
+        }
+
+        /* Release Notes Preview */
+        .release-notes-preview {
+          width: 100%;
+          max-width: 500px;
+          text-align: left;
+          background: var(--bg-primary);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg);
+          padding: var(--spacing-md);
+          margin-top: var(--spacing-md);
+        }
+
+        .release-notes-preview h4 {
+          margin: 0 0 var(--spacing-sm);
+          font-size: 0.625rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          color: var(--text-secondary);
+        }
+
+        .release-notes-preview .notes-text {
+          font-size: var(--font-size-sm);
+          color: var(--text-primary);
+          line-height: 1.6;
+          white-space: pre-wrap;
+          max-height: 150px;
+          overflow-y: auto;
+        }
+
+        /* Status Actions */
+        .status-actions {
+          display: flex;
+          flex-wrap: wrap;
+          gap: var(--spacing-sm);
+          margin-top: var(--spacing-lg);
+          justify-content: center;
+        }
+
+        /* Download Progress */
+        .download-progress {
+          width: 100%;
+          max-width: 500px;
+        }
+
+        .progress-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: var(--spacing-sm);
+        }
+
+        .progress-status {
+          font-size: var(--font-size-sm);
+          color: var(--text-secondary);
+        }
+
+        .progress-stats {
+          display: flex;
+          gap: var(--spacing-sm);
+          font-family: var(--font-mono);
+          font-size: var(--font-size-sm);
+        }
+
+        #downloadPercentText {
+          color: var(--primary-color);
+          font-weight: 600;
+        }
+
+        #downloadSpeedText {
+          color: var(--text-secondary);
+        }
+
+        .progress-track {
+          height: 10px;
+          background: var(--bg-primary);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-md);
+          overflow: hidden;
+        }
+
+        .progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, var(--primary-color), var(--primary-hover));
+          border-radius: var(--radius-sm);
+          transition: width 0.3s ease;
+          position: relative;
+        }
+
+        .progress-glow {
+          position: absolute;
+          right: 0;
+          top: 0;
+          bottom: 0;
+          width: 30px;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3));
+          animation: progress-shimmer 1.5s ease-in-out infinite;
+        }
+
+        @keyframes progress-shimmer {
+          0%, 100% { opacity: 0.5; }
+          50% { opacity: 1; }
+        }
+
+        .progress-footer {
+          display: flex;
+          justify-content: space-between;
+          margin-top: var(--spacing-xs);
+          font-size: var(--font-size-xs);
+          color: var(--text-muted);
+          font-family: var(--font-mono);
+        }
+
+        /* Download Success */
+        .download-success {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: var(--spacing-md);
+        }
+
+        .success-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: var(--spacing-sm);
+          padding: var(--spacing-sm) var(--spacing-lg);
+          background: var(--success-alpha-10);
+          color: var(--success-color);
+          border: 1px solid var(--success-alpha-30);
+          border-radius: var(--radius-xl);
+          font-weight: 600;
+          font-size: var(--font-size-base);
+        }
+
+        .success-badge i {
+          font-size: 1.25rem;
+        }
+
+        .install-hint {
+          font-size: var(--font-size-sm);
+          color: var(--text-secondary);
+          text-align: center;
+          max-width: 380px;
+          line-height: 1.6;
+        }
+
+        /* Buttons */
+        .updates-btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          gap: var(--spacing-sm);
+          padding: 12px 24px;
+          border: none;
+          border-radius: var(--radius-lg);
+          font-size: var(--font-size-base);
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          white-space: nowrap;
+        }
+
+        .updates-btn i {
+          font-size: 1.1rem;
+        }
+
+        .updates-btn .btn-meta {
+          font-size: var(--font-size-sm);
+          opacity: 0.85;
+          font-weight: 400;
+        }
+
+        .updates-btn.primary {
+          background: var(--primary-color);
+          color: white;
+          box-shadow: 0 2px 8px var(--primary-alpha-20);
+        }
+
+        .updates-btn.primary:hover {
+          background: var(--primary-hover);
+          transform: translateY(-2px);
+          box-shadow: 0 6px 16px var(--primary-alpha-30);
+        }
+
+        .updates-btn.secondary {
+          background: var(--bg-card-hover);
+          color: var(--text-primary);
+          border: 1px solid var(--border-color);
+        }
+
+        .updates-btn.secondary:hover {
+          background: var(--bg-card-hover);
+          border-color: var(--text-secondary);
+          transform: translateY(-1px);
+        }
+
+        .updates-btn.success {
+          background: var(--success-color);
+          color: white;
+          box-shadow: 0 2px 8px var(--success-alpha-20);
+        }
+
+        .updates-btn.success:hover {
+          background: var(--success-hover);
+          transform: translateY(-2px);
+          box-shadow: 0 6px 16px var(--success-alpha-30);
+        }
+
+        /* Version Card */
+        .updates-version-card {
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg);
+          overflow: hidden;
+        }
+
+        .version-card-header {
+          display: flex;
+          align-items: center;
+          gap: var(--spacing-sm);
+          padding: var(--spacing-md);
+          background: var(--bg-card-hover);
+          border-bottom: 1px solid var(--border-color);
+        }
+
+        .version-icon {
+          width: 44px;
+          height: 44px;
+          border-radius: var(--radius-md);
+          background: var(--primary-alpha-10);
+          color: var(--primary-color);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 1.4rem;
+          flex-shrink: 0;
+        }
+
+        .version-info {
+          flex: 1;
+          min-width: 0;
+        }
+
+        .version-info h4 {
+          margin: 0 0 2px;
+          font-size: 0.625rem;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          color: var(--text-secondary);
+        }
+
+        .version-number {
+          font-family: var(--font-mono);
+          font-size: var(--font-size-lg);
+          font-weight: 700;
+          color: var(--text-primary);
+        }
+
+        .version-details {
+          padding: var(--spacing-md);
+          display: flex;
+          flex-direction: column;
+          gap: var(--spacing-sm);
+        }
+
+        .detail-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: var(--spacing-xs) 0;
+        }
+
+        .detail-label {
+          font-size: var(--font-size-sm);
+          color: var(--text-secondary);
+          font-weight: 500;
+        }
+
+        .detail-value {
+          font-size: var(--font-size-sm);
+          font-weight: 600;
+          color: var(--text-primary);
+          font-family: var(--font-mono);
+        }
+
+        .channel-badge {
+          background: var(--success-alpha-10);
+          color: var(--success-color);
+          padding: 4px 12px;
+          border-radius: var(--radius-xl);
+          font-size: 0.625rem;
+          font-weight: 700;
+          font-family: var(--font-sans);
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+
+        /* History Section */
+        .updates-history-section {
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-lg);
+          overflow: hidden;
+        }
+
+        .history-header {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: var(--spacing-md);
+          cursor: pointer;
+          transition: background 0.15s ease;
+        }
+
+        .history-header:hover {
+          background: var(--bg-card-hover);
+        }
+
+        .history-title {
+          display: flex;
+          align-items: center;
+          gap: var(--spacing-sm);
+          font-weight: 600;
+          font-size: var(--font-size-base);
+          color: var(--text-primary);
+        }
+
+        .history-title i {
+          color: var(--text-secondary);
+          font-size: 1.1rem;
+        }
+
+        .history-chevron {
+          color: var(--text-secondary);
+          transition: transform 0.2s ease;
+        }
+
+        .history-header.expanded .history-chevron {
+          transform: rotate(180deg);
+        }
+
+        .history-content {
+          max-height: 0;
+          overflow: hidden;
+          transition: max-height 0.3s ease;
+        }
+
+        .history-content.expanded {
+          max-height: 500px;
+          overflow-y: auto;
+        }
+
+        /* Custom scrollbar for history */
+        .history-content::-webkit-scrollbar {
+          width: 6px;
+        }
+
+        .history-content::-webkit-scrollbar-track {
+          background: var(--bg-primary);
+        }
+
+        .history-content::-webkit-scrollbar-thumb {
+          background: var(--border-color);
+          border-radius: 3px;
+        }
+
+        .history-content::-webkit-scrollbar-thumb:hover {
+          background: var(--text-muted);
+        }
+
+        .history-loading {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: var(--spacing-sm);
+          padding: var(--spacing-lg);
+          color: var(--text-secondary);
+          font-size: var(--font-size-sm);
+        }
+
+        .history-list {
+          padding: var(--spacing-sm);
+          display: flex;
+          flex-direction: column;
+          gap: var(--spacing-xs);
+        }
+
+        .history-item {
+          display: flex;
+          gap: var(--spacing-sm);
+          padding: var(--spacing-sm) var(--spacing-sm);
+          background: var(--bg-primary);
+          border-radius: var(--radius-lg);
+          transition: background 0.15s ease;
+        }
+
+        .history-item:hover {
+          background: var(--bg-card-hover);
+        }
+
+        .history-item-version {
+          font-family: var(--font-mono);
+          font-weight: 600;
+          color: var(--text-primary);
+          min-width: 60px;
+        }
+
+        .history-item-date {
+          font-size: var(--font-size-sm);
+          color: var(--text-muted);
+          min-width: 90px;
+        }
+
+        .history-item-notes {
+          font-size: var(--font-size-sm);
+          color: var(--text-secondary);
+          flex: 1;
+          white-space: nowrap;
+          overflow: hidden;
+          text-overflow: ellipsis;
+        }
+
+        .history-empty {
+          padding: var(--spacing-lg);
+          text-align: center;
+          color: var(--text-secondary);
+          font-size: var(--font-size-sm);
+        }
+
+        /* Spinner animations */
+        .spinner-small {
+          width: 18px;
+          height: 18px;
+          border: 2px solid var(--bg-card-hover);
+          border-top-color: var(--primary-color);
+          border-radius: 50%;
+          animation: spin 0.8s linear infinite;
+        }
+
+        .spinning {
+          animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      </style>
+    `;
+  }
+
+  /**
+   * Update the Updates tab UI without full rebuild
+   */
+  _updateUpdatesTabUI() {
+    if (!this.dialogEl) return;
+    const updatesTab = this.dialogEl.querySelector('.settings-tab[data-tab-content="updates"]');
+    if (updatesTab) {
+      updatesTab.innerHTML = this._buildUpdatesTab();
+      this._attachUpdatesHandlers();
+    }
+  }
+
+  /**
+   * Attach event handlers for Updates tab
+   */
+  _attachUpdatesHandlers() {
+    if (!this.dialogEl) return;
+    
+    const checkBtn = this.dialogEl.querySelector('#checkUpdatesBtn');
+    const retryBtn = this.dialogEl.querySelector('#retryUpdateBtn');
+    const downloadBtn = this.dialogEl.querySelector('#downloadUpdateBtn');
+    const installBtn = this.dialogEl.querySelector('#installUpdateBtn');
+    const historyToggle = this.dialogEl.querySelector('#historyToggle');
+
+    // Check / Retry Handler
+    const handleCheck = async () => {
+      globalUpdateState.checking = true;
+      globalUpdateState.error = null;
+      this._updateUpdatesTabUI();
+
+      try {
+        // Call the check API
+        const response = await fetch('/api/updates/check');
+        const data = await response.json();
+
+        globalUpdateState.checking = false;
+        
+        if (data.update_available) {
+          globalUpdateState.available = true;
+          globalUpdateState.info = data.update;  // API returns 'update' not 'update_info'
+        } else {
+          globalUpdateState.available = false;
+          globalUpdateState.info = null;
+        }
+      } catch (err) {
+        console.error('Update check failed:', err);
+        globalUpdateState.checking = false;
+        globalUpdateState.error = err.message || 'Failed to check for updates';
+      }
+      
+      this._updateUpdatesBadge();
+      this._updateUpdatesTabUI();
+    };
+
+    if (checkBtn) checkBtn.addEventListener('click', handleCheck);
+    if (retryBtn) retryBtn.addEventListener('click', handleCheck);
+
+    // Download Handler
+    if (downloadBtn) {
+      downloadBtn.addEventListener('click', async () => {
+        if (!globalUpdateState.info) return;
+        
+        globalUpdateState.downloading = true;
+        globalUpdateState.progress = 0;
+        globalUpdateState.downloadStartTime = Date.now();
+        globalUpdateState.downloadedBytes = 0;
+        this._updateUpdatesTabUI();
 
         try {
-          const response = await fetch("/api/updates/check");
-          const data = await response.json();
-
-          const statusCard = content.querySelector("#updateStatusCard");
-          const availableCard = content.querySelector("#updateAvailableCard");
-          const statusIcon = content.querySelector("#updateStatusIcon");
-          const statusTitle = content.querySelector("#updateStatusTitle");
-          const statusMessage = content.querySelector("#updateStatusMessage");
-
-          if (data.update_available && data.update) {
-            // Update available
-            statusCard.style.display = "none";
-            availableCard.style.display = "flex";
-            
-            const availableMsg = content.querySelector("#updateAvailableMessage");
-            if (availableMsg) {
-              availableMsg.textContent = `Version ${data.update.version} is now available!`;
-            }
-
-            Utils.showToast({
-              type: "warning",
-              title: "Update Available",
-              message: `Version ${data.update.version} is ready to download`,
-            });
-          } else {
-            // No update
-            statusCard.style.display = "flex";
-            availableCard.style.display = "none";
-            statusIcon.innerHTML = '<i class="icon-circle-check"></i>';
-            statusTitle.textContent = "You're up to date!";
-            statusMessage.textContent = `ScreenerBot v${this.versionInfo.version} is the latest version.`;
-
-            Utils.showToast({
-              type: "success",
-              title: "No updates available",
-              message: "You're running the latest version",
-            });
-          }
-        } catch (err) {
-          console.error("Update check failed:", err);
-          Utils.showToast({
-            type: "error",
-            title: "Update check failed",
-            message: err.message || "Could not connect to update server",
+          // Start download
+          const response = await fetch('/api/updates/download', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ version: globalUpdateState.info.version })
           });
-        } finally {
-          checkBtn.disabled = false;
-          checkBtn.innerHTML = '<i class="icon-refresh-cw"></i><span>Check for Updates</span>';
+          
+          if (!response.ok) throw new Error('Failed to start download');
+
+          // Start polling for progress
+          this._startDownloadPoller();
+          
+        } catch (err) {
+          console.error('Download start failed:', err);
+          globalUpdateState.downloading = false;
+          globalUpdateState.error = err.message;
+          this._updateUpdatesTabUI();
         }
       });
+    }
+
+    // Install Handler
+    if (installBtn) {
+      installBtn.addEventListener('click', async () => {
+        if (!confirm('ScreenerBot will now open the update installer. After installing, restart the app to use the new version. Continue?')) return;
+        
+        installBtn.disabled = true;
+        const originalText = installBtn.innerHTML;
+        installBtn.innerHTML = '<i class="icon-loader spinning"></i><span>Opening installer...</span>';
+        
+        try {
+          const response = await fetch('/api/updates/install', { method: 'POST' });
+          const data = await response.json();
+          
+          if (!response.ok || !data.success) {
+            throw new Error(data.error || 'Failed to open installer');
+          }
+          
+          // Show success message
+          Utils.showToast({
+            type: 'success',
+            title: 'Installer Opened',
+            message: data.data?.message || 'Complete the installation and restart the app.',
+          });
+          
+          // Close the settings dialog
+          setTimeout(() => {
+            this.close();
+          }, 1500);
+          
+        } catch (err) {
+          console.error('Install failed:', err);
+          installBtn.disabled = false;
+          installBtn.innerHTML = originalText;
+          
+          Utils.showToast({
+            type: 'error',
+            title: 'Failed to Open Installer',
+            message: err.message || 'Please try downloading again.',
+          });
+        }
+      });
+    }
+
+    // History Toggle Handler
+    if (historyToggle) {
+      historyToggle.addEventListener('click', () => {
+        const content = this.dialogEl.querySelector('#historyContent');
+        const isExpanded = content.classList.toggle('expanded');
+        historyToggle.classList.toggle('expanded', isExpanded);
+        
+        // Load history on first expand
+        if (isExpanded && !this._historyLoaded) {
+          this._loadVersionHistory();
+        }
+      });
+    }
+  }
+
+  /**
+   * Load version history from API
+   */
+  async _loadVersionHistory() {
+    const historyContent = this.dialogEl?.querySelector('#historyContent');
+    if (!historyContent) return;
+
+    try {
+      // Try website API first for full history
+      const response = await fetch('https://screenerbot.io/api/releases/history?limit=15');
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch version history');
+      }
+
+      const data = await response.json();
+      this._historyLoaded = true;
+
+      if (!data.success || !data.data?.releases?.length) {
+        historyContent.innerHTML = `
+          <div class="history-empty">
+            <i class="icon-archive"></i>
+            <span>No version history available</span>
+          </div>
+        `;
+        return;
+      }
+
+      const releases = data.data.releases;
+      const historyHtml = releases.map(release => {
+        const date = release.publishedAt 
+          ? new Date(release.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+          : 'N/A';
+        const notes = release.releaseNotes || 'No release notes';
+        const truncatedNotes = notes.length > 80 ? notes.substring(0, 80) + '...' : notes;
+        
+        return `
+          <div class="history-item">
+            <span class="history-item-version">v${Utils.escapeHtml(release.version)}</span>
+            <span class="history-item-date">${date}</span>
+            <span class="history-item-notes" title="${Utils.escapeHtml(notes)}">${Utils.escapeHtml(truncatedNotes)}</span>
+          </div>
+        `;
+      }).join('');
+
+      historyContent.innerHTML = `<div class="history-list">${historyHtml}</div>`;
+
+    } catch (err) {
+      console.error('Failed to load version history:', err);
+      historyContent.innerHTML = `
+        <div class="history-empty">
+          <i class="icon-wifi-off"></i>
+          <span>Unable to load version history</span>
+        </div>
+      `;
     }
   }
 
@@ -1354,6 +2480,113 @@ export class SettingsDialog {
       icon.className = "icon-save";
       text.textContent = this.hasChanges ? "Save Changes" : "Saved";
     }
+  }
+
+  /**
+   * Start the download progress poller
+   */
+  _startDownloadPoller() {
+    if (this.downloadPoller) this.downloadPoller.stop();
+    
+    // Track download speed
+    let lastProgress = 0;
+    let lastTime = Date.now();
+    let speedHistory = [];
+    
+    this.downloadPoller = new Poller(async () => {
+      try {
+        const statusRes = await fetch('/api/updates/status');
+        const data = await statusRes.json();
+        // API returns { state: { download_progress: { downloading, progress_percent, completed, error, downloaded_bytes, total_bytes } } }
+        const state = data.state || data;
+        const progress = state.download_progress || {};
+        
+        if (progress.downloading) {
+          const currentProgress = progress.progress_percent || 0;
+          const now = Date.now();
+          const elapsed = (now - lastTime) / 1000; // seconds
+          
+          // Calculate speed (using progress percentage and total size if available)
+          let speedMBps = 0;
+          let etaText = '';
+          
+          if (progress.downloaded_bytes && progress.total_bytes) {
+            const bytesDiff = progress.downloaded_bytes - (lastProgress / 100 * progress.total_bytes);
+            if (elapsed > 0 && bytesDiff > 0) {
+              const bytesPerSec = bytesDiff / elapsed;
+              speedMBps = bytesPerSec / (1024 * 1024);
+              
+              // Smooth speed using moving average
+              speedHistory.push(speedMBps);
+              if (speedHistory.length > 5) speedHistory.shift();
+              const avgSpeed = speedHistory.reduce((a, b) => a + b, 0) / speedHistory.length;
+              
+              // Calculate ETA
+              const remainingBytes = progress.total_bytes - progress.downloaded_bytes;
+              const etaSeconds = remainingBytes / (avgSpeed * 1024 * 1024);
+              if (etaSeconds < 60) {
+                etaText = `${Math.round(etaSeconds)}s remaining`;
+              } else if (etaSeconds < 3600) {
+                etaText = `${Math.round(etaSeconds / 60)}m remaining`;
+              } else {
+                etaText = `${Math.round(etaSeconds / 3600)}h remaining`;
+              }
+              
+              speedMBps = avgSpeed;
+            }
+          } else {
+            // Fallback: estimate speed from progress change
+            const progressDiff = currentProgress - lastProgress;
+            if (elapsed > 0 && progressDiff > 0 && globalUpdateState.info?.file_size) {
+              const totalBytes = globalUpdateState.info.file_size;
+              const bytesDiff = (progressDiff / 100) * totalBytes;
+              speedMBps = bytesDiff / elapsed / (1024 * 1024);
+            }
+          }
+          
+          lastProgress = currentProgress;
+          lastTime = now;
+          globalUpdateState.progress = currentProgress;
+          
+          // Update UI elements directly for smoothness
+          if (this.dialogEl) {
+            const bar = this.dialogEl.querySelector('#downloadProgressBar');
+            const percentText = this.dialogEl.querySelector('#downloadPercentText');
+            const speedText = this.dialogEl.querySelector('#downloadSpeedText');
+            const etaElement = this.dialogEl.querySelector('#downloadEtaText');
+            const sizeText = this.dialogEl.querySelector('#downloadSizeText');
+            
+            if (bar) bar.style.width = `${currentProgress}%`;
+            if (percentText) percentText.textContent = `${Math.round(currentProgress)}%`;
+            if (speedText && speedMBps > 0) {
+              speedText.textContent = `${speedMBps.toFixed(1)} MB/s`;
+            }
+            if (etaElement && etaText) {
+              etaElement.textContent = etaText;
+            }
+            if (sizeText && progress.downloaded_bytes && progress.total_bytes) {
+              sizeText.textContent = `${this._formatBytes(progress.downloaded_bytes)} / ${this._formatBytes(progress.total_bytes)}`;
+            }
+          }
+        } else if (progress.completed && progress.downloaded_path) {
+          globalUpdateState.downloading = false;
+          globalUpdateState.downloaded = true;
+          globalUpdateState.progress = 100;
+          if (this.downloadPoller) this.downloadPoller.stop();
+          this._updateUpdatesTabUI();
+        } else if (progress.error) {
+          throw new Error(progress.error || 'Download failed');
+        }
+      } catch (err) {
+        console.error('Download poll error:', err);
+        globalUpdateState.downloading = false;
+        globalUpdateState.error = err.message;
+        if (this.downloadPoller) this.downloadPoller.stop();
+        this._updateUpdatesTabUI();
+      }
+    }, 1000);
+    
+    this.downloadPoller.start();
   }
 }
 
