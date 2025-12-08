@@ -1,18 +1,25 @@
 /* Token Details Dialog Styles - Redesigned */
 
 /* =============================================================================
-   BASE DIALOG STRUCTURE
+   BASE DIALOG STRUCTURE - Full Screen Desktop App Style
+   Respects macOS title bar (28px) at top for traffic lights and window drag
+   Respects status bar (24px) at bottom for version info
    ============================================================================= */
 
 .token-details-dialog {
   position: fixed;
-  inset: 0;
-  z-index: 10000;
+  /* Start below macOS title bar area to allow window dragging */
+  top: 28px;
+  left: 0;
+  right: 0;
+  /* Leave space for status bar at bottom */
+  bottom: 24px;
+  z-index: 10000; /* Above header (1000), below trade-action-dialog (10001) */
   display: flex;
-  align-items: center;
-  justify-content: center;
+  align-items: stretch;
+  justify-content: stretch;
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition: opacity 0.25s ease;
   pointer-events: none;
 }
 
@@ -21,61 +28,61 @@
   pointer-events: auto;
 }
 
+/* Backdrop - only covers dialog area (not title bar or status bar) */
 .dialog-backdrop {
   position: absolute;
   inset: 0;
-  background: rgb(0, 0, 0, 0.85);
+  background: rgb(0, 0, 0, 0.88);
   backdrop-filter: blur(8px);
-  cursor: pointer;
+  cursor: default;
 }
 
 .token-details-dialog .dialog-container {
   position: relative;
   background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-xl);
-  box-shadow: 0 20px 60px rgb(0, 0, 0, 0.5);
-  width: 92vw;
-  height: 92vh;
-  max-width: 1600px;
-  max-height: 1200px;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: dialogSlideUp 0.3s ease-out;
+  animation: dialogFadeIn 0.25s ease-out;
 }
 
-@keyframes dialogSlideUp {
+@keyframes dialogFadeIn {
   0% {
-    transform: translateY(30px) scale(0.96);
     opacity: 0;
   }
 
   100% {
-    transform: translateY(0) scale(1);
     opacity: 1;
   }
 }
 
 /* =============================================================================
-   HEADER - Modern Glassmorphism Design
+   HEADER - Desktop App Style with Two Rows
    ============================================================================= */
 
 .dialog-header {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 20px;
-  background: linear-gradient(
-    180deg,
-    var(--bg-secondary) 0%,
-    rgb(from var(--bg-secondary) r g b / 0.95) 100%
-  );
+  flex-direction: column;
+  background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
-  gap: var(--spacing-lg);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Top row: Token info, Price, Actions */
+.header-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px 10px 16px;
+  gap: 16px;
+  min-height: 64px;
 }
 
 /* Left section - Token identity */
@@ -84,13 +91,13 @@
   align-items: center;
   gap: 12px;
   flex: 0 0 auto;
-  min-width: 200px;
+  min-width: 180px;
 }
 
 .header-logo {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
   overflow: hidden;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
@@ -98,13 +105,6 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 2px 8px rgb(0, 0, 0, 0.15);
-  transition: all 0.2s ease;
-}
-
-.header-logo:hover {
-  transform: scale(1.05);
-  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.25);
 }
 
 .header-logo img {
@@ -114,7 +114,7 @@
 }
 
 .logo-placeholder {
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -123,43 +123,53 @@
 .header-title {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .title-row {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .title-main {
-  font-size: 1.1rem;
+  font-size: 1rem;
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 
 .title-sub {
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: var(--text-secondary);
   font-weight: 400;
-  max-width: 160px;
+  max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+/* Badges row - separate from title */
+.header-badges-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 10px 16px;
+  border-bottom: 1px solid var(--border-subtle, var(--border-color));
+}
+
 .title-badges {
   display: flex;
-  gap: 4px;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 
 .badge {
   display: inline-flex;
   align-items: center;
-  padding: 2px 6px;
+  padding: 3px 8px;
   border-radius: 4px;
-  font-size: 0.6rem;
+  font-size: 0.65rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -185,19 +195,25 @@
   color: var(--warning-color);
 }
 
+.badge-secondary {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
 /* Center section - Price & metrics */
 .header-center {
   flex: 1 1 auto;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: var(--spacing-xl);
+  gap: 24px;
 }
 
 #headerPrice {
   display: flex;
   align-items: center;
-  gap: var(--spacing-md);
+  gap: 24px;
 }
 
 .price-loading {
@@ -205,28 +221,45 @@
   color: var(--text-secondary);
 }
 
-.price-main {
+/* Price block - stacked layout */
+.price-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.price-sol-row {
   display: flex;
   align-items: baseline;
   gap: 8px;
 }
 
 .price-sol {
-  font-size: 1.4rem;
-  font-weight: 700;
+  font-size: 0.95rem;
+  font-weight: 600;
   color: var(--text-primary);
   font-family: var(--font-data);
   font-feature-settings: "tnum" 1, "zero" 1;
 }
 
+.price-sol-unit {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
 .price-usd {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--text-secondary);
   font-family: var(--font-data);
 }
 
+/* Price change badge */
 .price-change {
-  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
   font-weight: 600;
   font-family: var(--font-data);
   padding: 4px 10px;
@@ -243,10 +276,11 @@
   background: var(--danger-alpha-15, rgb(248, 81, 73, 0.15));
 }
 
+/* Metrics row */
 .price-metrics {
   display: flex;
-  gap: 20px;
-  padding-left: 20px;
+  gap: 16px;
+  padding-left: 16px;
   border-left: 1px solid var(--border-color);
 }
 
@@ -254,19 +288,20 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
+  min-width: 64px;
 }
 
 .metric-label {
   font-size: 0.6rem;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   font-weight: 500;
 }
 
 .metric-value {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: var(--text-primary);
   font-weight: 600;
   font-family: var(--font-data);
@@ -277,36 +312,32 @@
 .header-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex: 0 0 auto;
-}
-
-.header-actions {
-  display: flex;
-  gap: 4px;
 }
 
 .header-trade-actions {
   display: flex;
-  gap: 8px;
-  margin-right: 8px;
-  padding-right: 12px;
+  gap: 6px;
+  margin-right: 6px;
+  padding-right: 10px;
   border-right: 1px solid var(--border-color);
 }
 
 .trade-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  font-size: 0.75rem;
+  gap: 5px;
+  padding: 6px 12px;
+  font-size: 0.7rem;
   font-weight: 600;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 6px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
   text-transform: uppercase;
   letter-spacing: 0.03em;
+  white-space: nowrap;
 }
 
 .trade-btn:disabled {
@@ -323,8 +354,6 @@
 .trade-btn.buy-btn:hover:not(:disabled) {
   background: var(--success-alpha-20);
   border-color: var(--success-color);
-  box-shadow: 0 0 16px var(--success-alpha-30);
-  transform: translateY(-1px);
 }
 
 .trade-btn.sell-btn {
@@ -336,27 +365,30 @@
 .trade-btn.sell-btn:hover:not(:disabled) {
   background: var(--danger-alpha-20);
   border-color: var(--danger);
-  box-shadow: 0 0 16px var(--danger-alpha-30);
-  transform: translateY(-1px);
 }
 
 .trade-btn svg {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 4px;
 }
 
 .action-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: 30px;
+  height: 30px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
   text-decoration: none;
 }
 
@@ -366,19 +398,25 @@
   color: var(--text-primary);
 }
 
+.action-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
 .dialog-close {
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-secondary);
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
   flex-shrink: 0;
+  margin-left: 4px;
 }
 
 .dialog-close:hover {
@@ -387,20 +425,20 @@
 }
 
 .dialog-close svg {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 
 /* =============================================================================
-   TAB BAR - Modern Pill Style Design
+   TAB BAR - Compact Desktop App Style
    ============================================================================= */
 
 .dialog-tabs {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 8px 20px;
-  background: var(--bg-primary);
+  gap: 2px;
+  padding: 6px 16px;
+  background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
   overflow-x: auto;
@@ -409,26 +447,25 @@
 .tab-button {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
+  gap: 6px;
+  padding: 6px 14px;
   background: transparent;
   border: none;
-  border-radius: 8px;
-  font-size: 0.8rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
   white-space: nowrap;
   flex-shrink: 0;
   position: relative;
 }
 
-.tab-button svg {
-  width: 16px;
-  height: 16px;
+.tab-button i {
+  font-size: 14px;
   opacity: 0.6;
-  transition: opacity 0.2s ease;
+  transition: opacity 0.15s ease;
 }
 
 .tab-button:hover {
@@ -436,7 +473,7 @@
   background: var(--bg-card-hover);
 }
 
-.tab-button:hover svg {
+.tab-button:hover i {
   opacity: 0.9;
 }
 
@@ -446,7 +483,7 @@
   font-weight: 600;
 }
 
-.tab-button.active svg {
+.tab-button.active i {
   opacity: 1;
 }
 
@@ -454,10 +491,10 @@
 .tab-button.active::after {
   content: "";
   position: absolute;
-  bottom: -8px;
+  bottom: -6px;
   left: 50%;
   transform: translateX(-50%);
-  width: 24px;
+  width: 20px;
   height: 2px;
   background: var(--primary-color);
   border-radius: 2px;
@@ -477,7 +514,7 @@
 .token-details-dialog .tab-content {
   position: absolute;
   inset: 0;
-  padding: var(--spacing-lg);
+  padding: 16px;
   overflow-y: auto;
   display: none;
 }
@@ -1099,54 +1136,77 @@
 .security-score-container {
   display: flex;
   align-items: center;
-  gap: var(--spacing-lg);
+  gap: var(--spacing-xl);
   margin-bottom: var(--spacing-md);
 }
 
-.security-score {
-  display: flex;
-  align-items: baseline;
-  justify-content: center;
-  gap: 2px;
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  background: var(--bg-primary);
-  border: 4px solid var(--border-color);
+.security-score-circle {
+  position: relative;
+  width: 140px;
+  height: 140px;
   flex-shrink: 0;
 }
 
-.security-score.score-good {
-  border-color: var(--success-color);
-  background: var(--success-alpha-10);
+.score-progress {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform: rotate(-90deg);
 }
 
-.security-score.score-ok {
-  border-color: var(--primary-color);
-  background: var(--primary-alpha-10);
+.score-bg {
+  fill: none;
+  stroke: var(--border-color);
+  stroke-width: 8;
 }
 
-.security-score.score-warn {
-  border-color: var(--warning-color);
-  background: var(--warning-alpha-10);
+.score-ring {
+  fill: none;
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s ease;
 }
 
-.security-score.score-danger {
-  border-color: var(--danger);
-  background: var(--danger-alpha-10);
+.score-ring.score-good {
+  stroke: var(--success-color);
+}
+
+.score-ring.score-ok {
+  stroke: var(--primary-color);
+}
+
+.score-ring.score-warn {
+  stroke: var(--warning-color);
+}
+
+.score-ring.score-danger {
+  stroke: var(--danger);
+}
+
+.score-content {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
 }
 
 .score-value {
-  font-size: 2rem;
+  font-size: 1.75rem;
   font-weight: 700;
   font-family: var(--font-data);
   color: var(--text-primary);
+  line-height: 1;
 }
 
 .score-max {
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
   font-family: var(--font-data);
+  line-height: 1;
 }
 
 .score-info {
@@ -1156,10 +1216,32 @@
 }
 
 .score-info .score-label {
-  font-size: 1.1rem;
+  font-size: 1.25rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+.score-note {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.score-hint {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  opacity: 0.8;
+}
+
+.risk-score-info {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+  background: var(--bg-secondary);
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
 }
 
 .score-info .score-label.score-good {
@@ -2306,6 +2388,14 @@
   .header-center {
     display: none;
   }
+
+  .dialog-header {
+    justify-content: space-between;
+  }
+
+  .header-right {
+    flex-shrink: 0;
+  }
 }
 
 @media (width <= 900px) {
@@ -2337,10 +2427,24 @@
   .dialog-header {
     padding: var(--spacing-sm) var(--spacing-md);
     flex-wrap: wrap;
+    gap: var(--spacing-sm);
   }
 
   .header-left {
     gap: var(--spacing-sm);
+    min-width: auto;
+  }
+
+  .header-right {
+    order: 3;
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .header-trade-actions {
+    margin-right: 0;
+    padding-right: 0;
+    border-right: none;
   }
 
   .header-logo {

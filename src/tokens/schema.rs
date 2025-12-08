@@ -121,6 +121,7 @@ pub const CREATE_TABLES: &[&str] = &[
         token_type TEXT,
         token_decimals INTEGER,
         score INTEGER,
+        score_normalised INTEGER,
         score_description TEXT,
         mint_authority TEXT,
         freeze_authority TEXT,
@@ -221,9 +222,11 @@ pub const CREATE_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_tokens_discovery_mint ON tokens(first_discovered_at DESC, mint)",
 ];
 
-/// ALTER TABLE statements - DEPRECATED (clean slate rebuild strategy)
-/// Kept for reference only; schema v2 requires full database recreation
-pub const ALTER_STATEMENTS: &[&str] = &[];
+/// ALTER TABLE statements for schema migrations (existing databases)
+pub const ALTER_STATEMENTS: &[&str] = &[
+    // Add score_normalised column to security_rugcheck (0-100, higher = safer)
+    "ALTER TABLE security_rugcheck ADD COLUMN score_normalised INTEGER",
+];
 
 /// Performance PRAGMAs
 // Kept for reference; we now set PRAGMAs via rusqlite APIs to avoid "Execute returned results" errors

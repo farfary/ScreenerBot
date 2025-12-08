@@ -522,11 +522,10 @@ async function controlTrader(action) {
       applyStatus(payload.status);
     }
 
-    const icon = action === "start" ? '<i class="icon-check"></i>' : '<i class="icon-check"></i>';
-    Utils.showToast(`${icon} Trader ${action === "start" ? "started" : "stopped"}`, "success");
+    Utils.showToast(`Trader ${action === "start" ? "started" : "stopped"}`, "success");
   } catch (err) {
     console.error("[TraderHeader] Control action failed", err);
-    Utils.showToast(`<i class="icon-x"></i> ${err.message || "Trader control failed"}`, "error");
+    Utils.showToast(err.message || "Trader control failed", "error");
     setAvailability(false);
   } finally {
     setLoading(false);
@@ -829,17 +828,17 @@ function initNotifications() {
     if (event.type === "added" && event.notification) {
       const action = event.notification;
       const actionType = formatActionType(action.action_type);
-      Utils.showToast(`<i class="icon-bell"></i> ${actionType} started`, "info");
+      Utils.showToast(`${actionType} started`, "info");
     } else if (event.type === "updated" && event.notification) {
       const action = event.notification;
       const status = notificationManager.getStatus(action);
 
       if (status === "completed") {
         const actionType = formatActionType(action.action_type);
-        Utils.showToast(`<i class="icon-check"></i> ${actionType} completed`, "success");
+        Utils.showToast(`${actionType} completed`, "success");
       } else if (status === "failed") {
         const actionType = formatActionType(action.action_type);
-        Utils.showToast(`<i class="icon-x"></i> ${actionType} failed`, "error");
+        Utils.showToast(`${actionType} failed`, "error");
       }
     }
   });
@@ -887,13 +886,13 @@ async function handlePowerMenuAction(action) {
       await handleRestart();
       break;
     case "pause-services":
-      Utils.showToast('<i class="icon-pause"></i> Pause Services feature coming soon', "info");
+      Utils.showToast("Pause Services feature coming soon", "info");
       break;
     case "shutdown":
-      Utils.showToast('<i class="icon-power"></i> Shutdown feature coming soon', "info");
+      Utils.showToast("Shutdown feature coming soon", "info");
       break;
     case "system-info":
-      Utils.showToast('<i class="icon-info"></i> System Info panel coming soon', "info");
+      Utils.showToast("System Info panel coming soon", "info");
       break;
   }
 }
@@ -911,7 +910,7 @@ async function handleRestart() {
   if (!confirmed) return;
 
   try {
-    Utils.showToast('<i class="icon-refresh-cw"></i> Restarting bot...', "info");
+    Utils.showToast("Restarting bot...", "info");
 
     const res = await fetch("/api/system/reboot", {
       method: "POST",
@@ -922,7 +921,7 @@ async function handleRestart() {
       throw new Error(`Restart failed: ${res.status}`);
     }
 
-    Utils.showToast('<i class="icon-check"></i> Bot restarting... Please wait.', "success");
+    Utils.showToast("Bot restarting... Please wait.", "success");
 
     // Poll for reconnection using Poller
     setTimeout(() => {
@@ -935,17 +934,14 @@ async function handleRestart() {
             if (ping.ok) {
               reconnectPoller.stop();
               reconnectPoller.cleanup();
-              Utils.showToast('<i class="icon-check"></i> Bot restarted successfully!', "success");
+              Utils.showToast("Bot restarted successfully!", "success");
               window.location.reload();
             }
           } catch {
             if (attempts > 30) {
               reconnectPoller.stop();
               reconnectPoller.cleanup();
-              Utils.showToast(
-                '<i class="icon-triangle-alert"></i> Restart taking longer than expected',
-                "warning"
-              );
+              Utils.showToast("Restart taking longer than expected", "warning");
             }
           }
         },
@@ -955,7 +951,7 @@ async function handleRestart() {
     }, 2000);
   } catch (err) {
     console.error("[Header] Restart failed:", err);
-    Utils.showToast(`<i class="icon-x"></i> ${err.message}`, "error");
+    Utils.showToast(err.message, "error");
   }
 }
 

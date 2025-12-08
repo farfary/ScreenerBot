@@ -60,6 +60,7 @@ fn convert_rugcheck_to_data(info: &RugcheckInfo) -> RugcheckData {
         token_type: info.token_type.clone(),
         token_decimals: info.token_decimals,
         score: info.score,
+        score_normalised: info.score_normalised,
         score_description: None,
         mint_authority: info.mint_authority.clone(),
         freeze_authority: info.freeze_authority.clone(),

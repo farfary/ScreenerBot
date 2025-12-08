@@ -28,6 +28,18 @@
       header.classList.add("tauri-macos");
       console.log("[Theme] Added macOS-specific styling classes");
     }
+
+    // Enable native window dragging via Rust command
+    // This is a workaround for Tauri bug #9503 where TitleBarStyle::Overlay
+    // breaks window dragging on macOS
+    if (window.__TAURI__ && window.__TAURI__.core) {
+      try {
+        await window.__TAURI__.core.invoke("enable_window_drag");
+        console.log("[Theme] Enabled native window dragging via Rust command");
+      } catch (error) {
+        console.warn("[Theme] Failed to enable native window dragging:", error);
+      }
+    }
   }
 
   // Initialize Tauri window API if available
@@ -155,66 +167,112 @@
   }
 
   // ============================================================================
-  // CUSTOM TITLE BAR DOUBLE-CLICK HANDLER (macOS smart maximize)
+  // WINDOW DRAG HANDLING - Manual startDragging() for Tauri v2
+  // Based on official Tauri v2 docs: https://v2.tauri.app/learn/window-customization/
+  // The data-tauri-drag-region attribute requires manual JS implementation
+  // when there are interactive child elements.
   // ============================================================================
 
-  if (isTauri && isMacOS) {
-    setupSmartMaximizeHandler();
+  if (isTauri) {
+    setupWindowDragging();
   }
 
-  function setupSmartMaximizeHandler() {
-    console.log("[Theme] Setting up smart maximize handler for macOS");
+  function setupWindowDragging() {
+    console.log("[Theme] Setting up manual window drag handler");
 
-    const dragRegions = document.querySelectorAll("[data-tauri-drag-region]");
+    // Get the window API - must use correct API for Tauri v2
+    let appWindow = null;
+    
+    if (window.__TAURI__?.window?.getCurrentWindow) {
+      appWindow = window.__TAURI__.window.getCurrentWindow();
+      console.log("[Theme] Got window from __TAURI__.window.getCurrentWindow()");
+    } else if (window.__TAURI__?.webviewWindow?.getCurrentWebviewWindow) {
+      appWindow = window.__TAURI__.webviewWindow.getCurrentWebviewWindow();
+      console.log("[Theme] Got window from __TAURI__.webviewWindow.getCurrentWebviewWindow()");
+    } else if (tauriWindow) {
+      appWindow = tauriWindow;
+      console.log("[Theme] Using cached tauriWindow");
+    }
 
-    if (dragRegions.length === 0) {
-      console.warn("[Theme] No drag regions found for smart maximize handler");
+    if (!appWindow) {
+      console.warn("[Theme] Could not get Tauri window API - dragging disabled");
       return;
     }
 
-    console.log(`[Theme] Found ${dragRegions.length} drag regions`);
+    // Elements that should NOT trigger drag (interactive elements)
+    const interactiveSelectors = [
+      "button",
+      "a",
+      "input",
+      "select",
+      "textarea",
+      "[role='button']",
+      ".header-card",
+      ".header-brand",
+      ".header-action-btn",
+      ".header-actions",
+      ".nav-tabs",
+      ".nav-tab",
+      ".ticker-segment",
+    ].join(",");
 
-    let lastClickTime = 0;
-    const DOUBLE_CLICK_THRESHOLD = 300;
+    // Setup drag on title bar background (28px at top)
+    const titleBarBg = document.querySelector(".tauri-titlebar-bg");
+    if (titleBarBg) {
+      setupDragOnElement(titleBarBg, appWindow, interactiveSelectors);
+      console.log("[Theme] Drag handler installed on .tauri-titlebar-bg");
+    }
 
+    // Setup drag on header row 1 (main header with logo, cards, buttons)
+    const headerRow1 = document.querySelector(".header-row-1");
+    if (headerRow1) {
+      setupDragOnElement(headerRow1, appWindow, interactiveSelectors);
+      console.log("[Theme] Drag handler installed on .header-row-1");
+    }
+
+    // Also setup on any element with data-tauri-drag-region attribute
+    const dragRegions = document.querySelectorAll("[data-tauri-drag-region]");
     dragRegions.forEach((region) => {
-      region.addEventListener(
-        "mousedown",
-        async (e) => {
-          if (e.button !== 0) return;
-
-          const now = Date.now();
-          const timeSinceLastClick = now - lastClickTime;
-          lastClickTime = now;
-
-          if (timeSinceLastClick < DOUBLE_CLICK_THRESHOLD) {
-            console.log("[Theme] Double-click detected on drag region");
-
-            e.preventDefault();
-            e.stopPropagation();
-            e.stopImmediatePropagation();
-
-            try {
-              if (window.__TAURI__?.core?.invoke) {
-                await window.__TAURI__.core.invoke("smart_maximize");
-                console.log("[Theme] Smart maximize command executed");
-              } else if (window.__TAURI_INTERNALS__?.invoke) {
-                await window.__TAURI_INTERNALS__.invoke("smart_maximize");
-                console.log("[Theme] Smart maximize command executed (via internals)");
-              } else {
-                console.warn("[Theme] Tauri invoke not available");
-              }
-            } catch (error) {
-              console.error("[Theme] Smart maximize failed:", error);
-            }
-
-            lastClickTime = 0;
-          }
-        },
-        { capture: true }
-      );
+      if (region !== titleBarBg && region !== headerRow1) {
+        setupDragOnElement(region, appWindow, interactiveSelectors);
+      }
     });
 
-    console.log("[Theme] Smart maximize handler installed");
+    console.log("[Theme] Window drag handler setup complete");
+  }
+
+  function setupDragOnElement(element, appWindow, interactiveSelectors) {
+    element.addEventListener("mousedown", (e) => {
+      // Only handle primary (left) mouse button
+      // Use e.buttons (bitmask) as per Tauri docs
+      if (e.buttons !== 1) return;
+
+      // Check if click is on an interactive element - allow normal behavior
+      const isInteractive = e.target.closest(interactiveSelectors);
+      if (isInteractive) {
+        return;
+      }
+
+      // Prevent default to avoid text selection
+      e.preventDefault();
+
+      // e.detail contains click count - 2 means double click
+      if (e.detail === 2) {
+        // Double click - toggle maximize
+        console.log("[Theme] Double-click detected - toggling maximize");
+        appWindow.toggleMaximize().catch((err) => {
+          console.warn("[Theme] toggleMaximize failed:", err);
+          // Fallback to smart_maximize via invoke
+          if (window.__TAURI__?.core?.invoke) {
+            window.__TAURI__.core.invoke("smart_maximize").catch(() => {});
+          }
+        });
+      } else {
+        // Single click - start dragging
+        appWindow.startDragging().catch((err) => {
+          console.warn("[Theme] startDragging failed:", err);
+        });
+      }
+    });
   }
 })();

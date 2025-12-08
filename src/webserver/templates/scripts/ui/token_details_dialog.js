@@ -304,77 +304,69 @@ export class TokenDetailsDialog {
       <div class="dialog-backdrop"></div>
       <div class="dialog-container">
         <div class="dialog-header">
-          <div class="header-left">
-            <div class="header-logo">
-              ${logoUrl ? `<img src="${this._escapeHtml(logoUrl)}" alt="${this._escapeHtml(symbol)}" onerror="this.parentElement.innerHTML='<div class=\\'logo-placeholder\\'>${this._escapeHtml(symbol.charAt(0))}</div>'" />` : `<div class="logo-placeholder">${this._escapeHtml(symbol.charAt(0))}</div>`}
-            </div>
-            <div class="header-title">
-              <div class="title-row">
-                <span class="title-main">${this._escapeHtml(symbol)}</span>
-                <div class="title-badges" id="headerBadges"></div>
+          <div class="header-top-row">
+            <div class="header-left">
+              <div class="header-logo">
+                ${logoUrl ? `<img src="${this._escapeHtml(logoUrl)}" alt="${this._escapeHtml(symbol)}" onerror="this.parentElement.innerHTML='<div class=\\'logo-placeholder\\'>${this._escapeHtml(symbol.charAt(0))}</div>'" />` : `<div class="logo-placeholder">${this._escapeHtml(symbol.charAt(0))}</div>`}
               </div>
-              <div class="title-sub">${this._escapeHtml(name)}</div>
+              <div class="header-title">
+                <span class="title-main">${this._escapeHtml(symbol)}</span>
+                <span class="title-sub">${this._escapeHtml(name)}</span>
+              </div>
+            </div>
+            <div class="header-center">
+              <div class="header-price" id="headerPrice">
+                <div class="price-loading">Loading...</div>
+              </div>
+            </div>
+            <div class="header-right">
+              <div class="header-trade-actions">
+                <button class="trade-btn buy-btn" id="headerBuyBtn" title="Buy this token">
+                  <i class="icon-shopping-cart"></i>
+                  Buy
+                </button>
+                <button class="trade-btn sell-btn" id="headerSellBtn" title="Sell position" disabled>
+                  <i class="icon-dollar-sign"></i>
+                  Sell
+                </button>
+              </div>
+              <div class="header-actions">
+                <button class="action-btn" id="copyMintBtn" title="Copy Mint Address">
+                  <i class="icon-copy"></i>
+                </button>
+                <a href="https://solscan.io/token/${this._escapeHtml(this.tokenData.mint)}" target="_blank" class="action-btn" title="View on Solscan">
+                  <i class="icon-external-link"></i>
+                </a>
+              </div>
+              <button class="dialog-close" type="button" title="Close (ESC)">
+                <i class="icon-x"></i>
+              </button>
             </div>
           </div>
-          <div class="header-center">
-            <div class="header-price" id="headerPrice">
-              <div class="price-loading">Loading...</div>
-            </div>
-          </div>
-          <div class="header-right">
-            <div class="header-trade-actions">
-              <button class="trade-btn buy-btn" id="headerBuyBtn" title="Buy this token">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
-                Buy
-              </button>
-              <button class="trade-btn sell-btn" id="headerSellBtn" title="Sell position" disabled>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"></line><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path></svg>
-                Sell
-              </button>
-            </div>
-            <div class="header-actions">
-              <button class="action-btn" id="copyMintBtn" title="Copy Mint Address">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                </svg>
-              </button>
-              <a href="https://solscan.io/token/${this._escapeHtml(this.tokenData.mint)}" target="_blank" class="action-btn" title="View on Solscan">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
-                  <polyline points="15 3 21 3 21 9"></polyline>
-                  <line x1="10" y1="14" x2="21" y2="3"></line>
-                </svg>
-              </a>
-            </div>
-            <button class="dialog-close" type="button" title="Close (ESC)">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="18" y1="6" x2="6" y2="18"></line>
-                <line x1="6" y1="6" x2="18" y2="18"></line>
-              </svg>
-            </button>
+          <div class="header-badges-row" id="headerBadgesRow" style="display: none;">
+            <div class="title-badges" id="headerBadges"></div>
           </div>
         </div>
 
         <div class="dialog-tabs">
           <button class="tab-button active" data-tab="overview">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+            <i class="icon-info"></i>
             Overview
           </button>
           <button class="tab-button" data-tab="security">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            <i class="icon-shield"></i>
             Security
           </button>
           <button class="tab-button" data-tab="positions">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line></svg>
+            <i class="icon-chart-bar"></i>
             Positions
           </button>
           <button class="tab-button" data-tab="pools">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2.69l5.66 5.66a8 8 0 1 1-11.31 0z"></path></svg>
+            <i class="icon-droplet"></i>
             Pools
           </button>
           <button class="tab-button" data-tab="links">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+            <i class="icon-link"></i>
             Links
           </button>
         </div>
@@ -401,14 +393,22 @@ export class TokenDetailsDialog {
   }
 
   _updateHeader(token) {
-    // Update badges
+    // Update badges in separate row
     const badgesContainer = this.dialogEl.querySelector("#headerBadges");
-    if (badgesContainer) {
+    const badgesRow = this.dialogEl.querySelector("#headerBadgesRow");
+    if (badgesContainer && badgesRow) {
       const badges = [];
       if (token.verified) badges.push('<span class="badge badge-success">Verified</span>');
       if (token.has_open_position) badges.push('<span class="badge badge-info">Position</span>');
       if (token.blacklisted) badges.push('<span class="badge badge-danger">Blacklisted</span>');
-      badgesContainer.innerHTML = badges.join("");
+      if (token.has_ohlcv) badges.push('<span class="badge badge-secondary">OHLCV</span>');
+      
+      if (badges.length > 0) {
+        badgesContainer.innerHTML = badges.join("");
+        badgesRow.style.display = "flex";
+      } else {
+        badgesRow.style.display = "none";
+      }
     }
 
     // Update price section
@@ -441,8 +441,9 @@ export class TokenDetailsDialog {
       : "—";
     const priceUsd = token.price_usd !== null && token.price_usd !== undefined
       ? Utils.formatCurrencyUSD(token.price_usd)
-      : "—";
+      : "";
 
+    // Price change badge
     let changeHtml = "";
     if (token.price_change_periods) {
       const change24h = token.price_change_periods.h24;
@@ -454,27 +455,30 @@ export class TokenDetailsDialog {
     }
 
     return `
-      <div class="price-main">
-        <span class="price-sol">${priceSol} SOL</span>
-        <span class="price-usd">${priceUsd}</span>
-        ${changeHtml}
+      <div class="price-block">
+        <div class="price-sol-row">
+          <span class="price-sol">${priceSol}</span>
+          <span class="price-sol-unit">SOL</span>
+        </div>
+        ${priceUsd ? `<span class="price-usd">${priceUsd}</span>` : ""}
       </div>
+      ${changeHtml}
       <div class="price-metrics">
         <div class="metric-item">
           <span class="metric-label">MCap</span>
-          <span class="metric-value">${token.market_cap ? Utils.formatCurrencyUSD(token.market_cap) : "—"}</span>
+          <span class="metric-value">${token.market_cap ? Utils.formatCompactNumber(token.market_cap, { prefix: "$" }) : "—"}</span>
         </div>
         <div class="metric-item">
           <span class="metric-label">Liq</span>
-          <span class="metric-value">${token.liquidity_usd ? Utils.formatCurrencyUSD(token.liquidity_usd) : "—"}</span>
+          <span class="metric-value">${token.liquidity_usd ? Utils.formatCompactNumber(token.liquidity_usd, { prefix: "$" }) : "—"}</span>
         </div>
         <div class="metric-item">
           <span class="metric-label">Vol 24H</span>
-          <span class="metric-value">${token.volume_24h ? Utils.formatCurrencyUSD(token.volume_24h) : "—"}</span>
+          <span class="metric-value">${token.volume_24h ? Utils.formatCompactNumber(token.volume_24h, { prefix: "$" }) : "—"}</span>
         </div>
         <div class="metric-item">
           <span class="metric-label">Holders</span>
-          <span class="metric-value">${token.total_holders ? Utils.formatNumber(token.total_holders) : "—"}</span>
+          <span class="metric-value">${token.total_holders ? Utils.formatCompactNumber(token.total_holders) : "—"}</span>
         </div>
       </div>
     `;
@@ -1025,13 +1029,15 @@ export class TokenDetailsDialog {
   }
 
   _buildSecurityContent(token) {
-    const scoreClass = this._getScoreClass(token.risk_score);
-    const scoreLabel = this._getScoreLabel(token.risk_score);
-    const hasSecurityData = token.risk_score !== null && token.risk_score !== undefined;
+    // Use safety_score (0-100, higher = safer) for display
+    const safetyScore = token.safety_score;
+    const scoreClass = this._getSafetyScoreClass(safetyScore);
+    const scoreLabel = this._getSafetyScoreLabel(safetyScore);
+    const hasSecurityData = safetyScore !== null && safetyScore !== undefined;
 
     return `
       <div class="security-container">
-        ${this._buildSecurityHeader(token, scoreClass, scoreLabel, hasSecurityData)}
+        ${this._buildSecurityHeader(token, safetyScore, scoreClass, scoreLabel, hasSecurityData)}
         ${this._buildSecurityOverview(token)}
         ${this._buildAuthoritiesCard(token)}
         ${this._buildHoldersCard(token)}
@@ -1042,20 +1048,39 @@ export class TokenDetailsDialog {
     `;
   }
 
-  _buildSecurityHeader(token, scoreClass, scoreLabel, hasSecurityData) {
+  _buildSecurityHeader(token, safetyScore, scoreClass, scoreLabel, hasSecurityData) {
     const lastUpdated = token.security_last_updated
       ? Utils.formatTimestamp(token.security_last_updated)
       : null;
 
+    // Safety score is 0-100 (higher = safer)
+    const score = safetyScore ?? 0;
+    const scorePercent = Math.min(100, Math.max(0, score));
+    const circumference = 2 * Math.PI * 54; // radius = 54
+    const offset = circumference - (scorePercent / 100) * circumference;
+
+    // Risk score for additional info
+    const riskScore = token.risk_score;
+
     return `
       <div class="security-header">
         <div class="security-score-container">
-          <div class="security-score ${scoreClass}">
-            <span class="score-value">${token.risk_score ?? "—"}</span>
-            <span class="score-max">/1000</span>
+          <div class="security-score-circle">
+            <svg class="score-progress" width="140" height="140" viewBox="0 0 140 140">
+              <circle class="score-bg" cx="70" cy="70" r="54"></circle>
+              <circle class="score-ring ${scoreClass}" cx="70" cy="70" r="54" 
+                style="stroke-dasharray: ${circumference}; stroke-dashoffset: ${offset};"></circle>
+            </svg>
+            <div class="score-content">
+              <span class="score-value">${score}</span>
+              <span class="score-max">/100</span>
+            </div>
           </div>
           <div class="score-info">
             <span class="score-label ${scoreClass}">${scoreLabel}</span>
+            <span class="score-hint">Safety Score (higher = safer)</span>
+            ${riskScore !== null && riskScore !== undefined ? 
+              `<span class="risk-score-info">Risk Score: ${Utils.formatNumber(riskScore, { decimals: 0 })}</span>` : ""}
             ${lastUpdated ? `<span class="score-updated">Updated: ${lastUpdated}</span>` : ""}
           </div>
         </div>
@@ -1339,6 +1364,24 @@ export class TokenDetailsDialog {
     `;
   }
 
+  // Safety score classification (0-100, higher = safer)
+  _getSafetyScoreClass(score) {
+    if (score === null || score === undefined) return "";
+    if (score >= 70) return "score-good";
+    if (score >= 50) return "score-ok";
+    if (score >= 30) return "score-warn";
+    return "score-danger";
+  }
+
+  _getSafetyScoreLabel(score) {
+    if (score === null || score === undefined) return "Unknown";
+    if (score >= 70) return "Good";
+    if (score >= 50) return "OK";
+    if (score >= 30) return "Risky";
+    return "Danger";
+  }
+
+  // Deprecated - kept for reference but use _getSafetyScoreClass instead
   _getScoreClass(score) {
     if (score === null || score === undefined) return "";
     if (score >= 700) return "score-good";
@@ -1355,7 +1398,7 @@ export class TokenDetailsDialog {
     return "Danger";
   }
 
-  // =========================================================================
+  // ========================================================================
   // POSITIONS TAB
   // =========================================================================
 

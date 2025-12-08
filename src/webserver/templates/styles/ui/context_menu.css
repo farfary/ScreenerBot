@@ -1,0 +1,408 @@
+/* =============================================================================
+   Context Menu - macOS Native Style
+   ============================================================================= */
+
+/* Menu Overlay - captures clicks outside */
+.context-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10005;
+  pointer-events: auto;
+}
+
+/* Main Menu Container */
+.context-menu {
+  position: fixed;
+  z-index: 10006;
+  min-width: 200px;
+  max-width: 300px;
+  padding: 5px 0;
+  background: var(--bg-secondary, #161b22);
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 8px;
+  box-shadow:
+    0 10px 40px -10px rgb(0 0 0 / 50%),
+    0 0 0 1px rgb(255 255 255 / 5%);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  opacity: 0;
+  transform: scale(0.96);
+  transform-origin: top left;
+  transition:
+    opacity 0.12s ease-out,
+    transform 0.12s ease-out;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "SF Pro Text",
+    "Segoe UI",
+    Roboto,
+    sans-serif;
+  font-size: 13px;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.context-menu.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.context-menu.origin-top-right {
+  transform-origin: top right;
+}
+
+.context-menu.origin-bottom-left {
+  transform-origin: bottom left;
+}
+
+.context-menu.origin-bottom-right {
+  transform-origin: bottom right;
+}
+
+/* Menu Items */
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px 6px 10px;
+  margin: 0 5px;
+  color: var(--text-primary, #e6edf3);
+  cursor: default;
+  border-radius: 4px;
+  transition: background-color 0.08s ease;
+  position: relative;
+}
+
+.context-menu-item:hover,
+.context-menu-item:focus,
+.context-menu-item.active {
+  background: var(--primary-color, #2563eb);
+  color: #fff;
+  outline: none;
+}
+
+.context-menu-item:hover .context-menu-icon,
+.context-menu-item:focus .context-menu-icon,
+.context-menu-item.active .context-menu-icon {
+  color: #fff;
+}
+
+.context-menu-item:hover .context-menu-shortcut,
+.context-menu-item:focus .context-menu-shortcut,
+.context-menu-item.active .context-menu-shortcut {
+  color: rgb(255 255 255 / 70%);
+}
+
+.context-menu-item:hover .context-menu-submenu-arrow,
+.context-menu-item:focus .context-menu-submenu-arrow,
+.context-menu-item.active .context-menu-submenu-arrow {
+  color: rgb(255 255 255 / 70%);
+}
+
+/* Disabled Items */
+.context-menu-item.disabled {
+  color: var(--text-muted, #6e7681);
+  pointer-events: none;
+}
+
+.context-menu-item.disabled .context-menu-icon {
+  opacity: 0.4;
+}
+
+/* Destructive/Danger Items */
+.context-menu-item.danger:hover,
+.context-menu-item.danger:focus,
+.context-menu-item.danger.active {
+  background: var(--error-color, #f85149);
+}
+
+/* Success Items (Buy) */
+.context-menu-item.success:hover,
+.context-menu-item.success:focus,
+.context-menu-item.success.active {
+  background: var(--success-color, #3fb950);
+}
+
+/* Icon Container */
+.context-menu-icon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-secondary, #8b949e);
+  transition: color 0.08s ease;
+}
+
+/* Lucide font icons */
+.context-menu-icon i {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* Legacy SVG support */
+.context-menu-icon svg {
+  width: 14px;
+  height: 14px;
+  stroke-width: 1.75;
+}
+
+/* Checkmark for selected items */
+.context-menu-icon.check {
+  color: var(--success-color, #3fb950);
+}
+
+/* Label */
+.context-menu-label {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Keyboard Shortcut */
+.context-menu-shortcut {
+  font-size: 11px;
+  color: var(--text-muted, #6e7681);
+  margin-left: auto;
+  padding-left: 16px;
+  font-family: inherit;
+  transition: color 0.08s ease;
+}
+
+/* Submenu Arrow */
+.context-menu-submenu-arrow {
+  width: 12px;
+  height: 12px;
+  margin-left: auto;
+  color: var(--text-muted, #6e7681);
+  transition: color 0.08s ease;
+}
+
+.context-menu-submenu-arrow i {
+  font-size: 12px;
+  line-height: 1;
+}
+
+.context-menu-submenu-arrow svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* Separator */
+.context-menu-separator {
+  height: 1px;
+  margin: 5px 12px;
+  background: var(--border-color, #30363d);
+}
+
+/* Section Header */
+.context-menu-header {
+  padding: 6px 12px 4px 10px;
+  margin: 0 5px 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted, #6e7681);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  cursor: default;
+}
+
+/* Submenu Container */
+.context-menu-submenu {
+  position: absolute;
+  left: 100%;
+  top: -5px;
+  margin-left: 2px;
+  min-width: 180px;
+  padding: 5px 0;
+  background: var(--bg-secondary, #161b22);
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 8px;
+  box-shadow:
+    0 10px 40px -10px rgb(0 0 0 / 50%),
+    0 0 0 1px rgb(255 255 255 / 5%);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-4px);
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease,
+    visibility 0.12s;
+}
+
+.context-menu-item:hover > .context-menu-submenu,
+.context-menu-item.active > .context-menu-submenu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+}
+
+/* Submenu opens to left if near right edge */
+.context-menu-submenu.left,
+.context-menu.submenus-left .context-menu-submenu {
+  left: auto;
+  right: 100%;
+  margin-left: 0;
+  margin-right: 2px;
+  transform: translateX(4px);
+}
+
+.context-menu-item:hover > .context-menu-submenu.left,
+.context-menu-item.active > .context-menu-submenu.left,
+.context-menu-item.submenu-open > .context-menu-submenu.left,
+.context-menu.submenus-left .context-menu-item:hover > .context-menu-submenu,
+.context-menu.submenus-left .context-menu-item.submenu-open > .context-menu-submenu {
+  transform: translateX(0);
+}
+
+/* Submenu open state (for programmatic control) */
+.context-menu-item.submenu-open > .context-menu-submenu {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+}
+
+/* Badge/Tag in menu item */
+.context-menu-badge {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--primary-color-light, rgb(37 99 235 / 20%));
+  color: var(--primary-color, #2563eb);
+  font-weight: 500;
+  margin-left: 8px;
+}
+
+.context-menu-item:hover .context-menu-badge,
+.context-menu-item.active .context-menu-badge {
+  background: rgb(255 255 255 / 20%);
+  color: #fff;
+}
+
+/* Token Info Preview in Context Menu */
+.context-menu-token-preview {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  margin: 0 5px 4px;
+  background: rgb(0 0 0 / 20%);
+  border-radius: 6px;
+  cursor: default;
+}
+
+.context-menu-token-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg-card-hover, #21262d);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary, #e6edf3);
+  overflow: hidden;
+}
+
+.context-menu-token-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.context-menu-token-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.context-menu-token-symbol {
+  font-weight: 600;
+  color: var(--text-primary, #e6edf3);
+  font-size: 13px;
+}
+
+.context-menu-token-name {
+  font-size: 11px;
+  color: var(--text-secondary, #8b949e);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Animations */
+@keyframes context-menu-fade-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Focus visible for keyboard navigation */
+.context-menu:focus-visible {
+  outline: none;
+}
+
+.context-menu-item:focus-visible {
+  outline: 2px solid var(--primary-color, #2563eb);
+  outline-offset: -2px;
+}
+
+/* Dark Theme Adjustments (already default) */
+[data-theme="dark"] .context-menu {
+  background: rgb(22 27 34 / 95%);
+}
+
+/* Light Theme */
+[data-theme="light"] .context-menu {
+  background: rgb(255 255 255 / 95%);
+  border-color: rgb(0 0 0 / 10%);
+  box-shadow:
+    0 10px 40px -10px rgb(0 0 0 / 25%),
+    0 0 0 1px rgb(0 0 0 / 8%);
+}
+
+[data-theme="light"] .context-menu-item:hover,
+[data-theme="light"] .context-menu-item:focus,
+[data-theme="light"] .context-menu-item.active {
+  background: var(--primary-color, #2563eb);
+}
+
+[data-theme="light"] .context-menu-separator {
+  background: rgb(0 0 0 / 10%);
+}
+
+[data-theme="light"] .context-menu-token-preview {
+  background: rgb(0 0 0 / 5%);
+}
+
+/* Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  .context-menu,
+  .context-menu-submenu {
+    transition: none;
+  }
+}
+
+/* High Contrast */
+@media (prefers-contrast: more) {
+  .context-menu {
+    border-width: 2px;
+  }
+
+  .context-menu-item:hover,
+  .context-menu-item:focus {
+    outline: 2px solid currentcolor;
+    outline-offset: -2px;
+  }
+}

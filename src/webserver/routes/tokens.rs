@@ -191,7 +191,10 @@ pub struct TokenDetailResponse {
   pub buy_sell_ratio_24h: Option<f64>,
 
   // Security
+  /// Raw risk score from Rugcheck (0-150000+, HIGHER = MORE RISKY)
   pub risk_score: Option<i32>,
+  /// Normalized safety score from Rugcheck (0-100, HIGHER = SAFER)
+  pub safety_score: Option<i32>,
   pub rugged: Option<bool>,
   pub mint_authority: Option<String>,
   pub freeze_authority: Option<String>,
@@ -704,6 +707,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         net_flow_24h: None,
         buy_sell_ratio_24h: None,
         risk_score: None,
+        safety_score: None,
         rugged: None,
         mint_authority: None,
         freeze_authority: None,
@@ -843,7 +847,8 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
 
   // Get security info from Token struct
   let security_start = std::time::Instant::now();
-  let security_score = token.security_score;
+  let security_score = token.security_score; // Raw risk score (0-150000+, higher = riskier)
+  let security_score_normalised = token.security_score_normalised; // Normalized (0-100, higher = safer)
   let rugged = Some(token.is_rugged);
   let mint_authority = token.mint_authority.clone();
   let freeze_authority = token.freeze_authority.clone();
@@ -1096,27 +1101,28 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
   let logo_url = token.image_url.clone();
   let primary_website = websites.first().map(|link| link.url.clone());
 
-  let security_summary = match (rugged, security_score) {
+  // Security summary based on normalized score (0-100, higher = safer)
+  let security_summary = match (rugged, security_score_normalised) {
     (Some(true), Some(score)) => Some(format!(
- "Token flagged as rugged (score {}). Investigate before trading.",
+ "Token flagged as rugged (safety score {}). Investigate before trading.",
       score
     )),
     (Some(true), None) => {
  Some("Token flagged as rugged. Investigate before trading.".to_string())
     }
-    (_, Some(score)) if score >= 700 => {
- Some(format!("Strong security posture (score {}).", score))
+    (_, Some(score)) if score >= 70 => {
+ Some(format!("Strong security posture (safety score {}/100).", score))
     }
-    (_, Some(score)) if score >= 500 => Some(format!(
- "Moderate security score ({}). Monitor for changes.",
+    (_, Some(score)) if score >= 50 => Some(format!(
+ "Moderate security (safety score {}/100). Monitor for changes.",
       score
     )),
-    (_, Some(score)) if score >= 300 => Some(format!(
- "Security score {} indicates elevated risk.",
+    (_, Some(score)) if score >= 30 => Some(format!(
+ "Safety score {}/100 indicates elevated risk.",
       score
     )),
     (_, Some(score)) => Some(format!(
- "Security score {} indicates critical risk.",
+ "Safety score {}/100 indicates critical risk.",
       score
     )),
     _ => None,
@@ -1126,6 +1132,9 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
   let tagline = token.header_image_url.clone();
   let description = normalize_optional_text(token.description.clone());
 
+  // Verified = normalized score >= 70 (safer tokens)
+  let verified = security_score_normalised.map(|s| s >= 70).unwrap_or(false);
+
   Json(TokenDetailResponse {
     mint: token.mint.clone(),
     symbol: token.symbol.clone(),
@@ -1134,7 +1143,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     description,
     logo_url,
     website: primary_website,
-    verified: token.security_score.map(|s| s >= 500).unwrap_or(false),
+    verified,
     tags: combined_tags,
     pair_labels: Vec::new(), // Not available in unified Token
     decimals: Some(token.decimals),
@@ -1167,6 +1176,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     net_flow_24h,
     buy_sell_ratio_24h,
     risk_score: security_score,
+    safety_score: security_score_normalised,
     rugged,
     mint_authority,
     freeze_authority,

@@ -193,6 +193,9 @@ http-client = []
 crypto-extra = []
 fast = []
 full = []
+# Enable devtools in development (allows right-click, inspect element)
+# Production builds will NOT include this feature, blocking devtools access
+devtools = []
 
 [dev-dependencies]
 tempfile = "3"

@@ -934,7 +934,8 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
         logo_url: token.image_url.clone(),
         website: token.websites.first().map(|w| w.url.clone()),
         tags: Vec::new(), // Tags not available in unified Token
-        is_verified: token.security_score.map(|s| s >= 500).unwrap_or(false),
+        // Use normalized score (0-100, higher = safer) - verified if score >= 70
+        is_verified: token.security_score_normalised.map(|s| s >= 70).unwrap_or(false),
     });
 
     // 3. Get current price from pool service

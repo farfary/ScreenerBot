@@ -223,3 +223,51 @@ fn is_frame_equal(a: &NSRect, b: &NSRect, tolerance: f64) -> bool {
     && (a.size.width - b.size.width).abs() < tolerance
     && (a.size.height - b.size.height).abs() < tolerance
 }
+
+/// Start native window drag using Cocoa API
+/// 
+/// This is a workaround for the Tauri bug where TitleBarStyle::Overlay
+/// breaks window dragging on macOS (issue #9503).
+/// 
+/// We use NSWindow's setMovableByWindowBackground: to enable dragging
+/// from anywhere in the window.
+pub fn set_window_draggable(window: &WebviewWindow, draggable: bool) -> Result<(), String> {
+  unsafe {
+    let ns_window = get_ns_window(window)?;
+    
+    // setMovableByWindowBackground: allows the window to be moved by
+    // clicking and dragging anywhere on the window background
+    let _: () = objc2::msg_send![&*ns_window, setMovableByWindowBackground: draggable];
+    
+    logger::debug(
+      LogTag::System,
+      &format!("Set window movableByWindowBackground to {}", draggable),
+    );
+    
+    Ok(())
+  }
+}
+
+/// Enable the window to accept first mouse click for dragging
+/// This allows dragging the window even when it's not focused
+pub fn set_accepts_first_mouse(window: &WebviewWindow, accepts: bool) -> Result<(), String> {
+  unsafe {
+    let ns_window = get_ns_window(window)?;
+    
+    // Get the content view
+    let content_view: *mut AnyObject = objc2::msg_send![&*ns_window, contentView];
+    if !content_view.is_null() {
+      // Note: acceptsFirstMouse is actually a method on NSView that needs
+      // to be overridden. We can't easily set it. Instead, we use
+      // setAcceptsMouseMovedEvents to help with responsiveness.
+      let _: () = objc2::msg_send![&*ns_window, setAcceptsMouseMovedEvents: accepts];
+    }
+    
+    logger::debug(
+      LogTag::System,
+      &format!("Set window acceptsMouseMovedEvents to {}", accepts),
+    );
+    
+    Ok(())
+  }
+}

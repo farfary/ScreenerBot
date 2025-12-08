@@ -108,6 +108,7 @@ impl TokenDatabase {
                 token_type,
                 token_decimals,
                 score,
+                score_normalised,
                 score_description,
                 mint_authority,
                 freeze_authority,
@@ -130,12 +131,13 @@ impl TokenDatabase {
                 security_data_first_fetched_at
              ) VALUES (
                 ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
-                ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24
+                ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25
              )
              ON CONFLICT(mint) DO UPDATE SET
                 token_type = excluded.token_type,
                 token_decimals = excluded.token_decimals,
                 score = excluded.score,
+                score_normalised = excluded.score_normalised,
                 score_description = excluded.score_description,
                 mint_authority = excluded.mint_authority,
                 freeze_authority = excluded.freeze_authority,
@@ -160,6 +162,7 @@ impl TokenDatabase {
                 &data.token_type,
                 data.token_decimals,
                 data.score,
+                data.score_normalised,
                 &data.score_description,
                 &data.mint_authority,
                 &data.freeze_authority,
@@ -336,6 +339,7 @@ impl TokenDatabase {
                     token_type: None,
                     token_decimals: None,
                     score: security_score,
+                    score_normalised: None, // Not loaded in this lite version
                     score_description: None,
                     mint_authority: None,
                     freeze_authority: None,
@@ -1186,6 +1190,7 @@ impl TokenDatabase {
                     token_type,
                     token_decimals,
                     score,
+                    score_normalised,
                     score_description,
                     mint_authority,
                     freeze_authority,
@@ -1211,12 +1216,12 @@ impl TokenDatabase {
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
 
         let result = stmt.query_row(params![mint], |row| {
-            let risks_json: String = row.get(18)?;
-            let holders_json: String = row.get(19)?;
-            let markets_json: Option<String> = row.get(20)?;
-            let fetched_ts: i64 = row.get(21)?;
-            let first_fetched_ts: i64 = row.get(22)?;
-            let rugged_flag: Option<i64> = row.get(17)?;
+            let risks_json: String = row.get(19)?;
+            let holders_json: String = row.get(20)?;
+            let markets_json: Option<String> = row.get(21)?;
+            let fetched_ts: i64 = row.get(22)?;
+            let first_fetched_ts: i64 = row.get(23)?;
+            let rugged_flag: Option<i64> = row.get(18)?;
             let is_rugged = rugged_flag.unwrap_or(0) != 0;
 
             let risks: Vec<SecurityRisk> = serde_json::from_str(&risks_json)
@@ -1229,20 +1234,21 @@ impl TokenDatabase {
                 token_type: row.get(0)?,
                 token_decimals: row.get(1)?,
                 score: row.get(2)?,
-                score_description: row.get(3)?,
-                mint_authority: row.get(4)?,
-                freeze_authority: row.get(5)?,
-                top_10_holders_pct: row.get(6)?,
-                total_supply: row.get(7)?,
-                total_holders: row.get(8)?,
-                total_lp_providers: row.get(9)?,
-                graph_insiders_detected: row.get(10)?,
-                total_market_liquidity: row.get(11)?,
-                total_stable_liquidity: row.get(12)?,
-                creator_balance_pct: row.get(13)?,
-                transfer_fee_pct: row.get(14)?,
-                transfer_fee_max_amount: row.get(15)?,
-                transfer_fee_authority: row.get(16)?,
+                score_normalised: row.get(3)?,
+                score_description: row.get(4)?,
+                mint_authority: row.get(5)?,
+                freeze_authority: row.get(6)?,
+                top_10_holders_pct: row.get(7)?,
+                total_supply: row.get(8)?,
+                total_holders: row.get(9)?,
+                total_lp_providers: row.get(10)?,
+                graph_insiders_detected: row.get(11)?,
+                total_market_liquidity: row.get(12)?,
+                total_stable_liquidity: row.get(13)?,
+                creator_balance_pct: row.get(14)?,
+                transfer_fee_pct: row.get(15)?,
+                transfer_fee_max_amount: row.get(16)?,
+                transfer_fee_authority: row.get(17)?,
                 rugged: is_rugged,
                 risks,
                 top_holders: holders,
@@ -2666,6 +2672,7 @@ impl TokenDatabase {
                 mint_authority: None,
                 freeze_authority: None,
                 security_score,
+                security_score_normalised: None, // Not loaded in this query
                 is_rugged,
                 token_type: None,
                 graph_insiders_detected: None,
@@ -2876,6 +2883,7 @@ fn assemble_token(
     let mint_authority = security_ref.and_then(|sec| sec.mint_authority.clone());
     let freeze_authority = security_ref.and_then(|sec| sec.freeze_authority.clone());
     let security_score = security_ref.and_then(|sec| sec.score);
+    let security_score_normalised = security_ref.and_then(|sec| sec.score_normalised);
     let is_rugged = security_ref.map(|sec| sec.rugged).unwrap_or(false);
     let security_risks = security_ref
         .map(|sec| sec.risks.clone())
@@ -2977,6 +2985,7 @@ fn assemble_token(
         mint_authority,
         freeze_authority,
         security_score,
+        security_score_normalised,
         is_rugged,
         token_type,
         graph_insiders_detected,
@@ -3017,6 +3026,7 @@ fn assemble_token_without_market_data(
     let mint_authority = security_ref.and_then(|sec| sec.mint_authority.clone());
     let freeze_authority = security_ref.and_then(|sec| sec.freeze_authority.clone());
     let security_score = security_ref.and_then(|sec| sec.score);
+    let security_score_normalised = security_ref.and_then(|sec| sec.score_normalised);
     let is_rugged = security_ref.map(|sec| sec.rugged).unwrap_or(false);
     let security_risks = security_ref
         .map(|sec| sec.risks.clone())
@@ -3126,6 +3136,7 @@ fn assemble_token_without_market_data(
         mint_authority,
         freeze_authority,
         security_score,
+        security_score_normalised,
         is_rugged,
         token_type,
         graph_insiders_detected,

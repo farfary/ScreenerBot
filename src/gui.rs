@@ -79,7 +79,7 @@ pub async fn run_gui_mode() -> Result<(), String> {
     .plugin(tauri_plugin_process::init())
     .plugin(tauri_plugin_global_shortcut::Builder::new().build())
     .plugin(tauri_plugin_window_state::Builder::default().build())
-    .invoke_handler(tauri::generate_handler![smart_maximize])
+    .invoke_handler(tauri::generate_handler![smart_maximize, enable_window_drag])
     .setup({
       let zoom_level_clone = Arc::clone(&zoom_level);
       move |app| {
@@ -110,6 +110,31 @@ pub async fn run_gui_mode() -> Result<(), String> {
             } else {
               logger::info(LogTag::System, "macOS title bar set to Overlay");
             }
+          }
+
+          // Expose devtools flag to frontend
+          // When devtools feature is enabled, the "Inspect Element" option shows in context menu
+          #[cfg(feature = "devtools")]
+          {
+            if let Err(e) = window.eval("window.__SCREENERBOT_DEVTOOLS__ = true;") {
+              logger::warning(
+                LogTag::System,
+                &format!("Failed to set devtools flag: {}", e),
+              );
+            } else {
+              logger::info(LogTag::System, "Devtools feature enabled - Inspect Element available in context menu");
+            }
+          }
+
+          #[cfg(not(feature = "devtools"))]
+          {
+            if let Err(e) = window.eval("window.__SCREENERBOT_DEVTOOLS__ = false;") {
+              logger::warning(
+                LogTag::System,
+                &format!("Failed to set devtools flag: {}", e),
+              );
+            }
+            logger::info(LogTag::System, "Production build - Inspect Element hidden from context menu");
           }
 
           logger::info(LogTag::System, "Window configuration complete");
@@ -715,5 +740,25 @@ fn smart_maximize(window: tauri::WebviewWindow) -> Result<(), String> {
         .maximize()
         .map_err(|e| format!("Failed to maximize: {}", e))
     }
+  }
+}
+
+/// Enable window drag by background
+/// This is a workaround for Tauri bug #9503 where TitleBarStyle::Overlay
+/// breaks window dragging on macOS
+#[tauri::command]
+fn enable_window_drag(window: tauri::WebviewWindow) -> Result<(), String> {
+  #[cfg(target_os = "macos")]
+  {
+    crate::macos_window::set_window_draggable(&window, true)?;
+    crate::macos_window::set_accepts_first_mouse(&window, true)?;
+    Ok(())
+  }
+
+  #[cfg(not(target_os = "macos"))]
+  {
+    // On other platforms, dragging works normally
+    let _ = window;
+    Ok(())
   }
 }
