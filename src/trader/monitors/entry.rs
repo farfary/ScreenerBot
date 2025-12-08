@@ -69,6 +69,8 @@ pub async fn monitor_entries(
     let entry_check_concurrency = config::get_entry_check_concurrency();
     let semaphore = std::sync::Arc::new(tokio::sync::Semaphore::new(entry_check_concurrency));
 
+    let mut was_paused = false; // Track paused state
+
     loop {
         // Check if we should shutdown
         if *shutdown.borrow() {
@@ -79,9 +81,19 @@ pub async fn monitor_entries(
         // Check if trader is enabled
         let trader_enabled = config::is_trader_enabled();
         if !trader_enabled {
-            logger::info(LogTag::Trader, "Entry monitor paused - trader disabled");
+            // Only log when transitioning to paused state
+            if !was_paused {
+                logger::info(LogTag::Trader, "Entry monitor paused - trader disabled");
+                was_paused = true;
+            }
             sleep(Duration::from_secs(5)).await;
             continue;
+        }
+
+        // Log when resuming from paused state
+        if was_paused {
+            logger::info(LogTag::Trader, "Entry monitor resumed - trader enabled");
+            was_paused = false;
         }
 
         // Start cycle timing

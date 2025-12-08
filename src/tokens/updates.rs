@@ -900,7 +900,7 @@ async fn update_open_position_tokens(db: &TokenDatabase, coordinator: &RateLimit
         return;
     }
 
-    logger::info(
+    logger::debug(
         LogTag::Tokens,
         &format!("Updating {} open position tokens", tokens.len()),
     );
@@ -977,7 +977,7 @@ async fn update_pool_tracked_tokens(db: &TokenDatabase, coordinator: &RateLimitC
     }
 
     let batch = &tokens[..tokens.len().min(90)];
-    logger::info(
+    logger::debug(
         LogTag::Tokens,
         &format!("Updating {} pool-tracked tokens", batch.len()),
     );
@@ -1064,7 +1064,7 @@ async fn update_filter_passed_tokens(db: &TokenDatabase, coordinator: &RateLimit
 
     // Limit to 60 tokens total, process in batches of 30
     let batch = &tokens[..tokens.len().min(60)];
-    logger::info(
+    logger::debug(
         LogTag::Tokens,
         &format!("Updating {} filter-passed tokens", batch.len()),
     );
@@ -1137,7 +1137,7 @@ async fn update_background_tokens(db: &TokenDatabase, coordinator: &RateLimitCoo
         return;
     }
 
-    logger::info(
+    logger::debug(
         LogTag::Tokens,
         &format!("Updating {} background tokens", tokens.len()),
     );

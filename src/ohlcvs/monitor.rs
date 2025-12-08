@@ -205,7 +205,7 @@ impl OhlcvMonitor {
       let priority_owned = priority;
 
       tokio::spawn(async move {
-        logger::info(
+        logger::debug(
           LogTag::Ohlcv,
           &format!(
             "Triggering 30-day backfill for new token mint={} pool={} priority={:?}",
@@ -218,7 +218,7 @@ impl OhlcvMonitor {
           .await
         {
           Ok(total) => {
-            logger::info(
+            logger::debug(
               LogTag::Ohlcv,
               &format!(
                 "Backfill completed for mint={} total_candles={}",
@@ -1382,7 +1382,7 @@ impl OhlcvMonitor {
       Timeframe::Minute1,
     ];
 
-    logger::info(
+    logger::debug(
       LogTag::Ohlcv,
       &format!(
         "Starting 30-day backfill for mint={} pool={} priority={:?}",
@@ -1413,7 +1413,7 @@ impl OhlcvMonitor {
           total_fetched += count;
           // Mark as complete
           self.db.mark_backfill_complete(mint, *timeframe)?;
-          logger::info(
+          logger::debug(
             LogTag::Ohlcv,
             &format!(
               "Backfill complete for mint={} timeframe={} candles={}",
@@ -1450,7 +1450,7 @@ impl OhlcvMonitor {
     // Mark all as complete if we got here
     self.db.mark_all_backfills_complete(mint)?;
 
-    logger::info(
+    logger::debug(
       LogTag::Ohlcv,
       &format!(
         "Completed 30-day backfill for mint={} pool={} total_candles={}",

@@ -831,7 +831,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     (None, None, None, None, None, None, None)
   };
 
-  logger::info(
+  logger::debug(
     LogTag::Webserver,
     &format!(
       "mint={} elapsed={}ms has_price={}",
@@ -876,7 +876,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     })
     .collect();
 
-  logger::info(
+  logger::debug(
     LogTag::Webserver,
     &format!(
       "mint={} elapsed={}ms has_score={} risks_count={}",
@@ -900,7 +900,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     }
   };
 
-  logger::info(
+  logger::debug(
     LogTag::Webserver,
     &format!(
       "mint={} elapsed={}ms has_data={}",
@@ -939,7 +939,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
   let position_start = std::time::Instant::now();
   let has_open_position = positions::is_open_position(&mint).await;
 
-  logger::info(
+  logger::debug(
     LogTag::Webserver,
     &format!(
       "mint={} elapsed={}ms has_position={}",
@@ -975,7 +975,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     );
   }
 
-  logger::info(
+  logger::debug(
     LogTag::Webserver,
     &format!(
       "mint={} elapsed={}ms",
@@ -984,14 +984,27 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     ),
   );
 
-  logger::info(
-    LogTag::Webserver,
-    &format!(
-      "mint={} total_elapsed={}ms",
-      mint,
-      request_start.elapsed().as_millis()
-    ),
-  );
+  // Only log total elapsed time at INFO level if it's significant (>100ms)
+  let total_ms = request_start.elapsed().as_millis();
+  if total_ms > 100 {
+    logger::info(
+      LogTag::Webserver,
+      &format!(
+        "mint={} total_elapsed={}ms (slow request)",
+        mint,
+        total_ms
+      ),
+    );
+  } else {
+    logger::debug(
+      LogTag::Webserver,
+      &format!(
+        "mint={} total_elapsed={}ms",
+        mint,
+        total_ms
+      ),
+    );
+  }
 
   let created_at_ts = Some(token.first_discovered_at.timestamp());
   let token_birth_ts = token.blockchain_created_at.map(|dt| dt.timestamp());

@@ -1769,7 +1769,7 @@ impl TransactionDatabase {
             }
         }
 
-        logger::info(
+        logger::debug(
         LogTag::Transactions,
                 &format!(
                     "Aggregated {} txs: parsed={} with wallet, no_json={}, parse_errors={}, no_wallet_account={} | inflow={:.6} SOL, outflow={:.6} SOL, net={:.6} SOL",
