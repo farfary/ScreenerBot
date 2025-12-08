@@ -5,6 +5,7 @@
 /* global LightweightCharts */
 import * as Utils from "../core/utils.js";
 import { Poller } from "../core/poller.js";
+import { requestManager } from "../core/request_manager.js";
 import { TradeActionDialog } from "./trade_action_dialog.js";
 
 export class TokenDetailsDialog {
@@ -22,6 +23,8 @@ export class TokenDetailsDialog {
     this.isOpening = false;
     this.tradeDialog = null;
     this.positionsData = null;
+    this.walletBalance = 0;
+    this.walletBalanceFetchedAt = 0;
   }
 
   /**
@@ -529,15 +532,39 @@ export class TokenDetailsDialog {
     return this.tradeDialog;
   }
 
+  async _getWalletBalance() {
+    const now = Date.now();
+    if (this.walletBalance != null && now - this.walletBalanceFetchedAt < 10000) {
+      return this.walletBalance;
+    }
+
+    try {
+      const data = await requestManager.fetch("/api/wallet/balance", { priority: "low" });
+      const parsedBalance = Number(data?.sol_balance);
+      if (Number.isFinite(parsedBalance)) {
+        this.walletBalance = parsedBalance;
+        this.walletBalanceFetchedAt = now;
+        return this.walletBalance;
+      }
+    } catch (error) {
+      console.warn("[TokenDetailsDialog] Failed to fetch wallet balance", error);
+    }
+
+    this.walletBalance = 0;
+    this.walletBalanceFetchedAt = now;
+    return this.walletBalance;
+  }
+
   async _handleBuyClick() {
     const dialog = this._ensureTradeDialog();
     const symbol = this.fullTokenData?.symbol || this.tokenData?.symbol || "?";
+    const balance = await this._getWalletBalance();
 
     try {
       const result = await dialog.open({
         action: "buy",
         symbol,
-        context: {},
+        context: { balance },
       });
 
       if (!result) return; // User cancelled
