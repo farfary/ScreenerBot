@@ -961,7 +961,7 @@ export class SettingsDialog {
    * Build Updates tab content
    */
   _buildUpdatesTab() {
-    const { version, build_number } = this.versionInfo;
+    const { version } = this.versionInfo;
     return `
       <div class="settings-updates-section">
         <div class="settings-section">
@@ -972,7 +972,7 @@ export class SettingsDialog {
             </div>
             <div class="settings-update-info" id="updateStatusInfo">
               <h4 id="updateStatusTitle">You're up to date!</h4>
-              <p id="updateStatusMessage">ScreenerBot v${version} (build ${build_number}) is the latest version.</p>
+              <p id="updateStatusMessage">ScreenerBot v${version} is the latest version.</p>
             </div>
             <button class="settings-update-btn" id="checkUpdatesBtn">
               <i class="icon-refresh-cw"></i>
@@ -1000,7 +1000,6 @@ export class SettingsDialog {
             <div class="settings-release">
               <div class="settings-release-header">
                 <span class="settings-release-version">v${version}</span>
-                <span class="settings-release-date">Build ${build_number}</span>
                 <span class="settings-release-badge">Current</span>
               </div>
               <p id="currentReleaseNotes" style="color: var(--text-secondary); font-size: var(--font-size-sm); margin-top: var(--spacing-sm);">
@@ -1055,7 +1054,7 @@ export class SettingsDialog {
             availableCard.style.display = "none";
             statusIcon.innerHTML = '<i class="icon-circle-check"></i>';
             statusTitle.textContent = "You're up to date!";
-            statusMessage.textContent = `ScreenerBot v${this.versionInfo.version} (build ${this.versionInfo.build_number}) is the latest version.`;
+            statusMessage.textContent = `ScreenerBot v${this.versionInfo.version} is the latest version.`;
 
             Utils.showToast({
               type: "success",

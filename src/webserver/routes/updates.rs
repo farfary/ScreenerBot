@@ -28,6 +28,7 @@ use crate::{
 struct VersionResponse {
     version: String,
     platform: String,
+    build_number: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -84,9 +85,19 @@ async fn get_version() -> Response {
     logger::debug(LogTag::Webserver, "Version endpoint called");
 
     let info = version::get_version_info();
+    
+    // Extract build number from version (last part after the last dot)
+    // Version format: MAJOR.MINOR.BUILD_NUMBER (e.g., 0.1.57)
+    let build_number = info.version
+        .rsplit('.')
+        .next()
+        .unwrap_or("0")
+        .to_string();
+    
     let response = VersionResponse {
         version: info.version,
         platform: info.platform,
+        build_number,
     };
 
     success_response(response)
