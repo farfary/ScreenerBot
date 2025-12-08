@@ -347,6 +347,15 @@ function getPageFromPath() {
 
 async function bootstrapRouter() {
   await waitForReady();
+
+  // Initialize AppState from server before pages load
+  // All state is stored server-side, no localStorage
+  try {
+    await AppState.init();
+  } catch (e) {
+    console.warn("[Router] Failed to initialize AppState from server:", e);
+  }
+
   initRouter();
 }
 

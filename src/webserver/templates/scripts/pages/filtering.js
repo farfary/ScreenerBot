@@ -1513,7 +1513,7 @@ export function createLifecycle() {
         ctx.manageTabBar(tabBar);
         tabBar.show();
 
-        // Sync state.activeTab with TabBar's restored state (from localStorage or URL)
+        // Sync state.activeTab with TabBar's restored state (from server or URL)
         const active = tabBar.getActiveTab();
         if (active && active !== state.activeTab) {
           state.activeTab = active;

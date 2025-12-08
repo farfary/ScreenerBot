@@ -25,6 +25,7 @@ pub mod tokens;
 pub mod trader;
 pub mod trading;
 pub mod transactions;
+pub mod ui_state;
 pub mod updates;
 pub mod wallet;
 
@@ -165,6 +166,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .merge(ohlcv::ohlcv_routes())
         .merge(actions::routes())
         .merge(header::routes())
+        .merge(ui_state::routes())
         .nest("/connectivity", connectivity::routes())
         .nest("/initialization", initialization::routes())
         .nest("/trading", trading::routes())

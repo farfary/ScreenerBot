@@ -192,6 +192,11 @@ pub fn get_entry_analysis_path() -> PathBuf {
   get_data_directory().join("entry_analysis.json")
 }
 
+/// Returns the UI state file path (for persisting table state, etc.)
+pub fn get_ui_state_path() -> PathBuf {
+  get_data_directory().join("ui_state.json")
+}
+
 /// Returns the process lock file path
 pub fn get_process_lock_path() -> PathBuf {
   get_data_directory().join(".screenerbot.lock")

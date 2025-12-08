@@ -4,37 +4,8 @@
 (function () {
   "use strict";
 
-  const CACHE_KEY = "screenerbot_version_info";
-  const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
-
-  function getCachedVersionInfo() {
-    try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (cached) {
-        const { version, timestamp } = JSON.parse(cached);
-        if (Date.now() - timestamp < CACHE_DURATION_MS) {
-          return { version };
-        }
-      }
-    } catch {
-      // Ignore cache errors
-    }
-    return null;
-  }
-
-  function setCachedVersionInfo(version) {
-    try {
-      localStorage.setItem(
-        CACHE_KEY,
-        JSON.stringify({
-          version,
-          timestamp: Date.now(),
-        })
-      );
-    } catch {
-      // Ignore cache errors
-    }
-  }
+  // In-memory cache only (no localStorage needed for version info)
+  let cachedVersion = null;
 
   function updateVersionDisplay(version) {
     const el = document.getElementById("statusBarVersion");
@@ -59,19 +30,18 @@
   }
 
   async function initStatusBar() {
-    // Try cache first for instant display
-    const cached = getCachedVersionInfo();
-    if (cached) {
-      updateVersionDisplay(cached.version);
+    // Use cached version if available (same session)
+    if (cachedVersion) {
+      updateVersionDisplay(cachedVersion);
+      return;
     }
 
-    // Fetch fresh version (updates cache)
+    // Fetch version from server
     const info = await fetchVersionInfo();
     if (info && info.version) {
+      cachedVersion = info.version;
       updateVersionDisplay(info.version);
-      setCachedVersionInfo(info.version);
-    } else if (!cached) {
-      // Fallback if no cache and fetch failed
+    } else {
       updateVersionDisplay("—");
     }
   }

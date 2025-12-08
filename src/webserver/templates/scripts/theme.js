@@ -1,23 +1,20 @@
 // Theme Management
+// Uses server-side state storage for persistence across Tauri restarts
 (async function () {
   const html = document.documentElement;
   const themeToggle = document.getElementById("themeToggle");
   const themeIcon = document.getElementById("themeIcon");
   const themeText = document.getElementById("themeText");
 
-  // Check if running in Tauri (v2 uses __TAURI_INTERNALS__)
+  // Check if running in Tauri
   const isTauri =
-    window.__TAURI__ !== undefined ||
-    window.__TAURI_INTERNALS__ !== undefined;
+    window.__TAURI__ !== undefined || window.__TAURI_INTERNALS__ !== undefined;
   let tauriWindow = null;
-  let platform = null;
 
   console.log("[Theme] Initializing theme system...");
   console.log("[Theme] Running in Tauri:", isTauri);
-  console.log("[Theme] window.__TAURI__:", window.__TAURI__);
-  console.log("[Theme] window.__TAURI_INTERNALS__:", window.__TAURI_INTERNALS__);
 
-  // Detect platform - check user agent for macOS detection (works without Tauri API)
+  // Detect platform - check user agent for macOS detection
   const isMacOS =
     navigator.platform.toUpperCase().indexOf("MAC") >= 0 ||
     navigator.userAgent.toUpperCase().indexOf("MAC") >= 0;
@@ -36,7 +33,6 @@
   // Initialize Tauri window API if available
   if (isTauri && window.__TAURI__) {
     try {
-      // Try multiple API access patterns
       if (window.__TAURI__.window) {
         const { getCurrentWindow } = window.__TAURI__.window;
         tauriWindow = getCurrentWindow();
@@ -48,21 +44,12 @@
       }
 
       if (tauriWindow) {
-        console.log("[Theme] Successfully initialized Tauri window:", tauriWindow);
-        console.log(
-          "[Theme] Available methods:",
-          Object.getOwnPropertyNames(Object.getPrototypeOf(tauriWindow))
-        );
-      } else {
-        console.warn(
-          "[Theme] Could not initialize Tauri window - API structure:",
-          Object.keys(window.__TAURI__)
-        );
+        console.log("[Theme] Successfully initialized Tauri window");
       }
 
       // Detect platform via Tauri API if available
       if (window.__TAURI__.os) {
-        platform = await window.__TAURI__.os.platform();
+        const platform = await window.__TAURI__.os.platform();
         console.log("[Theme] Detected platform via Tauri API:", platform);
       }
     } catch (error) {
@@ -70,8 +57,23 @@
     }
   }
 
-  // Load saved theme or default to dark
-  const savedTheme = localStorage.getItem("theme") || "dark";
+  // Load saved theme from server or default to dark
+  let savedTheme = "dark";
+  try {
+    const response = await fetch("/api/ui-state/load", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ key: "theme" }),
+    });
+    if (response.ok) {
+      const data = await response.json();
+      if (data.value) {
+        savedTheme = data.value;
+      }
+    }
+  } catch (e) {
+    console.warn("[Theme] Failed to load theme from server, using default:", e);
+  }
   await setTheme(savedTheme);
 
   // Theme toggle click handler
@@ -80,10 +82,16 @@
     const newTheme = currentTheme === "light" ? "dark" : "light";
     console.log("[Theme] User toggled theme from", currentTheme, "to", newTheme);
     await setTheme(newTheme);
+
+    // Save to server
     try {
-      localStorage.setItem("theme", newTheme);
+      await fetch("/api/ui-state/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "theme", value: newTheme }),
+      });
     } catch (e) {
-      console.warn("[Theme] Failed to save theme to localStorage:", e);
+      console.warn("[Theme] Failed to save theme to server:", e);
     }
   });
 
@@ -91,12 +99,25 @@
   if (tauriWindow) {
     try {
       await tauriWindow.onThemeChanged(async (event) => {
-        const systemTheme = event.payload; // 'light' or 'dark'
-        const savedTheme = localStorage.getItem("theme");
+        const systemTheme = event.payload;
         console.log("[Theme] System theme changed to:", systemTheme);
 
-        // Only auto-sync if user hasn't explicitly set a theme preference
-        if (!savedTheme) {
+        // Check if user has set a preference
+        try {
+          const response = await fetch("/api/ui-state/load", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ key: "theme" }),
+          });
+          if (response.ok) {
+            const data = await response.json();
+            // Only auto-sync if user hasn't explicitly set a theme preference
+            if (!data.value) {
+              await setTheme(systemTheme);
+            }
+          }
+        } catch (e) {
+          // On error, follow system theme
           await setTheme(systemTheme);
         }
       });
@@ -118,15 +139,17 @@
       if (themeText) themeText.textContent = "Dark";
     }
 
-    // Sync with Tauri window theme (native title bar color on supported platforms)
+    // Sync with Tauri window theme
     if (tauriWindow) {
       try {
         console.log("[Theme] Syncing Tauri window theme to:", theme);
         await tauriWindow.setTheme(theme);
         console.log("[Theme] Successfully synced window theme");
       } catch (error) {
-        // setTheme may not be available on all platforms
-        console.log("[Theme] Window theme sync not supported on this platform:", error.message);
+        console.log(
+          "[Theme] Window theme sync not supported on this platform:",
+          error.message
+        );
       }
     }
   }
@@ -135,23 +158,15 @@
   // CUSTOM TITLE BAR DOUBLE-CLICK HANDLER (macOS smart maximize)
   // ============================================================================
 
-  // Only set up double-click handler in Tauri on macOS
   if (isTauri && isMacOS) {
     setupSmartMaximizeHandler();
   }
 
-  /**
-   * Set up double-click handler for custom title bar
-   * 
-   * This intercepts double-clicks on data-tauri-drag-region elements and calls
-   * our custom smart_maximize Rust command instead of the default macOS zoom behavior.
-   */
   function setupSmartMaximizeHandler() {
     console.log("[Theme] Setting up smart maximize handler for macOS");
 
-    // Find all drag region elements
     const dragRegions = document.querySelectorAll("[data-tauri-drag-region]");
-    
+
     if (dragRegions.length === 0) {
       console.warn("[Theme] No drag regions found for smart maximize handler");
       return;
@@ -159,51 +174,47 @@
 
     console.log(`[Theme] Found ${dragRegions.length} drag regions`);
 
-    // Track double-click timing manually to intercept before Tauri's handler
     let lastClickTime = 0;
-    const DOUBLE_CLICK_THRESHOLD = 300; // ms
+    const DOUBLE_CLICK_THRESHOLD = 300;
 
     dragRegions.forEach((region) => {
-      // Use mousedown to intercept before Tauri's drag handler
-      region.addEventListener("mousedown", async (e) => {
-        // Only handle left-click
-        if (e.button !== 0) return;
+      region.addEventListener(
+        "mousedown",
+        async (e) => {
+          if (e.button !== 0) return;
 
-        const now = Date.now();
-        const timeSinceLastClick = now - lastClickTime;
-        lastClickTime = now;
+          const now = Date.now();
+          const timeSinceLastClick = now - lastClickTime;
+          lastClickTime = now;
 
-        // Check if this is a double-click
-        if (timeSinceLastClick < DOUBLE_CLICK_THRESHOLD) {
-          console.log("[Theme] Double-click detected on drag region");
-          
-          // Prevent default behavior and Tauri's drag handler
-          e.preventDefault();
-          e.stopPropagation();
-          e.stopImmediatePropagation();
+          if (timeSinceLastClick < DOUBLE_CLICK_THRESHOLD) {
+            console.log("[Theme] Double-click detected on drag region");
 
-          // Call our smart maximize command
-          try {
-            if (window.__TAURI__?.core?.invoke) {
-              await window.__TAURI__.core.invoke("smart_maximize");
-              console.log("[Theme] Smart maximize command executed");
-            } else if (window.__TAURI_INTERNALS__?.invoke) {
-              await window.__TAURI_INTERNALS__.invoke("smart_maximize");
-              console.log("[Theme] Smart maximize command executed (via internals)");
-            } else {
-              console.warn("[Theme] Tauri invoke not available");
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+
+            try {
+              if (window.__TAURI__?.core?.invoke) {
+                await window.__TAURI__.core.invoke("smart_maximize");
+                console.log("[Theme] Smart maximize command executed");
+              } else if (window.__TAURI_INTERNALS__?.invoke) {
+                await window.__TAURI_INTERNALS__.invoke("smart_maximize");
+                console.log("[Theme] Smart maximize command executed (via internals)");
+              } else {
+                console.warn("[Theme] Tauri invoke not available");
+              }
+            } catch (error) {
+              console.error("[Theme] Smart maximize failed:", error);
             }
-          } catch (error) {
-            console.error("[Theme] Smart maximize failed:", error);
+
+            lastClickTime = 0;
           }
-          
-          // Reset click time to prevent triple-click triggering
-          lastClickTime = 0;
-        }
-      }, { capture: true }); // Use capture phase to intercept early
+        },
+        { capture: true }
+      );
     });
 
     console.log("[Theme] Smart maximize handler installed");
   }
 })();
-

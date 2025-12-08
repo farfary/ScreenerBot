@@ -360,7 +360,12 @@ export class SettingsDialog {
     // Apply theme
     if (iface.theme) {
       document.documentElement.setAttribute("data-theme", iface.theme);
-      localStorage.setItem("theme", iface.theme);
+      // Save theme to server (no localStorage)
+      fetch("/api/ui-state/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: "theme", value: iface.theme }),
+      }).catch((e) => console.warn("[Settings] Failed to save theme:", e));
       const themeIcon = document.getElementById("themeIcon");
       if (themeIcon) {
         themeIcon.className = iface.theme === "dark" ? "icon-moon" : "icon-sun";

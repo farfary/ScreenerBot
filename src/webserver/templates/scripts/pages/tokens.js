@@ -79,7 +79,7 @@ const SORT_KEY_TO_COLUMN = Object.entries(COLUMN_TO_SORT_KEY).reduce((acc, [colu
   return acc;
 }, {});
 
-const getTokensTableStateKey = (view) => `tokens-table-v2.${view}`;
+const getTokensTableStateKey = (view) => `tokens-table.${view}`;
 
 const PAGE_LIMIT = 100; // chunked fetch size for incremental scrolling
 const PRICE_HIGHLIGHT_DURATION_MS = 10_000;
@@ -1147,7 +1147,7 @@ function createLifecycle() {
     // Update table stateKey for per-tab state persistence
     if (table) {
       const nextStateKey = getTokensTableStateKey(view);
-      table.setStateKey(nextStateKey, { render: false }); // v2: fixed column order
+      table.setStateKey(nextStateKey, { render: false });
 
       // Update columns for the new view (different views have different conditional columns)
       const newColumns = buildColumns();
@@ -1547,7 +1547,7 @@ function createLifecycle() {
         container: "#tokens-root",
         columns,
         rowIdField: "mint",
-        stateKey: tableStateKey, // v2: fixed column order (Actions before Links)
+        stateKey: tableStateKey,
         enableLogging: false,
         sorting: {
           mode: "server",

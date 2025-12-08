@@ -368,7 +368,7 @@ function createLifecycle() {
       ctx.manageTabBar(tabBar);
       tabBar.show();
 
-      // Sync state.view with TabBar's restored state (from localStorage or URL)
+      // Sync state.view with TabBar's restored state (from server or URL)
       state.view = tabBar.getActiveTab() || state.view;
       state.sort = getInitialSortForView(state.view);
 

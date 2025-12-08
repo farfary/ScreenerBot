@@ -2,6 +2,7 @@ import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
+import * as AppState from "../core/app_state.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { requestManager } from "../core/request_manager.js";
 
@@ -744,31 +745,22 @@ export function createLifecycle() {
   }
 
   function loadStoredCategoryStates() {
-    if (typeof window === "undefined" || typeof window.localStorage === "undefined") {
-      return {};
-    }
-
+    // Category states are loaded via AppState (server-side)
     try {
-      const raw = window.localStorage.getItem("condition-category-states");
-      if (!raw) return {};
-      const parsed = JSON.parse(raw);
-      return parsed && typeof parsed === "object" ? parsed : {};
+      const stored = AppState.load("condition-category-states");
+      if (stored && typeof stored === "object") {
+        return stored;
+      }
     } catch (error) {
-      console.warn("[Strategies] Invalid category states, resetting:", error);
-      return {};
+      console.warn("[Strategies] Failed to load category states:", error);
     }
+    return {};
   }
 
   function persistCategoryStates() {
-    if (typeof window === "undefined" || typeof window.localStorage === "undefined") {
-      return;
-    }
-
+    // Save via AppState (server-side)
     try {
-      window.localStorage.setItem(
-        "condition-category-states",
-        JSON.stringify(categoryStates || {})
-      );
+      AppState.save("condition-category-states", categoryStates || {});
     } catch (error) {
       console.warn("[Strategies] Failed to save category states:", error);
     }

@@ -8,7 +8,7 @@
  * - Search and filtering
  * - Toolbar with custom buttons
  * - Scroll position restoration
- * - State persistence via localStorage
+ * - State persistence via server-side storage
  * - Custom cell renderers
  * - Row actions and selection
  * - Optional logging
@@ -2922,7 +2922,7 @@ export class DataTable {
   }
 
   /**
-   * Update the stateKey and reload state from localStorage
+   * Update the stateKey and reload state
    * Useful for pages with tabs where each tab should have separate table state
    * @param {string} newStateKey - The new state key to use
    * @param {Object} options - Options for state reload
@@ -3008,7 +3008,7 @@ export class DataTable {
   }
 
   /**
-   * Load state from localStorage
+   * Load state from server
    */
   _loadState() {
     const saved = AppState.load(this.options.stateKey);
@@ -3111,7 +3111,7 @@ export class DataTable {
   }
 
   /**
-   * Save state to localStorage
+   * Save state to server
    */
   _saveState() {
     const toSave = {

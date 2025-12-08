@@ -1578,7 +1578,7 @@ function createLifecycle() {
       // Show the tab bar
       tabBar.show();
 
-      // Sync state with tab bar's restored state (from localStorage or URL hash)
+      // Sync state with tab bar's restored state (from server or URL hash)
       const activeTab = tabBar.getActiveTab();
       if (activeTab && activeTab !== state.currentTab) {
         state.currentTab = activeTab;
