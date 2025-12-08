@@ -190,6 +190,7 @@
 .content > .page-container {
   flex: 1 1 auto;
   min-height: 0;
-  display: block;
-  overflow: hidden auto;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }

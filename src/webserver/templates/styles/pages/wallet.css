@@ -9,6 +9,8 @@
 }
 
 #wallet-root {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   /* Let inner sections (like tables) own scrolling so they can
@@ -214,7 +216,7 @@
 .wallet-history {
   display: flex;
   flex-direction: column;
-  height: 100%;
+  flex: 1;
   min-height: 0;
   overflow: hidden;
   /* Counteract #wallet-root padding for edge-to-edge table */
@@ -238,6 +240,9 @@
 #historyTableContainer {
   flex: 1;
   min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .history-ts {
