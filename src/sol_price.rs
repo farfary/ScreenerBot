@@ -287,7 +287,7 @@ async fn fetch_and_update_sol_price(consecutive_errors: &mut u32) {
       if validate_price_change(price) {
         update_price_cache(price, "jupiter_api".to_string(), true).await;
         *consecutive_errors = 0; // Reset error counter on success
-        logger::info(
+        logger::debug(
           LogTag::SolPrice,
  &format!("SOL price updated: ${:.4}", price),
         );

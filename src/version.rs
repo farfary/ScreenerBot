@@ -245,7 +245,7 @@ pub async fn check_for_update() -> Result<Option<UpdateInfo>, String> {
         server_url, VERSION, platform
     );
 
-    logger::info(
+    logger::debug(
         LogTag::System,
         &format!("Checking for updates at: {}", server_url),
     );

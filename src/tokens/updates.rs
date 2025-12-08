@@ -824,7 +824,7 @@ async fn update_uninitialized_tokens(db: &TokenDatabase, coordinator: &RateLimit
         return;
     }
 
-    logger::info(
+    logger::debug(
         LogTag::Tokens,
         &format!(
             "Seeding market data for {} newly discovered tokens",

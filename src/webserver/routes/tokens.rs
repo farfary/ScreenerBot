@@ -599,7 +599,7 @@ async fn refresh_token_data(
           "partial_failures": result.failures,
         })))
       } else {
-        logger::info(
+        logger::debug(
           LogTag::Webserver,
           &format!(
             "mint={} refresh_failed failures={:?}",
@@ -644,7 +644,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
   let lookup_start = std::time::Instant::now();
   let snapshot = match crate::tokens::get_full_token_async(&mint).await {
     Ok(Some(snap)) => {
-      logger::info(
+      logger::debug(
         LogTag::Webserver,
         &format!(
           "mint={} elapsed={}μs",
@@ -655,7 +655,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
       snap
     }
     Ok(None) | Err(_) => {
-      logger::info(
+      logger::debug(
         LogTag::Webserver,
         &format!(
           "mint={} elapsed={}μs",
@@ -1221,7 +1221,7 @@ async fn get_token_ohlcv(
     }
   };
 
-  logger::info(
+  logger::debug(
     LogTag::Webserver,
     &format!(
       "mint={} limit={} timeframe={}",

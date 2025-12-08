@@ -488,7 +488,7 @@ async fn run_service_health_monitor(shutdown: Arc<Notify>) {
 async fn emit_service_health_stats() {
   let cache_stats = cache::get_cache_stats();
 
-  logger::info(
+  logger::debug(
     LogTag::PoolService,
     &format!(
       "Pool service health: {} total prices, {} fresh prices, {} history entries",
