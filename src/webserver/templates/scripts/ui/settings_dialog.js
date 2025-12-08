@@ -1181,10 +1181,6 @@ export class SettingsDialog {
                 <span class="detail-label">Platform</span>
                 <span class="detail-value">${platform || 'Unknown'}</span>
               </div>
-              <div class="detail-row">
-                <span class="detail-label">Channel</span>
-                <span class="detail-value channel-badge">Stable</span>
-              </div>
             </div>
           </div>
 
@@ -1204,10 +1200,6 @@ export class SettingsDialog {
               <div class="detail-row">
                 <span class="detail-label">Platform</span>
                 <span class="detail-value">${platform || 'Unknown'}</span>
-              </div>
-              <div class="detail-row">
-                <span class="detail-label">Release Channel</span>
-                <span class="detail-value">Stable</span>
               </div>
               <div class="detail-row">
                 <span class="detail-label">Auto Update</span>
