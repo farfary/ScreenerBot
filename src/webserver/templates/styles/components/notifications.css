@@ -1,81 +1,18 @@
-/* Notification Trigger */
-.notification-trigger {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
+/* =============================================================================
+   Notification Center - Apple-Inspired Modern Design
+   Professional trading dashboard notification system with:
+   - Apple-style rounded corners (16-20px)
+   - Glass-morphism effects
+   - Dark/Light theme support
+   - Smooth micro-animations
+   - Symmetrical layouts
+   - Professional typography
+   ============================================================================= */
 
-.notification-item {
-  background: rgb(255, 255, 255, 0.02);
-  border: 1px solid rgb(255, 255, 255, 0.06);
-  border-radius: 8px;
-  padding: 8px 10px;
-  margin-bottom: 6px;
-  cursor: pointer;
-  transition: all 0.22s ease;
-  position: relative;
-  backdrop-filter: blur(4px);
-  box-shadow: 0 2px 8px rgb(0, 0, 0, 0.12);
-}
+/* -----------------------------------------------------------------------------
+   Drawer Layout - Full-screen overlay with slide-in panel
+   ----------------------------------------------------------------------------- */
 
-.notification-item:hover {
-  background: rgb(255, 255, 255, 0.04);
-  border-color: rgb(255, 255, 255, 0.18);
-  transform: translateX(-3px);
-  box-shadow: 0 10px 24px rgb(0, 0, 0, 0.28);
-}
-
-.notification-item:last-child {
-  margin-bottom: 0;
-}
-
-.notification-item::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 10px;
-  bottom: 10px;
-  width: 3px;
-  border-radius: 0 2px 2px 0;
-  background: var(--primary);
-  opacity: 0.9;
-  transition: background 0.2s ease;
-}
-
-.notification-item.in-progress::before {
-  background: var(--warning);
-}
-
-.notification-item.completed::before {
-  background: var(--success);
-}
-
-.notification-item.failed::before {
-  background: var(--error);
-}
-
-.notification-item.cancelled::before {
-  background: var(--text-tertiary);
-}
-
-.notification-item.unread {
-  border-color: rgb(59, 130, 246, 0.35);
-  box-shadow: 0 10px 28px rgb(59, 130, 246, 0.18);
-}
-
-@keyframes pulse-badge {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-
-  50% {
-    transform: scale(1.1);
-  }
-}
-
-/* Drawer Layout */
 .notification-drawer {
   position: fixed;
   inset: 0;
@@ -83,8 +20,8 @@
   display: flex;
   justify-content: flex-end;
   pointer-events: none;
-  transition: opacity 0.25s ease;
   opacity: 0;
+  transition: opacity 0.2s ease-out;
 }
 
 .notification-drawer[data-state="open"] {
@@ -92,368 +29,573 @@
   pointer-events: auto;
 }
 
+body.notification-drawer-open {
+  overflow: hidden;
+}
+
+/* Backdrop - Frosted glass effect */
 .notification-drawer__backdrop {
   flex: 1 1 auto;
-  background: rgb(9, 11, 18, 0.45);
-  backdrop-filter: blur(6px);
-  transition: opacity 0.25s ease;
+  background: rgb(0, 0, 0, 0.4);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   opacity: 0;
+  transition: opacity 0.3s ease-out;
 }
 
 .notification-drawer[data-state="open"] .notification-drawer__backdrop {
   opacity: 1;
 }
 
+/* Main Panel - Apple-style slide-in sheet */
 .notification-drawer__panel {
   position: relative;
-  width: min(480px, 90vw);
-  max-width: 520px;
-  background: var(--bg-primary);
-  border-left: none;
-  box-shadow: -12px 0 32px rgb(0, 0, 0, 0.35);
+  width: min(440px, 92vw);
+  max-width: 480px;
+  background: var(--bg-secondary);
   display: flex;
   flex-direction: column;
   height: 100vh;
   transform: translateX(100%);
-  transition: transform 0.32s ease;
+  transition: transform 0.35s cubic-bezier(0.32, 0.72, 0, 1);
+  box-shadow:
+    -20px 0 60px rgb(0, 0, 0, 0.25),
+    -1px 0 0 rgb(255, 255, 255, 0.05);
+  border-left: 1px solid rgb(255, 255, 255, 0.06);
 }
 
 .notification-drawer[data-state="open"] .notification-drawer__panel {
   transform: translateX(0);
 }
 
-body.notification-drawer-open {
-  overflow: hidden;
+/* Light theme panel */
+:root:not([data-theme="dark"]) .notification-drawer__panel {
+  background: rgb(248, 250, 252);
+  box-shadow:
+    -20px 0 60px rgb(0, 0, 0, 0.12),
+    -1px 0 0 rgb(0, 0, 0, 0.06);
+  border-left: 1px solid rgb(0, 0, 0, 0.08);
 }
 
-/* Notification Panel */
+/* -----------------------------------------------------------------------------
+   Panel Header - Clean, minimal design
+   ----------------------------------------------------------------------------- */
+
 .notification-panel-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  padding: 16px 20px 12px;
-  border-bottom: 1px solid var(--border);
-  background: linear-gradient(135deg, rgb(28, 36, 56, 0.9), rgb(18, 24, 39, 0.95));
-  position: relative;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid rgb(255, 255, 255, 0.06);
+  background: linear-gradient(180deg, rgb(255, 255, 255, 0.03) 0%, transparent 100%);
   gap: 16px;
+  flex-shrink: 0;
+}
+
+:root:not([data-theme="dark"]) .notification-panel-header {
+  border-bottom: 1px solid rgb(0, 0, 0, 0.06);
+  background: linear-gradient(180deg, rgb(255, 255, 255, 0.8) 0%, transparent 100%);
 }
 
 .notification-panel-heading {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  color: var(--text-primary);
+  gap: 2px;
 }
 
 .notification-eyebrow {
   margin: 0;
-  font-size: 10px;
-  letter-spacing: 0.1em;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-tertiary);
-  opacity: 0.8;
+  color: var(--text-muted);
 }
 
 .notification-panel-header h3 {
   margin: 0;
-  font-size: 18px;
-  font-weight: 700;
+  font-size: 20px;
+  font-weight: 600;
   color: var(--text-primary);
-  letter-spacing: 0.02em;
+  letter-spacing: -0.01em;
 }
 
-.notification-panel-actions {
+/* Header Actions Container */
+.notification-panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Connection Status Badge */
+.notification-connection {
   display: inline-flex;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 10px;
+  border-radius: 20px;
+  background: rgb(255, 255, 255, 0.04);
+  border: 1px solid rgb(255, 255, 255, 0.08);
+  transition: all 0.2s ease;
+}
+
+:root:not([data-theme="dark"]) .notification-connection {
+  background: rgb(0, 0, 0, 0.03);
+  border: 1px solid rgb(0, 0, 0, 0.08);
+}
+
+.notification-connection__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--warning-color);
+  box-shadow: 0 0 8px rgb(210, 153, 34, 0.5);
+  transition: all 0.3s ease;
+}
+
+.notification-connection[data-state="connected"] .notification-connection__dot {
+  background: var(--success-color);
+  box-shadow: 0 0 8px rgb(63, 185, 80, 0.5);
+}
+
+.notification-connection[data-state="disconnected"] .notification-connection__dot {
+  background: var(--error-color);
+  box-shadow: 0 0 8px rgb(248, 81, 73, 0.5);
+}
+
+.notification-connection__text {
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--text-secondary);
+}
+
+/* Panel Action Buttons */
+.notification-panel-actions {
+  display: flex;
+  gap: 8px;
   align-items: center;
 }
 
 .panel-action-btn {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-primary);
-  border: 1px solid var(--border);
-  border-radius: 6px;
+  background: rgb(255, 255, 255, 0.04);
+  border: 1px solid rgb(255, 255, 255, 0.08);
+  border-radius: 10px;
   cursor: pointer;
   font-size: 14px;
-  transition: all 0.2s;
-  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.15);
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
 }
 
 .panel-action-btn:hover {
-  background: var(--bg-hover);
-  border-color: var(--primary);
-  color: var(--primary);
-  box-shadow: 0 4px 8px rgb(0, 0, 0, 0.2);
+  background: rgb(255, 255, 255, 0.08);
+  border-color: rgb(255, 255, 255, 0.15);
+  color: var(--text-primary);
+  transform: scale(1.02);
 }
 
 .panel-action-btn:active {
-  transform: scale(0.95);
+  transform: scale(0.96);
 }
 
+:root:not([data-theme="dark"]) .panel-action-btn {
+  background: rgb(0, 0, 0, 0.03);
+  border: 1px solid rgb(0, 0, 0, 0.08);
+}
+
+:root:not([data-theme="dark"]) .panel-action-btn:hover {
+  background: rgb(0, 0, 0, 0.06);
+  border-color: rgb(0, 0, 0, 0.12);
+}
+
+/* Close Button - Larger and more prominent */
 .panel-close-btn {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
   background: rgb(255, 255, 255, 0.04);
-  border: 1px solid rgb(255, 255, 255, 0.06);
-  font-size: 22px;
+  border: 1px solid rgb(255, 255, 255, 0.08);
+  font-size: 20px;
   line-height: 1;
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.15);
 }
 
 .panel-close-btn:hover {
-  background: rgb(255, 255, 255, 0.08);
-  color: var(--text-primary);
-  box-shadow: 0 4px 8px rgb(0, 0, 0, 0.2);
+  background: rgb(248, 81, 73, 0.15);
+  border-color: rgb(248, 81, 73, 0.3);
+  color: var(--error-color);
 }
 
-.panel-secondary-btn {
-  padding: 0.65rem 1.1rem;
-  border-radius: 999px;
-  background: transparent;
-  border: 1px solid var(--border);
-  color: var(--text-secondary);
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
+:root:not([data-theme="dark"]) .panel-close-btn {
+  background: rgb(0, 0, 0, 0.03);
+  border: 1px solid rgb(0, 0, 0, 0.08);
 }
 
-.panel-secondary-btn:hover {
-  border-color: var(--primary);
-  color: var(--primary);
+:root:not([data-theme="dark"]) .panel-close-btn:hover {
+  background: rgb(239, 68, 68, 0.1);
+  border-color: rgb(239, 68, 68, 0.2);
 }
 
-.notification-panel-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.notification-connection {
-  display: inline-flex;
-  align-items: center;
-  gap: 10px;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: rgb(255, 255, 255, 0.06);
-  border: 1px solid rgb(255, 255, 255, 0.12);
-}
-
-.notification-connection__dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--warning);
-  box-shadow: 0 0 0 4px rgb(255, 255, 255, 0.04);
-  transition: background 0.2s ease;
-}
-
-.notification-connection[data-state="connected"] .notification-connection__dot {
-  background: var(--success);
-}
-
-.notification-connection[data-state="disconnected"] .notification-connection__dot {
-  background: var(--error);
-}
-
-.notification-connection__text {
-  font-size: 0.78rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-}
+/* -----------------------------------------------------------------------------
+   Summary Cards - Statistics overview with Apple-style cards
+   ----------------------------------------------------------------------------- */
 
 .notification-summary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 12px;
-  padding: 14px 20px 10px;
-  background: linear-gradient(180deg, rgb(18, 24, 39, 0.95), rgb(12, 16, 26, 0.9));
-  border-bottom: 1px solid rgb(255, 255, 255, 0.06);
+  padding: 16px 24px;
+  background: rgb(0, 0, 0, 0.15);
+  border-bottom: 1px solid rgb(255, 255, 255, 0.04);
+}
+
+:root:not([data-theme="dark"]) .notification-summary {
+  background: rgb(0, 0, 0, 0.02);
+  border-bottom: 1px solid rgb(0, 0, 0, 0.06);
 }
 
 .summary-card {
-  border-radius: 10px;
-  padding: 10px 12px;
-  background: rgb(255, 255, 255, 0.04);
-  border: 1px solid rgb(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  transition:
-    transform 0.2s ease,
-    border 0.2s ease;
+  gap: 6px;
+  padding: 14px 16px;
+  background: rgb(255, 255, 255, 0.03);
+  border: 1px solid rgb(255, 255, 255, 0.06);
+  border-radius: 14px;
+  transition: all 0.2s ease;
 }
 
 .summary-card:hover {
-  transform: translateY(-2px);
-  border-color: rgb(255, 255, 255, 0.18);
+  transform: translateY(-1px);
+  background: rgb(255, 255, 255, 0.05);
+  border-color: rgb(255, 255, 255, 0.1);
 }
 
+:root:not([data-theme="dark"]) .summary-card {
+  background: rgb(255, 255, 255, 0.8);
+  border: 1px solid rgb(0, 0, 0, 0.06);
+  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.04);
+}
+
+:root:not([data-theme="dark"]) .summary-card:hover {
+  background: rgb(255, 255, 255, 1);
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.08);
+}
+
+/* Card variants with accent colors */
 .summary-card.live {
-  background: rgb(59, 130, 246, 0.15);
-  border-color: rgb(59, 130, 246, 0.32);
+  background: rgb(88, 166, 255, 0.08);
+  border-color: rgb(88, 166, 255, 0.2);
+}
+
+.summary-card.live:hover {
+  background: rgb(88, 166, 255, 0.12);
+  border-color: rgb(88, 166, 255, 0.3);
 }
 
 .summary-card.success {
-  background: rgb(16, 185, 129, 0.12);
-  border-color: rgb(16, 185, 129, 0.32);
+  background: rgb(63, 185, 80, 0.08);
+  border-color: rgb(63, 185, 80, 0.2);
+}
+
+.summary-card.success:hover {
+  background: rgb(63, 185, 80, 0.12);
+  border-color: rgb(63, 185, 80, 0.3);
 }
 
 .summary-card.danger {
-  background: rgb(239, 68, 68, 0.12);
-  border-color: rgb(239, 68, 68, 0.32);
+  background: rgb(248, 81, 73, 0.08);
+  border-color: rgb(248, 81, 73, 0.2);
+}
+
+.summary-card.danger:hover {
+  background: rgb(248, 81, 73, 0.12);
+  border-color: rgb(248, 81, 73, 0.3);
+}
+
+/* Light theme card variants */
+:root:not([data-theme="dark"]) .summary-card.live {
+  background: rgb(21, 101, 192, 0.06);
+  border-color: rgb(21, 101, 192, 0.15);
+}
+
+:root:not([data-theme="dark"]) .summary-card.success {
+  background: rgb(16, 185, 129, 0.06);
+  border-color: rgb(16, 185, 129, 0.15);
+}
+
+:root:not([data-theme="dark"]) .summary-card.danger {
+  background: rgb(239, 68, 68, 0.06);
+  border-color: rgb(239, 68, 68, 0.15);
 }
 
 .summary-label {
-  font-size: 0.7rem;
+  font-size: 11px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-tertiary);
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
 }
 
 .summary-value {
-  font-size: 1.4rem;
+  font-size: 28px;
   font-weight: 700;
   color: var(--text-primary);
   font-family: var(--font-data);
   font-feature-settings: "tnum" 1, "zero" 1;
   line-height: 1;
+  letter-spacing: -0.02em;
 }
 
 .summary-sub {
-  font-size: 0.7rem;
+  font-size: 11px;
   font-weight: 500;
   color: var(--text-secondary);
   margin-top: 2px;
 }
 
-/* Notification Tabs */
+/* -----------------------------------------------------------------------------
+   Notification Tabs - Pill-style segmented control
+   ----------------------------------------------------------------------------- */
+
 .notification-tabs {
   display: flex;
   gap: 6px;
-  padding: 12px 20px 10px;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-primary);
+  padding: 12px 24px;
+  border-bottom: 1px solid rgb(255, 255, 255, 0.04);
+  background: transparent;
   overflow-x: auto;
-  position: sticky;
-  top: 0;
-  z-index: 5;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.notification-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+:root:not([data-theme="dark"]) .notification-tabs {
+  border-bottom: 1px solid rgb(0, 0, 0, 0.06);
 }
 
 .notification-tab {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 16px;
-  background: rgb(255, 255, 255, 0.02);
+  padding: 8px 14px;
+  background: transparent;
   border: 1px solid transparent;
-  border-radius: 999px;
-  font-size: 0.82rem;
+  border-radius: 20px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
   white-space: nowrap;
 }
 
 .notification-tab:hover {
-  background: rgb(255, 255, 255, 0.05);
+  background: rgb(255, 255, 255, 0.04);
   color: var(--text-primary);
 }
 
 .notification-tab.active {
-  background: var(--primary-alpha);
-  border-color: rgb(59, 130, 246, 0.45);
-  color: var(--primary);
-  box-shadow: 0 6px 18px rgb(59, 130, 246, 0.18);
+  background: var(--primary-color);
+  color: white;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgb(88, 166, 255, 0.3);
 }
 
+:root:not([data-theme="dark"]) .notification-tab.active {
+  box-shadow: 0 2px 8px rgb(21, 101, 192, 0.3);
+}
+
+:root:not([data-theme="dark"]) .notification-tab:hover:not(.active) {
+  background: rgb(0, 0, 0, 0.04);
+}
+
+/* Tab count badge */
 .tab-count {
-  min-width: 18px;
-  height: 18px;
-  padding: 0 5px;
-  background: rgb(59, 130, 246, 0.12);
-  border-radius: 999px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: rgb(255, 255, 255, 0.1);
+  border-radius: 10px;
   font-size: 11px;
   font-weight: 600;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--text-secondary);
+  font-family: var(--font-data);
 }
 
 .notification-tab.active .tab-count {
-  background: var(--primary);
+  background: rgb(255, 255, 255, 0.25);
   color: white;
 }
 
-/* Notification List */
+:root:not([data-theme="dark"]) .tab-count {
+  background: rgb(0, 0, 0, 0.06);
+}
+
+/* -----------------------------------------------------------------------------
+   Notification List - Scrollable container
+   ----------------------------------------------------------------------------- */
+
 .notification-list {
   flex: 1;
   overflow-y: auto;
-  padding: 14px 20px;
+  padding: 16px 24px;
+  scroll-behavior: smooth;
 }
 
+/* Custom scrollbar */
 .notification-list::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 
 .notification-list::-webkit-scrollbar-track {
-  background: rgb(255, 255, 255, 0.02);
+  background: transparent;
 }
 
 .notification-list::-webkit-scrollbar-thumb {
-  background: var(--border);
-  border-radius: 4px;
+  background: rgb(255, 255, 255, 0.15);
+  border-radius: 3px;
 }
 
 .notification-list::-webkit-scrollbar-thumb:hover {
-  background: var(--text-tertiary);
+  background: rgb(255, 255, 255, 0.25);
 }
 
-/* Empty State */
-.notification-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 60px 20px;
-  color: var(--text-tertiary);
+:root:not([data-theme="dark"]) .notification-list::-webkit-scrollbar-thumb {
+  background: rgb(0, 0, 0, 0.15);
 }
 
-.notification-empty span {
-  font-size: 48px;
-  margin-bottom: 12px;
-  opacity: 0.5;
+:root:not([data-theme="dark"]) .notification-list::-webkit-scrollbar-thumb:hover {
+  background: rgb(0, 0, 0, 0.25);
 }
 
-.notification-empty p {
-  margin: 0;
-  font-size: 14px;
+/* -----------------------------------------------------------------------------
+   Notification Item - Individual notification card
+   ----------------------------------------------------------------------------- */
+
+.notification-item {
+  position: relative;
+  background: rgb(255, 255, 255, 0.02);
+  border: 1px solid rgb(255, 255, 255, 0.06);
+  border-radius: 16px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  overflow: hidden;
 }
 
-/* Notification Header */
+.notification-item:last-child {
+  margin-bottom: 0;
+}
+
+.notification-item:hover {
+  background: rgb(255, 255, 255, 0.04);
+  border-color: rgb(255, 255, 255, 0.1);
+  transform: translateX(-2px);
+  box-shadow: 0 4px 20px rgb(0, 0, 0, 0.15);
+}
+
+:root:not([data-theme="dark"]) .notification-item {
+  background: rgb(255, 255, 255, 0.8);
+  border: 1px solid rgb(0, 0, 0, 0.06);
+  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.04);
+}
+
+:root:not([data-theme="dark"]) .notification-item:hover {
+  background: rgb(255, 255, 255, 1);
+  border-color: rgb(0, 0, 0, 0.1);
+  box-shadow: 0 4px 16px rgb(0, 0, 0, 0.08);
+}
+
+/* Status indicator bar on left edge */
+.notification-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 14px;
+  bottom: 14px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--primary-color);
+  opacity: 0.8;
+  transition: all 0.2s ease;
+}
+
+.notification-item:hover::before {
+  opacity: 1;
+  width: 4px;
+}
+
+/* Status variants */
+.notification-item.in-progress::before {
+  background: var(--warning-color);
+}
+
+.notification-item.completed::before {
+  background: var(--success-color);
+}
+
+.notification-item.failed::before {
+  background: var(--error-color);
+}
+
+.notification-item.cancelled::before {
+  background: var(--text-muted);
+}
+
+/* Unread state */
+.notification-item.unread {
+  border-color: rgb(88, 166, 255, 0.25);
+  background: rgb(88, 166, 255, 0.04);
+}
+
+:root:not([data-theme="dark"]) .notification-item.unread {
+  border-color: rgb(21, 101, 192, 0.2);
+  background: rgb(21, 101, 192, 0.03);
+}
+
+/* Notification header */
 .notification-header {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 5px;
+  gap: 10px;
+  margin-bottom: 6px;
 }
 
 .notification-icon {
   font-size: 18px;
   line-height: 1;
   margin-top: 1px;
+  flex-shrink: 0;
+}
+
+.notification-icon .icon-loader {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .notification-title {
@@ -461,241 +603,484 @@ body.notification-drawer-open {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 5px;
-  font-size: 12px;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--text-primary);
+  line-height: 1.3;
 }
 
 .notification-symbol {
   font-weight: 600;
-  color: var(--primary);
+  color: var(--primary-color);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: rgb(88, 166, 255, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
 }
 
-.notification-description {
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin: 4px 0 3px;
-  font-weight: 500;
-  line-height: 1.3;
+:root:not([data-theme="dark"]) .notification-symbol {
+  background: rgb(21, 101, 192, 0.08);
 }
 
-.notification-meta {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  margin-top: 1px;
-  opacity: 0.8;
-}
-
+/* Dismiss button */
 .notification-dismiss {
-  width: 20px;
-  height: 20px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
   background: transparent;
   border: none;
-  border-radius: 3px;
+  border-radius: 6px;
   font-size: 16px;
-  color: var(--text-tertiary);
+  color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.15s ease;
   flex-shrink: 0;
+  opacity: 0;
+}
+
+.notification-item:hover .notification-dismiss {
+  opacity: 1;
 }
 
 .notification-dismiss:hover {
-  background: var(--bg-tertiary);
-  color: var(--text-primary);
+  background: rgb(248, 81, 73, 0.15);
+  color: var(--error-color);
 }
 
-/* Progress Bar */
+/* Notification description */
+.notification-description {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin: 4px 0;
+  padding-left: 28px;
+  font-family: var(--font-data);
+}
+
+.notification-meta {
+  font-size: 11px;
+  color: var(--text-muted);
+  padding-left: 28px;
+}
+
+/* -----------------------------------------------------------------------------
+   Progress Bar - Animated progress indicator
+   ----------------------------------------------------------------------------- */
+
 .notification-progress {
-  margin: 8px 0 5px;
+  margin: 10px 0 6px;
+  padding-left: 28px;
 }
 
 .progress-bar-container {
   width: 100%;
   height: 4px;
-  background: var(--bg-tertiary);
+  background: rgb(255, 255, 255, 0.08);
   border-radius: 2px;
   overflow: hidden;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+}
+
+:root:not([data-theme="dark"]) .progress-bar-container {
+  background: rgb(0, 0, 0, 0.08);
 }
 
 .progress-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--primary), var(--primary-light));
+  background: linear-gradient(90deg, var(--primary-color), var(--link-color));
   border-radius: 2px;
   transition: width 0.3s ease;
-  animation: progress-shimmer 2s infinite;
+  position: relative;
+  overflow: hidden;
 }
 
-@keyframes progress-shimmer {
+.progress-bar-fill::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgb(255, 255, 255, 0.3),
+    transparent
+  );
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
   0% {
-    opacity: 1;
+    transform: translateX(-100%);
   }
-
-  50% {
-    opacity: 0.7;
-  }
-
   100% {
-    opacity: 1;
+    transform: translateX(100%);
   }
 }
 
 .progress-text {
   font-size: 11px;
-  color: var(--text-secondary);
   font-weight: 500;
+  color: var(--text-secondary);
   line-height: 1.3;
 }
 
-/* Notification Error */
+/* -----------------------------------------------------------------------------
+   Notification Error State
+   ----------------------------------------------------------------------------- */
+
 .notification-error {
-  margin-top: 6px;
-  padding: 6px 8px;
-  background: var(--error-alpha);
-  border: 1px solid var(--error-alpha);
-  border-radius: 4px;
+  margin: 8px 0 4px;
+  margin-left: 28px;
+  padding: 8px 10px;
+  background: rgb(248, 81, 73, 0.1);
+  border: 1px solid rgb(248, 81, 73, 0.2);
+  border-radius: 8px;
   font-size: 11px;
-  color: var(--error);
-  line-height: 1.3;
+  font-weight: 500;
+  color: var(--error-color);
+  line-height: 1.4;
 }
 
-/* Notification Time */
+:root:not([data-theme="dark"]) .notification-error {
+  background: rgb(239, 68, 68, 0.08);
+  border-color: rgb(239, 68, 68, 0.15);
+}
+
+/* -----------------------------------------------------------------------------
+   Notification Timestamp
+   ----------------------------------------------------------------------------- */
+
 .notification-time {
-  font-size: 10px;
-  color: var(--text-tertiary);
-  margin-top: 5px;
-  opacity: 0.85;
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 6px;
+  padding-left: 28px;
 }
 
-/* Footer */
+/* -----------------------------------------------------------------------------
+   Empty State - Centered message when no notifications
+   ----------------------------------------------------------------------------- */
+
+.notification-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 24px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.notification-empty span {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.4;
+}
+
+.notification-empty p {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.notification-empty small {
+  margin-top: 8px;
+  font-size: 12px;
+  opacity: 0.7;
+}
+
+/* -----------------------------------------------------------------------------
+   Filters Section - For history tabs
+   ----------------------------------------------------------------------------- */
+
+.notification-filters {
+  display: none;
+  padding: 12px 24px;
+  background: rgb(0, 0, 0, 0.1);
+  border-bottom: 1px solid rgb(255, 255, 255, 0.04);
+}
+
+:root:not([data-theme="dark"]) .notification-filters {
+  background: rgb(0, 0, 0, 0.02);
+  border-bottom: 1px solid rgb(0, 0, 0, 0.06);
+}
+
+.filter-row {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.filter-select {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid rgb(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgb(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%238b949e' d='M3 4.5L6 7.5L9 4.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+
+.filter-select:hover {
+  border-color: rgb(255, 255, 255, 0.2);
+  background-color: rgb(255, 255, 255, 0.06);
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px rgb(88, 166, 255, 0.15);
+}
+
+:root:not([data-theme="dark"]) .filter-select {
+  border: 1px solid rgb(0, 0, 0, 0.1);
+  background-color: rgb(255, 255, 255, 0.8);
+}
+
+:root:not([data-theme="dark"]) .filter-select:hover {
+  border-color: rgb(0, 0, 0, 0.15);
+  background-color: rgb(255, 255, 255, 1);
+}
+
+.filter-clear-btn {
+  padding: 8px 14px;
+  border: 1px solid rgb(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.filter-clear-btn:hover {
+  background: rgb(255, 255, 255, 0.06);
+  color: var(--text-primary);
+}
+
+:root:not([data-theme="dark"]) .filter-clear-btn {
+  border: 1px solid rgb(0, 0, 0, 0.1);
+}
+
+:root:not([data-theme="dark"]) .filter-clear-btn:hover {
+  background: rgb(0, 0, 0, 0.04);
+}
+
+/* -----------------------------------------------------------------------------
+   Pagination Controls
+   ----------------------------------------------------------------------------- */
+
+.notification-pagination {
+  display: none;
+  padding: 12px 24px;
+  background: rgb(0, 0, 0, 0.1);
+  border-top: 1px solid rgb(255, 255, 255, 0.04);
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+:root:not([data-theme="dark"]) .notification-pagination {
+  background: rgb(0, 0, 0, 0.02);
+  border-top: 1px solid rgb(0, 0, 0, 0.06);
+}
+
+.pagination-btn {
+  padding: 8px 16px;
+  border: 1px solid rgb(255, 255, 255, 0.1);
+  border-radius: 10px;
+  background: rgb(255, 255, 255, 0.04);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background: rgb(255, 255, 255, 0.08);
+  border-color: rgb(255, 255, 255, 0.2);
+}
+
+.pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+:root:not([data-theme="dark"]) .pagination-btn {
+  border: 1px solid rgb(0, 0, 0, 0.1);
+  background: rgb(255, 255, 255, 0.8);
+}
+
+:root:not([data-theme="dark"]) .pagination-btn:hover:not(:disabled) {
+  background: rgb(255, 255, 255, 1);
+}
+
+.pagination-info {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+/* -----------------------------------------------------------------------------
+   Panel Footer - Action buttons and metadata
+   ----------------------------------------------------------------------------- */
+
 .notification-panel-footer {
-  padding: 14px 20px 18px;
-  border-top: 1px solid var(--border);
-  background: linear-gradient(180deg, rgb(12, 16, 26, 0.9), rgb(18, 24, 39, 0.95));
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 16px;
+  padding: 16px 24px 20px;
+  border-top: 1px solid rgb(255, 255, 255, 0.06);
+  background: rgb(0, 0, 0, 0.15);
+  flex-shrink: 0;
+}
+
+:root:not([data-theme="dark"]) .notification-panel-footer {
+  border-top: 1px solid rgb(0, 0, 0, 0.06);
+  background: rgb(0, 0, 0, 0.02);
 }
 
 .notification-footer-meta {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  font-size: 0.78rem;
-  color: var(--text-secondary);
+  gap: 2px;
 }
 
 .notification-footer-meta span:first-child {
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-/* Light Mode Support */
-:root[data-theme="light"] .notification-drawer__panel {
-  background: var(--bg-primary);
-  border-left: none;
-  box-shadow: -12px 0 32px rgb(0, 0, 0, 0.12);
+.notification-footer-meta span:last-child {
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
-:root[data-theme="light"] .notification-panel-header {
-  background: linear-gradient(135deg, rgb(245, 247, 250, 0.95), rgb(238, 242, 248, 0.98));
+/* Secondary action button */
+.panel-secondary-btn {
+  padding: 10px 18px;
+  border-radius: 12px;
+  background: rgb(255, 255, 255, 0.04);
+  border: 1px solid rgb(255, 255, 255, 0.1);
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
-:root[data-theme="light"] .notification-summary {
-  background: linear-gradient(180deg, rgb(250, 251, 253, 0.98), rgb(245, 247, 250, 0.95));
+.panel-secondary-btn:hover {
+  background: rgb(255, 255, 255, 0.08);
+  border-color: var(--primary-color);
+  color: var(--primary-color);
 }
 
-:root[data-theme="light"] .notification-item {
-  background: rgb(0, 0, 0, 0.01);
-  border: 1px solid rgb(0, 0, 0, 0.08);
-  box-shadow: 0 2px 6px rgb(0, 0, 0, 0.04);
-}
-
-:root[data-theme="light"] .notification-item:hover {
-  background: rgb(0, 0, 0, 0.02);
-  border-color: rgb(0, 0, 0, 0.12);
-  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.08);
-}
-
-:root[data-theme="light"] .panel-action-btn {
+:root:not([data-theme="dark"]) .panel-secondary-btn {
   background: rgb(255, 255, 255, 0.8);
-  border: 1px solid rgb(0, 0, 0, 0.12);
-  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.08);
+  border: 1px solid rgb(0, 0, 0, 0.1);
 }
 
-:root[data-theme="light"] .panel-action-btn:hover {
-  background: rgb(255, 255, 255, 1);
-  box-shadow: 0 2px 6px rgb(0, 0, 0, 0.12);
-}
-
-:root[data-theme="light"] .panel-close-btn {
-  background: rgb(0, 0, 0, 0.04);
-  border: 1px solid rgb(0, 0, 0, 0.08);
-  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.08);
-}
-
-:root[data-theme="light"] .panel-close-btn:hover {
-  background: rgb(0, 0, 0, 0.08);
-  box-shadow: 0 2px 6px rgb(0, 0, 0, 0.12);
-}
-
-:root[data-theme="light"] .panel-secondary-btn {
-  background: rgb(255, 255, 255, 0.6);
-  border: 1px solid rgb(0, 0, 0, 0.12);
-}
-
-:root[data-theme="light"] .panel-secondary-btn:hover {
+:root:not([data-theme="dark"]) .panel-secondary-btn:hover {
   background: rgb(255, 255, 255, 1);
 }
 
-:root[data-theme="light"] .summary-card {
-  background: rgb(0, 0, 0, 0.02);
-  border: 1px solid rgb(0, 0, 0, 0.08);
-}
+/* -----------------------------------------------------------------------------
+   Responsive Adjustments
+   ----------------------------------------------------------------------------- */
 
-:root[data-theme="light"] .notification-panel-footer {
-  background: linear-gradient(180deg, rgb(245, 247, 250, 0.95), rgb(238, 242, 248, 0.98));
-}
-
-:root[data-theme="light"] .notification-connection {
-  background: rgb(0, 0, 0, 0.04);
-  border: 1px solid rgb(0, 0, 0, 0.08);
-}
-
-/* Responsive Adjustments */
 @media (width <= 768px) {
   .notification-drawer__panel {
     width: 100vw;
     max-width: 100vw;
+    border-radius: 0;
   }
 
   .notification-panel-header {
-    padding: 20px 20px 16px;
+    padding: 16px 20px 14px;
+  }
+
+  .notification-panel-header h3 {
+    font-size: 18px;
   }
 
   .notification-summary {
-    padding: 16px 20px 10px;
+    padding: 14px 20px;
+    gap: 10px;
+  }
+
+  .summary-card {
+    padding: 12px 14px;
+  }
+
+  .summary-value {
+    font-size: 24px;
   }
 
   .notification-tabs {
-    padding: 12px 20px 10px;
+    padding: 10px 20px;
   }
 
   .notification-list {
-    padding: 16px 20px;
+    padding: 14px 20px;
+  }
+
+  .notification-item {
+    padding: 12px 14px;
   }
 
   .notification-panel-footer {
     padding: 14px 20px 18px;
     flex-direction: column;
     align-items: stretch;
+    gap: 12px;
   }
 
   .panel-secondary-btn {
     width: 100%;
+    text-align: center;
   }
+}
+
+/* -----------------------------------------------------------------------------
+   Notification Trigger Button (in header)
+   ----------------------------------------------------------------------------- */
+
+.notification-trigger {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Animation for badge pulse */
+@keyframes pulse-badge {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.15);
+  }
+}
+
+.action-badge {
+  animation: pulse-badge 2s ease-in-out infinite;
 }

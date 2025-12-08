@@ -32,6 +32,7 @@ pub const SECURITY_TOKEN_HEADER: &str = "X-ScreenerBot-Token";
 /// - Root path (/) - returns HTML with embedded token
 /// - Static assets (/assets/*, /scripts/*, /styles/*)
 /// - Page HTML (/api/pages/*)
+/// - SSE streams (/api/*/stream) - EventSource API doesn't support custom headers
 ///
 /// In CLI mode, this middleware does nothing (allows all requests).
 pub async fn security_gate(request: Request, next: Next) -> Response {
@@ -44,11 +45,13 @@ pub async fn security_gate(request: Request, next: Next) -> Response {
 
   // Allow initial page load and static assets without token
   // These are needed for the browser to receive the HTML (which contains the token)
+  // Also allow SSE stream endpoints - EventSource API cannot send custom headers
   if path == "/"
     || path.starts_with("/assets/")
     || path.starts_with("/scripts/")
     || path.starts_with("/styles/")
     || path.starts_with("/api/pages/")
+    || path.ends_with("/stream")
   {
     return next.run(request).await;
   }

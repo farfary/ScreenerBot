@@ -223,6 +223,7 @@
       </div>
     </header>
 
+    <!-- Notification Center - Apple-style slide-in drawer -->
     <div id="notificationDrawer" class="notification-drawer" data-state="closed" aria-hidden="true">
       <div class="notification-drawer__backdrop" data-role="dismiss"></div>
       <section
@@ -231,6 +232,7 @@
         aria-modal="true"
         aria-labelledby="notificationDrawerTitle"
       >
+        <!-- Header with title and actions -->
         <header class="notification-panel-header">
           <div class="notification-panel-heading">
             <p class="notification-eyebrow">Action Center</p>
@@ -244,23 +246,25 @@
               </span>
             </div>
             <div class="notification-panel-actions">
-              <button id="markAllReadBtn" class="panel-action-btn" title="Mark all as read">
-                ✓
+              <button type="button" id="markAllReadBtn" class="panel-action-btn" title="Mark all as read">
+                <i class="icon-check"></i>
               </button>
-              <button id="clearAllBtn" class="panel-action-btn" title="Clear all">
+              <button type="button" id="clearAllBtn" class="panel-action-btn" title="Clear all">
                 <i class="icon-trash-2"></i>
               </button>
               <button
+                type="button"
                 id="notificationDrawerClose"
                 class="panel-close-btn"
                 aria-label="Close notifications"
               >
-                ×
+                <i class="icon-x"></i>
               </button>
             </div>
           </div>
         </header>
 
+        <!-- Summary statistics cards -->
         <div class="notification-summary">
           <div class="summary-card live">
             <span class="summary-label">Live</span>
@@ -275,165 +279,77 @@
           <div class="summary-card danger">
             <span class="summary-label">Failed</span>
             <span class="summary-value" id="drawerFailedCount">0</span>
-            <span class="summary-sub">Needs review</span>
+            <span class="summary-sub">Needs attention</span>
           </div>
         </div>
 
-        <div class="notification-tabs">
-          <button class="notification-tab active" data-tab="all">
+        <!-- Tab navigation -->
+        <nav class="notification-tabs" role="tablist">
+          <button type="button" class="notification-tab active" data-tab="all" role="tab" aria-selected="true">
             All <span class="tab-count" id="allCount">0</span>
           </button>
-          <button class="notification-tab" data-tab="active">
+          <button type="button" class="notification-tab" data-tab="active" role="tab" aria-selected="false">
             Active <span class="tab-count" id="activeCount">0</span>
           </button>
-          <button class="notification-tab" data-tab="completed">
+          <button type="button" class="notification-tab" data-tab="completed" role="tab" aria-selected="false">
             Completed <span class="tab-count" id="completedCount">0</span>
           </button>
-          <button class="notification-tab" data-tab="failed">
+          <button type="button" class="notification-tab" data-tab="failed" role="tab" aria-selected="false">
             Failed <span class="tab-count" id="failedCount">0</span>
           </button>
-        </div>
+        </nav>
 
-        <div
-          class="notification-filters"
-          id="notificationFilters"
-          style="
-            display: none;
-            padding: 12px;
-            background: var(--surface-elevated);
-            border-bottom: 1px solid var(--border-subtle);
-          "
-        >
-          <div class="filter-row" style="display: flex; gap: 8px; align-items: center">
-            <select
-              id="filterActionType"
-              class="filter-select"
-              style="
-                flex: 1;
-                padding: 6px 10px;
-                border: 1px solid var(--border-subtle);
-                border-radius: 6px;
-                background: var(--surface);
-                color: var(--text-primary);
-                font-size: 13px;
-              "
-            >
+        <!-- Filters for history tabs -->
+        <div class="notification-filters" id="notificationFilters">
+          <div class="filter-row">
+            <select id="filterActionType" class="filter-select">
               <option value="">All Types</option>
-              <option value="swapbuy">Swap Buy</option>
-              <option value="swapsell">Swap Sell</option>
-              <option value="positionopen">Position Open</option>
-              <option value="positionclose">Position Close</option>
-              <option value="positiondca">Position DCA</option>
-              <option value="positionpartialexit">Partial Exit</option>
-              <option value="manualorder">Manual Order</option>
+              <option value="swap_buy">Swap Buy</option>
+              <option value="swap_sell">Swap Sell</option>
+              <option value="position_open">Position Open</option>
+              <option value="position_close">Position Close</option>
+              <option value="position_dca">Position DCA</option>
+              <option value="position_partial_exit">Partial Exit</option>
+              <option value="manual_order">Manual Order</option>
             </select>
-
-            <select
-              id="filterState"
-              class="filter-select"
-              style="
-                flex: 1;
-                padding: 6px 10px;
-                border: 1px solid var(--border-subtle);
-                border-radius: 6px;
-                background: var(--surface);
-                color: var(--text-primary);
-                font-size: 13px;
-              "
-            >
+            <select id="filterState" class="filter-select">
               <option value="">All States</option>
               <option value="in_progress">In Progress</option>
               <option value="completed">Completed</option>
               <option value="failed">Failed</option>
               <option value="cancelled">Cancelled</option>
             </select>
-
-            <button
-              id="clearFiltersBtn"
-              class="filter-clear-btn"
-              style="
-                padding: 6px 12px;
-                border: 1px solid var(--border-subtle);
-                border-radius: 6px;
-                background: var(--surface);
-                color: var(--text-secondary);
-                font-size: 13px;
-                cursor: pointer;
-              "
-            >
-              Clear
-            </button>
+            <button type="button" id="clearFiltersBtn" class="filter-clear-btn">Clear</button>
           </div>
         </div>
 
-        <div class="notification-list" id="notificationList">
+        <!-- Notification list container -->
+        <div class="notification-list" id="notificationList" role="feed" aria-label="Notifications">
           <div class="notification-empty">
             <span><i class="icon-inbox"></i></span>
             <p>No notifications</p>
           </div>
         </div>
 
-        <div
-          class="notification-pagination"
-          id="notificationPagination"
-          style="
-            display: none;
-            padding: 12px;
-            background: var(--surface-elevated);
-            border-top: 1px solid var(--border-subtle);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            gap: 12px;
-          "
-        >
-          <button
-            id="prevPageBtn"
-            class="pagination-btn"
-            disabled
-            style="
-              padding: 6px 14px;
-              border: 1px solid var(--border-subtle);
-              border-radius: 6px;
-              background: var(--surface);
-              color: var(--text-primary);
-              font-size: 13px;
-              cursor: pointer;
-            "
-          >
-            ← Previous
+        <!-- Pagination controls -->
+        <div class="notification-pagination" id="notificationPagination">
+          <button type="button" id="prevPageBtn" class="pagination-btn" disabled>
+            <i class="icon-chevron-left"></i> Previous
           </button>
-          <span
-            class="pagination-info"
-            id="paginationInfo"
-            style="font-size: 13px; color: var(--text-secondary)"
-            >Page 1</span
-          >
-          <button
-            id="nextPageBtn"
-            class="pagination-btn"
-            disabled
-            style="
-              padding: 6px 14px;
-              border: 1px solid var(--border-subtle);
-              border-radius: 6px;
-              background: var(--surface);
-              color: var(--text-primary);
-              font-size: 13px;
-              cursor: pointer;
-            "
-          >
-            Next →
+          <span class="pagination-info" id="paginationInfo">Page 1</span>
+          <button type="button" id="nextPageBtn" class="pagination-btn" disabled>
+            Next <i class="icon-chevron-right"></i>
           </button>
         </div>
 
+        <!-- Footer with metadata and actions -->
         <footer class="notification-panel-footer">
           <div class="notification-footer-meta">
             <span id="notificationFooterActive">0 live</span>
             <span>Auto-dismiss after completion</span>
           </div>
           <button id="notificationOpenHistory" type="button" class="panel-secondary-btn">
-            View full activity
+            View History
           </button>
         </footer>
       </section>
