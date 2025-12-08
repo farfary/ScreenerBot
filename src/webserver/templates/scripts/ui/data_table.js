@@ -1705,6 +1705,7 @@ export class DataTable {
       return;
     }
 
+    // Skip if columns are locked and all have sizes
     if (this.options.lockColumnWidths && this.state.columnWidthsLocked) {
       const needsSizing = visibleColumns.some(
         (col) => typeof this.state.columnWidths[col.id] !== "number"
@@ -1712,6 +1713,12 @@ export class DataTable {
       if (!needsSizing) {
         return;
       }
+    }
+
+    // Skip content-based sizing if we've already auto-fitted and have stable widths
+    // This prevents oscillation during rapid data updates
+    if (this.state.hasAutoFitted && this._allColumnsHaveWidths()) {
+      return;
     }
 
     const allRows = Array.from(this.elements.tbody.querySelectorAll("tr[data-row-id]"));
@@ -1778,13 +1785,23 @@ export class DataTable {
       const previous = this.state.columnWidths[columnId];
 
       if (Number.isFinite(previous)) {
-        // Prevent repeated auto-sizing from inflating widths when content width is unchanged
-        const growthThreshold = 1;
-        const hasContentGrowth = maxWidth > previous + growthThreshold;
-
-        if (!hasContentGrowth) {
+        // Prevent oscillation: only allow width changes if content significantly changed
+        // Use a higher threshold to prevent micro-adjustments from causing visual jitter
+        const growthThreshold = 4;
+        const shrinkThreshold = 8;
+        
+        // Calculate the difference between new measured width and stored width
+        const widthDiff = finalWidth - previous;
+        
+        if (widthDiff > growthThreshold) {
+          // Content grew significantly, allow increase
+          // finalWidth stays as calculated
+        } else if (widthDiff < -shrinkThreshold) {
+          // Content shrank significantly, but only shrink if user hasn't interacted
+          // Keep previous width to prevent shrinking on data updates
           finalWidth = previous;
-        } else if (finalWidth < previous) {
+        } else {
+          // Within threshold, keep stable
           finalWidth = previous;
         }
       }
@@ -1818,14 +1835,11 @@ export class DataTable {
         this.state.columnWidthsLocked = true;
       }
     }
-
-    if (this.options.fitToContainer !== false) {
-      this._fitColumnsToContainer();
-      this.state.hasAutoFitted = true;
-    }
+    // Note: fitToContainer is now called separately in _renderTable to avoid double-fitting
   }
 
   // Snapshot current natural widths for visible columns into state if missing
+  // This function ONLY captures widths - fitting is done separately
   _snapshotColumnWidths() {
     if (!this.elements.thead) return;
     const headers = this.elements.thead.querySelectorAll("th[data-column-id]");
@@ -1838,18 +1852,21 @@ export class DataTable {
       }
     });
 
-    // Compute table width sum
+    // Update table width sum (but don't trigger fitting here)
     const sum = this._computeTableWidthFromState();
     if (typeof sum === "number") {
       this.state.tableWidth = sum;
-
-      if (this.options.fitToContainer !== false) {
-        this._fitColumnsToContainer();
-        this.state.hasAutoFitted = true;
-      }
-
       this._applyTableWidth();
     }
+  }
+
+  // Check if all visible columns have stored widths
+  _allColumnsHaveWidths() {
+    const visibleColumns = this._getOrderedColumns();
+    if (!visibleColumns || visibleColumns.length === 0) return false;
+    return visibleColumns.every(
+      (col) => typeof this.state.columnWidths[col.id] === "number"
+    );
   }
 
   _computeTableWidthFromState() {
@@ -2179,10 +2196,18 @@ export class DataTable {
       }
     }
 
-    // Make sure widths are captured and applied consistently
+    // Column width handling - coordinated to prevent oscillation
+    // 1. Auto-size from content (only on initial load or when needed)
     this._autoSizeColumnsFromContent();
+    // 2. Snapshot any missing widths from DOM
     this._snapshotColumnWidths();
+    // 3. Apply stored widths to DOM
     this._applyStoredColumnWidths();
+    // 4. Fit to container ONCE if not already done (prevents double-fitting)
+    if (this.options.fitToContainer !== false && !this.state.hasAutoFitted) {
+      this._fitColumnsToContainer();
+      this.state.hasAutoFitted = true;
+    }
 
     this._attachEvents();
 
@@ -3319,6 +3344,15 @@ export class DataTable {
           delete this.state.userResizedColumns[colId];
         }
       });
+
+      // Check if new columns were added (columns without widths)
+      // If so, reset hasAutoFitted to allow re-fitting with new columns
+      const hasNewColumns = newColumns.some(
+        (col) => typeof this.state.columnWidths[col.id] !== "number"
+      );
+      if (hasNewColumns) {
+        this.state.hasAutoFitted = false;
+      }
     }
 
     // Save updated state

@@ -2,9 +2,9 @@
 
 /* ==================== Colgroup Column Width Management ==================== */
 
-/* Smooth column width transitions */
+/* Column widths: NO transition by default to prevent oscillation during data updates */
 .data-table col {
-  transition: width 0.08s ease-out;
+  transition: none;
 }
 
 /* Disable transition during active resize for immediate feedback */
