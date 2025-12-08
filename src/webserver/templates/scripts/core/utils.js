@@ -393,6 +393,55 @@
     window.addEventListener(evt, closeDropdownMenus, { passive: true });
   });
 
+  // Global external link handler for Tauri
+  // Intercepts clicks on external links (http/https) and routes through backend API
+  // This is necessary because Tauri's webview doesn't natively open external links in browser
+  document.addEventListener(
+    "click",
+    async (e) => {
+      const link = e.target.closest("a[href]");
+      if (!link) return;
+
+      const href = link.getAttribute("href");
+      if (!href) return;
+
+      // Only intercept external URLs (http/https)
+      if (!href.startsWith("http://") && !href.startsWith("https://")) return;
+
+      // Check if this is a same-origin link (internal navigation) - allow those to work normally
+      try {
+        const linkUrl = new URL(href, window.location.origin);
+        if (linkUrl.origin === window.location.origin) return;
+      } catch {
+        // Invalid URL, skip
+        return;
+      }
+
+      // Prevent default browser behavior and open externally via backend API
+      e.preventDefault();
+      e.stopPropagation();
+
+      try {
+        const response = await fetch("/api/system/open-url", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: href }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          console.warn("Backend open-url failed:", errorData);
+          // Fallback to window.open
+          window.open(href, "_blank", "noopener,noreferrer");
+        }
+      } catch (err) {
+        console.warn("Backend open-url request failed:", err);
+        window.open(href, "_blank", "noopener,noreferrer");
+      }
+    },
+    true
+  ); // Use capture phase to intercept before other handlers
+
   function freezeTableLayout(tableElement) {
     const table =
       tableElement instanceof HTMLTableElement
@@ -920,25 +969,31 @@
   }
 
   /**
-   * Opens a URL in the default system browser.
-   * Uses Tauri opener API when running in Tauri, falls back to window.open in browser.
+   * Opens a URL in the default system browser via backend API.
+   * This works in Tauri because the backend uses system commands (open/xdg-open/start).
+   * Falls back to window.open if backend request fails.
    * @param {string} url - The URL to open
    */
   async function openExternal(url) {
     if (!url) return;
-    
-    // Check if running in Tauri - use opener plugin (Tauri v2)
-    if (window.__TAURI__?.opener?.openUrl) {
-      try {
-        await window.__TAURI__.opener.openUrl(url);
-        return;
-      } catch (err) {
-        console.warn("Tauri opener.openUrl failed, falling back to window.open:", err);
+
+    try {
+      const response = await fetch("/api/system/open-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.warn("Backend open-url failed:", errorData);
+        // Fallback to window.open
+        window.open(url, "_blank", "noopener,noreferrer");
       }
+    } catch (err) {
+      console.warn("Backend open-url request failed:", err);
+      window.open(url, "_blank", "noopener,noreferrer");
     }
-    
-    // Fallback to window.open for browser environment
-    window.open(url, "_blank", "noopener,noreferrer");
   }
 
   function openGMGN(mint) {

@@ -197,6 +197,8 @@ pub fn routes() -> Router<Arc<AppState>> {
     .route("/bootstrap", get(boot_status))
     .route("/paths", get(get_paths))
     .route("/paths/open-data", post(open_data_directory))
+    .route("/open-url", post(open_url))
+    .route("/exit", post(exit_app))
 }
 
 /// GET /api/system/bootstrap - Report real-time boot status for GUI/frontend gating
@@ -355,4 +357,92 @@ async fn open_data_directory() -> Response {
             None,
         ),
     }
+}
+
+// =============================================================================
+// OPEN URL IN BROWSER
+// =============================================================================
+
+#[derive(Debug, serde::Deserialize)]
+pub struct OpenUrlRequest {
+    pub url: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct OpenUrlResponse {
+    pub opened: bool,
+    pub message: String,
+    pub url: String,
+}
+
+/// POST /api/system/open-url - Open a URL in the system's default browser
+async fn open_url(axum::Json(request): axum::Json<OpenUrlRequest>) -> Response {
+    let url = request.url.trim();
+    
+    if url.is_empty() {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "INVALID_URL",
+            "URL cannot be empty",
+            None,
+        );
+    }
+
+    match paths::open_url_in_browser(url) {
+        Ok(_) => success_response(OpenUrlResponse {
+            opened: true,
+            message: "URL opened in your default browser".to_string(),
+            url: url.to_string(),
+        }),
+        Err(err) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "OPEN_URL_FAILED",
+            &err,
+            None,
+        ),
+    }
+}
+
+// =============================================================================
+// EXIT APP
+// =============================================================================
+
+#[derive(Debug, serde::Deserialize)]
+pub struct ExitAppRequest {
+    /// Delay in milliseconds before exiting (default: 0)
+    #[serde(default)]
+    pub delay_ms: u64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ExitAppResponse {
+    pub success: bool,
+    pub message: String,
+}
+
+/// POST /api/system/exit - Exit the application
+/// Used for "Install & Restart" to close the app after opening the installer
+async fn exit_app(axum::Json(request): axum::Json<ExitAppRequest>) -> Response {
+    logger::info(
+        LogTag::System,
+        &format!("Exit requested via API with delay: {}ms", request.delay_ms),
+    );
+
+    // Spawn exit task with optional delay
+    let delay_ms = request.delay_ms;
+    task::spawn(async move {
+        if delay_ms > 0 {
+            tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+        }
+        logger::info(LogTag::System, "Exiting application...");
+        std::process::exit(0);
+    });
+
+    success_response(ExitAppResponse {
+        success: true,
+        message: format!(
+            "Application will exit in {}ms",
+            request.delay_ms
+        ),
+    })
 }

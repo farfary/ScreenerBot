@@ -1214,7 +1214,7 @@ function createLifecycle() {
           Utils.showToast("Failed to copy mint", "warning");
         });
     } else if (urlMap[actionId]) {
-      window.open(urlMap[actionId], "_blank", "noopener,noreferrer");
+      Utils.openExternal(urlMap[actionId]);
     }
   };
 

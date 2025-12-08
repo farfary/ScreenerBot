@@ -2052,42 +2052,59 @@ export class SettingsDialog {
 
     // Install Handler
     if (installBtn) {
-      installBtn.addEventListener('click', async () => {
-        if (!confirm('ScreenerBot will now open the update installer. After installing, restart the app to use the new version. Continue?')) return;
-        
+      installBtn.addEventListener("click", async () => {
+        if (
+          !window.confirm(
+            "ScreenerBot will install the update and close. The installer will launch automatically. Continue?"
+          )
+        )
+          return;
+
         installBtn.disabled = true;
         const originalText = installBtn.innerHTML;
-        installBtn.innerHTML = '<i class="icon-loader spinning"></i><span>Opening installer...</span>';
-        
+        installBtn.innerHTML =
+          '<i class="icon-loader spinning"></i><span>Installing...</span>';
+
         try {
-          const response = await fetch('/api/updates/install', { method: 'POST' });
+          const response = await fetch("/api/updates/install", {
+            method: "POST",
+          });
           const data = await response.json();
-          
+
           if (!response.ok || !data.success) {
-            throw new Error(data.error || 'Failed to open installer');
+            throw new Error(data.error || "Failed to open installer");
           }
-          
+
           // Show success message
           Utils.showToast({
-            type: 'success',
-            title: 'Installer Opened',
-            message: data.data?.message || 'Complete the installation and restart the app.',
+            type: "success",
+            title: "Update Ready",
+            message: "Closing app to complete installation...",
           });
-          
-          // Close the settings dialog
-          setTimeout(() => {
-            this.close();
-          }, 1500);
-          
+
+          // Exit the app via backend API after a short delay
+          setTimeout(async () => {
+            try {
+              await fetch("/api/system/exit", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ delay_ms: 500 }),
+              });
+            } catch (exitErr) {
+              console.warn("Exit request failed:", exitErr);
+              // Fallback: just close the dialog
+              this.close();
+            }
+          }, 1000);
         } catch (err) {
-          console.error('Install failed:', err);
+          console.error("Install failed:", err);
           installBtn.disabled = false;
           installBtn.innerHTML = originalText;
-          
+
           Utils.showToast({
-            type: 'error',
-            title: 'Failed to Open Installer',
-            message: err.message || 'Please try downloading again.',
+            type: "error",
+            title: "Failed to Open Installer",
+            message: err.message || "Please try downloading again.",
           });
         }
       });
