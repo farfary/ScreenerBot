@@ -1662,7 +1662,7 @@ impl TransactionDatabase {
         let params_refs: Vec<&dyn rusqlite::ToSql> =
             params_vec.iter().map(|value| value.as_ref()).collect();
 
-        logger::info(
+        logger::debug(
             LogTag::Transactions,
             &format!(
                 "Aggregating SOL flows for wallet {} from {}",

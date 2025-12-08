@@ -106,7 +106,7 @@ async fn get_version() -> Response {
 /// GET /api/updates/check
 /// Checks for available updates
 async fn check_updates() -> Response {
-    logger::info(LogTag::Webserver, "Checking for updates...");
+    logger::debug(LogTag::Webserver, "Checking for updates...");
 
     let current_version = version::get_version().to_string();
 

@@ -66,7 +66,7 @@ impl Service for OhlcvService {
           }
           _ = sleep(Duration::from_secs(5)) => {}
         }
-        logger::info(LogTag::Ohlcv, &"AUTO_POPULATE: Adding open positions to OHLCV monitoring...".to_string());
+        logger::debug(LogTag::Ohlcv, &"AUTO_POPULATE: Adding open positions to OHLCV monitoring...".to_string());
 
         let open_positions = crate::positions::get_open_positions().await;
         for position in &open_positions {
@@ -80,7 +80,7 @@ impl Service for OhlcvService {
           }
         }
 
-        logger::info(
+        logger::debug(
           LogTag::Ohlcv,
           &format!("AUTO_POPULATE_DONE: Added {} open positions to OHLCV monitoring", open_positions.len()),
         );
