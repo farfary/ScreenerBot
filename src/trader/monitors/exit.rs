@@ -6,11 +6,12 @@
 //! - Priority-based trade execution (Emergency → High → Normal)
 //! - DCA opportunity processing
 //! - Event recording
+//! - Action tracking for dashboard visibility
 
 use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::trader::types::{TradeDecision, TradePriority};
-use crate::trader::{config, constants, evaluators, executors};
+use crate::trader::{actions, config, constants, evaluators, executors};
 use std::sync::Arc;
 use tokio::sync::Semaphore;
 use tokio::time::{sleep, Duration, Instant};
@@ -180,11 +181,70 @@ pub async fn monitor_positions(
       }
 
       if let Some(decision) = evaluation.decision {
-        if let Err(e) = executors::execute_trade(&decision).await {
-          logger::error(
-            LogTag::Trader,
-            &format!("Failed to execute exit for {}: {}", evaluation.symbol, e),
-          );
+        // Create action for dashboard visibility
+        let action = actions::AutoCloseAction::new(
+          &decision.mint,
+          Some(&evaluation.symbol),
+          decision.position_id.as_ref().and_then(|s| s.parse().ok()),
+          &format!("{:?}", decision.reason),
+        )
+        .await
+        .ok();
+
+        // Mark evaluation complete
+        if let Some(ref a) = action {
+          a.complete_evaluation().await;
+          a.start_quote().await;
+        }
+
+        match executors::execute_trade(&decision).await {
+          Ok(result) => {
+            if result.success {
+              // Complete action successfully
+              if let Some(ref a) = action {
+                a.complete_quote().await;
+                a.start_swap().await;
+                let sig = result.tx_signature.as_deref().unwrap_or("unknown");
+                a.complete_swap(sig, result.executed_size_sol).await;
+                a.complete(result.tx_signature.as_deref()).await;
+              }
+
+              logger::info(
+                LogTag::Trader,
+                &format!(
+                  "Exit executed for {}: tx={}",
+                  evaluation.symbol,
+                  result.tx_signature.as_deref().unwrap_or("unknown")
+                ),
+              );
+            } else {
+              // Fail action
+              let error_msg = result.error.clone().unwrap_or_default();
+              if let Some(ref a) = action {
+                a.fail(&error_msg).await;
+              }
+
+              logger::error(
+                LogTag::Trader,
+                &format!(
+                  "Exit failed for {}: {}",
+                  evaluation.symbol,
+                  error_msg
+                ),
+              );
+            }
+          }
+          Err(e) => {
+            // Fail action
+            if let Some(ref a) = action {
+              a.fail(&e).await;
+            }
+
+            logger::error(
+              LogTag::Trader,
+              &format!("Failed to execute exit for {}: {}", evaluation.symbol, e),
+            );
+          }
         }
       }
     }
@@ -193,6 +253,29 @@ pub async fn monitor_positions(
     match evaluators::dca::process_dca_opportunities().await {
       Ok(dca_decisions) => {
         for decision in dca_decisions {
+          // Get symbol for action
+          let symbol = crate::tokens::get_full_token_async(&decision.mint)
+            .await
+            .ok()
+            .flatten()
+            .map(|t| t.symbol);
+
+          // Create DCA action for dashboard visibility
+          let action = actions::AutoDcaAction::new(
+            &decision.mint,
+            symbol.as_deref(),
+            decision.position_id.as_deref(),
+            0, // We don't have dca_count here, it's tracked in position
+          )
+          .await
+          .ok();
+
+          // Mark evaluation complete
+          if let Some(ref a) = action {
+            a.complete_evaluation().await;
+            a.start_quote().await;
+          }
+
           logger::info(
             LogTag::Trader,
             &format!(
@@ -200,25 +283,46 @@ pub async fn monitor_positions(
               decision.position_id.as_deref().unwrap_or("unknown")
             ),
           );
+
           match executors::execute_trade(&decision).await {
             Ok(result) => {
               if result.success {
+                // Complete action successfully
+                if let Some(ref a) = action {
+                  a.complete_quote().await;
+                  a.start_swap().await;
+                  let sig = result.tx_signature.as_deref().unwrap_or("unknown");
+                  a.complete_swap(sig).await;
+                  a.complete(result.tx_signature.as_deref(), None).await;
+                }
+
                 logger::info(
                   LogTag::Trader,
  &format!("DCA executed for {}", decision.mint),
                 );
               } else {
+                // Fail action
+                let error_msg = result.error.clone().unwrap_or_default();
+                if let Some(ref a) = action {
+                  a.fail(&error_msg).await;
+                }
+
                 logger::error(
                   LogTag::Trader,
                   &format!(
  "DCA failed for {}: {}",
                     decision.mint,
-                    result.error.unwrap_or_default()
+                    error_msg
                   ),
                 );
               }
             }
             Err(e) => {
+              // Fail action
+              if let Some(ref a) = action {
+                a.fail(&e).await;
+              }
+
               logger::error(LogTag::Trader, &format!("Failed to execute DCA: {}", e));
             }
           }

@@ -751,37 +751,31 @@ pub fn routes() -> Router<Arc<AppState>> {
 // MANUAL TRADING HANDLERS
 // =============================================================================
 
-fn validate_mint(mint: &str) -> Result<(), Response> {
-    if Pubkey::from_str(mint).is_err() {
-        return Err(error_response(
-            StatusCode::BAD_REQUEST,
-            "InvalidMint",
-            "Invalid token mint address",
-            Some("Mint must be a valid base58 pubkey"),
-        ));
-    }
-    Ok(())
-}
-
-fn ensure_ready() -> Result<(), Response> {
+async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
+    // Check services ready
     if !are_core_services_ready() {
         let pending = get_pending_services().join(", ");
-        return Err(error_response(
+        let error_msg = format!("Core services not ready: {}", pending);
+        // Create failed action for visibility
+        crate::trader::actions::create_failed_buy_action(&req.mint, &error_msg).await;
+        return error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "CoreServicesNotReady",
             "Core services are not ready for trading operations",
             Some(&format!("pending={}", pending)),
-        ));
+        );
     }
-    Ok(())
-}
 
-async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
-    if let Err(resp) = ensure_ready() {
-        return resp;
-    }
-    if let Err(resp) = validate_mint(&req.mint) {
-        return resp;
+    // Validate mint
+    if Pubkey::from_str(&req.mint).is_err() {
+        let error_msg = "Invalid token mint address";
+        crate::trader::actions::create_failed_buy_action(&req.mint, error_msg).await;
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "InvalidMint",
+            error_msg,
+            Some("Mint must be a valid base58 pubkey"),
+        );
     }
 
     // Server-side blacklist enforcement with optional force override
@@ -795,6 +789,8 @@ async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
         .unwrap_or(Ok(false))
         {
             if !req.force.unwrap_or(false) {
+                let error_msg = "Token is blacklisted";
+                crate::trader::actions::create_failed_buy_action(&req.mint, error_msg).await;
                 return error_response(
                     StatusCode::FORBIDDEN,
                     "Blacklisted",
@@ -820,7 +816,7 @@ async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
         ),
     );
 
-    // Use standard manual_buy; force mode is not exposed publicly via manual module
+    // Use standard manual_buy - action tracking is handled inside
     let result = crate::trader::manual::manual_buy(&req.mint, size).await;
 
     match result {
@@ -865,28 +861,51 @@ async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
         .await
         .unwrap_or(Ok(false))
         {
+            let error_msg = "Token is blacklisted; cannot add to position";
+            crate::trader::actions::create_failed_add_action(&req.mint, error_msg).await;
             return error_response(
                 StatusCode::FORBIDDEN,
                 "Blacklisted",
-                "Token is blacklisted; cannot add to position",
+                error_msg,
                 None,
             );
         }
     }
-    if let Err(resp) = ensure_ready() {
-        return resp;
+
+    // Check services ready
+    if !are_core_services_ready() {
+        let pending = get_pending_services().join(", ");
+        let error_msg = format!("Core services not ready: {}", pending);
+        crate::trader::actions::create_failed_add_action(&req.mint, &error_msg).await;
+        return error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "CoreServicesNotReady",
+            "Core services are not ready for trading operations",
+            Some(&format!("pending={}", pending)),
+        );
     }
-    if let Err(resp) = validate_mint(&req.mint) {
-        return resp;
+
+    // Validate mint
+    if Pubkey::from_str(&req.mint).is_err() {
+        let error_msg = "Invalid token mint address";
+        crate::trader::actions::create_failed_add_action(&req.mint, error_msg).await;
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "InvalidMint",
+            error_msg,
+            Some("Mint must be a valid base58 pubkey"),
+        );
     }
 
     // Ensure there's an open position for this mint
     let has_open = positions::is_open_position(&req.mint).await;
     if !has_open {
+        let error_msg = "Cannot add to position: no open position for this token";
+        crate::trader::actions::create_failed_add_action(&req.mint, error_msg).await;
         return error_response(
             StatusCode::BAD_REQUEST,
             "NoOpenPosition",
-            "Cannot add to position: no open position for this token",
+            error_msg,
             None,
         );
     }
@@ -901,7 +920,7 @@ async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
         &format!("mint={} size_sol={}", req.mint, size),
     );
 
-    // Use trader module for centralized logic
+    // Use trader module - action tracking is handled inside
     let result = crate::trader::manual::manual_add(&req.mint, size).await;
 
     match result {
@@ -936,19 +955,39 @@ async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
 }
 
 async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response {
-    if let Err(resp) = ensure_ready() {
-        return resp;
+    // Check services ready
+    if !are_core_services_ready() {
+        let pending = get_pending_services().join(", ");
+        let error_msg = format!("Core services not ready: {}", pending);
+        crate::trader::actions::create_failed_sell_action(&req.mint, &error_msg).await;
+        return error_response(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "CoreServicesNotReady",
+            "Core services are not ready for trading operations",
+            Some(&format!("pending={}", pending)),
+        );
     }
-    if let Err(resp) = validate_mint(&req.mint) {
-        return resp;
+
+    // Validate mint
+    if Pubkey::from_str(&req.mint).is_err() {
+        let error_msg = "Invalid token mint address";
+        crate::trader::actions::create_failed_sell_action(&req.mint, error_msg).await;
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "InvalidMint",
+            error_msg,
+            Some("Mint must be a valid base58 pubkey"),
+        );
     }
 
     let is_open = positions::is_open_position(&req.mint).await;
     if !is_open {
+        let error_msg = "Cannot sell: no open position for this token";
+        crate::trader::actions::create_failed_sell_action(&req.mint, error_msg).await;
         return error_response(
             StatusCode::BAD_REQUEST,
             "NoOpenPosition",
-            "Cannot sell: no open position for this token",
+            error_msg,
             None,
         );
     }
@@ -967,6 +1006,8 @@ async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response {
     // Validate percentage if provided
     if let Some(percentage) = pct {
         if !percentage.is_finite() || percentage <= 0.0 || percentage > 100.0 {
+            let error_msg = format!("Invalid percentage: {}. Must be in (0, 100]", percentage);
+            crate::trader::actions::create_failed_sell_action(&req.mint, &error_msg).await;
             return error_response(
                 StatusCode::BAD_REQUEST,
                 "InvalidPercentage",
@@ -986,7 +1027,7 @@ async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response {
         ),
     );
 
-    // Route to trader module based on force flag
+    // Route to trader module - action tracking is handled inside
     let result = if req.force.unwrap_or(false) {
         crate::trader::manual::force_sell(&req.mint, pct).await
     } else {

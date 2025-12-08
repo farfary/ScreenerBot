@@ -24,6 +24,7 @@
 //! - `service`: Service implementation
 //! - `types`: Trader types
 
+pub mod actions;
 mod config;
 mod constants;
 mod controller;

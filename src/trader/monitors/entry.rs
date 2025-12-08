@@ -7,11 +7,12 @@
 //! - Calling evaluators for entry logic
 //! - Executing trades
 //! - Event recording
+//! - Action tracking for dashboard visibility
 
 use crate::logger::{self, LogTag};
 use crate::pools;
 use crate::positions;
-use crate::trader::{config, constants, evaluators, executors};
+use crate::trader::{actions, config, constants, evaluators, executors};
 use std::collections::HashMap;
 use std::sync::LazyLock;
 use tokio::sync::RwLock;
@@ -193,6 +194,28 @@ pub async fn monitor_entries(
                     )
                     .await;
 
+                    // Create action for dashboard visibility
+                    let symbol = crate::tokens::get_full_token_async(&decision.mint)
+                        .await
+                        .ok()
+                        .flatten()
+                        .map(|t| t.symbol);
+                    
+                    let action = actions::AutoOpenAction::new(
+                        &decision.mint,
+                        symbol.as_deref(),
+                        decision.strategy_id.as_deref(),
+                        &format!("{:?}", decision.reason),
+                    )
+                    .await
+                    .ok();
+
+                    // Mark evaluation complete (we got a decision)
+                    if let Some(ref a) = action {
+                        a.complete_evaluation().await;
+                        a.start_quote().await;
+                    }
+
                     // Execute the trade
                     let mint_for_cleanup = decision.mint.clone();
                     match executors::execute_trade(&decision).await {
@@ -202,6 +225,15 @@ pub async fn monitor_entries(
 
                             if result.success {
                                 let tx_sig = result.tx_signature.clone();
+                                
+                                // Complete action
+                                if let Some(ref a) = action {
+                                    a.complete_quote().await;
+                                    a.start_swap().await;
+                                    a.complete_swap(tx_sig.as_deref().unwrap_or("unknown")).await;
+                                    a.complete(tx_sig.as_deref()).await;
+                                }
+
                                 logger::info(
                                     LogTag::Trader,
                                     &format!(
@@ -226,6 +258,12 @@ pub async fn monitor_entries(
                                 .await;
                             } else {
                                 let error_msg = result.error.clone().unwrap_or_default();
+                                
+                                // Fail action
+                                if let Some(ref a) = action {
+                                    a.fail(&error_msg).await;
+                                }
+
                                 if let Some(remaining) =
                                     positions::parse_position_slot_error(&error_msg)
                                 {
@@ -276,6 +314,11 @@ pub async fn monitor_entries(
                         Err(e) => {
                             // Clear reservation on error
                             clear_token_reservation(&mint_for_cleanup).await;
+
+                            // Fail action
+                            if let Some(ref a) = action {
+                                a.fail(&e).await;
+                            }
 
                             logger::error(
                                 LogTag::Trader,
