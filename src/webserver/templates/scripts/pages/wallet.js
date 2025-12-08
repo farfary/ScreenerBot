@@ -82,6 +82,17 @@ function createLifecycle() {
   const formatPercent = (v) => Utils.formatPercent(v, { style: "pnl", decimals: 2, fallback: "—" });
   const formatUsd = (v) => Utils.formatCurrencyUSD(v, { fallback: "—" });
   const formatTimeAgo = (seconds) => Utils.formatTimeAgo(seconds, { fallback: "—" });
+  const formatTimestampShort = (ts) => Utils.formatTimestamp(ts, { variant: "short" });
+
+  const getChartHeight = () => {
+    const root = document.querySelector(".wallet-page");
+    if (!root || typeof window === "undefined") return 300;
+
+    const raw = window.getComputedStyle(root).getPropertyValue("--wallet-chart-height");
+    const parsed = parseFloat(raw);
+
+    return Number.isFinite(parsed) ? parsed : 300;
+  };
 
   const escapeHtml = (str) => Utils.escapeHtml(str);
 
@@ -201,7 +212,7 @@ function createLifecycle() {
           <div class="chart-header">
             <h3>Balance Trend</h3>
           </div>
-          <div id="balanceChart" style="height: 300px;"></div>
+          <div id="balanceChart"></div>
         </div>
       </div>
     `;
@@ -215,6 +226,9 @@ function createLifecycle() {
 
     const chartContainer = document.getElementById("balanceChart");
     if (!chartContainer) return;
+
+    const chartHeight = getChartHeight();
+    chartContainer.style.height = `${chartHeight}px`;
 
     // Destroy existing chart
     if (balanceChart) {
@@ -235,7 +249,7 @@ function createLifecycle() {
         vertLines: { color: "rgba(128, 128, 128, 0.1)" },
         horzLines: { color: "rgba(128, 128, 128, 0.1)" },
       },
-      height: 300,
+      height: chartHeight,
       timeScale: {
         timeVisible: true,
         secondsVisible: false,
@@ -308,7 +322,7 @@ function createLifecycle() {
           <div class="chart-header">
             <h3>Daily Flows</h3>
           </div>
-          <div id="flowsChart" style="height: 300px;"></div>
+          <div id="flowsChart"></div>
         </div>
       </div>
     `;
@@ -322,6 +336,9 @@ function createLifecycle() {
 
     const chartContainer = document.getElementById("flowsChart");
     if (!chartContainer) return;
+
+    const chartHeight = getChartHeight();
+    chartContainer.style.height = `${chartHeight}px`;
 
     // Destroy existing chart
     if (flowsChart) {
@@ -342,7 +359,7 @@ function createLifecycle() {
         vertLines: { color: "rgba(128, 128, 128, 0.1)" },
         horzLines: { color: "rgba(128, 128, 128, 0.1)" },
       },
-      height: 300,
+      height: chartHeight,
       timeScale: {
         timeVisible: true,
         secondsVisible: false,
@@ -673,15 +690,21 @@ function createLifecycle() {
 
       const snapshots = state.dashboardData.balance_trend.map((point, idx, arr) => {
         const prev = idx > 0 ? arr[idx - 1] : null;
+        const start = arr[0];
         const change = prev ? point.sol_balance - prev.sol_balance : 0;
         const changePercent =
           prev && prev.sol_balance > 0 ? (change / prev.sol_balance) * 100 : null;
+        const cumulative = start ? point.sol_balance - start.sol_balance : point.sol_balance;
+        const cumulativePercent =
+          start && start.sol_balance > 0 ? (cumulative / start.sol_balance) * 100 : null;
 
         return {
           timestamp: point.timestamp,
           sol_balance: point.sol_balance,
           change,
           change_percent: changePercent,
+          cumulative_change: cumulative,
+          cumulative_change_percent: cumulativePercent,
         };
       });
 
@@ -707,7 +730,18 @@ function createLifecycle() {
         label: "Timestamp",
         sortable: true,
         minWidth: 180,
-        render: (v) => new Date(v * 1000).toLocaleString(),
+        maxWidth: 240,
+        render: (v) => {
+          if (!v) return "—";
+          const ago = formatTimeAgo(v);
+          const primary = formatTimestampShort(v * 1000);
+          return `
+            <div class="history-ts">
+              <div class="history-ts-primary">${primary}</div>
+              <div class="history-ts-secondary">${ago}</div>
+            </div>
+          `;
+        },
       },
       {
         id: "sol_balance",
@@ -737,6 +771,28 @@ function createLifecycle() {
           return `<span class="${cls}">${formatPercent(v)}</span>`;
         },
       },
+      {
+        id: "cumulative_change",
+        label: "Since Start",
+        sortable: true,
+        minWidth: 140,
+        render: (v) => {
+          if (v == null) return "—";
+          const cls = v > 0 ? "value-positive" : v < 0 ? "value-negative" : "";
+          return `<span class="${cls}">${formatSol(v)}</span>`;
+        },
+      },
+      {
+        id: "cumulative_change_percent",
+        label: "Since Start %",
+        sortable: true,
+        minWidth: 110,
+        render: (v) => {
+          if (v == null) return "—";
+          const cls = v > 0 ? "value-positive" : v < 0 ? "value-negative" : "";
+          return `<span class="${cls}">${formatPercent(v)}</span>`;
+        },
+      },
     ];
 
     historyTable = new DataTable({
@@ -754,18 +810,23 @@ function createLifecycle() {
       const prev = idx > 0 ? arr[idx - 1] : null;
       const change = prev ? point.sol_balance - prev.sol_balance : 0;
       const changePercent = prev && prev.sol_balance > 0 ? (change / prev.sol_balance) * 100 : null;
+      const start = arr[0];
+      const cumulative = start ? point.sol_balance - start.sol_balance : point.sol_balance;
+      const cumulativePercent = start && start.sol_balance > 0 ? (cumulative / start.sol_balance) * 100 : null;
 
       return {
         Timestamp: new Date(point.timestamp * 1000).toISOString(),
         "SOL Balance": point.sol_balance.toFixed(6),
         Change: change.toFixed(6),
         "Change %": changePercent ? changePercent.toFixed(2) : "",
+        "Since Start": cumulative.toFixed(6),
+        "Since Start %": cumulativePercent ? cumulativePercent.toFixed(2) : "",
       };
     });
 
     Utils.exportToCSV(
       snapshots,
-      ["Timestamp", "SOL Balance", "Change", "Change %"],
+      ["Timestamp", "SOL Balance", "Change", "Change %", "Since Start", "Since Start %"],
       "wallet_history.csv"
     );
   }

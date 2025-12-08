@@ -1,6 +1,7 @@
 /* Wallet page-specific styles */
 
 .wallet-page {
+  --wallet-chart-height: clamp(220px, 38vh, 340px);
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -10,28 +11,42 @@
 #wallet-root {
   flex: 1;
   min-height: 0;
-  overflow-y: auto;
-  padding: 16px;
+  /* Let inner sections (like tables) own scrolling so they can
+     stretch to full height inside the page container. */
+  overflow: hidden;
+  padding: 12px;
 }
 
 /* Overview section */
 .wallet-overview {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: minmax(320px, 1.05fr) minmax(420px, 1fr);
+  grid-template-areas: "summary chart";
+  align-items: start;
+  gap: 12px;
+}
+
+@media (max-width: 1100px) {
+  .wallet-overview {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "summary"
+      "chart";
+  }
 }
 
 .summary-cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 12px;
+  grid-area: summary;
 }
 
 .summary-card {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  padding: 14px 16px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -47,7 +62,7 @@
 
 .summary-value {
   font-family: var(--font-data);
-  font-size: 1.3rem;
+  font-size: 1.15rem;
   font-weight: 600;
   color: var(--text-primary);
   font-feature-settings: "tnum" 1, "zero" 1;
@@ -78,10 +93,14 @@
 
 /* Chart container */
 .chart-container {
+  grid-area: chart;
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  padding: 16px;
+  padding: 12px;
+  min-height: var(--wallet-chart-height);
+  display: flex;
+  flex-direction: column;
 }
 
 .chart-header {
@@ -96,6 +115,11 @@
   font-size: 1rem;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+#balanceChart,
+#flowsChart {
+  height: var(--wallet-chart-height);
 }
 
 /* Actions bar */
@@ -122,7 +146,7 @@
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  padding: 14px 16px;
+  padding: 10px 12px;
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -149,8 +173,8 @@
 }
 
 .flow-value {
-  font-size: 1.3rem;
-  font-weight: 700;
+  font-size: 1.15rem;
+  font-weight: 600;
   color: var(--text-primary);
   font-family: var(--font-data);
   font-feature-settings: "tnum" 1, "zero" 1;
@@ -164,7 +188,7 @@
   min-height: 0;
   overflow: hidden;
   /* Counteract #wallet-root padding for edge-to-edge table */
-  margin: -16px;
+  margin: -12px;
   padding: 0;
 }
 
@@ -194,7 +218,7 @@
   min-height: 0;
   overflow: hidden;
   /* Counteract #wallet-root padding for edge-to-edge table */
-  margin: -16px;
+  margin: -12px;
   padding: 0;
 }
 
@@ -214,6 +238,23 @@
 #historyTableContainer {
   flex: 1;
   min-height: 0;
+}
+
+.history-ts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1.2;
+}
+
+.history-ts-primary {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.history-ts-secondary {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
 }
 
 /* Token cell in holdings table */

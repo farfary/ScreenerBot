@@ -33,9 +33,12 @@
   letter-spacing: 0.02em;
 }
 
-/* Ensure main content doesn't get hidden behind status bar */
+/* Ensure main content doesn't get hidden behind status bar.
+   We already use flex layout for .content/.page-container and
+   tables own their scroll area, so extra padding-bottom here
+   creates an empty strip above the fixed bar. */
 .content {
-  padding-bottom: 24px;
+  padding-bottom: 0;
 }
 
 /* Light theme adjustments */

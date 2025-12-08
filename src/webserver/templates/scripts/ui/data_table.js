@@ -73,6 +73,7 @@
  * - type: Column type - 'text', 'image', 'badge', etc. (optional, default: 'text')
  * - sortable: Enable sorting (optional, default: false)
  * - width: Column width in px or 'auto' (optional)
+ * - maxWidth: Maximum width in px (optional, clamps auto + resize)
  * - resizable: Enable column resizing (optional, default: true)
  * - visible: Initial visibility (optional, default: true)
  * - render: (value, row) => string - Custom cell renderer (optional)
@@ -1609,12 +1610,23 @@ export class DataTable {
   _getColumnMinWidth(columnId) {
     const column = this._getColumnConfig(columnId);
     if (!column) {
-      return 50;
+      return 80;
     }
     if (typeof column.minWidth === "number" && column.minWidth >= 0) {
       return column.minWidth;
     }
-    return 50;
+    return 80;
+  }
+
+  _getColumnMaxWidth(columnId) {
+    const column = this._getColumnConfig(columnId);
+    if (!column) {
+      return Number.POSITIVE_INFINITY;
+    }
+    if (typeof column.maxWidth === "number" && column.maxWidth > 0) {
+      return column.maxWidth;
+    }
+    return Number.POSITIVE_INFINITY;
   }
 
   _markColumnAsUserResized(columnId) {
@@ -1635,7 +1647,9 @@ export class DataTable {
   _applyColumnWidth(columnId, widthPx) {
     if (!columnId || !Number.isFinite(widthPx)) return;
 
-    const w = Math.max(0, Math.round(widthPx));
+    const minWidth = this._getColumnMinWidth(columnId);
+    const maxWidth = this._getColumnMaxWidth(columnId);
+    const w = Math.min(maxWidth, Math.max(minWidth, Math.round(widthPx)));
 
     // Update <col> element (primary width control)
     const col = this.elements.cols?.[columnId];
@@ -1720,13 +1734,16 @@ export class DataTable {
         !(typeof col.width === "string" && col.width.trim().toLowerCase() === "auto");
 
       if (hasFixedWidth) {
+        const minWidth = this._getColumnMinWidth(columnId);
+        const maxWidth = this._getColumnMaxWidth(columnId);
+        const fixed = Math.min(maxWidth, Math.max(minWidth, Number(col.width)));
         if (
-          typeof col.width === "number" &&
-          !Number.isNaN(col.width) &&
-          this.state.columnWidths[columnId] !== col.width
+          typeof fixed === "number" &&
+          !Number.isNaN(fixed) &&
+          this.state.columnWidths[columnId] !== fixed
         ) {
-          this.state.columnWidths[columnId] = col.width;
-          this._applyColumnWidth(columnId, col.width);
+          this.state.columnWidths[columnId] = fixed;
+          this._applyColumnWidth(columnId, fixed);
           didChange = true;
         }
         return;
@@ -1756,6 +1773,7 @@ export class DataTable {
       }
 
       const minWidth = this._getColumnMinWidth(columnId);
+      const maxWidthLimit = this._getColumnMaxWidth(columnId);
       let finalWidth = Math.max(minWidth, maxWidth + padding);
       const previous = this.state.columnWidths[columnId];
 
@@ -1774,6 +1792,8 @@ export class DataTable {
       if (!Number.isFinite(finalWidth)) {
         return;
       }
+
+      finalWidth = Math.min(maxWidthLimit, finalWidth);
 
       if (!Number.isFinite(previous) || Math.abs(previous - finalWidth) > 1) {
         this.state.columnWidths[columnId] = finalWidth;
@@ -1798,6 +1818,11 @@ export class DataTable {
         this.state.columnWidthsLocked = true;
       }
     }
+
+    if (this.options.fitToContainer !== false) {
+      this._fitColumnsToContainer();
+      this.state.hasAutoFitted = true;
+    }
   }
 
   // Snapshot current natural widths for visible columns into state if missing
@@ -1818,8 +1843,7 @@ export class DataTable {
     if (typeof sum === "number") {
       this.state.tableWidth = sum;
 
-      // Auto-fit columns to container if they overflow (only on initial load)
-      if (!this.state.hasAutoFitted && this.options.fitToContainer !== false) {
+      if (this.options.fitToContainer !== false) {
         this._fitColumnsToContainer();
         this.state.hasAutoFitted = true;
       }
@@ -1888,14 +1912,20 @@ export class DataTable {
           }
 
           const minWidth = this._getColumnMinWidth(col.id);
+          const maxWidth = this._getColumnMaxWidth(col.id);
           // Round down to avoid overflow accumulation, we'll fix remainder on last column
           let scaled = Math.max(minWidth, Math.floor(currentWidth * scaleFactor));
+
+          if (Number.isFinite(maxWidth)) {
+            scaled = Math.min(maxWidth, scaled);
+          }
 
           // On last column, absorb remainder so total matches targetWidth exactly (or as close as min allows)
           if (idx === lastIdx) {
             const remainder = targetWidth - runningTotal;
             // If remainder is less than minWidth, respect minWidth but it may still overflow in extreme cases
-            scaled = Math.max(minWidth, remainder);
+            const capped = Number.isFinite(maxWidth) ? Math.min(maxWidth, remainder) : remainder;
+            scaled = Math.max(minWidth, capped);
           }
 
           runningTotal += scaled;
@@ -1923,7 +1953,10 @@ export class DataTable {
         const currentWidth = this.state.columnWidths[lastCol.id];
         if (typeof currentWidth === "number" && !Number.isNaN(currentWidth)) {
           const gap = targetWidth - totalWidth;
-          const newWidth = currentWidth + gap;
+          const minWidth = this._getColumnMinWidth(lastCol.id);
+          const maxWidth = this._getColumnMaxWidth(lastCol.id);
+          const unclamped = currentWidth + gap;
+          const newWidth = Math.min(maxWidth, Math.max(minWidth, unclamped));
           this.state.columnWidths[lastCol.id] = newWidth;
           this._applyColumnWidth(lastCol.id, newWidth);
         }
