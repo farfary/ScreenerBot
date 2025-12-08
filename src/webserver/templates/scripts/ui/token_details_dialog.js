@@ -1000,59 +1000,277 @@ export class TokenDetailsDialog {
   _buildSecurityContent(token) {
     const scoreClass = this._getScoreClass(token.risk_score);
     const scoreLabel = this._getScoreLabel(token.risk_score);
+    const hasSecurityData = token.risk_score !== null && token.risk_score !== undefined;
 
     return `
       <div class="security-container">
-        <div class="security-header">
-          <div class="security-score ${scoreClass}">
-            <span class="score-value">${token.risk_score ?? "—"}</span>
-            <span class="score-label">${scoreLabel}</span>
-          </div>
-          <div class="security-summary">
-            ${token.security_summary ? `<p>${this._escapeHtml(token.security_summary)}</p>` : ""}
-          </div>
-        </div>
-
-        <div class="security-grid">
-          <div class="security-card">
-            <div class="card-header">Authorities</div>
-            <div class="card-body">
-              <div class="auth-row">
-                <span class="auth-label">Mint Authority</span>
-                ${this._renderAuthority(token.mint_authority)}
-              </div>
-              <div class="auth-row">
-                <span class="auth-label">Freeze Authority</span>
-                ${this._renderAuthority(token.freeze_authority)}
-              </div>
-            </div>
-          </div>
-
-          <div class="security-card">
-            <div class="card-header">Distribution</div>
-            <div class="card-body">
-              <div class="info-row">
-                <span class="info-label">Total Holders</span>
-                <span class="info-value">${token.total_holders ? Utils.formatNumber(token.total_holders) : "—"}</span>
-              </div>
-              <div class="info-row">
-                <span class="info-label">Top 10 Concentration</span>
-                <span class="info-value">${token.top_10_concentration ? Utils.formatPercentValue(token.top_10_concentration) : "—"}</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
+        ${this._buildSecurityHeader(token, scoreClass, scoreLabel, hasSecurityData)}
+        ${this._buildSecurityOverview(token)}
+        ${this._buildAuthoritiesCard(token)}
+        ${this._buildHoldersCard(token)}
+        ${this._buildTransferFeeCard(token)}
         ${this._buildRisksSection(token.security_risks)}
+        ${this._buildTopHoldersSection(token.top_holders)}
       </div>
     `;
   }
 
-  _renderAuthority(value) {
-    if (value === null || value === undefined || value === "") {
-      return '<span class="auth-status revoked"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Revoked</span>';
+  _buildSecurityHeader(token, scoreClass, scoreLabel, hasSecurityData) {
+    const lastUpdated = token.security_last_updated
+      ? Utils.formatTimestamp(token.security_last_updated)
+      : null;
+
+    return `
+      <div class="security-header">
+        <div class="security-score-container">
+          <div class="security-score ${scoreClass}">
+            <span class="score-value">${token.risk_score ?? "—"}</span>
+            <span class="score-max">/1000</span>
+          </div>
+          <div class="score-info">
+            <span class="score-label ${scoreClass}">${scoreLabel}</span>
+            ${lastUpdated ? `<span class="score-updated">Updated: ${lastUpdated}</span>` : ""}
+          </div>
+        </div>
+        ${token.rugged ? `
+        <div class="rugged-warning">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+          <span>Token flagged as RUGGED</span>
+        </div>
+        ` : ""}
+        ${token.security_summary ? `
+        <div class="security-summary">
+          <p>${this._escapeHtml(token.security_summary)}</p>
+        </div>
+        ` : ""}
+      </div>
+    `;
+  }
+
+  _buildSecurityOverview(token) {
+    const items = [];
+
+    if (token.token_type) {
+      items.push({ label: "Token Type", value: token.token_type, icon: "📦" });
     }
-    return '<span class="auth-status present"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> Present</span>';
+    if (token.total_holders !== null && token.total_holders !== undefined) {
+      items.push({ label: "Total Holders", value: Utils.formatNumber(token.total_holders, { decimals: 0 }), icon: "👥" });
+    }
+    if (token.lp_provider_count !== null && token.lp_provider_count !== undefined) {
+      items.push({ label: "LP Providers", value: Utils.formatNumber(token.lp_provider_count, { decimals: 0 }), icon: "💧" });
+    }
+    if (token.graph_insiders_detected !== null && token.graph_insiders_detected !== undefined) {
+      const insiderClass = token.graph_insiders_detected > 0 ? "warning" : "good";
+      items.push({ label: "Insiders Detected", value: token.graph_insiders_detected, icon: "🔍", class: insiderClass });
+    }
+
+    if (items.length === 0) return "";
+
+    return `
+      <div class="security-overview">
+        ${items.map((item) => `
+          <div class="overview-item ${item.class || ""}">
+            <span class="overview-icon">${item.icon}</span>
+            <span class="overview-value">${item.value}</span>
+            <span class="overview-label">${item.label}</span>
+          </div>
+        `).join("")}
+      </div>
+    `;
+  }
+
+  _buildAuthoritiesCard(token) {
+    return `
+      <div class="security-card">
+        <div class="card-header">
+          <span>Token Authorities</span>
+          <span class="card-subtitle">Control permissions</span>
+        </div>
+        <div class="card-body">
+          <div class="authority-grid">
+            <div class="authority-item">
+              <div class="authority-header">
+                <span class="authority-label">Mint Authority</span>
+                ${this._renderAuthorityBadge(token.mint_authority)}
+              </div>
+              ${token.mint_authority ? `
+              <div class="authority-address">
+                <span class="address-value" title="${token.mint_authority}">${this._formatShortAddress(token.mint_authority)}</span>
+                <button class="btn-copy-mini" onclick="Utils.copyToClipboard('${token.mint_authority}')" title="Copy">📋</button>
+              </div>
+              <div class="authority-warning">Can mint new tokens</div>
+              ` : `<div class="authority-safe">Cannot create new tokens</div>`}
+            </div>
+            <div class="authority-item">
+              <div class="authority-header">
+                <span class="authority-label">Freeze Authority</span>
+                ${this._renderAuthorityBadge(token.freeze_authority)}
+              </div>
+              ${token.freeze_authority ? `
+              <div class="authority-address">
+                <span class="address-value" title="${token.freeze_authority}">${this._formatShortAddress(token.freeze_authority)}</span>
+                <button class="btn-copy-mini" onclick="Utils.copyToClipboard('${token.freeze_authority}')" title="Copy">📋</button>
+              </div>
+              <div class="authority-warning">Can freeze accounts</div>
+              ` : `<div class="authority-safe">Cannot freeze accounts</div>`}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  _buildHoldersCard(token) {
+    const top10Pct = token.top_10_concentration;
+    const creatorPct = token.creator_balance_pct;
+
+    // Determine concentration risk level
+    let concentrationClass = "";
+    let concentrationLabel = "";
+    if (top10Pct !== null && top10Pct !== undefined) {
+      if (top10Pct > 80) {
+        concentrationClass = "danger";
+        concentrationLabel = "Very High Risk";
+      } else if (top10Pct > 60) {
+        concentrationClass = "warning";
+        concentrationLabel = "High";
+      } else if (top10Pct > 40) {
+        concentrationClass = "moderate";
+        concentrationLabel = "Moderate";
+      } else {
+        concentrationClass = "good";
+        concentrationLabel = "Healthy";
+      }
+    }
+
+    return `
+      <div class="security-card">
+        <div class="card-header">
+          <span>Holder Distribution</span>
+          ${concentrationLabel ? `<span class="concentration-badge ${concentrationClass}">${concentrationLabel}</span>` : ""}
+        </div>
+        <div class="card-body">
+          <div class="holder-stats">
+            <div class="holder-stat">
+              <span class="stat-label">Total Holders</span>
+              <span class="stat-value">${token.total_holders ? Utils.formatNumber(token.total_holders, { decimals: 0 }) : "—"}</span>
+            </div>
+            <div class="holder-stat">
+              <span class="stat-label">Top 10 Hold</span>
+              <span class="stat-value ${concentrationClass}">${top10Pct !== null && top10Pct !== undefined ? top10Pct.toFixed(2) + "%" : "—"}</span>
+            </div>
+            ${creatorPct !== null && creatorPct !== undefined ? `
+            <div class="holder-stat">
+              <span class="stat-label">Creator Balance</span>
+              <span class="stat-value ${creatorPct > 10 ? "warning" : ""}">${creatorPct.toFixed(2)}%</span>
+            </div>
+            ` : ""}
+          </div>
+          ${top10Pct !== null && top10Pct !== undefined ? `
+          <div class="concentration-bar">
+            <div class="bar-fill ${concentrationClass}" style="width: ${Math.min(top10Pct, 100)}%"></div>
+            <div class="bar-label">Top 10 holders own ${top10Pct.toFixed(1)}% of supply</div>
+          </div>
+          ` : ""}
+        </div>
+      </div>
+    `;
+  }
+
+  _buildTransferFeeCard(token) {
+    // Only show if token has transfer fee data
+    if (token.transfer_fee_pct === null && token.transfer_fee_pct === undefined) {
+      return "";
+    }
+
+    const hasFee = token.transfer_fee_pct > 0;
+
+    return `
+      <div class="security-card ${hasFee ? "has-fee" : ""}">
+        <div class="card-header">
+          <span>Transfer Fee (Token-2022)</span>
+          ${hasFee ? `<span class="fee-badge">⚠️ ${token.transfer_fee_pct}%</span>` : `<span class="no-fee-badge">✓ No Fee</span>`}
+        </div>
+        <div class="card-body">
+          ${hasFee ? `
+          <div class="fee-details">
+            <div class="fee-row">
+              <span class="fee-label">Fee Percentage</span>
+              <span class="fee-value">${token.transfer_fee_pct}%</span>
+            </div>
+            ${token.transfer_fee_max_amount ? `
+            <div class="fee-row">
+              <span class="fee-label">Max Fee Amount</span>
+              <span class="fee-value">${Utils.formatNumber(token.transfer_fee_max_amount)}</span>
+            </div>
+            ` : ""}
+            ${token.transfer_fee_authority ? `
+            <div class="fee-row">
+              <span class="fee-label">Fee Authority</span>
+              <span class="fee-value mono">${this._formatShortAddress(token.transfer_fee_authority)}</span>
+            </div>
+            ` : ""}
+          </div>
+          <div class="fee-warning">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            <span>A ${token.transfer_fee_pct}% fee is charged on every transfer</span>
+          </div>
+          ` : `
+          <div class="no-fee-info">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
+            <span>No transfer fee configured</span>
+          </div>
+          `}
+        </div>
+      </div>
+    `;
+  }
+
+  _buildTopHoldersSection(topHolders) {
+    if (!topHolders || topHolders.length === 0) {
+      return "";
+    }
+
+    const holderRows = topHolders.slice(0, 10).map((holder, idx) => {
+      const insiderClass = holder.is_insider ? "insider" : "";
+      const ownerLabel = holder.owner_type || "";
+
+      return `
+        <div class="holder-row ${insiderClass}">
+          <span class="holder-rank">#${idx + 1}</span>
+          <span class="holder-address" title="${holder.address}">
+            <a href="https://solscan.io/account/${holder.address}" target="_blank" rel="noopener">${this._formatShortAddress(holder.address)}</a>
+          </span>
+          <span class="holder-pct">${holder.percentage.toFixed(2)}%</span>
+          <div class="holder-bar">
+            <div class="bar-fill" style="width: ${Math.min(holder.percentage, 100)}%"></div>
+          </div>
+          ${holder.is_insider ? `<span class="insider-badge">Insider</span>` : ""}
+          ${ownerLabel ? `<span class="owner-badge">${ownerLabel}</span>` : ""}
+        </div>
+      `;
+    }).join("");
+
+    return `
+      <div class="security-card full-width">
+        <div class="card-header">
+          <span>Top Holders</span>
+          <span class="card-subtitle">${topHolders.length} addresses</span>
+        </div>
+        <div class="card-body">
+          <div class="holders-list">
+            ${holderRows}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  _renderAuthorityBadge(value) {
+    if (value === null || value === undefined || value === "") {
+      return '<span class="auth-badge revoked"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Revoked</span>';
+    }
+    return '<span class="auth-badge present"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> Present</span>';
   }
 
   _buildRisksSection(risks) {

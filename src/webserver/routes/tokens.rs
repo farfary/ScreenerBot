@@ -115,6 +115,15 @@ pub struct TokenPoolInfo {
   pub last_updated_unix: Option<i64>,
 }
 
+/// Top holder info for security display
+#[derive(Debug, Serialize, Clone)]
+pub struct TopHolderInfo {
+  pub address: String,
+  pub percentage: f64,
+  pub is_insider: bool,
+  pub owner_type: Option<String>,
+}
+
 /// Token detail response with enriched data
 #[derive(Debug, Serialize)]
 pub struct TokenDetailResponse {
@@ -190,6 +199,16 @@ pub struct TokenDetailResponse {
   pub top_10_concentration: Option<f64>,
   pub security_risks: Vec<SecurityRisk>,
   pub security_summary: Option<String>,
+  // Additional security fields
+  pub token_type: Option<String>,
+  pub creator_balance_pct: Option<f64>,
+  pub lp_provider_count: Option<i64>,
+  pub graph_insiders_detected: Option<i64>,
+  pub transfer_fee_pct: Option<f64>,
+  pub transfer_fee_max_amount: Option<i64>,
+  pub transfer_fee_authority: Option<String>,
+  pub top_holders: Vec<TopHolderInfo>,
+  pub security_last_updated: Option<i64>,
 
   // Social/Links
   pub websites: Vec<TokenWebsiteLink>,
@@ -692,6 +711,15 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         top_10_concentration: None,
         security_risks: vec![],
         security_summary: None,
+        token_type: None,
+        creator_balance_pct: None,
+        lp_provider_count: None,
+        graph_insiders_detected: None,
+        transfer_fee_pct: None,
+        transfer_fee_max_amount: None,
+        transfer_fee_authority: None,
+        top_holders: vec![],
+        security_last_updated: None,
         websites: vec![],
         socials: vec![],
         pools: vec![],
@@ -813,33 +841,49 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     ),
   );
 
-  // Get security info using async wrapper (prevents blocking async runtime)
+  // Get security info from Token struct
   let security_start = std::time::Instant::now();
-  let (
-    security_score,
-    rugged,
-    mint_authority,
-    freeze_authority,
-    total_holders,
-    top_10_concentration,
-    security_risks,
-  ) = (
-    None,
-    None,
-    None,
-    None,
-    None,
-    None,
-    Vec::<SecurityRisk>::new(),
-  );
+  let security_score = token.security_score;
+  let rugged = Some(token.is_rugged);
+  let mint_authority = token.mint_authority.clone();
+  let freeze_authority = token.freeze_authority.clone();
+  let total_holders = token.total_holders;
+  let top_10_concentration = if !token.top_holders.is_empty() {
+    // Calculate top 10 concentration from top_holders
+    let top_10_pct: f64 = token
+      .top_holders
+      .iter()
+      .take(10)
+      .map(|h| h.pct)
+      .sum();
+    if top_10_pct > 0.0 {
+      Some(top_10_pct)
+    } else {
+      None
+    }
+  } else {
+    None
+  };
+  let security_risks: Vec<SecurityRisk> = token
+    .security_risks
+    .iter()
+    .map(|r| SecurityRisk {
+      name: r.name.clone(),
+      value: r.value.clone(),
+      description: r.description.clone(),
+      score: r.score,
+      level: r.level.clone(),
+    })
+    .collect();
 
   logger::info(
     LogTag::Webserver,
     &format!(
-      "mint={} elapsed={}ms has_score={}",
+      "mint={} elapsed={}ms has_score={} risks_count={}",
       mint,
       security_start.elapsed().as_millis(),
-      security_score.is_some()
+      security_score.is_some(),
+      security_risks.len()
     ),
   );
 
@@ -1117,6 +1161,25 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     top_10_concentration,
     security_risks,
     security_summary,
+    token_type: token.token_type.clone(),
+    creator_balance_pct: token.creator_balance_pct,
+    lp_provider_count: token.lp_provider_count,
+    graph_insiders_detected: token.graph_insiders_detected,
+    transfer_fee_pct: token.transfer_fee_pct,
+    transfer_fee_max_amount: token.transfer_fee_max_amount,
+    transfer_fee_authority: token.transfer_fee_authority.clone(),
+    top_holders: token
+      .top_holders
+      .iter()
+      .take(10)
+      .map(|h| TopHolderInfo {
+        address: h.address.clone(),
+        percentage: h.pct,
+        is_insider: h.insider,
+        owner_type: h.owner.clone(),
+      })
+      .collect(),
+    security_last_updated: token.security_data_last_fetched_at.map(|dt| dt.timestamp()),
     websites,
     socials,
     pools: pool_infos,
