@@ -38,16 +38,29 @@
     });
   }
 
-  function formatCompactNumber(value, digits = 2, fallback = "—") {
+  function formatCompactNumber(value, digitsOrOptions = 2, maybeFallback = "—") {
+    // Support both (value, digits, fallback) and (value, { digits, fallback, prefix })
+    let digits = digitsOrOptions;
+    let fallback = maybeFallback;
+    let prefix = "";
+
+    if (typeof digitsOrOptions === "object" && digitsOrOptions !== null) {
+      digits = digitsOrOptions.digits ?? 2;
+      fallback = digitsOrOptions.fallback ?? "—";
+      prefix = digitsOrOptions.prefix ?? "";
+    }
+
     const num = coerceNumber(value);
     if (!Number.isFinite(num)) {
       return fallback;
     }
 
-    return Intl.NumberFormat("en-US", {
+    const formatted = Intl.NumberFormat("en-US", {
       notation: "compact",
       maximumFractionDigits: digits,
     }).format(num);
+
+    return prefix + formatted;
   }
 
   function formatBooleanFlag(value, unknownLabel = "Unknown") {
