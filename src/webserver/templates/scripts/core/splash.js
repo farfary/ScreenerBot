@@ -29,11 +29,29 @@ class SplashController {
       return;
     }
 
+    // Load and display version
+    this.loadVersion();
+
     // Start rotating status messages
     this.startStatusRotation();
 
     // Check initialization status
     this.checkInitialization();
+  }
+
+  async loadVersion() {
+    try {
+      const response = await fetch('/api/version');
+      if (response.ok) {
+        const data = await response.json();
+        const versionEl = document.getElementById('splashVersion');
+        if (versionEl && data.version) {
+          versionEl.textContent = `v${data.version}`;
+        }
+      }
+    } catch (err) {
+      console.warn("[Splash] Failed to load version:", err);
+    }
   }
 
   startStatusRotation() {

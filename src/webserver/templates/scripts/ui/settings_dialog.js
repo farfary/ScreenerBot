@@ -155,15 +155,15 @@ export class SettingsDialog {
     const updatesBtn = this.dialogEl.querySelector('.settings-nav-item[data-tab="updates"]');
     if (!updatesBtn) return;
     
-    // Remove existing badge
-    const existingBadge = updatesBtn.querySelector('.settings-nav-badge');
-    if (existingBadge) existingBadge.remove();
+    // Remove existing indicator
+    const existingIndicator = updatesBtn.querySelector('.settings-nav-indicator');
+    if (existingIndicator) existingIndicator.remove();
     
     if (globalUpdateState.available) {
-      const badge = document.createElement('span');
-      badge.className = 'settings-nav-badge';
-      badge.textContent = '1';
-      updatesBtn.appendChild(badge);
+      const indicator = document.createElement('span');
+      indicator.className = 'settings-nav-indicator';
+      indicator.title = 'New update available';
+      updatesBtn.appendChild(indicator);
     }
   }
 
@@ -506,14 +506,35 @@ export class SettingsDialog {
         </div>
       </div>
       <style>
-        .settings-nav-badge {
-          background: var(--error-color);
-          color: white;
-          font-size: var(--font-size-xs);
-          font-weight: bold;
-          padding: 2px var(--spacing-xs);
-          border-radius: var(--radius-lg);
+        .settings-nav-indicator {
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: var(--primary-color);
           margin-left: auto;
+          position: relative;
+          animation: pulse-indicator 2s ease-in-out infinite;
+        }
+        
+        .settings-nav-indicator::before {
+          content: '';
+          position: absolute;
+          inset: -4px;
+          border-radius: 50%;
+          border: 2px solid var(--primary-color);
+          opacity: 0;
+          animation: pulse-ring-indicator 2s ease-in-out infinite;
+        }
+        
+        @keyframes pulse-indicator {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.6; }
+        }
+        
+        @keyframes pulse-ring-indicator {
+          0% { transform: scale(0.8); opacity: 0.8; }
+          50% { transform: scale(1.2); opacity: 0.4; }
+          100% { transform: scale(1.4); opacity: 0; }
         }
       </style>
     `;
@@ -1106,7 +1127,7 @@ export class SettingsDialog {
    * Build Updates tab content - Modern design with version history
    */
   _buildUpdatesTab() {
-    const { version, build_number, platform } = this.versionInfo;
+    const { version, platform } = this.versionInfo;
     const state = globalUpdateState;
 
     // Build status section based on current state
@@ -1145,10 +1166,6 @@ export class SettingsDialog {
             </div>
             <div class="version-details">
               <div class="detail-row">
-                <span class="detail-label">Build</span>
-                <span class="detail-value">#${build_number || '?'}</span>
-              </div>
-              <div class="detail-row">
                 <span class="detail-label">Platform</span>
                 <span class="detail-value">${platform || 'Unknown'}</span>
               </div>
@@ -1159,19 +1176,30 @@ export class SettingsDialog {
             </div>
           </div>
 
-          <!-- Version History Section -->
-          <div class="updates-history-section">
-            <div class="history-header" id="historyToggle">
-              <div class="history-title">
-                <i class="icon-history"></i>
-                <span>Version History</span>
+          <!-- System Info Section -->
+          <div class="updates-system-section">
+            <div class="system-header">
+              <div class="system-title">
+                <i class="icon-info"></i>
+                <span>Installation Details</span>
               </div>
-              <i class="icon-chevron-down history-chevron"></i>
             </div>
-            <div class="history-content" id="historyContent">
-              <div class="history-loading">
-                <div class="spinner-small"></div>
-                <span>Loading version history...</span>
+            <div class="system-details">
+              <div class="detail-row">
+                <span class="detail-label">Version</span>
+                <span class="detail-value">v${version}</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Platform</span>
+                <span class="detail-value">${platform || 'Unknown'}</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Release Channel</span>
+                <span class="detail-value">Stable</span>
+              </div>
+              <div class="detail-row">
+                <span class="detail-label">Auto Update</span>
+                <span class="detail-value channel-badge">Enabled</span>
               </div>
             </div>
           </div>
@@ -1368,8 +1396,8 @@ export class SettingsDialog {
       <style>
         .updates-container {
           display: grid;
-          grid-template-columns: 1fr 320px;
-          gap: var(--spacing-md);
+          grid-template-columns: 1fr 420px;
+          gap: var(--spacing-lg);
           height: 100%;
           width: 100%;
         }
@@ -1844,28 +1872,28 @@ export class SettingsDialog {
           letter-spacing: 0.04em;
         }
 
-        /* History Section */
-        .updates-history-section {
+        /* System Info Section */
+        .updates-system-section {
           background: var(--bg-secondary);
           border: 1px solid var(--border-color);
           border-radius: var(--radius-lg);
           overflow: hidden;
+          display: flex;
+          flex-direction: column;
+          flex: 1;
         }
 
-        .history-header {
+        .system-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
           padding: var(--spacing-md);
-          cursor: pointer;
-          transition: background 0.15s ease;
-        }
-
-        .history-header:hover {
           background: var(--bg-card-hover);
+          border-bottom: 1px solid var(--border-color);
+          flex-shrink: 0;
         }
 
-        .history-title {
+        .system-title {
           display: flex;
           align-items: center;
           gap: var(--spacing-sm);
@@ -1874,106 +1902,16 @@ export class SettingsDialog {
           color: var(--text-primary);
         }
 
-        .history-title i {
+        .system-title i {
           color: var(--text-secondary);
           font-size: 1.1rem;
         }
 
-        .history-chevron {
-          color: var(--text-secondary);
-          transition: transform 0.2s ease;
-        }
-
-        .history-header.expanded .history-chevron {
-          transform: rotate(180deg);
-        }
-
-        .history-content {
-          max-height: 0;
-          overflow: hidden;
-          transition: max-height 0.3s ease;
-        }
-
-        .history-content.expanded {
-          max-height: 500px;
-          overflow-y: auto;
-        }
-
-        /* Custom scrollbar for history */
-        .history-content::-webkit-scrollbar {
-          width: 6px;
-        }
-
-        .history-content::-webkit-scrollbar-track {
-          background: var(--bg-primary);
-        }
-
-        .history-content::-webkit-scrollbar-thumb {
-          background: var(--border-color);
-          border-radius: 3px;
-        }
-
-        .history-content::-webkit-scrollbar-thumb:hover {
-          background: var(--text-muted);
-        }
-
-        .history-loading {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: var(--spacing-sm);
+        .system-details {
           padding: var(--spacing-lg);
-          color: var(--text-secondary);
-          font-size: var(--font-size-sm);
-        }
-
-        .history-list {
-          padding: var(--spacing-sm);
           display: flex;
           flex-direction: column;
-          gap: var(--spacing-xs);
-        }
-
-        .history-item {
-          display: flex;
-          gap: var(--spacing-sm);
-          padding: var(--spacing-sm) var(--spacing-sm);
-          background: var(--bg-primary);
-          border-radius: var(--radius-lg);
-          transition: background 0.15s ease;
-        }
-
-        .history-item:hover {
-          background: var(--bg-card-hover);
-        }
-
-        .history-item-version {
-          font-family: var(--font-mono);
-          font-weight: 600;
-          color: var(--text-primary);
-          min-width: 60px;
-        }
-
-        .history-item-date {
-          font-size: var(--font-size-sm);
-          color: var(--text-muted);
-          min-width: 90px;
-        }
-
-        .history-item-notes {
-          font-size: var(--font-size-sm);
-          color: var(--text-secondary);
-          flex: 1;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .history-empty {
-          padding: var(--spacing-lg);
-          text-align: center;
-          color: var(--text-secondary);
-          font-size: var(--font-size-sm);
+          gap: var(--spacing-md);
         }
 
         /* Spinner animations */
@@ -2019,7 +1957,6 @@ export class SettingsDialog {
     const retryBtn = this.dialogEl.querySelector('#retryUpdateBtn');
     const downloadBtn = this.dialogEl.querySelector('#downloadUpdateBtn');
     const installBtn = this.dialogEl.querySelector('#installUpdateBtn');
-    const historyToggle = this.dialogEl.querySelector('#historyToggle');
 
     // Check / Retry Handler
     const handleCheck = async () => {
@@ -2128,78 +2065,6 @@ export class SettingsDialog {
           });
         }
       });
-    }
-
-    // History Toggle Handler
-    if (historyToggle) {
-      historyToggle.addEventListener('click', () => {
-        const content = this.dialogEl.querySelector('#historyContent');
-        const isExpanded = content.classList.toggle('expanded');
-        historyToggle.classList.toggle('expanded', isExpanded);
-        
-        // Load history on first expand
-        if (isExpanded && !this._historyLoaded) {
-          this._loadVersionHistory();
-        }
-      });
-    }
-  }
-
-  /**
-   * Load version history from API
-   */
-  async _loadVersionHistory() {
-    const historyContent = this.dialogEl?.querySelector('#historyContent');
-    if (!historyContent) return;
-
-    try {
-      // Try website API first for full history
-      const response = await fetch('https://screenerbot.io/api/releases/history?limit=15');
-      
-      if (!response.ok) {
-        throw new Error('Failed to fetch version history');
-      }
-
-      const data = await response.json();
-      this._historyLoaded = true;
-
-      if (!data.success || !data.data?.releases?.length) {
-        historyContent.innerHTML = `
-          <div class="history-empty">
-            <i class="icon-archive"></i>
-            <span>No version history available</span>
-          </div>
-        `;
-        return;
-      }
-
-      const releases = data.data.releases;
-      const historyHtml = releases.map(release => {
-        const date = release.publishedAt 
-          ? new Date(release.publishedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
-          : 'N/A';
-        const notes = release.releaseNotes || 'No release notes';
-        const truncatedNotes = notes.length > 80 ? notes.substring(0, 80) + '...' : notes;
-        
-        return `
-          <div class="history-item">
-            <span class="history-item-version">v${Utils.escapeHtml(release.version)}</span>
-            <span class="history-item-date">${date}</span>
-            <span class="history-item-notes" title="${Utils.escapeHtml(notes)}">${Utils.escapeHtml(truncatedNotes)}</span>
-          </div>
-        `;
-      }).join('');
-
-      historyContent.innerHTML = `<div class="history-list">${historyHtml}</div>`;
-
-    } catch (err) {
-      console.error('Failed to load version history:', err);
-      historyContent.innerHTML = `
-        <div class="history-empty">
-          <i class="icon-wifi-off"></i>
-          <span>Unable to load version history</span>
-        </div>
-      `;
     }
   }
 
