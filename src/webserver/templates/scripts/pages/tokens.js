@@ -822,19 +822,19 @@ function createLifecycle() {
                     <div class="row-actions">
                       <button class="btn row-action" data-action="add" data-mint="${Utils.escapeHtml(
                         mint
-                      )}" title="Add to position (DCA)"${disabledAttr}>Add</button>
-                      <button class="btn warning row-action" data-action="sell" data-mint="${Utils.escapeHtml(
+                      )}" title="Add to position (DCA)"${disabledAttr}><i class="icon-plus-circle"></i> Add</button>
+                      <button class="btn row-action" data-action="sell" data-mint="${Utils.escapeHtml(
                         mint
-                      )}" title="Sell (full or % partial)"${disabledAttr}>Sell</button>
+                      )}" title="Sell (full or % partial)"${disabledAttr}><i class="icon-trending-down"></i> Sell</button>
                     </div>
                   `;
                 }
 
                 return `
                   <div class="row-actions">
-                    <button class="btn success row-action" data-action="buy" data-mint="${Utils.escapeHtml(
+                    <button class="btn row-action" data-action="buy" data-mint="${Utils.escapeHtml(
                       mint
-                    )}" title="Buy position"${disabledAttr}>Buy</button>
+                    )}" title="Buy position"${disabledAttr}><i class="icon-shopping-cart"></i> Buy</button>
                   </div>
                 `;
               },

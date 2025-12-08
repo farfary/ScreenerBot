@@ -2,45 +2,59 @@ import { on, off } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 
 /**
- * TradeActionDialog - Compact modal for buy/add/sell actions with preset buttons
+ * TradeActionDialog - Modern modal for buy/add/sell actions
  *
  * Features:
- * - Quick-action preset buttons (25%, 50%, 75%, 100% for sell, etc.)
- * - Custom amount input with validation
+ * - Quick-action preset buttons with visual feedback
+ * - Custom amount input with live validation
  * - Promise-based return value
  * - Keyboard navigation (Enter, Escape)
  * - Focus management and ARIA compliance
+ * - Loading states and transaction feedback
  */
 
 const ACTION_CONFIG = {
   buy: {
-    title: "<i class='icon-shopping-cart'></i> Buy Token",
-    confirmLabel: "Confirm Buy",
-    inputLabel: "Or Custom Amount (SOL):",
+    icon: "shopping-cart",
+    title: "Buy Token",
+    subtitle: "Enter amount in SOL",
+    confirmLabel: "Execute Buy",
+    inputLabel: "Custom Amount",
+    inputPlaceholder: "Enter SOL amount",
     inputHint: "Leave empty for config default",
+    colorClass: "action-buy",
     presets: [
-      { label: "0.005 SOL", value: 0.005, type: "amount" },
-      { label: "0.01 SOL", value: 0.01, type: "amount" },
-      { label: "0.02 SOL", value: 0.02, type: "amount" },
+      { label: "0.005", sublabel: "SOL", value: 0.005, type: "amount" },
+      { label: "0.01", sublabel: "SOL", value: 0.01, type: "amount" },
+      { label: "0.02", sublabel: "SOL", value: 0.02, type: "amount" },
+      { label: "0.05", sublabel: "SOL", value: 0.05, type: "amount" },
     ],
   },
   sell: {
-    title: '<i class="icon-dollar-sign"></i> Sell Position',
-    confirmLabel: "Confirm Sell",
-    inputLabel: "Or Custom Percentage:",
+    icon: "trending-down",
+    title: "Sell Position",
+    subtitle: "Select sell percentage",
+    confirmLabel: "Execute Sell",
+    inputLabel: "Custom Percentage",
+    inputPlaceholder: "1-100",
     inputHint: "Enter value between 1-100",
+    colorClass: "action-sell",
     presets: [
-      { label: "25%", value: 25, type: "percentage" },
-      { label: "50%", value: 50, type: "percentage" },
-      { label: "75%", value: 75, type: "percentage" },
-      { label: "100%", value: 100, type: "percentage", default: true },
+      { label: "25%", sublabel: "Partial", value: 25, type: "percentage" },
+      { label: "50%", sublabel: "Half", value: 50, type: "percentage" },
+      { label: "75%", sublabel: "Most", value: 75, type: "percentage" },
+      { label: "100%", sublabel: "Full Exit", value: 100, type: "percentage", default: true },
     ],
   },
   add: {
-    title: "<i class='icon-circle-plus'></i> Add to Position",
-    confirmLabel: "Confirm Add",
-    inputLabel: "Or Custom Amount (SOL):",
-    inputHint: "Leave empty for default (50%)",
+    icon: "plus-circle",
+    title: "Add to Position",
+    subtitle: "DCA into existing position",
+    confirmLabel: "Add Position",
+    inputLabel: "Custom Amount",
+    inputPlaceholder: "Enter SOL amount",
+    inputHint: "Leave empty for 50% of original entry",
+    colorClass: "action-add",
     presets: [], // Dynamic, built from context
   },
 };
@@ -50,6 +64,7 @@ export class TradeActionDialog {
     this.root = null;
     this.dialog = null;
     this.titleEl = null;
+    this.subtitleEl = null;
     this.contextEl = null;
     this.presetContainers = [];
     this.inputField = null;
@@ -60,6 +75,7 @@ export class TradeActionDialog {
     this._presetButtons = []; // Track preset buttons for cleanup
 
     this._isOpen = false;
+    this._isLoading = false;
     this._previousActiveElement = null;
     this._resolveOpen = null;
 
@@ -91,22 +107,50 @@ export class TradeActionDialog {
     overlay.innerHTML = `
       <div class="trade-action-dialog" role="dialog" aria-modal="true" aria-labelledby="trade-action-title" tabindex="-1">
         <header class="trade-action-header">
-          <h2 id="trade-action-title" class="trade-action-title"></h2>
-          <button type="button" class="trade-action-close" data-action="close" aria-label="Close dialog">&times;</button>
+          <div class="trade-action-header-content">
+            <div class="trade-action-icon-wrapper">
+              <svg class="trade-action-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+              </svg>
+            </div>
+            <div class="trade-action-title-group">
+              <h2 id="trade-action-title" class="trade-action-title"></h2>
+              <p class="trade-action-subtitle"></p>
+            </div>
+          </div>
+          <button type="button" class="trade-action-close" data-action="close" aria-label="Close dialog">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M18 6L6 18M6 6l12 12"/>
+            </svg>
+          </button>
         </header>
         <div class="trade-action-body">
           <div class="trade-action-context"></div>
           <div class="trade-action-presets"></div>
           <div class="trade-action-input-section">
             <label class="trade-action-input-label" for="trade-action-input"></label>
-            <input type="number" id="trade-action-input" class="trade-action-input" step="any" min="0" />
+            <div class="trade-action-input-wrapper">
+              <input type="number" id="trade-action-input" class="trade-action-input" step="any" min="0" />
+              <span class="trade-action-input-suffix">SOL</span>
+            </div>
             <div class="trade-action-input-hint"></div>
-            <div class="trade-action-error-msg" data-visible="false"></div>
+            <div class="trade-action-error-msg" data-visible="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 8v4M12 16h.01"/>
+              </svg>
+              <span class="trade-action-error-text"></span>
+            </div>
           </div>
         </div>
         <footer class="trade-action-footer">
-          <button type="button" class="trade-action-btn trade-action-btn-cancel" data-action="cancel">Cancel</button>
-          <button type="button" class="trade-action-btn trade-action-btn-confirm" data-action="confirm" disabled>Confirm</button>
+          <button type="button" class="trade-action-btn trade-action-btn-cancel" data-action="cancel">
+            Cancel
+          </button>
+          <button type="button" class="trade-action-btn trade-action-btn-confirm" data-action="confirm" disabled>
+            <span class="btn-text">Confirm</span>
+            <span class="btn-loader"></span>
+          </button>
         </footer>
       </div>
     `;
@@ -116,12 +160,16 @@ export class TradeActionDialog {
     this.root = overlay;
     this.dialog = overlay.querySelector(".trade-action-dialog");
     this.titleEl = overlay.querySelector(".trade-action-title");
+    this.subtitleEl = overlay.querySelector(".trade-action-subtitle");
+    this.iconWrapper = overlay.querySelector(".trade-action-icon-wrapper");
     this.contextEl = overlay.querySelector(".trade-action-context");
     this.presetsContainer = overlay.querySelector(".trade-action-presets");
     this.inputField = overlay.querySelector(".trade-action-input");
+    this.inputSuffix = overlay.querySelector(".trade-action-input-suffix");
     this.inputLabelEl = overlay.querySelector(".trade-action-input-label");
     this.inputHintEl = overlay.querySelector(".trade-action-input-hint");
     this.errorEl = overlay.querySelector(".trade-action-error-msg");
+    this.errorTextEl = overlay.querySelector(".trade-action-error-text");
     this.confirmBtn = overlay.querySelector('[data-action="confirm"]');
     this.cancelBtn = overlay.querySelector('[data-action="cancel"]');
     this.closeBtn = overlay.querySelector('[data-action="close"]');
@@ -160,6 +208,7 @@ export class TradeActionDialog {
     this.currentAction = action;
     this.currentContext = context;
     this._selectedPreset = null;
+    this._isLoading = false;
 
     // Create promise before rendering
     const resultPromise = new Promise((resolve) => {
@@ -169,7 +218,7 @@ export class TradeActionDialog {
     // Render content
     this._render(action, symbol, context);
 
-    // Show dialog
+    // Show dialog with animation
     this.root.classList.add("is-visible");
     this.root.setAttribute("aria-hidden", "false");
     document.body.classList.add("trade-action-dialog-open");
@@ -265,56 +314,93 @@ export class TradeActionDialog {
   _render(action, symbol, context) {
     const config = ACTION_CONFIG[action];
 
-    // Set title
+    // Set action-specific class on dialog
+    this.dialog.className = `trade-action-dialog ${config.colorClass}`;
+
+    // Update icon based on action
+    const iconSvg = this._getActionIcon(config.icon);
+    this.iconWrapper.innerHTML = iconSvg;
+
+    // Set title and subtitle
     this.titleEl.textContent = config.title;
+    this.subtitleEl.textContent = config.subtitle;
 
     // Render context info
     this._renderContext(action, symbol, context);
 
     // Build and render presets
     const presets = this._buildPresets(action, context);
-    this._renderPresets(presets);
+    this._renderPresets(presets, action);
 
-    // Set input labels
+    // Set input labels and state
     this.inputLabelEl.textContent = config.inputLabel;
     this.inputHintEl.textContent = config.inputHint;
     this.inputField.value = "";
-    this.inputField.placeholder =
-      action === "sell" ? "1-100" : action === "buy" ? "e.g. 0.01" : "e.g. 0.005";
+    this.inputField.placeholder = config.inputPlaceholder;
+    
+    // Update input suffix based on action
+    this.inputSuffix.textContent = action === "sell" ? "%" : "SOL";
+    this.inputSuffix.style.display = "block";
 
-    // Set confirm button label
-    this.confirmBtn.textContent = config.confirmLabel;
+    // Set confirm button label and reset loading state
+    const btnText = this.confirmBtn.querySelector(".btn-text");
+    if (btnText) btnText.textContent = config.confirmLabel;
     this.confirmBtn.disabled = true;
+    this.confirmBtn.classList.remove("loading");
 
     // Clear error
     this._clearError();
   }
 
+  _getActionIcon(iconName) {
+    const icons = {
+      "shopping-cart": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/>
+        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>
+      </svg>`,
+      "trending-down": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/>
+      </svg>`,
+      "plus-circle": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/>
+      </svg>`,
+    };
+    return icons[iconName] || icons["shopping-cart"];
+  }
+
   _renderContext(action, symbol, context) {
     const rows = [];
 
+    // Token info with symbol highlight
     rows.push(`
-      <div class="trade-action-context-row">
-        <span class="trade-action-context-label">Token:</span>
-        <span class="trade-action-context-value">${Utils.escapeHtml(symbol || "?")}</span>
+      <div class="trade-action-context-item">
+        <span class="trade-action-context-label">Token</span>
+        <span class="trade-action-context-value trade-action-symbol">${Utils.escapeHtml(symbol || "Unknown")}</span>
       </div>
     `);
 
     if (action === "buy" || action === "add") {
       const balance = context.balance != null ? context.balance.toFixed(4) : "—";
+      const balanceClass = context.balance != null && context.balance < 0.01 ? "low-balance" : "";
       rows.push(`
-        <div class="trade-action-context-row">
-          <span class="trade-action-context-label">Balance:</span>
-          <span class="trade-action-context-value">${Utils.escapeHtml(balance)} SOL</span>
+        <div class="trade-action-context-item">
+          <span class="trade-action-context-label">Available</span>
+          <span class="trade-action-context-value ${balanceClass}">
+            <span class="trade-action-balance-amount">${Utils.escapeHtml(balance)}</span>
+            <span class="trade-action-balance-unit">SOL</span>
+          </span>
         </div>
       `);
     }
 
     if (action === "add" && context.currentSize != null) {
       rows.push(`
-        <div class="trade-action-context-row">
-          <span class="trade-action-context-label">Current Size:</span>
-          <span class="trade-action-context-value">${context.currentSize.toFixed(4)} SOL</span>
+        <div class="trade-action-context-item">
+          <span class="trade-action-context-label">Current Position</span>
+          <span class="trade-action-context-value">
+            <span class="trade-action-balance-amount">${context.currentSize.toFixed(4)}</span>
+            <span class="trade-action-balance-unit">SOL</span>
+          </span>
         </div>
       `);
     }
@@ -322,14 +408,14 @@ export class TradeActionDialog {
     if (action === "sell" && context.holdings != null) {
       const formatted = Utils.formatCompactNumber(context.holdings, 2);
       rows.push(`
-        <div class="trade-action-context-row">
-          <span class="trade-action-context-label">Holdings:</span>
-          <span class="trade-action-context-value">${Utils.escapeHtml(formatted)}</span>
+        <div class="trade-action-context-item">
+          <span class="trade-action-context-label">Holdings</span>
+          <span class="trade-action-context-value">${Utils.escapeHtml(formatted)} tokens</span>
         </div>
       `);
     }
 
-    this.contextEl.innerHTML = rows.join("");
+    this.contextEl.innerHTML = `<div class="trade-action-context-grid">${rows.join("")}</div>`;
   }
 
   _buildPresets(action, context) {
@@ -347,22 +433,22 @@ export class TradeActionDialog {
         presets.push(
           {
             label: "1.0×",
+            sublabel: `${context.entrySize.toFixed(3)} SOL`,
             value: context.entrySize,
-            preview: `${context.entrySize.toFixed(3)} SOL`,
             type: "amount",
             group: "multiplier",
           },
           {
             label: "1.5×",
+            sublabel: `${(context.entrySize * 1.5).toFixed(3)} SOL`,
             value: context.entrySize * 1.5,
-            preview: `${(context.entrySize * 1.5).toFixed(3)} SOL`,
             type: "amount",
             group: "multiplier",
           },
           {
             label: "2.0×",
+            sublabel: `${(context.entrySize * 2.0).toFixed(3)} SOL`,
             value: context.entrySize * 2.0,
-            preview: `${(context.entrySize * 2.0).toFixed(3)} SOL`,
             type: "amount",
             group: "multiplier",
           }
@@ -373,7 +459,8 @@ export class TradeActionDialog {
       if (Array.isArray(context.entrySizes) && context.entrySizes.length > 0) {
         context.entrySizes.forEach((size) => {
           presets.push({
-            label: `${size} SOL`,
+            label: `${size}`,
+            sublabel: "SOL",
             value: size,
             type: "amount",
             group: "entry",
@@ -387,7 +474,7 @@ export class TradeActionDialog {
     return [];
   }
 
-  _renderPresets(presets) {
+  _renderPresets(presets, action) {
     if (!presets || presets.length === 0) {
       this.presetsContainer.innerHTML = "";
       return;
@@ -406,19 +493,14 @@ export class TradeActionDialog {
     const sections = [];
 
     Object.entries(groups).forEach(([groupName, groupPresets]) => {
-      const gridClass =
-        groupPresets.length === 4
-          ? "trade-action-preset-grid--four"
-          : groupPresets.length === 3
-            ? "trade-action-preset-grid--three"
-            : "";
-
       const label =
         groupName === "multiplier"
-          ? "Match Entry Amounts:"
+          ? "Match Entry"
           : groupName === "entry"
-            ? "Position Entry Sizes:"
-            : "Quick Actions:";
+            ? "Fixed Amount"
+            : action === "sell" 
+              ? "Quick Sell"
+              : "Quick Amount";
 
       const buttons = groupPresets
         .map(
@@ -431,8 +513,8 @@ export class TradeActionDialog {
           ${preset.default ? 'data-default="true"' : ""}
           aria-label="Select ${Utils.escapeHtml(preset.label)}"
         >
-          <span>${Utils.escapeHtml(preset.label)}</span>
-          ${preset.preview ? `<span class="trade-action-preset-preview">${Utils.escapeHtml(preset.preview)}</span>` : ""}
+          <span class="preset-label">${Utils.escapeHtml(preset.label)}</span>
+          ${preset.sublabel ? `<span class="preset-sublabel">${Utils.escapeHtml(preset.sublabel)}</span>` : ""}
         </button>
       `
         )
@@ -441,7 +523,7 @@ export class TradeActionDialog {
       sections.push(`
         <div class="trade-action-preset-section">
           <div class="trade-action-section-label">${label}</div>
-          <div class="trade-action-preset-grid ${gridClass}">
+          <div class="trade-action-preset-grid">
             ${buttons}
           </div>
         </div>
@@ -558,7 +640,9 @@ export class TradeActionDialog {
   }
 
   _showError(message) {
-    this.errorEl.textContent = message;
+    if (this.errorTextEl) {
+      this.errorTextEl.textContent = message;
+    }
     this.errorEl.setAttribute("data-visible", "true");
     this.inputField.classList.add("error");
     this.confirmBtn.disabled = true;
@@ -569,7 +653,26 @@ export class TradeActionDialog {
     this.inputField.classList.remove("error");
   }
 
+  _setLoading(loading) {
+    this._isLoading = loading;
+    if (loading) {
+      this.confirmBtn.classList.add("loading");
+      this.confirmBtn.disabled = true;
+      this.cancelBtn.disabled = true;
+      this.inputField.disabled = true;
+      this._presetButtons.forEach((btn) => (btn.disabled = true));
+    } else {
+      this.confirmBtn.classList.remove("loading");
+      this.cancelBtn.disabled = false;
+      this.inputField.disabled = false;
+      this._presetButtons.forEach((btn) => (btn.disabled = false));
+      this._updateConfirmButton();
+    }
+  }
+
   _handleConfirmClick() {
+    if (this._isLoading) return;
+
     const value = this._getInputValue();
 
     // Validate

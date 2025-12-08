@@ -292,12 +292,71 @@
 /* Row actions */
 .row-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
+  align-items: center;
 }
 
 .row-action {
-  padding: 4px 10px;
-  font-size: 0.8rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 6px 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.row-action:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--border-light);
+}
+
+/* Details button - subtle neutral */
+.row-action[data-action="details"] {
+  background: rgba(100, 116, 139, 0.1);
+  color: var(--text-secondary);
+  border-color: rgba(100, 116, 139, 0.2);
+}
+
+.row-action[data-action="details"]:hover {
+  background: rgba(100, 116, 139, 0.2);
+  color: var(--text-primary);
+  border-color: rgba(100, 116, 139, 0.3);
+}
+
+/* Trade button - accent color */
+.row-action[data-action="trade"] {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.row-action[data-action="trade"]:hover {
+  background: rgba(59, 130, 246, 0.25);
+  color: #93c5fd;
+  border-color: rgba(59, 130, 246, 0.5);
+}
+
+/* Icon in button */
+.row-action i {
+  font-size: 0.85em;
+}
+
+/* Disabled state */
+.row-action:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  pointer-events: none;
 }
 
 /* Value coloring */

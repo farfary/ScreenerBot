@@ -1367,6 +1367,15 @@ export class TokenDetailsDialog {
       });
     });
 
+    // Handle add buttons in position cards (DCA)
+    content.querySelectorAll(".btn-position-add").forEach((btn) => {
+      btn.addEventListener("click", async (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        await this._handleBuyClick();
+      });
+    });
+
     // Handle copy buttons
     content.querySelectorAll(".btn-copy-mini").forEach((btn) => {
       btn.addEventListener("click", (e) => {
@@ -1439,6 +1448,10 @@ export class TokenDetailsDialog {
             ${pos.transaction_entry_verified ? `<span class="position-badge verified">✓ Verified</span>` : ""}
           </div>
           <div class="position-actions">
+            <button class="btn-position-add" data-mint="${pos.mint}" title="Add to position (DCA)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8M8 12h8"/></svg>
+              Add
+            </button>
             <button class="btn-position-sell" data-mint="${pos.mint}" title="Sell position">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
               Sell

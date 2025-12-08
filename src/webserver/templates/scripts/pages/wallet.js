@@ -514,8 +514,8 @@ function createLifecycle() {
 
           return `
             <div class="row-actions">
-              <button class="btn row-action" data-action="details" data-mint="${escapeHtml(mint)}" title="View Details">Details</button>
-              <button class="btn row-action" data-action="trade" data-mint="${escapeHtml(mint)}" title="Trade">Trade</button>
+              <button class="btn row-action" data-action="details" data-mint="${escapeHtml(mint)}" title="View Details"><i class="icon-info"></i> Details</button>
+              <button class="btn row-action" data-action="trade" data-mint="${escapeHtml(mint)}" title="Trade"><i class="icon-repeat"></i> Trade</button>
             </div>
           `;
         },
