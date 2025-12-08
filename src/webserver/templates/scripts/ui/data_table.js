@@ -1044,12 +1044,10 @@ export class DataTable {
       this.documentClickHandler = null;
     }
 
-    // Remove resize handlers ONLY if no active resize operation
-    // This prevents cursor getting stuck when table re-renders during column resize
-    if (!this.resizing) {
-      document.removeEventListener("mousemove", this._handleResize);
-      document.removeEventListener("mouseup", this._handleResizeEnd);
-    }
+    // Always remove resize handlers to prevent accumulation
+    // The handlers will be re-added in the resize start handler if needed
+    document.removeEventListener("mousemove", this._handleResize);
+    document.removeEventListener("mouseup", this._handleResizeEnd);
 
     if (this._paginationScrollRAF !== null) {
       cancelAnimationFrame(this._paginationScrollRAF);
@@ -1596,11 +1594,13 @@ export class DataTable {
     });
   }
 
-  _arraysEqual(a = [], b = []) {
-    if (a.length !== b.length) {
+  _arraysEqual(a, b) {
+    const arrA = Array.isArray(a) ? a : [];
+    const arrB = Array.isArray(b) ? b : [];
+    if (arrA.length !== arrB.length) {
       return false;
     }
-    return a.every((value, index) => value === b[index]);
+    return arrA.every((value, index) => value === arrB[index]);
   }
 
   _getColumnConfig(columnId) {
@@ -1852,11 +1852,10 @@ export class DataTable {
       }
     });
 
-    // Update table width sum (but don't trigger fitting here)
+    // Update table width sum (fitting and DOM application done by caller)
     const sum = this._computeTableWidthFromState();
     if (typeof sum === "number") {
       this.state.tableWidth = sum;
-      this._applyTableWidth();
     }
   }
 
@@ -2931,7 +2930,7 @@ export class DataTable {
    * @param {boolean} options.render - Re-render table after state reload (default: true)
    */
   setStateKey(newStateKey, options = {}) {
-    if (!newStateKey || typeof newStateKey !== "string") {
+    if (!newStateKey || typeof newStateKey !== "string" || newStateKey.trim().length === 0) {
       this._log("error", "Invalid stateKey provided", { newStateKey });
       return;
     }
@@ -3246,6 +3245,8 @@ export class DataTable {
           if (this.state.visibleColumns[colId] !== newVisibility) {
             this.state.visibleColumns[colId] = newVisibility;
             hasChanges = true;
+            // Reset hasAutoFitted when visibility changes so columns re-fit
+            this.state.hasAutoFitted = false;
           }
         }
       });
@@ -3361,9 +3362,8 @@ export class DataTable {
     // Re-render table structure with new columns
     if (preserveData && this.state.data.length > 0) {
       // Re-apply filters with new columns (some filter functions may reference column IDs)
+      // Note: _applyFilters() already calls _renderTable() internally
       this._applyFilters();
-      // Re-render table with existing data
-      this._renderTable();
     } else {
       // Just re-render empty table
       this._renderTable();
