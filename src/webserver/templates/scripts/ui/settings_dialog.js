@@ -1478,15 +1478,15 @@ export class SettingsDialog {
           position: absolute;
           top: var(--spacing-sm);
           right: var(--spacing-sm);
-          background: var(--primary-color);
+          background: linear-gradient(135deg, var(--primary-color), #58c4dc);
           color: white;
           font-size: 0.625rem;
           font-weight: 700;
           text-transform: uppercase;
           letter-spacing: 0.06em;
-          padding: 4px 12px;
+          padding: 4px 10px;
           border-radius: var(--radius-xl);
-          box-shadow: 0 2px 8px var(--primary-alpha-30);
+          box-shadow: 0 2px 8px var(--primary-alpha-40);
         }
 
         /* Status Visual */
@@ -1543,26 +1543,31 @@ export class SettingsDialog {
           align-items: center;
           gap: var(--spacing-md);
           font-family: var(--font-mono);
-          font-size: 1.25rem;
           margin: var(--spacing-md) 0;
+          padding: var(--spacing-sm) var(--spacing-lg);
+          background: var(--bg-primary);
+          border-radius: var(--radius-md);
+          border: 1px solid var(--border-color);
         }
 
         .version-transition .old-version {
           color: var(--text-muted);
           text-decoration: line-through;
-          opacity: 0.6;
-          font-size: 1rem;
+          opacity: 0.7;
+          font-size: 0.875rem;
+          font-weight: 500;
         }
 
         .version-transition .new-version {
           color: var(--success-color);
           font-weight: 700;
-          font-size: 1.5rem;
+          font-size: 1.125rem;
         }
 
         .version-transition i {
-          color: var(--primary-color);
-          font-size: 1.2rem;
+          color: var(--text-secondary);
+          font-size: 0.875rem;
+          opacity: 0.6;
         }
 
         /* Status Content */
@@ -1589,30 +1594,41 @@ export class SettingsDialog {
         /* Release Notes Preview */
         .release-notes-preview {
           width: 100%;
-          max-width: 500px;
+          max-width: 400px;
           text-align: left;
           background: var(--bg-primary);
           border: 1px solid var(--border-color);
-          border-radius: var(--radius-lg);
-          padding: var(--spacing-md);
-          margin-top: var(--spacing-md);
+          border-radius: var(--radius-md);
+          padding: var(--spacing-sm) var(--spacing-md);
         }
 
         .release-notes-preview h4 {
-          margin: 0 0 var(--spacing-sm);
+          margin: 0 0 var(--spacing-xs);
           font-size: 0.625rem;
           font-weight: 600;
           text-transform: uppercase;
-          letter-spacing: 0.06em;
+          letter-spacing: 0.05em;
           color: var(--text-secondary);
+          display: flex;
+          align-items: center;
+          gap: var(--spacing-xs);
+        }
+
+        .release-notes-preview h4::before {
+          content: '';
+          display: inline-block;
+          width: 2px;
+          height: 10px;
+          background: var(--primary-color);
+          border-radius: 1px;
         }
 
         .release-notes-preview .notes-text {
-          font-size: var(--font-size-sm);
+          font-size: 0.8125rem;
           color: var(--text-primary);
-          line-height: 1.6;
+          line-height: 1.5;
           white-space: pre-wrap;
-          max-height: 150px;
+          max-height: 80px;
           overflow-y: auto;
         }
 
@@ -1628,7 +1644,11 @@ export class SettingsDialog {
         /* Download Progress */
         .download-progress {
           width: 100%;
-          max-width: 500px;
+          max-width: 400px;
+          background: var(--bg-primary);
+          border: 1px solid var(--border-color);
+          border-radius: var(--radius-md);
+          padding: var(--spacing-md);
         }
 
         .progress-header {
@@ -1639,15 +1659,17 @@ export class SettingsDialog {
         }
 
         .progress-status {
-          font-size: var(--font-size-sm);
-          color: var(--text-secondary);
+          font-size: 0.8125rem;
+          color: var(--text-primary);
+          font-weight: 500;
         }
 
         .progress-stats {
           display: flex;
           gap: var(--spacing-sm);
           font-family: var(--font-mono);
-          font-size: var(--font-size-sm);
+          font-size: 0.75rem;
+          align-items: center;
         }
 
         #downloadPercentText {
@@ -1660,16 +1682,15 @@ export class SettingsDialog {
         }
 
         .progress-track {
-          height: 10px;
-          background: var(--bg-primary);
-          border: 1px solid var(--border-color);
+          height: 8px;
+          background: var(--bg-card-hover);
           border-radius: var(--radius-md);
           overflow: hidden;
         }
 
         .progress-fill {
           height: 100%;
-          background: linear-gradient(90deg, var(--primary-color), var(--primary-hover));
+          background: linear-gradient(90deg, var(--primary-color), #58c4dc);
           border-radius: var(--radius-sm);
           transition: width 0.3s ease;
           position: relative;
@@ -1680,21 +1701,22 @@ export class SettingsDialog {
           right: 0;
           top: 0;
           bottom: 0;
-          width: 30px;
-          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3));
+          width: 40px;
+          background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
           animation: progress-shimmer 1.5s ease-in-out infinite;
         }
 
         @keyframes progress-shimmer {
-          0%, 100% { opacity: 0.5; }
+          0% { transform: translateX(-100%); opacity: 0; }
           50% { opacity: 1; }
+          100% { transform: translateX(100%); opacity: 0; }
         }
 
         .progress-footer {
           display: flex;
           justify-content: space-between;
           margin-top: var(--spacing-xs);
-          font-size: var(--font-size-xs);
+          font-size: 0.75rem;
           color: var(--text-muted);
           font-family: var(--font-mono);
         }
@@ -2490,12 +2512,24 @@ export class SettingsDialog {
     
     this.downloadPoller.start();
   }
+
+  /**
+   * Switch to a specific tab
+   */
+  switchToTab(tabId) {
+    if (!this.dialogEl) return;
+    
+    const navItem = this.dialogEl.querySelector(`.settings-nav-item[data-tab="${tabId}"]`);
+    if (navItem) {
+      navItem.click();
+    }
+  }
 }
 
 // Singleton instance for easy access
 let settingsDialogInstance = null;
 
-export function showSettingsDialog() {
+export async function showSettingsDialog(options = {}) {
   if (!settingsDialogInstance) {
     settingsDialogInstance = new SettingsDialog({
       onClose: () => {
@@ -2503,7 +2537,15 @@ export function showSettingsDialog() {
       },
     });
   }
-  settingsDialogInstance.show();
+  await settingsDialogInstance.show();
+  
+  // Switch to specific tab if requested (after dialog is shown)
+  if (options.tab) {
+    // Small delay to ensure DOM is ready
+    setTimeout(() => {
+      settingsDialogInstance.switchToTab(options.tab);
+    }, 100);
+  }
 }
 
 export function closeSettingsDialog() {
@@ -2511,3 +2553,81 @@ export function closeSettingsDialog() {
     settingsDialogInstance.close();
   }
 }
+
+/**
+ * Check for updates and auto-show dialog if update available
+ * Called after dashboard is fully loaded
+ */
+export async function checkAndShowUpdateDialog() {
+  // Don't check in CLI mode (no auto-updates)
+  if (!window.__SCREENERBOT_GUI_MODE) {
+    return;
+  }
+
+  try {
+    // First check current status
+    let response = await fetch('/api/updates/status');
+    if (!response.ok) return;
+    
+    let data = await response.json();
+    let state = data.state || data;
+    
+    // If no check has happened yet, trigger one
+    if (!state.last_check && !state.available_update) {
+      console.log('[SettingsDialog] No update check done yet, triggering check...');
+      const checkResponse = await fetch('/api/updates/check');
+      if (checkResponse.ok) {
+        const checkData = await checkResponse.json();
+        // Update state from check response
+        if (checkData.update_available && checkData.update) {
+          state = {
+            available_update: checkData.update,
+            last_check: checkData.last_check,
+            download_progress: state.download_progress || {}
+          };
+        }
+      }
+    }
+    
+    // Check if update is available or downloading
+    if (state.available_update || state.download_progress?.downloading) {
+      console.log('[SettingsDialog] Update available, showing dialog...');
+      
+      // Update global state
+      globalUpdateState.available = true;
+      globalUpdateState.info = state.available_update;
+      
+      if (state.download_progress?.downloading) {
+        globalUpdateState.downloading = true;
+        globalUpdateState.progress = state.download_progress.progress_percent || 0;
+      }
+      
+      // Show settings dialog with Updates tab selected
+      await showSettingsDialog({ tab: 'updates' });
+    }
+  } catch (err) {
+    console.warn('[SettingsDialog] Failed to check for updates on startup:', err);
+  }
+}
+
+// Auto-check for updates when dashboard is ready
+// Use dynamic import to avoid circular dependencies and ensure bootstrap is loaded
+(async function initUpdateCheck() {
+  if (typeof window === 'undefined' || !window.__SCREENERBOT_GUI_MODE) {
+    return;
+  }
+
+  try {
+    // Dynamically import bootstrap to get waitForReady
+    const { waitForReady } = await import('../core/bootstrap.js');
+    
+    // Wait for dashboard to be ready
+    await waitForReady();
+    
+    // Small delay to ensure UI is fully rendered
+    setTimeout(checkAndShowUpdateDialog, 1500);
+  } catch (err) {
+    console.warn('[SettingsDialog] Failed to initialize update check:', err);
+  }
+})();
+
