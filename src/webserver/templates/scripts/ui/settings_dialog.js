@@ -471,16 +471,16 @@ export class SettingsDialog {
               <span>About</span>
             </button>
             <div class="settings-nav-divider"></div>
-            <a href="https://screenerbot.io/privacy" target="_blank" rel="noopener" class="settings-nav-item settings-nav-link">
+            <button class="settings-nav-item settings-nav-link" data-external-url="https://screenerbot.io/privacy">
               <i class="icon-shield"></i>
               <span>Privacy Policy</span>
               <i class="icon-external-link settings-nav-external"></i>
-            </a>
-            <a href="https://screenerbot.io/terms" target="_blank" rel="noopener" class="settings-nav-item settings-nav-link">
+            </button>
+            <button class="settings-nav-item settings-nav-link" data-external-url="https://screenerbot.io/terms">
               <i class="icon-file-text"></i>
               <span>Terms of Service</span>
               <i class="icon-external-link settings-nav-external"></i>
-            </a>
+            </button>
           </nav>
 
           <div class="settings-content">
@@ -564,13 +564,24 @@ export class SettingsDialog {
     const saveBtn = this.dialogEl.querySelector("#settingsSaveBtn");
     saveBtn.addEventListener("click", () => this._saveSettings());
 
-    // Tab navigation
-    const tabButtons = this.dialogEl.querySelectorAll(".settings-nav-item");
+    // Tab navigation (exclude external links)
+    const tabButtons = this.dialogEl.querySelectorAll(".settings-nav-item:not(.settings-nav-link)");
     tabButtons.forEach((btn) => {
       btn.addEventListener("click", () => {
         const tab = btn.dataset.tab;
         if (tab && tab !== this.currentTab) {
           this._switchTab(tab);
+        }
+      });
+    });
+
+    // External links (Privacy Policy, Terms of Service)
+    const externalLinks = this.dialogEl.querySelectorAll(".settings-nav-link[data-external-url]");
+    externalLinks.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const url = btn.dataset.externalUrl;
+        if (url) {
+          Utils.openExternal(url);
         }
       });
     });
@@ -620,6 +631,7 @@ export class SettingsDialog {
         break;
       case "licenses":
         content.innerHTML = this._buildLicensesTab();
+        this._attachLicensesHandlers(content);
         break;
       case "about":
         content.innerHTML = this._buildAboutTab();
@@ -2069,9 +2081,36 @@ export class SettingsDialog {
   }
 
   /**
+   * Attach handlers for Licenses tab
+   */
+  _attachLicensesHandlers(content) {
+    // External links (license project URLs)
+    const externalLinks = content.querySelectorAll("[data-external-url]");
+    externalLinks.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const url = btn.dataset.externalUrl;
+        if (url) {
+          Utils.openExternal(url);
+        }
+      });
+    });
+  }
+
+  /**
    * Attach handlers for About tab
    */
   _attachAboutHandlers(content) {
+    // External links (GitHub, Docs, Discord)
+    const externalLinks = content.querySelectorAll("[data-external-url]");
+    externalLinks.forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const url = btn.dataset.externalUrl;
+        if (url) {
+          Utils.openExternal(url);
+        }
+      });
+    });
+
     const openBtn = content.querySelector("#openDataFolderBtn");
     if (openBtn) {
       openBtn.addEventListener("click", async () => {
@@ -2142,7 +2181,7 @@ export class SettingsDialog {
    * Build About tab content
    */
   _buildAboutTab() {
-    const { version, build_number } = this.versionInfo;
+    const { version } = this.versionInfo;
     const paths = this.pathsInfo || {};
     const dataPath = Utils.escapeHtml(paths.data_directory || "Loading data path...");
     const basePath = paths.base_directory ? Utils.escapeHtml(paths.base_directory) : "";
@@ -2155,23 +2194,21 @@ export class SettingsDialog {
         <p class="settings-about-tagline">Advanced Solana Trading Automation</p>
         <div class="settings-about-version">
           <span>v${version}</span>
-          <span class="settings-about-separator">•</span>
-          <span>Build ${build_number}</span>
         </div>
 
         <div class="settings-about-links">
-          <a href="https://github.com/farfary/ScreenerBot" target="_blank" rel="noopener" class="settings-about-link">
+          <button class="settings-about-link" data-external-url="https://github.com/farfary/ScreenerBot">
             <i class="icon-github"></i>
             <span>GitHub</span>
-          </a>
-          <a href="https://docs.screenerbot.app" target="_blank" rel="noopener" class="settings-about-link">
+          </button>
+          <button class="settings-about-link" data-external-url="https://docs.screenerbot.app">
             <i class="icon-book-open"></i>
             <span>Documentation</span>
-          </a>
-          <a href="https://discord.gg/screenerbot" target="_blank" rel="noopener" class="settings-about-link">
+          </button>
+          <button class="settings-about-link" data-external-url="https://discord.gg/screenerbot">
             <i class="icon-message-circle"></i>
             <span>Discord</span>
-          </a>
+          </button>
         </div>
 
         <div class="settings-about-path-card">
@@ -2277,10 +2314,10 @@ export class SettingsDialog {
                 (item) => `
               <div class="license-item">
                 <div class="license-item-header">
-                  <a href="${Utils.escapeHtml(item.url)}" target="_blank" rel="noopener" class="license-item-name">
+                  <button class="license-item-name" data-external-url="${Utils.escapeHtml(item.url)}">
                     ${Utils.escapeHtml(item.name)}
                     <i class="icon-external-link"></i>
-                  </a>
+                  </button>
                   <span class="license-item-badge">${Utils.escapeHtml(item.license)}</span>
                 </div>
                 <p class="license-item-desc">${Utils.escapeHtml(item.desc)}</p>

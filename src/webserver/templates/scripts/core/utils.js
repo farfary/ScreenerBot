@@ -906,16 +906,38 @@
     return lines.join("\n");
   }
 
+  /**
+   * Opens a URL in the default system browser.
+   * Uses Tauri opener API when running in Tauri, falls back to window.open in browser.
+   * @param {string} url - The URL to open
+   */
+  async function openExternal(url) {
+    if (!url) return;
+    
+    // Check if running in Tauri - use opener plugin (Tauri v2)
+    if (window.__TAURI__?.opener?.openUrl) {
+      try {
+        await window.__TAURI__.opener.openUrl(url);
+        return;
+      } catch (err) {
+        console.warn("Tauri opener.openUrl failed, falling back to window.open:", err);
+      }
+    }
+    
+    // Fallback to window.open for browser environment
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
   function openGMGN(mint) {
-    window.open(`https://gmgn.ai/sol/token/${mint}`, "_blank");
+    openExternal(`https://gmgn.ai/sol/token/${mint}`);
   }
 
   function openDexScreener(mint) {
-    window.open(`https://dexscreener.com/solana/${mint}`, "_blank");
+    openExternal(`https://dexscreener.com/solana/${mint}`);
   }
 
   function openSolscan(mint) {
-    window.open(`https://solscan.io/token/${mint}`, "_blank");
+    openExternal(`https://solscan.io/token/${mint}`);
   }
 
   function formatSignatureCompact(signature, options = {}) {
@@ -1038,6 +1060,7 @@
     copyDebugValue,
     copyDebugInfo,
     generateDebugText,
+    openExternal,
     openGMGN,
     openDexScreener,
     openSolscan,
@@ -1091,6 +1114,7 @@ export const {
   copyDebugValue,
   copyDebugInfo,
   generateDebugText,
+  openExternal,
   openGMGN,
   openDexScreener,
   openSolscan,

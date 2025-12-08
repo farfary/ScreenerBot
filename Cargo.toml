@@ -160,6 +160,7 @@ sysinfo = "0.30"
 # GUI - always compiled, use --gui flag at runtime to enable window
 tauri = { version = "2.1", features = ["devtools"] }
 tauri-plugin-shell = "2.0"
+tauri-plugin-opener = "2.0"
 tauri-plugin-global-shortcut = "2.0"
 tauri-plugin-window-state = "2.0"
 raw-window-handle = "0.6"
