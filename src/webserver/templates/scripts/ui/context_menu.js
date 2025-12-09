@@ -743,7 +743,7 @@ class ContextMenuManager {
     this.menuEl.setAttribute("tabindex", "-1");
 
     // Build menu content
-    this._renderItems(this.menuEl, this.items);
+    this._renderItems(this.menuEl, this.items, true);
 
     document.body.appendChild(this.overlayEl);
     document.body.appendChild(this.menuEl);
@@ -752,9 +752,9 @@ class ContextMenuManager {
   /**
    * Render menu items into container
    */
-  _renderItems(container, items) {
+  _renderItems(container, items, isRoot = false) {
     items.forEach((item, index) => {
-      const el = this._createItemElement(item, index);
+      const el = this._createItemElement(item, index, isRoot);
       if (el) {
         container.appendChild(el);
       }
@@ -764,7 +764,7 @@ class ContextMenuManager {
   /**
    * Create individual item element
    */
-  _createItemElement(item, index) {
+  _createItemElement(item, index, isRoot = false) {
     let el;
 
     switch (item.type) {
@@ -826,7 +826,9 @@ class ContextMenuManager {
         if (item.disabled) el.classList.add("disabled");
         el.setAttribute("role", "menuitem");
         el.setAttribute("tabindex", "-1");
-        el.dataset.index = index;
+        if (isRoot) {
+          el.dataset.index = index;
+        }
 
         // Icon
         if (item.icon) {
@@ -875,7 +877,7 @@ class ContextMenuManager {
           const submenuEl = document.createElement("div");
           submenuEl.className = "context-menu-submenu";
           submenuEl.setAttribute("role", "menu");
-          this._renderItems(submenuEl, item.submenu);
+          this._renderItems(submenuEl, item.submenu, false);
           el.appendChild(submenuEl);
 
           // Submenu hover handling
@@ -911,9 +913,11 @@ class ContextMenuManager {
         }
 
         // Hover highlighting
-        el.addEventListener("mouseenter", () => {
-          this._setActiveItem(index);
-        });
+        if (isRoot) {
+          el.addEventListener("mouseenter", () => {
+            this._setActiveItem(index);
+          });
+        }
 
         break;
       }
