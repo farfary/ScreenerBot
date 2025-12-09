@@ -491,6 +491,21 @@ pub fn get_all_strategies() -> Result<Vec<Strategy>, String> {
     Ok(result)
 }
 
+/// Check if any enabled strategies exist for a given type (lightweight check)
+pub fn has_enabled_strategies(strategy_type: StrategyType) -> Result<bool, String> {
+    let conn = get_connection()?;
+
+    let count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM strategies WHERE type = ?1 AND enabled = 1",
+            params![strategy_type.to_string()],
+            |row| row.get(0),
+        )
+        .map_err(|e| format!("Failed to check strategies count: {}", e))?;
+
+    Ok(count > 0)
+}
+
 /// Get enabled strategies by type
 pub fn get_enabled_strategies(strategy_type: StrategyType) -> Result<Vec<Strategy>, String> {
     let conn = get_connection()?;

@@ -7,7 +7,8 @@ use crate::logger::{self, LogTag};
 use crate::pools::PriceResult;
 use crate::positions::Position;
 use crate::strategies;
-use crate::strategies::types::{MarketData, PositionData};
+use crate::strategies::db::has_enabled_strategies;
+use crate::strategies::types::{MarketData, PositionData, StrategyType};
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
 use chrono::Utc;
 
@@ -20,6 +21,19 @@ impl StrategyEvaluator {
     token_mint: &str,
     price_info: &PriceResult,
   ) -> Result<Option<TradeDecision>, String> {
+    // Early check: skip if no entry strategies configured
+    match has_enabled_strategies(StrategyType::Entry) {
+      Ok(false) => return Ok(None),
+      Err(e) => {
+        logger::debug(
+          LogTag::Trader,
+          &format!("Failed to check entry strategies: {}", e),
+        );
+        return Ok(None);
+      }
+      Ok(true) => {} // Continue with evaluation
+    }
+
     // Check connectivity before evaluating - entry depends on external data
     if let Some(unhealthy) =
       crate::connectivity::check_endpoints_healthy(&["rpc", "dexscreener", "rugcheck"]).await
@@ -177,6 +191,19 @@ impl StrategyEvaluator {
     position: &Position,
     current_price: f64,
   ) -> Result<Option<TradeDecision>, String> {
+    // Early check: skip if no exit strategies configured
+    match has_enabled_strategies(StrategyType::Exit) {
+      Ok(false) => return Ok(None),
+      Err(e) => {
+        logger::debug(
+          LogTag::Trader,
+          &format!("Failed to check exit strategies: {}", e),
+        );
+        return Ok(None);
+      }
+      Ok(true) => {} // Continue with evaluation
+    }
+
     // Check connectivity before evaluating - exit depends on fresh price data
     if let Some(unhealthy) =
       crate::connectivity::check_endpoints_healthy(&["rpc", "dexscreener"]).await

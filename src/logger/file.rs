@@ -49,6 +49,22 @@ impl FileLogger {
 
         let file_writer = Some(BufWriter::with_capacity(FILE_BUFFER_SIZE, file));
 
+        // Create/update latest.log symlink for easy access to current log
+        let latest_link = log_dir.join("latest.log");
+        // Remove existing symlink if it exists (ignore errors)
+        let _ = fs::remove_file(&latest_link);
+        // Create new symlink pointing to current log file
+        #[cfg(unix)]
+        {
+            let _ = std::os::unix::fs::symlink(&log_file_path, &latest_link);
+        }
+        #[cfg(windows)]
+        {
+            // On Windows, use hard link or copy as fallback
+            let _ = fs::hard_link(&log_file_path, &latest_link)
+                .or_else(|_| fs::copy(&log_file_path, &latest_link).map(|_| ()));
+        }
+
         Ok(FileLogger {
             file_writer,
             current_date: now.format("%Y-%m-%d").to_string(),
