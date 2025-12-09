@@ -522,9 +522,10 @@ async fn reload_config_from_disk() -> Response {
 
 /// POST /api/config/reset - Reset configuration to defaults
 async fn reset_config_to_defaults() -> Response {
-    let (wallet_key, coingecko_api_key) = config::with_config(|cfg| {
+    let (wallet_encrypted, wallet_nonce, coingecko_api_key) = config::with_config(|cfg| {
         (
-            cfg.main_wallet_private.clone(),
+            cfg.wallet_encrypted.clone(),
+            cfg.wallet_nonce.clone(),
             cfg.tokens.discovery.coingecko.api_key.clone(),
         )
     });
@@ -533,8 +534,9 @@ async fn reset_config_to_defaults() -> Response {
         |cfg| {
             // Keep secrets that are not recoverable via the UI while resetting everything else.
             let mut fresh = config::Config::default();
-            if !wallet_key.is_empty() {
-                fresh.main_wallet_private = wallet_key.clone();
+            if !wallet_encrypted.is_empty() && !wallet_nonce.is_empty() {
+                fresh.wallet_encrypted = wallet_encrypted.clone();
+                fresh.wallet_nonce = wallet_nonce.clone();
             }
             fresh.tokens.discovery.coingecko.api_key = coingecko_api_key.clone();
             *cfg = fresh;
@@ -572,7 +574,9 @@ async fn get_config_diff() -> Response {
                 Ok(disk_config) => {
                     fn sanitize_config_json(value: &mut serde_json::Value) {
                         if let Some(obj) = value.as_object_mut() {
-                            obj.remove("main_wallet_private");
+                            // Remove encrypted wallet fields from comparison output
+                            obj.remove("wallet_encrypted");
+                            obj.remove("wallet_nonce");
                         }
                     }
 

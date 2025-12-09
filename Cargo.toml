@@ -1,6 +1,6 @@
 [package]
 name = "screenerbot"
-version = "0.1.71"
+version = "0.1.72"
 edition = "2021"
 default-run = "screenerbot"
 # Disable automatic binary discovery - we only want the main binary
@@ -98,6 +98,8 @@ r2d2_sqlite = "0.31"
 bs58 = "0.5"
 base64 = "0.22"
 toml = "0.9"
+aes-gcm = "0.10"
+machine-uid = "0.5"
 
 # CLI and logging - minimal features
 clap = { version = "4.0", features = ["derive"] }

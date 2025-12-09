@@ -356,11 +356,27 @@ async fn complete_initialization(Json(request): Json<CompleteInitializationReque
         ),
     );
 
-    // Step 3: Create and save config
-    logger::info(LogTag::Webserver, "Creating configuration...");
+    // Step 3: Encrypt the private key and create config
+    logger::info(LogTag::Webserver, "Encrypting wallet private key...");
+
+    let encrypted = match crate::secure_storage::encrypt_private_key(&request.wallet_private_key) {
+        Ok(enc) => enc,
+        Err(e) => {
+            errors.push(format!("Failed to encrypt private key: {}", e));
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "ENCRYPTION_FAILED",
+                &errors.join("; "),
+                None,
+            );
+        }
+    };
+
+    logger::info(LogTag::Webserver, "Creating configuration with encrypted wallet...");
 
     let config = Config {
-        main_wallet_private: request.wallet_private_key.clone(),
+        wallet_encrypted: encrypted.ciphertext,
+        wallet_nonce: encrypted.nonce,
         rpc: crate::config::schemas::RpcConfig {
             urls: working_rpc_urls,
         },

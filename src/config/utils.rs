@@ -407,7 +407,8 @@ pub fn save_config(path: Option<&str>) -> Result<(), String> {
 /// use screenerbot::config::{save_config_to_file, schemas::Config};
 ///
 /// let config = Config {
-/// main_wallet_private: "base58_key_here".to_string(),
+/// wallet_encrypted: "encrypted_base64".to_string(),
+/// wallet_nonce: "nonce_base64".to_string(),
 /// ..Default::default()
 /// };
 /// save_config_to_file(&config, "data/config.toml", true)?;
@@ -478,39 +479,35 @@ pub fn is_config_initialized() -> bool {
 
 /// Load the main wallet keypair from the configuration
 ///
-/// This function supports multiple private key formats:
-/// - Base58 encoded string (standard Solana format)
-/// - Array format like [1,2,3,4,...] (byte array representation)
-///
-/// The function performs comprehensive validation to ensure the private key
-/// is exactly 64 bytes and can be successfully converted to a Keypair.
+/// The private key is stored encrypted in config. This function:
+/// 1. Reads the encrypted ciphertext and nonce from config
+/// 2. Decrypts using machine-derived key (AES-256-GCM)
+/// 3. Parses the decrypted base58 private key into a Keypair
 ///
 /// # Returns
 /// - `Ok(Keypair)` - Successfully created Solana keypair
-/// - `Err(String)` - Invalid format, wrong length, or parsing error
-///
-/// # Example
-/// ```
-/// use screenerbot::config::get_wallet_keypair;
-///
-/// let wallet = get_wallet_keypair()?;
-/// println!("Wallet public key: {}", wallet.pubkey());
-/// ```
+/// - `Err(String)` - Decryption failed or invalid key format
 pub fn get_wallet_keypair() -> Result<Keypair, String> {
   with_config(|cfg| {
-    let private_key = &cfg.main_wallet_private;
-
-    if private_key.is_empty() {
-      return Err("Main wallet private key is empty in config".to_string());
+    // Check if encrypted wallet data exists
+    if cfg.wallet_encrypted.is_empty() || cfg.wallet_nonce.is_empty() {
+      return Err("Wallet not configured - encrypted private key is missing".to_string());
     }
 
-    // Parse the private key from base58 string or array format
+    // Decrypt the private key
+    let encrypted = crate::secure_storage::EncryptedData {
+      ciphertext: cfg.wallet_encrypted.clone(),
+      nonce: cfg.wallet_nonce.clone(),
+    };
+
+    let private_key = crate::secure_storage::decrypt_private_key(&encrypted)
+      .map_err(|e| format!("Failed to decrypt wallet: {}", e))?;
+
+    // Parse the decrypted private key (base58 or array format)
     let keypair = if private_key.starts_with('[') && private_key.ends_with(']') {
-      // Handle array format like [1,2,3,4,...]
-      load_keypair_from_array_format(private_key)?
+      load_keypair_from_array_format(&private_key)?
     } else {
-      // Handle base58 format
-      load_keypair_from_base58_format(private_key)?
+      load_keypair_from_base58_format(&private_key)?
     };
 
     Ok(keypair)
@@ -711,17 +708,18 @@ where
 pub fn reset_config_to_defaults_preserving_credentials() -> Result<(), String> {
  logger::info(LogTag::System, "Resetting configuration to defaults...");
 
-  // 1. Capture current wallet and RPC URLs
-  let (wallet_key, rpc_urls) =
-    with_config(|cfg| (cfg.main_wallet_private.clone(), cfg.rpc.urls.clone()));
+  // 1. Capture current encrypted wallet and RPC URLs
+  let (wallet_encrypted, wallet_nonce, rpc_urls) =
+    with_config(|cfg| (cfg.wallet_encrypted.clone(), cfg.wallet_nonce.clone(), cfg.rpc.urls.clone()));
 
   // 2. Create fresh config with defaults
   let mut fresh_config = Config::default();
 
   // 3. Restore preserved values
-  if !wallet_key.is_empty() {
-    fresh_config.main_wallet_private = wallet_key;
- logger::info(LogTag::System, "Preserved wallet private key");
+  if !wallet_encrypted.is_empty() && !wallet_nonce.is_empty() {
+    fresh_config.wallet_encrypted = wallet_encrypted;
+    fresh_config.wallet_nonce = wallet_nonce;
+ logger::info(LogTag::System, "Preserved encrypted wallet");
   }
 
   if !rpc_urls.is_empty() {

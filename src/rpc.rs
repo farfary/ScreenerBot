@@ -5853,7 +5853,8 @@ pub async fn test_rpc_endpoints(urls: &[String]) -> Vec<RpcEndpointTestResult> {
 /// Backward compatibility structure for old config access patterns
 #[derive(Debug, Clone)]
 pub struct BackwardCompatibleConfig {
-  pub main_wallet_private: String,
+  pub wallet_encrypted: String,
+  pub wallet_nonce: String,
   pub rpc_url: String,
   pub rpc_url_premium: String,
   pub rpc_url_ws_premium: String,

@@ -43,8 +43,11 @@ pub use wallet::*;
 config_struct! {
     /// Root configuration structure containing all sub-configurations
     pub struct Config {
-        /// Main wallet private key (base58 or array format)
-        main_wallet_private: String = String::new(),
+        /// Encrypted wallet private key (base64-encoded AES-256-GCM ciphertext)
+        wallet_encrypted: String = String::new(),
+
+        /// Nonce for wallet encryption (base64-encoded 12-byte nonce)
+        wallet_nonce: String = String::new(),
 
         /// RPC configuration
         rpc: RpcConfig = RpcConfig::default(),

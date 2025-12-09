@@ -46,12 +46,19 @@ pub async fn security_gate(request: Request, next: Next) -> Response {
   // Allow initial page load and static assets without token
   // These are needed for the browser to receive the HTML (which contains the token)
   // Also allow SSE stream endpoints - EventSource API cannot send custom headers
+  // Also allow initialization endpoints - needed before security token is injected
+  // Page routes (non-API) are allowed - they return HTML with embedded token
   if path == "/"
     || path.starts_with("/assets/")
     || path.starts_with("/scripts/")
     || path.starts_with("/styles/")
     || path.starts_with("/api/pages/")
+    || path.starts_with("/api/initialization")
+    || path.starts_with("/api/system/bootstrap")
+    || path.starts_with("/api/actions")
+    || path.starts_with("/api/services")
     || path.ends_with("/stream")
+    || !path.starts_with("/api/")  // All non-API routes (HTML pages) are allowed
   {
     return next.run(request).await;
   }
@@ -84,16 +91,15 @@ pub async fn security_gate(request: Request, next: Next) -> Response {
       )
     }
     None => {
-      // Missing token - only log for API endpoints (not for page loads)
-      if path.starts_with("/api/") {
-        logger::warning(
-          LogTag::Webserver,
-          &format!(
-            "Blocked API request to {} - missing security token",
-            path
-          ),
-        );
-      }
+      // Missing token - log for debugging
+      logger::warning(
+        LogTag::Webserver,
+        &format!(
+          "Blocked API request to {} - missing security token (GUI mode: {})",
+          path,
+          global::is_gui_mode()
+        ),
+      );
       utils::error_response(
         StatusCode::FORBIDDEN,
         "MISSING_TOKEN",

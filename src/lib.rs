@@ -25,6 +25,7 @@ pub mod reset;
 pub mod rpc;
 pub mod run;
 pub mod nfts;
+pub mod secure_storage;
 pub mod services;
 pub mod sol_price;
 pub mod startup;
