@@ -93,6 +93,97 @@
     return `$${scaled.toFixed(2)}${suffix}`;
   }
 
+  /**
+   * Format price with subscript notation for very small numbers
+   * Uses subscript notation: 0.0₉12345 means 0.000000000012345 (9 zeros after decimal)
+   * @param {number} price - The price to format
+   * @param {Object} options - Formatting options
+   * @param {string} options.fallback - Value to return if price is invalid
+   * @param {number} options.precision - Number of significant digits after zeros
+   * @returns {string} Formatted price string
+   */
+  function formatPriceSubscript(price, { fallback = "—", precision = 5 } = {}) {
+    const num = coerceNumber(price);
+    if (!Number.isFinite(num)) {
+      return fallback;
+    }
+    if (num === 0) return "0";
+
+    const absPrice = Math.abs(num);
+    const sign = num < 0 ? "-" : "";
+
+    // Handle normal-sized numbers (>= 0.0001)
+    if (absPrice >= 0.0001) {
+      const formatted = absPrice.toFixed(Math.min(9, precision + 4));
+      return sign + formatted.replace(/\.?0+$/, "");
+    }
+
+    // Count leading zeros after decimal
+    const str = absPrice.toFixed(20);
+    const match = str.match(/^0\.0*/);
+    if (!match) return sign + absPrice.toPrecision(precision);
+
+    const leadingZeros = match[0].length - 2; // Subtract "0."
+
+    // Get significant digits after zeros
+    const significantPart = str.substring(match[0].length);
+    const significant = significantPart.substring(0, Math.min(precision, significantPart.length));
+
+    // Use subscript for zero count
+    const subscriptDigits = "₀₁₂₃₄₅₆₇₈₉";
+    let subscript = "";
+    const zeroStr = leadingZeros.toString();
+    for (const char of zeroStr) {
+      subscript += subscriptDigits[parseInt(char, 10)];
+    }
+
+    return `${sign}0.0${subscript}${significant}`;
+  }
+
+  /**
+   * Format price based on magnitude for display (auto-selects best format)
+   * @param {number} price - The price to format
+   * @param {Object} options - Formatting options
+   * @param {string} options.fallback - Value to return if price is invalid
+   * @param {number} options.precision - Maximum decimal places
+   * @returns {string} Formatted price string
+   */
+  function formatPriceAuto(price, { fallback = "—", precision = 9 } = {}) {
+    const num = coerceNumber(price);
+    if (!Number.isFinite(num)) {
+      return fallback;
+    }
+    if (num === 0) return "0";
+
+    const absPrice = Math.abs(num);
+
+    // Very small prices - use subscript
+    if (absPrice < 0.000001) {
+      return formatPriceSubscript(price, { fallback, precision: 5 });
+    }
+
+    // Small prices - show more decimals
+    if (absPrice < 0.0001) {
+      return num.toExponential(4);
+    }
+
+    // Normal small prices
+    if (absPrice < 1) {
+      const formatted = num.toFixed(precision);
+      return formatted.replace(/\.?0+$/, "");
+    }
+
+    // Larger prices
+    if (absPrice < 1000) {
+      return num.toFixed(Math.min(4, precision));
+    }
+
+    // Very large prices
+    return num.toLocaleString("en-US", {
+      maximumFractionDigits: 2,
+    });
+  }
+
   function formatPriceSol(price, { fallback = "N/A", decimals = 12 } = {}) {
     const num = coerceNumber(price);
     if (!Number.isFinite(num)) {
@@ -1089,11 +1180,65 @@
       .replace(/^-+|-+$/g, "");
   }
 
+  // Timing Helper Functions
+
+  /**
+   * Creates a debounced version of a function that delays execution until
+   * after a specified wait period has passed since the last call.
+   * @param {Function} fn - The function to debounce
+   * @param {number} wait - The number of milliseconds to delay
+   * @returns {Function} The debounced function
+   */
+  function debounce(fn, wait) {
+    let timeoutId = null;
+    return function debounced(...args) {
+      if (timeoutId !== null) {
+        clearTimeout(timeoutId);
+      }
+      timeoutId = setTimeout(() => {
+        timeoutId = null;
+        fn.apply(this, args);
+      }, wait);
+    };
+  }
+
+  /**
+   * Creates a throttled version of a function that only executes at most once
+   * per specified time interval.
+   * @param {Function} fn - The function to throttle
+   * @param {number} limit - The minimum time between executions in milliseconds
+   * @returns {Function} The throttled function
+   */
+  function throttle(fn, limit) {
+    let lastCall = 0;
+    let timeoutId = null;
+    return function throttled(...args) {
+      const now = Date.now();
+      const timeSinceLastCall = now - lastCall;
+
+      if (timeSinceLastCall >= limit) {
+        // Enough time has passed, execute immediately
+        lastCall = now;
+        fn.apply(this, args);
+      } else if (timeoutId === null) {
+        // Schedule execution for when limit expires
+        timeoutId = setTimeout(() => {
+          lastCall = Date.now();
+          timeoutId = null;
+          fn.apply(this, args);
+        }, limit - timeSinceLastCall);
+      }
+      // If timeout already scheduled, ignore this call
+    };
+  }
+
   const Utils = {
     formatNumber,
     formatCompactNumber,
     formatBooleanFlag,
     formatCurrencyUSD,
+    formatPriceSubscript,
+    formatPriceAuto,
     formatPriceSol,
     formatPercentValue,
     formatPercent,
@@ -1132,6 +1277,8 @@
     openGMGN,
     openDexScreener,
     openSolscan,
+    debounce,
+    throttle,
   };
 
   // Keep window.Utils for legacy compatibility during migration
@@ -1148,6 +1295,8 @@ export const {
   formatCompactNumber,
   formatBooleanFlag,
   formatCurrencyUSD,
+  formatPriceSubscript,
+  formatPriceAuto,
   formatPriceSol,
   formatPercentValue,
   formatPercent,
@@ -1186,6 +1335,8 @@ export const {
   openGMGN,
   openDexScreener,
   openSolscan,
+  debounce,
+  throttle,
 } = (function () {
   // Return Utils from IIFE above (it's in module scope)
   return (typeof window !== "undefined" && window.Utils) || {};

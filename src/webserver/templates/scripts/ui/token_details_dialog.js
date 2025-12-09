@@ -2,7 +2,7 @@
  * Token Details Dialog
  * Full-screen dialog showing comprehensive token information with multiple tabs
  */
-/* global LightweightCharts */
+/* global createAdvancedChart, MutationObserver */
 import * as Utils from "../core/utils.js";
 import { Poller } from "../core/poller.js";
 import { requestManager } from "../core/request_manager.js";
@@ -25,6 +25,7 @@ export class TokenDetailsDialog {
     this.positionsData = null;
     this.walletBalance = 0;
     this.walletBalanceFetchedAt = 0;
+    this.advancedChart = null;
   }
 
   /**
@@ -182,7 +183,7 @@ export class TokenDetailsDialog {
   }
 
   async _refreshChartData() {
-    if (!this.candlestickSeries || !this.tokenData || this.currentTab !== "overview") {
+    if (!this.advancedChart || !this.tokenData || this.currentTab !== "overview") {
       return;
     }
 
@@ -201,9 +202,10 @@ export class TokenDetailsDialog {
         high: candle.high,
         low: candle.low,
         close: candle.close,
+        volume: candle.volume || 0,
       }));
 
-      this.candlestickSeries.setData(chartData);
+      this.advancedChart.setData(chartData);
     } catch (error) {
       // Silently fail
     }
@@ -263,13 +265,19 @@ export class TokenDetailsDialog {
         this.chartResizeObserver.disconnect();
         this.chartResizeObserver = null;
       }
-      if (this.chart) {
-        this.chart.remove();
-        this.chart = null;
+
+      // Clean up theme observer
+      if (this._themeObserver) {
+        this._themeObserver.disconnect();
+        this._themeObserver = null;
       }
-      if (this.candlestickSeries) {
-        this.candlestickSeries = null;
+
+      // Clean up advanced chart
+      if (this.advancedChart) {
+        this.advancedChart.destroy();
+        this.advancedChart = null;
       }
+      this.chart = null;
 
       if (this.dialogEl) {
         this.dialogEl.remove();
@@ -679,7 +687,7 @@ export class TokenDetailsDialog {
       this._stopChartPolling();
     }
 
-    if (tabId === "overview" && this.candlestickSeries) {
+    if (tabId === "overview" && this.advancedChart) {
       this._startChartPolling();
     }
 
@@ -741,17 +749,23 @@ export class TokenDetailsDialog {
         <div class="overview-right">
           <div class="chart-container">
             <div class="chart-header">
-              <div class="chart-title">Price Chart (SOL)</div>
+              <div class="chart-ohlcv-display" id="chartOhlcvDisplay">
+                <span class="ohlcv-item"><span class="ohlcv-label">O</span> <span class="ohlcv-value" id="ohlcvOpen">—</span></span>
+                <span class="ohlcv-item"><span class="ohlcv-label">H</span> <span class="ohlcv-value" id="ohlcvHigh">—</span></span>
+                <span class="ohlcv-item"><span class="ohlcv-label">L</span> <span class="ohlcv-value" id="ohlcvLow">—</span></span>
+                <span class="ohlcv-item"><span class="ohlcv-label">C</span> <span class="ohlcv-value" id="ohlcvClose">—</span></span>
+                <span class="ohlcv-change" id="ohlcvChange">—</span>
+              </div>
               <div class="chart-controls">
-                <select class="chart-timeframe" id="chartTimeframe">
-                  <option value="1m">1M</option>
-                  <option value="5m" selected>5M</option>
-                  <option value="15m">15M</option>
-                  <option value="1h">1H</option>
-                  <option value="4h">4H</option>
-                  <option value="12h">12H</option>
-                  <option value="1d">1D</option>
-                </select>
+                <div class="timeframe-buttons" id="timeframeButtons">
+                  <button class="timeframe-btn" data-tf="1m">1M</button>
+                  <button class="timeframe-btn active" data-tf="5m">5M</button>
+                  <button class="timeframe-btn" data-tf="15m">15M</button>
+                  <button class="timeframe-btn" data-tf="1h">1H</button>
+                  <button class="timeframe-btn" data-tf="4h">4H</button>
+                  <button class="timeframe-btn" data-tf="12h">12H</button>
+                  <button class="timeframe-btn" data-tf="1d">1D</button>
+                </div>
               </div>
             </div>
             <div id="tradingview-chart" class="tradingview-chart"></div>
@@ -1883,91 +1897,151 @@ export class TokenDetailsDialog {
 
   async _initializeChart(mint) {
     const chartContainer = this.dialogEl.querySelector("#tradingview-chart");
-    const timeframeSelect = this.dialogEl.querySelector("#chartTimeframe");
+    const timeframeButtons = this.dialogEl.querySelector("#timeframeButtons");
 
-    if (!chartContainer || !window.LightweightCharts) {
-      console.error("Chart container or LightweightCharts library not found");
+    if (!chartContainer) {
+      console.error("Chart container not found");
       return;
     }
 
-    const chart = window.LightweightCharts.createChart(chartContainer, {
-      layout: {
-        background: { color: "#0d1117" },
-        textColor: "#8b949e",
-      },
-      grid: {
-        vertLines: { color: "#21262d" },
-        horzLines: { color: "#21262d" },
-      },
-      crosshair: {
-        mode: window.LightweightCharts.CrosshairMode.Normal,
-      },
-      rightPriceScale: {
-        borderColor: "#30363d",
-        scaleMargins: { top: 0.1, bottom: 0.2 },
-      },
-      localization: {
-        priceFormatter: (price) => {
-          if (price === 0) return "0";
-          if (Math.abs(price) < 0.000001) return price.toExponential(6);
-          const formatted = price.toFixed(12);
-          return formatted.replace(/\.?0+$/, "");
-        },
-      },
-      timeScale: {
-        borderColor: "#30363d",
-        timeVisible: true,
-        secondsVisible: false,
-        barSpacing: 12,
-        minBarSpacing: 4,
-      },
-      width: chartContainer.clientWidth,
-      height: chartContainer.clientHeight,
-    });
+    if (!window.createAdvancedChart) {
+      console.error("AdvancedChart not available");
+      return;
+    }
 
-    const candlestickSeries = chart.addCandlestickSeries({
-      upColor: "#3fb950",
-      downColor: "#f85149",
-      borderVisible: false,
-      wickUpColor: "#3fb950",
-      wickDownColor: "#f85149",
-      priceFormat: {
-        type: "custom",
-        formatter: (price) => {
-          if (price === 0) return "0";
-          if (Math.abs(price) < 0.000001) return price.toExponential(6);
-          const formatted = price.toFixed(12);
-          return formatted.replace(/\.?0+$/, "");
-        },
+    // Determine current theme
+    const isDarkMode =
+      document.documentElement.getAttribute("data-theme") === "dark";
+
+    // Create advanced chart instance
+    this.advancedChart = window.createAdvancedChart(chartContainer, {
+      theme: isDarkMode ? "dark" : "light",
+      chartType: "candlestick",
+      showVolume: true,
+      showGrid: true,
+      showCrosshair: true,
+      showLegend: false, // We have our own OHLCV display in header
+      showTooltip: true,
+      priceFormat: "auto",
+      pricePrecision: 12,
+      barSpacing: 12,
+      minBarSpacing: 4,
+      indicators: [],
+      watermark: {
+        text: this.tokenData?.symbol || "",
+        fontSize: 32,
+        color: isDarkMode
+          ? "rgba(128, 128, 128, 0.1)"
+          : "rgba(128, 128, 128, 0.08)",
       },
     });
 
-    this.chart = chart;
-    this.candlestickSeries = candlestickSeries;
+    // Store reference for cleanup
+    this.chart = this.advancedChart;
 
-    this.currentTimeframe = timeframeSelect.value;
-    await this._loadChartData(mint, this.currentTimeframe);
+    // Get initial timeframe from active button
+    const activeBtn = timeframeButtons?.querySelector(".timeframe-btn.active");
+    this.currentTimeframe = activeBtn?.dataset.tf || "5m";
+    
+    await this._loadChartData(mint, this.currentTimeframe, true); // Initial load - set view
 
     this._startChartPolling();
 
-    timeframeSelect.addEventListener("change", async (e) => {
-      this.currentTimeframe = e.target.value;
-      await this._triggerOhlcvRefresh();
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      await this._loadChartData(mint, this.currentTimeframe);
-    });
+    // Handle timeframe button clicks
+    if (timeframeButtons) {
+      timeframeButtons.addEventListener("click", async (e) => {
+        const btn = e.target.closest(".timeframe-btn");
+        if (!btn) return;
+        
+        // Update active state
+        timeframeButtons.querySelectorAll(".timeframe-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        
+        this.currentTimeframe = btn.dataset.tf;
+        await this._triggerOhlcvRefresh();
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        await this._loadChartData(mint, this.currentTimeframe, true); // Timeframe change - reset view
+      });
+    }
 
-    const resizeObserver = new ResizeObserver(() => {
-      chart.applyOptions({
-        width: chartContainer.clientWidth,
-        height: chartContainer.clientHeight,
+    // Listen for theme changes and update chart
+    this._themeObserver = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        if (
+          mutation.type === "attributes" &&
+          mutation.attributeName === "data-theme"
+        ) {
+          const newTheme =
+            document.documentElement.getAttribute("data-theme") || "dark";
+          if (this.advancedChart) {
+            this.advancedChart.setTheme(newTheme);
+          }
+        }
       });
     });
-    resizeObserver.observe(chartContainer);
-    this.chartResizeObserver = resizeObserver;
+    this._themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["data-theme"],
+    });
+
+    // Add position markers if we have position data
+    this._updateChartPositions();
   }
 
-  async _loadChartData(mint, timeframe) {
+  _updateChartPositions() {
+    if (!this.advancedChart || !this.positionsData) return;
+
+    this.advancedChart.clearPositionMarkers();
+
+    // Add entry markers for each position entry
+    if (this.positionsData.entries && this.positionsData.entries.length > 0) {
+      this.positionsData.entries.forEach((entry, idx) => {
+        if (entry.price_sol && entry.timestamp) {
+          this.advancedChart.addPositionMarker({
+            type: idx === 0 ? "entry" : "dca",
+            price: entry.price_sol,
+            timestamp: Math.floor(new Date(entry.timestamp).getTime() / 1000),
+            label: idx === 0 ? "Entry" : `DCA ${idx}`,
+          });
+        }
+      });
+    }
+
+    // Add exit markers for closed positions
+    if (this.positionsData.exits && this.positionsData.exits.length > 0) {
+      this.positionsData.exits.forEach((exit, idx) => {
+        if (exit.price_sol && exit.timestamp) {
+          this.advancedChart.addPositionMarker({
+            type: "exit",
+            price: exit.price_sol,
+            timestamp: Math.floor(new Date(exit.timestamp).getTime() / 1000),
+            label: `Exit ${idx + 1}`,
+          });
+        }
+      });
+    }
+
+    // Add stop loss / take profit lines from current position
+    if (this.positionsData.stop_loss_price) {
+      this.advancedChart.addHorizontalLine({
+        price: this.positionsData.stop_loss_price,
+        color: "#ef4444",
+        label: "Stop Loss",
+        style: 2,
+      });
+    }
+
+    if (this.positionsData.take_profit_price) {
+      this.advancedChart.addHorizontalLine({
+        price: this.positionsData.take_profit_price,
+        color: "#10b981",
+        label: "Take Profit",
+        style: 2,
+      });
+    }
+  }
+
+  async _loadChartData(mint, timeframe, isInitialLoad = false) {
     try {
       const response = await fetch(`/api/tokens/${mint}/ohlcv?timeframe=${timeframe}`);
       if (!response.ok) return;
@@ -1975,26 +2049,58 @@ export class TokenDetailsDialog {
       const data = await response.json();
       if (!Array.isArray(data) || data.length === 0) return;
 
+      if (!this.advancedChart) return;
+
       const chartData = data.map((candle) => ({
         time: candle.timestamp,
         open: candle.open,
         high: candle.high,
         low: candle.low,
         close: candle.close,
+        volume: candle.volume || 0,
       }));
 
-      this.candlestickSeries.setData(chartData);
+      // setData now respects user interactions - only fits on first load
+      this.advancedChart.setData(chartData);
 
-      if (chartData.length > 0) {
-        const targetVisibleBars = 80;
-        const lastIndex = chartData.length - 1;
-        this.chart.timeScale().setVisibleLogicalRange({
-          from: lastIndex - targetVisibleBars,
-          to: lastIndex,
-        });
+      // Update OHLCV display with latest candle
+      this._updateOhlcvDisplay(chartData);
+
+      // Update position markers after loading data
+      this._updateChartPositions();
+
+      // Only set initial visible range on first load of this timeframe
+      // Chart will auto-preserve user's zoom/pan on subsequent updates
+      if (isInitialLoad && chartData.length > 0) {
+        // Reset interaction flag and set initial view
+        this.advancedChart.resetUserInteraction();
+        this.advancedChart.setVisibleRange(80);
       }
     } catch (error) {
       // Silently fail
+    }
+  }
+
+  _updateOhlcvDisplay(chartData) {
+    if (!chartData || chartData.length === 0) return;
+    
+    const latest = chartData[chartData.length - 1];
+    const ohlcvOpen = this.dialogEl?.querySelector("#ohlcvOpen");
+    const ohlcvHigh = this.dialogEl?.querySelector("#ohlcvHigh");
+    const ohlcvLow = this.dialogEl?.querySelector("#ohlcvLow");
+    const ohlcvClose = this.dialogEl?.querySelector("#ohlcvClose");
+    const ohlcvChange = this.dialogEl?.querySelector("#ohlcvChange");
+    
+    if (ohlcvOpen) ohlcvOpen.textContent = Utils.formatPriceSol(latest.open, { decimals: 9 });
+    if (ohlcvHigh) ohlcvHigh.textContent = Utils.formatPriceSol(latest.high, { decimals: 9 });
+    if (ohlcvLow) ohlcvLow.textContent = Utils.formatPriceSol(latest.low, { decimals: 9 });
+    if (ohlcvClose) ohlcvClose.textContent = Utils.formatPriceSol(latest.close, { decimals: 9 });
+    
+    if (ohlcvChange && latest.open && latest.close) {
+      const changePercent = ((latest.close - latest.open) / latest.open) * 100;
+      const sign = changePercent >= 0 ? "+" : "";
+      ohlcvChange.textContent = `${sign}${changePercent.toFixed(2)}%`;
+      ohlcvChange.className = `ohlcv-change ${changePercent >= 0 ? "positive" : "negative"}`;
     }
   }
 
@@ -2049,13 +2155,26 @@ export class TokenDetailsDialog {
     if (this._escapeHandler) {
       document.removeEventListener("keydown", this._escapeHandler);
     }
+
+    // Clean up theme observer
+    if (this._themeObserver) {
+      this._themeObserver.disconnect();
+      this._themeObserver = null;
+    }
+
+    // Clean up chart resize observer
     if (this.chartResizeObserver) {
       this.chartResizeObserver.disconnect();
+      this.chartResizeObserver = null;
     }
-    if (this.chart) {
-      this.chart.remove();
-      this.chart = null;
+
+    // Clean up advanced chart
+    if (this.advancedChart) {
+      this.advancedChart.destroy();
+      this.advancedChart = null;
     }
+    this.chart = null;
+
     if (this.dialogEl) {
       this.dialogEl.remove();
       this.dialogEl = null;

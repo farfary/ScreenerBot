@@ -41,6 +41,7 @@ const TABLE_SETTINGS_DIALOG_STYLES: &str =
 const CONFIRMATION_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/confirmation_dialog.css");
 const CONTEXT_MENU_STYLES: &str = include_str!("templates/styles/ui/context_menu.css");
+const ADVANCED_CHART_STYLES: &str = include_str!("templates/styles/ui/advanced_chart.css");
 const TOKEN_DETAILS_DIALOG_STYLES: &str = include_str!("templates/styles/token_details_dialog.css");
 const SETTINGS_DIALOG_STYLES: &str = include_str!("templates/styles/settings_dialog.css");
 const STATUS_BAR_STYLES: &str = include_str!("templates/styles/status_bar.css");
@@ -99,6 +100,7 @@ pub const TABLE_SETTINGS_DIALOG_UI: &str =
 pub const TOKEN_DETAILS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/token_details_dialog.js");
 pub const CONTEXT_MENU_UI: &str = include_str!("templates/scripts/ui/context_menu.js");
+pub const ADVANCED_CHART_UI: &str = include_str!("templates/scripts/ui/advanced_chart.js");
 pub const SETTINGS_DIALOG_UI: &str = include_str!("templates/scripts/ui/settings_dialog.js");
 pub const NOTIFICATION_PANEL_UI: &str = include_str!("templates/scripts/ui/notification_panel.js");
 
@@ -186,6 +188,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         TABLE_SETTINGS_DIALOG_STYLES,
         CONFIRMATION_DIALOG_STYLES,
         CONTEXT_MENU_STYLES,
+        ADVANCED_CHART_STYLES,
         TOKEN_DETAILS_DIALOG_STYLES,
         SETTINGS_DIALOG_STYLES,
         // Splash, onboarding, and setup screens (always included for proper transitions)

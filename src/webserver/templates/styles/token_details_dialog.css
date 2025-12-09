@@ -532,8 +532,8 @@
 .token-details-dialog .tab-content {
   position: absolute;
   inset: 0;
-  padding: 16px;
-  overflow-y: auto;
+  padding: 0;
+  overflow: hidden;
   display: none;
 }
 
@@ -592,7 +592,7 @@
 
 .overview-split-layout {
   display: grid;
-  grid-template-columns: 40% 60%;
+  grid-template-columns: minmax(320px, 35%) 1fr;
   gap: 0;
   height: 100%;
   overflow: hidden;
@@ -602,7 +602,8 @@
   overflow-y: auto;
   border-right: 1px solid var(--border-color);
   height: 100%;
-  padding: var(--spacing-md);
+  padding: 12px;
+  background: var(--bg-secondary);
 }
 
 .overview-right {
@@ -610,15 +611,16 @@
   height: 100%;
   display: flex;
   flex-direction: column;
+  background: var(--bg-primary);
 }
 
 /* Quick Stats Bar */
 .quick-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
-  gap: var(--spacing-sm);
-  margin-bottom: var(--spacing-md);
-  padding-bottom: var(--spacing-md);
+  gap: 6px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
   border-bottom: 1px solid var(--border-color);
 }
 
@@ -626,15 +628,15 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: var(--spacing-sm);
-  background: var(--bg-secondary);
-  border-radius: var(--radius-md);
+  gap: 1px;
+  padding: 6px 4px;
+  background: var(--bg-primary);
+  border-radius: 4px;
   text-align: center;
 }
 
 .quick-stat .stat-label {
-  font-size: 0.625rem;
+  font-size: 0.6rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -642,7 +644,7 @@
 }
 
 .quick-stat .stat-value {
-  font-size: 0.85rem;
+  font-size: 0.75rem;
   font-weight: 700;
   color: var(--text-primary);
   font-family: var(--font-data);
@@ -650,7 +652,7 @@
 }
 
 .quick-stat .stat-change {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 600;
   font-family: var(--font-data);
 }
@@ -667,24 +669,24 @@
 .overview-grid {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-sm);
+  gap: 8px;
 }
 
 .info-card {
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
+  border-radius: 6px;
   overflow: hidden;
 }
 
 .info-card.compact .card-body {
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: 8px 10px;
 }
 
 .card-header {
-  padding: 8px var(--spacing-md);
+  padding: 6px 10px;
   background: var(--bg-card-hover);
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   font-weight: 700;
   color: var(--text-primary);
   text-transform: uppercase;
@@ -1078,33 +1080,110 @@
   display: flex;
   flex-direction: column;
   height: 100%;
-  background: var(--bg-secondary);
+  background: var(--bg-primary);
 }
 
 .chart-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px var(--spacing-md);
-  background: var(--bg-card-hover);
+  padding: 8px 12px;
+  background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
 }
 
 .chart-title {
-  font-size: 0.75rem;
-  font-weight: 700;
-  color: var(--text-primary);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-secondary);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
+}
+
+/* OHLCV Display in chart header */
+.chart-ohlcv-display {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--font-data);
+  font-size: 0.7rem;
+}
+
+.ohlcv-item {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.ohlcv-label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.ohlcv-value {
+  color: var(--text-primary);
+  font-weight: 600;
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+.ohlcv-change {
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-weight: 600;
+}
+
+.ohlcv-change.positive {
+  color: var(--success-color);
+  background: var(--success-alpha-10);
+}
+
+.ohlcv-change.negative {
+  color: var(--danger);
+  background: var(--danger-alpha-10);
 }
 
 .chart-controls {
   display: flex;
-  gap: var(--spacing-sm);
+  gap: 2px;
   align-items: center;
 }
 
+/* Timeframe button row */
+.timeframe-buttons {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-primary);
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.timeframe-btn {
+  padding: 4px 8px;
+  background: transparent;
+  border: none;
+  border-radius: 3px;
+  color: var(--text-secondary);
+  font-size: 0.65rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-transform: uppercase;
+}
+
+.timeframe-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+}
+
+.timeframe-btn.active {
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+/* Legacy select - keep for compatibility but hidden */
 .chart-timeframe {
+  display: none;
   padding: 6px 12px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
@@ -1129,6 +1208,7 @@
   flex: 1;
   position: relative;
   min-height: 0;
+  overflow: hidden;
 }
 
 /* =============================================================================
