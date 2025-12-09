@@ -1,12 +1,15 @@
 // Splash Screen Controller
 // Shows on every app start, handles initialization check and routing
 
-const SPLASH_MIN_DURATION = 4500; // Minimum splash display time in ms (1500 original + 3000 extra)
-const SPLASH_STATUS_MESSAGES = [
-  "Initializing...",
-  "Checking configuration...",
-  "Connecting to services...",
-  "Almost ready...",
+const SPLASH_MIN_DURATION = 3000; // Minimum splash display time in ms
+
+// Status messages shown sequentially (not rotating)
+const SPLASH_PHASES = [
+  { message: "Starting ScreenerBot...", duration: 600 },
+  { message: "Loading configuration...", duration: 500 },
+  { message: "Connecting to Solana RPC...", duration: 700 },
+  { message: "Initializing services...", duration: 600 },
+  { message: "Preparing dashboard...", duration: 500 },
 ];
 
 class SplashController {
@@ -14,10 +17,12 @@ class SplashController {
     this.splashEl = null;
     this.statusEl = null;
     this.startTime = Date.now();
-    this.statusIndex = 0;
-    this.statusInterval = null;
+    this.phaseIndex = 0;
+    this.phaseTimeout = null;
     this.forceOnboarding = false;
     this.initializationRequired = false;
+    this.readyToTransition = false;
+    this.transitionTarget = null;
   }
 
   init() {
@@ -32,8 +37,8 @@ class SplashController {
     // Load and display version
     this.loadVersion();
 
-    // Start rotating status messages
-    this.startStatusRotation();
+    // Start sequential status messages
+    this.startPhaseSequence();
 
     // Check initialization status
     this.checkInitialization();
@@ -41,10 +46,10 @@ class SplashController {
 
   async loadVersion() {
     try {
-      const response = await fetch('/api/version');
+      const response = await fetch("/api/version");
       if (response.ok) {
         const data = await response.json();
-        const versionEl = document.getElementById('splashVersion');
+        const versionEl = document.getElementById("splashVersion");
         if (versionEl && data.version) {
           versionEl.textContent = `v${data.version}`;
         }
@@ -54,19 +59,44 @@ class SplashController {
     }
   }
 
-  startStatusRotation() {
+  startPhaseSequence() {
     if (!this.statusEl) return;
 
-    this.statusInterval = setInterval(() => {
-      this.statusIndex = (this.statusIndex + 1) % SPLASH_STATUS_MESSAGES.length;
-      this.statusEl.textContent = SPLASH_STATUS_MESSAGES[this.statusIndex];
-    }, 800);
+    // Show first phase immediately
+    this.statusEl.textContent = SPLASH_PHASES[0].message;
+    this.phaseIndex = 0;
+
+    this.advancePhase();
   }
 
-  stopStatusRotation() {
-    if (this.statusInterval) {
-      clearInterval(this.statusInterval);
-      this.statusInterval = null;
+  advancePhase() {
+    const currentPhase = SPLASH_PHASES[this.phaseIndex];
+
+    this.phaseTimeout = setTimeout(() => {
+      this.phaseIndex++;
+
+      if (this.phaseIndex < SPLASH_PHASES.length) {
+        // Show next phase message
+        this.statusEl.textContent = SPLASH_PHASES[this.phaseIndex].message;
+        this.advancePhase();
+      } else {
+        // All phases complete - show ready or wait
+        this.statusEl.textContent = "Ready";
+        this.checkReadyToTransition();
+      }
+    }, currentPhase.duration);
+  }
+
+  stopPhaseSequence() {
+    if (this.phaseTimeout) {
+      clearTimeout(this.phaseTimeout);
+      this.phaseTimeout = null;
+    }
+  }
+
+  checkReadyToTransition() {
+    if (this.readyToTransition && this.transitionTarget) {
+      this.transitionTo(this.transitionTarget);
     }
   }
 
@@ -80,40 +110,37 @@ class SplashController {
       const result = await response.json();
       this.forceOnboarding = !!result.force_onboarding;
       this.initializationRequired = !!result.required;
+
+      // Determine transition target
+      if (this.forceOnboarding) {
+        this.transitionTarget = "onboarding";
+      } else if (result.required) {
+        this.transitionTarget = result.onboarding_complete ? "setup" : "onboarding";
+      } else {
+        this.transitionTarget = "dashboard";
+      }
+
+      // Wait for minimum duration
       const elapsed = Date.now() - this.startTime;
       const remainingTime = Math.max(0, SPLASH_MIN_DURATION - elapsed);
-
-      // Wait for minimum splash duration
       await new Promise((resolve) => setTimeout(resolve, remainingTime));
 
-      this.stopStatusRotation();
-
-      if (this.forceOnboarding) {
-        this.transitionTo("onboarding");
-        return;
-      }
-
-      // Determine next destination
-      if (result.required) {
-        // Check if onboarding needed (backend controls this)
-        if (!result.onboarding_complete) {
-          this.transitionTo("onboarding");
-        } else {
-          this.transitionTo("setup");
-        }
-      } else {
-        // Fully initialized - go to dashboard
-        this.transitionTo("dashboard");
-      }
+      this.readyToTransition = true;
+      this.stopPhaseSequence();
+      this.checkReadyToTransition();
     } catch (error) {
       console.error("[Splash] Failed to check initialization:", error);
-      this.stopStatusRotation();
 
-      // On error, try to proceed to dashboard
+      // On error, proceed to dashboard
+      this.transitionTarget = "dashboard";
+
       const elapsed = Date.now() - this.startTime;
       const remainingTime = Math.max(0, SPLASH_MIN_DURATION - elapsed);
       await new Promise((resolve) => setTimeout(resolve, remainingTime));
-      this.transitionTo("dashboard");
+
+      this.readyToTransition = true;
+      this.stopPhaseSequence();
+      this.checkReadyToTransition();
     }
   }
 
