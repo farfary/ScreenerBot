@@ -315,6 +315,9 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* Prevent entire window from being draggable - only titlebar should be draggable */
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 /* =============================================================================

@@ -1,7 +1,7 @@
 // Splash Screen Controller
 // Shows on every app start, handles initialization check and routing
 
-const SPLASH_MIN_DURATION = 1500; // Minimum splash display time in ms
+const SPLASH_MIN_DURATION = 4500; // Minimum splash display time in ms (1500 original + 3000 extra)
 const SPLASH_STATUS_MESSAGES = [
   "Initializing...",
   "Checking configuration...",

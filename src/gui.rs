@@ -745,14 +745,17 @@ fn smart_maximize(window: tauri::WebviewWindow) -> Result<(), String> {
   }
 }
 
-/// Enable window drag by background
-/// This is a workaround for Tauri bug #9503 where TitleBarStyle::Overlay
-/// breaks window dragging on macOS
+/// Enable window drag handling for macOS
+/// Note: We no longer use setMovableByWindowBackground because it makes the
+/// ENTIRE window draggable. Instead, we rely on the JS-based drag handling
+/// in theme.js combined with CSS -webkit-app-region properties.
+/// This command now only sets acceptsFirstMouse for better UX.
 #[tauri::command]
 fn enable_window_drag(window: tauri::WebviewWindow) -> Result<(), String> {
   #[cfg(target_os = "macos")]
   {
-    crate::macos_window::set_window_draggable(&window, true)?;
+    // Only enable accepts first mouse for better dragging UX when window is unfocused
+    // DO NOT use set_window_draggable() as it makes entire window draggable
     crate::macos_window::set_accepts_first_mouse(&window, true)?;
     Ok(())
   }

@@ -39,6 +39,9 @@
   font-family: var(--header-font, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   flex-shrink: 0;
   transition: background-color 0.3s ease, box-shadow 0.3s ease;
+  /* Explicitly block dragging on header - only titlebar should be draggable */
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 /* Tauri macOS: Push header down to sit below title bar area */
