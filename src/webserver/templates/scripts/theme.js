@@ -218,27 +218,12 @@
       ".ticker-segment",
     ].join(",");
 
-    // Setup drag on title bar background (28px at top)
+    // Setup drag on title bar background only (28px at top)
     const titleBarBg = document.querySelector(".tauri-titlebar-bg");
     if (titleBarBg) {
       setupDragOnElement(titleBarBg, appWindow, interactiveSelectors);
       console.log("[Theme] Drag handler installed on .tauri-titlebar-bg");
     }
-
-    // Setup drag on header row 1 (main header with logo, cards, buttons)
-    const headerRow1 = document.querySelector(".header-row-1");
-    if (headerRow1) {
-      setupDragOnElement(headerRow1, appWindow, interactiveSelectors);
-      console.log("[Theme] Drag handler installed on .header-row-1");
-    }
-
-    // Also setup on any element with data-tauri-drag-region attribute
-    const dragRegions = document.querySelectorAll("[data-tauri-drag-region]");
-    dragRegions.forEach((region) => {
-      if (region !== titleBarBg && region !== headerRow1) {
-        setupDragOnElement(region, appWindow, interactiveSelectors);
-      }
-    });
 
     console.log("[Theme] Window drag handler setup complete");
   }

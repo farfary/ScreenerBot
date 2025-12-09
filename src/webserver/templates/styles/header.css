@@ -53,20 +53,6 @@
   padding: 12px 24px;
   height: 60px;
   background: transparent; /* Inherit from .modern-header */
-  user-select: none; /* Prevent text selection when dragging */
-  -webkit-user-select: none;
-  -webkit-app-region: drag; /* Enable native drag for header area */
-  app-region: drag;
-}
-
-/* Interactive elements should NOT be draggable */
-.header-brand,
-.header-card,
-.header-action-btn,
-.header-actions,
-.header-actions button {
-  -webkit-app-region: no-drag;
-  app-region: no-drag;
 }
 
 /* Brand/Logo - unified container */
