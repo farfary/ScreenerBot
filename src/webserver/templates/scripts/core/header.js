@@ -754,16 +754,18 @@ let headerTabsScrollCleanup = null;
 
 function initHeaderTabsScroll() {
   const headerRow = document.querySelector(".header-row-2");
-  if (!headerRow) return;
+  const wrapper = document.querySelector(".header-row-2-wrapper");
+  if (!headerRow || !wrapper) return;
 
   // Update scroll indicators based on scroll position
+  // Classes applied to WRAPPER (not scrollable element) so indicators stay fixed
   const updateScrollIndicators = () => {
     const { scrollLeft, scrollWidth, clientWidth } = headerRow;
     const canScrollLeft = scrollLeft > 1;
     const canScrollRight = scrollLeft < scrollWidth - clientWidth - 1;
 
-    headerRow.classList.toggle("can-scroll-left", canScrollLeft);
-    headerRow.classList.toggle("can-scroll-right", canScrollRight);
+    wrapper.classList.toggle("can-scroll-left", canScrollLeft);
+    wrapper.classList.toggle("can-scroll-right", canScrollRight);
   };
 
   // Mouse wheel horizontal scroll support

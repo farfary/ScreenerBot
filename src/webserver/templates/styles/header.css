@@ -410,6 +410,44 @@
    ROW 2: NAVIGATION TABS (44px)
    ============================================================================ */
 
+/* Wrapper for scroll indicators - indicators positioned here stay fixed at edges */
+.header-row-2-wrapper {
+  position: relative;
+  overflow: hidden;
+}
+
+/* Scroll overflow fade indicators - on wrapper so they don't scroll with content */
+.header-row-2-wrapper::before,
+.header-row-2-wrapper::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40px;
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.header-row-2-wrapper::before {
+  left: 0;
+  background: linear-gradient(to right, var(--bg-secondary), transparent);
+}
+
+.header-row-2-wrapper::after {
+  right: 0;
+  background: linear-gradient(to left, var(--bg-secondary), transparent);
+}
+
+.header-row-2-wrapper.can-scroll-left::before {
+  opacity: 1;
+}
+
+.header-row-2-wrapper.can-scroll-right::after {
+  opacity: 1;
+}
+
 .header-row-2 {
   height: 44px;
   background: var(--bg-secondary);
@@ -417,7 +455,6 @@
   overflow: auto hidden;
   scrollbar-width: none; /* Hide scrollbar Firefox */
   -ms-overflow-style: none; /* Hide scrollbar IE/Edge */
-  position: relative;
 }
 
 /* Hide scrollbar on webkit browsers */
@@ -459,38 +496,6 @@
   border-bottom-color: #60a5fa;
   background: rgb(59, 130, 246, 0.12);
   box-shadow: 0 0 12px rgb(59, 130, 246, 0.3);
-}
-
-/* Scroll overflow fade indicators for header tabs */
-.header-row-2::before,
-.header-row-2::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 40px;
-  pointer-events: none;
-  z-index: 5;
-  opacity: 0;
-  transition: opacity 0.2s ease;
-}
-
-.header-row-2::before {
-  left: 0;
-  background: linear-gradient(to right, var(--bg-secondary), transparent);
-}
-
-.header-row-2::after {
-  right: 0;
-  background: linear-gradient(to left, var(--bg-secondary), transparent);
-}
-
-.header-row-2.can-scroll-left::before {
-  opacity: 1;
-}
-
-.header-row-2.can-scroll-right::after {
-  opacity: 1;
 }
 
 /* ============================================================================
