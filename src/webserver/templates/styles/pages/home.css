@@ -166,9 +166,13 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 0.625rem;
-  padding-bottom: 0.4rem;
-  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid transparent;
+  background: linear-gradient(to bottom, transparent 0%, var(--bg-secondary) 100%);
+  border-radius: 6px 6px 0 0;
+  padding: 0.5rem 0.625rem;
+  margin: -0.625rem -0.625rem 0.75rem -0.625rem;
   flex-shrink: 0;
 }
 
@@ -180,21 +184,24 @@
   display: flex;
   align-items: center;
   gap: 0.35rem;
+  opacity: 0.95;
 }
 
 .card-header h2 i {
   font-size: 0.75rem;
-  opacity: 0.75;
+  opacity: 0.7;
 }
 
 .status-badge {
-  padding: 2px 7px;
-  border-radius: 9px;
+  padding: 3px 8px;
+  border-radius: 12px;
   font-size: 0.575rem;
-  font-weight: 700;
+  font-weight: 600;
   background: var(--badge-online);
   color: #fff;
   letter-spacing: 0.05em;
+  opacity: 0.9;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.1);
 }
 
 /* ===== Period Tabs ===== */
