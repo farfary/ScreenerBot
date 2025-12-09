@@ -2117,7 +2117,7 @@ export class TokenDetailsDialog {
   }
 
   _buildLinksRightColumn(token, mint, hasWebsites, hasSocials) {
-    // Explorers section - comprehensive list with Lucide icons
+    // Explorers section - comprehensive list
     const explorersSection = `
       <div class="links-section-card">
         <div class="links-section-title">
@@ -2125,18 +2125,18 @@ export class TokenDetailsDialog {
           Explorers & Analytics
         </div>
         <div class="links-grid-compact">
-          ${this._buildExplorerLink("https://solscan.io/token/" + mint, "Solscan", "icon-scan")}
-          ${this._buildExplorerLink("https://explorer.solana.com/address/" + mint, "Solana Explorer", "icon-globe")}
-          ${this._buildExplorerLink("https://birdeye.so/token/" + mint + "?chain=solana", "Birdeye", "icon-eye")}
-          ${this._buildExplorerLink("https://dexscreener.com/solana/" + mint, "DEX Screener", "icon-chart-candlestick")}
-          ${this._buildExplorerLink("https://www.geckoterminal.com/solana/tokens/" + mint, "GeckoTerminal", "icon-chart-line")}
-          ${this._buildExplorerLink("https://www.dextools.io/app/en/solana/pair-explorer/" + mint, "DexTools", "icon-wrench")}
-          ${this._buildExplorerLink("https://gmgn.ai/sol/token/" + mint, "GMGN", "icon-bot")}
-          ${this._buildExplorerLink("https://photon-sol.tinyastro.io/en/lp/" + mint, "Photon", "icon-zap")}
-          ${this._buildExplorerLink("https://rugcheck.xyz/tokens/" + mint, "RugCheck", "icon-shield")}
-          ${this._buildExplorerLink("https://app.bubblemaps.io/sol/token/" + mint, "Bubblemaps", "icon-chart-network")}
-          ${this._buildExplorerLink("https://www.coingecko.com/en/coins/" + mint, "CoinGecko", "icon-coins")}
-          ${this._buildExplorerLink("https://jup.ag/swap/SOL-" + mint, "Jupiter Swap", "icon-arrow-right-left")}
+          ${this._buildExplorerLink("https://solscan.io/token/" + mint, "Solscan")}
+          ${this._buildExplorerLink("https://explorer.solana.com/address/" + mint, "Solana Explorer")}
+          ${this._buildExplorerLink("https://birdeye.so/token/" + mint + "?chain=solana", "Birdeye")}
+          ${this._buildExplorerLink("https://dexscreener.com/solana/" + mint, "DEX Screener")}
+          ${this._buildExplorerLink("https://www.geckoterminal.com/solana/tokens/" + mint, "GeckoTerminal")}
+          ${this._buildExplorerLink("https://www.dextools.io/app/en/solana/pair-explorer/" + mint, "DexTools")}
+          ${this._buildExplorerLink("https://gmgn.ai/sol/token/" + mint, "GMGN")}
+          ${this._buildExplorerLink("https://photon-sol.tinyastro.io/en/lp/" + mint, "Photon")}
+          ${this._buildExplorerLink("https://rugcheck.xyz/tokens/" + mint, "RugCheck")}
+          ${this._buildExplorerLink("https://app.bubblemaps.io/sol/token/" + mint, "Bubblemaps")}
+          ${this._buildExplorerLink("https://www.coingecko.com/en/coins/" + mint, "CoinGecko")}
+          ${this._buildExplorerLink("https://jup.ag/swap/SOL-" + mint, "Jupiter Swap")}
         </div>
       </div>
     `;
@@ -2146,7 +2146,7 @@ export class TokenDetailsDialog {
     if (hasWebsites) {
       const websiteLinks = token.websites.map((site) => {
         const label = site.label || this._extractDomainName(site.url) || "Website";
-        return this._buildOfficialLink(site.url, label, "icon-globe");
+        return this._buildOfficialLink(site.url, label);
       }).join("");
 
       websitesSection = `
@@ -2166,8 +2166,8 @@ export class TokenDetailsDialog {
     let socialsSection = "";
     if (hasSocials) {
       const socialLinks = token.socials.map((social) => {
-        const { icon, label } = this._getSocialMeta(social.platform);
-        return this._buildSocialLink(social.url, label, icon);
+        const { label } = this._getSocialMeta(social.platform);
+        return this._buildSocialLink(social.url, label);
       }).join("");
 
       socialsSection = `
@@ -2204,22 +2204,18 @@ export class TokenDetailsDialog {
     `;
   }
 
-  _buildExplorerLink(url, name, iconClass) {
+  _buildExplorerLink(url, name) {
     return `
       <a href="${this._escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="links-explorer-item">
-        <i class="${iconClass}"></i>
         <span>${this._escapeHtml(name)}</span>
         <i class="icon-external-link link-external-icon"></i>
       </a>
     `;
   }
 
-  _buildOfficialLink(url, label, iconClass) {
+  _buildOfficialLink(url, label) {
     return `
       <a href="${this._escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="links-official-item">
-        <div class="links-official-icon">
-          <i class="${iconClass}"></i>
-        </div>
         <div class="links-official-content">
           <span class="links-official-label">${this._escapeHtml(label)}</span>
           <span class="links-official-url">${this._escapeHtml(this._formatUrl(url))}</span>
@@ -2229,13 +2225,10 @@ export class TokenDetailsDialog {
     `;
   }
 
-  _buildSocialLink(url, label, iconClass) {
+  _buildSocialLink(url, label) {
     const username = this._extractSocialUsername(url);
     return `
       <a href="${this._escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="links-social-item">
-        <div class="links-social-icon ${this._getSocialColorClass(label)}">
-          <i class="${iconClass}"></i>
-        </div>
         <div class="links-social-content">
           <span class="links-social-platform">${this._escapeHtml(label)}</span>
           ${username ? `<span class="links-social-handle">${this._escapeHtml(username)}</span>` : ""}

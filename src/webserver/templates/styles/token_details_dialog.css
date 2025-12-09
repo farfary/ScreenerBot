@@ -3053,12 +3053,6 @@
   background: var(--bg-card-hover);
 }
 
-.links-explorer-item i:first-child {
-  font-size: 0.9rem;
-  color: var(--primary-color);
-  flex-shrink: 0;
-}
-
 .links-explorer-item span {
   flex: 1;
   white-space: nowrap;
@@ -3103,22 +3097,6 @@
   background: var(--bg-card-hover);
 }
 
-.links-official-icon {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--primary-alpha-10);
-  border-radius: 6px;
-  flex-shrink: 0;
-}
-
-.links-official-icon i {
-  font-size: 1rem;
-  color: var(--primary-color);
-}
-
 .links-official-content {
   flex: 1;
   min-width: 0;
@@ -3157,85 +3135,6 @@
 .links-social-item:hover {
   border-color: var(--primary-color);
   background: var(--bg-card-hover);
-}
-
-.links-social-icon {
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  flex-shrink: 0;
-}
-
-.links-social-icon i {
-  font-size: 1rem;
-}
-
-/* Social platform colors */
-.links-social-icon.social-twitter {
-  background: rgb(29 155 240 / 15%);
-}
-
-.links-social-icon.social-twitter i {
-  color: #1d9bf0;
-}
-
-.links-social-icon.social-telegram {
-  background: rgb(38 165 228 / 15%);
-}
-
-.links-social-icon.social-telegram i {
-  color: #26a5e4;
-}
-
-.links-social-icon.social-discord {
-  background: rgb(88 101 242 / 15%);
-}
-
-.links-social-icon.social-discord i {
-  color: #5865f2;
-}
-
-.links-social-icon.social-youtube {
-  background: rgb(255 0 0 / 15%);
-}
-
-.links-social-icon.social-youtube i {
-  color: #f00;
-}
-
-.links-social-icon.social-github {
-  background: rgb(110 118 129 / 15%);
-}
-
-.links-social-icon.social-github i {
-  color: var(--text-primary);
-}
-
-.links-social-icon.social-medium {
-  background: rgb(0 0 0 / 10%);
-}
-
-.links-social-icon.social-medium i {
-  color: var(--text-primary);
-}
-
-.links-social-icon.social-reddit {
-  background: rgb(255 69 0 / 15%);
-}
-
-.links-social-icon.social-reddit i {
-  color: #ff4500;
-}
-
-.links-social-icon.social-default {
-  background: var(--primary-alpha-10);
-}
-
-.links-social-icon.social-default i {
-  color: var(--primary-color);
 }
 
 .links-social-content {
