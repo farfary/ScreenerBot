@@ -182,13 +182,15 @@
 
     // Get the window API - must use correct API for Tauri v2
     let appWindow = null;
-    
+
     if (window.__TAURI__?.window?.getCurrentWindow) {
       appWindow = window.__TAURI__.window.getCurrentWindow();
       console.log("[Theme] Got window from __TAURI__.window.getCurrentWindow()");
     } else if (window.__TAURI__?.webviewWindow?.getCurrentWebviewWindow) {
       appWindow = window.__TAURI__.webviewWindow.getCurrentWebviewWindow();
-      console.log("[Theme] Got window from __TAURI__.webviewWindow.getCurrentWebviewWindow()");
+      console.log(
+        "[Theme] Got window from __TAURI__.webviewWindow.getCurrentWebviewWindow()"
+      );
     } else if (tauriWindow) {
       appWindow = tauriWindow;
       console.log("[Theme] Using cached tauriWindow");

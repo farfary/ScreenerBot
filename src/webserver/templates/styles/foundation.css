@@ -318,6 +318,44 @@ body {
 }
 
 /* =============================================================================
+   Text Selection Control - App-like behavior
+   ============================================================================= */
+
+/* Disable text selection globally - dashboard is an app, not a document */
+*,
+*::before,
+*::after {
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* Re-enable selection ONLY for specific value elements */
+/* These classes mark numeric values that users may want to copy */
+.selectable,
+.data-numeric,
+.data-price,
+.data-percent,
+.pnl-positive,
+.pnl-negative,
+.pnl-neutral,
+.value-positive,
+.value-negative,
+.font-mono,
+[data-selectable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+
+/* Form inputs must always be selectable */
+input,
+textarea,
+[contenteditable="true"] {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* =============================================================================
    Trading Terminal Typography Utilities
    ============================================================================= */
 

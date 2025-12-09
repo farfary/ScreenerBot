@@ -177,6 +177,15 @@
   display: none;
 }
 
+/* APP MAIN - Container for everything below the header */
+.app-main {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 /* VIEWPORT - The single scroll region for content */
 .content {
   flex: 1 1 auto;
@@ -192,5 +201,5 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: auto; /* Allow scrolling at page container level */
 }

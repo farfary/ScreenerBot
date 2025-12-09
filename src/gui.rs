@@ -112,6 +112,8 @@ pub async fn run_gui_mode() -> Result<(), String> {
             }
           }
 
+          logger::info(LogTag::System, "Window configuration complete");
+
           // Expose devtools flag to frontend
           // When devtools feature is enabled, the "Inspect Element" option shows in context menu
           #[cfg(feature = "devtools")]

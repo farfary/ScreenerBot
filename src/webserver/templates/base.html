@@ -337,17 +337,20 @@
       </section>
     </div>
 
-    <!-- Sub-tabs container (populated dynamically per page) -->
-    <div id="subTabsContainer" class="sub-tabs-container" style="display: none">
-      <!-- Sub-tabs will be injected here by page-specific JavaScript -->
-    </div>
+    <!-- Main App Container (everything below the fixed header) -->
+    <div class="app-main">
+      <!-- Sub-tabs container (populated dynamically per page) -->
+      <div id="subTabsContainer" class="sub-tabs-container" style="display: none">
+        <!-- Sub-tabs will be injected here by page-specific JavaScript -->
+      </div>
 
-    <!-- Toolbar container (for action buttons below sub-tabs) -->
-    <div id="toolbarContainer" class="toolbar-container" style="display: none">
-      <!-- Toolbar buttons will be injected here by page-specific JavaScript -->
-    </div>
+      <!-- Toolbar container (for action buttons below sub-tabs) -->
+      <div id="toolbarContainer" class="toolbar-container" style="display: none">
+        <!-- Toolbar buttons will be injected here by page-specific JavaScript -->
+      </div>
 
-    <main class="content">{{CONTENT}}</main>
+      <main class="content">{{CONTENT}}</main>
+    </div>
 
     <!-- Status Bar - Fixed bottom bar with version info -->
     <footer class="status-bar" id="statusBar">
