@@ -1047,22 +1047,25 @@ export class TokenDetailsDialog {
     const safetyScore = token.safety_score;
     const scoreClass = this._getSafetyScoreClass(safetyScore);
     const scoreLabel = this._getSafetyScoreLabel(safetyScore);
-    const hasSecurityData = safetyScore !== null && safetyScore !== undefined;
 
     return `
       <div class="security-container">
-        ${this._buildSecurityHeader(token, safetyScore, scoreClass, scoreLabel, hasSecurityData)}
-        ${this._buildSecurityOverview(token)}
-        ${this._buildAuthoritiesCard(token)}
-        ${this._buildHoldersCard(token)}
-        ${this._buildTransferFeeCard(token)}
-        ${this._buildRisksSection(token.security_risks)}
-        ${this._buildTopHoldersSection(token.top_holders)}
+        <div class="security-left-col">
+          ${this._buildSecurityHeader(token, safetyScore, scoreClass, scoreLabel)}
+          ${this._buildSecurityOverview(token)}
+          ${this._buildAuthoritiesCard(token)}
+        </div>
+        <div class="security-right-col">
+          ${this._buildHoldersCard(token)}
+          ${this._buildTransferFeeCard(token)}
+          ${this._buildRisksSection(token.security_risks)}
+          ${this._buildTopHoldersSection(token.top_holders)}
+        </div>
       </div>
     `;
   }
 
-  _buildSecurityHeader(token, safetyScore, scoreClass, scoreLabel, hasSecurityData) {
+  _buildSecurityHeader(token, safetyScore, scoreClass, scoreLabel) {
     const lastUpdated = token.security_last_updated
       ? Utils.formatTimestamp(token.security_last_updated)
       : null;
@@ -1070,7 +1073,7 @@ export class TokenDetailsDialog {
     // Safety score is 0-100 (higher = safer)
     const score = safetyScore ?? 0;
     const scorePercent = Math.min(100, Math.max(0, score));
-    const circumference = 2 * Math.PI * 54; // radius = 54
+    const circumference = 2 * Math.PI * 38; // radius = 38 (smaller circle)
     const offset = circumference - (scorePercent / 100) * circumference;
 
     // Risk score for additional info
@@ -1080,9 +1083,9 @@ export class TokenDetailsDialog {
       <div class="security-header">
         <div class="security-score-container">
           <div class="security-score-circle">
-            <svg class="score-progress" width="140" height="140" viewBox="0 0 140 140">
-              <circle class="score-bg" cx="70" cy="70" r="54"></circle>
-              <circle class="score-ring ${scoreClass}" cx="70" cy="70" r="54" 
+            <svg class="score-progress" width="100" height="100" viewBox="0 0 100 100">
+              <circle class="score-bg" cx="50" cy="50" r="38"></circle>
+              <circle class="score-ring ${scoreClass}" cx="50" cy="50" r="38" 
                 style="stroke-dasharray: ${circumference}; stroke-dashoffset: ${offset};"></circle>
             </svg>
             <div class="score-content">
@@ -1092,16 +1095,16 @@ export class TokenDetailsDialog {
           </div>
           <div class="score-info">
             <span class="score-label ${scoreClass}">${scoreLabel}</span>
-            <span class="score-hint">Safety Score (higher = safer)</span>
+            <span class="score-hint">Safety Score</span>
             ${riskScore !== null && riskScore !== undefined ? 
-              `<span class="risk-score-info">Risk Score: ${Utils.formatNumber(riskScore, { decimals: 0 })}</span>` : ""}
-            ${lastUpdated ? `<span class="score-updated">Updated: ${lastUpdated}</span>` : ""}
+              `<span class="risk-score-info">Risk: ${Utils.formatNumber(riskScore, { decimals: 0 })}</span>` : ""}
+            ${lastUpdated ? `<span class="score-updated">${lastUpdated}</span>` : ""}
           </div>
         </div>
         ${token.rugged ? `
         <div class="rugged-warning">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-          <span>Token flagged as RUGGED</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+          <span>RUGGED</span>
         </div>
         ` : ""}
         ${token.security_summary ? `
@@ -1117,10 +1120,10 @@ export class TokenDetailsDialog {
     const items = [];
 
     if (token.token_type) {
-      items.push({ label: "Token Type", value: token.token_type, icon: "📦" });
+      items.push({ label: "Type", value: token.token_type, icon: "📦" });
     }
     if (token.total_holders !== null && token.total_holders !== undefined) {
-      items.push({ label: "Total Holders", value: Utils.formatNumber(token.total_holders, { decimals: 0 }), icon: "👥" });
+      items.push({ label: "Holders", value: Utils.formatCompactNumber(token.total_holders), icon: "👥" });
     }
     if (token.lp_provider_count !== null && token.lp_provider_count !== undefined) {
       items.push({ label: "LP Providers", value: Utils.formatNumber(token.lp_provider_count, { decimals: 0 }), icon: "💧" });
@@ -1492,9 +1495,29 @@ export class TokenDetailsDialog {
     const openPositions = positions.filter((p) => !p.exit_time);
     const closedPositions = positions.filter((p) => p.exit_time);
 
-    let html = "";
+    // Two-column layout when we have both open and closed positions
+    if (openPositions.length > 0 && closedPositions.length > 0) {
+      return `
+        <div class="positions-container">
+          <div class="positions-col">
+            <div class="positions-section">
+              <h3 class="positions-section-title">Open Positions (${openPositions.length})</h3>
+              <div class="positions-list">${openPositions.map((pos) => this._buildOpenPositionCard(pos)).join("")}</div>
+            </div>
+          </div>
+          <div class="positions-col">
+            <div class="positions-section">
+              <h3 class="positions-section-title">Closed Positions (${closedPositions.length})</h3>
+              <div class="positions-list">${closedPositions.map((pos) => this._buildClosedPositionCard(pos)).join("")}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    }
 
-    // Open positions section
+    // Single column for only open or only closed
+    let html = '<div class="positions-single-col">';
+    
     if (openPositions.length > 0) {
       html += `<div class="positions-section">
         <h3 class="positions-section-title">Open Positions (${openPositions.length})</h3>
@@ -1502,7 +1525,6 @@ export class TokenDetailsDialog {
       </div>`;
     }
 
-    // Closed positions section
     if (closedPositions.length > 0) {
       html += `<div class="positions-section">
         <h3 class="positions-section-title">Closed Positions (${closedPositions.length})</h3>
@@ -1510,6 +1532,7 @@ export class TokenDetailsDialog {
       </div>`;
     }
 
+    html += '</div>';
     return html;
   }
 
@@ -1713,6 +1736,20 @@ export class TokenDetailsDialog {
 
     content.innerHTML = this._buildPoolsContent(this.fullTokenData);
     content.dataset.loaded = "true";
+    this._attachPoolsCopyHandlers(content);
+  }
+
+  _attachPoolsCopyHandlers(content) {
+    content.querySelectorAll(".copy-btn-mini[data-copy]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const text = btn.dataset.copy;
+        if (text) {
+          Utils.copyToClipboard(text);
+        }
+      });
+    });
   }
 
   _buildPoolsContent(token) {
@@ -1728,36 +1765,208 @@ export class TokenDetailsDialog {
       `;
     }
 
-    const poolCards = pools.map((pool, idx) => {
-      return `
-        <div class="pool-card ${pool.is_canonical ? "canonical" : ""}">
-          <div class="pool-header">
-            <span class="pool-program">${this._escapeHtml(pool.program)}</span>
-            ${pool.is_canonical ? '<span class="canonical-badge">Canonical</span>' : ""}
-          </div>
-          <div class="pool-body">
-            <div class="pool-row">
-              <span class="pool-label">Pool Address</span>
-              <span class="pool-value mono" title="${this._escapeHtml(pool.pool_id)}">${this._formatShortAddress(pool.pool_id)}</span>
+    // Calculate summary stats
+    const totalLiquidity = pools.reduce((sum, p) => sum + (p.liquidity_usd || 0), 0);
+    const totalVolume24h = pools.reduce((sum, p) => sum + (p.volume_h24_usd || 0), 0);
+    const canonicalPool = pools.find((p) => p.is_canonical);
+    const programCounts = pools.reduce((acc, p) => {
+      acc[p.program] = (acc[p.program] || 0) + 1;
+      return acc;
+    }, {});
+    const baseRoleCount = pools.filter((p) => p.token_role === "base").length;
+    const quoteRoleCount = pools.filter((p) => p.token_role === "quote").length;
+
+    // Build left column - Summary stats
+    const leftCol = `
+      <div class="pools-left-col">
+        <div class="pools-summary-card">
+          <div class="pools-summary-title">Pool Summary</div>
+          <div class="pools-summary-stats">
+            <div class="pools-stat">
+              <span class="pools-stat-label">Total Pools</span>
+              <span class="pools-stat-value">${pools.length}</span>
             </div>
-            <div class="pool-row">
-              <span class="pool-label">Liquidity</span>
-              <span class="pool-value">${pool.liquidity_usd ? Utils.formatCurrencyUSD(pool.liquidity_usd) : "—"}</span>
+            <div class="pools-stat">
+              <span class="pools-stat-label">Total Liquidity</span>
+              <span class="pools-stat-value">${Utils.formatCurrencyUSD(totalLiquidity)}</span>
             </div>
-            <div class="pool-row">
-              <span class="pool-label">Volume 24H</span>
-              <span class="pool-value">${pool.volume_h24_usd ? Utils.formatCurrencyUSD(pool.volume_h24_usd) : "—"}</span>
+            <div class="pools-stat">
+              <span class="pools-stat-label">Total 24h Volume</span>
+              <span class="pools-stat-value">${Utils.formatCurrencyUSD(totalVolume24h)}</span>
             </div>
-            <div class="pool-row">
-              <span class="pool-label">Token Role</span>
-              <span class="pool-value">${this._escapeHtml(pool.token_role)}</span>
+            <div class="pools-stat">
+              <span class="pools-stat-label">Base Role</span>
+              <span class="pools-stat-value">${baseRoleCount}</span>
+            </div>
+            <div class="pools-stat">
+              <span class="pools-stat-label">Quote Role</span>
+              <span class="pools-stat-value">${quoteRoleCount}</span>
             </div>
           </div>
         </div>
-      `;
-    }).join("");
 
-    return `<div class="pools-grid">${poolCards}</div>`;
+        <div class="pools-summary-card">
+          <div class="pools-summary-title">DEX Breakdown</div>
+          <div class="pools-dex-list">
+            ${Object.entries(programCounts)
+              .sort((a, b) => b[1] - a[1])
+              .map(([program, count]) => `
+                <div class="pools-dex-row">
+                  <span class="pools-dex-name">${this._escapeHtml(program)}</span>
+                  <span class="pools-dex-count">${count}</span>
+                </div>
+              `)
+              .join("")}
+          </div>
+        </div>
+
+        ${canonicalPool ? `
+        <div class="pools-summary-card canonical-highlight">
+          <div class="pools-summary-title">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
+            Canonical Pool
+          </div>
+          <div class="pools-canonical-info">
+            <div class="pools-stat">
+              <span class="pools-stat-label">DEX</span>
+              <span class="pools-stat-value">${this._escapeHtml(canonicalPool.program)}</span>
+            </div>
+            <div class="pools-stat">
+              <span class="pools-stat-label">Liquidity</span>
+              <span class="pools-stat-value">${canonicalPool.liquidity_usd ? Utils.formatCurrencyUSD(canonicalPool.liquidity_usd) : "—"}</span>
+            </div>
+            <div class="pools-stat">
+              <span class="pools-stat-label">Volume 24h</span>
+              <span class="pools-stat-value">${canonicalPool.volume_h24_usd ? Utils.formatCurrencyUSD(canonicalPool.volume_h24_usd) : "—"}</span>
+            </div>
+          </div>
+        </div>
+        ` : ""}
+      </div>
+    `;
+
+    // Build right column - Pool details
+    const poolCards = pools.map((pool) => this._buildPoolDetailCard(pool)).join("");
+    const rightCol = `
+      <div class="pools-right-col">
+        <div class="pools-list-header">
+          <span class="pools-list-title">All Pools (${pools.length})</span>
+        </div>
+        <div class="pools-list">
+          ${poolCards}
+        </div>
+      </div>
+    `;
+
+    return `<div class="pools-container">${leftCol}${rightCol}</div>`;
+  }
+
+  _buildPoolDetailCard(pool) {
+    const lastUpdated = pool.last_updated_unix
+      ? Utils.formatTimestamp(pool.last_updated_unix * 1000)
+      : "—";
+
+    const reserveAccountsHtml =
+      pool.reserve_accounts && pool.reserve_accounts.length > 0
+        ? pool.reserve_accounts
+            .map(
+              (addr) => `
+            <div class="pool-reserve-item">
+              <span class="pool-reserve-addr" title="${this._escapeHtml(addr)}">${this._formatShortAddress(addr)}</span>
+              <button class="copy-btn-mini" data-copy="${this._escapeHtml(addr)}" title="Copy address">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+              </button>
+            </div>
+          `,
+            )
+            .join("")
+        : '<span class="pool-no-data">No reserve accounts</span>';
+
+    return `
+      <div class="pool-detail-card ${pool.is_canonical ? "canonical" : ""}">
+        <div class="pool-detail-header">
+          <div class="pool-detail-left">
+            <span class="pool-detail-program">${this._escapeHtml(pool.program)}</span>
+            ${pool.is_canonical ? '<span class="pool-canonical-badge">★ Canonical</span>' : ""}
+          </div>
+          <div class="pool-detail-role ${pool.token_role}">${this._escapeHtml(pool.token_role)}</div>
+        </div>
+
+        <div class="pool-detail-body">
+          <div class="pool-detail-section">
+            <div class="pool-detail-row">
+              <span class="pool-detail-label">Pool Address</span>
+              <div class="pool-detail-value-group">
+                <span class="pool-detail-value mono" title="${this._escapeHtml(pool.pool_id)}">${this._formatShortAddress(pool.pool_id)}</span>
+                <button class="copy-btn-mini" data-copy="${this._escapeHtml(pool.pool_id)}" title="Copy pool address">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="pool-detail-row">
+              <span class="pool-detail-label">Base Mint</span>
+              <div class="pool-detail-value-group">
+                <span class="pool-detail-value mono" title="${this._escapeHtml(pool.base_mint)}">${this._formatShortAddress(pool.base_mint)}</span>
+                <button class="copy-btn-mini" data-copy="${this._escapeHtml(pool.base_mint)}" title="Copy base mint">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="pool-detail-row">
+              <span class="pool-detail-label">Quote Mint</span>
+              <div class="pool-detail-value-group">
+                <span class="pool-detail-value mono" title="${this._escapeHtml(pool.quote_mint)}">${this._formatShortAddress(pool.quote_mint)}</span>
+                <button class="copy-btn-mini" data-copy="${this._escapeHtml(pool.quote_mint)}" title="Copy quote mint">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+              </div>
+            </div>
+
+            <div class="pool-detail-row">
+              <span class="pool-detail-label">Paired Mint</span>
+              <div class="pool-detail-value-group">
+                <span class="pool-detail-value mono" title="${this._escapeHtml(pool.paired_mint)}">${this._formatShortAddress(pool.paired_mint)}</span>
+                <button class="copy-btn-mini" data-copy="${this._escapeHtml(pool.paired_mint)}" title="Copy paired mint">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="pool-detail-divider"></div>
+
+          <div class="pool-detail-section">
+            <div class="pool-detail-row">
+              <span class="pool-detail-label">Liquidity</span>
+              <span class="pool-detail-value highlight">${pool.liquidity_usd ? Utils.formatCurrencyUSD(pool.liquidity_usd) : "—"}</span>
+            </div>
+
+            <div class="pool-detail-row">
+              <span class="pool-detail-label">Volume 24h</span>
+              <span class="pool-detail-value highlight">${pool.volume_h24_usd ? Utils.formatCurrencyUSD(pool.volume_h24_usd) : "—"}</span>
+            </div>
+
+            <div class="pool-detail-row">
+              <span class="pool-detail-label">Last Updated</span>
+              <span class="pool-detail-value muted">${lastUpdated}</span>
+            </div>
+          </div>
+
+          <div class="pool-detail-divider"></div>
+
+          <div class="pool-detail-section">
+            <div class="pool-detail-row reserves-row">
+              <span class="pool-detail-label">Reserve Accounts (${pool.reserve_accounts?.length || 0})</span>
+            </div>
+            <div class="pool-reserves-list">
+              ${reserveAccountsHtml}
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   // =========================================================================
@@ -1772,123 +1981,333 @@ export class TokenDetailsDialog {
 
     content.innerHTML = this._buildLinksContent(this.fullTokenData);
     content.dataset.loaded = "true";
+    this._attachLinksCopyHandlers(content);
+  }
+
+  _attachLinksCopyHandlers(content) {
+    content.querySelectorAll(".copy-btn-mini[data-copy]").forEach((btn) => {
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const text = btn.dataset.copy;
+        if (text) {
+          Utils.copyToClipboard(text);
+        }
+      });
+    });
   }
 
   _buildLinksContent(token) {
     const mint = token.mint;
     const hasWebsites = token.websites && token.websites.length > 0;
     const hasSocials = token.socials && token.socials.length > 0;
+    const hasLogo = !!token.logo_url;
+    const hasHeader = !!token.header_image_url;
+    const hasDescription = !!token.description;
 
-    // External explorer/analytics links - comprehensive list
-    const explorerLinks = `
-      <div class="links-section">
-        <div class="section-title">Explorers & Analytics</div>
-        <div class="links-grid">
-          <a href="https://solscan.io/token/${mint}" target="_blank" rel="noopener noreferrer" class="link-card explorer">
-            <div class="link-icon">🔍</div>
-            <div class="link-name">Solscan</div>
-          </a>
-          <a href="https://explorer.solana.com/address/${mint}" target="_blank" rel="noopener noreferrer" class="link-card explorer">
-            <div class="link-icon">◎</div>
-            <div class="link-name">Solana Explorer</div>
-          </a>
-          <a href="https://birdeye.so/token/${mint}?chain=solana" target="_blank" rel="noopener noreferrer" class="link-card explorer">
-            <div class="link-icon">🦅</div>
-            <div class="link-name">Birdeye</div>
-          </a>
-          <a href="https://dexscreener.com/solana/${mint}" target="_blank" rel="noopener noreferrer" class="link-card explorer">
-            <div class="link-icon">📊</div>
-            <div class="link-name">DEX Screener</div>
-          </a>
-          <a href="https://www.geckoterminal.com/solana/tokens/${mint}" target="_blank" rel="noopener noreferrer" class="link-card explorer">
-            <div class="link-icon">🦎</div>
-            <div class="link-name">GeckoTerminal</div>
-          </a>
-          <a href="https://www.dextools.io/app/en/solana/pair-explorer/${mint}" target="_blank" rel="noopener noreferrer" class="link-card explorer">
-            <div class="link-icon">🛠️</div>
-            <div class="link-name">DexTools</div>
-          </a>
-          <a href="https://gmgn.ai/sol/token/${mint}" target="_blank" rel="noopener noreferrer" class="link-card explorer">
-            <div class="link-icon">🤖</div>
-            <div class="link-name">GMGN</div>
-          </a>
-          <a href="https://photon-sol.tinyastro.io/en/lp/${mint}" target="_blank" rel="noopener noreferrer" class="link-card explorer">
-            <div class="link-icon">⚡</div>
-            <div class="link-name">Photon</div>
-          </a>
-          <a href="https://rugcheck.xyz/tokens/${mint}" target="_blank" rel="noopener noreferrer" class="link-card explorer">
-            <div class="link-icon">🛡️</div>
-            <div class="link-name">RugCheck</div>
-          </a>
-          <a href="https://app.bubblemaps.io/sol/token/${mint}" target="_blank" rel="noopener noreferrer" class="link-card explorer">
-            <div class="link-icon">🫧</div>
-            <div class="link-name">Bubblemaps</div>
-          </a>
+    // Build left column - Media & Info
+    const leftCol = this._buildLinksLeftColumn(token, hasLogo, hasHeader, hasDescription);
+
+    // Build right column - All links organized
+    const rightCol = this._buildLinksRightColumn(token, mint, hasWebsites, hasSocials);
+
+    return `<div class="links-container">${leftCol}${rightCol}</div>`;
+  }
+
+  _buildLinksLeftColumn(token, hasLogo, hasHeader, hasDescription) {
+    const mint = token.mint;
+
+    // Token info section
+    const tokenInfoSection = `
+      <div class="links-info-card">
+        <div class="links-info-title">
+          <i class="icon-info"></i>
+          Token Info
+        </div>
+        <div class="links-info-content">
+          <div class="links-info-row">
+            <span class="links-info-label">Mint Address</span>
+            <div class="links-info-value-group">
+              <span class="links-info-value mono" title="${this._escapeHtml(mint)}">${this._formatShortAddress(mint)}</span>
+              <button class="copy-btn-mini" data-copy="${this._escapeHtml(mint)}" title="Copy mint address">
+                <i class="icon-copy"></i>
+              </button>
+            </div>
+          </div>
+          ${token.data_source ? `
+          <div class="links-info-row">
+            <span class="links-info-label">Data Source</span>
+            <span class="links-info-value badge">${this._escapeHtml(token.data_source)}</span>
+          </div>
+          ` : ""}
+          ${token.verified ? `
+          <div class="links-info-row">
+            <span class="links-info-label">Status</span>
+            <span class="links-info-value badge success"><i class="icon-shield-check"></i> Verified</span>
+          </div>
+          ` : ""}
         </div>
       </div>
     `;
 
-    // Website links
-    let websiteLinks = "";
-    if (hasWebsites) {
-      const websiteItems = token.websites.map((site) => `
-        <a href="${this._escapeHtml(site.url)}" target="_blank" class="link-card website">
-          <div class="link-icon">🌐</div>
-          <div class="link-name">${this._escapeHtml(site.label || "Website")}</div>
-        </a>
-      `).join("");
-
-      websiteLinks = `
-        <div class="links-section">
-          <div class="section-title">Websites</div>
-          <div class="links-grid">${websiteItems}</div>
-        </div>
-      `;
-    }
-
-    // Social links
-    let socialLinks = "";
-    if (hasSocials) {
-      const socialItems = token.socials.map((social) => {
-        const icon = this._getSocialIcon(social.platform);
-        return `
-          <a href="${this._escapeHtml(social.url)}" target="_blank" class="link-card social">
-            <div class="link-icon">${icon}</div>
-            <div class="link-name">${this._escapeHtml(social.platform)}</div>
+    // Media section - logo and header
+    let mediaSection = "";
+    if (hasLogo || hasHeader) {
+      const logoHtml = hasLogo ? `
+        <div class="links-media-item">
+          <div class="links-media-label">Logo</div>
+          <div class="links-media-preview logo">
+            <img src="${this._escapeHtml(token.logo_url)}" alt="Token Logo" onerror="this.parentElement.innerHTML='<i class=\\'icon-image-off\\'></i>'" />
+          </div>
+          <a href="${this._escapeHtml(token.logo_url)}" target="_blank" class="links-media-link">
+            <i class="icon-external-link"></i> Open Image
           </a>
-        `;
-      }).join("");
+        </div>
+      ` : "";
 
-      socialLinks = `
-        <div class="links-section">
-          <div class="section-title">Socials</div>
-          <div class="links-grid">${socialItems}</div>
+      const headerHtml = hasHeader ? `
+        <div class="links-media-item">
+          <div class="links-media-label">Header Image</div>
+          <div class="links-media-preview header">
+            <img src="${this._escapeHtml(token.header_image_url)}" alt="Header Image" onerror="this.parentElement.innerHTML='<i class=\\'icon-image-off\\'></i>'" />
+          </div>
+          <a href="${this._escapeHtml(token.header_image_url)}" target="_blank" class="links-media-link">
+            <i class="icon-external-link"></i> Open Image
+          </a>
+        </div>
+      ` : "";
+
+      mediaSection = `
+        <div class="links-info-card">
+          <div class="links-info-title">
+            <i class="icon-image"></i>
+            Media Assets
+          </div>
+          <div class="links-media-grid">
+            ${logoHtml}
+            ${headerHtml}
+          </div>
         </div>
       `;
     }
 
-    if (!hasWebsites && !hasSocials) {
-      return explorerLinks + `
-        <div class="empty-state small">
-          <p>No official website or social links available for this token.</p>
+    // Description section
+    let descriptionSection = "";
+    if (hasDescription) {
+      descriptionSection = `
+        <div class="links-info-card">
+          <div class="links-info-title">
+            <i class="icon-file-text"></i>
+            Description
+          </div>
+          <div class="links-description">
+            ${this._escapeHtml(token.description)}
+          </div>
         </div>
       `;
     }
 
-    return explorerLinks + websiteLinks + socialLinks;
+    return `
+      <div class="links-left-col">
+        ${tokenInfoSection}
+        ${mediaSection}
+        ${descriptionSection}
+      </div>
+    `;
   }
 
-  _getSocialIcon(platform) {
-    const icons = {
-      twitter: "𝕏",
-      telegram: "✈️",
-      discord: "💬",
-      medium: "📝",
-      github: "🐙",
-      youtube: "▶️",
-      reddit: "🔴",
+  _buildLinksRightColumn(token, mint, hasWebsites, hasSocials) {
+    // Explorers section - comprehensive list with Lucide icons
+    const explorersSection = `
+      <div class="links-section-card">
+        <div class="links-section-title">
+          <i class="icon-search"></i>
+          Explorers & Analytics
+        </div>
+        <div class="links-grid-compact">
+          ${this._buildExplorerLink("https://solscan.io/token/" + mint, "Solscan", "icon-scan")}
+          ${this._buildExplorerLink("https://explorer.solana.com/address/" + mint, "Solana Explorer", "icon-globe")}
+          ${this._buildExplorerLink("https://birdeye.so/token/" + mint + "?chain=solana", "Birdeye", "icon-eye")}
+          ${this._buildExplorerLink("https://dexscreener.com/solana/" + mint, "DEX Screener", "icon-chart-candlestick")}
+          ${this._buildExplorerLink("https://www.geckoterminal.com/solana/tokens/" + mint, "GeckoTerminal", "icon-chart-line")}
+          ${this._buildExplorerLink("https://www.dextools.io/app/en/solana/pair-explorer/" + mint, "DexTools", "icon-wrench")}
+          ${this._buildExplorerLink("https://gmgn.ai/sol/token/" + mint, "GMGN", "icon-bot")}
+          ${this._buildExplorerLink("https://photon-sol.tinyastro.io/en/lp/" + mint, "Photon", "icon-zap")}
+          ${this._buildExplorerLink("https://rugcheck.xyz/tokens/" + mint, "RugCheck", "icon-shield")}
+          ${this._buildExplorerLink("https://app.bubblemaps.io/sol/token/" + mint, "Bubblemaps", "icon-chart-network")}
+          ${this._buildExplorerLink("https://www.coingecko.com/en/coins/" + mint, "CoinGecko", "icon-coins")}
+          ${this._buildExplorerLink("https://jup.ag/swap/SOL-" + mint, "Jupiter Swap", "icon-arrow-right-left")}
+        </div>
+      </div>
+    `;
+
+    // Official websites section
+    let websitesSection = "";
+    if (hasWebsites) {
+      const websiteLinks = token.websites.map((site) => {
+        const label = site.label || this._extractDomainName(site.url) || "Website";
+        return this._buildOfficialLink(site.url, label, "icon-globe");
+      }).join("");
+
+      websitesSection = `
+        <div class="links-section-card">
+          <div class="links-section-title">
+            <i class="icon-globe"></i>
+            Official Websites
+          </div>
+          <div class="links-list">
+            ${websiteLinks}
+          </div>
+        </div>
+      `;
+    }
+
+    // Social links section
+    let socialsSection = "";
+    if (hasSocials) {
+      const socialLinks = token.socials.map((social) => {
+        const { icon, label } = this._getSocialMeta(social.platform);
+        return this._buildSocialLink(social.url, label, icon);
+      }).join("");
+
+      socialsSection = `
+        <div class="links-section-card">
+          <div class="links-section-title">
+            <i class="icon-share-2"></i>
+            Social Media
+          </div>
+          <div class="links-list">
+            ${socialLinks}
+          </div>
+        </div>
+      `;
+    }
+
+    // No links message
+    let noLinksMessage = "";
+    if (!hasWebsites && !hasSocials) {
+      noLinksMessage = `
+        <div class="links-empty-notice">
+          <i class="icon-link-2-off"></i>
+          <span>No official website or social links available for this token.</span>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="links-right-col">
+        ${explorersSection}
+        ${websitesSection}
+        ${socialsSection}
+        ${noLinksMessage}
+      </div>
+    `;
+  }
+
+  _buildExplorerLink(url, name, iconClass) {
+    return `
+      <a href="${this._escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="links-explorer-item">
+        <i class="${iconClass}"></i>
+        <span>${this._escapeHtml(name)}</span>
+        <i class="icon-external-link link-external-icon"></i>
+      </a>
+    `;
+  }
+
+  _buildOfficialLink(url, label, iconClass) {
+    return `
+      <a href="${this._escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="links-official-item">
+        <div class="links-official-icon">
+          <i class="${iconClass}"></i>
+        </div>
+        <div class="links-official-content">
+          <span class="links-official-label">${this._escapeHtml(label)}</span>
+          <span class="links-official-url">${this._escapeHtml(this._formatUrl(url))}</span>
+        </div>
+        <i class="icon-external-link link-external-icon"></i>
+      </a>
+    `;
+  }
+
+  _buildSocialLink(url, label, iconClass) {
+    const username = this._extractSocialUsername(url);
+    return `
+      <a href="${this._escapeHtml(url)}" target="_blank" rel="noopener noreferrer" class="links-social-item">
+        <div class="links-social-icon ${this._getSocialColorClass(label)}">
+          <i class="${iconClass}"></i>
+        </div>
+        <div class="links-social-content">
+          <span class="links-social-platform">${this._escapeHtml(label)}</span>
+          ${username ? `<span class="links-social-handle">${this._escapeHtml(username)}</span>` : ""}
+        </div>
+        <i class="icon-external-link link-external-icon"></i>
+      </a>
+    `;
+  }
+
+  _getSocialMeta(platform) {
+    const platformLower = platform?.toLowerCase() || "";
+    const socialMap = {
+      twitter: { icon: "icon-twitter", label: "Twitter / X" },
+      x: { icon: "icon-twitter", label: "X (Twitter)" },
+      telegram: { icon: "icon-send", label: "Telegram" },
+      discord: { icon: "icon-message-circle", label: "Discord" },
+      medium: { icon: "icon-book-open", label: "Medium" },
+      github: { icon: "icon-github", label: "GitHub" },
+      youtube: { icon: "icon-youtube", label: "YouTube" },
+      reddit: { icon: "icon-message-square", label: "Reddit" },
+      facebook: { icon: "icon-facebook", label: "Facebook" },
+      instagram: { icon: "icon-instagram", label: "Instagram" },
+      linkedin: { icon: "icon-linkedin", label: "LinkedIn" },
+      tiktok: { icon: "icon-music", label: "TikTok" },
     };
-    return icons[platform?.toLowerCase()] || "🔗";
+    return socialMap[platformLower] || { icon: "icon-link", label: platform || "Link" };
+  }
+
+  _getSocialColorClass(platform) {
+    const platformLower = platform?.toLowerCase() || "";
+    const colorMap = {
+      "twitter / x": "social-twitter",
+      "x (twitter)": "social-twitter",
+      telegram: "social-telegram",
+      discord: "social-discord",
+      youtube: "social-youtube",
+      github: "social-github",
+      medium: "social-medium",
+      reddit: "social-reddit",
+    };
+    return colorMap[platformLower] || "social-default";
+  }
+
+  _extractDomainName(url) {
+    try {
+      const domain = new URL(url).hostname;
+      return domain.replace(/^www\./, "");
+    } catch {
+      return null;
+    }
+  }
+
+  _formatUrl(url) {
+    try {
+      const parsed = new URL(url);
+      return parsed.hostname + (parsed.pathname !== "/" ? parsed.pathname : "");
+    } catch {
+      return url;
+    }
+  }
+
+  _extractSocialUsername(url) {
+    try {
+      const parsed = new URL(url);
+      const path = parsed.pathname.replace(/^\/+|\/+$/g, "");
+      if (path && !path.includes("/")) {
+        return "@" + path;
+      }
+      return null;
+    } catch {
+      return null;
+    }
   }
 
   // =========================================================================

@@ -131,13 +131,19 @@ pub struct TokenDetailResponse {
   pub mint: String,
   pub symbol: String,
   pub name: Option<String>,
-  pub tagline: Option<String>,
   pub description: Option<String>,
   pub decimals: Option<u8>,
 
-  // Visuals
+  // Visuals / Media
   pub logo_url: Option<String>,
+  pub header_image_url: Option<String>,
+  pub open_graph_image: Option<String>,
+
+  // Primary website (convenience field)
   pub website: Option<String>,
+
+  // Data source info
+  pub data_source: Option<String>,
 
   // Status flags
   pub verified: bool,
@@ -670,10 +676,12 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
         mint: mint.clone(),
         symbol: "NOT_FOUND".to_string(),
         name: Some("Token not in cache".to_string()),
-        tagline: None,
         description: None,
         logo_url: None,
+        header_image_url: None,
+        open_graph_image: None,
         website: None,
+        data_source: None,
         verified: false,
         tags: vec![],
         pair_labels: vec![],
@@ -1128,9 +1136,12 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     _ => None,
   };
 
-  // Use header image as tagline if available
-  let tagline = token.header_image_url.clone();
+  // Media fields
+  let header_image_url = token.header_image_url.clone();
   let description = normalize_optional_text(token.description.clone());
+
+  // Data source as string
+  let data_source = Some(format!("{:?}", token.data_source));
 
   // Verified = normalized score >= 70 (safer tokens)
   let verified = security_score_normalised.map(|s| s >= 70).unwrap_or(false);
@@ -1139,10 +1150,12 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     mint: token.mint.clone(),
     symbol: token.symbol.clone(),
     name: Some(token.name.clone()),
-    tagline,
     description,
     logo_url,
+    header_image_url,
+    open_graph_image: None, // Not currently stored in Token struct
     website: primary_website,
+    data_source,
     verified,
     tags: combined_tags,
     pair_labels: Vec::new(), // Not available in unified Token
