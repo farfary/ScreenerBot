@@ -130,8 +130,10 @@ export const HINTS = {
 • **Valid SOL liquidity pools** — supported by our DEX decoders (Raydium, Orca, Meteora, etc.)
 • **Successful price calculation** — prices computed directly from on-chain pool reserves
 
-This is the most reliable token list for trading as prices are derived from actual pool data, not external APIs.`,
-      learnMoreUrl: "https://screenerbot.io/docs/tokens",
+This is the most reliable token list for trading as prices are derived from actual pool data, not external APIs.
+
+Click any token to view detailed information and manage blacklist status.`,
+      learnMoreUrl: "https://screenerbot.io/docs/dashboard/tokens",
     },
 
     noMarketData: {
@@ -174,7 +176,7 @@ Filtering checks include:
 • **Market cap** — optional FDV/MC filters
 
 Configure filters in the **Filtering** page.`,
-      learnMoreUrl: "https://screenerbot.io/docs/filtering",
+      learnMoreUrl: "https://screenerbot.io/docs/dashboard/filtering",
     },
 
     rejectedTokens: {
@@ -262,7 +264,7 @@ When DCA is triggered:
 • Entry count increments
 
 Configure DCA rules in **Auto Trader** settings.`,
-      learnMoreUrl: "https://screenerbot.io/docs/trader/dca",
+      learnMoreUrl: "https://screenerbot.io/docs/trading/dca-guide",
     },
 
     partialExit: {
@@ -295,7 +297,7 @@ Tokens must pass **all enabled criteria** to appear in the passed list:
 • Meta filters (token age, etc.)
 
 Disabled criteria are skipped entirely.`,
-      learnMoreUrl: "https://screenerbot.io/docs/filtering",
+      learnMoreUrl: "https://screenerbot.io/docs/dashboard/filtering",
     },
 
     dexscreener: {
@@ -334,7 +336,7 @@ GeckoTerminal often has data for newer tokens.`,
 • **Top Holders** — concentration risk
 
 Higher risk scores indicate more potential red flags.`,
-      learnMoreUrl: "https://screenerbot.io/docs/security",
+      learnMoreUrl: "https://screenerbot.io/docs/dashboard/filtering",
     },
 
     meta: {
@@ -367,7 +369,7 @@ Components:
 • **Risk Controls** — loss limits and safety gates
 
 Start/stop trading from the control panel.`,
-      learnMoreUrl: "https://screenerbot.io/docs/trader",
+      learnMoreUrl: "https://screenerbot.io/docs/dashboard/trader",
     },
 
     entryMonitor: {
@@ -483,7 +485,7 @@ Categories:
 • **Services** — background service settings
 
 Changes take effect immediately (hot reload).`,
-      learnMoreUrl: "https://screenerbot.io/docs/configuration",
+      learnMoreUrl: "https://screenerbot.io/docs/dashboard/system/config",
     },
   },
 };
