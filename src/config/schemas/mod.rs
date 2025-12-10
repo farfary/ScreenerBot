@@ -18,6 +18,7 @@ mod swaps;
 mod tokens;
 mod trader;
 mod wallet;
+mod webserver;
 
 pub use connectivity::*;
 pub use events::*;
@@ -35,6 +36,7 @@ pub use swaps::*;
 pub use tokens::*;
 pub use trader::*;
 pub use wallet::*;
+pub use webserver::*;
 
 // ============================================================================
 // ROOT CONFIGURATION
@@ -96,5 +98,8 @@ config_struct! {
 
         /// GUI/Desktop application configuration
         gui: GuiConfig = GuiConfig::default(),
+
+        /// Webserver configuration (headless/CLI mode only)
+        webserver: WebserverConfig = WebserverConfig::default(),
     }
 }

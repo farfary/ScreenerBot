@@ -6,6 +6,11 @@
 /// - Dynamic port selection to avoid conflicts
 /// - Security token validation for all requests
 /// - Binding to 127.0.0.1 only (localhost, no external access)
+///
+/// Headless/CLI mode:
+/// - Uses port from config (default 8080)
+/// - Uses host from config (default 127.0.0.1, use 0.0.0.0 for remote access)
+/// - No security token required (accessible via browser)
 use axum::Router;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -14,6 +19,7 @@ use tokio::sync::Notify;
 use tower_http::compression::CompressionLayer;
 
 use crate::{
+  config::with_config,
   global,
   logger::{self, LogTag},
   webserver::{routes, state::AppState},
@@ -74,16 +80,23 @@ async fn find_available_port() -> Result<u16, String> {
 /// - Uses a random available port (49152-65535)
 /// - Generates a security token for request validation
 /// - Only accepts requests with valid X-ScreenerBot-Token header
+/// - Always binds to 127.0.0.1 (localhost only) for security
 ///
-/// In CLI mode:
-/// - Uses fixed port 8080
+/// In CLI/Headless mode:
+/// - Uses port from config.webserver.port (default 8080)
+/// - Uses host from config.webserver.host (default 127.0.0.1, use 0.0.0.0 for remote)
 /// - No security token required (accessible via browser)
 pub async fn start_server() -> Result<(), String> {
   let is_gui = global::is_gui_mode();
 
-  // Determine port to use
-  let port = if is_gui {
-    // GUI mode: find available port and generate security token
+  // Get config values for headless mode
+  let (config_port, config_host) = with_config(|cfg| {
+    (cfg.webserver.port, cfg.webserver.host.clone())
+  });
+
+  // Determine port and host to use
+  let (port, host) = if is_gui {
+    // GUI mode: find available port, always bind to localhost for security
     let dynamic_port = find_available_port().await?;
     global::set_webserver_port(dynamic_port);
 
@@ -101,23 +114,39 @@ pub async fn start_server() -> Result<(), String> {
       &format!("Security token generated: {}...", &token[..8]),
     );
 
-    dynamic_port
+    (dynamic_port, DEFAULT_HOST.to_string())
   } else {
-    // CLI mode: use fixed port, no security token
-    global::set_webserver_port(DEFAULT_PORT);
-    logger::debug(
-      LogTag::Webserver,
-      &format!(
-        "CLI mode: using fixed port {} (accessible via browser)",
-        DEFAULT_PORT
-      ),
-    );
-    DEFAULT_PORT
+    // CLI/Headless mode: use config values
+    let port = if config_port > 0 { config_port } else { DEFAULT_PORT };
+    let host = if config_host.is_empty() { DEFAULT_HOST.to_string() } else { config_host };
+    
+    global::set_webserver_port(port);
+    
+    // Log appropriate message based on host binding
+    if host == "0.0.0.0" {
+      logger::info(
+        LogTag::Webserver,
+        &format!(
+          "Headless mode: binding to {}:{} (accessible from any network interface)",
+          host, port
+        ),
+      );
+    } else {
+      logger::info(
+        LogTag::Webserver,
+        &format!(
+          "Headless mode: binding to {}:{} (localhost only)",
+          host, port
+        ),
+      );
+    }
+
+    (port, host)
   };
 
   logger::debug(
     LogTag::Webserver,
-    &format!("Starting webserver on {}:{}", DEFAULT_HOST, port),
+    &format!("Starting webserver on {}:{}", host, port),
   );
 
   // Create application state
@@ -131,7 +160,7 @@ pub async fn start_server() -> Result<(), String> {
   let app = build_app(state.clone());
 
   // Parse bind address
-  let addr: SocketAddr = format!("{}:{}", DEFAULT_HOST, port)
+  let addr: SocketAddr = format!("{}:{}", host, port)
     .parse()
     .map_err(|e| format!("Invalid bind address: {}", e))?;
 
