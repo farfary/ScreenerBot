@@ -150,11 +150,25 @@ async fn main() {
   // =========================================================================
 
   // Check if we're running from an app bundle or if --gui flag is provided
+  // Detection patterns:
+  // - macOS: .app/Contents/MacOS (app bundle)
+  // - Windows: .exe (any executable)
+  // - Linux: /usr/bin/ (installed from .deb), AppImage, /opt/ (common install locations)
   let is_bundled = std::env::current_exe()
     .ok()
     .and_then(|exe| {
-      exe.to_str()
-        .map(|s| s.contains(".app/Contents/MacOS") || s.contains(".exe"))
+      exe.to_str().map(|s| {
+        // macOS app bundle
+        s.contains(".app/Contents/MacOS")
+          // Windows executable
+          || s.contains(".exe")
+          // Linux: installed from .deb to /usr/bin
+          || s.starts_with("/usr/bin/")
+          // Linux: AppImage (runs from /tmp/.mount_* or similar)
+          || s.contains(".mount_") || s.contains("AppImage")
+          // Linux: installed to /opt (common for third-party apps)
+          || s.starts_with("/opt/")
+      })
     })
     .unwrap_or(false);
 
