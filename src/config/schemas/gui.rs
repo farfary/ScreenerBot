@@ -50,6 +50,9 @@ config_struct! {
 
         /// Default table page size
         table_page_size: u32 = 25,
+
+        /// Show contextual help hints throughout the dashboard
+        show_hints: bool = true,
     }
 }
 

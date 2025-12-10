@@ -7,17 +7,35 @@ import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { TradeActionDialog } from "../ui/trade_action_dialog.js";
 import { TokenDetailsDialog } from "../ui/token_details_dialog.js";
+import * as Hints from "../core/hints.js";
+import { HintTrigger } from "../ui/hint_popover.js";
 
-// Sub-tabs (views) configuration
+// Sub-tabs (views) configuration with hint references
 const TOKEN_VIEWS = [
-  { id: "pool", label: '<i class="icon-droplet"></i> Pool Service' },
-  { id: "no_market", label: '<i class="icon-trending-down"></i> No Market Data' },
-  { id: "all", label: '<i class="icon-list"></i> All Tokens' },
-  { id: "passed", label: '<i class="icon-check"></i> Passed' },
-  { id: "rejected", label: '<i class="icon-circle-x"></i> Rejected' },
-  { id: "blacklisted", label: '<i class="icon-ban"></i> Blacklisted' },
-  { id: "positions", label: '<i class="icon-chart-bar"></i> Positions' },
-  { id: "recent", label: '<i class="icon-clock"></i> Recent' },
+  { id: "pool", label: '<i class="icon-droplet"></i> Pool Service', hintKey: "tokens.poolService" },
+  {
+    id: "no_market",
+    label: '<i class="icon-trending-down"></i> No Market Data',
+    hintKey: "tokens.noMarketData",
+  },
+  { id: "all", label: '<i class="icon-list"></i> All Tokens', hintKey: "tokens.allTokens" },
+  { id: "passed", label: '<i class="icon-check"></i> Passed', hintKey: "tokens.passedTokens" },
+  {
+    id: "rejected",
+    label: '<i class="icon-circle-x"></i> Rejected',
+    hintKey: "tokens.rejectedTokens",
+  },
+  {
+    id: "blacklisted",
+    label: '<i class="icon-ban"></i> Blacklisted',
+    hintKey: "tokens.blacklistedTokens",
+  },
+  {
+    id: "positions",
+    label: '<i class="icon-chart-bar"></i> Positions',
+    hintKey: "tokens.positionsTokens",
+  },
+  { id: "recent", label: '<i class="icon-clock"></i> Recent', hintKey: "tokens.recentTokens" },
 ];
 
 // Constants
@@ -224,6 +242,43 @@ function loadPersistedSort(stateKey) {
     };
   }
   return null;
+}
+
+/**
+ * Attach hint triggers to tab buttons
+ * Must be called after tab bar is rendered
+ */
+async function attachHintsToTabs() {
+  // Initialize hints system (loads settings and dismissed state)
+  await Hints.init();
+
+  if (!Hints.isEnabled()) return;
+
+  const container = document.querySelector("#subTabsContainer");
+  if (!container) return;
+
+  // Find all tab buttons and attach hints
+  TOKEN_VIEWS.forEach((view) => {
+    if (!view.hintKey) return;
+
+    const hint = Hints.getHint(view.hintKey);
+    if (!hint || Hints.isDismissed(hint.id)) return;
+
+    const tabButton = container.querySelector(`[data-tab-id="${view.id}"]`);
+    if (!tabButton) return;
+
+    // Check if hint already attached
+    if (tabButton.querySelector(".hint-trigger")) return;
+
+    // Append hint trigger to tab button (pass hintKey as path)
+    const triggerHtml = HintTrigger.render(hint, view.hintKey, { size: "sm" });
+    if (triggerHtml) {
+      tabButton.insertAdjacentHTML("beforeend", triggerHtml);
+    }
+  });
+
+  // Initialize hint trigger handlers
+  HintTrigger.initAll();
 }
 
 function createLifecycle() {
@@ -1515,6 +1570,9 @@ function createLifecycle() {
 
       // Show the tab bar
       tabBar.show();
+
+      // Attach hint triggers to tabs
+      attachHintsToTabs();
 
       // Get the active tab after state restoration
       const activeTab = tabBar.getActiveTab();

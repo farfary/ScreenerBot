@@ -1,0 +1,447 @@
+/* Hint Popover Styles - Contextual Help System */
+
+/* =============================================================================
+   Hint Trigger Button
+   ============================================================================= */
+
+.hint-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin-left: var(--spacing-xs);
+  background: var(--primary-alpha-10);
+  border: 1px solid var(--primary-alpha-20);
+  border-radius: 50%;
+  color: var(--primary-color);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+  vertical-align: middle;
+  flex-shrink: 0;
+  opacity: 0.85;
+}
+
+.hint-trigger:hover {
+  color: var(--primary-color);
+  background: var(--primary-alpha-20);
+  border-color: var(--primary-alpha-30);
+  opacity: 1;
+}
+
+.hint-trigger:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--primary-alpha-30);
+}
+
+.hint-trigger:active {
+  transform: scale(0.92);
+}
+
+/* Trigger sizes */
+.hint-trigger--sm {
+  width: 16px;
+  height: 16px;
+  font-size: 0.625rem;
+}
+
+.hint-trigger--md {
+  width: 20px;
+  height: 20px;
+  font-size: 0.75rem;
+}
+
+.hint-trigger--lg {
+  width: 24px;
+  height: 24px;
+  font-size: 0.875rem;
+}
+
+.hint-trigger i {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+/* =============================================================================
+   Hint Popover Container
+   ============================================================================= */
+
+.hint-popover {
+  position: fixed;
+  z-index: 10001;
+  width: max-content;
+  max-width: 360px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  box-shadow:
+    0 10px 40px -10px var(--shadow-lg),
+    0 0 0 1px rgb(255, 255, 255, 0.03);
+  opacity: 0;
+  transform: scale(0.95) translateY(4px);
+  transition:
+    opacity 0.2s ease-out,
+    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+
+.hint-popover--visible {
+  opacity: 1;
+  transform: scale(1) translateY(0);
+  pointer-events: auto;
+}
+
+/* =============================================================================
+   Popover Arrow
+   ============================================================================= */
+
+.hint-popover__arrow {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  transform: rotate(45deg);
+  z-index: -1;
+}
+
+/* Arrow positions */
+.hint-popover--right .hint-popover__arrow {
+  left: -7px;
+  top: 50%;
+  margin-top: -6px;
+  border-right: none;
+  border-top: none;
+}
+
+.hint-popover--left .hint-popover__arrow {
+  right: -7px;
+  top: 50%;
+  margin-top: -6px;
+  border-left: none;
+  border-bottom: none;
+}
+
+.hint-popover--bottom .hint-popover__arrow {
+  top: -7px;
+  left: 50%;
+  margin-left: -6px;
+  border-bottom: none;
+  border-right: none;
+}
+
+.hint-popover--top .hint-popover__arrow {
+  bottom: -7px;
+  left: 50%;
+  margin-left: -6px;
+  border-top: none;
+  border-left: none;
+}
+
+/* =============================================================================
+   Popover Header
+   ============================================================================= */
+
+.hint-popover__header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.hint-popover__icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: var(--primary-alpha-10);
+  border-radius: var(--radius-md);
+  color: var(--primary-color);
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
+.hint-popover__title {
+  flex: 1;
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.hint-popover__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  margin: -4px -4px -4px 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.hint-popover__close:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
+.hint-popover__close:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--primary-alpha-30);
+}
+
+/* =============================================================================
+   Popover Content
+   ============================================================================= */
+
+.hint-popover__content {
+  padding: var(--spacing-md);
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+.hint-popover__content p {
+  margin: 0 0 var(--spacing-sm) 0;
+}
+
+.hint-popover__content p:last-child {
+  margin-bottom: 0;
+}
+
+.hint-popover__content strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.hint-popover__content em {
+  font-style: italic;
+}
+
+.hint-popover__content code {
+  display: inline-block;
+  padding: 0.1em 0.4em;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--primary-color);
+}
+
+/* Lists */
+.hint-popover__list {
+  margin: var(--spacing-sm) 0;
+  padding: 0;
+  list-style: none;
+}
+
+.hint-popover__list-item {
+  position: relative;
+  padding-left: 1.25em;
+  margin-bottom: 0.4em;
+}
+
+.hint-popover__list-item:last-child {
+  margin-bottom: 0;
+}
+
+.hint-popover__list-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 5px;
+  height: 5px;
+  background: var(--primary-color);
+  border-radius: 50%;
+  opacity: 0.7;
+}
+
+/* =============================================================================
+   Popover Footer
+   ============================================================================= */
+
+.hint-popover__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-primary);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
+.hint-popover__learn-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--primary-color);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.hint-popover__learn-more:hover {
+  color: var(--primary-hover);
+  text-decoration: underline;
+}
+
+.hint-popover__learn-more i {
+  font-size: 0.7rem;
+  opacity: 0.8;
+}
+
+.hint-popover__dismiss {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease;
+}
+
+.hint-popover__dismiss:hover {
+  color: var(--text-secondary);
+}
+
+.hint-popover__dismiss-checkbox {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--primary-color);
+  cursor: pointer;
+}
+
+/* =============================================================================
+   Animations
+   ============================================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  .hint-trigger,
+  .hint-popover {
+    transition: none;
+  }
+}
+
+/* Disabled animations mode */
+.no-animations .hint-trigger,
+.no-animations .hint-popover {
+  transition: none;
+}
+
+/* =============================================================================
+   Dark Theme Adjustments
+   ============================================================================= */
+
+[data-theme="dark"] .hint-popover {
+  box-shadow:
+    0 10px 40px -10px rgb(0, 0, 0, 0.6),
+    0 0 0 1px rgb(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .hint-popover__arrow {
+  background: var(--bg-secondary);
+}
+
+[data-theme="dark"] .hint-popover__content code {
+  background: rgb(0, 0, 0, 0.3);
+}
+
+/* =============================================================================
+   Light Theme Adjustments
+   ============================================================================= */
+
+[data-theme="light"] .hint-popover {
+  box-shadow:
+    0 10px 40px -10px rgb(0, 0, 0, 0.15),
+    0 0 0 1px rgb(0, 0, 0, 0.08);
+}
+
+[data-theme="light"] .hint-trigger {
+  background: var(--primary-alpha-10);
+  border-color: var(--primary-alpha-20);
+}
+
+[data-theme="light"] .hint-trigger:hover {
+  background: var(--primary-alpha-20);
+  border-color: var(--primary-alpha-30);
+}
+
+/* =============================================================================
+   Responsive Adjustments
+   ============================================================================= */
+
+@media (width <= 768px) {
+  .hint-popover {
+    max-width: calc(100vw - 32px);
+    left: 16px !important;
+    right: 16px;
+    width: auto;
+  }
+
+  .hint-popover__arrow {
+    display: none;
+  }
+
+  .hint-popover--right,
+  .hint-popover--left {
+    /* On mobile, always position below */
+    transform-origin: top center;
+  }
+}
+
+/* =============================================================================
+   Tab Bar Integration
+   ============================================================================= */
+
+/* Hint trigger inside tab labels */
+.tab-bar .hint-trigger {
+  margin-left: 6px;
+  opacity: 0.7;
+  transition:
+    opacity 0.15s ease,
+    color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.tab-bar .tab:hover .hint-trigger,
+.tab-bar .tab.active .hint-trigger,
+.tab-bar .hint-trigger:focus {
+  opacity: 1;
+}
+
+/* Hint trigger in section headers */
+.settings-section-title .hint-trigger,
+.card-header .hint-trigger,
+.panel-header .hint-trigger {
+  margin-left: 8px;
+}
+
+/* Hint trigger inline with text */
+.hint-trigger-inline {
+  display: inline-flex;
+  vertical-align: baseline;
+  margin: 0 0 0 4px;
+}

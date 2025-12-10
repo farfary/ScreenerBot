@@ -386,6 +386,14 @@ export class SettingsDialog {
     if (iface.polling_interval_ms && iface.polling_interval_ms > 0) {
       setPollingInterval(iface.polling_interval_ms);
     }
+
+    // Apply hints toggle
+    if (typeof iface.show_hints === "boolean") {
+      // Dispatch event for hints system to react
+      document.dispatchEvent(
+        new CustomEvent("hints:toggle", { detail: { enabled: iface.show_hints } })
+      );
+    }
   }
 
   /**
@@ -756,6 +764,19 @@ export class SettingsDialog {
               </label>
             </div>
           </div>
+
+          <div class="settings-field">
+            <div class="settings-field-info">
+              <label>Show Contextual Hints</label>
+              <span class="settings-field-hint">Display help icons explaining dashboard features</span>
+            </div>
+            <div class="settings-field-control">
+              <label class="settings-toggle">
+                <input type="checkbox" id="settingShowHints" ${iface.show_hints !== false ? "checked" : ""}>
+                <span class="settings-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -773,6 +794,7 @@ export class SettingsDialog {
       ticker: content.querySelector("#settingTicker"),
       pageSize: content.querySelector("#settingPageSize"),
       autoExpand: content.querySelector("#settingAutoExpand"),
+      showHints: content.querySelector("#settingShowHints"),
     };
 
     const updateSetting = (path, value) => {
@@ -813,6 +835,11 @@ export class SettingsDialog {
     if (fields.autoExpand) {
       fields.autoExpand.addEventListener("change", (e) =>
         updateSetting("auto_expand_categories", e.target.checked)
+      );
+    }
+    if (fields.showHints) {
+      fields.showHints.addEventListener("change", (e) =>
+        updateSetting("show_hints", e.target.checked)
       );
     }
   }

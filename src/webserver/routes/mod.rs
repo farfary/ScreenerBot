@@ -233,6 +233,7 @@ async fn get_core_script(axum::extract::Path(file): axum::extract::Path<String>)
         "onboarding.js" => Some(templates::CORE_ONBOARDING),
         "setup.js" => Some(templates::CORE_SETUP),
         "status_bar.js" => Some(templates::CORE_STATUS_BAR),
+        "hints.js" => Some(templates::CORE_HINTS),
         _ => None,
     };
 
@@ -301,6 +302,7 @@ async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String>) -
         "advanced_chart.js" => Some(templates::ADVANCED_CHART_UI),
         "settings_dialog.js" => Some(templates::SETTINGS_DIALOG_UI),
         "notification_panel.js" => Some(templates::NOTIFICATION_PANEL_UI),
+        "hint_popover.js" => Some(templates::HINT_POPOVER_UI),
         _ => None,
     };
 

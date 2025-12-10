@@ -45,6 +45,7 @@ const ADVANCED_CHART_STYLES: &str = include_str!("templates/styles/ui/advanced_c
 const TOKEN_DETAILS_DIALOG_STYLES: &str = include_str!("templates/styles/token_details_dialog.css");
 const SETTINGS_DIALOG_STYLES: &str = include_str!("templates/styles/settings_dialog.css");
 const STATUS_BAR_STYLES: &str = include_str!("templates/styles/status_bar.css");
+const HINT_POPOVER_STYLES: &str = include_str!("templates/styles/ui/hint_popover.css");
 
 // Assets (logos, icons)
 pub const LOGO_SVG: &str = include_str!("assets/logo.svg");
@@ -81,6 +82,7 @@ pub const CORE_SPLASH: &str = include_str!("templates/scripts/core/splash.js");
 pub const CORE_ONBOARDING: &str = include_str!("templates/scripts/core/onboarding.js");
 pub const CORE_SETUP: &str = include_str!("templates/scripts/core/setup.js");
 pub const CORE_STATUS_BAR: &str = include_str!("templates/scripts/core/status_bar.js");
+pub const CORE_HINTS: &str = include_str!("templates/scripts/core/hints.js");
 
 const THEME_SCRIPTS: &str = include_str!("templates/scripts/theme.js");
 
@@ -103,6 +105,7 @@ pub const CONTEXT_MENU_UI: &str = include_str!("templates/scripts/ui/context_men
 pub const ADVANCED_CHART_UI: &str = include_str!("templates/scripts/ui/advanced_chart.js");
 pub const SETTINGS_DIALOG_UI: &str = include_str!("templates/scripts/ui/settings_dialog.js");
 pub const NOTIFICATION_PANEL_UI: &str = include_str!("templates/scripts/ui/notification_panel.js");
+pub const HINT_POPOVER_UI: &str = include_str!("templates/scripts/ui/hint_popover.js");
 
 pub const SERVICES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/services.js");
 pub const TRANSACTIONS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/transactions.js");
@@ -191,6 +194,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         ADVANCED_CHART_STYLES,
         TOKEN_DETAILS_DIALOG_STYLES,
         SETTINGS_DIALOG_STYLES,
+        HINT_POPOVER_STYLES,
         // Splash, onboarding, and setup screens (always included for proper transitions)
         SPLASH_PAGE_STYLES,
         ONBOARDING_PAGE_STYLES,
