@@ -1,5 +1,5 @@
 /* ============================================================================
-   STATUS BAR - Fixed bottom bar with version and system info
+   STATUS BAR - Fixed bottom bar with system metrics
    ============================================================================ */
 
 .status-bar {
@@ -7,31 +7,95 @@
   bottom: 0;
   left: 0;
   right: 0;
-  height: 24px;
+  height: 26px;
   z-index: 999;
   background: var(--header-bg, linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1c2128 100%));
   border-top: 1px solid var(--header-border, #30363d);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
+  padding: 0 var(--spacing-md, 16px);
   font-family: var(--font-mono, "JetBrains Mono", monospace);
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--text-muted, #8b949e);
+  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
 .status-bar-left,
+.status-bar-center,
 .status-bar-right {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: var(--spacing-xs, 4px);
 }
 
-.status-bar-version {
-  color: var(--text-secondary, #c9d1d9);
-  font-weight: 500;
-  letter-spacing: 0.02em;
+.status-bar-center {
+  flex-shrink: 0;
 }
+
+.status-bar-right {
+  justify-content: flex-end;
+}
+
+.status-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.status-icon {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  opacity: 0.6;
+}
+
+.status-label {
+  color: var(--text-muted, #8b949e);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+}
+
+.status-value {
+  color: var(--text-secondary, #c9d1d9);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.status-separator {
+  color: var(--border-color, #30363d);
+  margin: 0 6px;
+  opacity: 0.5;
+  user-select: none;
+}
+
+/* Health indicator colors */
+.status-health[data-health="good"] .status-value {
+  color: var(--success, #3fb950);
+}
+
+.status-health[data-health="warning"] .status-value {
+  color: #d29922;
+}
+
+.status-health[data-health="error"] .status-value {
+  color: var(--error, #f85149);
+}
+
+.status-health[data-health="unknown"] .status-value {
+  color: var(--text-muted, #8b949e);
+}
+
+/* Trading status indicator */
+.status-trading[data-active="true"] {
+  color: var(--success, #3fb950);
+  font-weight: 600;
+}
+
+.status-trading[data-active=\"false\"] {\n  color: var(--text-muted, #8b949e);\n}\n\n/* Reserve space for the fixed status bar at the bottom.\n   The status bar is 26px tall, so we need to reduce available\n   height by that amount to prevent content from being hidden. */\n.content {\n  padding-bottom: 26px; /* Height of .status-bar */\n}\n\n/* Light theme adjustments */\n[data-theme=\"light\"] .status-bar {\n  background: linear-gradient(135deg, #f0f2f6 0%, #e8eaee 100%);\n  border-top-color: #d1d5db;\n  color: #6b7280;\n}\n\n[data-theme=\"light\"] .status-value {\n  color: #374151;\n}\n\n[data-theme=\"light\"] .status-separator {\n  color: #d1d5db;\n}\n\n[data-theme=\"light\"] .status-health[data-health=\"good\"] .status-value {\n  color: #059669;\n}\n\n[data-theme=\"light\"] .status-health[data-health=\"warning\"] .status-value {\n  color: #d97706;\n}\n\n[data-theme=\"light\"] .status-health[data-health=\"error\"] .status-value {\n  color: #dc2626;\n}
 
 /* Reserve space for the fixed status bar at the bottom.
    The status bar is 24px tall, so we need to reduce available

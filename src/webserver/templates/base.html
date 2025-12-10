@@ -354,10 +354,61 @@
       <main class="content">{{CONTENT}}</main>
     </div>
 
-    <!-- Status Bar - Fixed bottom bar with version info -->
+    <!-- Status Bar - Fixed bottom bar with system metrics -->
     <footer class="status-bar" id="statusBar">
       <div class="status-bar-left">
-        <span class="status-bar-version" id="statusBarVersion">v—</span>
+        <span class="status-item">
+          <i class="status-icon icon-info"></i>
+          <span class="status-label">v</span>
+          <span class="status-value" id="statusBarVersion">—</span>
+        </span>
+        <span class="status-separator">•</span>
+        <span class="status-item">
+          <i class="status-icon icon-clock"></i>
+          <span class="status-label">Up</span>
+          <span class="status-value" id="statusBarUptime">—</span>
+        </span>
+        <span class="status-separator">•</span>
+        <span class="status-item">
+          <i class="status-icon icon-cpu"></i>
+          <span class="status-label">Mem</span>
+          <span class="status-value" id="statusBarMemory">—</span>
+        </span>
+      </div>
+      <div class="status-bar-center">
+        <span class="status-item">
+          <i class="status-icon icon-zap"></i>
+          <span class="status-label">RPC</span>
+          <span class="status-value" id="statusBarRpcRate">—</span>
+        </span>
+        <span class="status-separator">•</span>
+        <span class="status-item status-health" id="statusBarRpcHealth" data-health="unknown">
+          <span class="status-value" id="statusBarRpcSuccess">—</span>
+        </span>
+        <span class="status-separator">•</span>
+        <span class="status-item">
+          <i class="status-icon icon-activity"></i>
+          <span class="status-value" id="statusBarRpcLatency">—</span>
+        </span>
+      </div>
+      <div class="status-bar-right">
+        <span class="status-item">
+          <i class="status-icon icon-trending-up"></i>
+          <span class="status-label">Trading</span>
+          <span class="status-value status-trading" id="statusBarTrading" data-active="false">—</span>
+        </span>
+        <span class="status-separator">•</span>
+        <span class="status-item">
+          <i class="status-icon icon-layers"></i>
+          <span class="status-label">Pos</span>
+          <span class="status-value" id="statusBarPositions">—</span>
+        </span>
+        <span class="status-separator">•</span>
+        <span class="status-item">
+          <i class="status-icon icon-database"></i>
+          <span class="status-label">Tokens</span>
+          <span class="status-value" id="statusBarTokens">—</span>
+        </span>
       </div>
     </footer>
 

@@ -58,6 +58,7 @@ impl From<&crate::rpc::RpcStats> for RpcMetricsSummary {
 #[derive(Clone, Debug, Serialize)]
 pub struct StatusSnapshot {
     pub timestamp: DateTime<Utc>,
+    pub version: String,
     pub uptime_seconds: u64,
     pub uptime_formatted: String,
     pub trading_enabled: bool,
@@ -532,6 +533,7 @@ pub async fn gather_status_snapshot() -> StatusSnapshot {
 
     StatusSnapshot {
         timestamp: Utc::now(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
         uptime_seconds,
         uptime_formatted,
         trading_enabled,
