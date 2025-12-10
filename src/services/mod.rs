@@ -625,12 +625,15 @@ impl ServiceManager {
     Ok(())
   }
 
-  /// Resolve service startup order
+  /// Resolve service startup order with dependency validation
   fn resolve_startup_order(
     &self,
     services: &[&'static str],
   ) -> Result<Vec<&'static str>, String> {
     use std::collections::HashSet;
+
+    // First, validate all dependencies exist
+    self.validate_dependencies(services)?;
 
     let mut ordered = Vec::new();
     let mut visited = HashSet::new();
@@ -683,6 +686,35 @@ impl ServiceManager {
     ordered.sort_by_key(|name| self.services.get(name).map(|s| s.priority()).unwrap_or(100));
 
     Ok(ordered)
+  }
+
+  /// Validate that all declared dependencies exist as registered services
+  fn validate_dependencies(&self, services: &[&'static str]) -> Result<(), String> {
+    let registered: std::collections::HashSet<&str> =
+      self.services.keys().copied().collect();
+    let mut missing_deps: Vec<String> = Vec::new();
+
+    for &service_name in services {
+      if let Some(service) = self.services.get(service_name) {
+        for dep in service.dependencies() {
+          if !registered.contains(dep) {
+            missing_deps.push(format!(
+              "Service '{}' depends on '{}' which is not registered",
+              service_name, dep
+            ));
+          }
+        }
+      }
+    }
+
+    if !missing_deps.is_empty() {
+      // Log warnings but don't fail - allows for optional dependencies
+      for msg in &missing_deps {
+        logger::warning(LogTag::System, msg);
+      }
+    }
+
+    Ok(())
   }
 
   /// Get health status
@@ -803,25 +835,46 @@ pub async fn init_global_service_manager(manager: ServiceManager) {
 
   // Spawn background task to update cache every 5 seconds
   // (most services are idle, so less frequent updates reduce CPU overhead)
+  // Task auto-terminates when ServiceManager is cleared (during shutdown)
   tokio::spawn(async {
     loop {
       tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 
-      if let Some(manager_ref) = get_service_manager().await {
-        if let Some(manager) = manager_ref.read().await.as_ref() {
-          // Add timeout to prevent hanging forever
-          let update_future = manager.update_cache();
-          match tokio::time::timeout(tokio::time::Duration::from_secs(3), update_future)
-            .await
-          {
-            Ok(_) => {
-              // Update completed successfully
-              logger::debug(LogTag::System, "ServiceManager: Cache update completed");
-            }
-            Err(_) => {
-              logger::warning(LogTag::System, "ServiceManager: Cache update timed out after 3s - continuing with stale cache");
-            }
-          }
+      // Check if ServiceManager still exists - if not, shutdown is in progress
+      let manager_ref = match get_service_manager().await {
+        Some(m) => m,
+        None => {
+          logger::debug(
+            LogTag::System,
+            "ServiceManager: Cache update task terminating - manager not available",
+          );
+          break;
+        }
+      };
+
+      let manager_guard = manager_ref.read().await;
+      let manager = match manager_guard.as_ref() {
+        Some(m) => m,
+        None => {
+          logger::debug(
+            LogTag::System,
+            "ServiceManager: Cache update task terminating - manager cleared",
+          );
+          break;
+        }
+      };
+
+      // Add timeout to prevent hanging forever
+      let update_future = manager.update_cache();
+      match tokio::time::timeout(tokio::time::Duration::from_secs(3), update_future).await {
+        Ok(_) => {
+          logger::debug(LogTag::System, "ServiceManager: Cache update completed");
+        }
+        Err(_) => {
+          logger::warning(
+            LogTag::System,
+            "ServiceManager: Cache update timed out after 3s - continuing with stale cache",
+          );
         }
       }
     }

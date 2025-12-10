@@ -11,7 +11,7 @@ use crate::ohlcvs::monitor::{MonitorStats, OhlcvMonitor};
 use crate::ohlcvs::priorities::ActivityType;
 use crate::ohlcvs::types::{
     Candle, OhlcvError, OhlcvMetrics, OhlcvResult, PoolMetadata, Priority, Timeframe,
-    TimeframeBundle, TokenOhlcvConfig,
+    TimeframeBundle, TokenOhlcvConfig, BUNDLE_CANDLE_COUNT,
 };
 use chrono::Utc;
 use std::collections::{HashMap, HashSet};
@@ -24,7 +24,6 @@ use tokio::task::JoinHandle;
 // Bundle cache constants (Phase 2)
 const BUNDLE_CACHE_TTL_SECONDS: u64 = 30;
 const BUNDLE_CACHE_MAX_SIZE: usize = 150;
-const BUNDLE_CANDLE_COUNT: usize = 100;
 const PARALLEL_FETCH_LIMIT: usize = 10;
 const BUNDLE_REFRESH_INTERVAL_SECONDS: u64 = 5;
 
@@ -118,15 +117,22 @@ impl OhlcvServiceImpl {
             }
         }
 
-        // Fetch from unified candles table
-        let mut candles = self.db.get_candles(
-            mint,
-            Some(&pool),
-            timeframe,
-            from_timestamp,
-            to_timestamp,
-            Some(limit),
-        )?;
+        // Fetch from unified candles table (wrapped in spawn_blocking to avoid blocking async runtime)
+        let db = Arc::clone(&self.db);
+        let mint_owned = mint.to_string();
+        let pool_owned = pool.clone();
+        let mut candles = tokio::task::spawn_blocking(move || {
+            db.get_candles(
+                &mint_owned,
+                Some(&pool_owned),
+                timeframe,
+                from_timestamp,
+                to_timestamp,
+                Some(limit),
+            )
+        })
+        .await
+        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))??;
 
         if candles.is_empty() {
             return Ok(Vec::new());
@@ -195,36 +201,63 @@ impl OhlcvServiceImpl {
     /// Fetches in parallel with PARALLEL_FETCH_LIMIT concurrency
     /// Coordinates to prevent duplicate concurrent builds for same token
     async fn build_timeframe_bundle(&self, mint: &str) -> OhlcvResult<TimeframeBundle> {
-        // Use single write transaction to atomically check and mark as building
+        // Check if another task is already building this bundle
         {
-            let mut in_progress = self.build_in_progress.write().await;
-
-            // Try to insert - if already present, another task is building
-            if !in_progress.insert(mint.to_string()) {
+            let in_progress = self.build_in_progress.read().await;
+            if in_progress.contains(mint) {
                 logger::debug(
                     LogTag::Ohlcv,
-                    &format!("BUNDLE_BUILD_SKIP: Another task already building bundle for {}, waiting...", mint),
+                    &format!("BUNDLE_BUILD_WAIT: Another task already building bundle for {}, waiting...", mint),
                 );
                 drop(in_progress);
 
-                // Wait briefly for the other build to complete
-                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+                // Wait for the other build to complete (poll cache with exponential backoff)
+                let mut wait_ms = 50u64;
+                for _ in 0..10 {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(wait_ms)).await;
 
-                // Check cache again - the other build should have stored it
-                if let Ok(Some(bundle)) = self.get_timeframe_bundle(mint).await {
-                    logger::debug(
-                        LogTag::Ohlcv,
-                        &format!(
-                            "BUNDLE_BUILD_REUSE: Found bundle built by another task for {}",
-                            mint
-                        ),
-                    );
-                    return Ok(bundle);
+                    // Check if build completed (no longer in progress)
+                    let still_building = {
+                        let in_progress = self.build_in_progress.read().await;
+                        in_progress.contains(mint)
+                    };
+
+                    if !still_building {
+                        // Check cache for the result
+                        if let Ok(Some(bundle)) = self.get_timeframe_bundle(mint).await {
+                            logger::debug(
+                                LogTag::Ohlcv,
+                                &format!(
+                                    "BUNDLE_BUILD_REUSE: Found bundle built by another task for {}",
+                                    mint
+                                ),
+                            );
+                            return Ok(bundle);
+                        }
+                        break; // Build finished but no result - proceed to build ourselves
+                    }
+
+                    wait_ms = (wait_ms * 2).min(200); // Exponential backoff, max 200ms
                 }
-                // If still not in cache, proceed with build (other task may have failed)
-                // Re-acquire write lock and mark as building
-                let mut in_progress = self.build_in_progress.write().await;
-                in_progress.insert(mint.to_string());
+
+                // If we get here, either:
+                // 1. The other build completed but failed to cache
+                // 2. The other build is taking too long (>~1.2s)
+                // In either case, we'll try to build ourselves
+            }
+        }
+
+        // Mark as building (atomic check-and-set)
+        {
+            let mut in_progress = self.build_in_progress.write().await;
+            if !in_progress.insert(mint.to_string()) {
+                // Race condition: another task started building while we were waiting
+                // Just return error to avoid duplicate work
+                drop(in_progress);
+                return Err(OhlcvError::NotFound(format!(
+                    "Bundle build already in progress for {}",
+                    mint
+                )));
             }
         }
 

@@ -84,6 +84,9 @@ impl ConnectivityService {
 
         state::ensure_endpoint_registered(name, criticality, fallback).await;
 
+        // Capture previous health state BEFORE updating
+        let previous_health = state::get_endpoint_health(name).await;
+
         let result = monitor.check_health().await;
 
         let cfg = get_config_clone();
@@ -101,19 +104,41 @@ impl ConnectivityService {
         )
         .await;
 
-        // Log health changes and record events
-        if let Some(health) = state::get_endpoint_health(name).await {
-            match &health {
-                crate::connectivity::types::EndpointHealth::Healthy { latency_ms, .. } => {
-                    logger::debug(
-                        LogTag::Connectivity,
-                        &format!("{} endpoint healthy (latency={}ms)", name, latency_ms),
-                    );
+        // Get new health state after update
+        let new_health = match state::get_endpoint_health(name).await {
+            Some(h) => h,
+            None => return,
+        };
 
-                    // Record recovery event if this is a transition from unhealthy/degraded
+        // Helper to get health state discriminant for comparison
+        let get_state_kind = |h: &crate::connectivity::types::EndpointHealth| -> &'static str {
+            match h {
+                crate::connectivity::types::EndpointHealth::Healthy { .. } => "healthy",
+                crate::connectivity::types::EndpointHealth::Degraded { .. } => "degraded",
+                crate::connectivity::types::EndpointHealth::Unhealthy { .. } => "unhealthy",
+                crate::connectivity::types::EndpointHealth::Unknown => "unknown",
+            }
+        };
+
+        let previous_kind = previous_health.as_ref().map(get_state_kind).unwrap_or("unknown");
+        let new_kind = get_state_kind(&new_health);
+
+        // Only log and record events on state transitions
+        let state_changed = previous_kind != new_kind;
+
+        match &new_health {
+            crate::connectivity::types::EndpointHealth::Healthy { latency_ms, .. } => {
+                logger::debug(
+                    LogTag::Connectivity,
+                    &format!("{} endpoint healthy (latency={}ms)", name, latency_ms),
+                );
+
+                // Only record recovery event on transition TO healthy
+                if state_changed && (previous_kind == "unhealthy" || previous_kind == "degraded" || previous_kind == "unknown") {
                     tokio::spawn({
                         let name = name.to_string();
                         let latency = *latency_ms;
+                        let from_state = previous_kind.to_string();
                         async move {
                             record_connectivity_event(
                                 &name,
@@ -121,16 +146,20 @@ impl ConnectivityService {
                                 Severity::Info,
                                 serde_json::json!({
                                     "latency_ms": latency,
-                                    "message": "Endpoint recovered and is now healthy",
+                                    "previous_state": from_state,
+                                    "message": format!("Endpoint recovered from {} to healthy", from_state),
                                 }),
                             )
                             .await;
                         }
                     });
                 }
-                crate::connectivity::types::EndpointHealth::Degraded {
-                    latency_ms, reason, ..
-                } => {
+            }
+            crate::connectivity::types::EndpointHealth::Degraded {
+                latency_ms, reason, ..
+            } => {
+                // Only log warning on state transition
+                if state_changed {
                     logger::warning(
                         LogTag::Connectivity,
                         &format!(
@@ -139,11 +168,11 @@ impl ConnectivityService {
                         ),
                     );
 
-                    // Record connectivity event
                     tokio::spawn({
                         let name = name.to_string();
                         let reason = reason.clone();
                         let latency = *latency_ms;
+                        let from_state = previous_kind.to_string();
                         async move {
                             record_connectivity_event(
                                 &name,
@@ -152,17 +181,21 @@ impl ConnectivityService {
                                 serde_json::json!({
                                     "latency_ms": latency,
                                     "reason": reason,
+                                    "previous_state": from_state,
                                 }),
                             )
                             .await;
                         }
                     });
                 }
-                crate::connectivity::types::EndpointHealth::Unhealthy {
-                    reason,
-                    consecutive_failures,
-                    ..
-                } => {
+            }
+            crate::connectivity::types::EndpointHealth::Unhealthy {
+                reason,
+                consecutive_failures,
+                ..
+            } => {
+                // Only log on state transition (but always at appropriate level for critical)
+                if state_changed {
                     let log_fn = match criticality {
                         crate::connectivity::types::EndpointCriticality::Critical => logger::error,
                         crate::connectivity::types::EndpointCriticality::Important => {
@@ -179,22 +212,24 @@ impl ConnectivityService {
                         ),
                     );
 
-                    // Record connectivity event
+                    let severity = match criticality {
+                        crate::connectivity::types::EndpointCriticality::Critical => {
+                            Severity::Error
+                        }
+                        crate::connectivity::types::EndpointCriticality::Important => {
+                            Severity::Warn
+                        }
+                        crate::connectivity::types::EndpointCriticality::Optional => {
+                            Severity::Info
+                        }
+                    };
+
                     tokio::spawn({
                         let name = name.to_string();
                         let reason = reason.clone();
                         let failures = *consecutive_failures;
-                        let severity = match criticality {
-                            crate::connectivity::types::EndpointCriticality::Critical => {
-                                Severity::Error
-                            }
-                            crate::connectivity::types::EndpointCriticality::Important => {
-                                Severity::Warn
-                            }
-                            crate::connectivity::types::EndpointCriticality::Optional => {
-                                Severity::Info
-                            }
-                        };
+                        let from_state = previous_kind.to_string();
+                        let crit = criticality;
                         async move {
                             record_connectivity_event(
                                 &name,
@@ -203,15 +238,16 @@ impl ConnectivityService {
                                 serde_json::json!({
                                     "reason": reason,
                                     "consecutive_failures": failures,
-                                    "criticality": format!("{:?}", criticality),
+                                    "criticality": format!("{:?}", crit),
+                                    "previous_state": from_state,
                                 }),
                             )
                             .await;
                         }
                     });
                 }
-                _ => {}
             }
+            _ => {}
         }
     }
 

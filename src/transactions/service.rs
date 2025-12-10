@@ -40,17 +40,7 @@ const RETRY_BASE_DELAY_SECS: u64 = 2;
 // DEFERRED RETRY QUEUE
 // =============================================================================
 
-/// Deferred retry entry for transactions that need to be retried later
-/// Typically used for RPC indexing delays where transaction exists on-chain
-/// but RPC nodes haven't indexed it yet
-#[derive(Debug, Clone)]
-struct DeferredRetry {
-  signature: String,
-  retry_after: DateTime<Utc>,
-  attempts: u32,
-  reason: String,
-  first_seen: DateTime<Utc>,
-}
+use crate::transactions::types::DeferredRetry;
 
 /// Global deferred retry queue
 /// Transactions are added here when they fail due to temporary issues like RPC indexing delays
@@ -59,12 +49,14 @@ static DEFERRED_RETRIES: Lazy<Arc<Mutex<BTreeMap<String, DeferredRetry>>>> =
 
 /// Add a transaction to the deferred retry queue
 async fn defer_transaction_retry(signature: String, delay_secs: i64, reason: String) {
+  let now = Utc::now();
   let retry = DeferredRetry {
     signature: signature.clone(),
-    retry_after: Utc::now() + chrono::Duration::seconds(delay_secs),
+    next_retry_at: now + chrono::Duration::seconds(delay_secs),
     attempts: 1,
-    reason: reason.clone(),
-    first_seen: Utc::now(),
+    current_delay_secs: delay_secs,
+    last_error: Some(reason.clone()),
+    first_seen: now,
   };
 
   let mut deferred = DEFERRED_RETRIES.lock().await;
@@ -72,9 +64,9 @@ async fn defer_transaction_retry(signature: String, delay_secs: i64, reason: Str
   // Check if already exists, increment attempts if so
   if let Some(existing) = deferred.get_mut(&signature) {
     existing.attempts += 1;
-    existing.retry_after =
-      Utc::now() + chrono::Duration::seconds(delay_secs * (existing.attempts as i64));
-    existing.reason = reason;
+    existing.current_delay_secs = delay_secs * (existing.attempts as i64);
+    existing.next_retry_at = now + chrono::Duration::seconds(existing.current_delay_secs);
+    existing.last_error = Some(reason);
   } else {
     deferred.insert(signature, retry);
   }
@@ -1041,7 +1033,7 @@ async fn run_transaction_service(config: ServiceConfig) -> Result<(), String> {
       // Periodic transaction checking (every 3 seconds by default)
       _ = check_interval.tick() => {
         if let Err(e) = perform_periodic_check(&config, &processor, &fetcher, &mut metrics).await {
-          logger::info(
+          logger::warning(
             LogTag::Transactions,
             &format!("Periodic check failed: {}", e)
           );
@@ -1061,7 +1053,7 @@ async fn run_transaction_service(config: ServiceConfig) -> Result<(), String> {
           Some(sig) => {
             metrics.update_websocket_activity();
             if let Err(e) = handle_websocket_transaction(&config, &processor, sig).await {
-              logger::info(
+              logger::warning(
                 LogTag::Transactions,
                 &format!("WebSocket transaction handling failed: {}", e)
               );
@@ -1138,7 +1130,7 @@ async fn run_transaction_service(config: ServiceConfig) -> Result<(), String> {
       // General service health check (every 5 minutes)
       _ = tokio::time::sleep(Duration::from_secs(300)) => {
         if let Err(e) = perform_health_check(&mut metrics).await {
-          logger::info(
+          logger::warning(
             LogTag::Transactions,
             &format!("Health check failed: {}", e)
           );
@@ -1146,9 +1138,6 @@ async fn run_transaction_service(config: ServiceConfig) -> Result<(), String> {
       }
     }
   }
-
-  logger::info(LogTag::Transactions, "Transaction service loop ended");
-  Ok(())
 }
 
 // =============================================================================
@@ -1211,7 +1200,7 @@ async fn process_deferred_retries(
 
     for sig in signatures {
       if let Some(retry) = deferred.get(&sig) {
-        if retry.retry_after <= now {
+        if retry.next_retry_at <= now {
           ready_retries.push(deferred.remove(&sig).unwrap());
         }
       }
@@ -1245,8 +1234,9 @@ async fn process_deferred_retries(
         let current_attempts = retry.attempts;
         retry.attempts += 1;
         let delay_secs = 5 * (2_i64.pow(retry.attempts - 1));
-        retry.retry_after = now + chrono::Duration::seconds(delay_secs);
-        retry.reason = e.clone();
+        retry.current_delay_secs = delay_secs;
+        retry.next_retry_at = now + chrono::Duration::seconds(delay_secs);
+        retry.last_error = Some(e.clone());
 
         let mut deferred = DEFERRED_RETRIES.lock().await;
         deferred.insert(retry.signature.clone(), retry);

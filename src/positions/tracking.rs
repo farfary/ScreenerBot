@@ -1,18 +1,11 @@
 use super::{
   apply::apply_transition, state::update_position_state, transitions::PositionTransition,
 };
-use crate::{
-  logger::{self, LogTag},
-  pools::PriceResult,
-};
+use crate::logger::{self, LogTag};
 use tokio::time::Duration;
 
 /// Update position price tracking
-pub async fn update_position_tracking(
-  mint: &str,
-  current_price: f64,
-  _price_result: &PriceResult,
-) -> bool {
+pub async fn update_position_tracking(mint: &str, current_price: f64) -> bool {
   if current_price <= 0.0 || !current_price.is_finite() {
     return false;
   }

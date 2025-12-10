@@ -277,9 +277,12 @@ fn register_all_services(manager: &mut ServiceManager) {
   // Background utility services
   manager.register(Box::new(UpdateCheckService));
 
+  let service_count = 20; // connectivity, events, transactions, sol_price, pool_discovery, pool_fetcher,
+                           // pool_calculator, pool_analyzer, pool_helpers, tokens, filtering, ohlcv,
+                           // positions, wallet, rpc_stats, ata_cleanup, trader, webserver, update_check
   logger::info(
     LogTag::System,
-    "All services registered (22 total - includes ConnectivityService and UpdateCheckService)",
+    &format!("All services registered ({} total)", service_count),
   );
 }
 

@@ -163,7 +163,7 @@ impl DcaEvaluation {
     }
 
     // Check if DCA amount is valid and above minimum trade size
-    const MIN_TRADE_SIZE_SOL: f64 = 0.001; // Minimum 0.001 SOL (~$0.20 at $200/SOL)
+    use crate::trader::constants::MIN_TRADE_SIZE_SOL;
     if calculations.dca_amount_sol < MIN_TRADE_SIZE_SOL {
       should_trigger = false;
       reasons.push(format!(

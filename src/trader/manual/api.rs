@@ -8,6 +8,7 @@ use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::trader::actions::{ManualAddAction, ManualBuyAction, ManualSellAction};
+use crate::trader::constants::MAX_TRADE_SIZE_MULTIPLIER;
 use crate::trader::executors;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult};
 use chrono::Utc;
@@ -43,13 +44,13 @@ pub async fn manual_buy(mint: &str, size_sol: f64) -> Result<TradeResult, String
         return Err(error);
     }
 
-    // Check against reasonable upper bound (100x default trade size)
+    // Check against reasonable upper bound
     let default_trade_size = with_config(|cfg| cfg.trader.trade_size_sol);
-    let max_trade_size = default_trade_size * 100.0;
+    let max_trade_size = default_trade_size * MAX_TRADE_SIZE_MULTIPLIER;
     if size_sol > max_trade_size {
         let error = format!(
-            "SOL amount {:.4} exceeds maximum trade size of {:.4} SOL (100x default)",
-            size_sol, max_trade_size
+            "SOL amount {:.4} exceeds maximum trade size of {:.4} SOL ({}x default)",
+            size_sol, max_trade_size, MAX_TRADE_SIZE_MULTIPLIER as u32
         );
         action.fail_validation(&error).await;
         return Err(error);
@@ -304,13 +305,13 @@ pub async fn manual_add(mint: &str, size_sol: f64) -> Result<TradeResult, String
         return Err(error);
     }
 
-    // Check against reasonable upper bound (100x default trade size)
+    // Check against reasonable upper bound
     let default_trade_size = with_config(|cfg| cfg.trader.trade_size_sol);
-    let max_trade_size = default_trade_size * 100.0;
+    let max_trade_size = default_trade_size * MAX_TRADE_SIZE_MULTIPLIER;
     if size_sol > max_trade_size {
         let error = format!(
-            "SOL amount {:.4} exceeds maximum trade size of {:.4} SOL (100x default)",
-            size_sol, max_trade_size
+            "SOL amount {:.4} exceeds maximum trade size of {:.4} SOL ({}x default)",
+            size_sol, max_trade_size, MAX_TRADE_SIZE_MULTIPLIER as u32
         );
         action.fail_validation(&error).await;
         return Err(error);

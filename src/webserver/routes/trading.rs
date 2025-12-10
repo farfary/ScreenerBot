@@ -28,8 +28,6 @@ pub struct RiskManagement {
     pub stop_loss_percent: f64,
     pub time_override_loss_threshold_percent: f64,
     pub time_override_duration_hours: f64,
-    pub debug_force_sell_mode: bool,
-    pub debug_force_buy_mode: bool,
 }
 
 #[derive(Debug, Serialize)]
@@ -62,8 +60,6 @@ async fn get_trading_config() -> Response {
                     TimeUnit::from_str(&cfg.trader.time_override_unit).unwrap_or(TimeUnit::Hours);
                 unit.to_seconds(cfg.trader.time_override_duration) / 3600.0
             },
-            debug_force_sell_mode: crate::trader::DEBUG_FORCE_SELL_MODE,
-            debug_force_buy_mode: crate::trader::DEBUG_FORCE_BUY_MODE,
         },
         profit_targets: ProfitTargets {
             base_min_profit_percent: cfg.trader.roi_target_percent,

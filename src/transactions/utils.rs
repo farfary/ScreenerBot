@@ -196,139 +196,27 @@ pub fn format_lamports_change_as_sol(change_lamports: i64) -> String {
 // VALIDATION UTILITIES
 // =============================================================================
 
+/// Base58 character set (excludes 0, O, I, l to avoid ambiguity)
+const BASE58_ALPHABET: &[u8] = b"123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+
+/// Check if a character is valid Base58
+#[inline]
+fn is_base58_char(c: char) -> bool {
+    c.is_ascii() && BASE58_ALPHABET.contains(&(c as u8))
+}
+
 /// Validate that a string is a valid Solana signature
+/// Solana signatures are Base58 encoded and should be 87-88 characters long
 pub fn is_valid_signature(signature: &str) -> bool {
-    // Solana signatures are base58 encoded and should be 88 characters long
-    signature.len() == 88
-        && signature.chars().all(|c| {
-            c.is_ascii_alphanumeric()
-                || c == '1'
-                || c == '2'
-                || c == '3'
-                || c == '4'
-                || c == '5'
-                || c == '6'
-                || c == '7'
-                || c == '8'
-                || c == '9'
-                || c == 'A'
-                || c == 'B'
-                || c == 'C'
-                || c == 'D'
-                || c == 'E'
-                || c == 'F'
-                || c == 'G'
-                || c == 'H'
-                || c == 'J'
-                || c == 'K'
-                || c == 'L'
-                || c == 'M'
-                || c == 'N'
-                || c == 'P'
-                || c == 'Q'
-                || c == 'R'
-                || c == 'S'
-                || c == 'T'
-                || c == 'U'
-                || c == 'V'
-                || c == 'W'
-                || c == 'X'
-                || c == 'Y'
-                || c == 'Z'
-                || c == 'a'
-                || c == 'b'
-                || c == 'c'
-                || c == 'd'
-                || c == 'e'
-                || c == 'f'
-                || c == 'g'
-                || c == 'h'
-                || c == 'i'
-                || c == 'j'
-                || c == 'k'
-                || c == 'm'
-                || c == 'n'
-                || c == 'o'
-                || c == 'p'
-                || c == 'q'
-                || c == 'r'
-                || c == 's'
-                || c == 't'
-                || c == 'u'
-                || c == 'v'
-                || c == 'w'
-                || c == 'x'
-                || c == 'y'
-                || c == 'z'
-        })
+    let len = signature.len();
+    (len == 87 || len == 88) && signature.chars().all(is_base58_char)
 }
 
 /// Validate that a string is a valid Solana pubkey
+/// Solana pubkeys are Base58 encoded and should be 32-44 characters long
 pub fn is_valid_pubkey(pubkey: &str) -> bool {
-    // Solana pubkeys are base58 encoded and should be 32-44 characters long
-    pubkey.len() >= 32
-        && pubkey.len() <= 44
-        && pubkey.chars().all(|c| {
-            c.is_ascii_alphanumeric()
-                || c == '1'
-                || c == '2'
-                || c == '3'
-                || c == '4'
-                || c == '5'
-                || c == '6'
-                || c == '7'
-                || c == '8'
-                || c == '9'
-                || c == 'A'
-                || c == 'B'
-                || c == 'C'
-                || c == 'D'
-                || c == 'E'
-                || c == 'F'
-                || c == 'G'
-                || c == 'H'
-                || c == 'J'
-                || c == 'K'
-                || c == 'L'
-                || c == 'M'
-                || c == 'N'
-                || c == 'P'
-                || c == 'Q'
-                || c == 'R'
-                || c == 'S'
-                || c == 'T'
-                || c == 'U'
-                || c == 'V'
-                || c == 'W'
-                || c == 'X'
-                || c == 'Y'
-                || c == 'Z'
-                || c == 'a'
-                || c == 'b'
-                || c == 'c'
-                || c == 'd'
-                || c == 'e'
-                || c == 'f'
-                || c == 'g'
-                || c == 'h'
-                || c == 'i'
-                || c == 'j'
-                || c == 'k'
-                || c == 'm'
-                || c == 'n'
-                || c == 'o'
-                || c == 'p'
-                || c == 'q'
-                || c == 'r'
-                || c == 's'
-                || c == 't'
-                || c == 'u'
-                || c == 'v'
-                || c == 'w'
-                || c == 'x'
-                || c == 'y'
-                || c == 'z'
-        })
+    let len = pubkey.len();
+    len >= 32 && len <= 44 && pubkey.chars().all(is_base58_char)
 }
 
 /// Check if mint address is WSOL (wrapped SOL)

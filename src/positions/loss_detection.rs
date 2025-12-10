@@ -1,19 +1,8 @@
 use super::{lib::calculate_position_pnl, types::Position};
+use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::tokens::cleanup;
 use crate::tokens::database::get_global_database;
-
-// =============================================================================
-// LOSS DETECTION CONFIGURATION
-// =============================================================================
-
-/// Enable automatic blacklisting of tokens that result in losses
-/// When enabled, tokens that cause losses above configured thresholds will be automatically
-/// added to the blacklist to prevent future trading
-pub const ENABLE_LOSS_BASED_BLACKLISTING: bool = true;
-
-/// Minimum percentage loss threshold for blacklisting
-const MIN_LOSS_PERCENT_THRESHOLD: f64 = -15.0;
 
 // =============================================================================
 // LOSS DETECTION AND BLACKLISTING FUNCTIONS
@@ -34,8 +23,9 @@ const MIN_LOSS_PERCENT_THRESHOLD: f64 = -15.0;
 /// * `Ok(())` - Processing completed successfully
 /// * `Err(String)` - Error during P&L calculation or blacklisting
 pub async fn process_position_loss_detection(position: &Position) -> Result<(), String> {
-  // Check if loss-based blacklisting is enabled
-  if !ENABLE_LOSS_BASED_BLACKLISTING {
+  // Check if loss-based blacklisting is enabled via config
+  let loss_blacklist_enabled = with_config(|cfg| cfg.positions.loss_blacklist_enabled);
+  if !loss_blacklist_enabled {
     return Ok(());
   }
 
@@ -54,7 +44,8 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<(), 
     );
 
     // Only blacklist for significant losses to avoid being too aggressive
-    if should_blacklist_for_loss(net_pnl_percent) {
+    let threshold = with_config(|cfg| cfg.positions.loss_blacklist_threshold_pct);
+    if net_pnl_percent <= threshold {
       // Add to database-backed blacklist
       if let Some(db) = get_global_database() {
         match cleanup::blacklist_token(&position.mint, "PoorPerformance", &db) {
@@ -112,24 +103,12 @@ pub async fn process_position_loss_detection(position: &Position) -> Result<(), 
   Ok(())
 }
 
-/// Determine if a position should be blacklisted based on loss threshold
-///
-/// # Arguments
-/// * `loss_percent` - Loss percentage (negative value)
-///
-/// # Returns
-/// * `true` - Should be blacklisted
-/// * `false` - Should not be blacklisted
-fn should_blacklist_for_loss(loss_percent: f64) -> bool {
-  loss_percent <= MIN_LOSS_PERCENT_THRESHOLD
-}
-
 /// Get current loss detection threshold (for debugging/monitoring)
 ///
 /// # Returns
-/// * `percent_threshold` - Current percentage threshold
+/// * `percent_threshold` - Current percentage threshold from config
 pub fn get_loss_thresholds() -> f64 {
-  MIN_LOSS_PERCENT_THRESHOLD
+  with_config(|cfg| cfg.positions.loss_blacklist_threshold_pct)
 }
 
 /// Check if loss-based blacklisting is currently enabled
@@ -138,5 +117,5 @@ pub fn get_loss_thresholds() -> f64 {
 /// * `true` - Feature is enabled
 /// * `false` - Feature is disabled
 pub fn is_loss_blacklisting_enabled() -> bool {
-  ENABLE_LOSS_BASED_BLACKLISTING
+  with_config(|cfg| cfg.positions.loss_blacklist_enabled)
 }

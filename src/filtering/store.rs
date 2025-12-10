@@ -24,8 +24,9 @@ use super::types::{
 static GLOBAL_STORE: Lazy<Arc<FilteringStore>> = Lazy::new(|| Arc::new(FilteringStore::new()));
 
 // Timing constants
-const FILTER_CACHE_TTL_SECS: u64 = 60; // Increased from 30s to reduce refresh frequency
-const STALE_MULTIPLIER: u64 = 3;
+// Snapshot is considered stale after FILTER_CACHE_STALE_SECS (180s = 3 min)
+// Background refresh is triggered when snapshot age exceeds this threshold
+const FILTER_CACHE_STALE_SECS: u64 = 180;
 const TOKENS_TAB_MAX_PAGE_SIZE: usize = 200;
 const TOKENS_TAB_RECENT_TOKEN_HOURS: i64 = 24;
 
@@ -49,12 +50,11 @@ impl FilteringStore {
     /// Non-blocking snapshot access - returns cached snapshot immediately if available,
     /// or triggers background refresh if stale. Never blocks waiting for refresh.
     async fn ensure_snapshot(&self) -> Result<Arc<FilteringSnapshot>, String> {
-        let max_age = FILTER_CACHE_TTL_SECS;
         let stale_snapshot = self.snapshot.read().await.clone();
 
         // If we have any snapshot (even stale), return it immediately
         if let Some(existing) = stale_snapshot.as_ref() {
-            let is_stale = is_snapshot_stale(existing, max_age);
+            let is_stale = is_snapshot_stale(existing);
 
             // Trigger background refresh if stale and not already refreshing
             if is_stale && !self.refresh_in_progress.load(AtomicOrdering::Relaxed) {
@@ -105,7 +105,7 @@ impl FilteringStore {
         // Check again if snapshot is still stale (another refresh might have completed)
         let existing = self.snapshot.read().await.clone();
         if let Some(ref snapshot) = existing {
-            if !is_snapshot_stale(snapshot, FILTER_CACHE_TTL_SECS) {
+            if !is_snapshot_stale(snapshot) {
                 return Ok(snapshot.clone());
             }
         }
@@ -869,6 +869,6 @@ fn snapshot_age_secs(snapshot: &FilteringSnapshot) -> u64 {
         .max(0) as u64
 }
 
-fn is_snapshot_stale(snapshot: &FilteringSnapshot, max_age_secs: u64) -> bool {
-    snapshot_age_secs(snapshot) > max_age_secs.saturating_mul(STALE_MULTIPLIER)
+fn is_snapshot_stale(snapshot: &FilteringSnapshot) -> bool {
+    snapshot_age_secs(snapshot) > FILTER_CACHE_STALE_SECS
 }

@@ -153,10 +153,10 @@ impl OhlcvFetcher {
                 let latency = start.elapsed().as_millis() as u64;
                 self.record_api_call(latency);
 
-                // INFO: Record successful fetch
+                // DEBUG: Record successful fetch (higher-level fetch_success recorded by monitor after storage)
                 record_ohlcv_event(
-                    "fetch_aggregate_success",
-                    Severity::Info,
+                    "fetch_aggregate_complete",
+                    Severity::Debug,
                     None,
                     Some(pool_address),
                     json!({
@@ -270,10 +270,10 @@ impl OhlcvFetcher {
                 let latency = start.elapsed().as_millis() as u64;
                 self.record_api_call(latency);
 
-                // INFO: Record successful fetch
+                // DEBUG: Record successful fetch (higher-level events recorded by monitor after storage)
                 record_ohlcv_event(
-                    "fetch_success",
-                    Severity::Info,
+                    "fetch_immediate_complete",
+                    Severity::Debug,
                     None,
                     Some(pool_address),
                     json!({

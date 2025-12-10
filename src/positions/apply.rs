@@ -119,12 +119,12 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
           pos.exit_fee_lamports = Some(fee_lamports);
           pos.exit_time = Some(exit_time);
 
- // CRITICAL FIX: Update closed_reason to remove "_pending_verification"suffix
+ // CRITICAL FIX: Update closed_reason to remove pending verification suffix
           // This ensures database state matches verification status
           if let Some(reason) = &pos.closed_reason {
-            if reason.ends_with("_pending_verification") {
+            if reason.ends_with(super::PENDING_VERIFICATION_SUFFIX) {
               pos.closed_reason =
-                Some(reason.trim_end_matches("_pending_verification").to_string());
+                Some(reason.trim_end_matches(super::PENDING_VERIFICATION_SUFFIX).to_string());
             }
           }
 

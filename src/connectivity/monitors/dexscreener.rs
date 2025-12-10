@@ -3,7 +3,7 @@ use crate::connectivity::monitor::EndpointMonitor;
 use crate::connectivity::types::{EndpointCriticality, FallbackStrategy, HealthCheckResult};
 use async_trait::async_trait;
 use std::time::Instant;
-use tokio::time::{timeout, Duration};
+use tokio::time::Duration;
 
 /// DexScreener API monitor
 pub struct DexScreenerMonitor;
@@ -39,7 +39,7 @@ impl EndpointMonitor for DexScreenerMonitor {
 
     async fn check_health(&self) -> HealthCheckResult {
         let cfg = get_config_clone();
-        let timeout_secs = cfg.connectivity.health_check_timeout_secs;
+        let timeout_secs = cfg.connectivity.endpoints.dexscreener.timeout_secs.max(1);
 
         let client = match reqwest::Client::builder()
             .timeout(Duration::from_secs(timeout_secs))
@@ -56,8 +56,8 @@ impl EndpointMonitor for DexScreenerMonitor {
         );
         let start = Instant::now();
 
-        match timeout(Duration::from_secs(timeout_secs), client.get(&url).send()).await {
-            Ok(Ok(response)) => {
+        match client.get(&url).send().await {
+            Ok(response) => {
                 let latency = start.elapsed().as_millis() as u64;
 
                 if response.status().is_success() {
@@ -66,8 +66,13 @@ impl EndpointMonitor for DexScreenerMonitor {
                     HealthCheckResult::failure(format!("HTTP {}", response.status()))
                 }
             }
-            Ok(Err(e)) => HealthCheckResult::failure(format!("Request failed: {}", e)),
-            Err(_) => HealthCheckResult::failure(format!("Timeout after {}s", timeout_secs)),
+            Err(e) => {
+                if e.is_timeout() {
+                    HealthCheckResult::failure(format!("Timeout after {}s", timeout_secs))
+                } else {
+                    HealthCheckResult::failure(format!("Request failed: {}", e))
+                }
+            }
         }
     }
 

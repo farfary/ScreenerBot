@@ -1,6 +1,7 @@
 //! Manual trade tracking and history
 
 use crate::logger::{self, LogTag};
+use crate::trader::constants::MANUAL_TRADE_HISTORY_LIMIT;
 use crate::trader::types::TradeResult;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -43,9 +44,9 @@ pub async fn record_manual_trade(result: &TradeResult) -> Result<(), String> {
     let mut history = get_history_storage().write().await;
     history.push(record.clone());
 
-    // Keep only last 1000 records
-    if history.len() > 1000 {
-        let excess = history.len() - 1000;
+    // Keep only last N records
+    if history.len() > MANUAL_TRADE_HISTORY_LIMIT {
+        let excess = history.len() - MANUAL_TRADE_HISTORY_LIMIT;
         history.drain(0..excess);
     }
 

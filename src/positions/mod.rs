@@ -14,6 +14,9 @@ pub mod types;
 pub mod verifier;
 pub mod worker;
 
+// Suffix appended to closed_reason while exit verification is pending
+pub const PENDING_VERIFICATION_SUFFIX: &str = "_pending_verification";
+
 // Public API exports
 pub use operations::{
     add_to_position, close_position_direct, open_position_direct, open_position_with_size,

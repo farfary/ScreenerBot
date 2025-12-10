@@ -4,9 +4,10 @@
 //! - Entry evaluation (safety checks + strategy signals)
 //! - Exit evaluation (priority-based exit conditions)
 //! - DCA evaluation (dollar cost averaging logic)
-//! - Strategy evaluation (configured trading strategies)
+//! - Strategy evaluation (user-configured trading strategies)
 //!
-//! Exit strategies (roi, trailing stop, time override) are in separate files for clarity.
+//! Built-in exit rules (roi, trailing stop, time override) are in separate files.
+//! These are NOT strategy-system strategies - they're hardcoded rules with config toggles.
 
 pub mod dca;
 pub mod entry;

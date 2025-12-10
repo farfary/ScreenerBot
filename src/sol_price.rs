@@ -190,7 +190,6 @@ pub async fn fetch_and_cache_sol_price() -> Result<f64, String> {
 // =============================================================================
 
 /// Start the SOL price service
-/// Start the SOL price service
 ///
 /// Returns JoinHandle so ServiceManager can wait for graceful shutdown.
 pub async fn start_sol_price_service(

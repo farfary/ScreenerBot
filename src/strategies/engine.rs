@@ -3,6 +3,7 @@ use crate::strategies::conditions::ConditionRegistry;
 use crate::strategies::types::{
     EvaluationContext, EvaluationResult, LogicalOperator, RuleTree, Strategy,
 };
+use crate::trader::STRATEGY_CACHE_MAX_ENTRIES;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
@@ -230,7 +231,7 @@ impl StrategyEngine {
         );
 
         // Cleanup old entries if cache is too large
-        if cache.len() > 1000 {
+        if cache.len() > STRATEGY_CACHE_MAX_ENTRIES {
             cache.retain(|_, v| v.timestamp.elapsed().as_secs() < self.config.cache_ttl_seconds);
         }
     }

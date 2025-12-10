@@ -1020,14 +1020,14 @@ async fn update_pool_tracked_tokens(db: &TokenDatabase, coordinator: &RateLimitC
                             ),
                         );
                     } else if result.is_success() {
-                        // Success: Demote from Pool (75) to High (50) priority
-                        // This happens for tokens that were elevated due to stale data
-                        // After fresh update, they can use normal High priority intervals
-                        if let Err(e) = db.update_priority(&result.mint, 50) {
+                        // Success: Demote from PoolTracked (75) to Stale (40) priority
+                        // After fresh update, token returns to normal priority rotation
+                        // Using Stale (40) instead of non-existent "High" (50)
+                        if let Err(e) = db.update_priority(&result.mint, Priority::Stale.to_value()) {
                             logger::warning(
                                 LogTag::Tokens,
                                 &format!(
-                                    "Failed to demote {} from Pool to High priority: {}",
+                                    "Failed to demote {} from PoolTracked to Stale priority: {}",
                                     result.mint, e
                                 ),
                             );

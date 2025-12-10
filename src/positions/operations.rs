@@ -1,4 +1,5 @@
 use super::db as positions_db;
+use super::PENDING_VERIFICATION_SUFFIX;
 use super::{
   apply::apply_transition,
   queue::{enqueue_verification, VerificationItem, VerificationKind},
@@ -399,7 +400,7 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
     if let Some(db_pos) = db_pos_opt {
       let is_still_open = db_pos.position_type == "buy"
         && db_pos.exit_time.is_none()
-        && (!db_pos.exit_transaction_signature.is_some()
+        && (db_pos.exit_transaction_signature.is_none()
           || !db_pos.transaction_exit_verified);
       if is_still_open {
         logger::warning(
@@ -894,7 +895,7 @@ pub async fn close_position_direct(
   super::state::update_position_state(token_mint, |pos| {
     pos.exit_transaction_signature = Some(transaction_signature.clone());
     pos.exit_price = Some(exit_price); // Store pool/market price at exit decision time
-    pos.closed_reason = Some(format!("{}_pending_verification", exit_reason));
+    pos.closed_reason = Some(format!("{}{}", exit_reason, PENDING_VERIFICATION_SUFFIX));
   })
   .await;
 

@@ -42,6 +42,24 @@ impl Service for SolPriceService {
     }
 
     async fn health(&self) -> ServiceHealth {
-        ServiceHealth::Healthy
+        // Check if service is running
+        if !crate::sol_price::is_sol_price_service_running() {
+            return ServiceHealth::Unhealthy("SOL price service is not running".to_string());
+        }
+
+        // Check if we have valid cached price data
+        match crate::sol_price::get_sol_price_info() {
+            Some(info) => {
+                if info.is_fresh() {
+                    ServiceHealth::Healthy
+                } else {
+                    ServiceHealth::Degraded(format!(
+                        "SOL price data is stale ({}s old)",
+                        info.age_seconds()
+                    ))
+                }
+            }
+            None => ServiceHealth::Degraded("No SOL price data available yet".to_string()),
+        }
     }
 }

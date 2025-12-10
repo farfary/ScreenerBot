@@ -34,7 +34,7 @@ impl InternetMonitor {
                     let latency = start.elapsed().as_millis() as u64;
                     return Ok(latency);
                 }
-                Ok(Err(e)) => {
+                Ok(Err(_e)) => {
                     continue; // Try next DNS server
                 }
                 Err(_) => {

@@ -101,7 +101,7 @@ pub async fn evaluate_exit_for_position(
     }
     Ok(None) => {}
     Err(e) => {
-      crate::logger::info(
+      crate::logger::warning(
         crate::logger::LogTag::Trader,
         &format!(
           "Error checking trailing stop for {}: {}",
@@ -138,7 +138,7 @@ pub async fn evaluate_exit_for_position(
     }
     Ok(None) => {}
     Err(e) => {
-      crate::logger::info(
+      crate::logger::warning(
         crate::logger::LogTag::Trader,
         &format!(
           "Error checking ROI exit for {}: {}",
@@ -175,7 +175,7 @@ pub async fn evaluate_exit_for_position(
     }
     Ok(None) => {}
     Err(e) => {
-      crate::logger::info(
+      crate::logger::warning(
         crate::logger::LogTag::Trader,
         &format!(
           "Error checking time override for {}: {}",
@@ -217,7 +217,7 @@ pub async fn evaluate_exit_for_position(
     }
     Ok(None) => {}
     Err(e) => {
-      crate::logger::info(
+      crate::logger::warning(
         crate::logger::LogTag::Trader,
         &format!(
           "Error checking strategy exit for {}: {}",

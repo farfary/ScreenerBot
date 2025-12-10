@@ -159,7 +159,7 @@ pub async fn compute_snapshot(
                     ..
                 } = record;
 
-                let Some(mut mint) = token_mint else {
+                let Some(mint) = token_mint else {
                     continue;
                 };
                 if mint.is_empty() {
@@ -204,7 +204,7 @@ pub async fn compute_snapshot(
                     ..
                 } = record;
 
-                let Some(mut mint) = token_mint else {
+                let Some(mint) = token_mint else {
                     continue;
                 };
                 if mint.is_empty() {

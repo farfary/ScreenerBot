@@ -9,6 +9,7 @@ use crate::positions::Position;
 use crate::strategies;
 use crate::strategies::db::has_enabled_strategies;
 use crate::strategies::types::{MarketData, PositionData, StrategyType};
+use crate::trader::constants::STRATEGY_EVALUATION_TIMEOUT_SECS;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
 use chrono::Utc;
 
@@ -34,19 +35,8 @@ impl StrategyEvaluator {
       Ok(true) => {} // Continue with evaluation
     }
 
-    // Check connectivity before evaluating - entry depends on external data
-    if let Some(unhealthy) =
-      crate::connectivity::check_endpoints_healthy(&["rpc", "dexscreener", "rugcheck"]).await
-    {
-      logger::warning(
-        LogTag::Trader,
-        &format!(
- "Skipping entry evaluation for {} - Unhealthy endpoints: {}",
-          token_mint, unhealthy
-        ),
-      );
-      return Ok(None);
-    }
+    // NOTE: Connectivity is already verified by the caller (entry.rs)
+    // to avoid duplicate checks in the evaluation pipeline
 
     logger::info(
       LogTag::Trader,
@@ -116,7 +106,7 @@ impl StrategyEvaluator {
     };
 
     // Call strategies module for evaluation with timeout
-    let strategy_timeout = std::time::Duration::from_secs(5);
+    let strategy_timeout = std::time::Duration::from_secs(STRATEGY_EVALUATION_TIMEOUT_SECS);
     let evaluation_result = tokio::time::timeout(
       strategy_timeout,
       strategies::evaluate_entry_strategies(
@@ -152,14 +142,14 @@ impl StrategyEvaluator {
       }
       Ok(Ok(None)) => Ok(None),
       Ok(Err(e)) => {
-        logger::info(
+        logger::warning(
           LogTag::Trader,
           &format!("Strategy evaluation error for {}: {}", token_mint, e),
         );
         Ok(None) // Don't fail trading on strategy errors
       }
       Err(_timeout) => {
-        logger::info(
+        logger::warning(
     LogTag::Trader,
           &format!(
  "STRATEGY_TIMEOUT: Entry evaluation for {} exceeded {}s - Consider increasing timeout or optimizing strategies. This timeout is distinct from 'no signal'case.",
@@ -204,14 +194,15 @@ impl StrategyEvaluator {
       Ok(true) => {} // Continue with evaluation
     }
 
-    // Check connectivity before evaluating - exit depends on fresh price data
+    // NOTE: Exit strategy evaluation is called after other exit checks (blacklist, risk, trailing, ROI, time)
+    // Connectivity check here is defensive since exit coordinator doesn't pre-check
     if let Some(unhealthy) =
-      crate::connectivity::check_endpoints_healthy(&["rpc", "dexscreener"]).await
+      crate::connectivity::check_endpoints_healthy(&["rpc"]).await
     {
-      logger::warning(
+      logger::debug(
         LogTag::Trader,
         &format!(
- "Skipping exit evaluation for position {:?} - Unhealthy endpoints: {}",
+          "Skipping exit strategy evaluation for position {:?} - Unhealthy RPC: {}",
           position.id, unhealthy
         ),
       );
@@ -301,7 +292,7 @@ impl StrategyEvaluator {
     };
 
     // Call strategies module for evaluation with timeout
-    let strategy_timeout = std::time::Duration::from_secs(5);
+    let strategy_timeout = std::time::Duration::from_secs(STRATEGY_EVALUATION_TIMEOUT_SECS);
     let evaluation_result = tokio::time::timeout(
       strategy_timeout,
       strategies::evaluate_exit_strategies(
@@ -338,7 +329,7 @@ impl StrategyEvaluator {
       }
       Ok(Ok(None)) => Ok(None),
       Ok(Err(e)) => {
-        logger::info(
+        logger::warning(
           LogTag::Trader,
           &format!(
             "Strategy evaluation error for position {:?}: {}",
@@ -348,7 +339,7 @@ impl StrategyEvaluator {
         Ok(None) // Don't fail trading on strategy errors
       }
       Err(_timeout) => {
-        logger::info(
+        logger::warning(
     LogTag::Trader,
           &format!(
  "STRATEGY_TIMEOUT: Exit evaluation for position {:?} (mint={}) exceeded {}s - Consider increasing timeout or optimizing strategies. This timeout is distinct from 'no signal'case.",

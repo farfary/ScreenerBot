@@ -452,12 +452,14 @@ impl TransactionsManager {
 impl TransactionsManager {
     /// Add a deferred retry for a failed signature
     pub fn add_deferred_retry(&mut self, signature: String, error: Option<String>) {
+        let now = Utc::now();
         let retry = DeferredRetry {
             signature: signature.clone(),
-            next_retry_at: Utc::now() + chrono::Duration::seconds(30), // Start with 30 second delay
-            remaining_attempts: 3,
+            next_retry_at: now + chrono::Duration::seconds(30), // Start with 30 second delay
+            attempts: 1,
             current_delay_secs: 30,
             last_error: error,
+            first_seen: now,
         };
 
         self.deferred_retries.insert(signature.clone(), retry);
@@ -470,6 +472,9 @@ impl TransactionsManager {
         }
     }
 
+    /// Maximum retry attempts before giving up
+    const MAX_RETRY_ATTEMPTS: u32 = 3;
+
     /// Get retries that are ready to be processed
     pub fn get_ready_retries(&mut self) -> Vec<DeferredRetry> {
         let now = Utc::now();
@@ -479,16 +484,16 @@ impl TransactionsManager {
 
         for (signature, retry) in self.deferred_retries.iter() {
             if now >= retry.next_retry_at {
-                if retry.remaining_attempts > 0 {
+                if retry.attempts < Self::MAX_RETRY_ATTEMPTS {
                     ready_retries.push(retry.clone());
 
                     let mut updated_retry = retry.clone();
-                    updated_retry.remaining_attempts -= 1;
+                    updated_retry.attempts += 1;
                     updated_retry.current_delay_secs *= 2;
                     updated_retry.next_retry_at =
                         now + chrono::Duration::seconds(updated_retry.current_delay_secs);
 
-                    if updated_retry.remaining_attempts > 0 {
+                    if updated_retry.attempts < Self::MAX_RETRY_ATTEMPTS {
                         to_update.push((signature.clone(), updated_retry));
                     } else {
                         to_remove.push(signature.clone());

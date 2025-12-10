@@ -147,6 +147,7 @@ pub async fn fetch_dexscreener_data_batch(
                 .signed_duration_since(db_data.market_data_last_fetched_at)
                 .num_seconds();
 
+            // age_secs < 0 means future timestamp (clock skew) - treat as stale
             if age_secs >= 0 && age_secs <= 30 {
                 store::store_dexscreener(mint, &db_data);
                 if let Err(err) = store::refresh_token_snapshot(mint).await {

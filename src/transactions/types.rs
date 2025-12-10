@@ -10,13 +10,15 @@ use tabled::Tabled;
 pub const ANALYSIS_CACHE_VERSION: u32 = 2;
 
 /// Deferred retry record for signatures that timed out/dropped
+/// Used for both manager-level retries and service-level deferred queue
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DeferredRetry {
   pub signature: String,
   pub next_retry_at: DateTime<Utc>,
-  pub remaining_attempts: i32,
+  pub attempts: u32,
   pub current_delay_secs: i64,
   pub last_error: Option<String>,
+  pub first_seen: DateTime<Utc>,
 }
 
 /// Main Transaction structure used throughout the bot

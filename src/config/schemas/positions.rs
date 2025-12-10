@@ -31,6 +31,26 @@ config_struct! {
         })]
         position_open_cooldown_secs: i64 = 5,
 
+        // ==================== LOSS DETECTION CONFIGURATION ====================
+        #[metadata(field_metadata! {
+            label: "Enable Loss Blacklisting",
+            hint: "Auto-blacklist tokens that cause significant losses",
+            impact: "high",
+            category: "Loss Detection",
+        })]
+        loss_blacklist_enabled: bool = true,
+        #[metadata(field_metadata! {
+            label: "Loss Blacklist Threshold %",
+            hint: "Blacklist tokens with losses exceeding this % (-15 = blacklist if down 15%+)",
+            min: -100,
+            max: 0,
+            step: 1,
+            unit: "%",
+            impact: "high",
+            category: "Loss Detection",
+        })]
+        loss_blacklist_threshold_pct: f64 = -15.0,
+
         // ==================== PARTIAL EXIT CONFIGURATION ====================
         #[metadata(field_metadata! {
             label: "Enable Partial Exits",

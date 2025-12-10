@@ -1,6 +1,7 @@
 //! Risk management utilities
 
 use crate::positions::Position;
+use crate::trader::constants::EMERGENCY_LOSS_THRESHOLD_PCT;
 use crate::trader::types::{TradeAction, TradeDecision, TradePriority, TradeReason};
 use chrono::Utc;
 
@@ -25,8 +26,8 @@ pub async fn check_risk_limits(
 
     let loss_pct = (1.0 - current_price / entry_price) * 100.0;
 
-    // If loss exceeds 90%, trigger emergency exit
-    if loss_pct >= 90.0 {
+    // If loss exceeds emergency threshold, trigger emergency exit
+    if loss_pct >= EMERGENCY_LOSS_THRESHOLD_PCT {
         return Ok(Some(TradeDecision {
             position_id: position.id.map(|id| id.to_string()),
             mint: position.mint.clone(),

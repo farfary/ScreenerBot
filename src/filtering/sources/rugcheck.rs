@@ -1,5 +1,3 @@
-use std::cmp::Ordering;
-
 use crate::config::schemas::RugCheckFilters;
 use crate::filtering::sources::FilterRejectionReason;
 use crate::tokens::types::{SecurityRisk, Token};
@@ -95,7 +93,10 @@ pub fn evaluate(token: &Token, config: &RugCheckFilters) -> Result<(), FilterRej
                 }
             }
             None => {
-                if config.block_transfer_fee_tokens {
+                // Missing transfer fee data is acceptable - most tokens don't have transfer fees
+                // Only reject if max_transfer_fee_pct threshold requires the data
+                if config.max_transfer_fee_pct < 100.0 {
+                    // Threshold is set, but we have no data to verify - skip this token
                     return Err(FilterRejectionReason::RugcheckTransferFeeMissing);
                 }
             }
@@ -137,10 +138,11 @@ fn check_holder_distribution(
     }
 
     let mut holders = token.top_holders.clone();
-    holders.sort_by(|a, b| match b.pct.partial_cmp(&a.pct) {
-        Some(Ordering::Greater) | Some(Ordering::Equal) => Ordering::Greater,
-        Some(Ordering::Less) => Ordering::Less,
-        None => Ordering::Equal,
+    // Sort descending by percentage (highest first)
+    holders.sort_by(|a, b| {
+        b.pct
+            .partial_cmp(&a.pct)
+            .unwrap_or(std::cmp::Ordering::Equal)
     });
 
     if let Some(first) = holders.first() {

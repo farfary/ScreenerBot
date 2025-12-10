@@ -514,7 +514,7 @@ pub async fn get_open_positions() -> Vec<Position> {
     .filter(|p| {
       p.position_type == "buy"
         && p.exit_time.is_none()
-        && (!p.exit_transaction_signature.is_some() || !p.transaction_exit_verified)
+        && (p.exit_transaction_signature.is_none() || !p.transaction_exit_verified)
     })
     .cloned()
     .collect()
@@ -544,7 +544,7 @@ pub async fn is_open_position(mint: &str) -> bool {
       p.mint == mint
         && p.position_type == "buy"
         && p.exit_time.is_none()
-        && (!p.exit_transaction_signature.is_some() || !p.transaction_exit_verified)
+        && (p.exit_transaction_signature.is_none() || !p.transaction_exit_verified)
     }) {
       return true;
     }

@@ -10,6 +10,16 @@ const MAX_VERIFICATION_ATTEMPTS: u8 = 20;
 /// Maximum age for verification item in hours before giving up
 const MAX_VERIFICATION_AGE_HOURS: i64 = 2;
 
+/// Backoff intervals in seconds for verification retries (tiered exponential)
+/// Conservative timing to reduce RPC pressure: 5, 10, 20, 40, 60, 90, 120, 150, 180, 210, 240, 300
+const BACKOFF_INTERVALS_SECS: [i64; 12] = [5, 10, 20, 40, 60, 90, 120, 150, 180, 210, 240, 300];
+
+/// Maximum backoff interval in seconds (used when attempts exceed table size)
+const BACKOFF_MAX_SECS: i64 = 300;
+
+/// Jitter fraction for backoff randomization (±10%)
+const BACKOFF_JITTER_FRACTION: f64 = 0.1;
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum VerificationKind {
     Entry,
@@ -136,25 +146,16 @@ impl VerificationItem {
     pub fn with_retry(&self) -> Self {
         // Compute exponential backoff (bounded) based on attempts (after increment)
         let next_attempts = self.attempts.saturating_add(1);
-        // Tiered backoff in seconds (more conservative to reduce RPC pressure):
-        // 5, 10, 20, 40, 60, 90, 120, 150, 180, 210, 240, 300
-        let backoff_secs = match next_attempts {
-            0 => 0,
-            1 => 5,
-            2 => 10,
-            3 => 20,
-            4 => 40,
-            5 => 60,
-            6 => 90,
-            7 => 120,
-            8 => 150,
-            9 => 180,
-            10 => 210,
-            _ => 300,
+        
+        // Use tiered backoff from constants table, fallback to max for high attempt counts
+        let backoff_secs = if next_attempts == 0 {
+            0
+        } else {
+            let idx = (next_attempts as usize).saturating_sub(1);
+            BACKOFF_INTERVALS_SECS.get(idx).copied().unwrap_or(BACKOFF_MAX_SECS)
         };
 
-        // Add small jitter (±10%) to avoid thundering herd
-        let jitter_fraction: f64 = 0.1;
+        // Add small jitter to avoid thundering herd
         let jitter = {
             // Simple deterministic jitter based on signature hash and attempt number
             use std::hash::{Hash, Hasher};
@@ -163,10 +164,10 @@ impl VerificationItem {
             next_attempts.hash(&mut hasher);
             let h = hasher.finish();
             let sign = if (h & 1) == 0 { 1.0 } else { -1.0 };
-            let frac = (((h >> 1) as f64) / ((u64::MAX >> 1) as f64)) * jitter_fraction;
+            let frac = (((h >> 1) as f64) / ((u64::MAX >> 1) as f64)) * BACKOFF_JITTER_FRACTION;
             ((backoff_secs as f64) * frac * sign) as i64
         };
-        let backoff_with_jitter = std::cmp::max(1, (backoff_secs as i64) + jitter);
+        let backoff_with_jitter = std::cmp::max(1, backoff_secs + jitter);
 
         Self {
             signature: self.signature.clone(),

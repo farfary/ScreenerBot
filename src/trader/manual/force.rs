@@ -47,13 +47,14 @@ pub async fn force_buy(mint: &str, size_sol: f64) -> Result<TradeResult, String>
         return Err(error);
     }
 
-    // Check against reasonable upper bound (100x default trade size)
+    // Check against reasonable upper bound
+    use crate::trader::constants::MAX_TRADE_SIZE_MULTIPLIER;
     let default_trade_size = with_config(|cfg| cfg.trader.trade_size_sol);
-    let max_trade_size = default_trade_size * 100.0;
+    let max_trade_size = default_trade_size * MAX_TRADE_SIZE_MULTIPLIER;
     if size_sol > max_trade_size {
         let error = format!(
-            "SOL amount {:.4} exceeds maximum trade size of {:.4} SOL (100x default)",
-            size_sol, max_trade_size
+            "SOL amount {:.4} exceeds maximum trade size of {:.4} SOL ({}x default)",
+            size_sol, max_trade_size, MAX_TRADE_SIZE_MULTIPLIER as u32
         );
         action.fail_validation(&error).await;
         return Err(error);

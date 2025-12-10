@@ -50,12 +50,8 @@ impl Service for FilteringService {
     }
 
     fn dependencies(&self) -> Vec<&'static str> {
-        vec![
-            "tokens_store",
-            "pool_helpers",
-            "token_discovery",
-            "security",
-        ]
+        // Note: tokens service handles all token data including store, discovery, and security
+        vec!["tokens", "pool_helpers"]
     }
 
     fn is_enabled(&self) -> bool {
