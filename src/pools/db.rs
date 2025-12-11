@@ -199,6 +199,18 @@ impl Default for PoolsDatabase {
   }
 }
 
+impl Clone for PoolsDatabase {
+  fn clone(&self) -> Self {
+    Self {
+      db_path: self.db_path.clone(),
+      connection: Arc::clone(&self.connection),
+      write_queue: self.write_queue.clone(),
+      blacklisted_accounts: Arc::clone(&self.blacklisted_accounts),
+      blacklisted_pools: Arc::clone(&self.blacklisted_pools),
+    }
+  }
+}
+
 impl PoolsDatabase {
   /// Create new pools database instance
   pub fn new() -> Self {
@@ -211,6 +223,12 @@ impl PoolsDatabase {
       blacklisted_accounts: Arc::new(RwLock::new(HashSet::new())),
       blacklisted_pools: Arc::new(RwLock::new(HashSet::new())),
     }
+  }
+
+  /// Create a clone suitable for async operations
+  /// This is the same as clone() but with a more explicit name
+  pub fn clone_for_async(&self) -> Self {
+    self.clone()
   }
 
   /// Initialize database and create tables
@@ -1283,40 +1301,49 @@ impl PoolsDatabase {
 // GLOBAL DATABASE INSTANCE
 // =============================================================================
 
-/// Global database instance
-static mut GLOBAL_POOLS_DB: Option<PoolsDatabase> = None;
+use once_cell::sync::Lazy;
+
+/// Global database instance - thread-safe using Lazy + RwLock pattern
+static GLOBAL_POOLS_DB: Lazy<RwLock<Option<PoolsDatabase>>> = Lazy::new(|| RwLock::new(None));
 
 /// Initialize the global pools database
 pub async fn initialize_database() -> Result<(), String> {
-  unsafe {
-    let mut db = PoolsDatabase::new();
-    db.initialize().await?;
-    GLOBAL_POOLS_DB = Some(db);
+  let mut db = PoolsDatabase::new();
+  db.initialize().await?;
+
+  match GLOBAL_POOLS_DB.write() {
+    Ok(mut guard) => {
+      *guard = Some(db);
+      Ok(())
+    }
+    Err(e) => Err(format!("Failed to acquire write lock: {}", e)),
   }
-  Ok(())
 }
 
 /// Queue a price for storage in the global database
 pub async fn queue_price_for_storage(price: PriceResult) -> Result<(), String> {
-  unsafe {
-    if let Some(ref db) = GLOBAL_POOLS_DB {
-      db.queue_price_for_storage(price).await
-    } else {
-      Err("Database not initialized".to_string())
-    }
-  }
+  let db_ref = match GLOBAL_POOLS_DB.read() {
+    Ok(guard) => match guard.as_ref() {
+      Some(db) => db.clone_for_async(),
+      None => return Err("Database not initialized".to_string()),
+    },
+    Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
+  };
+  db_ref.queue_price_for_storage(price).await
 }
 
 /// Load recent price history for cache initialization
 pub async fn load_historical_data_for_token(mint: &str) -> Result<Vec<PriceResult>, String> {
-  unsafe {
-    if let Some(ref db) = GLOBAL_POOLS_DB {
-      db.load_recent_price_history(mint, PRICE_HISTORY_MAX_ENTRIES)
-        .await
-    } else {
-      Ok(Vec::new()) // Return empty if DB not available
-    }
-  }
+  let db_ref = match GLOBAL_POOLS_DB.read() {
+    Ok(guard) => match guard.as_ref() {
+      Some(db) => db.clone_for_async(),
+      None => return Ok(Vec::new()),
+    },
+    Err(_) => return Ok(Vec::new()),
+  };
+  db_ref
+    .load_recent_price_history(mint, PRICE_HISTORY_MAX_ENTRIES)
+    .await
 }
 
 /// Get extended price history from database
@@ -1325,46 +1352,50 @@ pub async fn get_extended_price_history(
   limit: Option<usize>,
   since_timestamp: Option<i64>,
 ) -> Result<Vec<PriceResult>, String> {
-  unsafe {
-    if let Some(ref db) = GLOBAL_POOLS_DB {
-      db.get_price_history(mint, limit, since_timestamp).await
-    } else {
-      Err("Database not initialized".to_string())
-    }
-  }
+  let db_ref = match GLOBAL_POOLS_DB.read() {
+    Ok(guard) => match guard.as_ref() {
+      Some(db) => db.clone_for_async(),
+      None => return Err("Database not initialized".to_string()),
+    },
+    Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
+  };
+  db_ref.get_price_history(mint, limit, since_timestamp).await
 }
 
 /// Cleanup old database entries
 pub async fn cleanup_old_entries() -> Result<usize, String> {
-  unsafe {
-    if let Some(ref db) = GLOBAL_POOLS_DB {
-      db.cleanup_old_entries().await
-    } else {
-      Ok(0)
-    }
-  }
+  let db_ref = match GLOBAL_POOLS_DB.read() {
+    Ok(guard) => match guard.as_ref() {
+      Some(db) => db.clone_for_async(),
+      None => return Ok(0),
+    },
+    Err(_) => return Ok(0),
+  };
+  db_ref.cleanup_old_entries().await
 }
 
 /// Cleanup gapped data for a specific token
 pub async fn cleanup_gapped_data_for_token(mint: &str) -> Result<usize, String> {
-  unsafe {
-    if let Some(ref db) = GLOBAL_POOLS_DB {
-      db.cleanup_gapped_data_for_token(mint).await
-    } else {
-      Ok(0)
-    }
-  }
+  let db_ref = match GLOBAL_POOLS_DB.read() {
+    Ok(guard) => match guard.as_ref() {
+      Some(db) => db.clone_for_async(),
+      None => return Ok(0),
+    },
+    Err(_) => return Ok(0),
+  };
+  db_ref.cleanup_gapped_data_for_token(mint).await
 }
 
 /// Cleanup gapped data for all tokens
 pub async fn cleanup_all_gapped_data() -> Result<usize, String> {
-  unsafe {
-    if let Some(ref db) = GLOBAL_POOLS_DB {
-      db.cleanup_all_gapped_data().await
-    } else {
-      Ok(0)
-    }
-  }
+  let db_ref = match GLOBAL_POOLS_DB.read() {
+    Ok(guard) => match guard.as_ref() {
+      Some(db) => db.clone_for_async(),
+      None => return Ok(0),
+    },
+    Err(_) => return Ok(0),
+  };
+  db_ref.cleanup_all_gapped_data().await
 }
 
 /// Add account to blacklist (global helper)
@@ -1375,25 +1406,28 @@ pub async fn add_account_to_blacklist(
   pool_id: Option<&str>,
   token_mint: Option<&str>,
 ) -> Result<(), String> {
-  unsafe {
-    if let Some(ref db) = GLOBAL_POOLS_DB {
-      db.add_account_to_blacklist(account_pubkey, reason, source, pool_id, token_mint)
-        .await
-    } else {
-      Err("Database not initialized".to_string())
-    }
-  }
+  let db_ref = match GLOBAL_POOLS_DB.read() {
+    Ok(guard) => match guard.as_ref() {
+      Some(db) => db.clone_for_async(),
+      None => return Err("Database not initialized".to_string()),
+    },
+    Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
+  };
+  db_ref
+    .add_account_to_blacklist(account_pubkey, reason, source, pool_id, token_mint)
+    .await
 }
 
 /// Check if account is blacklisted (global helper)
 pub async fn is_account_blacklisted(account_pubkey: &str) -> Result<bool, String> {
-  unsafe {
-    if let Some(ref db) = GLOBAL_POOLS_DB {
-      db.is_account_blacklisted(account_pubkey).await
-    } else {
-      Err("Database not initialized".to_string())
-    }
-  }
+  let db_ref = match GLOBAL_POOLS_DB.read() {
+    Ok(guard) => match guard.as_ref() {
+      Some(db) => db.clone_for_async(),
+      None => return Err("Database not initialized".to_string()),
+    },
+    Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
+  };
+  db_ref.is_account_blacklisted(account_pubkey).await
 }
 
 /// Add pool to blacklist (global helper)
@@ -1403,58 +1437,64 @@ pub async fn add_pool_to_blacklist(
   token_mint: Option<&str>,
   program_id: Option<&str>,
 ) -> Result<(), String> {
-  unsafe {
-    if let Some(ref db) = GLOBAL_POOLS_DB {
-      db.add_pool_to_blacklist(pool_id, reason, token_mint, program_id)
-        .await
-    } else {
-      Err("Database not initialized".to_string())
-    }
-  }
+  let db_ref = match GLOBAL_POOLS_DB.read() {
+    Ok(guard) => match guard.as_ref() {
+      Some(db) => db.clone_for_async(),
+      None => return Err("Database not initialized".to_string()),
+    },
+    Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
+  };
+  db_ref
+    .add_pool_to_blacklist(pool_id, reason, token_mint, program_id)
+    .await
 }
 
 /// Check if pool is blacklisted (global helper)
 pub async fn is_pool_blacklisted(pool_id: &str) -> Result<bool, String> {
-  unsafe {
-    if let Some(ref db) = GLOBAL_POOLS_DB {
-      db.is_pool_blacklisted(pool_id).await
-    } else {
-      Err("Database not initialized".to_string())
-    }
-  }
+  let db_ref = match GLOBAL_POOLS_DB.read() {
+    Ok(guard) => match guard.as_ref() {
+      Some(db) => db.clone_for_async(),
+      None => return Err("Database not initialized".to_string()),
+    },
+    Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
+  };
+  db_ref.is_pool_blacklisted(pool_id).await
 }
 
 /// Get blacklist statistics (global helper)
 pub async fn get_blacklist_stats() -> Result<(usize, usize), String> {
-  unsafe {
-    if let Some(ref db) = GLOBAL_POOLS_DB {
-      db.get_blacklist_stats().await
-    } else {
-      Ok((0, 0))
-    }
-  }
+  let db_ref = match GLOBAL_POOLS_DB.read() {
+    Ok(guard) => match guard.as_ref() {
+      Some(db) => db.clone_for_async(),
+      None => return Ok((0, 0)),
+    },
+    Err(_) => return Ok((0, 0)),
+  };
+  db_ref.get_blacklist_stats().await
 }
 
 pub async fn list_blacklisted_accounts(
   limit: Option<usize>,
 ) -> Result<Vec<BlacklistedAccountRecord>, String> {
-  unsafe {
-    if let Some(ref db) = GLOBAL_POOLS_DB {
-      db.list_blacklisted_accounts(limit).await
-    } else {
-      Ok(Vec::new())
-    }
-  }
+  let db_ref = match GLOBAL_POOLS_DB.read() {
+    Ok(guard) => match guard.as_ref() {
+      Some(db) => db.clone_for_async(),
+      None => return Ok(Vec::new()),
+    },
+    Err(_) => return Ok(Vec::new()),
+  };
+  db_ref.list_blacklisted_accounts(limit).await
 }
 
 pub async fn list_blacklisted_pools(
   limit: Option<usize>,
 ) -> Result<Vec<BlacklistedPoolRecord>, String> {
-  unsafe {
-    if let Some(ref db) = GLOBAL_POOLS_DB {
-      db.list_blacklisted_pools(limit).await
-    } else {
-      Ok(Vec::new())
-    }
-  }
+  let db_ref = match GLOBAL_POOLS_DB.read() {
+    Ok(guard) => match guard.as_ref() {
+      Some(db) => db.clone_for_async(),
+      None => return Ok(Vec::new()),
+    },
+    Err(_) => return Ok(Vec::new()),
+  };
+  db_ref.list_blacklisted_pools(limit).await
 }

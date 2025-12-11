@@ -10,6 +10,7 @@ use crate::logger::{self, LogTag};
 use crate::pools::service;
 use crate::rpc::{get_rpc_client, RpcClient};
 
+use futures::future::join_all;
 use solana_sdk::{account::Account, pubkey::Pubkey};
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
@@ -308,12 +309,11 @@ impl AccountFetcher {
         account_last_fetch: &Arc<RwLock<HashMap<Pubkey, Instant>>>,
         pending_accounts: &mut HashSet<Pubkey>,
     ) {
-        // Snapshot pools & last fetch times under locks (minimize lock duration)
-        let (pools, last_fetch_map) = {
+        // Snapshot pools under lock (minimize lock duration)
+        // Only clone pool data, not the last_fetch map
+        let pools = {
             let directory = pool_directory.read().unwrap();
-            let pools_vec = directory.values().cloned().collect::<Vec<_>>();
-            let last = account_last_fetch.read().unwrap();
-            (pools_vec, last.clone())
+            directory.values().cloned().collect::<Vec<_>>()
         };
 
         // Collect open position mints once (async call) to avoid per-pool await cost
@@ -323,26 +323,57 @@ impl AccountFetcher {
                 .into_iter()
                 .collect();
 
-        for pool in pools {
-            // Check if pool is blacklisted
-            match super::db::is_pool_blacklisted(&pool.pool_id.to_string()).await {
+        // Pre-compute pool ID strings to avoid allocations in async closures
+        let pool_ids: Vec<(usize, String)> = pools
+            .iter()
+            .enumerate()
+            .map(|(idx, pool)| (idx, pool.pool_id.to_string()))
+            .collect();
+
+        // Check pool blacklist status in parallel
+        let pool_blacklist_futures: Vec<_> = pool_ids
+            .iter()
+            .map(|(idx, pool_id_str)| {
+                let id_str = pool_id_str.clone();
+                let pool_idx = *idx;
+                async move {
+                    let result = super::db::is_pool_blacklisted(&id_str).await;
+                    (pool_idx, id_str, result)
+                }
+            })
+            .collect();
+
+        let pool_blacklist_results = join_all(pool_blacklist_futures).await;
+
+        // Build a set of non-blacklisted pool indices
+        let mut valid_pool_indices: HashSet<usize> = HashSet::new();
+        for (idx, pool_id_str, result) in pool_blacklist_results {
+            match result {
                 Ok(true) => {
-                    continue; // Skip blacklisted pool silently
+                    // Blacklisted, skip
                 }
                 Ok(false) => {
-                    // Not blacklisted, proceed to process pool
+                    valid_pool_indices.insert(idx);
                 }
                 Err(e) => {
                     logger::warning(
                         LogTag::PoolFetcher,
                         &format!(
                             "Failed to check blacklist for pool {}: {} - skipping as precaution",
-                            pool.pool_id, e
+                            pool_id_str, e
                         ),
                     );
                     // FAIL-CLOSED: Skip pool if blacklist check fails
-                    continue;
                 }
+            }
+        }
+
+        // Collect all reserve accounts we need to check from valid pools
+        let mut accounts_to_check: Vec<(Pubkey, u64)> = Vec::new();
+
+        for (idx, pool) in pools.iter().enumerate() {
+            if !valid_pool_indices.contains(&idx) {
+                continue;
             }
 
             // Determine the tracked (non-SOL) token mint for this pool
@@ -360,33 +391,59 @@ impl AccountFetcher {
             };
 
             for account in &pool.reserve_accounts {
-                // Check if account is blacklisted
-                match super::db::is_account_blacklisted(&account.to_string()).await {
-                    Ok(true) => {
-                        continue; // Skip blacklisted account silently
-                    }
-                    Ok(false) => {
-                        // Not blacklisted, proceed to check if needs fetch
-                    }
-                    Err(e) => {
-                        logger::warning(
-                            LogTag::PoolFetcher,
-                            &format!(
-                                "Failed to check blacklist for account {}: {} - skipping as precaution",
-                                account, e
-                            ),
-                        );
-                        // FAIL-CLOSED: Skip account if blacklist check fails to avoid RPC waste
-                        continue;
-                    }
-                }
+                accounts_to_check.push((*account, threshold));
+            }
+        }
 
-                let needs_fetch = match last_fetch_map.get(account) {
+        // Now check last fetch times with a single lock acquisition
+        // Only read the entries we actually need
+        {
+            let last_fetch = account_last_fetch.read().unwrap();
+            for (account, threshold) in accounts_to_check {
+                let needs_fetch = match last_fetch.get(&account) {
                     Some(last_time) => last_time.elapsed().as_secs() > threshold,
                     None => true, // Never fetched
                 };
                 if needs_fetch {
-                    pending_accounts.insert(*account);
+                    pending_accounts.insert(account);
+                }
+            }
+        }
+
+        // Filter out blacklisted accounts in parallel
+        let pending_list: Vec<Pubkey> = pending_accounts.iter().copied().collect();
+        let account_blacklist_futures: Vec<_> = pending_list
+            .iter()
+            .map(|account| {
+                let acc = *account;
+                let acc_str = acc.to_string();
+                async move {
+                    let result = super::db::is_account_blacklisted(&acc_str).await;
+                    (acc, acc_str, result)
+                }
+            })
+            .collect();
+
+        let account_blacklist_results = join_all(account_blacklist_futures).await;
+
+        for (account, account_str, result) in account_blacklist_results {
+            match result {
+                Ok(true) => {
+                    pending_accounts.remove(&account);
+                }
+                Ok(false) => {
+                    // Not blacklisted, keep in pending
+                }
+                Err(e) => {
+                    logger::warning(
+                        LogTag::PoolFetcher,
+                        &format!(
+                            "Failed to check blacklist for account {}: {} - skipping as precaution",
+                            account_str, e
+                        ),
+                    );
+                    // FAIL-CLOSED: Remove from pending if blacklist check fails
+                    pending_accounts.remove(&account);
                 }
             }
         }
@@ -417,18 +474,40 @@ impl AccountFetcher {
             return;
         }
 
-        let mut accounts_to_fetch = Vec::with_capacity(drained_accounts.len());
-        for account in drained_accounts {
-            let account_key = account.to_string();
-            match super::db::is_account_blacklisted(&account_key).await {
+        // Pre-compute string representations to avoid allocations in the async loop
+        let account_strings: Vec<(Pubkey, String)> = drained_accounts
+            .into_iter()
+            .map(|acc| {
+                let s = acc.to_string();
+                (acc, s)
+            })
+            .collect();
+
+        // Check blacklist status in parallel using join_all
+        let blacklist_futures: Vec<_> = account_strings
+            .iter()
+            .map(|(account, account_key)| {
+                let key = account_key.clone();
+                let acc = *account;
+                async move {
+                    let is_blacklisted = super::db::is_account_blacklisted(&key).await;
+                    (acc, key, is_blacklisted)
+                }
+            })
+            .collect();
+
+        let blacklist_results = futures::future::join_all(blacklist_futures).await;
+
+        let mut accounts_to_fetch = Vec::with_capacity(blacklist_results.len());
+        for (account, account_key, result) in blacklist_results {
+            match result {
                 Ok(true) => {
-                    pending_accounts.remove(&account);
+                    // Blacklisted, skip
                 }
                 Ok(false) => {
                     accounts_to_fetch.push(account);
                 }
                 Err(e) => {
-                    pending_accounts.remove(&account);
                     logger::warning(
                         LogTag::PoolFetcher,
                         &format!(

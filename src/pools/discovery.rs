@@ -400,10 +400,9 @@ impl PoolDiscovery {
         };
 
         if let Some(db) = crate::tokens::database::get_global_database() {
-          if let Ok(is_blacklisted) = tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current()
-              .block_on(async { db.is_blacklisted(token_mint) })
-          }) {
+          // is_blacklisted is a synchronous function that uses an internal Mutex,
+          // so we can call it directly without blocking wrappers
+          if let Ok(is_blacklisted) = db.is_blacklisted(token_mint) {
             if is_blacklisted {
               logger::debug(
                 LogTag::PoolDiscovery,

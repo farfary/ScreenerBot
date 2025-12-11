@@ -14,6 +14,7 @@ use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::logger::{self, LogTag};
 use crate::rpc::{get_rpc_client, RpcClient};
 
+use once_cell::sync::Lazy;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -27,36 +28,44 @@ const FETCH_INTERVAL_MS: u64 = 500;
 
 // Global service state
 static SERVICE_RUNNING: AtomicBool = AtomicBool::new(false);
-static mut GLOBAL_SHUTDOWN_HANDLE: Option<Arc<Notify>> = None;
+
+// Thread-safe global state using Lazy + RwLock pattern
+static GLOBAL_SHUTDOWN_HANDLE: Lazy<RwLock<Option<Arc<Notify>>>> =
+  Lazy::new(|| RwLock::new(None));
 
 // =============================================================================
 // POOL MONITORING CONFIGURATION
 // =============================================================================
 
 // Debug override for token monitoring (used by debug tools)
-static mut DEBUG_TOKEN_OVERRIDE: Option<Vec<String>> = None;
+static DEBUG_TOKEN_OVERRIDE: Lazy<RwLock<Option<Vec<String>>>> =
+  Lazy::new(|| RwLock::new(None));
 
 // Service components (will be initialized when service starts)
-static mut POOL_DISCOVERY: Option<Arc<PoolDiscovery>> = None;
-static mut POOL_ANALYZER: Option<Arc<PoolAnalyzer>> = None;
-static mut ACCOUNT_FETCHER: Option<Arc<AccountFetcher>> = None;
-static mut PRICE_CALCULATOR: Option<Arc<PriceCalculator>> = None;
+static POOL_DISCOVERY: Lazy<RwLock<Option<Arc<PoolDiscovery>>>> =
+  Lazy::new(|| RwLock::new(None));
+static POOL_ANALYZER: Lazy<RwLock<Option<Arc<PoolAnalyzer>>>> =
+  Lazy::new(|| RwLock::new(None));
+static ACCOUNT_FETCHER: Lazy<RwLock<Option<Arc<AccountFetcher>>>> =
+  Lazy::new(|| RwLock::new(None));
+static PRICE_CALCULATOR: Lazy<RwLock<Option<Arc<PriceCalculator>>>> =
+  Lazy::new(|| RwLock::new(None));
 
 // Public accessors for service manager (used by individual service implementations)
 pub fn get_pool_discovery() -> Option<Arc<PoolDiscovery>> {
-  unsafe { POOL_DISCOVERY.clone() }
+  POOL_DISCOVERY.read().ok()?.clone()
 }
 
 pub fn get_account_fetcher() -> Option<Arc<AccountFetcher>> {
-  unsafe { ACCOUNT_FETCHER.clone() }
+  ACCOUNT_FETCHER.read().ok()?.clone()
 }
 
 pub fn get_price_calculator() -> Option<Arc<PriceCalculator>> {
-  unsafe { PRICE_CALCULATOR.clone() }
+  PRICE_CALCULATOR.read().ok()?.clone()
 }
 
 pub fn get_pool_analyzer() -> Option<Arc<PoolAnalyzer>> {
-  unsafe { POOL_ANALYZER.clone() }
+  POOL_ANALYZER.read().ok()?.clone()
 }
 
 /// Initialize pool components only (no background tasks)
@@ -149,8 +158,8 @@ pub async fn initialize_pool_components() -> Result<(), PoolError> {
   let shutdown = Arc::new(Notify::new());
 
   // Store shutdown handle globally
-  unsafe {
-    GLOBAL_SHUTDOWN_HANDLE = Some(shutdown.clone());
+  if let Ok(mut handle) = GLOBAL_SHUTDOWN_HANDLE.write() {
+    *handle = Some(shutdown.clone());
   }
 
   // Initialize service components
@@ -163,8 +172,8 @@ pub async fn initialize_pool_components() -> Result<(), PoolError> {
     }
     Err(e) => {
       SERVICE_RUNNING.store(false, Ordering::Relaxed);
-      unsafe {
-        GLOBAL_SHUTDOWN_HANDLE = None;
+      if let Ok(mut handle) = GLOBAL_SHUTDOWN_HANDLE.write() {
+        *handle = None;
       }
 
       record_safe(Event::error(
@@ -262,9 +271,9 @@ pub async fn stop_pool_service(timeout_seconds: u64) -> Result<(), PoolError> {
   );
 
   // Get shutdown handle and notify
-  unsafe {
-    if let Some(ref handle) = GLOBAL_SHUTDOWN_HANDLE {
-      handle.notify_waiters();
+  if let Ok(handle) = GLOBAL_SHUTDOWN_HANDLE.read() {
+    if let Some(ref notify) = *handle {
+      notify.notify_waiters();
     }
   } // Wait for shutdown with timeout
   let shutdown_result =
@@ -279,12 +288,20 @@ pub async fn stop_pool_service(timeout_seconds: u64) -> Result<(), PoolError> {
       SERVICE_RUNNING.store(false, Ordering::Relaxed);
 
       // Clean up global components
-      unsafe {
-        GLOBAL_SHUTDOWN_HANDLE = None;
-        POOL_DISCOVERY = None;
-        POOL_ANALYZER = None;
-        ACCOUNT_FETCHER = None;
-        PRICE_CALCULATOR = None;
+      if let Ok(mut handle) = GLOBAL_SHUTDOWN_HANDLE.write() {
+        *handle = None;
+      }
+      if let Ok(mut discovery) = POOL_DISCOVERY.write() {
+        *discovery = None;
+      }
+      if let Ok(mut analyzer) = POOL_ANALYZER.write() {
+        *analyzer = None;
+      }
+      if let Ok(mut fetcher) = ACCOUNT_FETCHER.write() {
+        *fetcher = None;
+      }
+      if let Ok(mut calculator) = PRICE_CALCULATOR.write() {
+        *calculator = None;
       }
 
  logger::info(LogTag::PoolService, "Pool service stopped successfully");
@@ -342,14 +359,14 @@ pub fn is_single_pool_mode_enabled() -> bool {
 /// When set, the pool service will monitor only these tokens instead of
 /// discovering tokens from the database. Use None to disable override.
 pub fn set_debug_token_override(tokens: Option<Vec<String>>) {
-  unsafe {
-    DEBUG_TOKEN_OVERRIDE = tokens;
+  if let Ok(mut override_guard) = DEBUG_TOKEN_OVERRIDE.write() {
+    *override_guard = tokens;
   }
 }
 
 /// Get current debug token override
 pub fn get_debug_token_override() -> Option<Vec<String>> {
-  unsafe { DEBUG_TOKEN_OVERRIDE.clone() }
+  DEBUG_TOKEN_OVERRIDE.read().ok()?.clone()
 }
 
 /// Start helper background tasks (health monitor, database cleanup, gap cleanup)
@@ -438,12 +455,18 @@ async fn initialize_service_components() -> Result<(), String> {
   ));
   let price_calculator = Arc::new(PriceCalculator::new(pool_directory.clone()));
 
-  // Store components globally
-  unsafe {
-    POOL_DISCOVERY = Some(pool_discovery);
-    POOL_ANALYZER = Some(pool_analyzer);
-    ACCOUNT_FETCHER = Some(account_fetcher);
-    PRICE_CALCULATOR = Some(price_calculator);
+  // Store components globally using thread-safe RwLock pattern
+  if let Ok(mut discovery) = POOL_DISCOVERY.write() {
+    *discovery = Some(pool_discovery);
+  }
+  if let Ok(mut analyzer) = POOL_ANALYZER.write() {
+    *analyzer = Some(pool_analyzer);
+  }
+  if let Ok(mut fetcher) = ACCOUNT_FETCHER.write() {
+    *fetcher = Some(account_fetcher);
+  }
+  if let Ok(mut calculator) = PRICE_CALCULATOR.write() {
+    *calculator = Some(price_calculator);
   }
 
   logger::debug(LogTag::PoolService, "Service components initialized");

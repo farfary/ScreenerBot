@@ -9,18 +9,20 @@ use super::types::{price_cache_ttl_seconds, PriceHistory, PriceResult, PRICE_HIS
 use crate::logger::{self, LogTag};
 
 use dashmap::DashMap;
+use once_cell::sync::Lazy;
 use solana_sdk::pubkey::Pubkey;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use tokio::sync::Notify;
 
 /// Global price cache - high-performance concurrent hashmap
-static PRICE_CACHE: once_cell::sync::Lazy<DashMap<String, PriceResult>> =
-    once_cell::sync::Lazy::new(|| DashMap::new());
+static PRICE_CACHE: Lazy<DashMap<String, PriceResult>> = Lazy::new(DashMap::new);
 
-/// Global price history - protected by RwLock for batch operations
-static PRICE_HISTORY: once_cell::sync::Lazy<RwLock<dashmap::DashMap<String, PriceHistory>>> =
-    once_cell::sync::Lazy::new(|| RwLock::new(DashMap::new()));
+/// Global price history - DashMap is already thread-safe, no additional RwLock needed
+static PRICE_HISTORY: Lazy<DashMap<String, PriceHistory>> = Lazy::new(DashMap::new);
+
+/// Global shutdown handle for cleanup task
+static CLEANUP_SHUTDOWN: Lazy<Arc<Notify>> = Lazy::new(|| Arc::new(Notify::new()));
 
 /// Initialize the cache system
 pub async fn initialize_cache() {
@@ -29,7 +31,7 @@ pub async fn initialize_cache() {
     // Load historical data from database into cache
     load_historical_data_into_cache().await;
 
-    // Start cleanup task
+    // Start cleanup task with shutdown support
     start_cache_cleanup_task().await;
 
     logger::debug(LogTag::PoolCache, "Price cache system initialized");
@@ -58,58 +60,54 @@ pub fn update_price(price: PriceResult) {
         }
     });
 
-    // Update history with gap detection
-    if let Ok(history_map) = PRICE_HISTORY.read() {
-        if let Some(mut history) = history_map.get_mut(&mint) {
-            let removed_count = history.cleanup_gapped_data();
-            if removed_count > 0 {
-                logger::info(
-                    LogTag::PoolCache,
-                    &format!(
-                        "Removed {} gapped entries from memory for token: {}",
-                        removed_count, mint
-                    ),
-                );
-            }
-
-            history.add_price(price);
-
-            logger::debug(
+    // Update history with gap detection - DashMap is thread-safe, no RwLock needed
+    if let Some(mut history) = PRICE_HISTORY.get_mut(&mint) {
+        let removed_count = history.cleanup_gapped_data();
+        if removed_count > 0 {
+            logger::info(
                 LogTag::PoolCache,
-                &format!("Updated price for token: {}", mint),
+                &format!(
+                    "Removed {} gapped entries from memory for token: {}",
+                    removed_count, mint
+                ),
             );
-
-            // Trigger database gap cleanup if gaps were detected in memory
-            if removed_count > 0 {
-                let mint_for_cleanup = mint.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = db::cleanup_gapped_data_for_token(&mint_for_cleanup).await {
-                        logger::error(
-                            LogTag::PoolCache,
-                            &format!(
-                                "Failed to cleanup gapped data in database for {}: {}",
-                                mint_for_cleanup, e
-                            ),
-                        );
-                    }
-                });
-            }
-
-            return;
         }
-    }
 
-    // Create new history entry if it doesn't exist
-    if let Ok(mut history_map) = PRICE_HISTORY.write() {
-        let mut new_history = PriceHistory::new(mint.clone(), PRICE_HISTORY_MAX_ENTRIES);
-        new_history.add_price(price);
-        history_map.insert(mint.clone(), new_history);
+        history.add_price(price);
 
         logger::debug(
             LogTag::PoolCache,
-            &format!("Created new price history for token: {}", mint),
+            &format!("Updated price for token: {}", mint),
         );
+
+        // Trigger database gap cleanup if gaps were detected in memory
+        if removed_count > 0 {
+            let mint_for_cleanup = mint.clone();
+            tokio::spawn(async move {
+                if let Err(e) = db::cleanup_gapped_data_for_token(&mint_for_cleanup).await {
+                    logger::error(
+                        LogTag::PoolCache,
+                        &format!(
+                            "Failed to cleanup gapped data in database for {}: {}",
+                            mint_for_cleanup, e
+                        ),
+                    );
+                }
+            });
+        }
+
+        return;
     }
+
+    // Create new history entry if it doesn't exist
+    let mut new_history = PriceHistory::new(mint.clone(), PRICE_HISTORY_MAX_ENTRIES);
+    new_history.add_price(price);
+    PRICE_HISTORY.insert(mint.clone(), new_history);
+
+    logger::debug(
+        LogTag::PoolCache,
+        &format!("Created new price history for token: {}", mint),
+    );
 }
 
 /// Get available tokens (tokens with fresh prices)
@@ -131,10 +129,8 @@ pub fn get_available_tokens() -> Vec<String> {
 
 /// Get price history for a token
 pub fn get_price_history(mint: &str) -> Vec<PriceResult> {
-    if let Ok(history_map) = PRICE_HISTORY.read() {
-        if let Some(history) = history_map.get(mint) {
-            return history.to_vec();
-        }
+    if let Some(history) = PRICE_HISTORY.get(mint) {
+        return history.to_vec();
     }
     Vec::new()
 }
@@ -143,11 +139,7 @@ pub fn get_price_history(mint: &str) -> Vec<PriceResult> {
 pub fn get_cache_stats() -> CacheStats {
     let price_count = PRICE_CACHE.len();
     let fresh_count = get_available_tokens().len();
-    let history_count = if let Ok(history_map) = PRICE_HISTORY.read() {
-        history_map.len()
-    } else {
-        0
-    };
+    let history_count = PRICE_HISTORY.len();
 
     CacheStats {
         total_prices: price_count,
@@ -164,16 +156,30 @@ pub struct CacheStats {
     pub history_entries: usize,
 }
 
-/// Start background cache cleanup task
+/// Start background cache cleanup task with shutdown support
 async fn start_cache_cleanup_task() {
-    tokio::spawn(async {
+    let shutdown = CLEANUP_SHUTDOWN.clone();
+
+    tokio::spawn(async move {
         let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
 
         loop {
-            interval.tick().await;
-            cleanup_stale_entries();
+            tokio::select! {
+                _ = shutdown.notified() => {
+                    logger::debug(LogTag::PoolCache, "Cache cleanup task shutting down");
+                    break;
+                }
+                _ = interval.tick() => {
+                    cleanup_stale_entries();
+                }
+            }
         }
     });
+}
+
+/// Signal the cache cleanup task to shut down
+pub fn shutdown_cache() {
+    CLEANUP_SHUTDOWN.notify_waiters();
 }
 
 /// Remove stale price entries from cache
@@ -218,27 +224,25 @@ pub async fn load_token_history_from_database(mint: &str) -> Result<(), String> 
     match db::load_historical_data_for_token(mint).await {
         Ok(historical_prices) => {
             if !historical_prices.is_empty() {
-                // Create or update history entry
-                if let Ok(mut history_map) = PRICE_HISTORY.write() {
-                    let mut new_history =
-                        PriceHistory::new(mint.to_string(), PRICE_HISTORY_MAX_ENTRIES);
-                    let prices_count = historical_prices.len();
+                // Create or update history entry - DashMap is thread-safe
+                let mut new_history =
+                    PriceHistory::new(mint.to_string(), PRICE_HISTORY_MAX_ENTRIES);
+                let prices_count = historical_prices.len();
 
-                    // Add all historical prices
-                    for price in historical_prices {
-                        new_history.add_price(price);
-                    }
-
-                    history_map.insert(mint.to_string(), new_history);
-
-                    logger::debug(
-                        LogTag::PoolCache,
-                        &format!(
-                            "Loaded {} historical prices for token: {}",
-                            prices_count, mint
-                        ),
-                    );
+                // Add all historical prices
+                for price in historical_prices {
+                    new_history.add_price(price);
                 }
+
+                PRICE_HISTORY.insert(mint.to_string(), new_history);
+
+                logger::debug(
+                    LogTag::PoolCache,
+                    &format!(
+                        "Loaded {} historical prices for token: {}",
+                        prices_count, mint
+                    ),
+                );
             }
             Ok(())
         }
@@ -254,28 +258,24 @@ pub async fn load_token_history_from_database(mint: &str) -> Result<(), String> 
 
 /// Cleanup gapped data from all tokens in memory
 pub async fn cleanup_all_memory_gaps() -> (usize, usize) {
-    if let Ok(mut history_map) = PRICE_HISTORY.write() {
-        let mut total_removed = 0;
-        let mut tokens_cleaned = 0;
+    let mut total_removed = 0;
+    let mut tokens_cleaned = 0;
 
-        // Collect all tokens to avoid holding the write lock during iteration
-        let tokens: Vec<String> = history_map
-            .iter()
-            .map(|entry| entry.key().clone())
-            .collect();
+    // Collect all tokens first to avoid holding locks during iteration
+    let tokens: Vec<String> = PRICE_HISTORY
+        .iter()
+        .map(|entry| entry.key().clone())
+        .collect();
 
-        for token in tokens {
-            if let Some(mut history) = history_map.get_mut(&token) {
-                let removed = history.cleanup_gapped_data();
-                if removed > 0 {
-                    total_removed += removed;
-                    tokens_cleaned += 1;
-                }
+    for token in tokens {
+        if let Some(mut history) = PRICE_HISTORY.get_mut(&token) {
+            let removed = history.cleanup_gapped_data();
+            if removed > 0 {
+                total_removed += removed;
+                tokens_cleaned += 1;
             }
         }
-
-        (total_removed, tokens_cleaned)
-    } else {
-        (0, 0)
     }
+
+    (total_removed, tokens_cleaned)
 }

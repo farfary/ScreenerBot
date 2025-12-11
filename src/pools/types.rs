@@ -112,6 +112,11 @@ impl PriceResult {
 }
 
 /// Custom serde module for Instant serialization
+///
+/// Since `std::time::Instant` is a monotonic clock without a fixed epoch,
+/// we serialize it as the Unix timestamp of when the price was recorded.
+/// On deserialization, we reconstruct an approximate Instant by calculating
+/// how far in the past the timestamp is from now.
 mod instant_serde {
     use serde::{Deserialize, Deserializer, Serialize, Serializer};
     use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -120,21 +125,48 @@ mod instant_serde {
     where
         S: Serializer,
     {
-        // Convert Instant to unix timestamp (this is an approximation)
-        let elapsed = instant.elapsed();
-        let now = SystemTime::now();
-        let timestamp = now.duration_since(UNIX_EPOCH).unwrap().as_secs();
-        timestamp.serialize(serializer)
+        // Calculate the Unix timestamp for this instant
+        // We do this by finding how long ago the instant was from now,
+        // then subtracting that from the current Unix timestamp
+        let now_instant = Instant::now();
+        let now_system = SystemTime::now();
+        let elapsed_since_price = now_instant.saturating_duration_since(*instant);
+
+        // Get current Unix timestamp and subtract the elapsed time
+        let current_unix = now_system
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or(Duration::ZERO)
+            .as_secs();
+        let price_unix = current_unix.saturating_sub(elapsed_since_price.as_secs());
+
+        price_unix.serialize(serializer)
     }
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Instant, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let timestamp = u64::deserialize(deserializer)?;
-        // This is an approximation - we just return current Instant
-        // In practice, we should use a different time representation for serialization
-        Ok(Instant::now())
+        let stored_unix = u64::deserialize(deserializer)?;
+
+        // Calculate how far in the past this timestamp is
+        let now_system = SystemTime::now();
+        let current_unix = now_system
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or(Duration::ZERO)
+            .as_secs();
+
+        // Calculate how many seconds ago this price was recorded
+        let seconds_ago = current_unix.saturating_sub(stored_unix);
+
+        // Reconstruct an approximate Instant by subtracting from now
+        // Note: Instant::now() - Duration will panic if the result would be before
+        // the program started, so we use checked_sub and fallback to now
+        let now_instant = Instant::now();
+        let approximate_instant = now_instant
+            .checked_sub(Duration::from_secs(seconds_ago))
+            .unwrap_or(now_instant);
+
+        Ok(approximate_instant)
     }
 }
 
