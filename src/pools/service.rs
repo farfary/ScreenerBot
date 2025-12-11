@@ -209,6 +209,9 @@ pub async fn initialize_pool_components() -> Result<(), PoolError> {
     );
   }
 
+  // Warm cache for open positions - ensures fresh price data at startup
+  warm_cache_for_open_positions().await;
+
   logger::info(
     LogTag::PoolService,
     "Pool components initialized successfully",
@@ -595,4 +598,40 @@ async fn cleanup_memory_gaps() {
       ),
     );
   }
+}
+
+/// Warm cache for open positions by prefetching their pool data
+///
+/// This ensures that tokens with open positions have fresh price data
+/// immediately available when trading starts, rather than relying on
+/// stale cached data or waiting for the first discovery tick.
+async fn warm_cache_for_open_positions() {
+  let open_mints = crate::positions::get_open_mints().await;
+
+  if open_mints.is_empty() {
+    logger::debug(
+      LogTag::PoolService,
+      "No open positions to warm cache for",
+    );
+    return;
+  }
+
+  logger::info(
+    LogTag::PoolService,
+    &format!(
+      "Warming pool cache for {} tokens with open positions",
+      open_mints.len()
+    ),
+  );
+
+  // Use the tokens module prefetch to warm pool data cache
+  crate::tokens::prefetch_token_pools(&open_mints).await;
+
+  logger::info(
+    LogTag::PoolService,
+    &format!(
+      "Pool cache warming completed for {} position tokens",
+      open_mints.len()
+    ),
+  );
 }

@@ -1603,6 +1603,13 @@ function createLifecycle() {
     async activate(ctx) {
       console.log("[Trader] Activating page");
 
+      // Re-register deactivate cleanup (cleanups are cleared after each deactivate)
+      // and force-show tab bar to handle race conditions with TabBarManager
+      if (tabBar) {
+        ctx.manageTabBar(tabBar);
+        tabBar.show({ force: true });
+      }
+
       // Create pollers
       statsPoller = ctx.managePoller(
         new Poller(

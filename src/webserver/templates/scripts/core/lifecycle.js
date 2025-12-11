@@ -84,16 +84,22 @@ const createContext = (pageName) => {
       if (!tabBar || typeof tabBar !== "object") {
         return tabBar;
       }
+      // Re-register deactivate cleanup (cleanups are cleared after each deactivate)
+      // This is safe to call multiple times - the Set prevents duplicates
       this.onDeactivate(() => {
         if (typeof tabBar.hide === "function") {
           tabBar.hide({ silent: true });
         }
       });
-      this.onDispose(() => {
-        if (typeof tabBar.destroy === "function") {
-          tabBar.destroy();
-        }
-      });
+      // Dispose cleanup only needs to be registered once (survives until page disposal)
+      if (!tabBar.__disposeRegistered) {
+        this.onDispose(() => {
+          if (typeof tabBar.destroy === "function") {
+            tabBar.destroy();
+          }
+        });
+        tabBar.__disposeRegistered = true;
+      }
       return tabBar;
     },
     manageActionBar(actionBar) {

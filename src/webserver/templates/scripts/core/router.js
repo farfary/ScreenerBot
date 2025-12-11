@@ -103,10 +103,12 @@ export function trackTimeout(timeoutId) {
 function removeCachedPageElements(mainContent) {
   if (!mainContent) return;
 
-  Object.values(_state.pageCache).forEach((el) => {
-    if (el && el.parentElement === mainContent) {
+  // Remove ALL page containers from mainContent, not just cached ones
+  // This prevents duplicate content from WebView cache or stale renders
+  mainContent.querySelectorAll(".page-container").forEach((el) => {
+    el.style.display = "none";
+    if (el.parentElement === mainContent) {
       mainContent.removeChild(el);
-      el.style.display = "none";
     }
   });
 }
@@ -114,9 +116,14 @@ function removeCachedPageElements(mainContent) {
 function displayPageElement(mainContent, pageEl) {
   if (!mainContent || !pageEl) return;
 
+  // Remove all existing page containers first
   removeCachedPageElements(mainContent);
+  
+  // Only append if not already in mainContent
+  if (pageEl.parentElement !== mainContent) {
+    mainContent.appendChild(pageEl);
+  }
   pageEl.style.display = "";
-  mainContent.appendChild(pageEl);
 }
 
 async function fetchPageContent(pageName, timeoutMs) {
@@ -288,6 +295,22 @@ export function initRouter() {
     }
   });
 
+  // Cleanup any duplicate/orphan elements from WebView cache before initialization
+  const mainContent = document.querySelector("main.content");
+  if (mainContent) {
+    // Remove duplicate page containers (keep only the first one for each page)
+    const seenPages = new Set();
+    mainContent.querySelectorAll(".page-container").forEach((container) => {
+      const page = container.getAttribute("data-page");
+      if (seenPages.has(page)) {
+        console.log("[Router] Removing duplicate page container:", page);
+        container.remove();
+      } else {
+        seenPages.add(page);
+      }
+    });
+  }
+
   // Detect initial page with priority: URL → server-rendered active tab → stored preference → home
   const pathPage = getPageFromPath();
   const serverActiveTab = document.querySelector("nav .tab.active")?.getAttribute("data-page");
@@ -302,12 +325,19 @@ export function initRouter() {
   setActiveTab(initialPage);
 
   // Check if content is already server-rendered
-  // Select main.content specifically - there are multiple <main> elements
-  const mainContent = document.querySelector("main.content");
-  if (
+  // mainContent already queried above for cleanup
+  
+  // Check if page container already exists (WebView cache scenario)
+  const existingContainer = mainContent?.querySelector(`.page-container[data-page="${initialPage}"]`);
+  if (existingContainer) {
+    console.log("[Router] Found existing page container (cached), reusing:", initialPage);
+    _state.pageCache[initialPage] = existingContainer;
+    ensurePageStyles(initialPage);
+  } else if (
     mainContent &&
     mainContent.children.length > 0 &&
-    !mainContent.querySelector(".page-loading")
+    !mainContent.querySelector(".page-loading") &&
+    !mainContent.querySelector(".page-container")
   ) {
     console.log("[Router] Initial page already rendered:", initialPage);
 

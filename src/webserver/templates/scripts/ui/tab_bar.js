@@ -438,9 +438,10 @@ export class TabBar {
   }
 
   show(options = {}) {
-    const { silent = false } = options;
+    const { silent = false, force = false } = options;
 
-    if (this.visible) return;
+    // Skip if already visible unless force is true
+    if (this.visible && !force) return;
 
     // Remount to ensure correct buttons are displayed (important for shared containers)
     this._remountButtons();

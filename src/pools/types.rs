@@ -435,11 +435,25 @@ impl PriceHistory {
 
 /// Configuration constants
 pub const PRICE_HISTORY_MAX_ENTRIES: usize = 1000;
-pub const PRICE_CACHE_TTL_SECS: u64 = 30;
 
 /// Price cache TTL sourced from configuration
 pub fn price_cache_ttl_seconds() -> u64 {
-    PRICE_CACHE_TTL_SECS
+    crate::config::with_config(|cfg| cfg.pools.price_cache_ttl_secs)
+}
+
+/// Account blacklist threshold from configuration
+pub fn account_blacklist_threshold() -> u32 {
+    crate::config::with_config(|cfg| cfg.pools.account_blacklist_threshold)
+}
+
+/// Pool blacklist threshold from configuration
+pub fn pool_blacklist_threshold() -> u32 {
+    crate::config::with_config(|cfg| cfg.pools.pool_blacklist_threshold)
+}
+
+/// Failure window in seconds from configuration
+pub fn failure_window_secs() -> u64 {
+    crate::config::with_config(|cfg| cfg.pools.failure_window_secs)
 }
 
 /// Maximum number of tokens the pool service monitors concurrently

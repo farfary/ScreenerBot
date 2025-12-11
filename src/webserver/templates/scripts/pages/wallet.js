@@ -1089,9 +1089,9 @@ function createLifecycle() {
     async activate(ctx) {
       console.log("[Wallet] Activating...");
 
-      // Mount TabBar
+      // Mount TabBar (only if not already created)
       const subTabsContainer = document.querySelector("#subTabsContainer");
-      if (subTabsContainer) {
+      if (subTabsContainer && !tabBar) {
         tabBar = new TabBar({
           container: subTabsContainer,
           tabs: SUB_TABS,
@@ -1115,6 +1115,11 @@ function createLifecycle() {
         // Trigger initial view
         const activeTab = tabBar.getActiveTab() || "overview";
         switchView(activeTab, { force: true });
+      } else if (tabBar) {
+        // Re-register deactivate cleanup (cleanups are cleared after each deactivate)
+        // and force-show tab bar to handle race conditions with TabBarManager
+        ctx.manageTabBar(tabBar);
+        tabBar.show({ force: true });
       }
 
       // Start polling

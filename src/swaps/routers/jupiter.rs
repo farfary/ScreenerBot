@@ -4,6 +4,7 @@ use crate::config::with_config;
 use crate::errors::ScreenerBotError;
 use crate::logger::{self, LogTag};
 use crate::swaps::router::{Quote, QuoteRequest, SwapMode, SwapResult, SwapRouter};
+use crate::tokens::decimals::is_token_2022;
 use crate::tokens::Token;
 use async_trait::async_trait;
 use reqwest::Client;
@@ -196,9 +197,24 @@ impl SwapRouter for JupiterRouter {
     async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote, ScreenerBotError> {
         let slippage_bps = (request.slippage_pct * 100.0) as u16;
 
-        // Always set platform fee - we always trade against SOL or USDC
-        // Jupiter will handle fee collection from the appropriate side
-        let platform_fee_bps = Some(REFERRAL_FEE_BPS);
+        // Check if either token is Token2022 - Jupiter cannot collect fees on Token2022
+        // Error 0x177e (6014) = IncorrectTokenProgramID when trying to collect fees
+        let input_is_token_2022 = is_token_2022(&request.input_mint).await;
+        let output_is_token_2022 = is_token_2022(&request.output_mint).await;
+        let skip_fees = input_is_token_2022 || output_is_token_2022;
+
+        let platform_fee_bps = if skip_fees {
+            logger::info(
+                LogTag::Swap,
+                &format!(
+                    "Skipping Jupiter platform fee for Token2022 swap: input_2022={}, output_2022={}, input={}, output={}",
+                    input_is_token_2022, output_is_token_2022, request.input_mint, request.output_mint
+                ),
+            );
+            None
+        } else {
+            Some(REFERRAL_FEE_BPS)
+        };
 
         let quote_req = JupiterQuoteRequest {
             input_mint: request.input_mint.clone(),
@@ -217,7 +233,7 @@ impl SwapRouter for JupiterRouter {
                 request.input_mint,
                 request.output_mint,
                 slippage_bps,
-                REFERRAL_FEE_BPS
+                platform_fee_bps.unwrap_or(0)
             ),
         );
 
@@ -311,10 +327,26 @@ impl SwapRouter for JupiterRouter {
                 ScreenerBotError::internal_error(format!("Quote deserialization failed: {}", e))
             })?;
 
+        // Check if either token is Token2022 - Jupiter cannot collect fees on Token2022
+        let input_is_token_2022 = is_token_2022(&quote.input_mint).await;
+        let output_is_token_2022 = is_token_2022(&quote.output_mint).await;
+        let skip_fees = input_is_token_2022 || output_is_token_2022;
+
         // Get the referral token account - check both input and output mints
         // Since we always trade against SOL or USDC, one side will always match
-        let fee_account =
-            get_referral_token_account_for_swap(&quote.input_mint, &quote.output_mint);
+        // Skip fee account for Token2022 tokens to avoid IncorrectTokenProgramID error
+        let fee_account = if skip_fees {
+            logger::debug(
+                LogTag::Swap,
+                &format!(
+                    "Skipping feeAccount for Token2022 swap: input={}, output={}",
+                    quote.input_mint, quote.output_mint
+                ),
+            );
+            None
+        } else {
+            get_referral_token_account_for_swap(&quote.input_mint, &quote.output_mint)
+        };
 
         let swap_req = JupiterSwapRequest {
             user_public_key: quote.wallet_address.clone(),

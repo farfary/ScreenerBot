@@ -38,6 +38,11 @@ static FETCH_LOCKS: std::sync::LazyLock<Mutex<HashMap<String, Arc<AsyncMutex<()>
 static FAILED_CACHE: std::sync::LazyLock<Arc<RwLock<HashSet<String>>>> =
     std::sync::LazyLock::new(|| Arc::new(RwLock::new(HashSet::new())));
 
+// Cache for Token2022 detection (mint -> is_token_2022)
+// true = Token2022, false = standard SPL token
+static TOKEN_2022_CACHE: std::sync::LazyLock<Arc<RwLock<HashMap<String, bool>>>> =
+    std::sync::LazyLock::new(|| Arc::new(RwLock::new(HashMap::new())));
+
 // =============================================================================
 // PUBLIC API
 // =============================================================================
@@ -66,6 +71,82 @@ pub fn get_cached(mint: &str) -> Option<u8> {
         .and_then(|m| m.get(mint).copied());
 
     result
+}
+
+/// Check if a mint is Token2022 from cache only (sync, instant)
+///
+/// Returns None if not in cache - caller should use is_token_2022() for async check
+pub fn is_token_2022_cached(mint: &str) -> Option<bool> {
+    // SOL/WSOL is always standard SPL
+    if mint == SOL_MINT {
+        return Some(false);
+    }
+
+    TOKEN_2022_CACHE
+        .read()
+        .ok()
+        .and_then(|m| m.get(mint).copied())
+}
+
+/// Check if a mint is Token2022 (async with RPC fallback)
+///
+/// Checks cache first, then fetches from chain if needed.
+/// Result is cached for future calls.
+pub async fn is_token_2022(mint: &str) -> bool {
+    use crate::constants::TOKEN_2022_PROGRAM_ID;
+    use crate::rpc::get_rpc_client;
+    use solana_sdk::pubkey::Pubkey;
+    use std::str::FromStr;
+
+    // SOL/WSOL is always standard SPL
+    if mint == SOL_MINT {
+        return false;
+    }
+
+    // Check cache first
+    if let Some(is_2022) = is_token_2022_cached(mint) {
+        return is_2022;
+    }
+
+    // Fetch from chain
+    let mint_pubkey = match Pubkey::from_str(mint) {
+        Ok(pk) => pk,
+        Err(_) => {
+            // Invalid mint, assume standard SPL
+            cache_token_2022(mint, false);
+            return false;
+        }
+    };
+
+    let rpc_client = get_rpc_client();
+    match rpc_client.get_account(&mint_pubkey).await {
+        Ok(account) => {
+            let is_2022 = account.owner.to_string() == TOKEN_2022_PROGRAM_ID;
+            cache_token_2022(mint, is_2022);
+            if is_2022 {
+                logger::debug(
+                    LogTag::Tokens,
+                    &format!("Token2022 detected: mint={}", mint),
+                );
+            }
+            is_2022
+        }
+        Err(e) => {
+            logger::warning(
+                LogTag::Tokens,
+                &format!("Failed to check Token2022 status: mint={} err={}", mint, e),
+            );
+            // On error, assume standard SPL (safer for fee collection)
+            false
+        }
+    }
+}
+
+/// Cache Token2022 detection result
+fn cache_token_2022(mint: &str, is_2022: bool) {
+    if let Ok(mut w) = TOKEN_2022_CACHE.write() {
+        w.insert(mint.to_string(), is_2022);
+    }
 }
 
 /// Get decimals with fallback chain (cache → DB → chain)

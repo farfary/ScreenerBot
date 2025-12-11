@@ -2293,6 +2293,13 @@ function createLifecycle() {
     },
 
     activate(ctx) {
+      // Re-register deactivate cleanup (cleanups are cleared after each deactivate)
+      // and force-show tab bar to handle race conditions with TabBarManager
+      if (tabBar) {
+        ctx.manageTabBar(tabBar);
+        tabBar.show({ force: true });
+      }
+
       // Re-attach hints to tabs after TabBar remounts buttons on show()
       // (hints are lost when hide() clears innerHTML and show() rebuilds tabs)
       attachHintsToTabs();

@@ -2,7 +2,9 @@
 ///
 /// This module handles efficient batched fetching of pool account data from RPC.
 /// It optimizes RPC usage by batching requests and managing rate limits.
-use super::types::PoolDescriptor;
+use super::types::{
+    account_blacklist_threshold, failure_window_secs, pool_blacklist_threshold, PoolDescriptor,
+};
 use super::utils::is_sol_mint;
 
 use crate::events::{record_safe, Event, EventCategory, Severity};
@@ -22,9 +24,6 @@ const ACCOUNT_BATCH_SIZE: usize = 50;
 const FETCH_INTERVAL_MS: u64 = 500;
 const ACCOUNT_STALE_THRESHOLD_SECONDS: u64 = 30;
 const OPEN_POSITION_ACCOUNT_STALE_THRESHOLD_SECONDS: u64 = 5;
-const ACCOUNT_BLACKLIST_THRESHOLD: u32 = 3;
-const POOL_BLACKLIST_THRESHOLD: u32 = 2;
-const FAILURE_WINDOW_SECS: u64 = 300;
 
 #[derive(Debug, Clone)]
 struct MissingAccountState {
@@ -677,7 +676,7 @@ impl AccountFetcher {
             account_state.failures = account_state.failures.saturating_add(1);
             account_state.last_failure = Instant::now();
 
-            if account_state.failures >= ACCOUNT_BLACKLIST_THRESHOLD && !account_state.blacklisted {
+            if account_state.failures >= account_blacklist_threshold() && !account_state.blacklisted {
                 let (pool_id_str, token_mint_str) = directory_snapshot
                     .get(0)
                     .map(|(pool_id, descriptor)| {
@@ -716,7 +715,7 @@ impl AccountFetcher {
                             serde_json::json!({
                                 "account": account.to_string(),
                                 "failures": account_state.failures,
-                                "threshold": ACCOUNT_BLACKLIST_THRESHOLD,
+                                "threshold": account_blacklist_threshold(),
                                 "pool_id": pool_id_str,
                                 "token_mint": token_mint_str,
                             }),
@@ -743,7 +742,7 @@ impl AccountFetcher {
                 pool_state.failures = pool_state.failures.saturating_add(1);
                 pool_state.last_failure = Instant::now();
 
-                if pool_state.failures >= POOL_BLACKLIST_THRESHOLD && !pool_state.blacklisted {
+                if pool_state.failures >= pool_blacklist_threshold() && !pool_state.blacklisted {
                     let token_mint = if is_sol_mint(&descriptor.base_mint.to_string()) {
                         descriptor.quote_mint.to_string()
                     } else {
@@ -782,7 +781,7 @@ impl AccountFetcher {
                                     "program_kind": descriptor.program_kind.display_name(),
                                     "program_id": program_id,
                                     "failures": pool_state.failures,
-                                    "threshold": POOL_BLACKLIST_THRESHOLD,
+                                    "threshold": pool_blacklist_threshold(),
                                     "missing_account": account.to_string(),
                                 }),
                             ))
@@ -804,7 +803,7 @@ impl AccountFetcher {
         account_failure_tracker: &mut HashMap<Pubkey, MissingAccountState>,
         pool_failure_tracker: &mut HashMap<Pubkey, MissingPoolState>,
     ) {
-        let expiry = Duration::from_secs(FAILURE_WINDOW_SECS);
+        let expiry = Duration::from_secs(failure_window_secs());
         let now = Instant::now();
 
         account_failure_tracker.retain(|_, state| {
@@ -926,96 +925,118 @@ impl AccountFetcher {
     ///
     /// Creates isolated account data instances for each pool to prevent race conditions
     /// when multiple pools share the same vault accounts (common in Raydium Legacy AMM)
+    ///
+    /// Uses a two-phase approach to minimize lock contention:
+    /// 1. Build updates in local HashMap (no locks held)
+    /// 2. Apply updates to shared state (brief write lock)
+    /// 3. Trigger calculations (after releasing lock)
     async fn organize_accounts_into_bundles(
         account_data_list: &[AccountData],
         pool_directory: &Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>,
         account_bundles: &Arc<RwLock<HashMap<Pubkey, PoolAccountBundle>>>,
     ) {
+        // Phase 1: Snapshot pools (brief read lock)
         let pools = {
             let directory = pool_directory.read().unwrap();
             directory.clone()
         };
 
-        let mut bundles = account_bundles.write().unwrap();
+        // Phase 2: Build local updates without holding any locks
+        // Maps pool_id -> (bundle, pool_descriptor, needs_calculation)
+        let mut local_updates: HashMap<Pubkey, (PoolAccountBundle, PoolDescriptor, bool)> =
+            HashMap::new();
 
-        // For each account, find which pools it belongs to
+        // Get existing bundles to merge with (brief read lock)
+        let existing_bundles: HashMap<Pubkey, PoolAccountBundle> = {
+            let bundles = account_bundles.read().unwrap();
+            bundles.clone()
+        };
+
+        // Build updates locally
         for account_data in account_data_list {
             for (pool_id, pool_descriptor) in &pools {
                 if pool_descriptor
                     .reserve_accounts
                     .contains(&account_data.pubkey)
                 {
-                    let bundle = bundles
-                        .entry(*pool_id)
-                        .or_insert_with(|| PoolAccountBundle::new(*pool_id));
+                    let entry = local_updates.entry(*pool_id).or_insert_with(|| {
+                        let bundle = existing_bundles
+                            .get(pool_id)
+                            .cloned()
+                            .unwrap_or_else(|| PoolAccountBundle::new(*pool_id));
+                        (bundle, pool_descriptor.clone(), false)
+                    });
 
                     // Create isolated account data for each pool to prevent race conditions
-                    // when multiple pools share the same vault accounts
                     let isolated_account_data = AccountData {
                         pubkey: account_data.pubkey,
                         data: account_data.data.clone(),
                         slot: account_data.slot,
-                        fetched_at: Instant::now(), // Fresh timestamp for this pool context
+                        fetched_at: Instant::now(),
                         lamports: account_data.lamports,
                         owner: account_data.owner,
                     };
-                    bundle.add_account(isolated_account_data);
+                    entry.0.add_account(isolated_account_data);
 
+                    logger::debug(
+                        LogTag::PoolFetcher,
+                        &format!(
+                            "Added account {} to bundle for token {} in pool {}",
+                            account_data.pubkey,
+                            if is_sol_mint(&pool_descriptor.base_mint.to_string()) {
+                                pool_descriptor.quote_mint
+                            } else {
+                                pool_descriptor.base_mint
+                            },
+                            pool_id
+                        ),
+                    );
+
+                    // Check if bundle is now complete
+                    if entry.0.is_complete_and_needs_calculation(&pool_descriptor.reserve_accounts) {
+                        entry.0.mark_calculation_requested();
+                        entry.2 = true; // Mark needs calculation
+                    }
+                }
+            }
+        }
+
+        // Phase 3: Apply updates (brief write lock)
+        {
+            let mut bundles = account_bundles.write().unwrap();
+            for (pool_id, (bundle, _, _)) in &local_updates {
+                bundles.insert(*pool_id, bundle.clone());
+            }
+        }
+
+        // Phase 4: Trigger calculations (no locks held)
+        for (pool_id, (bundle, pool_descriptor, needs_calculation)) in local_updates {
+            if needs_calculation {
+                if let Some(calculator) = service::get_price_calculator() {
+                    let target_token = if is_sol_mint(&pool_descriptor.base_mint.to_string()) {
+                        pool_descriptor.quote_mint
+                    } else {
+                        pool_descriptor.base_mint
+                    };
+
+                    if let Err(e) =
+                        calculator.request_calculation(pool_id, pool_descriptor, bundle)
                     {
-                        let target_token = if is_sol_mint(&pool_descriptor.base_mint.to_string()) {
-                            pool_descriptor.quote_mint
-                        } else {
-                            pool_descriptor.base_mint
-                        };
+                        logger::warning(
+                            LogTag::PoolFetcher,
+                            &format!(
+                                "Failed to request calculation for token {} in pool {}: {}",
+                                target_token, pool_id, e
+                            ),
+                        );
+                    } else {
                         logger::debug(
                             LogTag::PoolFetcher,
                             &format!(
-                                "Added account {} to bundle for token {} in pool {}",
-                                account_data.pubkey, target_token, pool_id
+                                "Requested calculation for complete bundle - token {} in pool {}",
+                                target_token, pool_id
                             ),
                         );
-                    }
-
-                    // If bundle now complete and calculation not yet requested, trigger price calculation
-                    if bundle.is_complete_and_needs_calculation(&pool_descriptor.reserve_accounts) {
-                        bundle.mark_calculation_requested();
-
-                        if let Some(calculator) = service::get_price_calculator() {
-                            if let Err(e) = calculator.request_calculation(
-                                *pool_id,
-                                pool_descriptor.clone(),
-                                bundle.clone(),
-                            ) {
-                                logger::warning(
-                                    LogTag::PoolFetcher,
-                                    &format!(
-                                        "Failed to request calculation for token {} in pool {}: {}",
-                                        if is_sol_mint(&pool_descriptor.base_mint.to_string()) {
-                                            pool_descriptor.quote_mint
-                                        } else {
-                                            pool_descriptor.base_mint
-                                        },
-                                        pool_id,
-                                        e
-                                    ),
-                                );
-                            } else {
-                                let target_token =
-                                    if is_sol_mint(&pool_descriptor.base_mint.to_string()) {
-                                        pool_descriptor.quote_mint
-                                    } else {
-                                        pool_descriptor.base_mint
-                                    };
-                                logger::debug(
-                                    LogTag::PoolFetcher,
-                                    &format!(
-                                        "Requested calculation for complete bundle - token {} in pool {}",
-                                        target_token,
-                                        pool_id
-                                    ),
-                                );
-                            }
-                        }
                     }
                 }
             }

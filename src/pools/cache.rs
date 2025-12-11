@@ -207,16 +207,83 @@ fn cleanup_stale_entries() {
 
 /// Load historical data from database into in-memory cache
 async fn load_historical_data_into_cache() {
-    logger::debug(
+    logger::info(
         LogTag::PoolCache,
-        "Loading historical data from database into cache",
+        "Loading historical data from database into cache for open positions",
     );
 
-    // Get list of all tokens that have available prices in cache (this will be empty on first run)
-    // Instead, we'll load based on tokens that exist in the database
-    // For now, we'll load on-demand when prices are requested
+    // Get mints from open positions - these need their price history loaded
+    let open_mints = crate::positions::get_open_mints().await;
 
-    logger::debug(LogTag::PoolCache, "Historical data loading setup completed");
+    if open_mints.is_empty() {
+        logger::debug(
+            LogTag::PoolCache,
+            "No open positions found - skipping historical data load",
+        );
+        return;
+    }
+
+    logger::info(
+        LogTag::PoolCache,
+        &format!(
+            "Loading historical price data for {} tokens with open positions",
+            open_mints.len()
+        ),
+    );
+
+    let mut loaded_count = 0;
+    let mut failed_count = 0;
+
+    for mint in &open_mints {
+        match db::load_historical_data_for_token(mint).await {
+            Ok(historical_prices) => {
+                if !historical_prices.is_empty() {
+                    // Create history entry - DashMap is thread-safe
+                    let mut new_history =
+                        PriceHistory::new(mint.clone(), PRICE_HISTORY_MAX_ENTRIES);
+                    let prices_count = historical_prices.len();
+
+                    // Add all historical prices
+                    for price in historical_prices {
+                        new_history.add_price(price.clone());
+                        // Also populate the price cache with the latest price
+                        if new_history.prices.len() == prices_count {
+                            PRICE_CACHE.insert(mint.clone(), price);
+                        }
+                    }
+
+                    PRICE_HISTORY.insert(mint.clone(), new_history);
+                    loaded_count += 1;
+
+                    logger::debug(
+                        LogTag::PoolCache,
+                        &format!(
+                            "Loaded {} historical prices for open position token: {}",
+                            prices_count, mint
+                        ),
+                    );
+                }
+            }
+            Err(e) => {
+                failed_count += 1;
+                logger::warning(
+                    LogTag::PoolCache,
+                    &format!(
+                        "Failed to load historical data for open position token {}: {}",
+                        mint, e
+                    ),
+                );
+            }
+        }
+    }
+
+    logger::info(
+        LogTag::PoolCache,
+        &format!(
+            "Historical data loading completed: {} tokens loaded, {} failed",
+            loaded_count, failed_count
+        ),
+    );
 }
 
 /// Load historical data for a specific token from database
