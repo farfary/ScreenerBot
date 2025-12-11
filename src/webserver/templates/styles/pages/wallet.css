@@ -2,6 +2,7 @@
 
 .wallet-page {
   --wallet-chart-height: clamp(220px, 38vh, 340px);
+
   display: flex;
   flex-direction: column;
   height: 100%;
@@ -13,6 +14,7 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
+
   /* Let inner sections (like tables) own scrolling so they can
      stretch to full height inside the page container. */
   overflow: hidden;
@@ -28,7 +30,7 @@
   gap: 12px;
 }
 
-@media (max-width: 1100px) {
+@media (width <= 1100px) {
   .wallet-overview {
     grid-template-columns: 1fr;
     grid-template-areas:
@@ -189,6 +191,7 @@
   height: 100%;
   min-height: 0;
   overflow: hidden;
+
   /* Counteract #wallet-root padding for edge-to-edge table */
   margin: -12px;
   padding: 0;
@@ -219,6 +222,7 @@
   flex: 1;
   min-height: 0;
   overflow: hidden;
+
   /* Counteract #wallet-root padding for edge-to-edge table */
   margin: -12px;
   padding: 0;
@@ -328,28 +332,28 @@
 
 /* Details button - subtle neutral */
 .row-action[data-action="details"] {
-  background: rgba(100, 116, 139, 0.1);
+  background: rgb(100, 116, 139, 0.1);
   color: var(--text-secondary);
-  border-color: rgba(100, 116, 139, 0.2);
+  border-color: rgb(100, 116, 139, 0.2);
 }
 
 .row-action[data-action="details"]:hover {
-  background: rgba(100, 116, 139, 0.2);
+  background: rgb(100, 116, 139, 0.2);
   color: var(--text-primary);
-  border-color: rgba(100, 116, 139, 0.3);
+  border-color: rgb(100, 116, 139, 0.3);
 }
 
 /* Trade button - accent color */
 .row-action[data-action="trade"] {
-  background: rgba(59, 130, 246, 0.15);
+  background: rgb(59, 130, 246, 0.15);
   color: #60a5fa;
-  border-color: rgba(59, 130, 246, 0.3);
+  border-color: rgb(59, 130, 246, 0.3);
 }
 
 .row-action[data-action="trade"]:hover {
-  background: rgba(59, 130, 246, 0.25);
+  background: rgb(59, 130, 246, 0.25);
   color: #93c5fd;
-  border-color: rgba(59, 130, 246, 0.5);
+  border-color: rgb(59, 130, 246, 0.5);
 }
 
 /* Icon in button */

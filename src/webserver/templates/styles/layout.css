@@ -193,6 +193,7 @@
   overflow: hidden;
   display: flex;
   flex-direction: column;
+
   /* Prevent content area from being draggable - only titlebar should be draggable */
   -webkit-app-region: no-drag;
   app-region: no-drag;

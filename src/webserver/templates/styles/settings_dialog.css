@@ -25,7 +25,7 @@
   inset: 0;
   background: rgb(0 0 0 / 0.85);
   backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.25s ease-out;
@@ -469,7 +469,7 @@
 
 .settings-toggle input:checked + .settings-toggle-slider::before {
   left: calc(100% - 21px);
-  background: #ffffff;
+  background: #fff;
 }
 
 .settings-toggle input:disabled + .settings-toggle-slider {
@@ -1017,7 +1017,7 @@
   margin: 0;
   cursor: pointer;
   box-shadow: none;
-  -webkit-appearance: none;
+  appearance: none;
   appearance: none;
 }
 

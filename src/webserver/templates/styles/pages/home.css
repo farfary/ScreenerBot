@@ -172,7 +172,7 @@
   background: linear-gradient(to bottom, transparent 0%, var(--bg-secondary) 100%);
   border-radius: 6px 6px 0 0;
   padding: 0.5rem 0.625rem;
-  margin: -0.625rem -0.625rem 0.75rem -0.625rem;
+  margin: -0.625rem -0.625rem 0.75rem;
   flex-shrink: 0;
 }
 
@@ -599,6 +599,7 @@
   0% {
     transform: translateX(-100%);
   }
+
   100% {
     transform: translateX(100%);
   }
@@ -684,6 +685,7 @@
   100% {
     opacity: 0.6;
   }
+
   50% {
     opacity: 0.3;
   }
@@ -704,6 +706,7 @@
   from {
     opacity: 0.8;
   }
+
   to {
     opacity: 1;
   }

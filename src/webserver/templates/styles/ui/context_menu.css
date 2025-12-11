@@ -21,10 +21,10 @@
   border: 1px solid var(--border-color, #30363d);
   border-radius: 8px;
   box-shadow:
-    0 10px 40px -10px rgb(0 0 0 / 50%),
-    0 0 0 1px rgb(255 255 255 / 5%);
+    0 10px 40px -10px rgb(0 0 0 / 0.5),
+    0 0 0 1px rgb(255 255 255 / 0.05);
   backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
   opacity: 0;
   transform: scale(0.96);
   transform-origin: top left;
@@ -40,7 +40,7 @@
     sans-serif;
   font-size: 13px;
   user-select: none;
-  -webkit-user-select: none;
+  user-select: none;
 }
 
 .context-menu.visible {
@@ -91,13 +91,13 @@
 .context-menu-item:hover .context-menu-shortcut,
 .context-menu-item:focus .context-menu-shortcut,
 .context-menu-item.active .context-menu-shortcut {
-  color: rgb(255 255 255 / 70%);
+  color: rgb(255 255 255 / 0.7);
 }
 
 .context-menu-item:hover .context-menu-submenu-arrow,
 .context-menu-item:focus .context-menu-submenu-arrow,
 .context-menu-item.active .context-menu-submenu-arrow {
-  color: rgb(255 255 255 / 70%);
+  color: rgb(255 255 255 / 0.7);
 }
 
 /* Disabled Items */
@@ -222,10 +222,10 @@
   border: 1px solid var(--border-color, #30363d);
   border-radius: 8px;
   box-shadow:
-    0 10px 40px -10px rgb(0 0 0 / 50%),
-    0 0 0 1px rgb(255 255 255 / 5%);
+    0 10px 40px -10px rgb(0 0 0 / 0.5),
+    0 0 0 1px rgb(255 255 255 / 0.05);
   backdrop-filter: blur(20px) saturate(180%);
-  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  backdrop-filter: blur(20px) saturate(180%);
   opacity: 0;
   visibility: hidden;
   transform: translateX(-4px);
@@ -272,7 +272,7 @@
   font-size: 10px;
   padding: 2px 6px;
   border-radius: 4px;
-  background: var(--primary-color-light, rgb(37 99 235 / 20%));
+  background: var(--primary-color-light, rgb(37 99 235 / 0.2));
   color: var(--primary-color, #2563eb);
   font-weight: 500;
   margin-left: 8px;
@@ -280,7 +280,7 @@
 
 .context-menu-item:hover .context-menu-badge,
 .context-menu-item.active .context-menu-badge {
-  background: rgb(255 255 255 / 20%);
+  background: rgb(255 255 255 / 0.2);
   color: #fff;
 }
 
@@ -291,7 +291,7 @@
   gap: 10px;
   padding: 8px 12px;
   margin: 0 5px 4px;
-  background: rgb(0 0 0 / 20%);
+  background: rgb(0 0 0 / 0.2);
   border-radius: 6px;
   cursor: default;
 }
@@ -360,16 +360,16 @@
 
 /* Dark Theme Adjustments (already default) */
 [data-theme="dark"] .context-menu {
-  background: rgb(22 27 34 / 95%);
+  background: rgb(22 27 34 / 0.95);
 }
 
 /* Light Theme */
 [data-theme="light"] .context-menu {
-  background: rgb(255 255 255 / 95%);
-  border-color: rgb(0 0 0 / 10%);
+  background: rgb(255 255 255 / 0.95);
+  border-color: rgb(0 0 0 / 0.1);
   box-shadow:
-    0 10px 40px -10px rgb(0 0 0 / 25%),
-    0 0 0 1px rgb(0 0 0 / 8%);
+    0 10px 40px -10px rgb(0 0 0 / 0.25),
+    0 0 0 1px rgb(0 0 0 / 0.08);
 }
 
 [data-theme="light"] .context-menu-item:hover,
@@ -379,11 +379,11 @@
 }
 
 [data-theme="light"] .context-menu-separator {
-  background: rgb(0 0 0 / 10%);
+  background: rgb(0 0 0 / 0.1);
 }
 
 [data-theme="light"] .context-menu-token-preview {
-  background: rgb(0 0 0 / 5%);
+  background: rgb(0 0 0 / 0.05);
 }
 
 /* Reduced Motion */

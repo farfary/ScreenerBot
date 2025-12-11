@@ -60,10 +60,7 @@
 /* Individual slides - absolute positioning within container */
 .onboarding-slide {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   display: grid;
   grid-template-rows: auto auto auto minmax(0, 1fr);
   gap: 1.25rem;
@@ -76,8 +73,7 @@
     opacity 0.4s ease-out,
     transform 0.4s ease-out;
   pointer-events: none;
-  overflow-y: auto;
-  overflow-x: hidden;
+  overflow: hidden auto;
 }
 
 .onboarding-slide.active {
@@ -257,7 +253,7 @@
 }
 
 /* Responsive adjustments for tablets */
-@media (max-height: 700px), (max-width: 768px) {
+@media (height <= 700px), (width <= 768px) {
   .onboarding-header {
     padding: 0.75rem 1rem;
   }
@@ -315,7 +311,7 @@
 }
 
 /* Responsive for mobile */
-@media (max-width: 640px) {
+@media (width <= 640px) {
   .onboarding-content {
     padding: 0.75rem;
   }
@@ -382,7 +378,7 @@
 }
 
 /* Very small screens */
-@media (max-height: 600px) {
+@media (height <= 600px) {
   .onboarding-slide {
     gap: 0.625rem;
   }

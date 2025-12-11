@@ -9,11 +9,9 @@
 
 .token-details-dialog {
   position: fixed;
+
   /* Cover full screen including traffic light area */
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   z-index: 10000; /* Above header (1000), below trade-action-dialog (10001) */
   display: flex;
   flex-direction: column;
@@ -42,18 +40,17 @@
 /* Backdrop - covers area below title bar */
 .dialog-backdrop {
   position: absolute;
-  top: 28px;
-  left: 0;
-  right: 0;
-  bottom: 24px;
+  inset: 28px 0 24px;
   background: transparent;
   cursor: default;
 }
 
 .token-details-dialog .dialog-container {
   position: relative;
+
   /* Content starts below traffic light area */
   margin-top: 28px;
+
   /* Leave space for status bar at bottom */
   margin-bottom: 24px;
   background: var(--bg-primary);
@@ -98,7 +95,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 16px 10px 16px;
+  padding: 12px 16px 10px;
   gap: 16px;
   min-height: 64px;
 }
@@ -172,7 +169,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 0 16px 10px 16px;
+  padding: 0 16px 10px;
   border-bottom: 1px solid var(--border-subtle, var(--border-color));
 }
 
@@ -1238,10 +1235,7 @@
 /* Chart loading overlay */
 .chart-loading-overlay {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2056,7 +2050,7 @@
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  margin: 0 0 10px 0;
+  margin: 0 0 10px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--border-color);
 }
@@ -2193,7 +2187,7 @@
   position: absolute;
   width: 10px;
   height: 10px;
-  border: 2px solid currentColor;
+  border: 2px solid currentcolor;
   border-top-color: transparent;
   border-radius: 50%;
   animation: position-btn-spin 0.6s linear infinite;
@@ -2215,16 +2209,16 @@
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: #f87171;
-  background: rgba(239, 68, 68, 0.15);
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgb(239, 68, 68, 0.15);
+  border: 1px solid rgb(239, 68, 68, 0.3);
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .btn-position-sell:hover {
-  background: rgba(239, 68, 68, 0.25);
-  border-color: rgba(239, 68, 68, 0.5);
+  background: rgb(239, 68, 68, 0.25);
+  border-color: rgb(239, 68, 68, 0.5);
   color: #fca5a5;
 }
 
@@ -2252,16 +2246,16 @@
   text-transform: uppercase;
   letter-spacing: 0.03em;
   color: #60a5fa;
-  background: rgba(59, 130, 246, 0.15);
-  border: 1px solid rgba(59, 130, 246, 0.3);
+  background: rgb(59, 130, 246, 0.15);
+  border: 1px solid rgb(59, 130, 246, 0.3);
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
 .btn-position-add:hover {
-  background: rgba(59, 130, 246, 0.25);
-  border-color: rgba(59, 130, 246, 0.5);
+  background: rgb(59, 130, 246, 0.25);
+  border-color: rgb(59, 130, 246, 0.5);
   color: #93c5fd;
 }
 

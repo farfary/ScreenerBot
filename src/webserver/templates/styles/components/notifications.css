@@ -32,7 +32,7 @@ body.notification-drawer-open {
   flex: 1 1 auto;
   background: rgb(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(4px);
   opacity: 0;
   transition: opacity 0.2s ease-out;
 }
@@ -605,10 +605,7 @@ body.notification-drawer-open {
 .progress-bar-fill::after {
   content: "";
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  inset: 0;
   background: linear-gradient(90deg, transparent, rgb(255, 255, 255, 0.3), transparent);
   animation: shimmer 1.5s infinite;
 }

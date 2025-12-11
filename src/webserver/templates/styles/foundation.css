@@ -31,7 +31,7 @@
 
 /* Orbitron - Futuristic display font for branding */
 @font-face {
-  font-family: "Orbitron";
+  font-family: Orbitron;
   font-style: normal;
   font-weight: 400 900;
   font-display: swap;
@@ -147,6 +147,7 @@
   --font-sans: -apple-system, blinkmacsystemfont, "Segoe UI", roboto, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", monaco, "Cascadia Code", "Roboto Mono", monospace;
   --font-data: "JetBrains Mono", "SF Mono", monaco, monospace;
+
     /* Font Families */
   --font-brand: "Rajdhani", -apple-system, sans-serif;
   --font-size-xs: 0.75rem; /* 12px */
@@ -315,6 +316,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+
   /* Prevent entire window from being draggable - only titlebar should be draggable */
   -webkit-app-region: no-drag;
   app-region: no-drag;
@@ -329,10 +331,11 @@ body {
 *::before,
 *::after {
   user-select: none;
-  -webkit-user-select: none;
+  user-select: none;
 }
 
 /* Re-enable selection ONLY for specific value elements */
+
 /* These classes mark numeric values that users may want to copy */
 .selectable,
 .data-numeric,
@@ -346,7 +349,7 @@ body {
 .font-mono,
 [data-selectable="true"] {
   user-select: text;
-  -webkit-user-select: text;
+  user-select: text;
   cursor: text;
 }
 
@@ -355,7 +358,7 @@ input,
 textarea,
 [contenteditable="true"] {
   user-select: text;
-  -webkit-user-select: text;
+  user-select: text;
 }
 
 /* =============================================================================
@@ -483,7 +486,7 @@ textarea,
   background: linear-gradient(
     90deg,
     transparent,
-    rgba(255, 255, 255, 0.08),
+    rgb(255, 255, 255, 0.08),
     transparent
   );
   animation: shimmer 2s infinite;

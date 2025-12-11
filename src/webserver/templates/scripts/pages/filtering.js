@@ -1120,9 +1120,6 @@ function renderShell() {
   return `
     <div class="filtering-page">
       <div class="filtering-shell">
-        <header class="filtering-top">
-          <h1><i class="icon-target"></i> Filtering Configuration</h1>
-        </header>
         <div id="filtering-info-bar">${renderInfoBar()}</div>
         <div id="filtering-search-bar">${renderSearchBar()}</div>
         <div class="filtering-content" id="filtering-config-panels">

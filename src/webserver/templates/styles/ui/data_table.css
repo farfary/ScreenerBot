@@ -81,8 +81,7 @@ body.dt-column-resizing .data-table col {
 /* Scroll container */
 .data-table-scroll-container {
   flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden; /* Avoid thin right-hand gap when columns fit */
+  overflow: hidden auto; /* Avoid thin right-hand gap when columns fit */
   position: relative;
   min-height: 0; /* Critical for flex scrolling */
 }
