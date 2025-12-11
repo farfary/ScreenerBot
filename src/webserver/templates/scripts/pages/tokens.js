@@ -1374,11 +1374,32 @@ function createLifecycle() {
   const updateOhlcvToolbar = () => {
     if (!ohlcvTable) return;
     const stats = ohlcvState.stats || {};
-    
-    ohlcvTable.setSummaryItem?.("ohlcv-total", stats.total_tokens ?? 0);
-    ohlcvTable.setSummaryItem?.("ohlcv-active", stats.active_tokens ?? 0);
-    ohlcvTable.setSummaryItem?.("ohlcv-candles", Utils.formatCompactNumber(stats.total_candles ?? 0));
-    ohlcvTable.setSummaryItem?.("ohlcv-size", `${(stats.database_size_mb ?? 0).toFixed(1)} MB`);
+
+    ohlcvTable.updateToolbarSummary([
+      {
+        id: "ohlcv-total",
+        label: "Total Tokens",
+        value: Utils.formatNumber(stats.total_tokens ?? 0, 0),
+      },
+      {
+        id: "ohlcv-active",
+        label: "Active",
+        value: Utils.formatNumber(stats.active_tokens ?? 0, 0),
+        variant: "success",
+      },
+      {
+        id: "ohlcv-candles",
+        label: "Candles",
+        value: Utils.formatCompactNumber(stats.total_candles ?? 0),
+        variant: "info",
+      },
+      {
+        id: "ohlcv-size",
+        label: "DB Size",
+        value: `${(stats.database_size_mb ?? 0).toFixed(1)} MB`,
+        variant: "secondary",
+      },
+    ]);
   };
 
   const handleOhlcvDelete = async (mint) => {
