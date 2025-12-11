@@ -157,40 +157,40 @@
 
 /* Buy button - green accent */
 .row-actions .btn.row-action[data-action="buy"] {
-  background: rgba(16, 185, 129, 0.15);
+  background: rgb(16, 185, 129, 0.15);
   color: #34d399;
-  border-color: rgba(16, 185, 129, 0.3);
+  border-color: rgb(16, 185, 129, 0.3);
 }
 
 .row-actions .btn.row-action[data-action="buy"]:hover {
-  background: rgba(16, 185, 129, 0.25);
-  border-color: rgba(16, 185, 129, 0.5);
+  background: rgb(16, 185, 129, 0.25);
+  border-color: rgb(16, 185, 129, 0.5);
   color: #6ee7b7;
 }
 
 /* Add button - blue accent */
 .row-actions .btn.row-action[data-action="add"] {
-  background: rgba(59, 130, 246, 0.15);
+  background: rgb(59, 130, 246, 0.15);
   color: #60a5fa;
-  border-color: rgba(59, 130, 246, 0.3);
+  border-color: rgb(59, 130, 246, 0.3);
 }
 
 .row-actions .btn.row-action[data-action="add"]:hover {
-  background: rgba(59, 130, 246, 0.25);
-  border-color: rgba(59, 130, 246, 0.5);
+  background: rgb(59, 130, 246, 0.25);
+  border-color: rgb(59, 130, 246, 0.5);
   color: #93c5fd;
 }
 
 /* Sell button - red accent */
 .row-actions .btn.row-action[data-action="sell"] {
-  background: rgba(239, 68, 68, 0.15);
+  background: rgb(239, 68, 68, 0.15);
   color: #f87171;
-  border-color: rgba(239, 68, 68, 0.3);
+  border-color: rgb(239, 68, 68, 0.3);
 }
 
 .row-actions .btn.row-action[data-action="sell"]:hover {
-  background: rgba(239, 68, 68, 0.25);
-  border-color: rgba(239, 68, 68, 0.5);
+  background: rgb(239, 68, 68, 0.25);
+  border-color: rgb(239, 68, 68, 0.5);
   color: #fca5a5;
 }
 
@@ -204,4 +204,172 @@
 /* Icon in button */
 .row-actions .btn i {
   font-size: 0.85em;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   OHLCV TAB STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* OHLCV table container */
+#ohlcv-table-container {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Mint cell in OHLCV table */
+.mint-cell {
+  font-family: var(--font-data);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+/* Status badge */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.status-badge i {
+  font-size: 0.9em;
+}
+
+.status-active {
+  background: rgb(16, 185, 129, 0.15);
+  color: var(--badge-online);
+  border: 1px solid rgb(16, 185, 129, 0.3);
+}
+
+.status-inactive {
+  background: rgb(156, 163, 175, 0.15);
+  color: var(--text-muted);
+  border: 1px solid rgb(156, 163, 175, 0.3);
+}
+
+/* Priority badge */
+.priority-badge {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.priority-critical {
+  background: rgb(239, 68, 68, 0.2);
+  color: #f87171;
+}
+
+.priority-high {
+  background: rgb(245, 158, 11, 0.2);
+  color: #fbbf24;
+}
+
+.priority-medium {
+  background: rgb(59, 130, 246, 0.2);
+  color: #60a5fa;
+}
+
+.priority-low {
+  background: rgb(156, 163, 175, 0.15);
+  color: var(--text-muted);
+}
+
+/* Backfill progress cell */
+.backfill-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 100px;
+}
+
+.backfill-bar {
+  height: 4px;
+  background: var(--bg-secondary);
+  border-radius: 2px;
+  position: relative;
+  overflow: hidden;
+}
+
+.backfill-bar::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 100%;
+  width: var(--progress, 0%);
+  border-radius: 2px;
+  transition: width 0.3s ease;
+}
+
+.backfill-bar.progress-complete::after {
+  background: var(--badge-online);
+}
+
+.backfill-bar.progress-partial::after {
+  background: var(--badge-warning);
+}
+
+.backfill-bar.progress-low::after {
+  background: var(--badge-error);
+}
+
+.backfill-text {
+  font-size: 0.7rem;
+  font-family: var(--font-data);
+  color: var(--text-secondary);
+}
+
+/* Timeframe indicators */
+.tf-indicators {
+  display: flex;
+  gap: 2px;
+}
+
+.tf-indicator {
+  font-size: 0.6rem;
+  font-weight: 700;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 2px;
+  text-transform: uppercase;
+}
+
+.tf-done {
+  background: rgb(16, 185, 129, 0.2);
+  color: var(--badge-online);
+}
+
+.tf-pending {
+  background: rgb(156, 163, 175, 0.1);
+  color: var(--text-muted);
+}
+
+/* Warning value for gaps */
+.value-warning {
+  color: var(--badge-warning);
+  font-weight: 600;
+  font-family: var(--font-data);
+}
+
+/* Delete button in OHLCV table */
+.ohlcv-delete-btn {
+  padding: 4px 8px !important;
+  font-size: 0.75rem !important;
+}
+
+.ohlcv-delete-btn:hover {
+  background: rgb(239, 68, 68, 0.2) !important;
 }

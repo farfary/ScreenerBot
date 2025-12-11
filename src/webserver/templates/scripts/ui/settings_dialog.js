@@ -470,6 +470,10 @@ export class SettingsDialog {
               <i class="icon-zap"></i>
               <span>Startup</span>
             </button>
+            <button class="settings-nav-item" data-tab="data">
+              <i class="icon-database"></i>
+              <span>Data</span>
+            </button>
             <div class="settings-nav-divider"></div>
             <button class="settings-nav-item" data-tab="updates">
               <i class="icon-refresh-cw"></i>
@@ -504,6 +508,9 @@ export class SettingsDialog {
               <div class="settings-loading">Loading...</div>
             </div>
             <div class="settings-tab" data-tab-content="startup">
+              <div class="settings-loading">Loading...</div>
+            </div>
+            <div class="settings-tab" data-tab-content="data">
               <div class="settings-loading">Loading...</div>
             </div>
             <div class="settings-tab" data-tab-content="updates">
@@ -637,6 +644,10 @@ export class SettingsDialog {
       case "startup":
         content.innerHTML = this._buildStartupTab();
         this._attachStartupHandlers(content);
+        break;
+      case "data":
+        content.innerHTML = this._buildDataTab();
+        this._attachDataHandlers(content);
         break;
       case "updates":
         content.innerHTML = this._buildUpdatesTab();
@@ -1165,6 +1176,244 @@ export class SettingsDialog {
         updateSetting("show_background_notifications", e.target.checked)
       );
     }
+  }
+
+  /**
+   * Build Data tab content - Clear data and cleanup options
+   */
+  _buildDataTab() {
+    return `
+      <div class="settings-section">
+        <h3 class="settings-section-title">OHLCV Data Management</h3>
+        <p class="settings-section-description">
+          OHLCV (candlestick) data is stored for tokens you've viewed in charts or that have been monitored for trading strategies.
+          This data is never automatically deleted to preserve historical analysis.
+        </p>
+        
+        <div class="settings-group">
+          <div class="data-stats-card" id="ohlcvStatsCard">
+            <div class="data-stats-loading">Loading statistics...</div>
+          </div>
+          
+          <div class="settings-field">
+            <div class="settings-field-info">
+              <label>Cleanup Inactive Tokens</label>
+              <span class="settings-field-hint">
+                Remove OHLCV data for tokens that haven't been active for a specified time.
+                This helps free up disk space from tokens you're no longer tracking.
+              </span>
+            </div>
+            <div class="settings-field-control data-action-group">
+              <input type="number" id="cleanupHours" class="settings-input small" value="24" min="1" max="720" />
+              <span class="input-suffix">hours</span>
+              <button id="cleanupOhlcvBtn" class="btn btn-warning">
+                <i class="icon-trash-2"></i>
+                Cleanup
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <div class="settings-section">
+        <h3 class="settings-section-title">Application Data</h3>
+        <p class="settings-section-description">
+          Manage other application data stored on your device. These actions cannot be undone.
+        </p>
+        
+        <div class="settings-group">
+          <div class="settings-field">
+            <div class="settings-field-info">
+              <label>UI State Cache</label>
+              <span class="settings-field-hint">
+                Clears saved table column preferences, filter states, and view settings.
+                The UI will reset to defaults on next load.
+              </span>
+            </div>
+            <div class="settings-field-control">
+              <button id="clearUiStateBtn" class="btn btn-secondary">
+                <i class="icon-refresh-cw"></i>
+                Clear Cache
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <style>
+        .data-stats-card {
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          border-radius: 8px;
+          padding: 16px;
+          margin-bottom: 16px;
+        }
+        
+        .data-stats-loading {
+          color: var(--text-muted);
+          font-style: italic;
+        }
+        
+        .data-stats-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+          gap: 16px;
+        }
+        
+        .data-stat-item {
+          text-align: center;
+        }
+        
+        .data-stat-value {
+          font-size: 1.5rem;
+          font-weight: 700;
+          font-family: var(--font-data);
+          color: var(--text-primary);
+        }
+        
+        .data-stat-label {
+          font-size: 0.75rem;
+          color: var(--text-muted);
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+        
+        .data-action-group {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+        
+        .settings-input.small {
+          width: 80px;
+        }
+        
+        .input-suffix {
+          color: var(--text-muted);
+          font-size: 0.875rem;
+        }
+      </style>
+    `;
+  }
+
+  /**
+   * Attach handlers for Data tab
+   */
+  _attachDataHandlers(content) {
+    // Load OHLCV stats
+    this._loadOhlcvStats(content);
+    
+    // Cleanup button
+    const cleanupBtn = content.querySelector("#cleanupOhlcvBtn");
+    const hoursInput = content.querySelector("#cleanupHours");
+    
+    if (cleanupBtn && hoursInput) {
+      cleanupBtn.addEventListener("click", async () => {
+        const hours = parseInt(hoursInput.value, 10);
+        if (isNaN(hours) || hours < 1) {
+          Utils.showToast("Invalid hours value", "error");
+          return;
+        }
+        
+        if (!window.confirm(`This will delete OHLCV data for tokens inactive for more than ${hours} hours. Continue?`)) {
+          return;
+        }
+        
+        cleanupBtn.disabled = true;
+        cleanupBtn.innerHTML = '<i class="icon-loader"></i> Cleaning...';
+        
+        try {
+          const response = await fetch("/api/ohlcv/cleanup", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ inactive_hours: hours }),
+          });
+          
+          if (response.ok) {
+            const data = await response.json();
+            Utils.showToast(`Cleaned up ${data.deleted_count} inactive tokens`, "success");
+            this._loadOhlcvStats(content);
+          } else {
+            Utils.showToast("Cleanup failed", "error");
+          }
+        } catch (err) {
+          Utils.showToast("Cleanup failed: " + err.message, "error");
+        } finally {
+          cleanupBtn.disabled = false;
+          cleanupBtn.innerHTML = '<i class="icon-trash-2"></i> Cleanup';
+        }
+      });
+    }
+    
+    // Clear UI state button
+    const clearUiBtn = content.querySelector("#clearUiStateBtn");
+    if (clearUiBtn) {
+      clearUiBtn.addEventListener("click", () => {
+        if (!window.confirm("Clear all saved UI preferences? This will reset table columns, filters, and view settings.")) {
+          return;
+        }
+        
+        // Clear localStorage items related to UI state
+        const keysToRemove = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.startsWith("table.") || key.startsWith("tokens-table") || key.startsWith("positions-table") || key.includes(".state"))) {
+            keysToRemove.push(key);
+          }
+        }
+        
+        keysToRemove.forEach(key => localStorage.removeItem(key));
+        Utils.showToast(`Cleared ${keysToRemove.length} cached UI settings`, "success");
+      });
+    }
+  }
+  
+  /**
+   * Load OHLCV statistics
+   */
+  async _loadOhlcvStats(content) {
+    const statsCard = content.querySelector("#ohlcvStatsCard");
+    if (!statsCard) return;
+    
+    try {
+      const response = await fetch("/api/ohlcv/stats");
+      if (response.ok) {
+        const data = await response.json();
+        statsCard.innerHTML = `
+          <div class="data-stats-grid">
+            <div class="data-stat-item">
+              <div class="data-stat-value">${data.total_tokens || 0}</div>
+              <div class="data-stat-label">Tokens</div>
+            </div>
+            <div class="data-stat-item">
+              <div class="data-stat-value">${data.active_tokens || 0}</div>
+              <div class="data-stat-label">Active</div>
+            </div>
+            <div class="data-stat-item">
+              <div class="data-stat-value">${this._formatCompactNumber(data.total_candles || 0)}</div>
+              <div class="data-stat-label">Candles</div>
+            </div>
+            <div class="data-stat-item">
+              <div class="data-stat-value">${(data.database_size_mb || 0).toFixed(1)} MB</div>
+              <div class="data-stat-label">DB Size</div>
+            </div>
+          </div>
+        `;
+      } else {
+        statsCard.innerHTML = '<div class="data-stats-loading">Failed to load statistics</div>';
+      }
+    } catch (err) {
+      statsCard.innerHTML = '<div class="data-stats-loading">Failed to load statistics</div>';
+    }
+  }
+  
+  /**
+   * Format number compactly (1.2K, 3.4M, etc)
+   */
+  _formatCompactNumber(num) {
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+    return String(num);
   }
 
   /**

@@ -1337,10 +1337,20 @@ async function handleSaveConfig() {
     state.config = JSON.parse(JSON.stringify(state.draft)); // Deep clone
     state.hasChanges = false;
     state.lastSaved = new Date();
+
+    // Trigger filtering refresh after config save so changes take effect immediately
+    try {
+      await refreshSnapshot();
+      // Reload stats to show updated results
+      setTimeout(() => loadStats(), 500);
+    } catch (refreshError) {
+      console.warn("Auto-refresh after save failed:", refreshError);
+    }
+
     Utils.showToast({
       type: "success",
       title: "Configuration Saved",
-      message: "Filtering settings saved successfully",
+      message: "Filtering settings saved and snapshot refreshed",
     });
   } catch (error) {
     console.error("Failed to save config:", error);

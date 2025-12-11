@@ -232,6 +232,25 @@ Useful for:
 
 Note: New tokens may lack complete market data initially.`,
     },
+
+    ohlcvData: {
+      id: "tokens.ohlcv",
+      title: "OHLCV Data Management",
+      content: `View and manage OHLCV (candlestick) data stored for tokens.
+
+Shows:
+• **Candle Count** — total data points stored
+• **Backfill Progress** — timeframe completion status
+• **Data Span** — time coverage in hours
+• **Pool Count** — tracked liquidity pools
+• **Status** — active monitoring or inactive
+
+Actions:
+• **Delete** — remove all OHLCV data for a token
+• **Cleanup** — bulk remove inactive token data
+
+OHLCV data is preserved permanently and never auto-deleted.`,
+    },
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -486,6 +505,157 @@ Categories:
 
 Changes take effect immediately (hot reload).`,
       learnMoreUrl: "https://screenerbot.io/docs/dashboard/system/config",
+    },
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TOKEN DETAILS DIALOG
+  // ═══════════════════════════════════════════════════════════════════════════
+  tokenDetails: {
+    chart: {
+      id: "token_details.chart",
+      title: "Price Chart (OHLCV)",
+      content: `**Important:** This chart shows cached OHLCV data used for automated trading strategies, not live prices.
+
+**Why cached data?**
+• OHLCV data is collected and aggregated for strategy evaluation
+• Update frequency depends on token priority (positions get faster updates)
+• Used by entry/exit monitors for technical analysis decisions
+
+**DEX Price Complexity:**
+In decentralized trading, a token can have **multiple liquidity pools** across different DEXs (Raydium, Orca, Meteora, etc.). Each pool may show slightly different prices based on:
+• Pool liquidity depth
+• Recent trading activity
+• Arbitrage lag between pools
+
+There is **no single "true" price** until you execute a swap — the actual price depends on which pool/route is used and current slippage.
+
+**Data Sources:**
+• DexScreener and GeckoTerminal provide aggregated OHLCV
+• Timeframe selection affects candle granularity
+• "Waiting for data" means OHLCV is being fetched`,
+      learnMoreUrl: "https://screenerbot.io/docs/concepts/pricing",
+    },
+
+    tokenInfo: {
+      id: "token_details.token_info",
+      title: "Token Information",
+      content: `Basic token metadata from on-chain and market sources.
+
+• **Mint** — unique token address on Solana (click to copy)
+• **Decimals** — token precision (usually 6-9)
+• **Age** — time since token/pool creation
+• **DEX** — primary trading venue for this token
+• **Holders** — unique wallet addresses holding the token
+• **Top 10 Hold** — percentage held by top 10 wallets
+
+Higher holder count and lower concentration generally indicate healthier distribution.`,
+    },
+
+    liquidity: {
+      id: "token_details.liquidity",
+      title: "Liquidity & Market Data",
+      content: `Market metrics from the primary liquidity pool.
+
+• **FDV** — Fully Diluted Valuation (price × total supply)
+• **Liquidity** — USD value of pool reserves
+• **Pool SOL** — SOL reserves in the pool
+• **Pool Token** — token reserves in the pool
+
+**Why liquidity matters:**
+• Higher liquidity = less slippage on trades
+• Low liquidity can cause significant price impact
+• Pool reserves directly determine swap prices
+
+Data from DexScreener/GeckoTerminal, refreshed periodically.`,
+    },
+
+    priceChanges: {
+      id: "token_details.price_changes",
+      title: "Price Changes",
+      content: `Price movement over various timeframes.
+
+• **5M** — last 5 minutes
+• **1H** — last hour
+• **6H** — last 6 hours
+• **24H** — last 24 hours
+
+**Note:** These percentages come from market aggregators and may differ slightly from on-chain pool prices due to:
+• Data aggregation delays
+• Multiple pool price averaging
+• Different calculation methodologies`,
+    },
+
+    volume: {
+      id: "token_details.volume",
+      title: "Trading Volume",
+      content: `USD trading volume across timeframes.
+
+Higher volume indicates:
+• More active trading interest
+• Better price discovery
+• Generally lower slippage
+
+Very low volume tokens may have:
+• Wide bid-ask spreads
+• Difficult exits
+• Higher manipulation risk`,
+    },
+
+    activity: {
+      id: "token_details.activity",
+      title: "Transaction Activity",
+      content: `Buy/sell transaction counts and ratios.
+
+• **Buy/Sell bars** — visual ratio of buys vs sells
+• **B/S Ratio** — buys divided by sells (>1 = more buying)
+• **Net Flow** — difference between buy and sell counts
+
+**Interpreting activity:**
+• High buy ratio may indicate accumulation
+• High sell ratio may indicate distribution
+• Transaction count doesn't reflect volume size`,
+    },
+
+    security: {
+      id: "token_details.security",
+      title: "Security Analysis",
+      content: `Risk assessment from Rugcheck.xyz and on-chain analysis.
+
+**Safety Score (0-100):**
+Higher scores indicate safer tokens. Factors include:
+• Authority permissions (mint/freeze)
+• Holder concentration
+• LP lock status
+• Known risk patterns
+
+**Key Risk Indicators:**
+• **Mint Authority** — can create new tokens (inflation risk)
+• **Freeze Authority** — can freeze token accounts
+• **Top Holder %** — concentration risk
+• **LP Providers** — liquidity provider count
+
+Always verify security before trading significant amounts.`,
+      learnMoreUrl: "https://screenerbot.io/docs/concepts/security",
+    },
+
+    pools: {
+      id: "token_details.pools",
+      title: "Liquidity Pools",
+      content: `All discovered liquidity pools for this token.
+
+**Why multiple pools matter:**
+• Each pool has different liquidity and pricing
+• Swap routers find the best route across pools
+• Price can vary 1-5% between pools
+
+**Pool Information:**
+• **DEX** — which exchange hosts the pool
+• **Liquidity** — USD value of pool reserves
+• **Volume** — recent trading activity
+• **Price** — current pool price
+
+The Pool Service calculates prices from the highest-liquidity SOL pair.`,
     },
   },
 };

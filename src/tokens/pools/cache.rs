@@ -630,6 +630,40 @@ pub async fn prefetch(mints: &[String]) {
     }
 }
 
+/// Fetch pool snapshot immediately (bypasses background queue)
+/// Use this for user-viewed tokens that need immediate data
+pub async fn fetch_immediate(mint: &str) -> TokenResult<Option<TokenPoolsSnapshot>> {
+    let trimmed = mint.trim();
+    if trimmed.is_empty() {
+        return Err(TokenError::InvalidMint(
+            "Mint address cannot be empty".to_string(),
+        ));
+    }
+
+    // Check if fresh cache exists - return immediately
+    if let Some(snapshot) = get_cached_pool_snapshot(trimmed) {
+        if is_snapshot_fresh(&snapshot) {
+            return Ok(Some(snapshot));
+        }
+    }
+
+    // Do immediate fetch, bypassing the background queue
+    let (should_refresh, notifier) = begin_refresh_slot(trimmed).await;
+
+    if !should_refresh {
+        // Another request is already fetching - wait for it
+        notifier.notified().await;
+        return Ok(get_cached_pool_snapshot(trimmed).or_else(|| get_cached_pool_snapshot_allow_stale(trimmed)));
+    }
+
+    // Do the actual fetch
+    let result = refresh_token_pools_and_cache(trimmed, true).await;
+
+    complete_refresh_slot(trimmed).await;
+
+    result
+}
+
 /// Clear pool cache (for testing/reset)
 pub fn clear_cache() {
     if let Ok(mut guard) = TOKEN_POOLS_CACHE.write() {

@@ -556,6 +556,12 @@ pub async fn remove_token_monitoring(mint: &str) -> OhlcvResult<()> {
     service.monitor.remove_token(mint).await
 }
 
+pub async fn update_token_priority(mint: &str, priority: Priority) -> OhlcvResult<()> {
+    let service = get_or_init_service().await?;
+
+    service.monitor.update_priority(mint, priority).await
+}
+
 pub async fn record_activity(mint: &str, activity_type: ActivityType) -> OhlcvResult<()> {
     let service = get_or_init_service().await?;
 
@@ -658,4 +664,52 @@ pub async fn build_timeframe_bundle(mint: &str) -> OhlcvResult<TimeframeBundle> 
 pub async fn store_bundle(mint: String, bundle: TimeframeBundle) -> OhlcvResult<()> {
     let service = get_or_init_service().await?;
     service.store_bundle(mint, bundle).await
+}
+
+// ==================== OHLCV Listing and Management API ====================
+
+use crate::ohlcvs::database::{DatabaseStats, DeleteResult, OhlcvTokenStatus};
+
+/// Get all OHLCV tokens with their status information
+pub async fn get_all_tokens_with_status() -> OhlcvResult<Vec<OhlcvTokenStatus>> {
+    let service = get_or_init_service().await?;
+    let db = Arc::clone(&service.db);
+
+    tokio::task::spawn_blocking(move || db.get_all_tokens_with_status())
+        .await
+        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))?
+}
+
+/// Delete all OHLCV data for a specific token
+pub async fn delete_token_data(mint: &str) -> OhlcvResult<DeleteResult> {
+    let service = get_or_init_service().await?;
+    let db = Arc::clone(&service.db);
+    let mint_owned = mint.to_string();
+
+    // Also remove from monitoring
+    let _ = service.monitor.remove_token(&mint_owned).await;
+
+    tokio::task::spawn_blocking(move || db.delete_token_data(&mint_owned))
+        .await
+        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))?
+}
+
+/// Delete OHLCV data for tokens that have been inactive for specified hours
+pub async fn delete_inactive_tokens(inactive_hours: i64) -> OhlcvResult<Vec<String>> {
+    let service = get_or_init_service().await?;
+    let db = Arc::clone(&service.db);
+
+    tokio::task::spawn_blocking(move || db.delete_inactive_tokens(inactive_hours))
+        .await
+        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))?
+}
+
+/// Get database statistics
+pub async fn get_database_stats() -> OhlcvResult<DatabaseStats> {
+    let service = get_or_init_service().await?;
+    let db = Arc::clone(&service.db);
+
+    tokio::task::spawn_blocking(move || db.get_database_stats())
+        .await
+        .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))?
 }

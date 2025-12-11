@@ -36,6 +36,11 @@ const TOKEN_VIEWS = [
     hintKey: "tokens.positionsTokens",
   },
   { id: "recent", label: '<i class="icon-clock"></i> Recent', hintKey: "tokens.recentTokens" },
+  {
+    id: "ohlcv",
+    label: '<i class="icon-chart-candle"></i> OHLCV Data',
+    hintKey: "tokens.ohlcvData",
+  },
 ];
 
 // Constants
@@ -283,7 +288,9 @@ async function attachHintsToTabs() {
 
 function createLifecycle() {
   let table = null;
+  let ohlcvTable = null; // Separate table for OHLCV data view
   let poller = null;
+  let ohlcvPoller = null; // Separate poller for OHLCV data
   let tabBar = null;
   let tradeDialog = null;
   let tokenDetailsDialog = null;
@@ -295,6 +302,13 @@ function createLifecycle() {
 
   const priceHistory = new Map();
   let priceBaselineReady = false;
+
+  // OHLCV state
+  const ohlcvState = {
+    tokens: [],
+    stats: null,
+    isLoading: false,
+  };
 
   const state = {
     view: DEFAULT_VIEW,
@@ -1183,10 +1197,373 @@ function createLifecycle() {
     ];
   };
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // OHLCV TABLE FUNCTIONS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const buildOhlcvColumns = () => {
+    return [
+      {
+        id: "mint",
+        label: "Token",
+        sortable: true,
+        minWidth: 120,
+        maxWidth: 200,
+        wrap: false,
+        render: (value) => {
+          const short = value ? `${value.slice(0, 6)}...${value.slice(-4)}` : "—";
+          return `<span class="mint-cell" title="${Utils.escapeHtml(value)}">${short}</span>`;
+        },
+      },
+      {
+        id: "status",
+        label: "Status",
+        sortable: true,
+        minWidth: 90,
+        wrap: false,
+        render: (value) => {
+          const isActive = value === "active";
+          const cls = isActive ? "status-active" : "status-inactive";
+          const icon = isActive ? "icon-activity" : "icon-pause";
+          return `<span class="status-badge ${cls}"><i class="${icon}"></i> ${value}</span>`;
+        },
+      },
+      {
+        id: "priority",
+        label: "Priority",
+        sortable: true,
+        minWidth: 80,
+        wrap: false,
+        render: (value) => {
+          const priorityClass = {
+            critical: "priority-critical",
+            high: "priority-high",
+            medium: "priority-medium",
+            low: "priority-low",
+          }[value?.toLowerCase()] || "priority-medium";
+          return `<span class="priority-badge ${priorityClass}">${value || "—"}</span>`;
+        },
+      },
+      {
+        id: "candle_count",
+        label: "Candles",
+        sortable: true,
+        minWidth: 90,
+        wrap: false,
+        align: "right",
+        render: (value) => Utils.formatNumber(value, { fallback: "0" }),
+      },
+      {
+        id: "backfill_progress",
+        label: "Backfill",
+        sortable: false,
+        minWidth: 120,
+        wrap: false,
+        render: (value) => {
+          if (!value) return "—";
+          const { completed, total, percent, timeframes } = value;
+          const pct = Math.round(percent);
+          const progressCls = pct === 100 ? "progress-complete" : pct > 50 ? "progress-partial" : "progress-low";
+          
+          // Build timeframe icons
+          const tfIcons = [
+            { key: "m1", label: "1m", done: timeframes?.["1m"] ?? timeframes?.m1 },
+            { key: "m5", label: "5m", done: timeframes?.["5m"] ?? timeframes?.m5 },
+            { key: "m15", label: "15m", done: timeframes?.["15m"] ?? timeframes?.m15 },
+            { key: "h1", label: "1h", done: timeframes?.["1h"] ?? timeframes?.h1 },
+            { key: "h4", label: "4h", done: timeframes?.["4h"] ?? timeframes?.h4 },
+            { key: "h12", label: "12h", done: timeframes?.["12h"] ?? timeframes?.h12 },
+            { key: "d1", label: "1d", done: timeframes?.["1d"] ?? timeframes?.d1 },
+          ].map(tf => {
+            const cls = tf.done ? "tf-done" : "tf-pending";
+            return `<span class="tf-indicator ${cls}" title="${tf.label}: ${tf.done ? 'Complete' : 'Pending'}">${tf.label.charAt(0)}</span>`;
+          }).join("");
+          
+          return `<div class="backfill-cell">
+            <div class="backfill-bar ${progressCls}" style="--progress: ${pct}%"></div>
+            <span class="backfill-text">${completed}/${total}</span>
+            <div class="tf-indicators">${tfIcons}</div>
+          </div>`;
+        },
+      },
+      {
+        id: "data_span_hours",
+        label: "Data Span",
+        sortable: true,
+        minWidth: 90,
+        wrap: false,
+        align: "right",
+        render: (value) => {
+          if (!value || value <= 0) return "—";
+          if (value < 24) return `${value.toFixed(1)}h`;
+          const days = value / 24;
+          return `${days.toFixed(1)}d`;
+        },
+      },
+      {
+        id: "open_gaps",
+        label: "Gaps",
+        sortable: true,
+        minWidth: 70,
+        wrap: false,
+        align: "right",
+        render: (value) => {
+          if (!value || value === 0) return '<span class="value-positive">0</span>';
+          return `<span class="value-warning">${value}</span>`;
+        },
+      },
+      {
+        id: "pool_count",
+        label: "Pools",
+        sortable: true,
+        minWidth: 70,
+        wrap: false,
+        align: "right",
+        render: (value) => Utils.formatNumber(value, { fallback: "0" }),
+      },
+      {
+        id: "last_fetch",
+        label: "Last Fetch",
+        sortable: true,
+        minWidth: 100,
+        wrap: false,
+        render: (value) => {
+          if (!value) return "—";
+          const timestamp = typeof value === "string" ? Math.floor(new Date(value).getTime() / 1000) : value;
+          return timeAgoCell(timestamp);
+        },
+      },
+      {
+        id: "actions",
+        label: "",
+        sortable: false,
+        minWidth: 80,
+        maxWidth: 80,
+        wrap: false,
+        render: (_value, row) => {
+          return `<button class="btn btn-small btn-danger ohlcv-delete-btn" data-mint="${Utils.escapeHtml(row.mint)}" title="Delete OHLCV data">
+            <i class="icon-trash-2"></i>
+          </button>`;
+        },
+      },
+    ];
+  };
+
+  const fetchOhlcvData = async () => {
+    ohlcvState.isLoading = true;
+    try {
+      const response = await requestManager.fetch("/api/ohlcv/tokens", { priority: "normal" });
+      if (response && response.tokens) {
+        ohlcvState.tokens = response.tokens;
+        ohlcvState.stats = response.stats;
+      }
+    } catch (err) {
+      console.error("Failed to fetch OHLCV data:", err);
+      Utils.showToast("Failed to load OHLCV data", "error");
+    } finally {
+      ohlcvState.isLoading = false;
+    }
+  };
+
+  const updateOhlcvTable = () => {
+    if (!ohlcvTable) return;
+    ohlcvTable.setData(ohlcvState.tokens, { preserveScroll: true });
+    updateOhlcvToolbar();
+  };
+
+  const updateOhlcvToolbar = () => {
+    if (!ohlcvTable) return;
+    const stats = ohlcvState.stats || {};
+    
+    ohlcvTable.setSummaryItem?.("ohlcv-total", stats.total_tokens ?? 0);
+    ohlcvTable.setSummaryItem?.("ohlcv-active", stats.active_tokens ?? 0);
+    ohlcvTable.setSummaryItem?.("ohlcv-candles", Utils.formatCompactNumber(stats.total_candles ?? 0));
+    ohlcvTable.setSummaryItem?.("ohlcv-size", `${(stats.database_size_mb ?? 0).toFixed(1)} MB`);
+  };
+
+  const handleOhlcvDelete = async (mint) => {
+    if (!window.confirm(`Delete all OHLCV data for ${mint.slice(0, 8)}...?`)) return;
+    
+    try {
+      const response = await requestManager.fetch(`/api/ohlcv/${mint}/delete`, {
+        method: "DELETE",
+        priority: "high",
+      });
+      
+      if (response) {
+        Utils.showToast(
+          `Deleted: ${response.candles_deleted} candles, ${response.pools_deleted} pools`,
+          "success"
+        );
+        await fetchOhlcvData();
+        updateOhlcvTable();
+      }
+    } catch (err) {
+      console.error("Failed to delete OHLCV data:", err);
+      Utils.showToast("Failed to delete OHLCV data", "error");
+    }
+  };
+
+  const handleOhlcvCleanup = async () => {
+    const hours = window.prompt("Delete inactive tokens older than (hours):", "24");
+    if (!hours) return;
+    
+    const inactiveHours = parseInt(hours, 10);
+    if (isNaN(inactiveHours) || inactiveHours < 1) {
+      Utils.showToast("Invalid hours value", "error");
+      return;
+    }
+    
+    try {
+      const response = await requestManager.fetch("/api/ohlcv/cleanup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ inactive_hours: inactiveHours }),
+        priority: "high",
+      });
+      
+      if (response) {
+        Utils.showToast(`Cleaned up ${response.deleted_count} inactive tokens`, "success");
+        await fetchOhlcvData();
+        updateOhlcvTable();
+      }
+    } catch (err) {
+      console.error("Failed to cleanup OHLCV data:", err);
+      Utils.showToast("Failed to cleanup OHLCV data", "error");
+    }
+  };
+
+  const initOhlcvTable = () => {
+    if (ohlcvTable) return; // Already initialized
+
+    // Create container for OHLCV table
+    const rootEl = document.querySelector("#tokens-root");
+    if (!rootEl) return;
+
+    // Create OHLCV container
+    let ohlcvContainer = document.querySelector("#ohlcv-table-container");
+    if (!ohlcvContainer) {
+      ohlcvContainer = document.createElement("div");
+      ohlcvContainer.id = "ohlcv-table-container";
+      ohlcvContainer.className = "ohlcv-table-container";
+      ohlcvContainer.style.display = "none";
+      rootEl.parentNode.insertBefore(ohlcvContainer, rootEl.nextSibling);
+    }
+
+    ohlcvTable = new DataTable({
+      container: "#ohlcv-table-container",
+      columns: buildOhlcvColumns(),
+      rowIdField: "mint",
+      stateKey: "ohlcv-table",
+      enableLogging: false,
+      sorting: {
+        mode: "client",
+        column: "candle_count",
+        direction: "desc",
+      },
+      compact: true,
+      stickyHeader: true,
+      zebra: true,
+      fitToContainer: true,
+      autoSizeColumns: false,
+      uniformRowHeight: 2,
+      toolbar: {
+        title: {
+          icon: "icon-chart-candle",
+          text: "OHLCV Data",
+        },
+        summary: [
+          { id: "ohlcv-total", label: "Total Tokens", value: "0" },
+          { id: "ohlcv-active", label: "Active", value: "0", variant: "success" },
+          { id: "ohlcv-candles", label: "Candles", value: "0", variant: "info" },
+          { id: "ohlcv-size", label: "DB Size", value: "0 MB", variant: "secondary" },
+        ],
+        actions: [
+          {
+            id: "cleanup",
+            label: "Cleanup Inactive",
+            icon: "icon-trash-2",
+            variant: "warning",
+            onClick: handleOhlcvCleanup,
+          },
+        ],
+      },
+    });
+
+    // Add click handler for delete buttons
+    ohlcvContainer.addEventListener("click", (e) => {
+      const deleteBtn = e.target.closest(".ohlcv-delete-btn");
+      if (deleteBtn) {
+        const mint = deleteBtn.getAttribute("data-mint");
+        if (mint) handleOhlcvDelete(mint);
+      }
+    });
+  };
+
+  const showOhlcvView = () => {
+    const tokensRoot = document.querySelector("#tokens-root");
+    const ohlcvContainer = document.querySelector("#ohlcv-table-container");
+    
+    if (tokensRoot) tokensRoot.style.display = "none";
+    if (ohlcvContainer) ohlcvContainer.style.display = "";
+    
+    // Pause main table poller, start OHLCV poller
+    if (poller) poller.pause();
+    if (lastUpdatePoller) lastUpdatePoller.pause();
+    
+    if (!ohlcvPoller) {
+      ohlcvPoller = new Poller(
+        async () => {
+          await fetchOhlcvData();
+          updateOhlcvTable();
+        },
+        {
+          label: "OHLCV",
+          getInterval: () => 30000,
+          pauseWhenHidden: true,
+        }
+      );
+    }
+    ohlcvPoller.start();
+    
+    // Initial load
+    fetchOhlcvData().then(() => updateOhlcvTable());
+  };
+
+  const hideOhlcvView = () => {
+    const tokensRoot = document.querySelector("#tokens-root");
+    const ohlcvContainer = document.querySelector("#ohlcv-table-container");
+    
+    if (tokensRoot) tokensRoot.style.display = "";
+    if (ohlcvContainer) ohlcvContainer.style.display = "none";
+    
+    // Pause OHLCV poller, resume main poller
+    if (ohlcvPoller) ohlcvPoller.pause();
+    if (poller) poller.start();
+    if (lastUpdatePoller) lastUpdatePoller.start();
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // VIEW SWITCHING
+  // ═══════════════════════════════════════════════════════════════════════════
+
   const switchView = (view) => {
     if (!TOKEN_VIEWS.some((v) => v.id === view)) return;
     const previousView = state.view;
     state.view = view;
+
+    // Handle OHLCV view specially - it has its own table
+    if (view === "ohlcv") {
+      initOhlcvTable();
+      showOhlcvView();
+      return;
+    }
+
+    // Leaving OHLCV view - hide it
+    if (previousView === "ohlcv") {
+      hideOhlcvView();
+    }
+
     state.totalCount = null;
     state.lastUpdate = null;
     state.filters = getDefaultFiltersForView(view);
@@ -1886,14 +2263,22 @@ function createLifecycle() {
       table.setToolbarSearchValue(state.search, { apply: false });
       updateToolbar();
 
-      // Trigger initial data load if no sort state was restored
-      // (sort restoration triggers reload via handleSortChange)
-      if (!hasSortRestored) {
+      // Handle OHLCV view specially - it has its own table
+      if (state.view === "ohlcv") {
+        initOhlcvTable();
+        showOhlcvView();
+      } else if (!hasSortRestored) {
+        // Trigger initial data load if no sort state was restored
+        // (sort restoration triggers reload via handleSortChange)
         requestReload("initial", { silent: false, resetScroll: true }).catch(() => {});
       }
     },
 
     activate(ctx) {
+      // Re-attach hints to tabs after TabBar remounts buttons on show()
+      // (hints are lost when hide() clears innerHTML and show() rebuilds tabs)
+      attachHintsToTabs();
+
       // Fetch wallet balance for dialog context
       fetch("/api/wallet/balance")
         .then((res) => (res.ok ? res.json() : null))
@@ -1905,6 +2290,17 @@ function createLifecycle() {
         .catch(() => {
           console.warn("[Tokens] Failed to fetch wallet balance");
         });
+
+      // Handle OHLCV view specially - it has its own poller
+      if (state.view === "ohlcv") {
+        if (ohlcvPoller) {
+          ohlcvPoller.start();
+        } else {
+          // OHLCV poller not initialized yet, fetch data
+          fetchOhlcvData().catch(() => {});
+        }
+        return;
+      }
 
       // Start poller to update "Last Update" display every second
       if (!lastUpdatePoller) {
@@ -1942,6 +2338,8 @@ function createLifecycle() {
     deactivate() {
       table?.cancelPendingLoad();
       // Lifecycle automatically stops managed pollers
+      // Pause OHLCV poller if active
+      if (ohlcvPoller) ohlcvPoller.pause();
     },
 
     dispose() {
@@ -1973,6 +2371,20 @@ function createLifecycle() {
         table.destroy();
         table = null;
       }
+      // Clean up OHLCV table
+      if (ohlcvTable) {
+        ohlcvTable.destroy();
+        ohlcvTable = null;
+      }
+      if (ohlcvPoller) {
+        ohlcvPoller.stop();
+        ohlcvPoller = null;
+      }
+      // Remove OHLCV container
+      const ohlcvContainer = document.querySelector("#ohlcv-table-container");
+      if (ohlcvContainer) {
+        ohlcvContainer.remove();
+      }
       poller = null;
       tabBar = null; // Cleaned up automatically by manageTabBar
       TabBarManager.unregister("tokens");
@@ -1986,6 +2398,10 @@ function createLifecycle() {
       state.summary = { ...DEFAULT_SUMMARY };
       state.hasLoadedOnce = false;
       walletBalance = 0;
+      // Reset OHLCV state
+      ohlcvState.tokens = [];
+      ohlcvState.stats = null;
+      ohlcvState.isLoading = false;
     },
   };
 }

@@ -704,6 +704,13 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 8px;
+}
+
+.card-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .card-header .verified-badge {
@@ -1100,6 +1107,14 @@
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
+  gap: 12px;
+}
+
+.chart-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
 }
 
 .chart-title {
@@ -1220,6 +1235,54 @@
   overflow: hidden;
 }
 
+/* Chart loading overlay */
+.chart-loading-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  z-index: 10;
+  transition: opacity 0.3s ease;
+}
+
+.chart-loading-overlay.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.chart-loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.chart-loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: chart-spinner 1s linear infinite;
+}
+
+@keyframes chart-spinner {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.chart-loading-text {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
 /* =============================================================================
    SECURITY TAB
    ============================================================================= */
@@ -1258,6 +1321,23 @@
   border: 1px solid var(--border-color);
   border-radius: 6px;
   padding: 12px;
+}
+
+.security-header-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.security-header-title .section-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .security-score-container {

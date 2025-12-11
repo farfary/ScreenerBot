@@ -10,12 +10,17 @@ use crate::tokens::types::{TokenError, TokenPoolInfo, TokenResult};
 use crate::tokens::updates::RateLimitCoordinator;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use super::conversion;
 use super::operations::ingest_pool_entry;
 use serde_json::json;
 
+/// Timeout for acquiring rate limit permits (prevents indefinite blocking)
+const RATE_LIMIT_ACQUIRE_TIMEOUT: Duration = Duration::from_secs(5);
+
 /// Fetch pools from all enabled sources (DexScreener + GeckoTerminal)
+/// Uses timeouts on rate limit acquisition to prevent indefinite blocking
 pub async fn fetch_from_sources(
     mint: &str,
     coordinator: Arc<RateLimitCoordinator>,
@@ -34,14 +39,29 @@ pub async fn fetch_from_sources(
         let mint = mint_owned.clone();
         async move {
             if should_fetch_dex {
-                coordinator.acquire_dexscreener_pools().await?;
-                api.dexscreener
-                    .fetch_token_pools(&mint, None)
-                    .await
-                    .map_err(|e| TokenError::Api {
+                // Use timeout to prevent indefinite blocking on rate limit
+                match tokio::time::timeout(
+                    RATE_LIMIT_ACQUIRE_TIMEOUT,
+                    coordinator.acquire_dexscreener_pools(),
+                )
+                .await
+                {
+                    Ok(Ok(())) => {
+                        // Got permit, proceed with fetch
+                        api.dexscreener
+                            .fetch_token_pools(&mint, None)
+                            .await
+                            .map_err(|e| TokenError::Api {
+                                source: "DexScreener".to_string(),
+                                message: e,
+                            })
+                    }
+                    Ok(Err(e)) => Err(e),
+                    Err(_) => Err(TokenError::RateLimit {
                         source: "DexScreener".to_string(),
-                        message: e,
-                    })
+                        message: "Rate limit acquisition timed out".to_string(),
+                    }),
+                }
             } else {
                 Ok(Vec::new())
             }
@@ -54,14 +74,29 @@ pub async fn fetch_from_sources(
         let mint = mint_owned.clone();
         async move {
             if should_fetch_gecko {
-                coordinator.acquire_geckoterminal().await?;
-                api.geckoterminal
-                    .fetch_pools(&mint)
-                    .await
-                    .map_err(|e| TokenError::Api {
+                // Use timeout to prevent indefinite blocking on rate limit
+                match tokio::time::timeout(
+                    RATE_LIMIT_ACQUIRE_TIMEOUT,
+                    coordinator.acquire_geckoterminal(),
+                )
+                .await
+                {
+                    Ok(Ok(())) => {
+                        // Got permit, proceed with fetch
+                        api.geckoterminal
+                            .fetch_pools(&mint)
+                            .await
+                            .map_err(|e| TokenError::Api {
+                                source: "GeckoTerminal".to_string(),
+                                message: e,
+                            })
+                    }
+                    Ok(Err(e)) => Err(e),
+                    Err(_) => Err(TokenError::RateLimit {
                         source: "GeckoTerminal".to_string(),
-                        message: e,
-                    })
+                        message: "Rate limit acquisition timed out".to_string(),
+                    }),
+                }
             } else {
                 Ok(Vec::new())
             }

@@ -2095,12 +2095,14 @@ impl TokenDatabase {
         };
 
         // Build query (always join market tables so we can populate Token fields consistently)
+        // PERF: This single query with JOINs avoids N+1 problem for filtering
         let select_base = r#"
             SELECT
                 t.mint, t.symbol, t.name, t.decimals,
                 t.first_discovered_at, t.blockchain_created_at,
                 t.metadata_last_fetched_at, t.decimals_last_fetched_at,
                 sr.score, sr.rugged, sr.security_data_last_fetched_at,
+                sr.mint_authority, sr.freeze_authority,
                 bl.reason as blacklist_reason,
                 ut.priority, ut.pool_price_last_calculated_at, ut.pool_price_last_used_pool_address,
                 d.price_usd, d.price_sol, d.price_native,
@@ -2152,69 +2154,71 @@ impl TokenDatabase {
                 let metadata_last_fetched_at: i64 = row.get(6)?;
                 let decimals_last_fetched_at: i64 = row.get(7)?;
 
-                // Security data (optional) - now includes timestamp
+                // Security data (optional) - includes authority fields for filtering
                 let security_score: Option<i32> = row.get(8)?;
                 let is_rugged: bool = row
                     .get::<_, Option<i64>>(9)?
                     .map(|v| v != 0)
                     .unwrap_or(false);
                 let security_data_last_fetched_at: Option<i64> = row.get(10)?;
+                let mint_authority: Option<String> = row.get(11)?;
+                let freeze_authority: Option<String> = row.get(12)?;
 
                 // Blacklist status
-                let is_blacklisted = row.get::<_, Option<String>>(11)?.is_some();
+                let is_blacklisted = row.get::<_, Option<String>>(13)?.is_some();
 
                 // Priority and pool price tracking
-                let priority_value: Option<i32> = row.get(12)?;
-                let pool_price_last_calculated_at: Option<i64> = row.get(13)?;
-                let pool_price_last_used_pool: Option<String> = row.get(14)?;
+                let priority_value: Option<i32> = row.get(14)?;
+                let pool_price_last_calculated_at: Option<i64> = row.get(15)?;
+                let pool_price_last_used_pool: Option<String> = row.get(16)?;
 
-                // DexScreener fields 15..=35
-                let d_price_usd: Option<f64> = row.get(15)?;
-                let d_price_sol: Option<f64> = row.get(16)?;
-                let d_price_native: Option<String> = row.get(17)?;
-                let d_change_5m: Option<f64> = row.get(18)?;
-                let d_change_1h: Option<f64> = row.get(19)?;
-                let d_change_6h: Option<f64> = row.get(20)?;
-                let d_change_24h: Option<f64> = row.get(21)?;
-                let d_market_cap: Option<f64> = row.get(22)?;
-                let d_fdv: Option<f64> = row.get(23)?;
-                let d_liquidity_usd: Option<f64> = row.get(24)?;
-                let d_vol_5m: Option<f64> = row.get(25)?;
-                let d_vol_1h: Option<f64> = row.get(26)?;
-                let d_vol_6h: Option<f64> = row.get(27)?;
-                let d_vol_24h: Option<f64> = row.get(28)?;
-                let d_txn_5m_buys: Option<i64> = row.get(29)?;
-                let d_txn_5m_sells: Option<i64> = row.get(30)?;
-                let d_txn_1h_buys: Option<i64> = row.get(31)?;
-                let d_txn_1h_sells: Option<i64> = row.get(32)?;
-                let d_txn_6h_buys: Option<i64> = row.get(33)?;
-                let d_txn_6h_sells: Option<i64> = row.get(34)?;
-                let d_txn_24h_buys: Option<i64> = row.get(35)?;
-                let d_txn_24h_sells: Option<i64> = row.get(36)?;
-                let d_market_data_last_fetched_at: Option<i64> = row.get(37)?;
-                let d_image_url: Option<String> = row.get(38)?;
-                let d_header_image_url: Option<String> = row.get(39)?;
-                let d_pair_blockchain_created_at: Option<i64> = row.get(40)?;
+                // DexScreener fields 17..=37
+                let d_price_usd: Option<f64> = row.get(17)?;
+                let d_price_sol: Option<f64> = row.get(18)?;
+                let d_price_native: Option<String> = row.get(19)?;
+                let d_change_5m: Option<f64> = row.get(20)?;
+                let d_change_1h: Option<f64> = row.get(21)?;
+                let d_change_6h: Option<f64> = row.get(22)?;
+                let d_change_24h: Option<f64> = row.get(23)?;
+                let d_market_cap: Option<f64> = row.get(24)?;
+                let d_fdv: Option<f64> = row.get(25)?;
+                let d_liquidity_usd: Option<f64> = row.get(26)?;
+                let d_vol_5m: Option<f64> = row.get(27)?;
+                let d_vol_1h: Option<f64> = row.get(28)?;
+                let d_vol_6h: Option<f64> = row.get(29)?;
+                let d_vol_24h: Option<f64> = row.get(30)?;
+                let d_txn_5m_buys: Option<i64> = row.get(31)?;
+                let d_txn_5m_sells: Option<i64> = row.get(32)?;
+                let d_txn_1h_buys: Option<i64> = row.get(33)?;
+                let d_txn_1h_sells: Option<i64> = row.get(34)?;
+                let d_txn_6h_buys: Option<i64> = row.get(35)?;
+                let d_txn_6h_sells: Option<i64> = row.get(36)?;
+                let d_txn_24h_buys: Option<i64> = row.get(37)?;
+                let d_txn_24h_sells: Option<i64> = row.get(38)?;
+                let d_market_data_last_fetched_at: Option<i64> = row.get(39)?;
+                let d_image_url: Option<String> = row.get(40)?;
+                let d_header_image_url: Option<String> = row.get(41)?;
+                let d_pair_blockchain_created_at: Option<i64> = row.get(42)?;
 
-                // GeckoTerminal fields 41..=54
-                let g_price_usd: Option<f64> = row.get(41)?;
-                let g_price_sol: Option<f64> = row.get(42)?;
-                let g_price_native: Option<String> = row.get(43)?;
-                let g_change_5m: Option<f64> = row.get(44)?;
-                let g_change_1h: Option<f64> = row.get(45)?;
-                let g_change_6h: Option<f64> = row.get(46)?;
-                let g_change_24h: Option<f64> = row.get(47)?;
-                let g_market_cap: Option<f64> = row.get(48)?;
-                let g_fdv: Option<f64> = row.get(49)?;
-                let g_liquidity_usd: Option<f64> = row.get(50)?;
-                let g_vol_5m: Option<f64> = row.get(51)?;
-                let g_vol_1h: Option<f64> = row.get(52)?;
-                let g_vol_6h: Option<f64> = row.get(53)?;
-                let g_vol_24h: Option<f64> = row.get(54)?;
-                let g_pool_count: Option<i64> = row.get(55)?;
-                let g_reserve_in_usd: Option<f64> = row.get(56)?;
-                let g_market_data_last_fetched_at: Option<i64> = row.get(57)?;
-                let g_image_url: Option<String> = row.get(58)?;
+                // GeckoTerminal fields 43..=60
+                let g_price_usd: Option<f64> = row.get(43)?;
+                let g_price_sol: Option<f64> = row.get(44)?;
+                let g_price_native: Option<String> = row.get(45)?;
+                let g_change_5m: Option<f64> = row.get(46)?;
+                let g_change_1h: Option<f64> = row.get(47)?;
+                let g_change_6h: Option<f64> = row.get(48)?;
+                let g_change_24h: Option<f64> = row.get(49)?;
+                let g_market_cap: Option<f64> = row.get(50)?;
+                let g_fdv: Option<f64> = row.get(51)?;
+                let g_liquidity_usd: Option<f64> = row.get(52)?;
+                let g_vol_5m: Option<f64> = row.get(53)?;
+                let g_vol_1h: Option<f64> = row.get(54)?;
+                let g_vol_6h: Option<f64> = row.get(55)?;
+                let g_vol_24h: Option<f64> = row.get(56)?;
+                let g_pool_count: Option<i64> = row.get(57)?;
+                let g_reserve_in_usd: Option<f64> = row.get(58)?;
+                let g_market_data_last_fetched_at: Option<i64> = row.get(59)?;
+                let g_image_url: Option<String> = row.get(60)?;
 
                 Ok((
                     mint,
@@ -2228,6 +2232,8 @@ impl TokenDatabase {
                     security_score,
                     is_rugged,
                     security_data_last_fetched_at,
+                    mint_authority,
+                    freeze_authority,
                     is_blacklisted,
                     priority_value,
                     pool_price_last_calculated_at,
@@ -2296,6 +2302,8 @@ impl TokenDatabase {
                 security_score,
                 is_rugged,
                 security_data_last_fetched_at,
+                mint_authority,
+                freeze_authority,
                 is_blacklisted,
                 priority_value,
                 pool_price_last_calculated_at,
@@ -2668,9 +2676,9 @@ impl TokenDatabase {
                 websites: vec![],
                 socials: vec![],
 
-                // Security Information
-                mint_authority: None,
-                freeze_authority: None,
+                // Security Information - authority fields loaded for filtering
+                mint_authority,
+                freeze_authority,
                 security_score,
                 security_score_normalised: None, // Not loaded in this query
                 is_rugged,
@@ -3290,6 +3298,21 @@ pub async fn get_all_tokens_optional_market_async(
             sort_by.as_deref(),
             sort_direction.as_deref(),
         )
+    })
+    .await
+    .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async: Load ALL tokens in a single batch query for filtering.
+/// PERF: Uses efficient JOINs to avoid N+1 query problem.
+/// Returns all tokens with market data and security fields needed for filtering.
+pub async fn get_all_tokens_for_filtering_async() -> TokenResult<Vec<Token>> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+
+    tokio::task::spawn_blocking(move || {
+        // Use limit=0 to get ALL tokens, no sorting needed for filtering
+        db.get_all_tokens_optional_market(0, 0, None, None)
     })
     .await
     .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?

@@ -7,7 +7,7 @@ use crate::ohlcvs::types::{OhlcvError, OhlcvResult, PoolConfig, PoolMetadata};
 use crate::tokens::pools;
 use crate::tokens::types::{TokenPoolInfo, TokenPoolsSnapshot};
 use crate::tokens::{
-    get_token_pools_snapshot, get_token_pools_snapshot_allow_stale, prefetch_token_pools,
+    fetch_token_pools_immediate, get_token_pools_snapshot_allow_stale,
 };
 use serde_json::json;
 use std::cmp::Ordering;
@@ -160,6 +160,7 @@ impl PoolManager {
     }
 
     /// Discover and register pools for a token using centralized token snapshots.
+    /// Uses immediate fetch (bypasses background queue) for fast response.
     pub async fn discover_pools(&self, mint: &str) -> OhlcvResult<Vec<PoolConfig>> {
         record_ohlcv_event(
             "pool_discovery_start",
@@ -172,10 +173,32 @@ impl PoolManager {
         )
         .await;
 
-        prefetch_token_pools(&[mint.to_string()]).await;
-
-        let snapshot = match Self::load_snapshot_with_fallback(mint).await {
-            Ok(snapshot) => snapshot,
+        // Use immediate fetch instead of background prefetch for user-viewed tokens
+        let snapshot = match fetch_token_pools_immediate(mint).await {
+            Ok(Some(snapshot)) => snapshot,
+            Ok(None) => {
+                // Try stale fallback
+                match get_token_pools_snapshot_allow_stale(mint).await {
+                    Ok(Some(snapshot)) => snapshot,
+                    Ok(None) | Err(_) => {
+                        record_ohlcv_event(
+                            "pool_discovery_error",
+                            Severity::Error,
+                            Some(mint),
+                            None,
+                            json!({
+                                "mint": mint,
+                                "error": "No pool snapshot available",
+                            }),
+                        )
+                        .await;
+                        return Err(OhlcvError::NotFound(format!(
+                            "No pool snapshot available for mint {}",
+                            mint
+                        )));
+                    }
+                }
+            }
             Err(err) => {
                 record_ohlcv_event(
                     "pool_discovery_error",
@@ -188,7 +211,7 @@ impl PoolManager {
                     }),
                 )
                 .await;
-                return Err(err);
+                return Err(OhlcvError::ApiError(err.to_string()));
             }
         };
 
@@ -314,95 +337,6 @@ impl PoolManager {
         .await;
 
         Ok(discovered_configs)
-    }
-
-    async fn load_snapshot_with_fallback(mint: &str) -> OhlcvResult<TokenPoolsSnapshot> {
-        match get_token_pools_snapshot(mint).await {
-            Ok(Some(snapshot)) => Ok(snapshot),
-            Ok(None) => {
-                record_ohlcv_event(
-                    "pool_discovery_snapshot_missing",
-                    Severity::Warn,
-                    Some(mint),
-                    None,
-                    json!({
-                        "mint": mint,
-                        "reason": "no_fresh_snapshot",
-                    }),
-                )
-                .await;
-
-                logger::debug(
-                    LogTag::Ohlcv,
-                    &format!(
-                        "No fresh pool snapshot for mint={} – attempting stale fallback",
-                        mint
-                    ),
-                );
-
-                Self::load_stale_snapshot(mint).await
-            }
-            Err(err) => {
-                let message = err.to_string();
-                record_ohlcv_event(
-                    "pool_discovery_snapshot_error",
-                    Severity::Error,
-                    Some(mint),
-                    None,
-                    json!({
-                        "mint": mint,
-                        "error": message,
-                    }),
-                )
-                .await;
-
-                logger::warning(
-                    LogTag::Ohlcv,
-                    &format!(
-                        "Pool snapshot fetch failed for mint={} error={} – attempting stale fallback",
-                        mint, message
-                    ),
-                );
-
-                Self::load_stale_snapshot(mint).await
-            }
-        }
-    }
-
-    async fn load_stale_snapshot(mint: &str) -> OhlcvResult<TokenPoolsSnapshot> {
-        match get_token_pools_snapshot_allow_stale(mint).await {
-            Ok(Some(snapshot)) => {
-                record_ohlcv_event(
-                    "pool_discovery_snapshot_stale",
-                    Severity::Warn,
-                    Some(mint),
-                    None,
-                    json!({
-                        "mint": mint,
-                        "fetched_at": snapshot.pool_data_last_fetched_at,
-                    }),
-                )
-                .await;
-
-                logger::warning(
-                    LogTag::Ohlcv,
-                    &format!(
-                        "Using stale pool snapshot for mint={} fetched_at={}",
-                        mint, snapshot.pool_data_last_fetched_at
-                    ),
-                );
-
-                Ok(snapshot)
-            }
-            Ok(None) => Err(OhlcvError::NotFound(format!(
-                "No pool snapshot available for mint {}",
-                mint
-            ))),
-            Err(err) => Err(OhlcvError::ApiError(format!(
-                "Failed to load stale pool snapshot for {}: {}",
-                mint, err
-            ))),
-        }
     }
 
     fn merge_pool_info(

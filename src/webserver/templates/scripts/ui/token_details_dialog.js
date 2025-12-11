@@ -7,6 +7,8 @@ import * as Utils from "../core/utils.js";
 import { Poller } from "../core/poller.js";
 import { requestManager } from "../core/request_manager.js";
 import { TradeActionDialog } from "./trade_action_dialog.js";
+import * as Hints from "../core/hints.js";
+import { HintTrigger } from "./hint_popover.js";
 
 export class TokenDetailsDialog {
   constructor(options = {}) {
@@ -26,6 +28,7 @@ export class TokenDetailsDialog {
     this.walletBalance = 0;
     this.walletBalanceFetchedAt = 0;
     this.advancedChart = null;
+    this.chartDataLoaded = false; // Track whether OHLCV data has been loaded
   }
 
   /**
@@ -58,9 +61,21 @@ export class TokenDetailsDialog {
 
     try {
       this.tokenData = tokenData;
+      // Use initial tokenData for immediate display (don't wait for API)
+      // fullTokenData will be updated by polling when fresh data arrives
+      this.fullTokenData = tokenData;
+      // Reset chart data state for new token
+      this.chartDataLoaded = false;
+
+      // Initialize hints system before creating dialog
+      await Hints.init();
+
       this._createDialog();
       this._attachEventHandlers();
       this._loadTabContent("overview");
+
+      // Initialize hint triggers after content is loaded
+      HintTrigger.initAll();
 
       requestAnimationFrame(() => {
         if (this.dialogEl) {
@@ -68,19 +83,23 @@ export class TokenDetailsDialog {
         }
       });
 
+      // Trigger backend refresh endpoints in parallel (fire and forget)
+      // These trigger high-priority data fetching on backend
+      // Don't await - let them run in background while dialog shows
       this._triggerTokenRefresh().catch((err) => {
         console.warn("Token refresh failed:", err);
       });
-
-      this._triggerOhlcvRefresh().catch((err) => {
-        // Silent - expected for new tokens
+      this._triggerOhlcvRefresh().catch(() => {
+        // Silent - expected for new tokens without OHLCV
       });
 
-      this._fetchTokenData().catch((err) => {
-        console.error("Failed to fetch token data:", err);
-      });
-
-      this._startPolling();
+      // Start polling after a short delay to give refresh time to start
+      // The poller will fetch fresh data as it becomes available
+      setTimeout(() => {
+        if (this.dialogEl) {
+          this._startPolling();
+        }
+      }, 500);
     } finally {
       this.isOpening = false;
     }
@@ -88,30 +107,36 @@ export class TokenDetailsDialog {
 
   async _triggerTokenRefresh() {
     try {
-      const response = await fetch(`/api/tokens/${this.tokenData.mint}/refresh`, {
+      // Use requestManager with high priority for immediate refresh
+      const response = await requestManager.fetch(`/api/tokens/${this.tokenData.mint}/refresh`, {
         method: "POST",
+        priority: "high",
       });
-      if (response.ok) {
-        const result = await response.json();
-        console.log("Token data refresh triggered:", result);
+      if (response.success !== false) {
+        console.log("Token data refresh triggered:", response);
+        return response;
       }
     } catch (error) {
       console.warn("Failed to trigger token refresh:", error);
     }
+    return null;
   }
 
   async _triggerOhlcvRefresh() {
     try {
-      const response = await fetch(`/api/tokens/${this.tokenData.mint}/ohlcv/refresh`, {
+      // Use requestManager with high priority for immediate OHLCV refresh
+      const response = await requestManager.fetch(`/api/tokens/${this.tokenData.mint}/ohlcv/refresh`, {
         method: "POST",
+        priority: "high",
       });
-      if (response.ok) {
-        const result = await response.json();
-        console.log("OHLCV data refresh triggered:", result);
+      if (response.success !== false) {
+        console.log("OHLCV data refresh triggered:", response);
+        return response;
       }
     } catch (error) {
       // Silently ignore - OHLCV may not be available for new tokens
     }
+    return null;
   }
 
   async _fetchTokenData() {
@@ -119,11 +144,10 @@ export class TokenDetailsDialog {
     this.isRefreshing = true;
 
     try {
-      const response = await fetch(`/api/tokens/${this.tokenData.mint}`);
-      if (!response.ok) {
-        throw new Error(`Failed to fetch token details: ${response.statusText}`);
-      }
-      const newData = await response.json();
+      // Use requestManager with high priority for token detail fetch
+      const newData = await requestManager.fetch(`/api/tokens/${this.tokenData.mint}`, {
+        priority: "high",
+      });
       const isInitialLoad = !this.fullTokenData;
       this.fullTokenData = newData;
       this._updateHeader(this.fullTokenData);
@@ -165,11 +189,13 @@ export class TokenDetailsDialog {
 
   _startChartPolling() {
     this._stopChartPolling();
+    // Use faster polling (1.5s) when waiting for data, slower (5s) when data loaded
+    const interval = this.chartDataLoaded ? 5000 : 1500;
     this.chartPoller = new Poller(
       () => {
         this._refreshChartData();
       },
-      { label: "ChartRefresh", interval: 5000 }
+      { label: "ChartRefresh", interval }
     );
     this.chartPoller.start();
   }
@@ -187,14 +213,28 @@ export class TokenDetailsDialog {
       return;
     }
 
-    try {
-      const response = await fetch(
-        `/api/tokens/${this.tokenData.mint}/ohlcv?timeframe=${this.currentTimeframe}&limit=200`
-      );
-      if (!response.ok) return;
+    const loadingOverlay = this.dialogEl?.querySelector("#chartLoadingOverlay");
+    const loadingText = loadingOverlay?.querySelector(".chart-loading-text");
+    const wasDataLoaded = this.chartDataLoaded;
 
-      const data = await response.json();
-      if (!Array.isArray(data) || data.length === 0) return;
+    try {
+      // Use requestManager with normal priority for periodic chart refresh
+      const data = await requestManager.fetch(
+        `/api/tokens/${this.tokenData.mint}/ohlcv?timeframe=${this.currentTimeframe}&limit=200`,
+        { priority: "normal" }
+      );
+
+      if (!Array.isArray(data) || data.length === 0) {
+        // No data yet - keep showing waiting message
+        if (loadingText) {
+          loadingText.textContent = "Waiting for chart data...";
+        }
+        if (loadingOverlay) {
+          loadingOverlay.classList.remove("hidden");
+        }
+        this.chartDataLoaded = false;
+        return;
+      }
 
       const chartData = data.map((candle) => ({
         time: candle.timestamp,
@@ -206,8 +246,28 @@ export class TokenDetailsDialog {
       }));
 
       this.advancedChart.setData(chartData);
+
+      // Hide loading overlay and mark data as loaded
+      if (loadingOverlay) {
+        loadingOverlay.classList.add("hidden");
+      }
+      this.chartDataLoaded = true;
+
+      // Update OHLCV display
+      this._updateOhlcvDisplay(chartData);
+
+      // If data just loaded (was not loaded before), restart polling with slower interval
+      if (!wasDataLoaded && this.chartDataLoaded) {
+        this._startChartPolling();
+      }
     } catch (error) {
-      // Silently fail
+      // On error when no data yet, keep showing waiting message
+      if (!this.chartDataLoaded && loadingText) {
+        loadingText.textContent = "Waiting for chart data...";
+      }
+      if (!this.chartDataLoaded && loadingOverlay) {
+        loadingOverlay.classList.remove("hidden");
+      }
     }
   }
 
@@ -224,6 +284,16 @@ export class TokenDetailsDialog {
 
   close() {
     if (!this.dialogEl) return;
+
+    // Deprioritize token OHLCV monitoring when dialog closes (fire and forget)
+    if (this.tokenData?.mint) {
+      requestManager.fetch(`/api/tokens/${this.tokenData.mint}/ohlcv/deprioritize`, {
+        method: "POST",
+        priority: "low",
+      }).catch(() => {
+        // Silent - deprioritize is best-effort
+      });
+    }
 
     this._stopPolling();
     this._stopChartPolling();
@@ -749,6 +819,10 @@ export class TokenDetailsDialog {
         <div class="overview-right">
           <div class="chart-container">
             <div class="chart-header">
+              <div class="chart-header-left">
+                <span class="chart-title">Price Chart</span>
+                ${this._renderHintTrigger("tokenDetails.chart")}
+              </div>
               <div class="chart-ohlcv-display" id="chartOhlcvDisplay">
                 <span class="ohlcv-item"><span class="ohlcv-label">O</span> <span class="ohlcv-value" id="ohlcvOpen">—</span></span>
                 <span class="ohlcv-item"><span class="ohlcv-label">H</span> <span class="ohlcv-value" id="ohlcvHigh">—</span></span>
@@ -769,6 +843,12 @@ export class TokenDetailsDialog {
               </div>
             </div>
             <div id="tradingview-chart" class="tradingview-chart"></div>
+            <div id="chartLoadingOverlay" class="chart-loading-overlay">
+              <div class="chart-loading-content">
+                <div class="chart-loading-spinner"></div>
+                <div class="chart-loading-text">Loading chart data...</div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -830,7 +910,10 @@ export class TokenDetailsDialog {
       <div class="info-card compact">
         <div class="card-header">
           <span>Token Info</span>
-          ${token.verified ? '<span class="verified-badge">✓ Verified</span>' : ""}
+          <div class="card-header-actions">
+            ${token.verified ? '<span class="verified-badge">✓ Verified</span>' : ""}
+            ${this._renderHintTrigger("tokenDetails.tokenInfo")}
+          </div>
         </div>
         <div class="card-body">
           <div class="info-grid-2col">
@@ -873,7 +956,10 @@ export class TokenDetailsDialog {
   _buildLiquidityCard(token) {
     return `
       <div class="info-card compact">
-        <div class="card-header">Liquidity & Market</div>
+        <div class="card-header">
+          <span>Liquidity & Market</span>
+          ${this._renderHintTrigger("tokenDetails.liquidity")}
+        </div>
         <div class="card-body">
           <div class="info-grid-2col">
             <div class="info-cell highlight">
@@ -908,7 +994,10 @@ export class TokenDetailsDialog {
     const changes = token.price_change_periods || {};
     return `
       <div class="info-card compact">
-        <div class="card-header">Price Changes</div>
+        <div class="card-header">
+          <span>Price Changes</span>
+          ${this._renderHintTrigger("tokenDetails.priceChanges")}
+        </div>
         <div class="card-body">
           <div class="change-grid">
             <div class="change-item">
@@ -937,7 +1026,10 @@ export class TokenDetailsDialog {
     const volumes = token.volume_periods || {};
     return `
       <div class="info-card compact">
-        <div class="card-header">Trading Volume</div>
+        <div class="card-header">
+          <span>Trading Volume</span>
+          ${this._renderHintTrigger("tokenDetails.volume")}
+        </div>
         <div class="card-body">
           <div class="volume-grid-4">
             <div class="volume-item">
@@ -971,7 +1063,10 @@ export class TokenDetailsDialog {
       <div class="info-card compact">
         <div class="card-header">
           <span>Transaction Activity</span>
-          ${buySellRatio ? `<span class="ratio-badge ${ratioClass}">${buySellRatio.toFixed(2)} B/S</span>` : ""}
+          <div class="card-header-actions">
+            ${buySellRatio ? `<span class="ratio-badge ${ratioClass}">${buySellRatio.toFixed(2)} B/S</span>` : ""}
+            ${this._renderHintTrigger("tokenDetails.activity")}
+          </div>
         </div>
         <div class="card-body">
           <div class="txn-grid">
@@ -1081,6 +1176,10 @@ export class TokenDetailsDialog {
 
     return `
       <div class="security-header">
+        <div class="security-header-title">
+          <span class="section-title">Security Analysis</span>
+          ${this._renderHintTrigger("tokenDetails.security")}
+        </div>
         <div class="security-score-container">
           <div class="security-score-circle">
             <svg class="score-progress" width="100" height="100" viewBox="0 0 100 100">
@@ -1780,7 +1879,10 @@ export class TokenDetailsDialog {
     const leftCol = `
       <div class="pools-left-col">
         <div class="pools-summary-card">
-          <div class="pools-summary-title">Pool Summary</div>
+          <div class="pools-summary-title">
+            <span>Pool Summary</span>
+            ${this._renderHintTrigger("tokenDetails.pools")}
+          </div>
           <div class="pools-summary-stats">
             <div class="pools-stat">
               <span class="pools-stat-label">Total Pools</span>
@@ -2454,12 +2556,26 @@ export class TokenDetailsDialog {
   }
 
   async _loadChartData(mint, timeframe, isInitialLoad = false) {
-    try {
-      const response = await fetch(`/api/tokens/${mint}/ohlcv?timeframe=${timeframe}`);
-      if (!response.ok) return;
+    const loadingOverlay = this.dialogEl?.querySelector("#chartLoadingOverlay");
+    const loadingText = loadingOverlay?.querySelector(".chart-loading-text");
 
-      const data = await response.json();
-      if (!Array.isArray(data) || data.length === 0) return;
+    try {
+      // Use requestManager with high priority for initial chart data load
+      const data = await requestManager.fetch(`/api/tokens/${mint}/ohlcv?timeframe=${timeframe}`, {
+        priority: isInitialLoad ? "high" : "normal",
+      });
+
+      if (!Array.isArray(data) || data.length === 0) {
+        // No data yet - show waiting message
+        if (loadingText) {
+          loadingText.textContent = "Waiting for chart data...";
+        }
+        if (loadingOverlay) {
+          loadingOverlay.classList.remove("hidden");
+        }
+        this.chartDataLoaded = false;
+        return;
+      }
 
       if (!this.advancedChart) return;
 
@@ -2475,6 +2591,12 @@ export class TokenDetailsDialog {
       // setData now respects user interactions - only fits on first load
       this.advancedChart.setData(chartData);
 
+      // Hide loading overlay when data arrives
+      if (loadingOverlay) {
+        loadingOverlay.classList.add("hidden");
+      }
+      this.chartDataLoaded = true;
+
       // Update OHLCV display with latest candle
       this._updateOhlcvDisplay(chartData);
 
@@ -2489,7 +2611,14 @@ export class TokenDetailsDialog {
         this.advancedChart.setVisibleRange(80);
       }
     } catch (error) {
-      // Silently fail
+      // On error, show waiting message
+      if (loadingText) {
+        loadingText.textContent = "Waiting for chart data...";
+      }
+      if (loadingOverlay) {
+        loadingOverlay.classList.remove("hidden");
+      }
+      this.chartDataLoaded = false;
     }
   }
 
@@ -2551,6 +2680,15 @@ export class TokenDetailsDialog {
   _getChangeClass(value) {
     if (value === null || value === undefined) return "";
     return value >= 0 ? "positive" : "negative";
+  }
+
+  /**
+   * Render a hint trigger for card headers
+   */
+  _renderHintTrigger(hintKey) {
+    const hint = Hints.getHint(hintKey);
+    if (!hint) return "";
+    return HintTrigger.render(hint, hintKey, { size: "sm", position: "bottom" });
   }
 
   _escapeHtml(text) {

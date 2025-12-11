@@ -4,18 +4,18 @@ use crate::config::FilteringConfig;
 use crate::filtering::sources::FilterRejectionReason;
 use crate::positions;
 use crate::tokens::types::Token;
-use crate::tokens::{self, get_cached_decimals, get_decimals};
+use crate::tokens::{self, get_cached_decimals};
 
 /// Evaluate meta-level filters that apply regardless of external data sources.
 pub async fn evaluate(
     token: &Token,
     config: &FilteringConfig,
 ) -> Result<(), FilterRejectionReason> {
-    // ALWAYS check decimals - this is a fundamental requirement
+    // PERF: Check decimals from cache only - no chain fetching during filtering.
+    // If decimals aren't cached, the token isn't ready for trading anyway.
+    // This avoids N chain calls for tokens without cached decimals.
     if !has_cached_decimals(&token.mint) {
-        if get_decimals(&token.mint).await.is_none() {
-            return Err(FilterRejectionReason::NoDecimalsInDatabase);
-        }
+        return Err(FilterRejectionReason::NoDecimalsInDatabase);
     }
 
     if config.age_enabled && is_too_new(token, config) {

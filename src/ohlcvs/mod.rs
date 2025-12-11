@@ -18,6 +18,7 @@ pub use types::{
     TimeframeBundle, TokenOhlcvConfig, BUNDLE_CANDLE_COUNT,
 };
 
+pub use database::{DatabaseStats, DeleteResult, OhlcvTokenStatus};
 pub use monitor::{MonitorStats, MonitorTelemetrySnapshot};
 pub use priorities::ActivityType;
 pub use service::OhlcvService;
@@ -85,6 +86,10 @@ pub async fn remove_token_monitoring(mint: &str) -> OhlcvResult<()> {
     service::remove_token_monitoring(mint).await
 }
 
+pub async fn update_token_priority(mint: &str, priority: Priority) -> OhlcvResult<()> {
+    service::update_token_priority(mint, priority).await
+}
+
 pub async fn record_activity(mint: &str, activity_type: ActivityType) -> OhlcvResult<()> {
     service::record_activity(mint, activity_type).await
 }
@@ -100,4 +105,21 @@ pub async fn build_timeframe_bundle(mint: &str) -> OhlcvResult<TimeframeBundle> 
 
 pub async fn store_bundle(mint: String, bundle: TimeframeBundle) -> OhlcvResult<()> {
     service::store_bundle(mint, bundle).await
+}
+
+// OHLCV listing and management API
+pub async fn get_all_tokens_with_status() -> OhlcvResult<Vec<OhlcvTokenStatus>> {
+    service::get_all_tokens_with_status().await
+}
+
+pub async fn delete_token_data(mint: &str) -> OhlcvResult<DeleteResult> {
+    service::delete_token_data(mint).await
+}
+
+pub async fn delete_inactive_tokens(inactive_hours: i64) -> OhlcvResult<Vec<String>> {
+    service::delete_inactive_tokens(inactive_hours).await
+}
+
+pub async fn get_database_stats() -> OhlcvResult<DatabaseStats> {
+    service::get_database_stats().await
 }

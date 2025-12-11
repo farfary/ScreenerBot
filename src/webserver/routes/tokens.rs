@@ -520,6 +520,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     .route("/tokens/:mint/refresh", post(refresh_token_data))
     .route("/tokens/:mint/ohlcv", get(get_token_ohlcv))
     .route("/tokens/:mint/ohlcv/refresh", post(refresh_token_ohlcv))
+    .route("/tokens/:mint/ohlcv/deprioritize", post(deprioritize_token_ohlcv))
     .route("/tokens/:mint/dexscreener", get(get_token_dexscreener))
 }
 
@@ -968,7 +969,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
   let priority = if has_open_position {
     crate::ohlcvs::Priority::Critical
   } else {
-    crate::ohlcvs::Priority::Medium // User is viewing, so medium priority
+    crate::ohlcvs::Priority::High // User is actively viewing, high priority for fast data
   };
 
   if let Err(e) = crate::ohlcvs::add_token_monitoring(&mint, priority).await {
@@ -1362,6 +1363,53 @@ async fn refresh_token_ohlcv(
         "success": true,
         "mint": mint,
         "message": "OHLCV monitoring active, data pending pool availability",
+      })))
+    }
+  }
+}
+
+/// Deprioritize token OHLCV monitoring (when user closes token detail dialog)
+async fn deprioritize_token_ohlcv(
+  Path(mint): Path<String>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
+  logger::debug(
+    LogTag::Webserver,
+    &format!("OHLCV deprioritize requested for mint={}", mint),
+  );
+
+  // Don't deprioritize if this is an open position
+  let is_open_position = positions::is_open_position(&mint).await;
+  if is_open_position {
+    return Ok(Json(serde_json::json!({
+      "success": true,
+      "mint": mint,
+      "message": "Token is open position, priority unchanged",
+    })));
+  }
+
+  // Downgrade to Medium priority (normal monitoring level)
+  match crate::ohlcvs::update_token_priority(&mint, crate::ohlcvs::Priority::Medium).await {
+    Ok(_) => {
+      logger::debug(
+        LogTag::Webserver,
+        &format!("mint={} ohlcv_deprioritized", mint),
+      );
+      Ok(Json(serde_json::json!({
+        "success": true,
+        "mint": mint,
+        "message": "OHLCV priority reduced",
+      })))
+    }
+    Err(e) => {
+      // Not an error if token wasn't being monitored
+      logger::debug(
+        LogTag::Webserver,
+        &format!("mint={} ohlcv_deprioritize_skipped error={}", mint, e),
+      );
+      Ok(Json(serde_json::json!({
+        "success": true,
+        "mint": mint,
+        "message": "Token not in OHLCV monitoring",
       })))
     }
   }
