@@ -298,6 +298,7 @@ async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String>) -
         "action_bar.js" => Some(templates::ACTION_BAR_UI),
         "table_settings_dialog.js" => Some(templates::TABLE_SETTINGS_DIALOG_UI),
         "token_details_dialog.js" => Some(templates::TOKEN_DETAILS_DIALOG_UI),
+        "transaction_details_dialog.js" => Some(templates::TRANSACTION_DETAILS_DIALOG_UI),
         "context_menu.js" => Some(templates::CONTEXT_MENU_UI),
         "advanced_chart.js" => Some(templates::ADVANCED_CHART_UI),
         "settings_dialog.js" => Some(templates::SETTINGS_DIALOG_UI),

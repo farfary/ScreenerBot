@@ -1,0 +1,1094 @@
+/* Transaction Details Dialog Styles */
+
+/* =============================================================================
+   BASE DIALOG STRUCTURE - Full Screen Desktop App Style
+   ============================================================================= */
+
+.transaction-details-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.transaction-details-dialog.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Title bar area - same background as dialog content for seamless look */
+.transaction-details-dialog::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  background: var(--bg-secondary);
+  z-index: 1;
+}
+
+/* Backdrop - covers area below title bar */
+.transaction-details-dialog .dialog-backdrop {
+  position: absolute;
+  inset: 28px 0 24px;
+  background: transparent;
+  cursor: default;
+}
+
+.transaction-details-dialog .dialog-container {
+  position: relative;
+  margin-top: 28px;
+  margin-bottom: 24px;
+  background: var(--bg-primary);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  width: 100%;
+  flex: 1;
+  max-width: none;
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: tx-dialog-fade-in 0.25s ease-out;
+  z-index: 2;
+}
+
+@keyframes tx-dialog-fade-in {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+/* =============================================================================
+   HEADER
+   ============================================================================= */
+
+.transaction-details-dialog .dialog-header {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.transaction-details-dialog .header-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  gap: 16px;
+  min-height: 56px;
+}
+
+.transaction-details-dialog .header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+}
+
+.transaction-details-dialog .header-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.transaction-details-dialog .header-icon i {
+  font-size: 16px;
+  color: var(--text-secondary);
+}
+
+.transaction-details-dialog .header-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.transaction-details-dialog .title-main {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.transaction-details-dialog .title-sub {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.transaction-details-dialog .header-center {
+  flex: 1 1 auto;
+  display: flex;
+  justify-content: center;
+}
+
+.transaction-details-dialog .header-badges {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.transaction-details-dialog .header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
+.transaction-details-dialog .header-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.transaction-details-dialog .action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+
+.transaction-details-dialog .action-btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.transaction-details-dialog .dialog-close {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.transaction-details-dialog .dialog-close:hover {
+  background: var(--danger-alpha-15, rgb(248, 81, 73, 0.15));
+  color: var(--danger);
+}
+
+/* =============================================================================
+   TAB BAR
+   ============================================================================= */
+
+.transaction-details-dialog .dialog-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.transaction-details-dialog .tab-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.transaction-details-dialog .tab-button i {
+  font-size: 14px;
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+.transaction-details-dialog .tab-button:hover {
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+}
+
+.transaction-details-dialog .tab-button:hover i {
+  opacity: 0.9;
+}
+
+.transaction-details-dialog .tab-button.active {
+  color: var(--primary-color);
+  background: var(--primary-alpha-10);
+  font-weight: 600;
+}
+
+.transaction-details-dialog .tab-button.active i {
+  opacity: 1;
+}
+
+.transaction-details-dialog .tab-button.active::after {
+  content: "";
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 2px;
+  background: var(--primary-color);
+  border-radius: 2px;
+}
+
+.transaction-details-dialog .tab-badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 2px 6px;
+  background: var(--bg-primary);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  margin-left: 2px;
+}
+
+/* =============================================================================
+   BODY & TAB CONTENT
+   ============================================================================= */
+
+.transaction-details-dialog .dialog-body {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg-primary);
+}
+
+.transaction-details-dialog .tab-content {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  overflow-y: auto;
+  display: none;
+}
+
+.transaction-details-dialog .tab-content.active {
+  display: block;
+}
+
+/* Loading & Empty States */
+.transaction-details-dialog .loading-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.transaction-details-dialog .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 200px;
+  color: var(--text-secondary);
+  text-align: center;
+  gap: 12px;
+  padding: 24px;
+}
+
+.transaction-details-dialog .empty-state i {
+  font-size: 32px;
+  opacity: 0.5;
+}
+
+.transaction-details-dialog .empty-state p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.transaction-details-dialog .error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--danger);
+  text-align: center;
+  gap: 12px;
+}
+
+.transaction-details-dialog .error-state i {
+  font-size: 32px;
+}
+
+.transaction-details-dialog .empty-message {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+/* =============================================================================
+   BADGES
+   ============================================================================= */
+
+.transaction-details-dialog .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.transaction-details-dialog .badge i {
+  font-size: 12px;
+}
+
+.transaction-details-dialog .badge.success {
+  background: var(--success-alpha-20);
+  color: var(--success-color);
+}
+
+.transaction-details-dialog .badge.error {
+  background: var(--danger-alpha-20);
+  color: var(--danger);
+}
+
+.transaction-details-dialog .badge.warning {
+  background: var(--warning-alpha-20);
+  color: var(--warning-color);
+}
+
+.transaction-details-dialog .badge.info {
+  background: var(--primary-alpha-20);
+  color: var(--primary-color);
+}
+
+.transaction-details-dialog .badge.secondary {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+/* =============================================================================
+   OVERVIEW TAB
+   ============================================================================= */
+
+.transaction-details-dialog .tx-overview-layout {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.transaction-details-dialog .overview-section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.transaction-details-dialog .section-header {
+  padding: 10px 14px;
+  background: var(--bg-card-hover);
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.transaction-details-dialog .section-count {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  background: var(--bg-primary);
+  border-radius: 8px;
+  color: var(--text-secondary);
+}
+
+.transaction-details-dialog .info-grid {
+  padding: 8px 0;
+}
+
+.transaction-details-dialog .info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 14px;
+  gap: 16px;
+}
+
+.transaction-details-dialog .info-row:not(:last-child) {
+  border-bottom: 1px solid var(--border-subtle, var(--border-color));
+}
+
+.transaction-details-dialog .info-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.transaction-details-dialog .info-value {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  font-weight: 600;
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
+  text-align: right;
+  word-break: break-all;
+}
+
+.transaction-details-dialog .signature-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.transaction-details-dialog .error-text {
+  color: var(--danger);
+}
+
+.transaction-details-dialog .mono-text {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}
+
+.transaction-details-dialog .mono-text-sm {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+/* =============================================================================
+   BALANCES TAB
+   ============================================================================= */
+
+.transaction-details-dialog .tx-balances-layout {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.transaction-details-dialog .balance-section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.transaction-details-dialog .balance-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.transaction-details-dialog .balance-table th {
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.transaction-details-dialog .balance-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle, var(--border-color));
+  color: var(--text-primary);
+}
+
+.transaction-details-dialog .balance-table tr:last-child td {
+  border-bottom: none;
+}
+
+.transaction-details-dialog .balance-table .numeric {
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
+  text-align: right;
+}
+
+.transaction-details-dialog .balance-table .positive {
+  color: var(--success-color);
+}
+
+.transaction-details-dialog .balance-table .negative {
+  color: var(--danger);
+}
+
+.transaction-details-dialog .balance-summary {
+  display: flex;
+  gap: 24px;
+  padding: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  justify-content: center;
+}
+
+.transaction-details-dialog .summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.transaction-details-dialog .summary-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.transaction-details-dialog .summary-value {
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-family: var(--font-data);
+}
+
+.transaction-details-dialog .summary-value.positive {
+  color: var(--success-color);
+}
+
+.transaction-details-dialog .summary-value.negative {
+  color: var(--danger);
+}
+
+/* =============================================================================
+   INSTRUCTIONS TAB
+   ============================================================================= */
+
+.transaction-details-dialog .tx-instructions-layout {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.transaction-details-dialog .instructions-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 4px;
+}
+
+.transaction-details-dialog .instructions-count {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.transaction-details-dialog .instructions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.transaction-details-dialog .instruction-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.transaction-details-dialog .instruction-card-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.transaction-details-dialog .instruction-card-header:hover {
+  background: var(--bg-card-hover);
+}
+
+.transaction-details-dialog .instruction-index {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  width: 28px;
+  height: 28px;
+  background: var(--bg-primary);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.transaction-details-dialog .instruction-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.transaction-details-dialog .instruction-type {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.transaction-details-dialog .instruction-program {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.transaction-details-dialog .instruction-expand {
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+
+.transaction-details-dialog .instruction-card.expanded .instruction-expand {
+  transform: rotate(180deg);
+}
+
+.transaction-details-dialog .instruction-card-body {
+  display: none;
+  padding: 0 14px 14px;
+  border-top: 1px solid var(--border-color);
+}
+
+.transaction-details-dialog .instruction-card.expanded .instruction-card-body {
+  display: block;
+}
+
+.transaction-details-dialog .instruction-detail {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle, var(--border-color));
+}
+
+.transaction-details-dialog .detail-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.transaction-details-dialog .detail-value {
+  font-size: 0.8rem;
+  color: var(--text-primary);
+}
+
+.transaction-details-dialog .instruction-accounts {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--border-subtle, var(--border-color));
+}
+
+.transaction-details-dialog .accounts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.transaction-details-dialog .account-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  background: var(--bg-primary);
+  border-radius: 4px;
+  font-size: 0.75rem;
+}
+
+.transaction-details-dialog .account-index {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  width: 20px;
+  text-align: center;
+}
+
+.transaction-details-dialog .instruction-data {
+  padding: 10px 0;
+}
+
+.transaction-details-dialog .data-preview {
+  margin: 8px 0 0;
+  padding: 10px;
+  background: var(--bg-primary);
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+/* =============================================================================
+   LOGS TAB
+   ============================================================================= */
+
+.transaction-details-dialog .tx-logs-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.transaction-details-dialog .logs-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.transaction-details-dialog .logs-search {
+  flex: 1;
+  max-width: 300px;
+  padding: 8px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+}
+
+.transaction-details-dialog .logs-search:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.transaction-details-dialog .logs-search::placeholder {
+  color: var(--text-muted);
+}
+
+.transaction-details-dialog .logs-count {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.transaction-details-dialog .logs-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 16px;
+}
+
+.transaction-details-dialog .log-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.4;
+}
+
+.transaction-details-dialog .log-entry:hover {
+  background: var(--bg-secondary);
+}
+
+.transaction-details-dialog .log-index {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  min-width: 28px;
+  text-align: right;
+  padding-top: 2px;
+}
+
+.transaction-details-dialog .log-message {
+  color: var(--text-secondary);
+  word-break: break-all;
+}
+
+.transaction-details-dialog .log-entry.log-success .log-message {
+  color: var(--success-color);
+}
+
+.transaction-details-dialog .log-entry.log-error .log-message {
+  color: var(--danger);
+}
+
+.transaction-details-dialog .log-entry.log-invoke .log-message {
+  color: var(--primary-color);
+}
+
+.transaction-details-dialog .log-entry.log-consumed .log-message {
+  color: var(--text-secondary);
+}
+
+/* Log highlighting */
+.transaction-details-dialog .hl-invoke {
+  color: var(--primary-color);
+  font-weight: 600;
+}
+
+.transaction-details-dialog .hl-success {
+  color: var(--success-color);
+  font-weight: 600;
+}
+
+.transaction-details-dialog .hl-error {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.transaction-details-dialog .hl-compute {
+  color: var(--warning-color);
+}
+
+/* =============================================================================
+   ATA TAB
+   ============================================================================= */
+
+.transaction-details-dialog .tx-ata-layout {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.transaction-details-dialog .ata-summary {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.transaction-details-dialog .ata-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  padding: 14px;
+}
+
+.transaction-details-dialog .ata-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px;
+  background: var(--bg-primary);
+  border-radius: 6px;
+}
+
+.transaction-details-dialog .ata-stat.highlight {
+  background: var(--primary-alpha-10);
+  border: 1px solid var(--primary-alpha-20);
+}
+
+.transaction-details-dialog .ata-stat .stat-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.transaction-details-dialog .ata-stat .stat-value {
+  font-size: 0.9rem;
+  font-weight: 700;
+  font-family: var(--font-data);
+  color: var(--text-primary);
+}
+
+.transaction-details-dialog .ata-stat .stat-value.positive {
+  color: var(--success-color);
+}
+
+.transaction-details-dialog .ata-stat .stat-value.negative {
+  color: var(--danger);
+}
+
+.transaction-details-dialog .ata-operations {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.transaction-details-dialog .ata-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.transaction-details-dialog .ata-table th {
+  padding: 10px 14px;
+  text-align: left;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.transaction-details-dialog .ata-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle, var(--border-color));
+  color: var(--text-primary);
+}
+
+.transaction-details-dialog .ata-table tr:last-child td {
+  border-bottom: none;
+}
+
+.transaction-details-dialog .ata-table .numeric {
+  font-family: var(--font-data);
+  text-align: right;
+}
+
+/* =============================================================================
+   RAW TAB
+   ============================================================================= */
+
+.transaction-details-dialog .tx-raw-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.transaction-details-dialog .raw-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.transaction-details-dialog .raw-copy-btn,
+.transaction-details-dialog .raw-expand-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.transaction-details-dialog .raw-copy-btn:hover,
+.transaction-details-dialog .raw-expand-btn:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+  border-color: var(--text-muted);
+}
+
+.transaction-details-dialog .raw-json-container {
+  flex: 1;
+  overflow: auto;
+  padding: 16px;
+  background: var(--bg-primary);
+}
+
+.transaction-details-dialog .raw-json {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+}
+
+/* =============================================================================
+   ADDRESS LINKS & COPY BUTTONS
+   ============================================================================= */
+
+.transaction-details-dialog .address-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.transaction-details-dialog .address-link a {
+  color: var(--link-color);
+  text-decoration: none;
+}
+
+.transaction-details-dialog .address-link a:hover {
+  text-decoration: underline;
+}
+
+.transaction-details-dialog .copy-btn-mini,
+.transaction-details-dialog .copy-btn-inline,
+.transaction-details-dialog .link-btn-inline {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  padding: 0;
+}
+
+.transaction-details-dialog .copy-btn-mini:hover,
+.transaction-details-dialog .copy-btn-inline:hover,
+.transaction-details-dialog .link-btn-inline:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.transaction-details-dialog .copy-btn-mini i,
+.transaction-details-dialog .copy-btn-inline i,
+.transaction-details-dialog .link-btn-inline i {
+  font-size: 12px;
+}
+
+.transaction-details-dialog .link-btn-inline {
+  text-decoration: none;
+}

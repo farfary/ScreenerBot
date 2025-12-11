@@ -965,15 +965,23 @@ impl TransactionDatabase {
         Ok(())
     }
 
-    /// Get transaction by signature
+    /// Get transaction by signature with full analysis data
     pub async fn get_transaction(&self, signature: &str) -> Result<Option<Transaction>, String> {
         let conn = self.get_connection()?;
         let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
 
+        // Join raw_transactions with processed_transactions to get full data
         let result = conn.query_row(
-            r#"SELECT signature, slot, block_time, timestamp, status, success, error_message,
-                          fee_lamports, compute_units_consumed, instructions_count, accounts_count
-                   FROM raw_transactions WHERE signature = ?1 AND wallet_address = ?2"#,
+            r#"SELECT 
+                r.signature, r.slot, r.block_time, r.timestamp, r.status, r.success, r.error_message,
+                r.fee_lamports, r.compute_units_consumed, r.instructions_count, r.accounts_count,
+                r.raw_transaction_data,
+                p.transaction_type, p.direction, p.sol_balance_change, p.token_balance_changes,
+                p.token_swap_info, p.swap_pnl_info, p.ata_operations, p.token_transfers,
+                p.instruction_info, p.analysis_duration_ms, p.cached_analysis, p.fee_sol, p.sol_delta
+            FROM raw_transactions r
+            LEFT JOIN processed_transactions p ON r.signature = p.signature AND p.wallet_address = ?2
+            WHERE r.signature = ?1 AND r.wallet_address = ?2"#,
             params![signature, wallet_address],
             |row| {
                 let timestamp_str: String = row.get(3)?;
@@ -996,20 +1004,124 @@ impl TransactionDatabase {
                     _ => TransactionStatus::Pending,
                 };
 
+                // Parse raw_transaction_data JSON if present
+                let raw_transaction_data: Option<serde_json::Value> = row
+                    .get::<_, Option<String>>(11)?
+                    .and_then(|json| serde_json::from_str(&json).ok());
+
+                // Parse processed fields from joined data
+                let transaction_type_str: Option<String> = row.get(12)?;
+                let transaction_type = transaction_type_str
+                    .as_ref()
+                    .and_then(|s| {
+                        // First try parsing as JSON object (for rich variants like SwapSolToToken)
+                        serde_json::from_str(s)
+                            .ok()
+                            // Then try as quoted string (for simple variants like "Sell")
+                            .or_else(|| serde_json::from_str(&format!("\"{}\"", s)).ok())
+                    })
+                    .unwrap_or(TransactionType::Unknown);
+
+                let direction_str: Option<String> = row.get(13)?;
+                let direction = match direction_str.as_deref() {
+                    Some("Incoming") => TransactionDirection::Incoming,
+                    Some("Outgoing") => TransactionDirection::Outgoing,
+                    Some("Internal") => TransactionDirection::Internal,
+                    _ => TransactionDirection::Unknown,
+                };
+
+                let sol_balance_change_json: Option<String> = row.get(14)?;
+                let sol_balance_changes: Vec<SolBalanceChange> = sol_balance_change_json
+                    .as_ref()
+                    .and_then(|json| serde_json::from_str(json).ok())
+                    .unwrap_or_default();
+                
+                // Use sol_delta from the dedicated column (index 24) for the aggregate change
+                let sol_delta: f64 = row.get::<_, Option<f64>>(24)?.unwrap_or(0.0);
+
+                let token_balance_changes_json: Option<String> = row.get(15)?;
+                let token_balance_changes: Vec<TokenBalanceChange> = token_balance_changes_json
+                    .as_ref()
+                    .and_then(|json| serde_json::from_str(json).ok())
+                    .unwrap_or_default();
+
+                let token_swap_info_json: Option<String> = row.get(16)?;
+                let token_swap_info: Option<TokenSwapInfo> = token_swap_info_json
+                    .as_ref()
+                    .and_then(|json| serde_json::from_str(json).ok());
+
+                let swap_pnl_info_json: Option<String> = row.get(17)?;
+                let swap_pnl_info: Option<SwapPnLInfo> = swap_pnl_info_json
+                    .as_ref()
+                    .and_then(|json| serde_json::from_str(json).ok());
+
+                let ata_operations_json: Option<String> = row.get(18)?;
+                let ata_operations: Vec<AtaOperation> = ata_operations_json
+                    .as_ref()
+                    .and_then(|json| serde_json::from_str(json).ok())
+                    .unwrap_or_default();
+
+                let token_transfers_json: Option<String> = row.get(19)?;
+                let token_transfers: Vec<TokenTransfer> = token_transfers_json
+                    .as_ref()
+                    .and_then(|json| serde_json::from_str(json).ok())
+                    .unwrap_or_default();
+
+                let instruction_info_json: Option<String> = row.get(20)?;
+                let instruction_info: Vec<InstructionInfo> = instruction_info_json
+                    .as_ref()
+                    .and_then(|json| serde_json::from_str(json).ok())
+                    .unwrap_or_default();
+
+                let analysis_duration_ms: Option<u64> = row.get::<_, Option<i64>>(21)?
+                    .map(|v| v as u64);
+
+                let cached_analysis_json: Option<String> = row.get(22)?;
+                let cached_analysis: Option<CachedAnalysis> = cached_analysis_json
+                    .as_ref()
+                    .and_then(|json| serde_json::from_str(json).ok());
+
+                let fee_sol: f64 = row.get::<_, Option<f64>>(23)?.unwrap_or(0.0);
+
                 Ok(Transaction {
                     signature: row.get(0)?,
                     slot: row.get(1)?,
                     block_time: row.get(2)?,
                     timestamp,
                     status,
+                    transaction_type,
+                    direction,
                     success: row.get(5)?,
                     error_message: row.get(6)?,
+                    fee_sol,
                     fee_lamports: row.get(7)?,
                     compute_units_consumed: row.get(8)?,
                     instructions_count: row.get(9).unwrap_or(0),
                     accounts_count: row.get(10).unwrap_or(0),
-                    // Analysis fields are not cached - calculated fresh
-                    ..Transaction::new(row.get::<_, String>(0)?)
+                    sol_balance_change: sol_delta,
+                    sol_balance_changes,
+                    token_transfers,
+                    token_balance_changes,
+                    token_swap_info,
+                    swap_pnl_info,
+                    ata_operations,
+                    instruction_info,
+                    raw_transaction_data,
+                    analysis_duration_ms,
+                    cached_analysis,
+                    last_updated: Utc::now(),
+                    // These require deeper parsing from raw_transaction_data
+                    wallet_lamport_change: 0,
+                    wallet_signed: false,
+                    log_messages: Vec::new(),
+                    instructions: Vec::new(),
+                    position_impact: None,
+                    profit_calculation: None,
+                    ata_analysis: None,
+                    token_info: None,
+                    calculated_token_price_sol: None,
+                    token_symbol: None,
+                    token_decimals: None,
                 })
             },
         );

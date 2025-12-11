@@ -5,6 +5,7 @@ import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
 import { requestManager } from "../core/request_manager.js";
+import { TransactionDetailsDialog } from "../ui/transaction_details_dialog.js";
 
 const PAGE_LIMIT = 100;
 const DEFAULT_FILTERS = {
@@ -114,6 +115,7 @@ function createLifecycle() {
   let ctxRef = null;
   let table = null;
   let poller = null;
+  let txDialog = null;
 
   const state = {
     filters: { ...DEFAULT_FILTERS },
@@ -468,6 +470,14 @@ function createLifecycle() {
         stickyHeader: true,
         zebra: true,
         fitToContainer: true,
+        onRowClick: (row) => {
+          if (row && row.signature) {
+            if (!txDialog) {
+              txDialog = new TransactionDetailsDialog();
+            }
+            txDialog.show(row);
+          }
+        },
         sorting: {
           column: initialSort.column,
           direction: initialSort.direction,
@@ -657,6 +667,10 @@ function createLifecycle() {
       if (table) {
         table.destroy();
         table = null;
+      }
+      if (txDialog) {
+        txDialog.close();
+        txDialog = null;
       }
       ctxRef = null;
       state.filters = { ...DEFAULT_FILTERS };
