@@ -689,7 +689,8 @@
   padding: 8px 10px;
 }
 
-.card-header {
+/* Scoped to info-card to avoid conflicts with other pages */
+.info-card .card-header {
   padding: 6px 10px;
   background: var(--bg-card-hover);
   font-size: 0.65rem;
@@ -704,13 +705,13 @@
   gap: 8px;
 }
 
-.card-header-actions {
+.info-card .card-header-actions {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.card-header .verified-badge {
+.info-card .card-header .verified-badge {
   font-size: 0.65rem;
   color: var(--success-color);
   background: var(--success-alpha-10);
@@ -719,7 +720,7 @@
   font-weight: 600;
 }
 
-.card-header .ratio-badge {
+.info-card .card-header .ratio-badge {
   font-size: 0.65rem;
   padding: 2px 8px;
   border-radius: 8px;
@@ -727,22 +728,23 @@
   font-family: var(--font-data);
 }
 
-.card-header .ratio-badge.bullish {
+.info-card .card-header .ratio-badge.bullish {
   color: var(--success-color);
   background: var(--success-alpha-10);
 }
 
-.card-header .ratio-badge.bearish {
+.info-card .card-header .ratio-badge.bearish {
   color: var(--danger);
   background: var(--danger-alpha-10);
 }
 
-.card-header .ratio-badge.neutral {
+.info-card .card-header .ratio-badge.neutral {
   color: var(--text-secondary);
   background: var(--bg-primary);
 }
 
-.card-body {
+/* Scoped to .info-card to avoid conflicts with other pages */
+.info-card .card-body {
   padding: var(--spacing-md);
 }
 

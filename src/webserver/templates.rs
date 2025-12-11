@@ -3,7 +3,7 @@
 /// Templates are stored in `src/webserver/templates/` and embedded at compile time
 /// using `include_str!`. This keeps the Rust module focused on wiring helpers
 /// while HTML, CSS, and JavaScript live in dedicated files.
-use crate::arguments;
+use crate::{arguments, version};
 
 const BASE_TEMPLATE: &str = include_str!("templates/base.html");
 const FOUNDATION_STYLES: &str = include_str!("templates/styles/foundation.css");
@@ -142,6 +142,10 @@ const SETUP_PAGE: &str = include_str!("templates/pages/setup.html");
 pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     use crate::global;
 
+    let asset_version = option_env!("ASSET_VERSION_TS")
+        .map(|ts| format!("{}-{}", version::get_version(), ts))
+        .unwrap_or_else(|| version::get_version().to_string());
+
     let mut html = BASE_TEMPLATE.replace("{{TITLE}}", title);
     html = html.replace("{{NAV_TABS}}", &nav_tabs(active_tab));
     html = html.replace("{{CONTENT}}", content);
@@ -158,6 +162,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     html = html.replace("{{SECURITY_TOKEN}}", &security_token);
     html = html.replace("{{WEBSERVER_PORT}}", &port.to_string());
     html = html.replace("{{IS_GUI_MODE}}", if is_gui { "true" } else { "false" });
+    html = html.replace("{{ASSET_VERSION}}", asset_version.as_str());
 
     // Inject splash, onboarding, and setup screens
     html = html.replace("{{SPLASH_SCREEN}}", SPLASH_PAGE);
@@ -201,43 +206,25 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         SETUP_PAGE_STYLES,
         // Status bar (always visible at bottom)
         STATUS_BAR_STYLES,
+        // All page styles included upfront to prevent FOUC (Flash of Unstyled Content)
+        // when navigating via SPA router. The CSS is small enough that bundling all
+        // is better than risking style injection race conditions in WebView.
+        SERVICES_PAGE_STYLES,
+        TRANSACTIONS_PAGE_STYLES,
+        EVENTS_PAGE_STYLES,
+        TOKENS_PAGE_STYLES,
+        POSITIONS_PAGE_STYLES,
+        FILTERING_PAGE_STYLES,
+        CONFIG_PAGE_STYLES,
+        STRATEGIES_PAGE_STYLES,
+        TRADER_PAGE_STYLES,
+        WALLET_PAGE_STYLES,
+        HOME_PAGE_STYLES,
+        UPDATES_PAGE_STYLES,
     ];
-    if active_tab == "services" {
-        combined_styles.push(SERVICES_PAGE_STYLES);
-    }
-    if active_tab == "transactions" {
-        combined_styles.push(TRANSACTIONS_PAGE_STYLES);
-    }
-    if active_tab == "events" {
-        combined_styles.push(EVENTS_PAGE_STYLES);
-    }
-    if active_tab == "tokens" {
-        combined_styles.push(TOKENS_PAGE_STYLES);
-    }
-    if active_tab == "positions" {
-        combined_styles.push(POSITIONS_PAGE_STYLES);
-    }
-    if active_tab == "filtering" {
-        combined_styles.push(FILTERING_PAGE_STYLES);
-    }
-    if active_tab == "config" {
-        combined_styles.push(CONFIG_PAGE_STYLES);
-    }
-    if active_tab == "strategies" {
-        combined_styles.push(STRATEGIES_PAGE_STYLES);
-    }
-    if active_tab == "trader" {
-        combined_styles.push(TRADER_PAGE_STYLES);
-    }
-    if active_tab == "wallet" {
-        combined_styles.push(WALLET_PAGE_STYLES);
-    }
-    if active_tab == "home" {
-        combined_styles.push(HOME_PAGE_STYLES);
-    }
-    if active_tab == "updates" {
-        combined_styles.push(UPDATES_PAGE_STYLES);
-    }
+    // Suppress unused variable warning - active_tab was used for conditional style loading
+    // but we now include all styles upfront to prevent FOUC in WebView
+    let _ = active_tab;
     html = html.replace("/*__INJECTED_STYLES__*/", &combined_styles.join("\n"));
     let mut page_style_injections = String::new();
     for (page, styles) in [

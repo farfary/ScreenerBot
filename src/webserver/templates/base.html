@@ -3,6 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+
+    <!-- Cache-busting version injected by server -->
+    <script>
+      window.__ASSET_VERSION__ = "{{ASSET_VERSION}}";
+    </script>
 
     <!-- Security token injection for GUI mode (MUST run first) -->
     <script>
@@ -111,7 +119,7 @@
       <div class="header-row header-row-1">
         <!-- Logo & Brand -->
         <div class="header-brand" id="headerBrand">
-          <img src="/assets/logo.svg" alt="ScreenerBot" class="brand-logo" />
+          <img src="/assets/logo.svg?v={{ASSET_VERSION}}" alt="ScreenerBot" class="brand-logo" />
           <span class="brand-text">ScreenerBot</span>
         </div>
 
@@ -418,23 +426,23 @@
     </script>
 
     <!-- Core ES Modules - Loaded as external files for proper import resolution -->
-    <script type="module" src="/scripts/core/lifecycle.js"></script>
-    <script type="module" src="/scripts/core/app_state.js"></script>
-    <script type="module" src="/scripts/core/poller.js"></script>
-    <script type="module" src="/scripts/core/dom.js"></script>
-    <script type="module" src="/scripts/core/utils.js"></script>
-    <script type="module" src="/scripts/core/router.js"></script>
-    <script type="module" src="/scripts/core/header.js"></script>
+    <script type="module" src="/scripts/core/lifecycle.js?v={{ASSET_VERSION}}"></script>
+    <script type="module" src="/scripts/core/app_state.js?v={{ASSET_VERSION}}"></script>
+    <script type="module" src="/scripts/core/poller.js?v={{ASSET_VERSION}}"></script>
+    <script type="module" src="/scripts/core/dom.js?v={{ASSET_VERSION}}"></script>
+    <script type="module" src="/scripts/core/utils.js?v={{ASSET_VERSION}}"></script>
+    <script type="module" src="/scripts/core/router.js?v={{ASSET_VERSION}}"></script>
+    <script type="module" src="/scripts/core/header.js?v={{ASSET_VERSION}}"></script>
 
     <!-- UI Components -->
-    <script type="module" src="/scripts/ui/context_menu.js"></script>
-    <script src="/scripts/ui/advanced_chart.js"></script>
+    <script type="module" src="/scripts/ui/context_menu.js?v={{ASSET_VERSION}}"></script>
+    <script src="/scripts/ui/advanced_chart.js?v={{ASSET_VERSION}}"></script>
 
     <!-- Splash, Onboarding, and Setup Controllers (non-module for immediate execution) -->
-    <script src="/scripts/core/splash.js"></script>
-    <script src="/scripts/core/onboarding.js"></script>
-    <script src="/scripts/core/setup.js"></script>
-    <script src="/scripts/core/status_bar.js"></script>
+    <script src="/scripts/core/splash.js?v={{ASSET_VERSION}}"></script>
+    <script src="/scripts/core/onboarding.js?v={{ASSET_VERSION}}"></script>
+    <script src="/scripts/core/setup.js?v={{ASSET_VERSION}}"></script>
+    <script src="/scripts/core/status_bar.js?v={{ASSET_VERSION}}"></script>
 
     <!-- Theme toggle (non-module) -->
     <script>

@@ -3,10 +3,13 @@ import { PageLifecycleRegistry } from "./lifecycle.js";
 import * as AppState from "./app_state.js";
 import { waitForReady } from "./bootstrap.js";
 
+const assetVersion = window.__ASSET_VERSION__ || "";
+const assetQuery = assetVersion ? `?v=${encodeURIComponent(assetVersion)}` : "";
+
 // Import TabBarManager for coordinated tab bar management
 let TabBarManager = null;
 try {
-  const tabBarModule = await import("../ui/tab_bar.js");
+  const tabBarModule = await import(`../ui/tab_bar.js${assetQuery}`);
   TabBarManager = tabBarModule.TabBarManager;
 } catch (err) {
   console.warn("[Router] TabBar module not available:", err.message);
@@ -15,7 +18,7 @@ try {
 // Import ActionBarManager for coordinated action bar management
 let ActionBarManager = null;
 try {
-  const actionBarModule = await import("../ui/action_bar.js");
+  const actionBarModule = await import(`../ui/action_bar.js${assetQuery}`);
   ActionBarManager = actionBarModule.ActionBarManager;
 } catch (err) {
   console.warn("[Router] ActionBar module not available:", err.message);
@@ -121,8 +124,9 @@ async function fetchPageContent(pageName, timeoutMs) {
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(`/api/pages/${pageName}`, {
+    const response = await fetch(`/api/pages/${pageName}${assetQuery}`, {
       signal: controller.signal,
+      cache: "no-store",
     });
 
     clearTimeout(timeoutId);
@@ -232,7 +236,7 @@ export async function loadPage(pageName) {
 
     // Load page-specific module if it exists
     try {
-      await import(`../pages/${pageName}.js`);
+      await import(`../pages/${pageName}.js${assetQuery}`);
     } catch (err) {
       console.warn(`[Router] No module for page ${pageName}:`, err.message);
     }

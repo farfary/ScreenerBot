@@ -777,8 +777,8 @@
   margin-top: 1rem;
 }
 
-/* Card Header - Internal title for config cards */
-.card-header {
+/* Card Header - Internal title for config cards - Scoped to trader page */
+.config-card .card-header {
   margin: -1.25rem -1.25rem 1rem;
   padding: 1rem 1.25rem;
   background: linear-gradient(135deg, var(--primary-alpha-5), transparent);
@@ -786,7 +786,7 @@
   border-radius: 8px 8px 0 0;
 }
 
-.card-header h3 {
+.config-card .card-header h3 {
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -796,7 +796,7 @@
   color: var(--text-primary);
 }
 
-.card-header h3 i {
+.config-card .card-header h3 i {
   color: var(--primary-color);
   font-size: 1.125rem;
 }

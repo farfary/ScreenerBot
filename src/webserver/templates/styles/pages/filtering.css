@@ -286,7 +286,7 @@
 }
 
 /* Disable card body (fields) but keep header interactive for toggles */
-.card-body.disabled {
+.filter-card .card-body.disabled {
   opacity: 0.5;
   pointer-events: none;
 }
@@ -353,7 +353,8 @@
   transform: translateX(14px);
 }
 
-.card-body {
+/* Scoped to filtering page to avoid conflicts with other pages */
+.filter-card .card-body {
   padding: var(--spacing-md) var(--spacing-md) var(--spacing-lg);
   display: flex;
   flex-direction: column;

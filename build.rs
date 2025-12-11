@@ -1,4 +1,11 @@
 fn main() {
+  // Per-build asset version for cache busting of embedded HTML/CSS/JS
+  let build_epoch = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .map(|d| d.as_secs())
+    .unwrap_or(0);
+  println!("cargo:rustc-env=ASSET_VERSION_TS={build_epoch}");
+
   // macOS 26 Tahoe icon support: Track Assets.car for rebuild triggers
   #[cfg(target_os = "macos")]
   {

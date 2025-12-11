@@ -1914,14 +1914,11 @@ function createLifecycle() {
       }
 
       // Find the row element
-      const row = e.target.closest("tr");
+      const row = e.target.closest("tr[data-row-id]");
       if (!row) return;
 
-      // Get the mint from row dataset or find it in the cells
-      const mintCell = row.querySelector("[data-token-mint]");
-      if (!mintCell) return;
-
-      const mint = mintCell.dataset.tokenMint;
+      // Get the mint from the row's data-row-id attribute (set by DataTable)
+      const mint = row.dataset.rowId;
       if (!mint) return;
 
       // Find token data in table

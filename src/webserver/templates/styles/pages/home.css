@@ -162,7 +162,8 @@
   flex-direction: column;
 }
 
-.card-header {
+/* Scoped to home page to avoid conflicts with other pages */
+.dashboard-card .card-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -176,7 +177,7 @@
   flex-shrink: 0;
 }
 
-.card-header h2 {
+.dashboard-card .card-header h2 {
   font-size: 0.85rem;
   font-weight: 700;
   color: var(--text-primary);
@@ -187,7 +188,7 @@
   opacity: 0.95;
 }
 
-.card-header h2 i {
+.dashboard-card .card-header h2 i {
   font-size: 0.75rem;
   opacity: 0.7;
 }

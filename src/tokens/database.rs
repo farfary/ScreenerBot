@@ -1987,12 +1987,22 @@ impl TokenDatabase {
         let is_blacklisted = self.is_blacklisted(mint)?;
         let priority = self.get_priority(mint)?;
 
-        // Prepare fallback images: when using GeckoTerminal, try DexScreener images from DB
-        let (fallback_img, fallback_header) = match data_source {
-            DataSource::GeckoTerminal => match self.get_dexscreener_data(mint)? {
+        // Prepare fallback images from alternate source when primary source is missing them
+        let (fallback_img, fallback_header) = match (&data_source, &market_data) {
+            // When using GeckoTerminal, try DexScreener images
+            (DataSource::GeckoTerminal, _) => match self.get_dexscreener_data(mint)? {
                 Some(ds) => (ds.image_url, ds.header_image_url),
                 None => (None, None),
             },
+            // When using DexScreener without image, try GeckoTerminal
+            (DataSource::DexScreener, MarketDataType::DexScreener(ds))
+                if ds.image_url.is_none() =>
+            {
+                match self.get_geckoterminal_data(mint)? {
+                    Some(gt) => (gt.image_url, None),
+                    None => (None, None),
+                }
+            }
             _ => (None, None),
         };
 
@@ -2597,11 +2607,24 @@ impl TokenDatabase {
                 None
             };
 
-            // Determine image_url and header_image_url based on data source
+            // Determine image_url and header_image_url with cross-source fallback
+            // If primary source doesn't have image, try the other source
             let (resolved_image_url, resolved_header_image_url) = match data_source {
-                DataSource::DexScreener => (d_image_url, d_header_image_url),
-                DataSource::GeckoTerminal => (g_image_url, None),
-                DataSource::Unknown => (None, None),
+                DataSource::DexScreener => {
+                    // Use DexScreener image, fallback to GeckoTerminal if missing
+                    let img = d_image_url.clone().or(g_image_url.clone());
+                    (img, d_header_image_url.clone())
+                }
+                DataSource::GeckoTerminal => {
+                    // Use GeckoTerminal image, fallback to DexScreener if missing
+                    let img = g_image_url.clone().or(d_image_url.clone());
+                    (img, d_header_image_url.clone())
+                }
+                DataSource::Unknown => {
+                    // Try any available image
+                    let img = d_image_url.clone().or(g_image_url.clone());
+                    (img, d_header_image_url.clone())
+                }
                 _ => (None, None),
             };
 

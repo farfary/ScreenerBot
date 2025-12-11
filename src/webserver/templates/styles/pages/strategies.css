@@ -384,8 +384,8 @@
   opacity: 0.8;
 }
 
-/* Card Header - Horizontal Layout */
-.card-header {
+/* Card Header - Horizontal Layout - Scoped to condition-card to avoid conflicts */
+.condition-card .card-header {
   padding: 1rem 1.25rem;
   display: flex;
   align-items: center;
@@ -396,7 +396,7 @@
   background: linear-gradient(to bottom, transparent, rgb(0, 0, 0, 0.01));
 }
 
-.card-header-left {
+.condition-card .card-header-left {
   display: flex;
   align-items: center;
   gap: 1rem;
@@ -404,7 +404,7 @@
   min-width: 0;
 }
 
-.card-header-right {
+.condition-card .card-header-right {
   display: flex;
   align-items: center;
   gap: 1rem;
@@ -637,8 +637,8 @@
   transform: translateY(0);
 }
 
-/* Card Body */
-.card-body {
+/* Card Body - scoped to condition-card to avoid conflicts with other pages */
+.condition-card .card-body {
   padding: 1.25rem;
   background: linear-gradient(to bottom, rgb(0, 0, 0, 0.01), transparent);
   border-bottom-left-radius: 8px;

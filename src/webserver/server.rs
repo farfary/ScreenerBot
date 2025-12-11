@@ -235,8 +235,15 @@ fn build_app(state: Arc<AppState>) -> Router {
   let app = routes::create_router(state);
 
   // Add middleware layers
-  // Order: security_gate -> initialization_gate -> compression
+  // Order matters - layers are applied in reverse order (last added runs first):
+  // 1. Compression runs first (outermost)
+  // 2. Security gate checks token
+  // 3. Initialization gate checks init status  
+  // 4. Cache control adds no-cache headers (innermost, runs last on response)
   let app = app
+    .layer(axum::middleware::from_fn(
+      crate::webserver::middleware::cache_control,
+    ))
     .layer(axum::middleware::from_fn(
       crate::webserver::middleware::initialization_gate,
     ))

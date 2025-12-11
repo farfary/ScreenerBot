@@ -835,7 +835,6 @@ function renderInfoBar() {
   const cacheAge = updated_at ? Utils.formatTimeAgo(new Date(updated_at)) : "Never";
 
   return `
-    <div class="filtering-info-bar">
       <div class="info-item highlight">
         <span class="label">Total:</span>
         <span class="value">${Utils.escapeHtml(Utils.formatNumber(total_tokens, 0))}</span>
@@ -860,7 +859,6 @@ function renderInfoBar() {
         <span class="label">Cache:</span>
         <span class="value">${Utils.escapeHtml(cacheAge)}</span>
       </div>
-    </div>
   `;
 }
 
@@ -1096,7 +1094,6 @@ function renderSearchBar() {
   const sourceToggle = showSourceToggle ? renderSourceToggle(state.activeTab) : "";
 
   return `
-    <div class="filtering-search-bar">
       <input
         type="text"
         id="filtering-search"
@@ -1104,7 +1101,6 @@ function renderSearchBar() {
         value="${Utils.escapeHtml(state.searchQuery)}"
       />
       ${sourceToggle}
-    </div>
   `;
 }
 
@@ -1120,8 +1116,8 @@ function renderShell() {
   return `
     <div class="filtering-page">
       <div class="filtering-shell">
-        <div id="filtering-info-bar">${renderInfoBar()}</div>
-        <div id="filtering-search-bar">${renderSearchBar()}</div>
+        <div class="filtering-info-bar" id="filtering-info-bar">${renderInfoBar()}</div>
+        <div class="filtering-search-bar" id="filtering-search-bar">${renderSearchBar()}</div>
         <div class="filtering-content" id="filtering-config-panels">
           ${renderConfigPanels()}
         </div>

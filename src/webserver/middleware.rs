@@ -1,10 +1,10 @@
 /// Webserver middleware
 ///
-/// Request interceptors for authentication, validation, and gating
+/// Request interceptors for authentication, validation, gating, and cache control
 use axum::{
   body::Body,
   extract::Request,
-  http::StatusCode,
+  http::{header, StatusCode},
   middleware::Next,
   response::{IntoResponse, Response},
 };
@@ -168,4 +168,37 @@ pub async fn initialization_gate(request: Request, next: Next) -> Response {
     "Bot initialization is required before accessing this endpoint",
     Some("Please complete the initialization process through the web interface"),
   )
+}
+
+/// Cache control middleware
+///
+/// Adds Cache-Control headers to prevent WebView/browser caching of static resources.
+/// This ensures fresh CSS, JS, and HTML are always fetched, especially important for:
+/// - Tauri WebView (WKWebView on macOS) which caches aggressively
+/// - Development mode where styles/scripts change frequently
+///
+/// Header values:
+/// - `no-cache`: Force revalidation with server before using cached copy
+/// - `no-store`: Don't store any version in cache
+/// - `must-revalidate`: After expiration, must check with server
+/// - `max-age=0`: Consider stale immediately
+pub async fn cache_control(request: Request, next: Next) -> Response {
+  let mut response = next.run(request).await;
+  
+  // Add cache control headers to prevent caching
+  let headers = response.headers_mut();
+  headers.insert(
+    header::CACHE_CONTROL,
+    "no-cache, no-store, must-revalidate, max-age=0".parse().unwrap(),
+  );
+  headers.insert(
+    header::PRAGMA,
+    "no-cache".parse().unwrap(),
+  );
+  headers.insert(
+    header::EXPIRES,
+    "0".parse().unwrap(),
+  );
+  
+  response
 }

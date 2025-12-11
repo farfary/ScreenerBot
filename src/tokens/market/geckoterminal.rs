@@ -139,7 +139,7 @@ pub async fn fetch_geckoterminal_data_batch(
                 .total_reserve_in_usd
                 .as_ref()
                 .and_then(|s| s.parse().ok()),
-            image_url: None,
+            image_url: attrs.image_url.clone(),
             market_data_last_fetched_at: Utc::now(),
             market_data_first_fetched_at: Utc::now(),
         };
