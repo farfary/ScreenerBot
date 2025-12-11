@@ -82,6 +82,25 @@ pub struct OpenPathResponse {
     pub path: String,
 }
 
+#[derive(Debug, Serialize)]
+pub struct DatabaseStats {
+    pub name: String,
+    pub path: String,
+    pub size_bytes: u64,
+    pub size_mb: f64,
+    pub exists: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DataStatsResponse {
+    pub databases: Vec<DatabaseStats>,
+    pub total_size_mb: f64,
+    pub config_path: String,
+    pub config_size_bytes: u64,
+    pub data_directory: String,
+    pub timestamp: String,
+}
+
 // =============================================================================
 // ROUTE HANDLERS
 // =============================================================================
@@ -194,11 +213,12 @@ async fn reboot_system() -> Response {
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/reboot", post(reboot_system))
-    .route("/bootstrap", get(boot_status))
-    .route("/paths", get(get_paths))
-    .route("/paths/open-data", post(open_data_directory))
-    .route("/open-url", post(open_url))
-    .route("/exit", post(exit_app))
+        .route("/bootstrap", get(boot_status))
+        .route("/paths", get(get_paths))
+        .route("/paths/open-data", post(open_data_directory))
+        .route("/open-url", post(open_url))
+        .route("/exit", post(exit_app))
+        .route("/data-stats", get(get_data_stats))
 }
 
 /// GET /api/system/bootstrap - Report real-time boot status for GUI/frontend gating
@@ -444,5 +464,66 @@ async fn exit_app(axum::Json(request): axum::Json<ExitAppRequest>) -> Response {
             "Application will exit in {}ms",
             request.delay_ms
         ),
+    })
+}
+
+// =============================================================================
+// DATA STATS
+// =============================================================================
+
+/// GET /api/system/data-stats - Get statistics for all databases and data files
+async fn get_data_stats() -> Response {
+    let mut databases = Vec::new();
+    let mut total_size: u64 = 0;
+
+    // Helper to get file size
+    fn get_file_stats(name: &str, path: std::path::PathBuf) -> DatabaseStats {
+        let (size_bytes, exists) = std::fs::metadata(&path)
+            .map(|m| (m.len(), true))
+            .unwrap_or((0, false));
+        DatabaseStats {
+            name: name.to_string(),
+            path: path.display().to_string(),
+            size_bytes,
+            size_mb: size_bytes as f64 / 1_048_576.0,
+            exists,
+        }
+    }
+
+    // Collect all database stats
+    let db_configs = [
+        ("Tokens", paths::get_tokens_db_path()),
+        ("Transactions", paths::get_transactions_db_path()),
+        ("Positions", paths::get_positions_db_path()),
+        ("Events", paths::get_events_db_path()),
+        ("OHLCV", paths::get_ohlcvs_db_path()),
+        ("Wallet", paths::get_wallet_db_path()),
+        ("Pools", paths::get_pools_db_path()),
+        ("Strategies", paths::get_strategies_db_path()),
+        ("Actions", paths::get_actions_db_path()),
+    ];
+
+    for (name, path) in db_configs {
+        let stats = get_file_stats(name, path);
+        total_size += stats.size_bytes;
+        databases.push(stats);
+    }
+
+    // Sort by size descending
+    databases.sort_by(|a, b| b.size_bytes.cmp(&a.size_bytes));
+
+    // Get config file size
+    let config_path = paths::get_config_path();
+    let config_size_bytes = std::fs::metadata(&config_path)
+        .map(|m| m.len())
+        .unwrap_or(0);
+
+    success_response(DataStatsResponse {
+        databases,
+        total_size_mb: total_size as f64 / 1_048_576.0,
+        config_path: config_path.display().to_string(),
+        config_size_bytes,
+        data_directory: paths::get_data_directory().display().to_string(),
+        timestamp: Utc::now().to_rfc3339(),
     })
 }

@@ -139,9 +139,85 @@
   background: #059669;
 }
 
+/* Secondary button - subtle background */
+.btn-secondary {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--text-secondary);
+}
+
+/* Warning button - amber/orange */
+.btn-warning {
+  background: var(--warning-color);
+  color: #fff;
+}
+
+.btn-warning:hover {
+  background: var(--warning-color-dark);
+}
+
+/* Danger button - red */
+.btn-danger {
+  background: var(--error-color);
+  color: #fff;
+}
+
+.btn-danger:hover {
+  background: var(--error-color-dark);
+}
+
+/* Outline button - transparent with border */
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.btn-outline:hover {
+  border-color: var(--link-color);
+  color: var(--link-color);
+  background: var(--primary-alpha-5);
+}
+
+/* Ghost button - no background until hover */
+.btn-ghost {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+}
+
+.btn-ghost:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+/* Button sizes */
 .btn-sm {
   padding: var(--spacing-xs) var(--spacing-sm);
-  font-size: 0.9em;
+  font-size: 0.8125rem;
+}
+
+.btn-lg {
+  padding: var(--spacing-sm) var(--spacing-lg);
+  font-size: 1rem;
+}
+
+/* Button states */
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.btn:focus-visible {
+  outline: 2px solid var(--link-color);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px var(--primary-alpha-10);
 }
 
 /* Links dropdown trigger button */
@@ -184,15 +260,53 @@
   font-style: italic;
 }
 
+/* =============================================================================
+   Empty State Component
+   ============================================================================= */
+
 .empty-state {
   text-align: center;
   padding: var(--spacing-2xl);
   color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--spacing-sm);
 }
 
 .empty-state-icon {
-  font-size: 3em;
-  margin-bottom: var(--spacing-sm);
+  font-size: 2.5rem;
+  margin-bottom: var(--spacing-xs);
+  opacity: 0.5;
+  color: var(--text-secondary);
+}
+
+.empty-state-title {
+  font-size: var(--font-size-lg);
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.empty-state-description {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  max-width: 300px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.empty-state-action {
+  margin-top: var(--spacing-sm);
+}
+
+/* Compact empty state variant */
+.empty-state.compact {
+  padding: var(--spacing-lg);
+}
+
+.empty-state.compact .empty-state-icon {
+  font-size: 1.5rem;
 }
 
 /* Dropdown Menu Styles */

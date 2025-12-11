@@ -1179,61 +1179,182 @@ export class SettingsDialog {
   }
 
   /**
-   * Build Data tab content - Clear data and cleanup options
+   * Build Data tab content - Comprehensive data management
    */
   _buildDataTab() {
     return `
+      <!-- Database Overview Section -->
       <div class="settings-section">
-        <h3 class="settings-section-title">OHLCV Data Management</h3>
+        <h3 class="settings-section-title">
+          <i class="icon-database"></i>
+          Database Storage
+        </h3>
         <p class="settings-section-description">
-          OHLCV (candlestick) data is stored for tokens you've viewed in charts or that have been monitored for trading strategies.
-          This data is never automatically deleted to preserve historical analysis.
+          Overview of all databases storing your trading data, positions, and historical information.
+        </p>
+        
+        <div class="data-overview-card" id="dataOverviewCard">
+          <div class="data-stats-loading"><i class="icon-loader"></i> Loading database statistics...</div>
+        </div>
+      </div>
+
+      <!-- Configuration Backup Section -->
+      <div class="settings-section">
+        <h3 class="settings-section-title">
+          <i class="icon-settings"></i>
+          Configuration Management
+        </h3>
+        <p class="settings-section-description">
+          Export, import, and manage your bot configuration. Keep backups before making major changes.
         </p>
         
         <div class="settings-group">
-          <div class="data-stats-card" id="ohlcvStatsCard">
-            <div class="data-stats-loading">Loading statistics...</div>
+          <div class="config-actions-row">
+            <button id="exportConfigBtn" class="btn btn-primary">
+              <i class="icon-download"></i>
+              Export Config
+            </button>
+            <button id="importConfigBtn" class="btn btn-secondary">
+              <i class="icon-upload"></i>
+              Import Config
+            </button>
+            <button id="resetConfigBtn" class="btn btn-warning">
+              <i class="icon-refresh-cw"></i>
+              Reset to Defaults
+            </button>
+          </div>
+          <input type="file" id="configFileInput" accept=".json,.toml" style="display: none;" />
+          
+          <div class="config-info-box">
+            <div class="config-info-item">
+              <span class="config-info-label">Config Location</span>
+              <span class="config-info-value" id="configPathDisplay">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trading Presets Section -->
+      <div class="settings-section">
+        <h3 class="settings-section-title">
+          <i class="icon-zap"></i>
+          Quick Trading Presets
+        </h3>
+        <p class="settings-section-description">
+          Apply pre-configured trading profiles. Each preset adjusts position limits, trade sizes, and risk parameters.
+        </p>
+        
+        <div class="presets-grid">
+          <div class="preset-card" data-preset="conservative">
+            <div class="preset-icon preset-icon-conservative">
+              <i class="icon-shield"></i>
+            </div>
+            <div class="preset-info">
+              <h4 class="preset-title">Conservative</h4>
+              <ul class="preset-details">
+                <li>Max 2 positions</li>
+                <li>0.005 SOL trades</li>
+                <li>15% ROI target</li>
+                <li>Strict filtering</li>
+              </ul>
+            </div>
+            <button class="btn btn-sm btn-outline preset-apply-btn" data-preset="conservative">
+              Apply
+            </button>
           </div>
           
+          <div class="preset-card" data-preset="moderate">
+            <div class="preset-icon preset-icon-moderate">
+              <i class="icon-activity"></i>
+            </div>
+            <div class="preset-info">
+              <h4 class="preset-title">Moderate</h4>
+              <ul class="preset-details">
+                <li>Max 5 positions</li>
+                <li>0.01 SOL trades</li>
+                <li>20% ROI target</li>
+                <li>Balanced filtering</li>
+              </ul>
+            </div>
+            <button class="btn btn-sm btn-outline preset-apply-btn" data-preset="moderate">
+              Apply
+            </button>
+          </div>
+          
+          <div class="preset-card" data-preset="aggressive">
+            <div class="preset-icon preset-icon-aggressive">
+              <i class="icon-trending-up"></i>
+            </div>
+            <div class="preset-info">
+              <h4 class="preset-title">Aggressive</h4>
+              <ul class="preset-details">
+                <li>Max 10 positions</li>
+                <li>0.02 SOL trades</li>
+                <li>30% ROI target</li>
+                <li>Relaxed filtering</li>
+              </ul>
+            </div>
+            <button class="btn btn-sm btn-outline preset-apply-btn" data-preset="aggressive">
+              Apply
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Data Cleanup Section -->
+      <div class="settings-section">
+        <h3 class="settings-section-title">
+          <i class="icon-trash-2"></i>
+          Data Cleanup
+        </h3>
+        <p class="settings-section-description">
+          Free up disk space by removing old or unused data. These actions cannot be undone.
+        </p>
+        
+        <div class="settings-group">
           <div class="settings-field">
             <div class="settings-field-info">
-              <label>Cleanup Inactive Tokens</label>
+              <label>OHLCV Data Cleanup</label>
               <span class="settings-field-hint">
-                Remove OHLCV data for tokens that haven't been active for a specified time.
-                This helps free up disk space from tokens you're no longer tracking.
+                Remove candlestick data for tokens that haven't been active for the specified time.
               </span>
             </div>
             <div class="settings-field-control data-action-group">
               <input type="number" id="cleanupHours" class="settings-input small" value="24" min="1" max="720" />
               <span class="input-suffix">hours</span>
-              <button id="cleanupOhlcvBtn" class="btn btn-warning">
+              <button id="cleanupOhlcvBtn" class="btn btn-warning btn-sm">
                 <i class="icon-trash-2"></i>
-                Cleanup
+                Cleanup OHLCV
               </button>
             </div>
           </div>
-        </div>
-      </div>
-      
-      <div class="settings-section">
-        <h3 class="settings-section-title">Application Data</h3>
-        <p class="settings-section-description">
-          Manage other application data stored on your device. These actions cannot be undone.
-        </p>
-        
-        <div class="settings-group">
+          
           <div class="settings-field">
             <div class="settings-field-info">
               <label>UI State Cache</label>
               <span class="settings-field-hint">
-                Clears saved table column preferences, filter states, and view settings.
-                The UI will reset to defaults on next load.
+                Clear saved table preferences, filter states, and view settings.
               </span>
             </div>
             <div class="settings-field-control">
-              <button id="clearUiStateBtn" class="btn btn-secondary">
+              <button id="clearUiStateBtn" class="btn btn-secondary btn-sm">
                 <i class="icon-refresh-cw"></i>
-                Clear Cache
+                Clear UI Cache
+              </button>
+            </div>
+          </div>
+
+          <div class="settings-field">
+            <div class="settings-field-info">
+              <label>Open Data Folder</label>
+              <span class="settings-field-hint">
+                Open the folder containing all ScreenerBot data in your file manager.
+              </span>
+            </div>
+            <div class="settings-field-control">
+              <button id="openDataFolderBtn" class="btn btn-secondary btn-sm">
+                <i class="icon-folder"></i>
+                Open Folder
               </button>
             </div>
           </div>
@@ -1241,43 +1362,261 @@ export class SettingsDialog {
       </div>
       
       <style>
-        .data-stats-card {
+        /* Database Overview Card */
+        .data-overview-card {
           background: var(--bg-secondary);
           border: 1px solid var(--border-color);
           border-radius: 8px;
           padding: 16px;
-          margin-bottom: 16px;
         }
         
         .data-stats-loading {
           color: var(--text-muted);
           font-style: italic;
-        }
-        
-        .data-stats-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-          gap: 16px;
-        }
-        
-        .data-stat-item {
           text-align: center;
+          padding: 24px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
         }
         
-        .data-stat-value {
-          font-size: 1.5rem;
-          font-weight: 700;
-          font-family: var(--font-data);
-          color: var(--text-primary);
+        .data-stats-loading i {
+          animation: spin 1s linear infinite;
         }
         
-        .data-stat-label {
+        .data-total-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 12px 16px;
+          background: linear-gradient(135deg, var(--primary-alpha-10), var(--primary-alpha-5));
+          border-radius: 8px;
+          margin-bottom: 16px;
+          position: relative;
+          overflow: hidden;
+        }
+        
+        .data-total-bar::before {
+          content: '';
+          position: absolute;
+          top: 0;
+          left: -100%;
+          width: 100%;
+          height: 100%;
+          background: linear-gradient(
+            90deg,
+            transparent,
+            rgba(255, 255, 255, 0.08),
+            transparent
+          );
+          animation: shimmer 3s infinite;
+        }
+        
+        @keyframes shimmer {
+          100% { left: 100%; }
+        }
+        
+        .data-total-label {
           font-size: 0.75rem;
           color: var(--text-muted);
           text-transform: uppercase;
           letter-spacing: 0.04em;
         }
         
+        .data-total-value {
+          font-size: 1.5rem;
+          font-weight: 700;
+          font-family: var(--font-data);
+          color: var(--link-color);
+        }
+        
+        .data-db-list {
+          display: grid;
+          gap: 8px;
+        }
+        
+        .data-db-item {
+          display: grid;
+          grid-template-columns: 120px 1fr auto;
+          align-items: center;
+          gap: 12px;
+          padding: 8px 12px;
+          background: var(--bg-primary);
+          border-radius: 6px;
+          border: 1px solid var(--border-color);
+        }
+        
+        .data-db-name {
+          font-size: 0.875rem;
+          font-weight: 500;
+          color: var(--text-primary);
+        }
+        
+        .data-db-bar-container {
+          height: 6px;
+          background: var(--bg-secondary);
+          border-radius: 3px;
+          overflow: hidden;
+        }
+        
+        .data-db-bar {
+          height: 100%;
+          background: var(--link-color);
+          border-radius: 3px;
+          transition: width 0.3s ease;
+        }
+        
+        .data-db-size {
+          font-size: 0.75rem;
+          font-family: var(--font-data);
+          color: var(--text-muted);
+          min-width: 60px;
+          text-align: right;
+        }
+
+        /* Config Management */
+        .config-actions-row {
+          display: flex;
+          gap: 8px;
+          flex-wrap: wrap;
+          margin-bottom: 16px;
+        }
+        
+        .config-info-box {
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          border-radius: 6px;
+          padding: 12px;
+        }
+        
+        .config-info-item {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+        
+        .config-info-label {
+          font-size: 0.75rem;
+          color: var(--text-muted);
+          text-transform: uppercase;
+        }
+        
+        .config-info-value {
+          font-size: 0.75rem;
+          font-family: var(--font-data);
+          color: var(--text-secondary);
+          max-width: 350px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+          cursor: pointer;
+          padding: 4px 8px;
+          border-radius: 4px;
+          transition: background-color 0.15s ease, color 0.15s ease;
+        }
+        
+        .config-info-value:hover {
+          background: var(--bg-card-hover);
+          color: var(--link-color);
+        }
+        
+        .config-info-value::after {
+          content: ' 📋';
+          opacity: 0;
+          transition: opacity 0.15s ease;
+        }
+        
+        .config-info-value:hover::after {
+          opacity: 0.7;
+        }
+
+        /* Presets Grid */
+        .presets-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 16px;
+        }
+        
+        .preset-card {
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          border-radius: 8px;
+          padding: 16px;
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+          cursor: pointer;
+          transition: 
+            border-color 0.2s ease,
+            transform 0.2s ease,
+            box-shadow 0.2s ease;
+        }
+        
+        .preset-card:hover {
+          border-color: var(--link-color);
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px var(--shadow-sm);
+        }
+        
+        .preset-card:active {
+          transform: translateY(0);
+        }
+        
+        .preset-icon {
+          width: 44px;
+          height: 44px;
+          border-radius: 10px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 1.35rem;
+          box-shadow: 0 2px 8px var(--shadow-sm);
+        }
+        
+        .preset-icon-conservative {
+          background: var(--success-alpha-20);
+          color: var(--success);
+        }
+        
+        .preset-icon-moderate {
+          background: var(--primary-alpha-20);
+          color: var(--link-color);
+        }
+        
+        .preset-icon-aggressive {
+          background: var(--danger-alpha-20);
+          color: var(--error-color);
+        }
+        
+        .preset-info {
+          flex: 1;
+        }
+        
+        .preset-title {
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: var(--text-primary);
+          margin: 0 0 8px 0;
+        }
+        
+        .preset-details {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+          font-size: 0.75rem;
+          color: var(--text-muted);
+        }
+        
+        .preset-details li {
+          padding: 2px 0;
+        }
+        
+        .preset-apply-btn {
+          width: 100%;
+        }
+
+        /* Data Cleanup */
         .data-action-group {
           display: flex;
           align-items: center;
@@ -1285,12 +1624,12 @@ export class SettingsDialog {
         }
         
         .settings-input.small {
-          width: 80px;
+          width: 70px;
         }
         
         .input-suffix {
           color: var(--text-muted);
-          font-size: 0.875rem;
+          font-size: 0.8125rem;
         }
       </style>
     `;
@@ -1300,10 +1639,65 @@ export class SettingsDialog {
    * Attach handlers for Data tab
    */
   _attachDataHandlers(content) {
-    // Load OHLCV stats
-    this._loadOhlcvStats(content);
+    // Load data overview
+    this._loadDataOverview(content);
     
-    // Cleanup button
+    // Display config path with copy on click
+    if (this.pathsInfo?.config_path) {
+      const pathDisplay = content.querySelector("#configPathDisplay");
+      if (pathDisplay) {
+        pathDisplay.textContent = this.pathsInfo.config_path;
+        pathDisplay.title = "Click to copy path";
+        pathDisplay.addEventListener("click", async () => {
+          try {
+            await Utils.copyToClipboard(this.pathsInfo.config_path);
+            Utils.showToast("Config path copied to clipboard", "success");
+          } catch (err) {
+            Utils.showToast("Failed to copy path", "error");
+          }
+        });
+      }
+    }
+    
+    // Export config button
+    const exportBtn = content.querySelector("#exportConfigBtn");
+    if (exportBtn) {
+      exportBtn.addEventListener("click", () => this._exportConfig());
+    }
+    
+    // Import config button
+    const importBtn = content.querySelector("#importConfigBtn");
+    const fileInput = content.querySelector("#configFileInput");
+    if (importBtn && fileInput) {
+      importBtn.addEventListener("click", () => fileInput.click());
+      fileInput.addEventListener("change", (e) => this._importConfig(e));
+    }
+    
+    // Reset config button
+    const resetBtn = content.querySelector("#resetConfigBtn");
+    if (resetBtn) {
+      resetBtn.addEventListener("click", () => this._resetConfig());
+    }
+    
+    // Trading preset buttons - handle both card click and button click
+    content.querySelectorAll(".preset-card").forEach(card => {
+      card.addEventListener("click", (e) => {
+        // Don't trigger if clicking the button (let button handler work)
+        if (e.target.closest(".preset-apply-btn")) return;
+        const preset = card.dataset.preset;
+        this._applyPreset(preset);
+      });
+    });
+    
+    content.querySelectorAll(".preset-apply-btn").forEach(btn => {
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const preset = btn.dataset.preset;
+        this._applyPreset(preset);
+      });
+    });
+    
+    // OHLCV cleanup button
     const cleanupBtn = content.querySelector("#cleanupOhlcvBtn");
     const hoursInput = content.querySelector("#cleanupHours");
     
@@ -1315,12 +1709,12 @@ export class SettingsDialog {
           return;
         }
         
-        if (!window.confirm(`This will delete OHLCV data for tokens inactive for more than ${hours} hours. Continue?`)) {
+        if (!window.confirm(`Delete OHLCV data for tokens inactive for more than ${hours} hours?`)) {
           return;
         }
         
         cleanupBtn.disabled = true;
-        cleanupBtn.innerHTML = '<i class="icon-loader"></i> Cleaning...';
+        cleanupBtn.innerHTML = '<i class="icon-loader spin"></i> Cleaning...';
         
         try {
           const response = await fetch("/api/ohlcv/cleanup", {
@@ -1332,7 +1726,7 @@ export class SettingsDialog {
           if (response.ok) {
             const data = await response.json();
             Utils.showToast(`Cleaned up ${data.deleted_count} inactive tokens`, "success");
-            this._loadOhlcvStats(content);
+            this._loadDataOverview(content);
           } else {
             Utils.showToast("Cleanup failed", "error");
           }
@@ -1340,7 +1734,7 @@ export class SettingsDialog {
           Utils.showToast("Cleanup failed: " + err.message, "error");
         } finally {
           cleanupBtn.disabled = false;
-          cleanupBtn.innerHTML = '<i class="icon-trash-2"></i> Cleanup';
+          cleanupBtn.innerHTML = '<i class="icon-trash-2"></i> Cleanup OHLCV';
         }
       });
     }
@@ -1353,7 +1747,6 @@ export class SettingsDialog {
           return;
         }
         
-        // Clear localStorage items related to UI state
         const keysToRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
@@ -1366,44 +1759,249 @@ export class SettingsDialog {
         Utils.showToast(`Cleared ${keysToRemove.length} cached UI settings`, "success");
       });
     }
+    
+    // Open data folder button
+    const openFolderBtn = content.querySelector("#openDataFolderBtn");
+    if (openFolderBtn) {
+      openFolderBtn.addEventListener("click", async () => {
+        try {
+          const response = await fetch("/api/system/paths/open-data", { method: "POST" });
+          if (response.ok) {
+            Utils.showToast("Data folder opened", "success");
+          } else {
+            Utils.showToast("Failed to open folder", "error");
+          }
+        } catch (err) {
+          Utils.showToast("Failed to open folder: " + err.message, "error");
+        }
+      });
+    }
   }
   
   /**
-   * Load OHLCV statistics
+   * Load comprehensive data overview
    */
-  async _loadOhlcvStats(content) {
-    const statsCard = content.querySelector("#ohlcvStatsCard");
-    if (!statsCard) return;
+  async _loadDataOverview(content) {
+    const card = content.querySelector("#dataOverviewCard");
+    if (!card) return;
     
     try {
-      const response = await fetch("/api/ohlcv/stats");
-      if (response.ok) {
-        const data = await response.json();
-        statsCard.innerHTML = `
-          <div class="data-stats-grid">
-            <div class="data-stat-item">
-              <div class="data-stat-value">${data.total_tokens || 0}</div>
-              <div class="data-stat-label">Tokens</div>
+      const response = await fetch("/api/system/data-stats");
+      if (!response.ok) throw new Error("Failed to load stats");
+      
+      const data = await response.json();
+      const maxSize = Math.max(...data.databases.map(db => db.size_bytes), 1);
+      
+      const dbItemsHtml = data.databases
+        .filter(db => db.exists)
+        .map(db => {
+          const percentage = (db.size_bytes / maxSize) * 100;
+          const sizeDisplay = db.size_mb >= 1 
+            ? `${db.size_mb.toFixed(1)} MB` 
+            : `${(db.size_bytes / 1024).toFixed(0)} KB`;
+          return `
+            <div class="data-db-item">
+              <span class="data-db-name">${db.name}</span>
+              <div class="data-db-bar-container">
+                <div class="data-db-bar" style="width: ${percentage}%"></div>
+              </div>
+              <span class="data-db-size">${sizeDisplay}</span>
             </div>
-            <div class="data-stat-item">
-              <div class="data-stat-value">${data.active_tokens || 0}</div>
-              <div class="data-stat-label">Active</div>
-            </div>
-            <div class="data-stat-item">
-              <div class="data-stat-value">${this._formatCompactNumber(data.total_candles || 0)}</div>
-              <div class="data-stat-label">Candles</div>
-            </div>
-            <div class="data-stat-item">
-              <div class="data-stat-value">${(data.database_size_mb || 0).toFixed(1)} MB</div>
-              <div class="data-stat-label">DB Size</div>
-            </div>
-          </div>
-        `;
-      } else {
-        statsCard.innerHTML = '<div class="data-stats-loading">Failed to load statistics</div>';
+          `;
+        })
+        .join('');
+      
+      card.innerHTML = `
+        <div class="data-total-bar">
+          <span class="data-total-label">Total Database Storage</span>
+          <span class="data-total-value">${data.total_size_mb.toFixed(1)} MB</span>
+        </div>
+        <div class="data-db-list">
+          ${dbItemsHtml}
+        </div>
+      `;
+      
+      // Update config path display
+      const pathDisplay = content.querySelector("#configPathDisplay");
+      if (pathDisplay && data.config_path) {
+        pathDisplay.textContent = data.config_path;
+        pathDisplay.title = data.config_path;
       }
     } catch (err) {
-      statsCard.innerHTML = '<div class="data-stats-loading">Failed to load statistics</div>';
+      card.innerHTML = '<div class="data-stats-loading">Failed to load database statistics</div>';
+    }
+  }
+  
+  /**
+   * Export configuration to JSON file
+   */
+  async _exportConfig() {
+    try {
+      const response = await fetch("/api/config");
+      if (!response.ok) throw new Error("Failed to fetch config");
+      
+      const config = await response.json();
+      
+      // Remove sensitive data
+      const exportData = { ...config };
+      delete exportData.wallet_encrypted;
+      delete exportData.wallet_nonce;
+      
+      const dataStr = JSON.stringify(exportData, null, 2);
+      const blob = new Blob([dataStr], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `screenerbot-config-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      Utils.showToast("Configuration exported successfully", "success");
+    } catch (err) {
+      Utils.showToast("Failed to export config: " + err.message, "error");
+    }
+  }
+  
+  /**
+   * Import configuration from JSON file
+   */
+  async _importConfig(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    // Reset file input for future imports
+    event.target.value = '';
+    
+    try {
+      const text = await file.text();
+      const imported = JSON.parse(text);
+      
+      // Confirm import
+      if (!window.confirm("Import this configuration? Current settings will be overwritten. Wallet credentials will be preserved.")) {
+        return;
+      }
+      
+      // Import each section separately to preserve wallet
+      const sections = ['trader', 'positions', 'filtering', 'swaps', 'tokens', 'rpc', 'sol_price', 'events', 'services', 'monitoring', 'ohlcv', 'gui'];
+      
+      for (const section of sections) {
+        if (imported[section]) {
+          const response = await fetch(`/api/config/${section}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(imported[section]),
+          });
+          
+          if (!response.ok) {
+            console.warn(`Failed to import ${section} section`);
+          }
+        }
+      }
+      
+      Utils.showToast("Configuration imported successfully. Some changes may require restart.", "success");
+    } catch (err) {
+      Utils.showToast("Failed to import config: " + err.message, "error");
+    }
+  }
+  
+  /**
+   * Reset configuration to defaults
+   */
+  async _resetConfig() {
+    if (!window.confirm("Reset all settings to defaults? Your wallet credentials will be preserved, but all other settings will be reset.")) {
+      return;
+    }
+    
+    try {
+      const response = await fetch("/api/config/reset", { method: "POST" });
+      
+      if (response.ok) {
+        Utils.showToast("Configuration reset to defaults", "success");
+      } else {
+        const data = await response.json();
+        Utils.showToast("Failed to reset config: " + (data.error || "Unknown error"), "error");
+      }
+    } catch (err) {
+      Utils.showToast("Failed to reset config: " + err.message, "error");
+    }
+  }
+  
+  /**
+   * Apply trading preset
+   */
+  async _applyPreset(presetName) {
+    const presets = {
+      conservative: {
+        trader: {
+          max_open_positions: 2,
+          trade_size_sol: 0.005,
+          roi_target_percent: 15,
+        },
+        filtering: {
+          min_liquidity_usd: 10000,
+        },
+        positions: {
+          stop_loss_percent: 25,
+        }
+      },
+      moderate: {
+        trader: {
+          max_open_positions: 5,
+          trade_size_sol: 0.01,
+          roi_target_percent: 20,
+        },
+        filtering: {
+          min_liquidity_usd: 5000,
+        },
+        positions: {
+          stop_loss_percent: 20,
+        }
+      },
+      aggressive: {
+        trader: {
+          max_open_positions: 10,
+          trade_size_sol: 0.02,
+          roi_target_percent: 30,
+        },
+        filtering: {
+          min_liquidity_usd: 1000,
+        },
+        positions: {
+          stop_loss_percent: 15,
+        }
+      }
+    };
+    
+    const preset = presets[presetName];
+    if (!preset) {
+      Utils.showToast("Unknown preset", "error");
+      return;
+    }
+    
+    const presetDisplayName = presetName.charAt(0).toUpperCase() + presetName.slice(1);
+    if (!window.confirm(`Apply ${presetDisplayName} trading preset? This will update your trader, filtering, and position settings.`)) {
+      return;
+    }
+    
+    try {
+      // Apply each section
+      for (const [section, values] of Object.entries(preset)) {
+        const response = await fetch(`/api/config/${section}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(values),
+        });
+        
+        if (!response.ok) {
+          console.warn(`Failed to apply ${section} preset`);
+        }
+      }
+      
+      Utils.showToast(`${presetDisplayName} preset applied successfully`, "success");
+    } catch (err) {
+      Utils.showToast("Failed to apply preset: " + err.message, "error");
     }
   }
   
