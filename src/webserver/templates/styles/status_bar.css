@@ -95,7 +95,12 @@
   font-weight: 600;
 }
 
-.status-trading[data-active="\"false\""] {\n  color: var(--text-muted, #8b949e);color\n}\n\n/* Reserve space for the fixed status bar at the bottom.\n   The status bar is 26px tall, so we need to reduce available\n   height by that amount to prevent content from being hidden. */\n.content {\n  padding-bottom: 26px;padding-bottom /* Height of .status-bar */\n}\n\n/* Light theme adjustments */\n[data-theme="\"light\""] .status-bar {\n  background: linear-gradient(135deg, #f0f2f6 0%, #e8eaee 100%);background\n  border-top-color: #d1d5db;border-top-color\n  color: #6b7280;color\n}\n\n[data-theme="\"light\""] .status-value {\n  color: #374151;color\n}\n\n[data-theme="\"light\""] .status-separator {\n  color: #d1d5db;color\n}\n\n[data-theme="\"light\""] .status-health[data-health="\"good\""] .status-value {\n  color: #059669;color\n}\n\n[data-theme="\"light\""] .status-health[data-health="\"warning\""] .status-value {\n  color: #d97706;color\n}\n\n[data-theme="\"light\""] .status-health[data-health="\"error\""] .status-value {\n  color: #dc2626;color\n}
+.status-trading[data-active="false"] {
+  color: var(--text-muted, #8b949e);
+}
+
+/* The following block is a duplicate and contains syntax errors, so it is removed. */
+
 
 /* Reserve space for the fixed status bar at the bottom.
    The status bar is 24px tall, so we need to reduce available
