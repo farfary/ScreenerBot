@@ -1197,5 +1197,6 @@ function createLifecycle() {
   };
 }
 
-// Register page
+// Register page (supports both legacy "wallet" and new "wallets" routes)
 registerPage("wallet", createLifecycle());
+registerPage("wallets", createLifecycle());

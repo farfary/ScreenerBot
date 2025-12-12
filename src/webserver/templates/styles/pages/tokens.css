@@ -98,7 +98,9 @@
   display: inline-flex;
   align-items: center;
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .price-change-diff {
@@ -108,7 +110,9 @@
 .value-positive,
 .value-negative {
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .tokens-page td[data-column-id="price_sol"],
@@ -127,7 +131,9 @@
 .tokens-page td[data-column-id="token_birth_at"],
 .tokens-page td[data-column-id="first_seen_at"] {
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 /* Row actions buttons */

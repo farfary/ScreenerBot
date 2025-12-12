@@ -120,7 +120,14 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
 
     logger::info(LogTag::System, "Configuration loaded successfully");
 
-    // 5. Validate wallet consistency
+    // 5. Initialize wallets module (migrates from config.toml if needed)
+    crate::wallets::initialize()
+      .await
+      .map_err(|e| format!("Failed to initialize wallets: {}", e))?;
+
+    logger::info(LogTag::System, "Wallets module initialized");
+
+    // 6. Validate wallet consistency
  logger::info(LogTag::System, "Validating wallet consistency...");
 
     match crate::wallet_validation::WalletValidator::validate_wallet_consistency().await? {

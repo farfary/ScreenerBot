@@ -81,9 +81,38 @@ body.dt-column-resizing .data-table col {
 /* Scroll container */
 .data-table-scroll-container {
   flex: 1;
-  overflow: hidden auto; /* Avoid thin right-hand gap when columns fit */
+  overflow: auto; /* Enable both horizontal and vertical scrolling */
   position: relative;
   min-height: 0; /* Critical for flex scrolling */
+}
+
+/* Custom scrollbar styling for dark theme */
+.data-table-scroll-container::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.data-table-scroll-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.data-table-scroll-container::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+.data-table-scroll-container::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+.data-table-scroll-container::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Firefox scrollbar styling */
+.data-table-scroll-container {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-color) transparent;
 }
 
 .data-table-blocking-state {
@@ -441,7 +470,9 @@ body.dt-column-resizing * {
   min-height: inherit;
   vertical-align: middle; /* Center content vertically */
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 /* Uniform row height mode */
@@ -550,34 +581,6 @@ body.dt-column-resizing * {
   }
 }
 
-/* Scrollbar styling */
-.data-table-scroll-container::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-
-.data-table-scroll-container::-webkit-scrollbar-track {
-  background: rgb(0, 0, 0, 0.05);
-  border-radius: 5px;
-}
-
-.data-table-scroll-container::-webkit-scrollbar-thumb {
-  background: rgb(0, 0, 0, 0.2);
-  border-radius: 5px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-
-.data-table-scroll-container::-webkit-scrollbar-thumb:hover {
-  background: rgb(0, 0, 0, 0.3);
-  background-clip: padding-box;
-}
-
-.data-table-scroll-container::-webkit-scrollbar-corner {
-  background: transparent;
-}
-
-/* Responsive adjustments */
 @media (width <= 768px) {
   .data-table-toolbar {
     flex-direction: column;
@@ -1089,7 +1092,9 @@ body.dt-column-resizing * {
 .data-table td[data-type="currency"],
 .data-table .dt-cell-numeric {
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   font-weight: 500;
   letter-spacing: -0.01em;
   text-align: right;
@@ -1112,7 +1117,9 @@ body.dt-column-resizing * {
 /* Price display with emphasis */
 .data-table .dt-price {
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   font-weight: 600;
 }
 
@@ -1138,7 +1145,9 @@ body.dt-column-resizing * {
 /* SOL amount display */
 .data-table .dt-sol {
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   font-weight: 500;
 }
 

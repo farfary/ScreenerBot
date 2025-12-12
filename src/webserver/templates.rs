@@ -23,7 +23,8 @@ const FILTERING_PAGE_STYLES: &str = include_str!("templates/styles/pages/filteri
 const CONFIG_PAGE_STYLES: &str = include_str!("templates/styles/pages/config.css");
 const STRATEGIES_PAGE_STYLES: &str = include_str!("templates/styles/pages/strategies.css");
 const TRADER_PAGE_STYLES: &str = include_str!("templates/styles/pages/trader.css");
-const WALLET_PAGE_STYLES: &str = include_str!("templates/styles/pages/wallet.css");
+const WALLETS_PAGE_STYLES: &str = include_str!("templates/styles/pages/wallets.css");
+const TOOLS_PAGE_STYLES: &str = include_str!("templates/styles/pages/tools.css");
 const HOME_PAGE_STYLES: &str = include_str!("templates/styles/pages/home.css");
 const UPDATES_PAGE_STYLES: &str = include_str!("templates/styles/pages/updates.css");
 const SPLASH_PAGE_STYLES: &str = include_str!("templates/styles/pages/splash.css");
@@ -120,7 +121,8 @@ pub const FILTERING_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/fi
 pub const CONFIG_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/config.js");
 pub const STRATEGIES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/strategies.js");
 pub const TRADER_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/trader.js");
-pub const WALLET_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/wallet.js");
+pub const WALLETS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/wallets.js");
+pub const TOOLS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/tools.js");
 pub const HOME_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/home.js");
 pub const UPDATES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/updates.js");
 pub const ABOUT_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/about.js");
@@ -134,7 +136,8 @@ const FILTERING_PAGE: &str = include_str!("templates/pages/filtering.html");
 const CONFIG_PAGE: &str = include_str!("templates/pages/config.html");
 const STRATEGIES_PAGE: &str = include_str!("templates/pages/strategies.html");
 const TRADER_PAGE: &str = include_str!("templates/pages/trader.html");
-const WALLET_PAGE: &str = include_str!("templates/pages/wallet.html");
+const WALLETS_PAGE: &str = include_str!("templates/pages/wallets.html");
+const TOOLS_PAGE: &str = include_str!("templates/pages/tools.html");
 const HOME_PAGE: &str = include_str!("templates/pages/home.html");
 const UPDATES_PAGE: &str = include_str!("templates/pages/updates.html");
 const ABOUT_PAGE: &str = include_str!("templates/pages/about.html");
@@ -223,7 +226,8 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         CONFIG_PAGE_STYLES,
         STRATEGIES_PAGE_STYLES,
         TRADER_PAGE_STYLES,
-        WALLET_PAGE_STYLES,
+        WALLETS_PAGE_STYLES,
+        TOOLS_PAGE_STYLES,
         HOME_PAGE_STYLES,
         UPDATES_PAGE_STYLES,
     ];
@@ -242,7 +246,8 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         ("config", CONFIG_PAGE_STYLES),
         ("strategies", STRATEGIES_PAGE_STYLES),
         ("trader", TRADER_PAGE_STYLES),
-        ("wallet", WALLET_PAGE_STYLES),
+        ("wallets", WALLETS_PAGE_STYLES),
+        ("tools", TOOLS_PAGE_STYLES),
         ("home", HOME_PAGE_STYLES),
         ("updates", UPDATES_PAGE_STYLES),
     ] {
@@ -339,8 +344,12 @@ pub fn trader_content() -> String {
     render_page(TRADER_PAGE)
 }
 
-pub fn wallet_content() -> String {
-    render_page(WALLET_PAGE)
+pub fn wallets_content() -> String {
+    render_page(WALLETS_PAGE)
+}
+
+pub fn tools_content() -> String {
+    render_page(TOOLS_PAGE)
 }
 
 pub fn initialization_content() -> String {

@@ -111,74 +111,116 @@ pub fn default_tabs() -> Vec<TabConfig> {
             enabled: true,
         },
         TabConfig {
+            id: "tools".into(),
+            label: "Tools".into(),
+            icon: "icon-wrench".into(),
+            order: 1,
+            enabled: true,
+        },
+        TabConfig {
             id: "positions".into(),
             label: "Positions".into(),
             icon: "icon-chart-candlestick".into(),
-            order: 1,
+            order: 2,
             enabled: true,
         },
         TabConfig {
             id: "tokens".into(),
             label: "Tokens".into(),
             icon: "icon-coins".into(),
-            order: 2,
+            order: 3,
             enabled: true,
         },
         TabConfig {
             id: "filtering".into(),
             label: "Filtering".into(),
             icon: "icon-list-filter".into(),
-            order: 3,
+            order: 4,
             enabled: true,
         },
         TabConfig {
-            id: "wallet".into(),
-            label: "Wallet".into(),
+            id: "wallets".into(),
+            label: "Wallets".into(),
             icon: "icon-wallet".into(),
-            order: 4,
+            order: 5,
             enabled: true,
         },
         TabConfig {
             id: "trader".into(),
             label: "Auto Trader".into(),
             icon: "icon-bot".into(),
-            order: 5,
+            order: 6,
             enabled: true,
         },
         TabConfig {
             id: "strategies".into(),
             label: "Strategies".into(),
             icon: "icon-target".into(),
-            order: 6,
+            order: 7,
             enabled: true,
         },
         TabConfig {
             id: "transactions".into(),
             label: "Transactions".into(),
             icon: "icon-activity".into(),
-            order: 7,
+            order: 8,
             enabled: true,
         },
         TabConfig {
             id: "services".into(),
             label: "Services".into(),
             icon: "icon-server".into(),
-            order: 8,
+            order: 9,
             enabled: true,
         },
         TabConfig {
             id: "config".into(),
             label: "Config".into(),
             icon: "icon-settings".into(),
-            order: 9,
+            order: 10,
             enabled: true,
         },
         TabConfig {
             id: "events".into(),
             label: "Events".into(),
             icon: "icon-radio-tower".into(),
-            order: 10,
+            order: 11,
             enabled: true,
         },
     ]
+}
+
+/// Ensures all default tabs exist in the provided tabs list.
+/// Also handles migration from old tab IDs (e.g., "wallet" -> "wallets").
+/// Returns the merged list with missing tabs added and old IDs migrated.
+pub fn ensure_all_tabs_present(mut tabs: Vec<TabConfig>) -> Vec<TabConfig> {
+    let defaults = default_tabs();
+    
+    // Migration: rename "wallet" to "wallets" if present
+    for tab in &mut tabs {
+        if tab.id == "wallet" {
+            tab.id = "wallets".into();
+            tab.label = "Wallets".into();
+        }
+    }
+    
+    // Find max order to add new tabs after existing ones
+    let max_order = tabs.iter().map(|t| t.order).max().unwrap_or(0);
+    let mut next_order = max_order + 1;
+    
+    // Add any missing tabs from defaults
+    for default_tab in defaults {
+        let exists = tabs.iter().any(|t| t.id == default_tab.id);
+        if !exists {
+            let mut new_tab = default_tab;
+            new_tab.order = next_order;
+            next_order += 1;
+            tabs.push(new_tab);
+        }
+    }
+    
+    // Sort by order
+    tabs.sort_by_key(|t| t.order);
+    
+    tabs
 }

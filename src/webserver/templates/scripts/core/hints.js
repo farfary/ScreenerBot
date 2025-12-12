@@ -488,6 +488,139 @@ Empty token accounts can be cleaned up in Settings.`,
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
+  // WALLETS PAGE
+  // ═══════════════════════════════════════════════════════════════════════════
+  wallets: {
+    security: {
+      id: "wallets.security",
+      title: "Wallet Security",
+      content: `**Bank-Grade Encryption**
+
+All private keys are encrypted with AES-256-GCM using a machine-bound key:
+
+• **AES-256-GCM** — military-grade encryption standard
+• **Machine-Bound Key** — derived from your device's unique identifier
+• **Local Storage Only** — keys never leave your device
+• **No Cloud Backup** — keys cannot be recovered if lost
+
+**What this means:**
+• Your keys are safe even if the database file is stolen
+• Only this specific machine can decrypt the keys
+• Always backup your private keys externally`,
+    },
+
+    mainWallet: {
+      id: "wallets.main",
+      title: "Main Wallet",
+      content: `The primary wallet used for all trading operations.
+
+• **Auto-Trading** — entry/exit trades execute from this wallet
+• **Balance Display** — shown in header and dashboard
+• **Token Holdings** — SPL tokens held by this wallet
+
+Change the main wallet by selecting "Set as Main" on any secondary wallet.`,
+    },
+
+    secondaryWallets: {
+      id: "wallets.secondary",
+      title: "Secondary Wallets",
+      content: `Additional wallets for multi-wallet operations.
+
+• **Multi-Wallet Trading** — coordinate buys/sells across wallets
+• **Portfolio Separation** — organize by strategy or purpose
+• **Independent Balances** — each wallet has its own SOL/tokens
+
+Secondary wallets are not used by auto-trading unless explicitly configured.`,
+    },
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // TOOLS PAGE
+  // ═══════════════════════════════════════════════════════════════════════════
+  tools: {
+    walletCleanup: {
+      id: "tools.wallet_cleanup",
+      title: "Wallet Cleanup Tool",
+      content: `**Reclaim SOL from Empty Token Accounts**
+
+Every token you interact with creates an Associated Token Account (ATA) that requires ~0.002 SOL in rent.
+
+**How it works:**
+• Scans your wallet for ATAs with zero balance
+• Shows total reclaimable SOL amount
+• Closes empty accounts to recover rent
+
+**Important:**
+• Only closes accounts with exactly 0 balance
+• Failed closures are cached to avoid retry spam
+• Large wallets may require multiple cleanup passes`,
+    },
+
+    burnTokens: {
+      id: "tools.burn_tokens",
+      title: "Burn Tokens Tool",
+      content: `**Permanently Destroy Tokens**
+
+Burning tokens removes them from circulation forever.
+
+**Use cases:**
+• Clean up worthless dust tokens
+• Reduce token supply (if you're the creator)
+• Remove scam/spam tokens
+
+**Warning:** This action is irreversible. Burned tokens cannot be recovered.`,
+    },
+
+    walletGenerator: {
+      id: "tools.wallet_generator",
+      title: "Wallet Generator Tool",
+      content: `**Generate New Solana Keypairs**
+
+Create new wallets securely on your device.
+
+**Features:**
+• Generates cryptographically secure keypairs
+• Optional vanity address prefix (e.g., "SOL...")
+• Export as base58 or JSON array
+
+**Security:**
+• Keys are generated locally
+• Never transmitted over the network
+• Always backup keys securely`,
+    },
+
+    volumeAggregator: {
+      id: "tools.volume_aggregator",
+      title: "Volume Aggregator Tool",
+      content: `**Generate Trading Volume**
+
+Creates organic-looking trading activity for a token using multiple wallets.
+
+**How it works:**
+• Uses your secondary wallets to execute buy/sell pairs
+• Distributes transactions across wallets for natural appearance
+• Configurable amounts and delays between transactions
+
+**Requirements:**
+• At least 2 secondary wallets configured
+• Each wallet needs SOL for gas fees (~0.01 SOL minimum)
+• Token must have active liquidity pools
+
+**Configuration:**
+• **Total Volume** — target SOL volume to generate
+• **Min/Max Amount** — range for individual transaction sizes
+• **Delay** — time between transactions (min 1000ms)
+• **Randomize** — vary amounts within range
+
+**Risks:**
+• Wallet balances are used for transactions
+• Failed transactions may result in partial fills
+• High-frequency trading may trigger rate limits`,
+      learnMoreUrl: "https://screenerbot.io/docs/tools/volume-aggregator",
+    },
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
   // CONFIG PAGE
   // ═══════════════════════════════════════════════════════════════════════════
   config: {

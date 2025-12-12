@@ -355,7 +355,9 @@
   margin-left: auto;
   text-align: right;
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 /* Metrics Grid */
@@ -494,7 +496,9 @@
   color: var(--text-primary);
   margin-bottom: 0.125rem;
   line-height: 1.2;
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .metric-value.positive {
@@ -602,7 +606,9 @@
 
 .health-value {
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   font-weight: 600;
   color: var(--text-primary);
   font-size: 0.875rem;
@@ -619,7 +625,9 @@
 /* Time Rule Values (position exit timeline) */
 .time-rule-value {
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   font-weight: 500;
 }
 
@@ -728,7 +736,9 @@
   color: var(--text-primary);
   font-weight: 500;
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 /* ============================================================================
@@ -1133,7 +1143,9 @@
   font-weight: 600;
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   margin-bottom: 0.125rem;
 }
 
@@ -1467,7 +1479,9 @@
   font-size: 0.875rem;
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .hint-text {

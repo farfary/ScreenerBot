@@ -51,7 +51,7 @@ pub fn load_config() -> Result<(), String> {
 /// - `Ok(())` - Configuration loaded successfully
 /// - `Err(String)` - Error message if loading failed
 pub fn load_config_from_path(path: &str) -> Result<(), String> {
-  let config = if std::path::Path::new(path).exists() {
+  let mut config = if std::path::Path::new(path).exists() {
     // Load from file
     let contents = std::fs::read_to_string(path)
       .map_err(|e| format!("Failed to read config file '{}': {}", path, e))?;
@@ -62,10 +62,14 @@ pub fn load_config_from_path(path: &str) -> Result<(), String> {
     // Use defaults if file doesn't exist
     crate::logger::warning(
       crate::logger::LogTag::System,
- &format!("Config file '{}'not found, using default values", path),
+      &format!("Config file '{}' not found, using default values", path),
     );
     Config::default()
   };
+
+  // Ensure all navigation tabs are present (handles migrations like wallet -> wallets, adds new tabs like tools)
+  config.gui.dashboard.navigation.tabs = 
+    crate::config::schemas::ensure_all_tabs_present(config.gui.dashboard.navigation.tabs);
 
   CONFIG
     .set(RwLock::new(config))
@@ -289,8 +293,12 @@ pub fn reload_config_from_path(path: &str) -> Result<(), String> {
   let contents = std::fs::read_to_string(path)
     .map_err(|e| format!("Failed to read config file '{}': {}", path, e))?;
 
-  let new_config = toml::from_str::<Config>(&contents)
+  let mut new_config = toml::from_str::<Config>(&contents)
     .map_err(|e| format!("Failed to parse config file '{}': {}", path, e))?;
+
+  // Ensure all navigation tabs are present (handles migrations)
+  new_config.gui.dashboard.navigation.tabs = 
+    crate::config::schemas::ensure_all_tabs_present(new_config.gui.dashboard.navigation.tabs);
 
   // Validate configuration before applying
   validate_config(&new_config)?;
@@ -477,17 +485,45 @@ pub fn is_config_initialized() -> bool {
 // WALLET MANAGEMENT FUNCTIONS
 // ============================================================================
 
-/// Load the main wallet keypair from the configuration
+/// Load the main wallet keypair from the wallets database
 ///
-/// The private key is stored encrypted in config. This function:
-/// 1. Reads the encrypted ciphertext and nonce from config
-/// 2. Decrypts using machine-derived key (AES-256-GCM)
-/// 3. Parses the decrypted base58 private key into a Keypair
+/// This function uses the new multi-wallet system. For async code, prefer
+/// using `wallets::get_main_keypair()` directly.
+///
+/// The private key is stored encrypted in the wallets database. This function:
+/// 1. Checks if wallets module is initialized
+/// 2. Falls back to legacy config.toml if not initialized
+/// 3. Returns the main wallet keypair
 ///
 /// # Returns
-/// - `Ok(Keypair)` - Successfully created Solana keypair
-/// - `Err(String)` - Decryption failed or invalid key format
+/// - `Ok(Keypair)` - Successfully retrieved main wallet keypair
+/// - `Err(String)` - No main wallet configured or decryption failed
 pub fn get_wallet_keypair() -> Result<Keypair, String> {
+  // Try the new wallets module first (async -> sync bridge)
+  // Use try_read to avoid blocking if we're in an async context
+  if let Ok(handle) = tokio::runtime::Handle::try_current() {
+    // We're in an async context - use block_in_place
+    return tokio::task::block_in_place(|| {
+      handle.block_on(async {
+        // Check if wallets module is initialized
+        if crate::wallets::is_initialized().await {
+          return crate::wallets::get_main_keypair().await;
+        }
+        // Fall back to legacy config
+        get_wallet_keypair_from_config()
+      })
+    });
+  }
+
+  // Not in async context - create a temporary runtime
+  // This should only happen during early startup
+  get_wallet_keypair_from_config()
+}
+
+/// Legacy function to get wallet keypair from config.toml
+///
+/// Used as fallback before wallets module is initialized
+fn get_wallet_keypair_from_config() -> Result<Keypair, String> {
   with_config(|cfg| {
     // Check if encrypted wallet data exists
     if cfg.wallet_encrypted.is_empty() || cfg.wallet_nonce.is_empty() {

@@ -3069,6 +3069,134 @@ impl RpcClient {
     }
   }
 
+  /// Sign, send, and confirm a transaction using a specific keypair
+  ///
+  /// This is similar to sign_send_and_confirm_transaction but accepts a keypair
+  /// parameter instead of using the main wallet from config. Used by volume
+  /// aggregator and other tools that need to sign with secondary wallets.
+  pub async fn sign_send_and_confirm_with_keypair(
+    &self,
+    swap_transaction_base64: &str,
+    keypair: &Keypair,
+  ) -> Result<String, ScreenerBotError> {
+    logger::info(
+      LogTag::Rpc,
+      &format!(
+        "Starting sign_send_and_confirm_with_keypair for wallet {} with {} byte transaction",
+        keypair.pubkey(),
+        swap_transaction_base64.len()
+      ),
+    );
+
+    // Decode base64 transaction
+    let original_tx_bytes = base64::engine::general_purpose::STANDARD
+      .decode(swap_transaction_base64)
+      .map_err(|e| {
+        ScreenerBotError::Data(crate::errors::DataError::ParseError {
+          data_type: "base64_transaction".to_string(),
+          error: format!("Failed to decode transaction: {}", e),
+        })
+      })?;
+
+    // Deserialize the VersionedTransaction
+    let mut transaction: VersionedTransaction = bincode::deserialize(&original_tx_bytes)
+      .map_err(|e| {
+        ScreenerBotError::Data(crate::errors::DataError::ParseError {
+          data_type: "VersionedTransaction".to_string(),
+          error: format!("Failed to deserialize transaction: {}", e),
+        })
+      })?;
+
+    // Sign the transaction (first signature index assumed to be wallet)
+    let sig = keypair.sign_message(&transaction.message.serialize());
+    if transaction.signatures.is_empty() {
+      transaction.signatures.push(sig);
+    } else {
+      transaction.signatures[0] = sig;
+    }
+
+    logger::info(
+      LogTag::Rpc,
+      &format!(
+        "Transaction signed, wallet={}, sig={}",
+        keypair.pubkey(),
+        sig
+      ),
+    );
+
+    // Use current round-robin URL
+    let url = self.url();
+    let commitment = CommitmentConfig::confirmed();
+
+    logger::debug(
+      LogTag::Rpc,
+      &format!(
+        "Creating blocking RpcClient for send_and_confirm at {}",
+        url
+      ),
+    );
+
+    // Build blocking client and send+confirm in blocking thread
+    // Record submission event (no signature yet)
+    crate::events::record_transaction_event("unknown", "submitted", true, None, None, None)
+      .await;
+
+    let join_res = tokio::task::spawn_blocking(move || {
+      let client = SolanaRpcClient::new_with_commitment(url, commitment);
+      client.send_and_confirm_transaction(&transaction)
+    })
+    .await
+    .map_err(|e| {
+      ScreenerBotError::Network(crate::errors::NetworkError::Generic {
+        message: format!("Join error in send_and_confirm: {}", e),
+      })
+    })?;
+
+    match join_res {
+      Ok(signature) => {
+        logger::info(
+          LogTag::Rpc,
+          &format!("Transaction confirmed: {}", signature),
+        );
+        // Record success event
+        crate::events::record_transaction_event(
+          &signature.to_string(),
+          "confirmed",
+          true,
+          None,
+          None,
+          None,
+        )
+        .await;
+        Ok(signature.to_string())
+      }
+      Err(client_err) => {
+        logger::error(
+          LogTag::Rpc,
+          &format!("send_and_confirm failed: {}", client_err),
+        );
+        // Record failure event
+        crate::events::record_transaction_event(
+          "unknown",
+          "failed",
+          false,
+          None,
+          None,
+          Some(&client_err.to_string()),
+        )
+        .await;
+        Err(ScreenerBotError::Blockchain(
+          crate::errors::BlockchainError::TransactionDropped {
+            signature: "unknown".to_string(),
+            reason: format!("send_and_confirm_transaction failed: {}", client_err),
+            fee_paid: None,
+            attempts: 1,
+          },
+        ))
+      }
+    }
+  }
+
   /// Send and confirm a signed transaction with robust confirmation logic
   /// This method accepts an already-signed Transaction object and uses the same
   /// confirmation approach as sign_send_and_confirm_transaction but for pre-signed transactions

@@ -255,7 +255,9 @@
   font-weight: 600;
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .price-sol-unit {
@@ -320,7 +322,9 @@
   color: var(--text-primary);
   font-weight: 600;
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 /* Right section - Trade actions & controls */
@@ -654,7 +658,9 @@
   font-weight: 700;
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .quick-stat .stat-change {
@@ -782,7 +788,9 @@
   font-weight: 600;
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .info-cell .cell-value.large {
@@ -939,7 +947,9 @@
   color: var(--text-primary);
   font-weight: 600;
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .info-value.mono {
@@ -1068,7 +1078,9 @@
 .txn-counts {
   font-size: 0.75rem;
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   width: 70px;
   text-align: right;
   flex-shrink: 0;
@@ -1147,7 +1159,9 @@
 .ohlcv-value {
   color: var(--text-primary);
   font-weight: 600;
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .ohlcv-change {
@@ -2196,7 +2210,9 @@
 }
 
 @keyframes position-btn-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Sell button - red accent */
@@ -2307,7 +2323,9 @@
   font-size: 0.9rem;
   font-weight: 700;
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .position-pnl-banner.positive .pnl-value {
@@ -2371,7 +2389,9 @@
   font-weight: 600;
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .position-cell .cell-sub {
@@ -2421,7 +2441,9 @@
 .detail-value {
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   display: flex;
   align-items: center;
   gap: var(--spacing-xs);
@@ -2561,7 +2583,9 @@
   font-weight: 600;
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .pools-canonical-info {
@@ -2731,7 +2755,9 @@
   font-size: 0.75rem;
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .pool-detail-value.mono {
@@ -2871,7 +2897,9 @@
   color: var(--text-primary);
   font-weight: 500;
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .pool-value.mono {

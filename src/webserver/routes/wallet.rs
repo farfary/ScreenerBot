@@ -32,11 +32,28 @@ pub struct TokenBalanceInfo {
     pub is_token_2022: bool,
 }
 
+#[derive(Debug, Serialize)]
+pub struct WalletTokensResponse {
+    pub tokens: Vec<WalletTokenHolding>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct WalletTokenHolding {
+    pub mint: String,
+    pub symbol: Option<String>,
+    pub name: Option<String>,
+    pub balance: u64,
+    pub ui_amount: f64,
+    pub decimals: u8,
+    pub is_token_2022: bool,
+}
+
 /// Create wallet routes
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/wallet/current", get(get_wallet_current))
         .route("/wallet/balance", get(get_wallet_balance)) // Alias for /wallet/current
+        .route("/wallet/tokens", get(get_wallet_tokens))
         .route("/wallet/dashboard", post(get_wallet_dashboard))
         .route("/wallet/dashboard/refresh", post(refresh_wallet_dashboard))
         .route("/wallet/flow-cache", get(get_wallet_flow_cache_stats))
@@ -79,6 +96,73 @@ async fn get_wallet_current() -> Json<Option<WalletCurrentResponse>> {
 /// Get wallet balance (alias for get_wallet_current)
 async fn get_wallet_balance() -> Json<Option<WalletCurrentResponse>> {
     get_wallet_current().await
+}
+
+/// Get wallet token holdings with enriched metadata
+async fn get_wallet_tokens() -> Json<WalletTokensResponse> {
+    // Return demo data if demo mode is enabled
+    if crate::webserver::demo::is_demo_mode() {
+        return Json(crate::webserver::demo::get_demo_wallet_tokens());
+    }
+
+    // Get current wallet snapshot
+    let snapshot = match get_current_wallet_status().await {
+        Ok(Some(s)) => s,
+        Ok(None) => {
+            return Json(WalletTokensResponse { tokens: vec![] });
+        }
+        Err(err) => {
+            logger::warning(
+                LogTag::Webserver,
+                &format!("Failed to get wallet status for tokens: {}", err),
+            );
+            return Json(WalletTokensResponse { tokens: vec![] });
+        }
+    };
+
+    // Collect mints from token balances
+    let mints: Vec<String> = snapshot
+        .token_balances
+        .iter()
+        .map(|tb| tb.mint.clone())
+        .collect();
+
+    // Fetch token metadata in batch
+    let mut metadata_map: std::collections::HashMap<String, (Option<String>, Option<String>)> =
+        std::collections::HashMap::new();
+
+    // Try to get metadata for each token from token database
+    if let Some(db) = crate::tokens::database::get_global_database() {
+        for mint in &mints {
+            if let Ok(Some(meta)) = db.get_token(mint) {
+                metadata_map.insert(mint.clone(), (meta.symbol.clone(), meta.name.clone()));
+            }
+        }
+    }
+
+    // Build response with enriched data
+    let tokens: Vec<WalletTokenHolding> = snapshot
+        .token_balances
+        .iter()
+        .map(|tb| {
+            let (symbol, name) = metadata_map
+                .get(&tb.mint)
+                .cloned()
+                .unwrap_or((None, None));
+
+            WalletTokenHolding {
+                mint: tb.mint.clone(),
+                symbol,
+                name,
+                balance: tb.balance,
+                ui_amount: tb.balance_ui,
+                decimals: tb.decimals,
+                is_token_2022: tb.is_token_2022,
+            }
+        })
+        .collect();
+
+    Json(WalletTokensResponse { tokens })
 }
 
 #[derive(Debug, Deserialize)]

@@ -678,7 +678,9 @@
   font-weight: 600;
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   word-break: break-word;
 }
 
@@ -902,7 +904,9 @@
   font-weight: 600;
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   line-height: 1.2;
 }
 

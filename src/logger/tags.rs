@@ -42,6 +42,7 @@ pub enum LogTag {
     Security,
     Webserver,
     Test,
+    Tools,
     Other(String),
 }
 
@@ -85,6 +86,7 @@ impl LogTag {
             LogTag::Security => "security".to_string(),
             LogTag::Webserver => "webserver".to_string(),
             LogTag::Test => "test".to_string(),
+            LogTag::Tools => "tools".to_string(),
             LogTag::Other(ref s) => s.to_lowercase(),
         }
     }
@@ -128,6 +130,7 @@ impl LogTag {
             LogTag::Security => "SECURITY",
             LogTag::Webserver => "WEBSERVER",
             LogTag::Test => "TEST",
+            LogTag::Tools => "TOOLS",
             LogTag::Other(_) => "OTHER",
         }
     }
@@ -172,6 +175,7 @@ impl std::fmt::Display for LogTag {
             LogTag::Security => format!("{:<8}", "SECURITY").bright_red().bold(),
             LogTag::Webserver => format!("{:<8}", "WEBSERVER").bright_green().bold(),
             LogTag::Test => format!("{:<8}", "TEST").bright_blue().bold(),
+            LogTag::Tools => format!("{:<8}", "TOOLS").bright_purple().bold(),
             LogTag::Other(s) => format!("{:<8}", s).white().bold(),
         };
         write!(f, "{}", tag_str)

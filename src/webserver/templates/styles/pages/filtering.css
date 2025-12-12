@@ -79,7 +79,9 @@
   font-weight: 600;
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .filtering-info-bar .info-item.highlight .value {
@@ -110,7 +112,9 @@
   background: var(--bg-card);
   color: var(--text-primary);
   font-size: 0.875rem;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .filtering-search-bar input::placeholder {
@@ -210,7 +214,9 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-xs);
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .status-card:hover {
@@ -231,7 +237,9 @@
   font-weight: 700;
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   line-height: 1.2;
 }
 
@@ -273,7 +281,9 @@
   border-radius: var(--radius-lg);
   overflow: hidden;
   min-width: 0;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .filter-card:hover {
@@ -434,9 +444,13 @@
   color: var(--text-primary);
   font-size: 0.8rem;
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   text-align: right;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .filtering-config-field input[type="number"]:focus,

@@ -68,7 +68,9 @@
   line-height: 1.05;
   letter-spacing: 0.01em;
   text-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .hero-change {
@@ -86,7 +88,9 @@
   font-size: 0.95rem;
   letter-spacing: 0.01em;
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .hero-change-value.profit,
@@ -137,7 +141,9 @@
   font-family: var(--font-data);
   font-size: clamp(0.9rem, 1.2vw, 1.05rem);
   font-weight: 600;
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 /* ===== Content Grid - 3 Columns ===== */
@@ -282,7 +288,9 @@
   font-size: var(--value-size);
   font-weight: 600;
   color: var(--text-primary);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   white-space: nowrap;
 }
 
@@ -329,7 +337,9 @@
   font-weight: 700;
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 /* ===== Positions Card ===== */
@@ -366,7 +376,9 @@
   font-size: var(--value-size);
   font-weight: 600;
   color: var(--text-primary);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   white-space: nowrap;
 }
 
@@ -419,7 +431,9 @@
   font-weight: 700;
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   white-space: nowrap;
 }
 
@@ -481,7 +495,9 @@
   font-weight: 700;
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .token-value.success {
@@ -497,11 +513,11 @@
   .content-grid {
     grid-template-columns: minmax(260px, 1.2fr) minmax(160px, 0.8fr) minmax(180px, 1fr);
   }
-  
+
   .analytics-grid {
     grid-template-columns: repeat(2, 1fr);
   }
-  
+
   .analytics-item.primary {
     grid-column: 1 / -1;
   }
@@ -518,7 +534,7 @@
     grid-template-columns: 1fr 1fr;
     gap: var(--home-gap);
   }
-  
+
   .analytics-grid {
     grid-template-columns: repeat(3, 1fr);
   }
@@ -541,11 +557,11 @@
   .right-stack {
     grid-template-columns: 1fr;
   }
-  
+
   .analytics-grid {
     grid-template-columns: repeat(2, 1fr);
   }
-  
+
   .analytics-secondary {
     grid-template-columns: repeat(3, 1fr);
   }
@@ -616,22 +632,12 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgb(255 255 255 / 0.1) 50%,
-    transparent 100%
-  );
+  background: linear-gradient(90deg, transparent 0%, rgb(255 255 255 / 0.1) 50%, transparent 100%);
   animation: home-shimmer 1.5s ease-in-out infinite;
 }
 
 [data-theme="dark"] .wallet-hero.loading::after {
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgb(88 166 255 / 0.08) 50%,
-    transparent 100%
-  );
+  background: linear-gradient(90deg, transparent 0%, rgb(88 166 255 / 0.08) 50%, transparent 100%);
 }
 
 /* Loading state for dashboard cards */
@@ -644,23 +650,13 @@
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgb(0 0 0 / 0.04) 50%,
-    transparent 100%
-  );
+  background: linear-gradient(90deg, transparent 0%, rgb(0 0 0 / 0.04) 50%, transparent 100%);
   animation: home-shimmer 1.5s ease-in-out infinite;
   pointer-events: none;
 }
 
 [data-theme="dark"] .dashboard-card.loading::after {
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgb(255 255 255 / 0.03) 50%,
-    transparent 100%
-  );
+  background: linear-gradient(90deg, transparent 0%, rgb(255 255 255 / 0.03) 50%, transparent 100%);
 }
 
 /* Pulsing placeholder for values in loading state */

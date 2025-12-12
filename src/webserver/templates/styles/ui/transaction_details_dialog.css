@@ -60,8 +60,12 @@
 }
 
 @keyframes tx-dialog-fade-in {
-  0% { opacity: 0; }
-  100% { opacity: 1; }
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
 }
 
 /* =============================================================================
@@ -467,7 +471,9 @@
   color: var(--text-primary);
   font-weight: 600;
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   text-align: right;
   word-break: break-all;
 }
@@ -541,7 +547,9 @@
 
 .transaction-details-dialog .balance-table .numeric {
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   text-align: right;
 }
 

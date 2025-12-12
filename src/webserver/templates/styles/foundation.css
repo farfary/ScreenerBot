@@ -129,6 +129,12 @@
   --danger-alpha-20: rgb(239, 68, 68, 0.2);
   --danger-alpha-30: rgb(239, 68, 68, 0.3);
 
+  /* Solana Brand Colors */
+  --solana-purple: #9945ff;
+  --solana-green: #14f195;
+  --solana-alpha-20: rgb(153, 69, 255, 0.2);
+  --solana-green-alpha-20: rgb(20, 241, 149, 0.2);
+
   /* Spacing Scale (8px base) */
   --spacing-xs: 4px;
   --spacing-sm: 8px;
@@ -148,7 +154,7 @@
   --font-mono: "JetBrains Mono", "SF Mono", monaco, "Cascadia Code", "Roboto Mono", monospace;
   --font-data: "JetBrains Mono", "SF Mono", monaco, monospace;
 
-    /* Font Families */
+  /* Font Families */
   --font-brand: "Rajdhani", -apple-system, sans-serif;
   --font-size-xs: 0.75rem; /* 12px */
   --font-size-sm: 0.875rem; /* 14px */
@@ -247,6 +253,12 @@
   --danger-alpha-10: rgb(248, 81, 73, 0.1);
   --danger-alpha-20: rgb(248, 81, 73, 0.2);
   --danger-alpha-30: rgb(248, 81, 73, 0.3);
+
+  /* Solana Brand Colors */
+  --solana-purple: #9945ff;
+  --solana-green: #14f195;
+  --solana-alpha-20: rgb(153, 69, 255, 0.2);
+  --solana-green-alpha-20: rgb(20, 241, 149, 0.2);
 
   /* Spacing Scale (8px base) */
   --spacing-xs: 4px;
@@ -369,14 +381,18 @@ textarea,
 .data-numeric,
 .font-data {
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   letter-spacing: -0.01em;
 }
 
 /* Price display - slightly larger, emphasized */
 .data-price {
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   font-weight: 500;
 }
 
@@ -399,21 +415,27 @@ textarea,
 /* PnL (Profit & Loss) classes - used by formatPnL() and formatPercent() in utils.js */
 .pnl-positive {
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   color: var(--success-color);
   font-weight: 600;
 }
 
 .pnl-negative {
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   color: var(--error-color);
   font-weight: 600;
 }
 
 .pnl-neutral {
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   color: var(--text-secondary);
   font-weight: 500;
 }
@@ -421,13 +443,17 @@ textarea,
 /* Value classes for positive/negative styling in tables */
 .value-positive {
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   color: var(--success-color);
 }
 
 .value-negative {
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   color: var(--error-color);
 }
 
@@ -456,8 +482,12 @@ textarea,
 }
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* Pulse animation for attention */
@@ -466,8 +496,13 @@ textarea,
 }
 
 @keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
 }
 
 /* Shimmer animation for loading states */
@@ -477,23 +512,20 @@ textarea,
 }
 
 .shimmer::after {
-  content: '';
+  content: "";
   position: absolute;
   top: 0;
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    rgb(255, 255, 255, 0.08),
-    transparent
-  );
+  background: linear-gradient(90deg, transparent, rgb(255, 255, 255, 0.08), transparent);
   animation: shimmer 2s infinite;
 }
 
 @keyframes shimmer {
-  100% { left: 100%; }
+  100% {
+    left: 100%;
+  }
 }
 
 /* Fade in animation */
@@ -502,8 +534,14 @@ textarea,
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Scale in animation for modals/dialogs */
@@ -512,6 +550,12 @@ textarea,
 }
 
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }

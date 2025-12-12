@@ -28,7 +28,7 @@ use crate::webserver::routes::header::{
 };
 use crate::webserver::routes::positions::{PositionResponse, PositionsStatsResponse};
 use crate::webserver::routes::trader::{ExitBreakdown, TraderStatsResponse};
-use crate::webserver::routes::wallet::{TokenBalanceInfo, WalletCurrentResponse};
+use crate::webserver::routes::wallet::{TokenBalanceInfo, WalletCurrentResponse, WalletTokensResponse, WalletTokenHolding};
 
 /// Global flag for demo mode - set at startup based on --dashboard-demo argument
 pub static DEMO_MODE_ENABLED: AtomicBool = AtomicBool::new(false);
@@ -879,4 +879,48 @@ pub fn get_demo_header_metrics() -> HeaderMetricsResponse {
         system,
         timestamp: now.to_rfc3339(),
     }
+}
+
+/// Generate demo wallet tokens response
+pub fn get_demo_wallet_tokens() -> WalletTokensResponse {
+    let tokens = vec![
+        WalletTokenHolding {
+            mint: "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN".to_string(),
+            symbol: Some("TRUMP".to_string()),
+            name: Some("Official Trump".to_string()),
+            balance: 125_340_000,
+            ui_amount: 125.34,
+            decimals: 6,
+            is_token_2022: false,
+        },
+        WalletTokenHolding {
+            mint: "MEW1gQWJ3nEXg2qgERiKu7FAFj79PHvQVREQUzScPP5".to_string(),
+            symbol: Some("MEW".to_string()),
+            name: Some("cat in a dogs world".to_string()),
+            balance: 2_345_000_000,
+            ui_amount: 2345.0,
+            decimals: 6,
+            is_token_2022: false,
+        },
+        WalletTokenHolding {
+            mint: "9BB6NFEcjBCtnNLFko2FqVQBq8HHM13kCyYcdQbgpump".to_string(),
+            symbol: Some("Fartcoin".to_string()),
+            name: Some("Fartcoin".to_string()),
+            balance: 847_000_000,
+            ui_amount: 847.0,
+            decimals: 6,
+            is_token_2022: false,
+        },
+        WalletTokenHolding {
+            mint: "ukHH6c7mMyiWCf1b9pnWe25TSpkDDt3H5pQZgZ74J82".to_string(),
+            symbol: Some("BOME".to_string()),
+            name: Some("BOOK OF MEME".to_string()),
+            balance: 1_234_000_000,
+            ui_amount: 1234.0,
+            decimals: 6,
+            is_token_2022: false,
+        },
+    ];
+
+    WalletTokensResponse { tokens }
 }

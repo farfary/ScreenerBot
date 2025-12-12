@@ -31,13 +31,7 @@
   transition:
     opacity 0.12s ease-out,
     transform 0.12s ease-out;
-  font-family:
-    -apple-system,
-    BlinkMacSystemFont,
-    "SF Pro Text",
-    "Segoe UI",
-    Roboto,
-    sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
   font-size: 13px;
   user-select: none;
   user-select: none;

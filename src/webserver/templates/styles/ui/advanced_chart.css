@@ -52,7 +52,9 @@
   border-bottom: 1px solid var(--border-color);
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   min-height: 32px;
 }
 
@@ -146,7 +148,9 @@
   box-shadow: 0 4px 12px var(--shadow-lg);
   font-family: var(--font-mono);
   font-size: 0.75rem;
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   pointer-events: none;
 }
 
@@ -428,7 +432,9 @@
    ============================================================================= */
 
 .price-subscript {
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .price-subscript sub {
