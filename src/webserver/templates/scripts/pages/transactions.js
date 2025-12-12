@@ -391,8 +391,10 @@ function createLifecycle() {
 
   return {
     init(_ctx) {
-      const initialSort =
-        loadPersistedSort(TRANSACTIONS_STATE_KEY) || { column: "timestamp", direction: "desc" };
+      const initialSort = loadPersistedSort(TRANSACTIONS_STATE_KEY) || {
+        column: "timestamp",
+        direction: "desc",
+      };
 
       const columns = [
         {

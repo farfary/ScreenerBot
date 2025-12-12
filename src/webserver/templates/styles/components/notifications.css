@@ -32,7 +32,6 @@ body.notification-drawer-open {
   flex: 1 1 auto;
   background: rgb(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
-  backdrop-filter: blur(4px);
   opacity: 0;
   transition: opacity 0.2s ease-out;
 }
@@ -502,6 +501,7 @@ body.notification-drawer-open {
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
@@ -620,6 +620,7 @@ body.notification-drawer-open {
   0% {
     transform: translateX(-100%);
   }
+
   100% {
     transform: translateX(100%);
   }
@@ -784,6 +785,7 @@ body.notification-drawer-open {
   100% {
     transform: scale(1);
   }
+
   50% {
     transform: scale(1.15);
   }

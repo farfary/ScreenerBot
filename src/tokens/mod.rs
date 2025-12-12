@@ -18,11 +18,13 @@ pub mod database;
 pub mod decimals;
 pub mod discovery;
 pub mod events;
+pub mod favorites;
 pub mod filtered;
 pub mod market;
 pub mod pools;
 pub mod priorities;
 pub mod schema;
+pub mod search;
 pub mod security;
 pub mod service;
 pub mod store;
@@ -100,6 +102,16 @@ pub use decimals::{
 
 // Re-export updates API
 pub use updates::UpdateResult;
+
+// Re-export search API
+pub use search::{search_tokens, SearchResults, TokenSearchResult};
+
+// Re-export favorites API
+pub use favorites::{
+    add_favorite_async, get_favorite_async, get_favorites_async, get_favorites_count_async,
+    is_favorite_async, remove_favorite_async, update_favorite_async, AddFavoriteRequest,
+    FavoriteToken, UpdateFavoriteRequest,
+};
 
 // ============================================================================
 // PUBLIC FORCE UPDATE API

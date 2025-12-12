@@ -12,6 +12,11 @@ import { HintTrigger } from "../ui/hint_popover.js";
 
 // Sub-tabs (views) configuration with hint references
 const TOKEN_VIEWS = [
+  {
+    id: "favorites",
+    label: '<i class="icon-star"></i> Favorites',
+    hintKey: "tokens.favorites",
+  },
   { id: "pool", label: '<i class="icon-droplet"></i> Pool Service', hintKey: "tokens.poolService" },
   {
     id: "no_market",
@@ -307,6 +312,13 @@ function createLifecycle() {
   const ohlcvState = {
     tokens: [],
     stats: null,
+    isLoading: false,
+  };
+
+  // Favorites state
+  let favoritesTable = null;
+  const favoritesState = {
+    favorites: [],
     isLoading: false,
   };
 
@@ -1235,12 +1247,13 @@ function createLifecycle() {
         minWidth: 80,
         wrap: false,
         render: (value) => {
-          const priorityClass = {
-            critical: "priority-critical",
-            high: "priority-high",
-            medium: "priority-medium",
-            low: "priority-low",
-          }[value?.toLowerCase()] || "priority-medium";
+          const priorityClass =
+            {
+              critical: "priority-critical",
+              high: "priority-high",
+              medium: "priority-medium",
+              low: "priority-low",
+            }[value?.toLowerCase()] || "priority-medium";
           return `<span class="priority-badge ${priorityClass}">${value || "—"}</span>`;
         },
       },
@@ -1263,8 +1276,9 @@ function createLifecycle() {
           if (!value) return "—";
           const { completed, total, percent, timeframes } = value;
           const pct = Math.round(percent);
-          const progressCls = pct === 100 ? "progress-complete" : pct > 50 ? "progress-partial" : "progress-low";
-          
+          const progressCls =
+            pct === 100 ? "progress-complete" : pct > 50 ? "progress-partial" : "progress-low";
+
           // Build timeframe icons
           const tfIcons = [
             { key: "m1", label: "1m", done: timeframes?.["1m"] ?? timeframes?.m1 },
@@ -1274,11 +1288,13 @@ function createLifecycle() {
             { key: "h4", label: "4h", done: timeframes?.["4h"] ?? timeframes?.h4 },
             { key: "h12", label: "12h", done: timeframes?.["12h"] ?? timeframes?.h12 },
             { key: "d1", label: "1d", done: timeframes?.["1d"] ?? timeframes?.d1 },
-          ].map(tf => {
-            const cls = tf.done ? "tf-done" : "tf-pending";
-            return `<span class="tf-indicator ${cls}" title="${tf.label}: ${tf.done ? 'Complete' : 'Pending'}">${tf.label.charAt(0)}</span>`;
-          }).join("");
-          
+          ]
+            .map((tf) => {
+              const cls = tf.done ? "tf-done" : "tf-pending";
+              return `<span class="tf-indicator ${cls}" title="${tf.label}: ${tf.done ? "Complete" : "Pending"}">${tf.label.charAt(0)}</span>`;
+            })
+            .join("");
+
           return `<div class="backfill-cell">
             <div class="backfill-bar ${progressCls}" style="--progress: ${pct}%"></div>
             <span class="backfill-text">${completed}/${total}</span>
@@ -1329,7 +1345,8 @@ function createLifecycle() {
         wrap: false,
         render: (value) => {
           if (!value) return "—";
-          const timestamp = typeof value === "string" ? Math.floor(new Date(value).getTime() / 1000) : value;
+          const timestamp =
+            typeof value === "string" ? Math.floor(new Date(value).getTime() / 1000) : value;
           return timeAgoCell(timestamp);
         },
       },
@@ -1404,13 +1421,13 @@ function createLifecycle() {
 
   const handleOhlcvDelete = async (mint) => {
     if (!window.confirm(`Delete all OHLCV data for ${mint.slice(0, 8)}...?`)) return;
-    
+
     try {
       const response = await requestManager.fetch(`/api/ohlcv/${mint}/delete`, {
         method: "DELETE",
         priority: "high",
       });
-      
+
       if (response) {
         Utils.showToast(
           `Deleted: ${response.candles_deleted} candles, ${response.pools_deleted} pools`,
@@ -1428,13 +1445,13 @@ function createLifecycle() {
   const handleOhlcvCleanup = async () => {
     const hours = window.prompt("Delete inactive tokens older than (hours):", "24");
     if (!hours) return;
-    
+
     const inactiveHours = parseInt(hours, 10);
     if (isNaN(inactiveHours) || inactiveHours < 1) {
       Utils.showToast("Invalid hours value", "error");
       return;
     }
-    
+
     try {
       const response = await requestManager.fetch("/api/ohlcv/cleanup", {
         method: "POST",
@@ -1442,7 +1459,7 @@ function createLifecycle() {
         body: JSON.stringify({ inactive_hours: inactiveHours }),
         priority: "high",
       });
-      
+
       if (response) {
         Utils.showToast(`Cleaned up ${response.deleted_count} inactive tokens`, "success");
         await fetchOhlcvData();
@@ -1524,14 +1541,14 @@ function createLifecycle() {
   const showOhlcvView = () => {
     const tokensRoot = document.querySelector("#tokens-root");
     const ohlcvContainer = document.querySelector("#ohlcv-table-container");
-    
+
     if (tokensRoot) tokensRoot.style.display = "none";
     if (ohlcvContainer) ohlcvContainer.style.display = "";
-    
+
     // Pause main table poller, start OHLCV poller
     if (poller) poller.pause();
     if (lastUpdatePoller) lastUpdatePoller.pause();
-    
+
     if (!ohlcvPoller) {
       ohlcvPoller = new Poller(
         async () => {
@@ -1546,7 +1563,7 @@ function createLifecycle() {
       );
     }
     ohlcvPoller.start();
-    
+
     // Initial load
     fetchOhlcvData().then(() => updateOhlcvTable());
   };
@@ -1554,12 +1571,277 @@ function createLifecycle() {
   const hideOhlcvView = () => {
     const tokensRoot = document.querySelector("#tokens-root");
     const ohlcvContainer = document.querySelector("#ohlcv-table-container");
-    
+
     if (tokensRoot) tokensRoot.style.display = "";
     if (ohlcvContainer) ohlcvContainer.style.display = "none";
-    
+
     // Pause OHLCV poller, resume main poller
     if (ohlcvPoller) ohlcvPoller.pause();
+    if (poller) poller.start();
+    if (lastUpdatePoller) lastUpdatePoller.start();
+  };
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FAVORITES TABLE FUNCTIONS
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  const buildFavoritesColumns = () => {
+    return [
+      {
+        id: "token",
+        label: "Token",
+        sortable: true,
+        minWidth: 200,
+        wrap: false,
+        render: (_v, row) => {
+          const logo = row.logo_url
+            ? `<img class="token-logo" alt="" src="${Utils.escapeHtml(row.logo_url)}" />`
+            : '<span class="token-logo">N/A</span>';
+          const sym = Utils.escapeHtml(row.symbol || "???");
+          const name = row.name
+            ? `<div class="token-name">${Utils.escapeHtml(row.name)}</div>`
+            : "";
+          return `<div class="token-cell">${logo}<div><div class="token-symbol">${sym}</div>${name}</div></div>`;
+        },
+      },
+      {
+        id: "mint",
+        label: "Mint",
+        sortable: true,
+        minWidth: 150,
+        wrap: false,
+        render: (value) => {
+          const short = value ? `${value.slice(0, 8)}...${value.slice(-4)}` : "—";
+          return `<code class="mint-code" title="${Utils.escapeHtml(value)}">${short}</code>`;
+        },
+      },
+      {
+        id: "notes",
+        label: "Notes",
+        sortable: false,
+        minWidth: 200,
+        wrap: true,
+        render: (value) => {
+          if (!value) return '<span class="text-muted">—</span>';
+          return Utils.escapeHtml(value);
+        },
+      },
+      {
+        id: "created_at",
+        label: "Added",
+        sortable: true,
+        minWidth: 120,
+        wrap: false,
+        render: (value) => {
+          if (!value) return "—";
+          const timestamp =
+            typeof value === "string" ? Math.floor(new Date(value).getTime() / 1000) : value;
+          return timeAgoCell(timestamp);
+        },
+      },
+      {
+        id: "actions",
+        label: "",
+        sortable: false,
+        minWidth: 120,
+        maxWidth: 120,
+        wrap: false,
+        render: (_value, row) => {
+          return `
+            <div class="favorites-actions">
+              <button class="btn btn-small btn-icon favorites-action-btn" data-action="copy" data-mint="${Utils.escapeHtml(row.mint)}" title="Copy Mint">
+                <i class="icon-copy"></i>
+              </button>
+              <button class="btn btn-small btn-icon favorites-action-btn" data-action="external" data-mint="${Utils.escapeHtml(row.mint)}" title="View on DexScreener">
+                <i class="icon-external-link"></i>
+              </button>
+              <button class="btn btn-small btn-icon btn-danger favorites-action-btn" data-action="remove" data-mint="${Utils.escapeHtml(row.mint)}" title="Remove from favorites">
+                <i class="icon-trash-2"></i>
+              </button>
+            </div>
+          `;
+        },
+      },
+    ];
+  };
+
+  const fetchFavorites = async () => {
+    favoritesState.isLoading = true;
+    try {
+      const response = await requestManager.fetch("/api/tokens/favorites", { priority: "normal" });
+      if (response && response.favorites) {
+        favoritesState.favorites = response.favorites;
+      }
+    } catch (err) {
+      console.error("Failed to fetch favorites:", err);
+      Utils.showToast("Failed to load favorites", "error");
+    } finally {
+      favoritesState.isLoading = false;
+    }
+  };
+
+  const updateFavoritesTable = () => {
+    if (!favoritesTable) return;
+    const isEmpty = favoritesState.favorites.length === 0;
+    const emptyState = document.querySelector("#favorites-empty-state");
+
+    if (isEmpty) {
+      favoritesTable.setData([], { preserveScroll: false });
+      if (emptyState) emptyState.style.display = "";
+    } else {
+      if (emptyState) emptyState.style.display = "none";
+      favoritesTable.setData(favoritesState.favorites, { preserveScroll: true });
+    }
+    updateFavoritesToolbar();
+  };
+
+  const updateFavoritesToolbar = () => {
+    if (!favoritesTable) return;
+    const count = favoritesState.favorites.length;
+
+    favoritesTable.updateToolbarSummary([
+      {
+        id: "favorites-total",
+        label: "Total Favorites",
+        value: Utils.formatNumber(count, 0),
+        variant: count > 0 ? "info" : "secondary",
+      },
+    ]);
+  };
+
+  const handleFavoriteAction = async (action, mint) => {
+    switch (action) {
+      case "copy":
+        try {
+          await navigator.clipboard.writeText(mint);
+          Utils.showToast("Mint address copied", "success");
+        } catch (err) {
+          console.error("Failed to copy mint:", err);
+          Utils.showToast("Failed to copy mint", "warning");
+        }
+        break;
+
+      case "external":
+        Utils.openExternal(`https://dexscreener.com/solana/${mint}`);
+        break;
+
+      case "remove":
+        try {
+          await requestManager.fetch(`/api/tokens/favorites/${encodeURIComponent(mint)}`, {
+            method: "DELETE",
+            priority: "high",
+          });
+          // Remove from local state
+          favoritesState.favorites = favoritesState.favorites.filter((f) => f.mint !== mint);
+          updateFavoritesTable();
+          Utils.showToast("Removed from favorites", "success");
+        } catch (err) {
+          console.error("Failed to remove favorite:", err);
+          Utils.showToast("Failed to remove favorite", "error");
+        }
+        break;
+    }
+  };
+
+  const initFavoritesTable = () => {
+    if (favoritesTable) return; // Already initialized
+
+    // Create container for favorites table
+    const rootEl = document.querySelector("#tokens-root");
+    if (!rootEl) return;
+
+    // Create favorites container
+    let favoritesContainer = document.querySelector("#favorites-table-container");
+    if (!favoritesContainer) {
+      favoritesContainer = document.createElement("div");
+      favoritesContainer.id = "favorites-table-container";
+      favoritesContainer.className = "favorites-table-container";
+      favoritesContainer.style.display = "none";
+      rootEl.parentNode.insertBefore(favoritesContainer, rootEl.nextSibling);
+    }
+
+    // Create empty state element
+    let emptyState = document.querySelector("#favorites-empty-state");
+    if (!emptyState) {
+      emptyState = document.createElement("div");
+      emptyState.id = "favorites-empty-state";
+      emptyState.className = "empty-state";
+      emptyState.style.display = "none";
+      emptyState.innerHTML = `
+        <div class="empty-state-icon">⭐</div>
+        <h3 class="empty-state-title">No Favorites Yet</h3>
+        <p class="empty-state-description">
+          Use the search (<kbd>⌘K</kbd>) to find tokens and add them to your favorites.
+        </p>
+      `;
+      favoritesContainer.appendChild(emptyState);
+    }
+
+    favoritesTable = new DataTable({
+      container: "#favorites-table-container",
+      columns: buildFavoritesColumns(),
+      rowIdField: "mint",
+      stateKey: "favorites-table",
+      enableLogging: false,
+      sorting: {
+        mode: "client",
+        column: "created_at",
+        direction: "desc",
+      },
+      compact: true,
+      stickyHeader: true,
+      zebra: true,
+      fitToContainer: true,
+      autoSizeColumns: false,
+      uniformRowHeight: 2,
+      toolbar: {
+        title: {
+          icon: "icon-star",
+          text: "Favorite Tokens",
+        },
+        summary: [
+          { id: "favorites-total", label: "Total Favorites", value: "0", variant: "secondary" },
+        ],
+      },
+    });
+
+    // Add click handler for action buttons
+    favoritesContainer.addEventListener("click", (e) => {
+      const actionBtn = e.target.closest(".favorites-action-btn");
+      if (actionBtn) {
+        const action = actionBtn.getAttribute("data-action");
+        const mint = actionBtn.getAttribute("data-mint");
+        if (action && mint) handleFavoriteAction(action, mint);
+      }
+    });
+  };
+
+  const showFavoritesView = () => {
+    const tokensRoot = document.querySelector("#tokens-root");
+    const favoritesContainer = document.querySelector("#favorites-table-container");
+    const ohlcvContainer = document.querySelector("#ohlcv-table-container");
+
+    if (tokensRoot) tokensRoot.style.display = "none";
+    if (favoritesContainer) favoritesContainer.style.display = "";
+    if (ohlcvContainer) ohlcvContainer.style.display = "none";
+
+    // Pause main table poller
+    if (poller) poller.pause();
+    if (lastUpdatePoller) lastUpdatePoller.pause();
+    if (ohlcvPoller) ohlcvPoller.pause();
+
+    // Initial load
+    fetchFavorites().then(() => updateFavoritesTable());
+  };
+
+  const hideFavoritesView = () => {
+    const tokensRoot = document.querySelector("#tokens-root");
+    const favoritesContainer = document.querySelector("#favorites-table-container");
+
+    if (tokensRoot) tokensRoot.style.display = "";
+    if (favoritesContainer) favoritesContainer.style.display = "none";
+
+    // Resume main poller
     if (poller) poller.start();
     if (lastUpdatePoller) lastUpdatePoller.start();
   };
@@ -1572,6 +1854,18 @@ function createLifecycle() {
     if (!TOKEN_VIEWS.some((v) => v.id === view)) return;
     const previousView = state.view;
     state.view = view;
+
+    // Handle Favorites view specially - it has its own table
+    if (view === "favorites") {
+      initFavoritesTable();
+      showFavoritesView();
+      return;
+    }
+
+    // Leaving Favorites view - hide it
+    if (previousView === "favorites") {
+      hideFavoritesView();
+    }
 
     // Handle OHLCV view specially - it has its own table
     if (view === "ohlcv") {
@@ -2327,6 +2621,14 @@ function createLifecycle() {
         return;
       }
 
+      // Handle Favorites view specially - refresh favorites data
+      if (state.view === "favorites") {
+        fetchFavorites()
+          .then(() => updateFavoritesTable())
+          .catch(() => {});
+        return;
+      }
+
       // Start poller to update "Last Update" display every second
       if (!lastUpdatePoller) {
         lastUpdatePoller = ctx.managePoller(
@@ -2410,6 +2712,16 @@ function createLifecycle() {
       if (ohlcvContainer) {
         ohlcvContainer.remove();
       }
+      // Clean up Favorites table
+      if (favoritesTable) {
+        favoritesTable.destroy();
+        favoritesTable = null;
+      }
+      // Remove Favorites container
+      const favoritesContainer = document.querySelector("#favorites-table-container");
+      if (favoritesContainer) {
+        favoritesContainer.remove();
+      }
       poller = null;
       tabBar = null; // Cleaned up automatically by manageTabBar
       TabBarManager.unregister("tokens");
@@ -2427,6 +2739,9 @@ function createLifecycle() {
       ohlcvState.tokens = [];
       ohlcvState.stats = null;
       ohlcvState.isLoading = false;
+      // Reset Favorites state
+      favoritesState.favorites = [];
+      favoritesState.isLoading = false;
     },
   };
 }

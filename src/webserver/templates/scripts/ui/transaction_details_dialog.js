@@ -54,9 +54,12 @@ export class TransactionDetailsDialog {
     this.isLoading = true;
 
     try {
-      const data = await requestManager.fetch(`/api/transactions/${this.transactionData.signature}`, {
-        priority: "high",
-      });
+      const data = await requestManager.fetch(
+        `/api/transactions/${this.transactionData.signature}`,
+        {
+          priority: "high",
+        }
+      );
       this.fullTransactionData = data;
       this._updateDialogContent();
     } catch (error) {
@@ -138,7 +141,9 @@ export class TransactionDetailsDialog {
 
   _getDialogHTML() {
     const tx = this.transactionData;
-    const shortSig = tx.signature ? `${tx.signature.slice(0, 8)}...${tx.signature.slice(-8)}` : "Unknown";
+    const shortSig = tx.signature
+      ? `${tx.signature.slice(0, 8)}...${tx.signature.slice(-8)}`
+      : "Unknown";
     const typeLabel = this._getTypeLabel(tx.transaction_type);
     const statusBadge = this._getStatusBadge(tx.status, tx.success);
 
@@ -494,14 +499,18 @@ export class TransactionDetailsDialog {
   }
 
   _buildSolChangesTable(changes) {
-    const rows = changes.map((c) => `
+    const rows = changes
+      .map(
+        (c) => `
       <tr>
         <td class="mono-text">${this._buildAddressLink(c.account, "account")}</td>
         <td class="numeric">${Utils.formatSol(c.pre_balance, { decimals: 9, suffix: "" })}</td>
         <td class="numeric">${Utils.formatSol(c.post_balance, { decimals: 9, suffix: "" })}</td>
         <td class="numeric ${c.change >= 0 ? "positive" : "negative"}">${c.change >= 0 ? "+" : ""}${Utils.formatSol(c.change, { decimals: 9, suffix: "" })}</td>
       </tr>
-    `).join("");
+    `
+      )
+      .join("");
 
     return `
       <table class="balance-table">
@@ -519,14 +528,18 @@ export class TransactionDetailsDialog {
   }
 
   _buildTokenChangesTable(changes) {
-    const rows = changes.map((c) => `
+    const rows = changes
+      .map(
+        (c) => `
       <tr>
         <td class="mono-text">${this._buildAddressLink(c.mint, "token")}</td>
         <td class="numeric">${c.pre_balance !== null ? Utils.formatNumber(c.pre_balance, { decimals: c.decimals || 9 }) : "—"}</td>
         <td class="numeric">${c.post_balance !== null ? Utils.formatNumber(c.post_balance, { decimals: c.decimals || 9 }) : "—"}</td>
         <td class="numeric ${c.change >= 0 ? "positive" : "negative"}">${c.change >= 0 ? "+" : ""}${Utils.formatNumber(c.change, { decimals: c.decimals || 9 })}</td>
       </tr>
-    `).join("");
+    `
+      )
+      .join("");
 
     return `
       <table class="balance-table">
@@ -554,11 +567,14 @@ export class TransactionDetailsDialog {
     const instructions = tx.instructions || tx.instruction_info || [];
 
     if (instructions.length === 0) {
-      content.innerHTML = '<div class="empty-state"><i class="icon-code"></i><p>No instructions found</p></div>';
+      content.innerHTML =
+        '<div class="empty-state"><i class="icon-code"></i><p>No instructions found</p></div>';
       return;
     }
 
-    const instructionCards = instructions.map((instr, idx) => this._buildInstructionCard(instr, idx)).join("");
+    const instructionCards = instructions
+      .map((instr, idx) => this._buildInstructionCard(instr, idx))
+      .join("");
 
     content.innerHTML = `
       <div class="tx-instructions-layout">
@@ -602,20 +618,28 @@ export class TransactionDetailsDialog {
             <span class="detail-label">Program ID</span>
             <span class="detail-value">${this._buildAddressLink(programId, "account")}</span>
           </div>
-          ${accounts.length > 0 ? `
+          ${
+            accounts.length > 0
+              ? `
             <div class="instruction-accounts">
               <span class="detail-label">Accounts (${accounts.length})</span>
               <div class="accounts-list">
                 ${accounts.map((acc, i) => `<div class="account-item"><span class="account-index">${i}</span>${this._buildAddressLink(acc, "account")}</div>`).join("")}
               </div>
             </div>
-          ` : ""}
-          ${instr.data ? `
+          `
+              : ""
+          }
+          ${
+            instr.data
+              ? `
             <div class="instruction-data">
               <span class="detail-label">Data</span>
               <pre class="data-preview">${Utils.escapeHtml(instr.data.slice(0, 200))}${instr.data.length > 200 ? "..." : ""}</pre>
             </div>
-          ` : ""}
+          `
+              : ""
+          }
         </div>
       </div>
     `;
@@ -632,7 +656,8 @@ export class TransactionDetailsDialog {
     const logs = tx.log_messages || [];
 
     if (logs.length === 0) {
-      content.innerHTML = '<div class="empty-state"><i class="icon-file-text"></i><p>No logs available</p></div>';
+      content.innerHTML =
+        '<div class="empty-state"><i class="icon-file-text"></i><p>No logs available</p></div>';
       return;
     }
 
@@ -663,23 +688,30 @@ export class TransactionDetailsDialog {
 
   _buildLogsList(logs, filter) {
     const filterLower = (filter || "").toLowerCase();
-    const filteredLogs = filterLower ? logs.filter((log) => log.toLowerCase().includes(filterLower)) : logs;
+    const filteredLogs = filterLower
+      ? logs.filter((log) => log.toLowerCase().includes(filterLower))
+      : logs;
 
     if (filteredLogs.length === 0) {
       return '<div class="empty-message">No matching logs</div>';
     }
 
-    return filteredLogs.map((log, idx) => `
+    return filteredLogs
+      .map(
+        (log, idx) => `
       <div class="log-entry ${this._getLogClass(log)}">
         <span class="log-index">${idx + 1}</span>
         <span class="log-message">${this._highlightLog(log)}</span>
       </div>
-    `).join("");
+    `
+      )
+      .join("");
   }
 
   _getLogClass(log) {
     if (log.includes("success")) return "log-success";
-    if (log.includes("failed") || log.includes("error") || log.includes("Error")) return "log-error";
+    if (log.includes("failed") || log.includes("error") || log.includes("Error"))
+      return "log-error";
     if (log.includes("invoke")) return "log-invoke";
     if (log.includes("consumed")) return "log-consumed";
     return "";
@@ -710,7 +742,8 @@ export class TransactionDetailsDialog {
     const ataOps = tx.ata_operations || [];
 
     if (!ataAnalysis && ataOps.length === 0) {
-      content.innerHTML = '<div class="empty-state"><i class="icon-layers"></i><p>No ATA operations in this transaction</p></div>';
+      content.innerHTML =
+        '<div class="empty-state"><i class="icon-layers"></i><p>No ATA operations in this transaction</p></div>';
       return;
     }
 
@@ -753,7 +786,9 @@ export class TransactionDetailsDialog {
   }
 
   _buildAtaOperationsList(operations) {
-    const rows = operations.map((op) => `
+    const rows = operations
+      .map(
+        (op) => `
       <tr>
         <td><span class="badge ${op.operation_type === "Creation" ? "info" : "warning"}">${op.operation_type}</span></td>
         <td class="mono-text">${this._buildAddressLink(op.account_address, "account")}</td>
@@ -761,7 +796,9 @@ export class TransactionDetailsDialog {
         <td class="numeric">${Utils.formatSol(op.rent_amount || op.rent_cost_sol || 0, { decimals: 9 })}</td>
         <td>${op.is_wsol ? '<span class="badge secondary">WSOL</span>' : "—"}</td>
       </tr>
-    `).join("");
+    `
+      )
+      .join("");
 
     return `
       <div class="ata-operations">
@@ -909,7 +946,7 @@ export class TransactionDetailsDialog {
 
     // Handle Failed variant with message
     if (status.Failed) {
-      return "<span class=\"badge error\"><i class=\"icon-x\"></i> Failed</span>";
+      return '<span class="badge error"><i class="icon-x"></i> Failed</span>';
     }
 
     // Fallback based on success boolean
@@ -943,9 +980,10 @@ export class TransactionDetailsDialog {
   _buildAddressLink(address, type = "account") {
     if (!address) return "—";
     const short = this._shortenAddress(address);
-    const url = type === "token"
-      ? `https://solscan.io/token/${address}`
-      : `https://solscan.io/account/${address}`;
+    const url =
+      type === "token"
+        ? `https://solscan.io/token/${address}`
+        : `https://solscan.io/account/${address}`;
     return `
       <span class="address-link">
         <a href="${url}" target="_blank" class="mono-text" title="${Utils.escapeHtml(address)}">${short}</a>

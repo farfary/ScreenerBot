@@ -16,7 +16,7 @@ let globalUpdateState = {
   progress: 0,
   downloaded: false,
   error: null,
-  statusPoller: null
+  statusPoller: null,
 };
 
 export class SettingsDialog {
@@ -68,13 +68,13 @@ export class SettingsDialog {
 
     // Otherwise check status from server
     try {
-      const response = await fetch('/api/updates/status');
+      const response = await fetch("/api/updates/status");
       if (response.ok) {
         const data = await response.json();
         // API returns { state: { available_update, download_progress, ... } }
         const state = data.state || data;
         const progress = state.download_progress || {};
-        
+
         if (progress.downloading) {
           globalUpdateState.downloading = true;
           globalUpdateState.progress = progress.progress_percent || 0;
@@ -98,15 +98,20 @@ export class SettingsDialog {
         }
       }
     } catch (err) {
-      console.warn('Failed to sync update status:', err);
+      console.warn("Failed to sync update status:", err);
     }
 
     // If not downloading/ready, maybe check for updates if not checked yet
-    if (!globalUpdateState.checked && !globalUpdateState.checking && !globalUpdateState.downloading && !globalUpdateState.downloaded) {
+    if (
+      !globalUpdateState.checked &&
+      !globalUpdateState.checking &&
+      !globalUpdateState.downloading &&
+      !globalUpdateState.downloaded
+    ) {
       this._performBackgroundUpdateCheck();
     } else {
       this._updateUpdatesBadge();
-      if (this.currentTab === 'updates') {
+      if (this.currentTab === "updates") {
         this._updateUpdatesTabUI();
       }
     }
@@ -121,27 +126,27 @@ export class SettingsDialog {
     this._updateUpdatesBadge(); // Might show spinner or nothing
 
     try {
-      const response = await fetch('/api/updates/check');
+      const response = await fetch("/api/updates/check");
       const data = await response.json();
-      
+
       globalUpdateState.checking = false;
-      
+
       if (data.update_available) {
         globalUpdateState.available = true;
-        globalUpdateState.info = data.update;  // API returns 'update' not 'update_info'
+        globalUpdateState.info = data.update; // API returns 'update' not 'update_info'
       } else {
         globalUpdateState.available = false;
       }
     } catch (err) {
-      console.error('Background update check failed:', err);
+      console.error("Background update check failed:", err);
       globalUpdateState.checking = false;
       globalUpdateState.error = err.message;
     }
-    
+
     this._updateUpdatesBadge();
-    
+
     // If user is currently on updates tab, refresh it
-    if (this.currentTab === 'updates') {
+    if (this.currentTab === "updates") {
       this._updateUpdatesTabUI();
     }
   }
@@ -151,18 +156,18 @@ export class SettingsDialog {
    */
   _updateUpdatesBadge() {
     if (!this.dialogEl) return;
-    
+
     const updatesBtn = this.dialogEl.querySelector('.settings-nav-item[data-tab="updates"]');
     if (!updatesBtn) return;
-    
+
     // Remove existing indicator
-    const existingIndicator = updatesBtn.querySelector('.settings-nav-indicator');
+    const existingIndicator = updatesBtn.querySelector(".settings-nav-indicator");
     if (existingIndicator) existingIndicator.remove();
-    
+
     if (globalUpdateState.available) {
-      const indicator = document.createElement('span');
-      indicator.className = 'settings-nav-indicator';
-      indicator.title = 'New update available';
+      const indicator = document.createElement("span");
+      indicator.className = "settings-nav-indicator";
+      indicator.title = "New update available";
       updatesBtn.appendChild(indicator);
     }
   }
@@ -293,7 +298,13 @@ export class SettingsDialog {
     return [
       { id: "home", label: "Home", icon: "icon-house", order: 0, enabled: true },
       { id: "tools", label: "Tools", icon: "icon-wrench", order: 1, enabled: true },
-      { id: "positions", label: "Positions", icon: "icon-chart-candlestick", order: 2, enabled: true },
+      {
+        id: "positions",
+        label: "Positions",
+        icon: "icon-chart-candlestick",
+        order: 2,
+        enabled: true,
+      },
       { id: "tokens", label: "Tokens", icon: "icon-coins", order: 3, enabled: true },
       { id: "filtering", label: "Filtering", icon: "icon-list-filter", order: 4, enabled: true },
       { id: "wallets", label: "Wallets", icon: "icon-wallet", order: 5, enabled: true },
@@ -527,7 +538,6 @@ export class SettingsDialog {
         </div>
       </div>
     `;
-
   }
 
   /**
@@ -1339,7 +1349,7 @@ export class SettingsDialog {
   _attachDataHandlers(content) {
     // Load data overview
     this._loadDataOverview(content);
-    
+
     // Display config path with copy on click
     if (this.pathsInfo?.config_path) {
       const pathDisplay = content.querySelector("#configPathDisplay");
@@ -1356,13 +1366,13 @@ export class SettingsDialog {
         });
       }
     }
-    
+
     // Export config button
     const exportBtn = content.querySelector("#exportConfigBtn");
     if (exportBtn) {
       exportBtn.addEventListener("click", () => this._exportConfig());
     }
-    
+
     // Import config button
     const importBtn = content.querySelector("#importConfigBtn");
     const fileInput = content.querySelector("#configFileInput");
@@ -1370,15 +1380,15 @@ export class SettingsDialog {
       importBtn.addEventListener("click", () => fileInput.click());
       fileInput.addEventListener("change", (e) => this._importConfig(e));
     }
-    
+
     // Reset config button
     const resetBtn = content.querySelector("#resetConfigBtn");
     if (resetBtn) {
       resetBtn.addEventListener("click", () => this._resetConfig());
     }
-    
+
     // Trading preset buttons - handle both card click and button click
-    content.querySelectorAll(".preset-card").forEach(card => {
+    content.querySelectorAll(".preset-card").forEach((card) => {
       card.addEventListener("click", (e) => {
         // Don't trigger if clicking the button (let button handler work)
         if (e.target.closest(".preset-apply-btn")) return;
@@ -1386,19 +1396,19 @@ export class SettingsDialog {
         this._applyPreset(preset);
       });
     });
-    
-    content.querySelectorAll(".preset-apply-btn").forEach(btn => {
+
+    content.querySelectorAll(".preset-apply-btn").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         e.stopPropagation();
         const preset = btn.dataset.preset;
         this._applyPreset(preset);
       });
     });
-    
+
     // OHLCV cleanup button
     const cleanupBtn = content.querySelector("#cleanupOhlcvBtn");
     const hoursInput = content.querySelector("#cleanupHours");
-    
+
     if (cleanupBtn && hoursInput) {
       cleanupBtn.addEventListener("click", async () => {
         const hours = parseInt(hoursInput.value, 10);
@@ -1406,21 +1416,23 @@ export class SettingsDialog {
           Utils.showToast("Invalid hours value", "error");
           return;
         }
-        
-        if (!window.confirm(`Delete OHLCV data for tokens inactive for more than ${hours} hours?`)) {
+
+        if (
+          !window.confirm(`Delete OHLCV data for tokens inactive for more than ${hours} hours?`)
+        ) {
           return;
         }
-        
+
         cleanupBtn.disabled = true;
         cleanupBtn.innerHTML = '<i class="icon-loader spin"></i> Cleaning...';
-        
+
         try {
           const response = await fetch("/api/ohlcv/cleanup", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ inactive_hours: hours }),
           });
-          
+
           if (response.ok) {
             const data = await response.json();
             Utils.showToast(`Cleaned up ${data.deleted_count} inactive tokens`, "success");
@@ -1436,28 +1448,38 @@ export class SettingsDialog {
         }
       });
     }
-    
+
     // Clear UI state button
     const clearUiBtn = content.querySelector("#clearUiStateBtn");
     if (clearUiBtn) {
       clearUiBtn.addEventListener("click", () => {
-        if (!window.confirm("Clear all saved UI preferences? This will reset table columns, filters, and view settings.")) {
+        if (
+          !window.confirm(
+            "Clear all saved UI preferences? This will reset table columns, filters, and view settings."
+          )
+        ) {
           return;
         }
-        
+
         const keysToRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
-          if (key && (key.startsWith("table.") || key.startsWith("tokens-table") || key.startsWith("positions-table") || key.includes(".state"))) {
+          if (
+            key &&
+            (key.startsWith("table.") ||
+              key.startsWith("tokens-table") ||
+              key.startsWith("positions-table") ||
+              key.includes(".state"))
+          ) {
             keysToRemove.push(key);
           }
         }
-        
-        keysToRemove.forEach(key => localStorage.removeItem(key));
+
+        keysToRemove.forEach((key) => localStorage.removeItem(key));
         Utils.showToast(`Cleared ${keysToRemove.length} cached UI settings`, "success");
       });
     }
-    
+
     // Open data folder button
     const openFolderBtn = content.querySelector("#openDataFolderBtn");
     if (openFolderBtn) {
@@ -1475,28 +1497,29 @@ export class SettingsDialog {
       });
     }
   }
-  
+
   /**
    * Load comprehensive data overview
    */
   async _loadDataOverview(content) {
     const card = content.querySelector("#dataOverviewCard");
     if (!card) return;
-    
+
     try {
       const response = await fetch("/api/system/data-stats");
       if (!response.ok) throw new Error("Failed to load stats");
-      
+
       const data = await response.json();
-      const maxSize = Math.max(...data.databases.map(db => db.size_bytes), 1);
-      
+      const maxSize = Math.max(...data.databases.map((db) => db.size_bytes), 1);
+
       const dbItemsHtml = data.databases
-        .filter(db => db.exists)
-        .map(db => {
+        .filter((db) => db.exists)
+        .map((db) => {
           const percentage = (db.size_bytes / maxSize) * 100;
-          const sizeDisplay = db.size_mb >= 1 
-            ? `${db.size_mb.toFixed(1)} MB` 
-            : `${(db.size_bytes / 1024).toFixed(0)} KB`;
+          const sizeDisplay =
+            db.size_mb >= 1
+              ? `${db.size_mb.toFixed(1)} MB`
+              : `${(db.size_bytes / 1024).toFixed(0)} KB`;
           return `
             <div class="data-db-item">
               <span class="data-db-name">${db.name}</span>
@@ -1507,8 +1530,8 @@ export class SettingsDialog {
             </div>
           `;
         })
-        .join('');
-      
+        .join("");
+
       card.innerHTML = `
         <div class="data-total-bar">
           <span class="data-total-label">Total Database Storage</span>
@@ -1518,7 +1541,7 @@ export class SettingsDialog {
           ${dbItemsHtml}
         </div>
       `;
-      
+
       // Update config path display
       const pathDisplay = content.querySelector("#configPathDisplay");
       if (pathDisplay && data.config_path) {
@@ -1529,7 +1552,7 @@ export class SettingsDialog {
       card.innerHTML = '<div class="data-stats-loading">Failed to load database statistics</div>';
     }
   }
-  
+
   /**
    * Export configuration to JSON file
    */
@@ -1537,53 +1560,70 @@ export class SettingsDialog {
     try {
       const response = await fetch("/api/config");
       if (!response.ok) throw new Error("Failed to fetch config");
-      
+
       const config = await response.json();
-      
+
       // Remove sensitive data
       const exportData = { ...config };
       delete exportData.wallet_encrypted;
       delete exportData.wallet_nonce;
-      
+
       const dataStr = JSON.stringify(exportData, null, 2);
       const blob = new Blob([dataStr], { type: "application/json" });
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `screenerbot-config-${new Date().toISOString().split('T')[0]}.json`;
+      a.download = `screenerbot-config-${new Date().toISOString().split("T")[0]}.json`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      
+
       Utils.showToast("Configuration exported successfully", "success");
     } catch (err) {
       Utils.showToast("Failed to export config: " + err.message, "error");
     }
   }
-  
+
   /**
    * Import configuration from JSON file
    */
   async _importConfig(event) {
     const file = event.target.files?.[0];
     if (!file) return;
-    
+
     // Reset file input for future imports
-    event.target.value = '';
-    
+    event.target.value = "";
+
     try {
       const text = await file.text();
       const imported = JSON.parse(text);
-      
+
       // Confirm import
-      if (!window.confirm("Import this configuration? Current settings will be overwritten. Wallet credentials will be preserved.")) {
+      if (
+        !window.confirm(
+          "Import this configuration? Current settings will be overwritten. Wallet credentials will be preserved."
+        )
+      ) {
         return;
       }
-      
+
       // Import each section separately to preserve wallet
-      const sections = ['trader', 'positions', 'filtering', 'swaps', 'tokens', 'rpc', 'sol_price', 'events', 'services', 'monitoring', 'ohlcv', 'gui'];
-      
+      const sections = [
+        "trader",
+        "positions",
+        "filtering",
+        "swaps",
+        "tokens",
+        "rpc",
+        "sol_price",
+        "events",
+        "services",
+        "monitoring",
+        "ohlcv",
+        "gui",
+      ];
+
       for (const section of sections) {
         if (imported[section]) {
           const response = await fetch(`/api/config/${section}`, {
@@ -1591,30 +1631,37 @@ export class SettingsDialog {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(imported[section]),
           });
-          
+
           if (!response.ok) {
             console.warn(`Failed to import ${section} section`);
           }
         }
       }
-      
-      Utils.showToast("Configuration imported successfully. Some changes may require restart.", "success");
+
+      Utils.showToast(
+        "Configuration imported successfully. Some changes may require restart.",
+        "success"
+      );
     } catch (err) {
       Utils.showToast("Failed to import config: " + err.message, "error");
     }
   }
-  
+
   /**
    * Reset configuration to defaults
    */
   async _resetConfig() {
-    if (!window.confirm("Reset all settings to defaults? Your wallet credentials will be preserved, but all other settings will be reset.")) {
+    if (
+      !window.confirm(
+        "Reset all settings to defaults? Your wallet credentials will be preserved, but all other settings will be reset."
+      )
+    ) {
       return;
     }
-    
+
     try {
       const response = await fetch("/api/config/reset", { method: "POST" });
-      
+
       if (response.ok) {
         Utils.showToast("Configuration reset to defaults", "success");
       } else {
@@ -1625,7 +1672,7 @@ export class SettingsDialog {
       Utils.showToast("Failed to reset config: " + err.message, "error");
     }
   }
-  
+
   /**
    * Apply trading preset
    */
@@ -1642,7 +1689,7 @@ export class SettingsDialog {
         },
         positions: {
           stop_loss_percent: 25,
-        }
+        },
       },
       moderate: {
         trader: {
@@ -1655,7 +1702,7 @@ export class SettingsDialog {
         },
         positions: {
           stop_loss_percent: 20,
-        }
+        },
       },
       aggressive: {
         trader: {
@@ -1668,21 +1715,25 @@ export class SettingsDialog {
         },
         positions: {
           stop_loss_percent: 15,
-        }
-      }
+        },
+      },
     };
-    
+
     const preset = presets[presetName];
     if (!preset) {
       Utils.showToast("Unknown preset", "error");
       return;
     }
-    
+
     const presetDisplayName = presetName.charAt(0).toUpperCase() + presetName.slice(1);
-    if (!window.confirm(`Apply ${presetDisplayName} trading preset? This will update your trader, filtering, and position settings.`)) {
+    if (
+      !window.confirm(
+        `Apply ${presetDisplayName} trading preset? This will update your trader, filtering, and position settings.`
+      )
+    ) {
       return;
     }
-    
+
     try {
       // Apply each section
       for (const [section, values] of Object.entries(preset)) {
@@ -1691,24 +1742,24 @@ export class SettingsDialog {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(values),
         });
-        
+
         if (!response.ok) {
           console.warn(`Failed to apply ${section} preset`);
         }
       }
-      
+
       Utils.showToast(`${presetDisplayName} preset applied successfully`, "success");
     } catch (err) {
       Utils.showToast("Failed to apply preset: " + err.message, "error");
     }
   }
-  
+
   /**
    * Format number compactly (1.2K, 3.4M, etc)
    */
   _formatCompactNumber(num) {
-    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
-    if (num >= 1000) return (num / 1000).toFixed(1) + 'K';
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
+    if (num >= 1000) return (num / 1000).toFixed(1) + "K";
     return String(num);
   }
 
@@ -1720,8 +1771,8 @@ export class SettingsDialog {
     const state = globalUpdateState;
 
     // Build status section based on current state
-    let statusSection = '';
-    
+    let statusSection = "";
+
     if (state.checking) {
       statusSection = this._buildCheckingState();
     } else if (state.error) {
@@ -1756,7 +1807,7 @@ export class SettingsDialog {
             <div class="version-details">
               <div class="detail-row">
                 <span class="detail-label">Platform</span>
-                <span class="detail-value">${platform || 'Unknown'}</span>
+                <span class="detail-value">${platform || "Unknown"}</span>
               </div>
             </div>
           </div>
@@ -1776,7 +1827,7 @@ export class SettingsDialog {
               </div>
               <div class="detail-row">
                 <span class="detail-label">Platform</span>
-                <span class="detail-value">${platform || 'Unknown'}</span>
+                <span class="detail-value">${platform || "Unknown"}</span>
               </div>
               <div class="detail-row">
                 <span class="detail-label">Auto Update</span>
@@ -1844,8 +1895,8 @@ export class SettingsDialog {
     const isDownloaded = state.downloaded;
     const fileSize = info.file_size ? this._formatBytes(info.file_size) : null;
 
-    let actionContent = '';
-    
+    let actionContent = "";
+
     if (isDownloaded) {
       actionContent = `
         <div class="download-success">
@@ -1878,7 +1929,7 @@ export class SettingsDialog {
             </div>
           </div>
           <div class="progress-footer">
-            <span id="downloadSizeText">${fileSize ? `0 / ${fileSize}` : ''}</span>
+            <span id="downloadSizeText">${fileSize ? `0 / ${fileSize}` : ""}</span>
             <span id="downloadEtaText"></span>
           </div>
         </div>
@@ -1889,7 +1940,7 @@ export class SettingsDialog {
           <button class="updates-btn primary" id="downloadUpdateBtn">
             <i class="icon-download"></i>
             <span>Download Update</span>
-            ${fileSize ? `<span class="btn-meta">(${fileSize})</span>` : ''}
+            ${fileSize ? `<span class="btn-meta">(${fileSize})</span>` : ""}
           </button>
         </div>
       `;
@@ -1906,12 +1957,16 @@ export class SettingsDialog {
           </div>
         </div>
         <div class="status-content">
-          ${info.release_notes ? `
+          ${
+            info.release_notes
+              ? `
             <div class="release-notes-preview">
               <h4>What's New</h4>
               <div class="notes-text">${Utils.escapeHtml(info.release_notes)}</div>
             </div>
-          ` : ''}
+          `
+              : ""
+          }
         </div>
         ${actionContent}
       </div>
@@ -1947,33 +2002,33 @@ export class SettingsDialog {
    * Get platform-specific install hint
    */
   _getInstallHint() {
-    const platform = this.versionInfo.platform || '';
-    if (platform.toLowerCase().includes('macos') || platform.toLowerCase().includes('darwin')) {
-      return 'The installer will open. Drag ScreenerBot to your Applications folder.';
-    } else if (platform.toLowerCase().includes('windows')) {
-      return 'The installer will guide you through the update process.';
-    } else if (platform.toLowerCase().includes('linux')) {
-      return 'Run the AppImage or install the .deb package to update.';
+    const platform = this.versionInfo.platform || "";
+    if (platform.toLowerCase().includes("macos") || platform.toLowerCase().includes("darwin")) {
+      return "The installer will open. Drag ScreenerBot to your Applications folder.";
+    } else if (platform.toLowerCase().includes("windows")) {
+      return "The installer will guide you through the update process.";
+    } else if (platform.toLowerCase().includes("linux")) {
+      return "Run the AppImage or install the .deb package to update.";
     }
-    return 'Follow the installer instructions to complete the update.';
+    return "Follow the installer instructions to complete the update.";
   }
 
   /**
    * Format bytes to human readable size
    */
   _formatBytes(bytes) {
-    if (bytes === 0) return '0 B';
+    if (bytes === 0) return "0 B";
     const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const sizes = ["B", "KB", "MB", "GB"];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
   }
 
   /**
    * Get styles for Updates tab (styles now in settings_dialog.css)
    */
   _getUpdatesStyles() {
-    return '';
+    return "";
   }
 
   /**
@@ -1993,11 +2048,11 @@ export class SettingsDialog {
    */
   _attachUpdatesHandlers() {
     if (!this.dialogEl) return;
-    
-    const checkBtn = this.dialogEl.querySelector('#checkUpdatesBtn');
-    const retryBtn = this.dialogEl.querySelector('#retryUpdateBtn');
-    const downloadBtn = this.dialogEl.querySelector('#downloadUpdateBtn');
-    const installBtn = this.dialogEl.querySelector('#installUpdateBtn');
+
+    const checkBtn = this.dialogEl.querySelector("#checkUpdatesBtn");
+    const retryBtn = this.dialogEl.querySelector("#retryUpdateBtn");
+    const downloadBtn = this.dialogEl.querySelector("#downloadUpdateBtn");
+    const installBtn = this.dialogEl.querySelector("#installUpdateBtn");
 
     // Check / Retry Handler
     const handleCheck = async () => {
@@ -2007,36 +2062,36 @@ export class SettingsDialog {
 
       try {
         // Call the check API
-        const response = await fetch('/api/updates/check');
+        const response = await fetch("/api/updates/check");
         const data = await response.json();
 
         globalUpdateState.checking = false;
-        
+
         if (data.update_available) {
           globalUpdateState.available = true;
-          globalUpdateState.info = data.update;  // API returns 'update' not 'update_info'
+          globalUpdateState.info = data.update; // API returns 'update' not 'update_info'
         } else {
           globalUpdateState.available = false;
           globalUpdateState.info = null;
         }
       } catch (err) {
-        console.error('Update check failed:', err);
+        console.error("Update check failed:", err);
         globalUpdateState.checking = false;
-        globalUpdateState.error = err.message || 'Failed to check for updates';
+        globalUpdateState.error = err.message || "Failed to check for updates";
       }
-      
+
       this._updateUpdatesBadge();
       this._updateUpdatesTabUI();
     };
 
-    if (checkBtn) checkBtn.addEventListener('click', handleCheck);
-    if (retryBtn) retryBtn.addEventListener('click', handleCheck);
+    if (checkBtn) checkBtn.addEventListener("click", handleCheck);
+    if (retryBtn) retryBtn.addEventListener("click", handleCheck);
 
     // Download Handler
     if (downloadBtn) {
-      downloadBtn.addEventListener('click', async () => {
+      downloadBtn.addEventListener("click", async () => {
         if (!globalUpdateState.info) return;
-        
+
         globalUpdateState.downloading = true;
         globalUpdateState.progress = 0;
         globalUpdateState.downloadStartTime = Date.now();
@@ -2045,19 +2100,18 @@ export class SettingsDialog {
 
         try {
           // Start download
-          const response = await fetch('/api/updates/download', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ version: globalUpdateState.info.version })
+          const response = await fetch("/api/updates/download", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ version: globalUpdateState.info.version }),
           });
-          
-          if (!response.ok) throw new Error('Failed to start download');
+
+          if (!response.ok) throw new Error("Failed to start download");
 
           // Start polling for progress
           this._startDownloadPoller();
-          
         } catch (err) {
-          console.error('Download start failed:', err);
+          console.error("Download start failed:", err);
           globalUpdateState.downloading = false;
           globalUpdateState.error = err.message;
           this._updateUpdatesTabUI();
@@ -2077,8 +2131,7 @@ export class SettingsDialog {
 
         installBtn.disabled = true;
         const originalText = installBtn.innerHTML;
-        installBtn.innerHTML =
-          '<i class="icon-loader spinning"></i><span>Installing...</span>';
+        installBtn.innerHTML = '<i class="icon-loader spinning"></i><span>Installing...</span>';
 
         try {
           const response = await fetch("/api/updates/install", {
@@ -2294,57 +2347,182 @@ export class SettingsDialog {
       {
         category: "Application Framework",
         items: [
-          { name: "Tauri", license: "MIT / Apache-2.0", url: "https://tauri.app/", desc: "Desktop application framework" },
-          { name: "Tokio", license: "MIT", url: "https://tokio.rs/", desc: "Async runtime for Rust" },
-          { name: "Axum", license: "MIT", url: "https://github.com/tokio-rs/axum", desc: "Web server framework" },
-          { name: "Tower", license: "MIT", url: "https://github.com/tower-rs/tower", desc: "Service abstractions" },
+          {
+            name: "Tauri",
+            license: "MIT / Apache-2.0",
+            url: "https://tauri.app/",
+            desc: "Desktop application framework",
+          },
+          {
+            name: "Tokio",
+            license: "MIT",
+            url: "https://tokio.rs/",
+            desc: "Async runtime for Rust",
+          },
+          {
+            name: "Axum",
+            license: "MIT",
+            url: "https://github.com/tokio-rs/axum",
+            desc: "Web server framework",
+          },
+          {
+            name: "Tower",
+            license: "MIT",
+            url: "https://github.com/tower-rs/tower",
+            desc: "Service abstractions",
+          },
           { name: "Hyper", license: "MIT", url: "https://hyper.rs/", desc: "HTTP implementation" },
         ],
       },
       {
         category: "Solana Blockchain",
         items: [
-          { name: "solana-sdk", license: "Apache-2.0", url: "https://github.com/anza-xyz/agave", desc: "Solana SDK core" },
-          { name: "solana-client", license: "Apache-2.0", url: "https://github.com/anza-xyz/agave", desc: "RPC client" },
-          { name: "solana-program", license: "Apache-2.0", url: "https://github.com/anza-xyz/agave", desc: "Program library" },
-          { name: "spl-token", license: "Apache-2.0", url: "https://github.com/solana-labs/solana-program-library", desc: "SPL Token program" },
-          { name: "spl-token-2022", license: "Apache-2.0", url: "https://github.com/solana-labs/solana-program-library", desc: "Token-2022 extensions" },
-          { name: "spl-associated-token-account", license: "Apache-2.0", url: "https://github.com/solana-labs/solana-program-library", desc: "Associated token accounts" },
+          {
+            name: "solana-sdk",
+            license: "Apache-2.0",
+            url: "https://github.com/anza-xyz/agave",
+            desc: "Solana SDK core",
+          },
+          {
+            name: "solana-client",
+            license: "Apache-2.0",
+            url: "https://github.com/anza-xyz/agave",
+            desc: "RPC client",
+          },
+          {
+            name: "solana-program",
+            license: "Apache-2.0",
+            url: "https://github.com/anza-xyz/agave",
+            desc: "Program library",
+          },
+          {
+            name: "spl-token",
+            license: "Apache-2.0",
+            url: "https://github.com/solana-labs/solana-program-library",
+            desc: "SPL Token program",
+          },
+          {
+            name: "spl-token-2022",
+            license: "Apache-2.0",
+            url: "https://github.com/solana-labs/solana-program-library",
+            desc: "Token-2022 extensions",
+          },
+          {
+            name: "spl-associated-token-account",
+            license: "Apache-2.0",
+            url: "https://github.com/solana-labs/solana-program-library",
+            desc: "Associated token accounts",
+          },
         ],
       },
       {
         category: "Data & Storage",
         items: [
-          { name: "SQLite", license: "Public Domain", url: "https://sqlite.org/", desc: "Embedded database engine" },
-          { name: "rusqlite", license: "MIT", url: "https://github.com/rusqlite/rusqlite", desc: "SQLite Rust bindings" },
-          { name: "r2d2", license: "MIT / Apache-2.0", url: "https://github.com/sfackler/r2d2", desc: "Database connection pool" },
-          { name: "Serde", license: "MIT / Apache-2.0", url: "https://serde.rs/", desc: "Serialization framework" },
-          { name: "TOML", license: "MIT / Apache-2.0", url: "https://github.com/toml-rs/toml", desc: "Configuration parsing" },
+          {
+            name: "SQLite",
+            license: "Public Domain",
+            url: "https://sqlite.org/",
+            desc: "Embedded database engine",
+          },
+          {
+            name: "rusqlite",
+            license: "MIT",
+            url: "https://github.com/rusqlite/rusqlite",
+            desc: "SQLite Rust bindings",
+          },
+          {
+            name: "r2d2",
+            license: "MIT / Apache-2.0",
+            url: "https://github.com/sfackler/r2d2",
+            desc: "Database connection pool",
+          },
+          {
+            name: "Serde",
+            license: "MIT / Apache-2.0",
+            url: "https://serde.rs/",
+            desc: "Serialization framework",
+          },
+          {
+            name: "TOML",
+            license: "MIT / Apache-2.0",
+            url: "https://github.com/toml-rs/toml",
+            desc: "Configuration parsing",
+          },
         ],
       },
       {
         category: "Networking",
         items: [
-          { name: "reqwest", license: "MIT / Apache-2.0", url: "https://github.com/seanmonstar/reqwest", desc: "HTTP client" },
-          { name: "tokio-tungstenite", license: "MIT", url: "https://github.com/snapview/tokio-tungstenite", desc: "WebSocket client" },
-          { name: "RustLS", license: "MIT / Apache-2.0", url: "https://github.com/rustls/rustls", desc: "TLS implementation" },
+          {
+            name: "reqwest",
+            license: "MIT / Apache-2.0",
+            url: "https://github.com/seanmonstar/reqwest",
+            desc: "HTTP client",
+          },
+          {
+            name: "tokio-tungstenite",
+            license: "MIT",
+            url: "https://github.com/snapview/tokio-tungstenite",
+            desc: "WebSocket client",
+          },
+          {
+            name: "RustLS",
+            license: "MIT / Apache-2.0",
+            url: "https://github.com/rustls/rustls",
+            desc: "TLS implementation",
+          },
         ],
       },
       {
         category: "Cryptography & Encoding",
         items: [
-          { name: "BLAKE3", license: "CC0 / Apache-2.0", url: "https://github.com/BLAKE3-team/BLAKE3", desc: "Hash function" },
-          { name: "SHA-2", license: "MIT / Apache-2.0", url: "https://github.com/RustCrypto/hashes", desc: "SHA-256/512 hashing" },
-          { name: "bs58", license: "MIT / Apache-2.0", url: "https://github.com/Nullus157/bs58-rs", desc: "Base58 encoding" },
-          { name: "base64", license: "MIT / Apache-2.0", url: "https://github.com/marshallpierce/rust-base64", desc: "Base64 encoding" },
+          {
+            name: "BLAKE3",
+            license: "CC0 / Apache-2.0",
+            url: "https://github.com/BLAKE3-team/BLAKE3",
+            desc: "Hash function",
+          },
+          {
+            name: "SHA-2",
+            license: "MIT / Apache-2.0",
+            url: "https://github.com/RustCrypto/hashes",
+            desc: "SHA-256/512 hashing",
+          },
+          {
+            name: "bs58",
+            license: "MIT / Apache-2.0",
+            url: "https://github.com/Nullus157/bs58-rs",
+            desc: "Base58 encoding",
+          },
+          {
+            name: "base64",
+            license: "MIT / Apache-2.0",
+            url: "https://github.com/marshallpierce/rust-base64",
+            desc: "Base64 encoding",
+          },
         ],
       },
       {
         category: "UI Assets",
         items: [
-          { name: "Lucide Icons", license: "ISC", url: "https://lucide.dev/", desc: "Icon font library" },
-          { name: "JetBrains Mono", license: "OFL-1.1", url: "https://www.jetbrains.com/lp/mono/", desc: "Monospace font" },
-          { name: "Orbitron", license: "OFL-1.1", url: "https://fonts.google.com/specimen/Orbitron", desc: "Display font" },
+          {
+            name: "Lucide Icons",
+            license: "ISC",
+            url: "https://lucide.dev/",
+            desc: "Icon font library",
+          },
+          {
+            name: "JetBrains Mono",
+            license: "OFL-1.1",
+            url: "https://www.jetbrains.com/lp/mono/",
+            desc: "Monospace font",
+          },
+          {
+            name: "Orbitron",
+            license: "OFL-1.1",
+            url: "https://fonts.google.com/specimen/Orbitron",
+            desc: "Display font",
+          },
         ],
       },
     ];
@@ -2435,40 +2613,41 @@ export class SettingsDialog {
    */
   _startDownloadPoller() {
     if (this.downloadPoller) this.downloadPoller.stop();
-    
+
     // Track download speed
     let lastProgress = 0;
     let lastTime = Date.now();
     let speedHistory = [];
-    
+
     this.downloadPoller = new Poller(async () => {
       try {
-        const statusRes = await fetch('/api/updates/status');
+        const statusRes = await fetch("/api/updates/status");
         const data = await statusRes.json();
         // API returns { state: { download_progress: { downloading, progress_percent, completed, error, downloaded_bytes, total_bytes } } }
         const state = data.state || data;
         const progress = state.download_progress || {};
-        
+
         if (progress.downloading) {
           const currentProgress = progress.progress_percent || 0;
           const now = Date.now();
           const elapsed = (now - lastTime) / 1000; // seconds
-          
+
           // Calculate speed (using progress percentage and total size if available)
           let speedMBps = 0;
-          let etaText = '';
-          
+          let etaText = "";
+
           if (progress.downloaded_bytes && progress.total_bytes) {
-            const bytesDiff = progress.downloaded_bytes - (lastProgress / 100 * progress.total_bytes);
+            const bytesDiff =
+              progress.downloaded_bytes - (lastProgress / 100) * progress.total_bytes;
             if (elapsed > 0 && bytesDiff > 0) {
               const bytesPerSec = bytesDiff / elapsed;
               speedMBps = bytesPerSec / (1024 * 1024);
-              
+
               // Smooth speed using moving average
               speedHistory.push(speedMBps);
               if (speedHistory.length > 5) speedHistory.shift();
               const avgSpeed = speedHistory.reduce((a, b) => a + b, 0) / speedHistory.length;
-              
+
               // Calculate ETA
               const remainingBytes = progress.total_bytes - progress.downloaded_bytes;
               const etaSeconds = remainingBytes / (avgSpeed * 1024 * 1024);
@@ -2479,7 +2658,7 @@ export class SettingsDialog {
               } else {
                 etaText = `${Math.round(etaSeconds / 3600)}h remaining`;
               }
-              
+
               speedMBps = avgSpeed;
             }
           } else {
@@ -2491,19 +2670,19 @@ export class SettingsDialog {
               speedMBps = bytesDiff / elapsed / (1024 * 1024);
             }
           }
-          
+
           lastProgress = currentProgress;
           lastTime = now;
           globalUpdateState.progress = currentProgress;
-          
+
           // Update UI elements directly for smoothness
           if (this.dialogEl) {
-            const bar = this.dialogEl.querySelector('#downloadProgressBar');
-            const percentText = this.dialogEl.querySelector('#download-percent-text');
-            const speedText = this.dialogEl.querySelector('#download-speed-text');
-            const etaElement = this.dialogEl.querySelector('#downloadEtaText');
-            const sizeText = this.dialogEl.querySelector('#downloadSizeText');
-            
+            const bar = this.dialogEl.querySelector("#downloadProgressBar");
+            const percentText = this.dialogEl.querySelector("#download-percent-text");
+            const speedText = this.dialogEl.querySelector("#download-speed-text");
+            const etaElement = this.dialogEl.querySelector("#downloadEtaText");
+            const sizeText = this.dialogEl.querySelector("#downloadSizeText");
+
             if (bar) bar.style.width = `${currentProgress}%`;
             if (percentText) percentText.textContent = `${Math.round(currentProgress)}%`;
             if (speedText && speedMBps > 0) {
@@ -2523,17 +2702,17 @@ export class SettingsDialog {
           if (this.downloadPoller) this.downloadPoller.stop();
           this._updateUpdatesTabUI();
         } else if (progress.error) {
-          throw new Error(progress.error || 'Download failed');
+          throw new Error(progress.error || "Download failed");
         }
       } catch (err) {
-        console.error('Download poll error:', err);
+        console.error("Download poll error:", err);
         globalUpdateState.downloading = false;
         globalUpdateState.error = err.message;
         if (this.downloadPoller) this.downloadPoller.stop();
         this._updateUpdatesTabUI();
       }
     }, 1000);
-    
+
     this.downloadPoller.start();
   }
 
@@ -2542,7 +2721,7 @@ export class SettingsDialog {
    */
   switchToTab(tabId) {
     if (!this.dialogEl) return;
-    
+
     const navItem = this.dialogEl.querySelector(`.settings-nav-item[data-tab="${tabId}"]`);
     if (navItem) {
       navItem.click();
@@ -2562,7 +2741,7 @@ export async function showSettingsDialog(options = {}) {
     });
   }
   await settingsDialogInstance.show();
-  
+
   // Switch to specific tab if requested (after dialog is shown)
   if (options.tab) {
     // Small delay to ensure DOM is ready
@@ -2590,16 +2769,16 @@ export async function checkAndShowUpdateDialog() {
 
   try {
     // First check current status
-    let response = await fetch('/api/updates/status');
+    let response = await fetch("/api/updates/status");
     if (!response.ok) return;
-    
+
     let data = await response.json();
     let state = data.state || data;
-    
+
     // If no check has happened yet, trigger one
     if (!state.last_check && !state.available_update) {
-      console.log('[SettingsDialog] No update check done yet, triggering check...');
-      const checkResponse = await fetch('/api/updates/check');
+      console.log("[SettingsDialog] No update check done yet, triggering check...");
+      const checkResponse = await fetch("/api/updates/check");
       if (checkResponse.ok) {
         const checkData = await checkResponse.json();
         // Update state from check response
@@ -2607,51 +2786,50 @@ export async function checkAndShowUpdateDialog() {
           state = {
             available_update: checkData.update,
             last_check: checkData.last_check,
-            download_progress: state.download_progress || {}
+            download_progress: state.download_progress || {},
           };
         }
       }
     }
-    
+
     // Check if update is available or downloading
     if (state.available_update || state.download_progress?.downloading) {
-      console.log('[SettingsDialog] Update available, showing dialog...');
-      
+      console.log("[SettingsDialog] Update available, showing dialog...");
+
       // Update global state
       globalUpdateState.available = true;
       globalUpdateState.info = state.available_update;
-      
+
       if (state.download_progress?.downloading) {
         globalUpdateState.downloading = true;
         globalUpdateState.progress = state.download_progress.progress_percent || 0;
       }
-      
+
       // Show settings dialog with Updates tab selected
-      await showSettingsDialog({ tab: 'updates' });
+      await showSettingsDialog({ tab: "updates" });
     }
   } catch (err) {
-    console.warn('[SettingsDialog] Failed to check for updates on startup:', err);
+    console.warn("[SettingsDialog] Failed to check for updates on startup:", err);
   }
 }
 
 // Auto-check for updates when dashboard is ready
 // Use dynamic import to avoid circular dependencies and ensure bootstrap is loaded
 (async function initUpdateCheck() {
-  if (typeof window === 'undefined' || !window.__SCREENERBOT_GUI_MODE) {
+  if (typeof window === "undefined" || !window.__SCREENERBOT_GUI_MODE) {
     return;
   }
 
   try {
     // Dynamically import bootstrap to get waitForReady
-    const { waitForReady } = await import('../core/bootstrap.js');
-    
+    const { waitForReady } = await import("../core/bootstrap.js");
+
     // Wait for dashboard to be ready
     await waitForReady();
-    
+
     // Small delay to ensure UI is fully rendered
     setTimeout(checkAndShowUpdateDialog, 1500);
   } catch (err) {
-    console.warn('[SettingsDialog] Failed to initialize update check:', err);
+    console.warn("[SettingsDialog] Failed to initialize update check:", err);
   }
 })();
-

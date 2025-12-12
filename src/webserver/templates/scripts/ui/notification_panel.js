@@ -367,7 +367,9 @@ function subscribeToUpdates() {
     if (event.type === "lag") {
       const skipped = event.payload?.skipped || 0;
       Utils.showToast(
-        skipped > 0 ? `Missed ${skipped} updates — refreshing…` : "Stream fell behind — refreshing…",
+        skipped > 0
+          ? `Missed ${skipped} updates — refreshing…`
+          : "Stream fell behind — refreshing…",
         "warning"
       );
     }

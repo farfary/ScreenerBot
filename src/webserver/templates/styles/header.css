@@ -13,7 +13,6 @@
   z-index: 999;
   background: var(--titlebar-bg, #0d1117);
   user-select: none;
-  user-select: none;
   -webkit-app-region: drag; /* Enable native drag for this region */
   app-region: drag;
   transition: background-color 0.3s ease;

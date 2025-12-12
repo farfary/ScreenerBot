@@ -7,8 +7,7 @@
   const themeText = document.getElementById("themeText");
 
   // Check if running in Tauri
-  const isTauri =
-    window.__TAURI__ !== undefined || window.__TAURI_INTERNALS__ !== undefined;
+  const isTauri = window.__TAURI__ !== undefined || window.__TAURI_INTERNALS__ !== undefined;
   let tauriWindow = null;
 
   console.log("[Theme] Initializing theme system...");
@@ -158,10 +157,7 @@
         await tauriWindow.setTheme(theme);
         console.log("[Theme] Successfully synced window theme");
       } catch (error) {
-        console.log(
-          "[Theme] Window theme sync not supported on this platform:",
-          error.message
-        );
+        console.log("[Theme] Window theme sync not supported on this platform:", error.message);
       }
     }
   }
@@ -188,9 +184,7 @@
       console.log("[Theme] Got window from __TAURI__.window.getCurrentWindow()");
     } else if (window.__TAURI__?.webviewWindow?.getCurrentWebviewWindow) {
       appWindow = window.__TAURI__.webviewWindow.getCurrentWebviewWindow();
-      console.log(
-        "[Theme] Got window from __TAURI__.webviewWindow.getCurrentWebviewWindow()"
-      );
+      console.log("[Theme] Got window from __TAURI__.webviewWindow.getCurrentWebviewWindow()");
     } else if (tauriWindow) {
       appWindow = tauriWindow;
       console.log("[Theme] Using cached tauriWindow");

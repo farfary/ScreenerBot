@@ -49,6 +49,7 @@ const TRANSACTION_DETAILS_DIALOG_STYLES: &str =
 const SETTINGS_DIALOG_STYLES: &str = include_str!("templates/styles/settings_dialog.css");
 const STATUS_BAR_STYLES: &str = include_str!("templates/styles/status_bar.css");
 const HINT_POPOVER_STYLES: &str = include_str!("templates/styles/ui/hint_popover.css");
+const SEARCH_DIALOG_STYLES: &str = include_str!("templates/styles/ui/search_dialog.css");
 
 // Assets (logos, icons)
 pub const LOGO_SVG: &str = include_str!("assets/logo.svg");
@@ -111,6 +112,7 @@ pub const ADVANCED_CHART_UI: &str = include_str!("templates/scripts/ui/advanced_
 pub const SETTINGS_DIALOG_UI: &str = include_str!("templates/scripts/ui/settings_dialog.js");
 pub const NOTIFICATION_PANEL_UI: &str = include_str!("templates/scripts/ui/notification_panel.js");
 pub const HINT_POPOVER_UI: &str = include_str!("templates/scripts/ui/hint_popover.js");
+pub const SEARCH_DIALOG_UI: &str = include_str!("templates/scripts/ui/search_dialog.js");
 
 pub const SERVICES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/services.js");
 pub const TRANSACTIONS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/transactions.js");
@@ -208,6 +210,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         TRANSACTION_DETAILS_DIALOG_STYLES,
         SETTINGS_DIALOG_STYLES,
         HINT_POPOVER_STYLES,
+        SEARCH_DIALOG_STYLES,
         // Splash, onboarding, and setup screens (always included for proper transitions)
         SPLASH_PAGE_STYLES,
         ONBOARDING_PAGE_STYLES,

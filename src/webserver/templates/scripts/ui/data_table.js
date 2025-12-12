@@ -1789,10 +1789,10 @@ export class DataTable {
         // Use a higher threshold to prevent micro-adjustments from causing visual jitter
         const growthThreshold = 4;
         const shrinkThreshold = 8;
-        
+
         // Calculate the difference between new measured width and stored width
         const widthDiff = finalWidth - previous;
-        
+
         if (widthDiff > growthThreshold) {
           // Content grew significantly, allow increase
           // finalWidth stays as calculated
@@ -1863,9 +1863,7 @@ export class DataTable {
   _allColumnsHaveWidths() {
     const visibleColumns = this._getOrderedColumns();
     if (!visibleColumns || visibleColumns.length === 0) return false;
-    return visibleColumns.every(
-      (col) => typeof this.state.columnWidths[col.id] === "number"
-    );
+    return visibleColumns.every((col) => typeof this.state.columnWidths[col.id] === "number");
   }
 
   _computeTableWidthFromState() {

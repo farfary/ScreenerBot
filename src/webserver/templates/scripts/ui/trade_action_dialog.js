@@ -337,7 +337,7 @@ export class TradeActionDialog {
     this.inputHintEl.textContent = config.inputHint;
     this.inputField.value = "";
     this.inputField.placeholder = config.inputPlaceholder;
-    
+
     // Update input suffix based on action
     this.inputSuffix.textContent = action === "sell" ? "%" : "SOL";
     this.inputSuffix.style.display = "block";
@@ -498,7 +498,7 @@ export class TradeActionDialog {
           ? "Match Entry"
           : groupName === "entry"
             ? "Fixed Amount"
-            : action === "sell" 
+            : action === "sell"
               ? "Quick Sell"
               : "Quick Amount";
 

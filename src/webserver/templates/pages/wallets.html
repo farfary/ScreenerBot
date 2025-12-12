@@ -18,6 +18,12 @@
         <button class="btn" id="refresh-wallets-btn" type="button" data-tooltip="Refresh wallet list" aria-label="Refresh wallet list">
           <i class="icon-refresh-cw"></i>
         </button>
+        <button class="btn" id="import-wallets-btn" type="button">
+          <i class="icon-upload"></i> Import
+        </button>
+        <button class="btn" id="export-wallets-btn" type="button">
+          <i class="icon-download"></i> Export
+        </button>
         <button class="btn primary" id="add-wallet-btn" type="button">
           <i class="icon-plus"></i> Add Wallet
         </button>
@@ -295,6 +301,226 @@
           <button type="button" class="btn" id="delete-cancel-btn">No</button>
           <button type="button" class="btn danger" id="confirm-delete-btn">
             <i class="icon-trash-2"></i> Yes, Delete
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bulk Import Modal -->
+  <div class="modal-overlay hidden" id="bulk-import-modal">
+    <div class="modal-dialog modal-lg">
+      <div class="modal-header">
+        <h2><i class="icon-upload"></i> Import Wallets</h2>
+        <button class="modal-close" type="button" id="bulk-import-modal-close" aria-label="Close modal">
+          <i class="icon-x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <!-- Step Indicator -->
+        <div class="import-steps">
+          <div class="import-step active" data-step="1">
+            <span class="step-number">1</span>
+            <span class="step-label">Upload File</span>
+          </div>
+          <div class="step-connector"></div>
+          <div class="import-step" data-step="2">
+            <span class="step-number">2</span>
+            <span class="step-label">Map Columns</span>
+          </div>
+          <div class="step-connector"></div>
+          <div class="import-step" data-step="3">
+            <span class="step-number">3</span>
+            <span class="step-label">Results</span>
+          </div>
+        </div>
+
+        <!-- Step 1: File Upload -->
+        <div class="import-step-content" id="import-step-1">
+          <div class="warning-banner">
+            <i class="icon-alert-triangle"></i>
+            <div>
+              <strong>Security Warning</strong>
+              <p>Only import files from trusted sources. Private keys will be encrypted and stored securely on this device.</p>
+            </div>
+          </div>
+          <div class="file-dropzone" id="import-dropzone">
+            <div class="dropzone-content">
+              <i class="icon-upload-cloud"></i>
+              <p class="dropzone-title">Drop your file here</p>
+              <p class="dropzone-subtitle">or click to browse</p>
+              <span class="dropzone-formats">Supports CSV and Excel (.xlsx, .xls)</span>
+            </div>
+            <input type="file" id="import-file-input" accept=".csv,.xlsx,.xls" hidden />
+          </div>
+          <div class="selected-file hidden" id="selected-file-info">
+            <i class="icon-file-text"></i>
+            <span id="selected-file-name">filename.csv</span>
+            <button type="button" class="btn-icon" id="clear-file-btn" aria-label="Remove file">
+              <i class="icon-x"></i>
+            </button>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn" id="import-step1-cancel">Cancel</button>
+            <button type="button" class="btn primary" id="import-step1-next" disabled>
+              <i class="icon-arrow-right"></i> Next
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 2: Column Mapping & Preview -->
+        <div class="import-step-content hidden" id="import-step-2">
+          <div class="column-mapping-section">
+            <h4><i class="icon-settings"></i> Map Columns</h4>
+            <p class="mapping-subtitle">Match your file columns to wallet fields</p>
+            <div class="column-mapping-grid" id="column-mapping-grid">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+          <div class="preview-section">
+            <h4><i class="icon-eye"></i> Preview (First 5 Rows)</h4>
+            <div class="preview-table-wrapper" id="preview-table-wrapper">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+          <div class="import-summary" id="import-summary">
+            <div class="summary-item valid">
+              <i class="icon-check-circle"></i>
+              <span><strong id="valid-count">0</strong> valid</span>
+            </div>
+            <div class="summary-item invalid">
+              <i class="icon-x-circle"></i>
+              <span><strong id="invalid-count">0</strong> invalid</span>
+            </div>
+            <div class="summary-item duplicate">
+              <i class="icon-copy"></i>
+              <span><strong id="duplicate-count">0</strong> duplicates</span>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn" id="import-step2-back">
+              <i class="icon-arrow-left"></i> Back
+            </button>
+            <button type="button" class="btn primary" id="import-step2-execute" disabled>
+              <i class="icon-upload"></i> Import Wallets
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 3: Import Results -->
+        <div class="import-step-content hidden" id="import-step-3">
+          <div class="import-results-header" id="import-results-header">
+            <!-- Dynamically populated with success/error summary -->
+          </div>
+          <div class="import-results-table-wrapper" id="import-results-table">
+            <!-- Dynamically populated -->
+          </div>
+          <div class="form-actions">
+            <button type="button" class="btn primary" id="import-step3-done">
+              <i class="icon-check"></i> Done
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bulk Export Modal -->
+  <div class="modal-overlay hidden" id="bulk-export-modal">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-header">
+        <h2><i class="icon-download"></i> Export Wallets</h2>
+        <button class="modal-close" type="button" id="bulk-export-modal-close" aria-label="Close modal">
+          <i class="icon-x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <!-- Export Options -->
+        <div class="export-options">
+          <div class="form-group">
+            <label for="export-format">Format</label>
+            <select id="export-format">
+              <option value="csv">CSV (.csv)</option>
+              <option value="xlsx">Excel (.xlsx)</option>
+            </select>
+          </div>
+          <div class="form-group checkbox-group">
+            <label>
+              <input type="checkbox" id="export-include-inactive" />
+              <span>Include archived wallets</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Export Without Keys Section -->
+        <div class="export-safe-section">
+          <div class="info-banner">
+            <i class="icon-shield-check"></i>
+            <div>
+              <strong>Safe Export</strong>
+              <p>Export wallet addresses and metadata only. No private keys included.</p>
+            </div>
+          </div>
+          <button type="button" class="btn primary full-width" id="export-safe-btn">
+            <i class="icon-download"></i> Export Addresses
+          </button>
+        </div>
+
+        <div class="export-divider">
+          <span>or</span>
+        </div>
+
+        <!-- Export With Keys Section (Dangerous) -->
+        <div class="export-keys-section">
+          <div class="danger-banner">
+            <i class="icon-alert-triangle"></i>
+            <div>
+              <strong>⚠️ Dangerous Export</strong>
+              <p>Include private keys in the export. Anyone with this file can steal your funds.</p>
+            </div>
+          </div>
+          <button type="button" class="btn danger full-width" id="export-with-keys-btn">
+            <i class="icon-unlock"></i> Export with Private Keys
+          </button>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn" id="export-cancel-btn">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Export Keys Confirmation Modal -->
+  <div class="modal-overlay hidden" id="export-keys-confirm-modal">
+    <div class="modal-dialog modal-sm">
+      <div class="modal-header">
+        <h2><i class="icon-alert-triangle"></i> Confirm Dangerous Export</h2>
+        <button class="modal-close" type="button" id="export-keys-confirm-close" aria-label="Close modal">
+          <i class="icon-x"></i>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="danger-banner">
+          <i class="icon-alert-triangle"></i>
+          <div>
+            <strong>⚠️ Critical Security Warning</strong>
+            <p>You are about to export <strong id="export-wallet-count">0</strong> private keys. This is extremely dangerous!</p>
+            <ul class="danger-list">
+              <li>Anyone with this file can steal all funds</li>
+              <li>Never share this file with anyone</li>
+              <li>Delete the file immediately after use</li>
+            </ul>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="export-confirm-input">Type "EXPORT KEYS" to confirm</label>
+          <input type="text" id="export-confirm-input" placeholder="EXPORT KEYS" autocomplete="off" />
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn" id="export-keys-confirm-cancel">Cancel</button>
+          <button type="button" class="btn danger" id="export-keys-confirm-btn" disabled>
+            <i class="icon-download"></i> Export Keys
           </button>
         </div>
       </div>

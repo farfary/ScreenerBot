@@ -174,7 +174,8 @@ async function handleScanATAs() {
 
   scanBtn.disabled = true;
   scanBtn.innerHTML = '<i class="icon-loader spin"></i> Scanning...';
-  listEl.innerHTML = '<div class="loading-state"><i class="icon-loader spin"></i> Scanning wallet...</div>';
+  listEl.innerHTML =
+    '<div class="loading-state"><i class="icon-loader spin"></i> Scanning wallet...</div>';
 
   try {
     const response = await fetch("/api/tools/ata-scan");
@@ -648,19 +649,19 @@ async function handleVolumeAggregatorStart() {
     }
 
     Utils.showToast("Volume aggregator started", "success");
-    
+
     // Store target volume for progress calculation
     window.vaTargetVolume = request.total_volume_sol;
-    
+
     // Update UI to running state
     updateVolumeAggregatorUI("running", null);
-    
+
     // Start polling for status
     startVolumeAggregatorPolling();
   } catch (error) {
     console.error("Failed to start volume aggregator:", error);
     Utils.showToast(`Failed to start: ${error.message}`, "error");
-    
+
     if (startBtn) {
       startBtn.disabled = false;
       startBtn.innerHTML = '<i class="icon-play"></i> Start';
@@ -693,7 +694,7 @@ async function handleVolumeAggregatorStop() {
   } catch (error) {
     console.error("Failed to stop volume aggregator:", error);
     Utils.showToast(`Failed to stop: ${error.message}`, "error");
-    
+
     if (stopBtn) {
       stopBtn.disabled = false;
       stopBtn.innerHTML = '<i class="icon-square"></i> Stop';
@@ -709,9 +710,9 @@ async function checkVolumeAggregatorStatus() {
     const response = await fetch("/api/tools/volume-aggregator/status");
     const result = await response.json();
     const data = result.data || result;
-    
+
     updateVolumeAggregatorUI(data.status, data.session);
-    
+
     // If running, start polling
     if (data.status === "running") {
       startVolumeAggregatorPolling();
@@ -726,15 +727,15 @@ async function checkVolumeAggregatorStatus() {
  */
 function startVolumeAggregatorPolling() {
   stopVolumeAggregatorPolling();
-  
+
   volumeAggregatorPoller = setInterval(async () => {
     try {
       const response = await fetch("/api/tools/volume-aggregator/status");
       const result = await response.json();
       const data = result.data || result;
-      
+
       updateVolumeAggregatorUI(data.status, data.session);
-      
+
       // Stop polling if no longer running
       if (data.status !== "running") {
         stopVolumeAggregatorPolling();
@@ -782,8 +783,8 @@ function updateVolumeAggregatorUI(status, session) {
   // Button states
   if (startBtn) {
     startBtn.disabled = isRunning;
-    startBtn.innerHTML = isRunning 
-      ? '<i class="icon-loader spin"></i> Running...' 
+    startBtn.innerHTML = isRunning
+      ? '<i class="icon-loader spin"></i> Running...'
       : '<i class="icon-play"></i> Start';
   }
   if (stopBtn) {
@@ -794,7 +795,9 @@ function updateVolumeAggregatorUI(status, session) {
   // Form disabled state
   if (form) {
     const inputs = form.querySelectorAll("input, select");
-    inputs.forEach(input => { input.disabled = isRunning; });
+    inputs.forEach((input) => {
+      input.disabled = isRunning;
+    });
   }
 
   // Show/hide sections
@@ -820,9 +823,11 @@ function updateVolumeAggregatorUI(status, session) {
     if (volumeTargetEl) volumeTargetEl.textContent = `${targetVolume.toFixed(2)} SOL`;
     if (progressFill) progressFill.style.width = `${progress}%`;
     if (progressPercent) progressPercent.textContent = `${progress.toFixed(1)}%`;
-    if (successCount) successCount.textContent = (session.successful_buys || 0) + (session.successful_sells || 0);
+    if (successCount)
+      successCount.textContent = (session.successful_buys || 0) + (session.successful_sells || 0);
     if (failedCount) failedCount.textContent = session.failed_count || 0;
-    if (durationEl) durationEl.textContent = Utils.formatDuration((session.duration_secs || 0) * 1000);
+    if (durationEl)
+      durationEl.textContent = Utils.formatDuration((session.duration_secs || 0) * 1000);
   }
 }
 

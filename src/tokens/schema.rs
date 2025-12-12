@@ -177,6 +177,19 @@ pub const CREATE_TABLES: &[&str] = &[
         FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE RESTRICT
     )
     "#,
+    // Token favorites (user-saved tokens)
+    r#"
+    CREATE TABLE IF NOT EXISTS token_favorites (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        mint TEXT NOT NULL UNIQUE,
+        name TEXT,
+        symbol TEXT,
+        logo_url TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )
+    "#,
 ];
 
 /// All CREATE INDEX statements
@@ -220,6 +233,10 @@ pub const CREATE_INDEXES: &[&str] = &[
 
     // Composite indexes for common sorting patterns
     "CREATE INDEX IF NOT EXISTS idx_tokens_discovery_mint ON tokens(first_discovered_at DESC, mint)",
+
+    // Token favorites indexes
+    "CREATE INDEX IF NOT EXISTS idx_favorites_mint ON token_favorites(mint)",
+    "CREATE INDEX IF NOT EXISTS idx_favorites_created ON token_favorites(created_at DESC)",
 ];
 
 /// ALTER TABLE statements for schema migrations (existing databases)

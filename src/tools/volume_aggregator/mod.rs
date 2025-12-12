@@ -7,17 +7,14 @@
 //! ## Usage
 //! ```rust,ignore
 //! use screenerbot::tools::{VolumeAggregator, VolumeConfig};
+//! use screenerbot::tools::{DelayConfig, SizingConfig, DistributionStrategy};
 //! use solana_sdk::pubkey::Pubkey;
 //!
-//! let config = VolumeConfig {
-//!     token_mint: token_pubkey,
-//!     total_volume_sol: 10.0,
-//!     num_wallets: 5,
-//!     min_amount_sol: 0.1,
-//!     max_amount_sol: 0.5,
-//!     delay_between_ms: 2000,
-//!     randomize_amounts: true,
-//! };
+//! let config = VolumeConfig::new(token_pubkey, 10.0)
+//!     .with_delay(DelayConfig::random(1000, 3000))
+//!     .with_sizing(SizingConfig::random(0.1, 0.5))
+//!     .with_strategy(DistributionStrategy::RoundRobin)
+//!     .with_num_wallets(5);
 //!
 //! let mut aggregator = VolumeAggregator::new(config);
 //! aggregator.prepare().await?;
@@ -25,8 +22,10 @@
 //! ```
 
 mod executor;
+pub mod strategies;
 mod types;
 
 // Re-export types
 pub use executor::VolumeAggregator;
-pub use types::{VolumeConfig, VolumeSession, VolumeTransaction, TransactionStatus};
+pub use strategies::{calculate_amount, calculate_amount_clamped, calculate_delay, StrategyExecutor};
+pub use types::{SessionStatus, TransactionStatus, VolumeConfig, VolumeSession, VolumeTransaction};

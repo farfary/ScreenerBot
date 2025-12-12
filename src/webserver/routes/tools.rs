@@ -131,9 +131,11 @@ pub struct StartVolumeAggregatorRequest {
     /// Delay between transactions in milliseconds
     #[serde(default = "default_delay")]
     pub delay_between_ms: u64,
-    /// Whether to randomize amounts
-    #[serde(default = "default_randomize")]
-    pub randomize_amounts: bool,
+    /// Maximum delay (for random mode)
+    pub delay_max_ms: Option<u64>,
+    /// Distribution strategy: "round_robin", "random", or "burst:N"
+    #[serde(default = "default_strategy")]
+    pub strategy: String,
 }
 
 fn default_num_wallets() -> usize {
@@ -148,8 +150,8 @@ fn default_max_amount() -> f64 {
 fn default_delay() -> u64 {
     3000
 }
-fn default_randomize() -> bool {
-    true
+fn default_strategy() -> String {
+    "round_robin".to_string()
 }
 
 /// Response for volume aggregator status
@@ -166,15 +168,17 @@ pub struct VolumeAggregatorStatusResponse {
 pub struct VolumeSessionResponse {
     pub session_id: String,
     pub token_mint: String,
-    pub total_volume_sol: f64,
+    pub target_volume_sol: f64,
+    pub actual_volume_sol: f64,
     pub successful_buys: usize,
     pub successful_sells: usize,
     pub failed_count: usize,
     pub started_at: String,
     pub ended_at: Option<String>,
-    pub completed: bool,
+    pub status: String,
     pub success_rate: f64,
     pub duration_secs: i64,
+    pub progress_pct: f64,
     pub transaction_count: usize,
 }
 
@@ -183,15 +187,17 @@ impl From<&VolumeSession> for VolumeSessionResponse {
         Self {
             session_id: s.session_id.clone(),
             token_mint: s.token_mint.clone(),
-            total_volume_sol: s.total_volume_sol,
+            target_volume_sol: s.target_volume_sol,
+            actual_volume_sol: s.actual_volume_sol,
             successful_buys: s.successful_buys,
             successful_sells: s.successful_sells,
             failed_count: s.failed_count,
             started_at: s.started_at.to_rfc3339(),
             ended_at: s.ended_at.map(|t| t.to_rfc3339()),
-            completed: s.completed,
+            status: format!("{:?}", s.status).to_lowercase(),
             success_rate: s.success_rate(),
             duration_secs: s.duration_secs(),
+            progress_pct: s.progress_pct(),
             transaction_count: s.transactions.len(),
         }
     }
@@ -432,16 +438,31 @@ async fn start_volume_aggregator(Json(request): Json<StartVolumeAggregatorReques
         }
     }
 
-    // Build config
-    let config = VolumeConfig {
-        token_mint,
-        total_volume_sol: request.total_volume_sol,
-        num_wallets: request.num_wallets,
-        min_amount_sol: request.min_amount_sol,
-        max_amount_sol: request.max_amount_sol,
-        delay_between_ms: request.delay_between_ms,
-        randomize_amounts: request.randomize_amounts,
+    // Build config using new builder pattern
+    use crate::tools::{DelayConfig, SizingConfig, DistributionStrategy};
+    
+    // Determine sizing config based on min/max
+    let sizing_config = if request.min_amount_sol == request.max_amount_sol {
+        SizingConfig::fixed(request.min_amount_sol)
+    } else {
+        SizingConfig::random(request.min_amount_sol, request.max_amount_sol)
     };
+    
+    // Determine delay config
+    let delay_config = if let Some(max_ms) = request.delay_max_ms {
+        DelayConfig::random(request.delay_between_ms, max_ms)
+    } else {
+        DelayConfig::fixed(request.delay_between_ms)
+    };
+    
+    // Parse strategy
+    let strategy = DistributionStrategy::from_db_value(&request.strategy);
+    
+    let config = VolumeConfig::new(token_mint, request.total_volume_sol)
+        .with_num_wallets(request.num_wallets)
+        .with_sizing(sizing_config)
+        .with_delay(delay_config)
+        .with_strategy(strategy);
 
     // Validate config
     if let Err(e) = config.validate() {
@@ -492,10 +513,12 @@ async fn start_volume_aggregator(Json(request): Json<StartVolumeAggregatorReques
         let mut state = VOLUME_AGGREGATOR_STATE.write().await;
         match result {
             Ok(session) => {
-                state.status = if session.completed {
-                    ToolStatus::Completed
-                } else {
-                    ToolStatus::Aborted
+                use crate::tools::SessionStatus;
+                state.status = match session.status {
+                    SessionStatus::Completed => ToolStatus::Completed,
+                    SessionStatus::Aborted => ToolStatus::Aborted,
+                    SessionStatus::Failed => ToolStatus::Failed,
+                    _ => ToolStatus::Completed,
                 };
                 state.session = Some(session);
             }

@@ -263,14 +263,16 @@ class SetupControllerClass {
       const result = await this.validateCredentials();
 
       if (!result || !result.valid) {
-        const errorMsg = result?.errors?.length > 0 ? result.errors.join("; ") : "Validation failed";
+        const errorMsg =
+          result?.errors?.length > 0 ? result.errors.join("; ") : "Validation failed";
         throw new Error(errorMsg);
       }
 
       // Update wallet validation
       if (walletStatus) {
         walletStatus.className = "setup-verification-status success";
-        walletStatus.innerHTML = '<i class="icon-check"></i><span>Wallet validated successfully</span>';
+        walletStatus.innerHTML =
+          '<i class="icon-check"></i><span>Wallet validated successfully</span>';
       }
       if (walletDetails && result.wallet_address) {
         walletDetails.classList.add("show");

@@ -419,7 +419,6 @@
   font-size: 0.7rem;
   color: var(--text-muted);
   line-height: 1.4;
-  word-wrap: break-word;
   overflow-wrap: break-word;
 }
 

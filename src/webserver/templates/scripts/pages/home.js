@@ -264,7 +264,8 @@ function createLifecycle() {
       )}%)`;
     if (cpuEl) cpuEl.textContent = `${Utils.formatNumber(system.cpu_percent, 1)}%`;
     if (rpcRateEl) rpcRateEl.textContent = Utils.formatNumber(system.rpc_calls_per_min, 1);
-    if (rpcSuccessEl) rpcSuccessEl.textContent = `${Utils.formatNumber(system.rpc_success_rate, 1)}%`;
+    if (rpcSuccessEl)
+      rpcSuccessEl.textContent = `${Utils.formatNumber(system.rpc_success_rate, 1)}%`;
     if (servicesEl) servicesEl.textContent = `${system.services_healthy}/${system.services_total}`;
   }
 

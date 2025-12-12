@@ -135,23 +135,6 @@ impl WalletWithKey {
     }
 }
 
-/// Balance information for a wallet
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WalletBalance {
-    /// Wallet address
-    pub address: String,
-    /// SOL balance in lamports
-    pub sol_lamports: u64,
-    /// SOL balance in SOL
-    pub sol_balance: f64,
-    /// Number of token accounts
-    pub token_count: u32,
-    /// Total token value in SOL (approximate)
-    pub token_value_sol: f64,
-    /// Timestamp of balance check
-    pub checked_at: DateTime<Utc>,
-}
-
 /// Summary of all wallets for dashboard
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WalletsSummary {
@@ -163,7 +146,7 @@ pub struct WalletsSummary {
     pub main_wallet: Option<String>,
     /// Main wallet name (if any)
     pub main_wallet_name: Option<String>,
-    /// Total SOL across all active wallets
+    /// Total SOL across all active wallets (placeholder, populated by balance fetching)
     pub total_sol: f64,
 }
 
@@ -213,4 +196,31 @@ pub struct ExportWalletResponse {
     pub private_key: String,
     /// Warning message
     pub warning: String,
+}
+
+// =============================================================================
+// TOKEN BALANCE TYPES
+// =============================================================================
+
+/// Cached token balance for a wallet
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TokenBalance {
+    /// Wallet database ID
+    pub wallet_id: i64,
+    /// Token mint address
+    pub mint: String,
+    /// Raw balance (in smallest units)
+    pub balance: u64,
+    /// UI-friendly balance (with decimals applied)
+    pub ui_amount: f64,
+    /// Token decimals
+    pub decimals: u8,
+    /// Token symbol (if known)
+    pub symbol: Option<String>,
+    /// Token name (if known)
+    pub name: Option<String>,
+    /// Whether this is a Token-2022 token
+    pub is_token_2022: bool,
+    /// When this balance was last updated
+    pub updated_at: DateTime<Utc>,
 }

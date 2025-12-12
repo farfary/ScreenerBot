@@ -171,6 +171,11 @@
 
         <!-- Quick Actions -->
         <div class="header-actions">
+          <!-- Search -->
+          <button class="header-action-btn" id="searchBtn" aria-label="Search tokens (Cmd+K)" title="Search tokens (⌘K)">
+            <i class="action-icon icon-search"></i>
+          </button>
+
           <!-- Notifications -->
           <button class="header-action-btn" id="notificationBtn" aria-label="Notifications">
             <i class="action-icon icon-bell"></i>
@@ -436,7 +441,19 @@
 
     <!-- UI Components -->
     <script type="module" src="/scripts/ui/context_menu.js?v={{ASSET_VERSION}}"></script>
+    <script type="module" src="/scripts/ui/search_dialog.js?v={{ASSET_VERSION}}"></script>
     <script src="/scripts/ui/advanced_chart.js?v={{ASSET_VERSION}}"></script>
+
+    <!-- Initialize global search dialog -->
+    <script type="module">
+      import { initSearchDialog, openDialog } from '/scripts/ui/search_dialog.js?v={{ASSET_VERSION}}';
+      initSearchDialog();
+      // Connect header search button
+      const searchBtn = document.getElementById('searchBtn');
+      if (searchBtn) {
+        searchBtn.addEventListener('click', openDialog);
+      }
+    </script>
 
     <!-- Splash, Onboarding, and Setup Controllers (non-module for immediate execution) -->
     <script src="/scripts/core/splash.js?v={{ASSET_VERSION}}"></script>

@@ -1,7 +1,7 @@
 use axum::{
   extract::{Path, Query},
   http::StatusCode,
-  routing::{get, post},
+  routing::{delete, get, patch, post},
   Json, Router,
 };
 use serde::{Deserialize, Serialize};
@@ -19,6 +19,7 @@ use crate::{
   pools, positions,
   tokens::cleanup,
   tokens::database::get_global_database,
+  tokens::favorites::{AddFavoriteRequest, FavoriteToken, UpdateFavoriteRequest},
   tokens::SecurityRisk,
   webserver::{
     state::AppState,
@@ -508,6 +509,45 @@ impl FilterRequest {
 }
 
 // =============================================================================
+// SEARCH TYPES
+// =============================================================================
+
+/// Query parameters for token search
+#[derive(Debug, Deserialize)]
+pub struct TokenSearchQuery {
+  pub q: String,
+  pub limit: Option<usize>,
+}
+
+/// Token search response
+#[derive(Debug, Serialize)]
+pub struct TokenSearchResponse {
+  pub results: Vec<crate::tokens::TokenSearchResult>,
+  pub query: String,
+  pub total: usize,
+}
+
+// =============================================================================
+// FAVORITES TYPES
+// =============================================================================
+
+/// Response for favorites list
+#[derive(Debug, Serialize)]
+pub struct FavoritesListResponse {
+  pub favorites: Vec<FavoriteToken>,
+  pub total: usize,
+}
+
+/// Response for single favorite operations
+#[derive(Debug, Serialize)]
+pub struct FavoriteResponse {
+  pub success: bool,
+  pub favorite: Option<FavoriteToken>,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub message: Option<String>,
+}
+
+// =============================================================================
 // ROUTE REGISTRATION
 // =============================================================================
 
@@ -516,6 +556,11 @@ pub fn routes() -> Router<Arc<AppState>> {
     .route("/tokens/list", get(get_tokens_list))
     .route("/tokens/stats", get(get_tokens_stats))
     .route("/tokens/filter", post(filter_tokens))
+    .route("/tokens/search", get(search_tokens))
+    .route("/tokens/favorites", get(get_favorites))
+    .route("/tokens/favorites", post(add_favorite))
+    .route("/tokens/favorites/:mint", delete(remove_favorite))
+    .route("/tokens/favorites/:mint", patch(update_favorite))
     .route("/tokens/:mint", get(get_token_detail))
     .route("/tokens/:mint/refresh", post(refresh_token_data))
     .route("/tokens/:mint/ohlcv", get(get_token_ohlcv))
@@ -527,6 +572,249 @@ pub fn routes() -> Router<Arc<AppState>> {
 // =============================================================================
 // HANDLERS
 // =============================================================================
+
+// =============================================================================
+// FAVORITES HANDLERS
+// =============================================================================
+
+/// GET /api/tokens/favorites
+///
+/// Get all favorite tokens ordered by creation date (newest first)
+async fn get_favorites() -> Result<Json<FavoritesListResponse>, (StatusCode, Json<serde_json::Value>)>
+{
+  logger::debug(LogTag::Webserver, "Fetching token favorites");
+
+  match crate::tokens::get_favorites_async().await {
+    Ok(favorites) => {
+      let total = favorites.len();
+      logger::info(
+        LogTag::Webserver,
+        &format!("Fetched {} favorites", total),
+      );
+      Ok(Json(FavoritesListResponse { favorites, total }))
+    }
+    Err(e) => {
+      logger::warning(
+        LogTag::Webserver,
+        &format!("Failed to fetch favorites: {}", e),
+      );
+      Err((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(serde_json::json!({
+          "success": false,
+          "error": format!("Failed to fetch favorites: {}", e)
+        })),
+      ))
+    }
+  }
+}
+
+/// POST /api/tokens/favorites
+///
+/// Add a token to favorites
+async fn add_favorite(
+  Json(request): Json<AddFavoriteRequest>,
+) -> Result<Json<FavoriteResponse>, (StatusCode, Json<serde_json::Value>)> {
+  logger::debug(
+    LogTag::Webserver,
+    &format!("Adding favorite: mint={}", request.mint),
+  );
+
+  match crate::tokens::add_favorite_async(request.clone()).await {
+    Ok(favorite) => {
+      logger::info(
+        LogTag::Webserver,
+        &format!(
+          "Added favorite: mint={} symbol={:?}",
+          favorite.mint, favorite.symbol
+        ),
+      );
+      Ok(Json(FavoriteResponse {
+        success: true,
+        favorite: Some(favorite),
+        message: None,
+      }))
+    }
+    Err(e) => {
+      logger::warning(
+        LogTag::Webserver,
+        &format!("Failed to add favorite mint={}: {}", request.mint, e),
+      );
+      Err((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(serde_json::json!({
+          "success": false,
+          "error": format!("Failed to add favorite: {}", e)
+        })),
+      ))
+    }
+  }
+}
+
+/// DELETE /api/tokens/favorites/:mint
+///
+/// Remove a token from favorites
+async fn remove_favorite(
+  Path(mint): Path<String>,
+) -> Result<Json<FavoriteResponse>, (StatusCode, Json<serde_json::Value>)> {
+  logger::debug(
+    LogTag::Webserver,
+    &format!("Removing favorite: mint={}", mint),
+  );
+
+  match crate::tokens::remove_favorite_async(mint.clone()).await {
+    Ok(removed) => {
+      if removed {
+        logger::info(
+          LogTag::Webserver,
+          &format!("Removed favorite: mint={}", mint),
+        );
+        Ok(Json(FavoriteResponse {
+          success: true,
+          favorite: None,
+          message: Some("Favorite removed".to_string()),
+        }))
+      } else {
+        logger::debug(
+          LogTag::Webserver,
+          &format!("Favorite not found: mint={}", mint),
+        );
+        Err((
+          StatusCode::NOT_FOUND,
+          Json(serde_json::json!({
+            "success": false,
+            "error": "Favorite not found"
+          })),
+        ))
+      }
+    }
+    Err(e) => {
+      logger::warning(
+        LogTag::Webserver,
+        &format!("Failed to remove favorite mint={}: {}", mint, e),
+      );
+      Err((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(serde_json::json!({
+          "success": false,
+          "error": format!("Failed to remove favorite: {}", e)
+        })),
+      ))
+    }
+  }
+}
+
+/// PATCH /api/tokens/favorites/:mint
+///
+/// Update a favorite's notes or metadata
+async fn update_favorite(
+  Path(mint): Path<String>,
+  Json(request): Json<UpdateFavoriteRequest>,
+) -> Result<Json<FavoriteResponse>, (StatusCode, Json<serde_json::Value>)> {
+  logger::debug(
+    LogTag::Webserver,
+    &format!("Updating favorite: mint={}", mint),
+  );
+
+  match crate::tokens::update_favorite_async(mint.clone(), request).await {
+    Ok(Some(favorite)) => {
+      logger::info(
+        LogTag::Webserver,
+        &format!("Updated favorite: mint={}", mint),
+      );
+      Ok(Json(FavoriteResponse {
+        success: true,
+        favorite: Some(favorite),
+        message: None,
+      }))
+    }
+    Ok(None) => {
+      logger::debug(
+        LogTag::Webserver,
+        &format!("Favorite not found for update: mint={}", mint),
+      );
+      Err((
+        StatusCode::NOT_FOUND,
+        Json(serde_json::json!({
+          "success": false,
+          "error": "Favorite not found"
+        })),
+      ))
+    }
+    Err(e) => {
+      logger::warning(
+        LogTag::Webserver,
+        &format!("Failed to update favorite mint={}: {}", mint, e),
+      );
+      Err((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(serde_json::json!({
+          "success": false,
+          "error": format!("Failed to update favorite: {}", e)
+        })),
+      ))
+    }
+  }
+}
+
+/// GET /api/tokens/search
+///
+/// Search for tokens by name, symbol, or mint address.
+/// Uses DexScreener search API for name/symbol queries, and direct lookup for mint addresses.
+///
+/// Query: q (required), limit (optional, default 20, max 50)
+async fn search_tokens(
+  Query(query): Query<TokenSearchQuery>,
+) -> Result<Json<TokenSearchResponse>, (StatusCode, Json<serde_json::Value>)> {
+  let search_query = query.q.trim();
+
+  if search_query.is_empty() {
+    return Err((
+      StatusCode::BAD_REQUEST,
+      Json(serde_json::json!({
+        "success": false,
+        "error": "Search query 'q' is required"
+      })),
+    ));
+  }
+
+  logger::debug(
+    LogTag::Webserver,
+    &format!("Token search: q='{}', limit={:?}", search_query, query.limit),
+  );
+
+  match crate::tokens::search_tokens(search_query, query.limit).await {
+    Ok(results) => {
+      logger::info(
+        LogTag::Webserver,
+        &format!(
+          "Token search completed: q='{}', results={}",
+          search_query, results.total
+        ),
+      );
+
+      Ok(Json(TokenSearchResponse {
+        results: results.results,
+        query: results.query,
+        total: results.total,
+      }))
+    }
+    Err(err) => {
+      logger::warning(
+        LogTag::Webserver,
+        &format!("Token search failed: q='{}', error={}", search_query, err),
+      );
+
+      Err((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(serde_json::json!({
+          "success": false,
+          "error": err
+        })),
+      ))
+    }
+  }
+}
 
 /// GET /api/tokens/list
 ///

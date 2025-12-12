@@ -168,6 +168,11 @@ pub fn get_actions_db_path() -> PathBuf {
   get_data_directory().join("actions.db")
 }
 
+/// Returns the tools database path
+pub fn get_tools_db_path() -> PathBuf {
+  get_data_directory().join("tools.db")
+}
+
 // =============================================================================
 // CACHE AND DATA FILE PATHS
 // =============================================================================

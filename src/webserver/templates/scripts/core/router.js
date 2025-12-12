@@ -118,7 +118,7 @@ function displayPageElement(mainContent, pageEl) {
 
   // Remove all existing page containers first
   removeCachedPageElements(mainContent);
-  
+
   // Only append if not already in mainContent
   if (pageEl.parentElement !== mainContent) {
     mainContent.appendChild(pageEl);
@@ -326,9 +326,11 @@ export function initRouter() {
 
   // Check if content is already server-rendered
   // mainContent already queried above for cleanup
-  
+
   // Check if page container already exists (WebView cache scenario)
-  const existingContainer = mainContent?.querySelector(`.page-container[data-page="${initialPage}"]`);
+  const existingContainer = mainContent?.querySelector(
+    `.page-container[data-page="${initialPage}"]`
+  );
   if (existingContainer) {
     console.log("[Router] Found existing page container (cached), reusing:", initialPage);
     _state.pageCache[initialPage] = existingContainer;

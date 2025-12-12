@@ -147,7 +147,8 @@ class ContextMenuManager {
 
     if (rowEl && isTokensTable) {
       // Get mint from data-row-id or data-mint
-      const mint = tableRow?.dataset.rowId ||
+      const mint =
+        tableRow?.dataset.rowId ||
         walletRow?.dataset.mint ||
         rowEl.querySelector("[data-mint]")?.dataset.mint;
 
@@ -174,9 +175,7 @@ class ContextMenuManager {
     }
 
     // Check for positions table rows
-    const positionsTable = target.closest(
-      "#positions-root, [data-context='positions']"
-    );
+    const positionsTable = target.closest("#positions-root, [data-context='positions']");
     if (tableRow && positionsTable) {
       const mint = tableRow.dataset.rowId;
       const symbolEl = tableRow.querySelector(
@@ -192,9 +191,7 @@ class ContextMenuManager {
     }
 
     // Check for transaction rows
-    const transactionsTable = target.closest(
-      "#transactions-root, [data-context='transactions']"
-    );
+    const transactionsTable = target.closest("#transactions-root, [data-context='transactions']");
     if (tableRow && transactionsTable) {
       const signature = tableRow.dataset.rowId;
 
@@ -461,16 +458,14 @@ class ContextMenuManager {
       type: "item",
       label: "View on Solscan",
       icon: "externalLink",
-      action: () =>
-        window.open(`https://solscan.io/tx/${context.signature}`, "_blank"),
+      action: () => window.open(`https://solscan.io/tx/${context.signature}`, "_blank"),
     });
 
     items.push({
       type: "item",
       label: "View on Solana FM",
       icon: "globe",
-      action: () =>
-        window.open(`https://solana.fm/tx/${context.signature}`, "_blank"),
+      action: () => window.open(`https://solana.fm/tx/${context.signature}`, "_blank"),
     });
 
     items.push({ type: "separator" });
@@ -561,11 +556,7 @@ class ContextMenuManager {
         type: "item",
         label: "View on Solscan",
         icon: "globe",
-        action: () =>
-          window.open(
-            `https://solscan.io/account/${context.text.trim()}`,
-            "_blank"
-          ),
+        action: () => window.open(`https://solscan.io/account/${context.text.trim()}`, "_blank"),
       });
     }
   }
@@ -928,13 +919,11 @@ class ContextMenuManager {
 
   _openSubmenuForItem(el) {
     // Close other submenus first
-    this.menuEl
-      .querySelectorAll(".context-menu-item.submenu-open")
-      .forEach((item) => {
-        if (item !== el) {
-          item.classList.remove("submenu-open");
-        }
-      });
+    this.menuEl.querySelectorAll(".context-menu-item.submenu-open").forEach((item) => {
+      if (item !== el) {
+        item.classList.remove("submenu-open");
+      }
+    });
 
     el.classList.add("submenu-open");
 
@@ -1060,9 +1049,7 @@ class ContextMenuManager {
     if (this.flatItems.length === 0) return;
 
     // Find current position in flat list
-    let currentFlatIdx = this.flatItems.findIndex(
-      (f) => f.index === this.activeItemIndex
-    );
+    let currentFlatIdx = this.flatItems.findIndex((f) => f.index === this.activeItemIndex);
 
     if (currentFlatIdx === -1) {
       currentFlatIdx = direction > 0 ? -1 : this.flatItems.length;
@@ -1084,9 +1071,7 @@ class ContextMenuManager {
   _setActiveItem(index) {
     if (!this.menuEl) return;
 
-    const items = this.menuEl.querySelectorAll(
-      ":scope > .context-menu-item"
-    );
+    const items = this.menuEl.querySelectorAll(":scope > .context-menu-item");
     items.forEach((item, i) => {
       const isActive = parseInt(item.dataset.index) === index;
       item.classList.toggle("active", isActive);
@@ -1098,10 +1083,7 @@ class ContextMenuManager {
    * Activate current item (Enter key)
    */
   _activateCurrentItem() {
-    if (
-      this.activeItemIndex >= 0 &&
-      this.activeItemIndex < this.items.length
-    ) {
+    if (this.activeItemIndex >= 0 && this.activeItemIndex < this.items.length) {
       const item = this.items[this.activeItemIndex];
       if (item && item.type === "item" && !item.disabled) {
         if (item.submenu) {
@@ -1132,11 +1114,9 @@ class ContextMenuManager {
    * Close current submenu
    */
   _closeCurrentSubmenu() {
-    this.menuEl
-      .querySelectorAll(".context-menu-item.submenu-open")
-      .forEach((el) => {
-        el.classList.remove("submenu-open");
-      });
+    this.menuEl.querySelectorAll(".context-menu-item.submenu-open").forEach((el) => {
+      el.classList.remove("submenu-open");
+    });
   }
 
   // =========================================================================

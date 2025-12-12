@@ -9,6 +9,7 @@
 //! - Main wallet designation for trading
 //! - Secondary wallets for tools/volume aggregator
 //! - Import/export functionality
+//! - Bulk import from CSV/Excel files
 //!
 //! ## Usage
 //! ```rust,ignore
@@ -28,6 +29,7 @@
 //! }).await?;
 //! ```
 
+pub mod bulk;
 mod crypto;
 mod database;
 mod manager;
@@ -35,8 +37,8 @@ mod types;
 
 // Re-export types
 pub use types::{
-    CreateWalletRequest, ExportWalletResponse, ImportWalletRequest, UpdateWalletRequest, Wallet,
-    WalletBalance, WalletRole, WalletType, WalletWithKey, WalletsSummary,
+    CreateWalletRequest, ExportWalletResponse, ImportWalletRequest, TokenBalance,
+    UpdateWalletRequest, Wallet, WalletRole, WalletType, WalletWithKey, WalletsSummary,
 };
 
 // Re-export manager functions
@@ -64,10 +66,21 @@ pub use manager::{
     set_main_wallet,
     update_last_used,
     update_wallet,
+    // Bulk operations
+    bulk_import_wallets,
+    export_wallets,
+    get_existing_wallet_addresses,
     // Tools integration
     get_wallets_with_keys,
     // Summary
     get_wallets_summary,
+    // Token balance operations
+    clear_token_balances,
+    get_all_token_balances,
+    get_token_balances,
+    update_all_wallet_balances,
+    update_wallet_balances,
+    upsert_token_balance,
 };
 
 // Re-export crypto utilities

@@ -125,10 +125,13 @@ export class TokenDetailsDialog {
   async _triggerOhlcvRefresh() {
     try {
       // Use requestManager with high priority for immediate OHLCV refresh
-      const response = await requestManager.fetch(`/api/tokens/${this.tokenData.mint}/ohlcv/refresh`, {
-        method: "POST",
-        priority: "high",
-      });
+      const response = await requestManager.fetch(
+        `/api/tokens/${this.tokenData.mint}/ohlcv/refresh`,
+        {
+          method: "POST",
+          priority: "high",
+        }
+      );
       if (response.success !== false) {
         console.log("OHLCV data refresh triggered:", response);
         return response;
@@ -287,12 +290,14 @@ export class TokenDetailsDialog {
 
     // Deprioritize token OHLCV monitoring when dialog closes (fire and forget)
     if (this.tokenData?.mint) {
-      requestManager.fetch(`/api/tokens/${this.tokenData.mint}/ohlcv/deprioritize`, {
-        method: "POST",
-        priority: "low",
-      }).catch(() => {
-        // Silent - deprioritize is best-effort
-      });
+      requestManager
+        .fetch(`/api/tokens/${this.tokenData.mint}/ohlcv/deprioritize`, {
+          method: "POST",
+          priority: "low",
+        })
+        .catch(() => {
+          // Silent - deprioritize is best-effort
+        });
     }
 
     this._stopPolling();
@@ -480,7 +485,7 @@ export class TokenDetailsDialog {
       if (token.has_open_position) badges.push('<span class="badge badge-info">Position</span>');
       if (token.blacklisted) badges.push('<span class="badge badge-danger">Blacklisted</span>');
       if (token.has_ohlcv) badges.push('<span class="badge badge-secondary">OHLCV</span>');
-      
+
       if (badges.length > 0) {
         badgesContainer.innerHTML = badges.join("");
         badgesRow.style.display = "flex";
@@ -514,12 +519,14 @@ export class TokenDetailsDialog {
   }
 
   _buildHeaderPrice(token) {
-    const priceSol = token.price_sol !== null && token.price_sol !== undefined
-      ? Utils.formatPriceSol(token.price_sol, { decimals: 12 })
-      : "—";
-    const priceUsd = token.price_usd !== null && token.price_usd !== undefined
-      ? Utils.formatCurrencyUSD(token.price_usd)
-      : "";
+    const priceSol =
+      token.price_sol !== null && token.price_sol !== undefined
+        ? Utils.formatPriceSol(token.price_sol, { decimals: 12 })
+        : "—";
+    const priceUsd =
+      token.price_usd !== null && token.price_usd !== undefined
+        ? Utils.formatCurrencyUSD(token.price_usd)
+        : "";
 
     // Price change badge
     let changeHtml = "";
@@ -694,9 +701,10 @@ export class TokenDetailsDialog {
       const sellBtn = this.dialogEl.querySelector("#headerSellBtn");
       if (sellBtn) sellBtn.disabled = true;
 
-      const body = result.percentage === 100
-        ? { mint: this.tokenData.mint, close_all: true }
-        : { mint: this.tokenData.mint, percentage: result.percentage };
+      const body =
+        result.percentage === 100
+          ? { mint: this.tokenData.mint, close_all: true }
+          : { mint: this.tokenData.mint, percentage: result.percentage };
 
       const response = await fetch("/api/trader/manual/sell", {
         method: "POST",
@@ -902,9 +910,10 @@ export class TokenDetailsDialog {
         : "—";
 
     // Build tags display
-    const tagsHtml = token.tags && token.tags.length > 0
-      ? `<div class="token-tags">${token.tags.map((t) => `<span class="token-tag">${this._escapeHtml(t)}</span>`).join("")}</div>`
-      : "";
+    const tagsHtml =
+      token.tags && token.tags.length > 0
+        ? `<div class="token-tags">${token.tags.map((t) => `<span class="token-tag">${this._escapeHtml(t)}</span>`).join("")}</div>`
+        : "";
 
     return `
       <div class="info-card compact">
@@ -933,18 +942,26 @@ export class TokenDetailsDialog {
               <span class="cell-label">DEX</span>
               <span class="cell-value">${token.pool_dex ? this._escapeHtml(token.pool_dex) : "—"}</span>
             </div>
-            ${token.total_holders ? `
+            ${
+              token.total_holders
+                ? `
             <div class="info-cell">
               <span class="cell-label">Holders</span>
               <span class="cell-value">${Utils.formatNumber(token.total_holders, { decimals: 0 })}</span>
             </div>
-            ` : ""}
-            ${token.top_10_concentration ? `
+            `
+                : ""
+            }
+            ${
+              token.top_10_concentration
+                ? `
             <div class="info-cell">
               <span class="cell-label">Top 10 Hold</span>
               <span class="cell-value">${token.top_10_concentration.toFixed(1)}%</span>
             </div>
-            ` : ""}
+            `
+                : ""
+            }
           </div>
           ${tagsHtml}
           ${token.description ? `<div class="info-description">${this._escapeHtml(token.description)}</div>` : ""}
@@ -979,12 +996,16 @@ export class TokenDetailsDialog {
               <span class="cell-value">${token.pool_reserves_token ? Utils.formatCompactNumber(token.pool_reserves_token) : "—"}</span>
             </div>
           </div>
-          ${token.pool_address ? `
+          ${
+            token.pool_address
+              ? `
           <div class="pool-address">
             <span class="cell-label">Pool</span>
             <a href="https://solscan.io/account/${token.pool_address}" target="_blank" rel="noopener" class="pool-link">${this._formatShortAddress(token.pool_address)}</a>
           </div>
-          ` : ""}
+          `
+              : ""
+          }
         </div>
       </div>
     `;
@@ -1057,7 +1078,13 @@ export class TokenDetailsDialog {
   _buildActivityCard(token) {
     const txns = token.txn_periods || {};
     const buySellRatio = token.buy_sell_ratio_24h;
-    const ratioClass = buySellRatio ? (buySellRatio > 1 ? "bullish" : buySellRatio < 1 ? "bearish" : "neutral") : "";
+    const ratioClass = buySellRatio
+      ? buySellRatio > 1
+        ? "bullish"
+        : buySellRatio < 1
+          ? "bearish"
+          : "neutral"
+      : "";
 
     return `
       <div class="info-card compact">
@@ -1075,7 +1102,9 @@ export class TokenDetailsDialog {
             ${this._buildTxnRow("6H", txns.h6)}
             ${this._buildTxnRow("24H", txns.h24)}
           </div>
-          ${token.buys_24h !== undefined || token.sells_24h !== undefined ? `
+          ${
+            token.buys_24h !== undefined || token.sells_24h !== undefined
+              ? `
           <div class="txn-summary">
             <div class="txn-summary-item buys">
               <span class="summary-icon">↗</span>
@@ -1087,15 +1116,21 @@ export class TokenDetailsDialog {
               <span class="summary-value">${token.sells_24h ?? 0}</span>
               <span class="summary-label">Sells</span>
             </div>
-            ${token.net_flow_24h !== undefined ? `
+            ${
+              token.net_flow_24h !== undefined
+                ? `
             <div class="txn-summary-item flow ${token.net_flow_24h >= 0 ? "positive" : "negative"}">
               <span class="summary-icon">${token.net_flow_24h >= 0 ? "+" : "−"}</span>
               <span class="summary-value">${Math.abs(token.net_flow_24h)}</span>
               <span class="summary-label">Net</span>
             </div>
-            ` : ""}
+            `
+                : ""
+            }
           </div>
-          ` : ""}
+          `
+              : ""
+          }
         </div>
       </div>
     `;
@@ -1106,7 +1141,7 @@ export class TokenDetailsDialog {
     const buys = data.buys ?? 0;
     const sells = data.sells ?? 0;
     const total = buys + sells;
-    const buyPct = total > 0 ? (buys / total * 100) : 50;
+    const buyPct = total > 0 ? (buys / total) * 100 : 50;
     return `
       <div class="txn-row">
         <span class="txn-label">${label}</span>
@@ -1195,22 +1230,33 @@ export class TokenDetailsDialog {
           <div class="score-info">
             <span class="score-label ${scoreClass}">${scoreLabel}</span>
             <span class="score-hint">Safety Score</span>
-            ${riskScore !== null && riskScore !== undefined ? 
-              `<span class="risk-score-info">Risk: ${Utils.formatNumber(riskScore, { decimals: 0 })}</span>` : ""}
+            ${
+              riskScore !== null && riskScore !== undefined
+                ? `<span class="risk-score-info">Risk: ${Utils.formatNumber(riskScore, { decimals: 0 })}</span>`
+                : ""
+            }
             ${lastUpdated ? `<span class="score-updated">${lastUpdated}</span>` : ""}
           </div>
         </div>
-        ${token.rugged ? `
+        ${
+          token.rugged
+            ? `
         <div class="rugged-warning">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
           <span>RUGGED</span>
         </div>
-        ` : ""}
-        ${token.security_summary ? `
+        `
+            : ""
+        }
+        ${
+          token.security_summary
+            ? `
         <div class="security-summary">
           <p>${this._escapeHtml(token.security_summary)}</p>
         </div>
-        ` : ""}
+        `
+            : ""
+        }
       </div>
     `;
   }
@@ -1222,27 +1268,44 @@ export class TokenDetailsDialog {
       items.push({ label: "Type", value: token.token_type, icon: "📦" });
     }
     if (token.total_holders !== null && token.total_holders !== undefined) {
-      items.push({ label: "Holders", value: Utils.formatCompactNumber(token.total_holders), icon: "👥" });
+      items.push({
+        label: "Holders",
+        value: Utils.formatCompactNumber(token.total_holders),
+        icon: "👥",
+      });
     }
     if (token.lp_provider_count !== null && token.lp_provider_count !== undefined) {
-      items.push({ label: "LP Providers", value: Utils.formatNumber(token.lp_provider_count, { decimals: 0 }), icon: "💧" });
+      items.push({
+        label: "LP Providers",
+        value: Utils.formatNumber(token.lp_provider_count, { decimals: 0 }),
+        icon: "💧",
+      });
     }
     if (token.graph_insiders_detected !== null && token.graph_insiders_detected !== undefined) {
       const insiderClass = token.graph_insiders_detected > 0 ? "warning" : "good";
-      items.push({ label: "Insiders Detected", value: token.graph_insiders_detected, icon: "🔍", class: insiderClass });
+      items.push({
+        label: "Insiders Detected",
+        value: token.graph_insiders_detected,
+        icon: "🔍",
+        class: insiderClass,
+      });
     }
 
     if (items.length === 0) return "";
 
     return `
       <div class="security-overview">
-        ${items.map((item) => `
+        ${items
+          .map(
+            (item) => `
           <div class="overview-item ${item.class || ""}">
             <span class="overview-icon">${item.icon}</span>
             <span class="overview-value">${item.value}</span>
             <span class="overview-label">${item.label}</span>
           </div>
-        `).join("")}
+        `
+          )
+          .join("")}
       </div>
     `;
   }
@@ -1261,26 +1324,34 @@ export class TokenDetailsDialog {
                 <span class="authority-label">Mint Authority</span>
                 ${this._renderAuthorityBadge(token.mint_authority)}
               </div>
-              ${token.mint_authority ? `
+              ${
+                token.mint_authority
+                  ? `
               <div class="authority-address">
                 <span class="address-value" title="${token.mint_authority}">${this._formatShortAddress(token.mint_authority)}</span>
                 <button class="btn-copy-mini" onclick="Utils.copyToClipboard('${token.mint_authority}')" title="Copy">📋</button>
               </div>
               <div class="authority-warning">Can mint new tokens</div>
-              ` : `<div class="authority-safe">Cannot create new tokens</div>`}
+              `
+                  : `<div class="authority-safe">Cannot create new tokens</div>`
+              }
             </div>
             <div class="authority-item">
               <div class="authority-header">
                 <span class="authority-label">Freeze Authority</span>
                 ${this._renderAuthorityBadge(token.freeze_authority)}
               </div>
-              ${token.freeze_authority ? `
+              ${
+                token.freeze_authority
+                  ? `
               <div class="authority-address">
                 <span class="address-value" title="${token.freeze_authority}">${this._formatShortAddress(token.freeze_authority)}</span>
                 <button class="btn-copy-mini" onclick="Utils.copyToClipboard('${token.freeze_authority}')" title="Copy">📋</button>
               </div>
               <div class="authority-warning">Can freeze accounts</div>
-              ` : `<div class="authority-safe">Cannot freeze accounts</div>`}
+              `
+                  : `<div class="authority-safe">Cannot freeze accounts</div>`
+              }
             </div>
           </div>
         </div>
@@ -1327,19 +1398,27 @@ export class TokenDetailsDialog {
               <span class="stat-label">Top 10 Hold</span>
               <span class="stat-value ${concentrationClass}">${top10Pct !== null && top10Pct !== undefined ? top10Pct.toFixed(2) + "%" : "—"}</span>
             </div>
-            ${creatorPct !== null && creatorPct !== undefined ? `
+            ${
+              creatorPct !== null && creatorPct !== undefined
+                ? `
             <div class="holder-stat">
               <span class="stat-label">Creator Balance</span>
               <span class="stat-value ${creatorPct > 10 ? "warning" : ""}">${creatorPct.toFixed(2)}%</span>
             </div>
-            ` : ""}
+            `
+                : ""
+            }
           </div>
-          ${top10Pct !== null && top10Pct !== undefined ? `
+          ${
+            top10Pct !== null && top10Pct !== undefined
+              ? `
           <div class="concentration-bar">
             <div class="bar-fill ${concentrationClass}" style="width: ${Math.min(top10Pct, 100)}%"></div>
             <div class="bar-label">Top 10 holders own ${top10Pct.toFixed(1)}% of supply</div>
           </div>
-          ` : ""}
+          `
+              : ""
+          }
         </div>
       </div>
     `;
@@ -1360,35 +1439,47 @@ export class TokenDetailsDialog {
           ${hasFee ? `<span class="fee-badge">⚠️ ${token.transfer_fee_pct}%</span>` : `<span class="no-fee-badge">✓ No Fee</span>`}
         </div>
         <div class="card-body">
-          ${hasFee ? `
+          ${
+            hasFee
+              ? `
           <div class="fee-details">
             <div class="fee-row">
               <span class="fee-label">Fee Percentage</span>
               <span class="fee-value">${token.transfer_fee_pct}%</span>
             </div>
-            ${token.transfer_fee_max_amount ? `
+            ${
+              token.transfer_fee_max_amount
+                ? `
             <div class="fee-row">
               <span class="fee-label">Max Fee Amount</span>
               <span class="fee-value">${Utils.formatNumber(token.transfer_fee_max_amount)}</span>
             </div>
-            ` : ""}
-            ${token.transfer_fee_authority ? `
+            `
+                : ""
+            }
+            ${
+              token.transfer_fee_authority
+                ? `
             <div class="fee-row">
               <span class="fee-label">Fee Authority</span>
               <span class="fee-value mono">${this._formatShortAddress(token.transfer_fee_authority)}</span>
             </div>
-            ` : ""}
+            `
+                : ""
+            }
           </div>
           <div class="fee-warning">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
             <span>A ${token.transfer_fee_pct}% fee is charged on every transfer</span>
           </div>
-          ` : `
+          `
+              : `
           <div class="no-fee-info">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
             <span>No transfer fee configured</span>
           </div>
-          `}
+          `
+          }
         </div>
       </div>
     `;
@@ -1399,11 +1490,13 @@ export class TokenDetailsDialog {
       return "";
     }
 
-    const holderRows = topHolders.slice(0, 10).map((holder, idx) => {
-      const insiderClass = holder.is_insider ? "insider" : "";
-      const ownerLabel = holder.owner_type || "";
+    const holderRows = topHolders
+      .slice(0, 10)
+      .map((holder, idx) => {
+        const insiderClass = holder.is_insider ? "insider" : "";
+        const ownerLabel = holder.owner_type || "";
 
-      return `
+        return `
         <div class="holder-row ${insiderClass}">
           <span class="holder-rank">#${idx + 1}</span>
           <span class="holder-address" title="${holder.address}">
@@ -1417,7 +1510,8 @@ export class TokenDetailsDialog {
           ${ownerLabel ? `<span class="owner-badge">${ownerLabel}</span>` : ""}
         </div>
       `;
-    }).join("");
+      })
+      .join("");
 
     return `
       <div class="security-card full-width">
@@ -1456,9 +1550,10 @@ export class TokenDetailsDialog {
       `;
     }
 
-    const riskItems = risks.map((risk) => {
-      const levelClass = risk.level?.toLowerCase() || "info";
-      return `
+    const riskItems = risks
+      .map((risk) => {
+        const levelClass = risk.level?.toLowerCase() || "info";
+        return `
         <div class="risk-item ${levelClass}">
           <div class="risk-header">
             <span class="risk-name">${this._escapeHtml(risk.name)}</span>
@@ -1468,7 +1563,8 @@ export class TokenDetailsDialog {
           ${risk.value ? `<div class="risk-value">${this._escapeHtml(risk.value)}</div>` : ""}
         </div>
       `;
-    }).join("");
+      })
+      .join("");
 
     return `
       <div class="security-card full-width">
@@ -1616,7 +1712,7 @@ export class TokenDetailsDialog {
 
     // Single column for only open or only closed
     let html = '<div class="positions-single-col">';
-    
+
     if (openPositions.length > 0) {
       html += `<div class="positions-section">
         <h3 class="positions-section-title">Open Positions (${openPositions.length})</h3>
@@ -1631,18 +1727,23 @@ export class TokenDetailsDialog {
       </div>`;
     }
 
-    html += '</div>';
+    html += "</div>";
     return html;
   }
 
   _buildOpenPositionCard(pos) {
     const pnlClass = (pos.unrealized_pnl || 0) >= 0 ? "positive" : "negative";
-    const priceChange = pos.current_price && pos.entry_price ? ((pos.current_price - pos.entry_price) / pos.entry_price * 100).toFixed(2) : null;
+    const priceChange =
+      pos.current_price && pos.entry_price
+        ? (((pos.current_price - pos.entry_price) / pos.entry_price) * 100).toFixed(2)
+        : null;
     const priceChangeClass = priceChange >= 0 ? "positive" : "negative";
 
     // Calculate token amount display
     const tokenAmount = pos.remaining_token_amount || pos.token_amount;
-    const tokenAmountDisplay = tokenAmount ? Utils.formatNumber(tokenAmount / Math.pow(10, 9), { decimals: 4 }) : "—";
+    const tokenAmountDisplay = tokenAmount
+      ? Utils.formatNumber(tokenAmount / Math.pow(10, 9), { decimals: 4 })
+      : "—";
 
     return `
       <div class="position-card open" data-position-id="${pos.id || pos.mint}">
@@ -1710,19 +1811,29 @@ export class TokenDetailsDialog {
               <span class="detail-label">Entry Time</span>
               <span class="detail-value">${Utils.formatTimestamp(pos.entry_time)} (${Utils.formatDuration(Date.now() / 1000 - pos.entry_time)} ago)</span>
             </div>
-            ${pos.entry_fee_lamports ? `
+            ${
+              pos.entry_fee_lamports
+                ? `
             <div class="detail-row">
               <span class="detail-label">Entry Fee</span>
               <span class="detail-value">${Utils.formatSol(pos.entry_fee_lamports / 1e9)} SOL</span>
             </div>
-            ` : ""}
-            ${pos.liquidity_tier ? `
+            `
+                : ""
+            }
+            ${
+              pos.liquidity_tier
+                ? `
             <div class="detail-row">
               <span class="detail-label">Liquidity Tier</span>
               <span class="detail-value tier-${pos.liquidity_tier.toLowerCase()}">${pos.liquidity_tier}</span>
             </div>
-            ` : ""}
-            ${pos.entry_transaction_signature ? `
+            `
+                : ""
+            }
+            ${
+              pos.entry_transaction_signature
+                ? `
             <div class="detail-row">
               <span class="detail-label">Entry TX</span>
               <span class="detail-value signature">
@@ -1730,7 +1841,9 @@ export class TokenDetailsDialog {
                 <button class="btn-copy-mini" data-copy="${pos.entry_transaction_signature}" title="Copy signature">📋</button>
               </span>
             </div>
-            ` : ""}
+            `
+                : ""
+            }
           </div>
         </div>
       </div>
@@ -1795,28 +1908,40 @@ export class TokenDetailsDialog {
               <span class="detail-label">Entry Time</span>
               <span class="detail-value">${Utils.formatTimestamp(pos.entry_time)}</span>
             </div>
-            ${pos.entry_fee_lamports || pos.exit_fee_lamports ? `
+            ${
+              pos.entry_fee_lamports || pos.exit_fee_lamports
+                ? `
             <div class="detail-row">
               <span class="detail-label">Total Fees</span>
               <span class="detail-value">${Utils.formatSol(((pos.entry_fee_lamports || 0) + (pos.exit_fee_lamports || 0)) / 1e9)} SOL</span>
             </div>
-            ` : ""}
-            ${pos.entry_transaction_signature ? `
+            `
+                : ""
+            }
+            ${
+              pos.entry_transaction_signature
+                ? `
             <div class="detail-row">
               <span class="detail-label">Entry TX</span>
               <span class="detail-value signature">
                 <a href="https://solscan.io/tx/${pos.entry_transaction_signature}" target="_blank" rel="noopener">${pos.entry_transaction_signature.slice(0, 8)}...${pos.entry_transaction_signature.slice(-8)}</a>
               </span>
             </div>
-            ` : ""}
-            ${pos.exit_transaction_signature ? `
+            `
+                : ""
+            }
+            ${
+              pos.exit_transaction_signature
+                ? `
             <div class="detail-row">
               <span class="detail-label">Exit TX</span>
               <span class="detail-value signature">
                 <a href="https://solscan.io/tx/${pos.exit_transaction_signature}" target="_blank" rel="noopener">${pos.exit_transaction_signature.slice(0, 8)}...${pos.exit_transaction_signature.slice(-8)}</a>
               </span>
             </div>
-            ` : ""}
+            `
+                : ""
+            }
           </div>
         </div>
       </div>
@@ -1912,17 +2037,21 @@ export class TokenDetailsDialog {
           <div class="pools-dex-list">
             ${Object.entries(programCounts)
               .sort((a, b) => b[1] - a[1])
-              .map(([program, count]) => `
+              .map(
+                ([program, count]) => `
                 <div class="pools-dex-row">
                   <span class="pools-dex-name">${this._escapeHtml(program)}</span>
                   <span class="pools-dex-count">${count}</span>
                 </div>
-              `)
+              `
+              )
               .join("")}
           </div>
         </div>
 
-        ${canonicalPool ? `
+        ${
+          canonicalPool
+            ? `
         <div class="pools-summary-card canonical-highlight">
           <div class="pools-summary-title">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"></path></svg>
@@ -1943,7 +2072,9 @@ export class TokenDetailsDialog {
             </div>
           </div>
         </div>
-        ` : ""}
+        `
+            : ""
+        }
       </div>
     `;
 
@@ -1979,7 +2110,7 @@ export class TokenDetailsDialog {
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
               </button>
             </div>
-          `,
+          `
             )
             .join("")
         : '<span class="pool-no-data">No reserve accounts</span>';
@@ -2136,18 +2267,26 @@ export class TokenDetailsDialog {
               </button>
             </div>
           </div>
-          ${token.data_source ? `
+          ${
+            token.data_source
+              ? `
           <div class="links-info-row">
             <span class="links-info-label">Data Source</span>
             <span class="links-info-value badge">${this._escapeHtml(token.data_source)}</span>
           </div>
-          ` : ""}
-          ${token.verified ? `
+          `
+              : ""
+          }
+          ${
+            token.verified
+              ? `
           <div class="links-info-row">
             <span class="links-info-label">Status</span>
             <span class="links-info-value badge success"><i class="icon-shield-check"></i> Verified</span>
           </div>
-          ` : ""}
+          `
+              : ""
+          }
         </div>
       </div>
     `;
@@ -2155,7 +2294,8 @@ export class TokenDetailsDialog {
     // Media section - logo and header
     let mediaSection = "";
     if (hasLogo || hasHeader) {
-      const logoHtml = hasLogo ? `
+      const logoHtml = hasLogo
+        ? `
         <div class="links-media-item">
           <div class="links-media-label">Logo</div>
           <div class="links-media-preview logo">
@@ -2165,9 +2305,11 @@ export class TokenDetailsDialog {
             <i class="icon-external-link"></i> Open Image
           </a>
         </div>
-      ` : "";
+      `
+        : "";
 
-      const headerHtml = hasHeader ? `
+      const headerHtml = hasHeader
+        ? `
         <div class="links-media-item">
           <div class="links-media-label">Header Image</div>
           <div class="links-media-preview header">
@@ -2177,7 +2319,8 @@ export class TokenDetailsDialog {
             <i class="icon-external-link"></i> Open Image
           </a>
         </div>
-      ` : "";
+      `
+        : "";
 
       mediaSection = `
         <div class="links-info-card">
@@ -2246,10 +2389,12 @@ export class TokenDetailsDialog {
     // Official websites section
     let websitesSection = "";
     if (hasWebsites) {
-      const websiteLinks = token.websites.map((site) => {
-        const label = site.label || this._extractDomainName(site.url) || "Website";
-        return this._buildOfficialLink(site.url, label);
-      }).join("");
+      const websiteLinks = token.websites
+        .map((site) => {
+          const label = site.label || this._extractDomainName(site.url) || "Website";
+          return this._buildOfficialLink(site.url, label);
+        })
+        .join("");
 
       websitesSection = `
         <div class="links-section-card">
@@ -2267,10 +2412,12 @@ export class TokenDetailsDialog {
     // Social links section
     let socialsSection = "";
     if (hasSocials) {
-      const socialLinks = token.socials.map((social) => {
-        const { label } = this._getSocialMeta(social.platform);
-        return this._buildSocialLink(social.url, label);
-      }).join("");
+      const socialLinks = token.socials
+        .map((social) => {
+          const { label } = this._getSocialMeta(social.platform);
+          return this._buildSocialLink(social.url, label);
+        })
+        .join("");
 
       socialsSection = `
         <div class="links-section-card">
@@ -2424,8 +2571,7 @@ export class TokenDetailsDialog {
     }
 
     // Determine current theme
-    const isDarkMode =
-      document.documentElement.getAttribute("data-theme") === "dark";
+    const isDarkMode = document.documentElement.getAttribute("data-theme") === "dark";
 
     // Create advanced chart instance
     this.advancedChart = window.createAdvancedChart(chartContainer, {
@@ -2444,9 +2590,7 @@ export class TokenDetailsDialog {
       watermark: {
         text: this.tokenData?.symbol || "",
         fontSize: 32,
-        color: isDarkMode
-          ? "rgba(128, 128, 128, 0.1)"
-          : "rgba(128, 128, 128, 0.08)",
+        color: isDarkMode ? "rgba(128, 128, 128, 0.1)" : "rgba(128, 128, 128, 0.08)",
       },
     });
 
@@ -2456,7 +2600,7 @@ export class TokenDetailsDialog {
     // Get initial timeframe from active button
     const activeBtn = timeframeButtons?.querySelector(".timeframe-btn.active");
     this.currentTimeframe = activeBtn?.dataset.tf || "5m";
-    
+
     await this._loadChartData(mint, this.currentTimeframe, true); // Initial load - set view
 
     this._startChartPolling();
@@ -2466,11 +2610,13 @@ export class TokenDetailsDialog {
       timeframeButtons.addEventListener("click", async (e) => {
         const btn = e.target.closest(".timeframe-btn");
         if (!btn) return;
-        
+
         // Update active state
-        timeframeButtons.querySelectorAll(".timeframe-btn").forEach(b => b.classList.remove("active"));
+        timeframeButtons
+          .querySelectorAll(".timeframe-btn")
+          .forEach((b) => b.classList.remove("active"));
         btn.classList.add("active");
-        
+
         this.currentTimeframe = btn.dataset.tf;
         await this._triggerOhlcvRefresh();
         await new Promise((resolve) => setTimeout(resolve, 500));
@@ -2481,12 +2627,8 @@ export class TokenDetailsDialog {
     // Listen for theme changes and update chart
     this._themeObserver = new MutationObserver((mutations) => {
       mutations.forEach((mutation) => {
-        if (
-          mutation.type === "attributes" &&
-          mutation.attributeName === "data-theme"
-        ) {
-          const newTheme =
-            document.documentElement.getAttribute("data-theme") || "dark";
+        if (mutation.type === "attributes" && mutation.attributeName === "data-theme") {
+          const newTheme = document.documentElement.getAttribute("data-theme") || "dark";
           if (this.advancedChart) {
             this.advancedChart.setTheme(newTheme);
           }
@@ -2624,19 +2766,19 @@ export class TokenDetailsDialog {
 
   _updateOhlcvDisplay(chartData) {
     if (!chartData || chartData.length === 0) return;
-    
+
     const latest = chartData[chartData.length - 1];
     const ohlcvOpen = this.dialogEl?.querySelector("#ohlcvOpen");
     const ohlcvHigh = this.dialogEl?.querySelector("#ohlcvHigh");
     const ohlcvLow = this.dialogEl?.querySelector("#ohlcvLow");
     const ohlcvClose = this.dialogEl?.querySelector("#ohlcvClose");
     const ohlcvChange = this.dialogEl?.querySelector("#ohlcvChange");
-    
+
     if (ohlcvOpen) ohlcvOpen.textContent = Utils.formatPriceSol(latest.open, { decimals: 9 });
     if (ohlcvHigh) ohlcvHigh.textContent = Utils.formatPriceSol(latest.high, { decimals: 9 });
     if (ohlcvLow) ohlcvLow.textContent = Utils.formatPriceSol(latest.low, { decimals: 9 });
     if (ohlcvClose) ohlcvClose.textContent = Utils.formatPriceSol(latest.close, { decimals: 9 });
-    
+
     if (ohlcvChange && latest.open && latest.close) {
       const changePercent = ((latest.close - latest.open) / latest.open) * 100;
       const sign = changePercent >= 0 ? "+" : "";

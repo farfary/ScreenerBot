@@ -379,3 +379,65 @@
 .ohlcv-delete-btn:hover {
   background: rgb(239, 68, 68, 0.2) !important;
 }
+
+/* =============================================================================
+   Favorites Table Styles
+   ============================================================================= */
+
+.favorites-table-container {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Mint code styling */
+.mint-code {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  padding: 2px 6px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+
+/* Favorites action buttons */
+.favorites-actions {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.favorites-action-btn {
+  padding: 4px 6px !important;
+  min-width: 28px;
+  font-size: 0.75rem !important;
+}
+
+.favorites-action-btn:hover {
+  background: var(--bg-hover) !important;
+}
+
+.favorites-action-btn.btn-danger:hover {
+  background: rgb(239, 68, 68, 0.2) !important;
+}
+
+/* Favorites empty state */
+#favorites-empty-state {
+  margin-top: var(--spacing-xl);
+}
+
+#favorites-empty-state kbd {
+  display: inline-block;
+  padding: 2px 6px;
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+}
+
+/* Text muted helper */
+.text-muted {
+  color: var(--text-muted);
+}

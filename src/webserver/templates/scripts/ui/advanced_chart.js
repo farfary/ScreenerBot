@@ -298,10 +298,8 @@
           continue;
         }
 
-        const avgGain =
-          gains.slice(-period).reduce((a, b) => a + b, 0) / period;
-        const avgLoss =
-          losses.slice(-period).reduce((a, b) => a + b, 0) / period;
+        const avgGain = gains.slice(-period).reduce((a, b) => a + b, 0) / period;
+        const avgLoss = losses.slice(-period).reduce((a, b) => a + b, 0) / period;
 
         const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
         const rsi = 100 - 100 / (1 + rs);
@@ -382,9 +380,7 @@
   class AdvancedChart {
     constructor(container, options = {}) {
       this.container =
-        typeof container === "string"
-          ? document.querySelector(container)
-          : container;
+        typeof container === "string" ? document.querySelector(container) : container;
 
       if (!this.container) {
         throw new Error("AdvancedChart: Container element not found");
@@ -670,9 +666,7 @@
 
       // Set main series data
       if (this.options.chartType === "line" || this.options.chartType === "area") {
-        this.mainSeries.setData(
-          this.data.map((d) => ({ time: d.time, value: d.close }))
-        );
+        this.mainSeries.setData(this.data.map((d) => ({ time: d.time, value: d.close })));
       } else {
         this.mainSeries.setData(this.data);
       }
@@ -726,9 +720,7 @@
       };
 
       // Update or add to data array
-      const existingIndex = this.data.findIndex(
-        (d) => d.time === normalizedPoint.time
-      );
+      const existingIndex = this.data.findIndex((d) => d.time === normalizedPoint.time);
       if (existingIndex >= 0) {
         this.data[existingIndex] = normalizedPoint;
       } else {
@@ -957,22 +949,15 @@
         },
       });
 
-      macdLine.setData(
-        macdData.macdLine.filter((d) => d.value !== null)
-      );
-      signalLine.setData(
-        macdData.signalLine.filter((d) => d.value !== null)
-      );
+      macdLine.setData(macdData.macdLine.filter((d) => d.value !== null));
+      signalLine.setData(macdData.signalLine.filter((d) => d.value !== null));
       histogram.setData(
         macdData.histogram
           .filter((d) => d.value !== null)
           .map((d) => ({
             time: d.time,
             value: d.value,
-            color:
-              d.value >= 0
-                ? colors.macdHistogramUp
-                : colors.macdHistogramDown,
+            color: d.value >= 0 ? colors.macdHistogramUp : colors.macdHistogramDown,
           }))
       );
 
@@ -1320,12 +1305,16 @@
           <span class="tooltip-label">Change</span>
           <span class="tooltip-value ${changeClass}">${change >= 0 ? "+" : ""}${changePercent.toFixed(2)}%</span>
         </div>
-        ${dataPoint.volume ? `
+        ${
+          dataPoint.volume
+            ? `
         <div class="tooltip-row">
           <span class="tooltip-label">Volume</span>
           <span class="tooltip-value">${this._formatVolume(dataPoint.volume)}</span>
         </div>
-        ` : ""}
+        `
+            : ""
+        }
       `;
 
       // Position tooltip
@@ -1371,15 +1360,15 @@
       });
 
       // Track user scroll/zoom interactions
-      this.chartArea.addEventListener('wheel', () => {
+      this.chartArea.addEventListener("wheel", () => {
         this._markUserInteraction();
       });
 
-      this.chartArea.addEventListener('mousedown', () => {
+      this.chartArea.addEventListener("mousedown", () => {
         this._markUserInteraction();
       });
 
-      this.chartArea.addEventListener('touchstart', () => {
+      this.chartArea.addEventListener("touchstart", () => {
         this._markUserInteraction();
       });
 
@@ -1525,10 +1514,7 @@
           const updatedVolumeData = this.data.map((d) => ({
             time: d.time,
             value: d.volume,
-            color:
-              d.close >= d.open
-                ? this.theme.volumeUpColor
-                : this.theme.volumeDownColor,
+            color: d.close >= d.open ? this.theme.volumeUpColor : this.theme.volumeDownColor,
           }));
           this.volumeSeries.setData(updatedVolumeData);
         }
@@ -1556,9 +1542,7 @@
       // Reload data
       if (this.data.length) {
         if (type === "line" || type === "area") {
-          this.mainSeries.setData(
-            this.data.map((d) => ({ time: d.time, value: d.close }))
-          );
+          this.mainSeries.setData(this.data.map((d) => ({ time: d.time, value: d.close })));
         } else {
           this.mainSeries.setData(this.data);
         }
@@ -1588,10 +1572,7 @@
           const volumeData = this.data.map((d) => ({
             time: d.time,
             value: d.volume,
-            color:
-              d.close >= d.open
-                ? this.theme.volumeUpColor
-                : this.theme.volumeDownColor,
+            color: d.close >= d.open ? this.theme.volumeUpColor : this.theme.volumeDownColor,
           }));
           this.volumeSeries.setData(volumeData);
         }
@@ -1633,7 +1614,7 @@
       if (!this.chart || !this.data.length) return;
 
       // Find the logical index for this timestamp
-      const index = this.data.findIndex(d => d.time >= timestamp);
+      const index = this.data.findIndex((d) => d.time >= timestamp);
       if (index < 0) return;
 
       // Use scrollToRealTime for proper time-based scrolling
