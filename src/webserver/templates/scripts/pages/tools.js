@@ -10,6 +10,7 @@ import * as Hints from "../core/hints.js";
 import { HintTrigger } from "../ui/hint_popover.js";
 import { DataTable } from "../ui/data_table.js";
 import { ToolFavorites } from "../ui/tool_favorites.js";
+import { enhanceAllSelects } from "../ui/custom_select.js";
 
 // =============================================================================
 // Constants
@@ -1290,7 +1291,7 @@ function renderVolumeAggregatorTool(container, actionsContainer) {
                 </div>
                 <div class="form-group">
                   <label for="va-num-wallets">Number of Wallets</label>
-                  <select id="va-num-wallets" aria-describedby="va-num-wallets-hint">
+                  <select id="va-num-wallets" aria-describedby="va-num-wallets-hint" data-custom-select>
                     <option value="2">2 wallets</option>
                     <option value="3">3 wallets</option>
                     <option value="4">4 wallets</option>
@@ -2329,6 +2330,9 @@ function selectTool(toolId) {
     contentEl.innerHTML = "";
     actionsEl.innerHTML = "";
     definition.render(contentEl, actionsEl);
+    
+    // Enhance any native select elements with custom styling
+    enhanceAllSelects(contentEl);
   }
 
   // Save state

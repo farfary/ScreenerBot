@@ -5,6 +5,7 @@
 import * as Utils from "../core/utils.js";
 import { getCurrentPage } from "../core/router.js";
 import { setInterval as setPollingInterval, Poller } from "../core/poller.js";
+import { enhanceAllSelects } from "./custom_select.js";
 
 // Global update state to persist across dialog opens
 let globalUpdateState = {
@@ -616,6 +617,7 @@ export class SettingsDialog {
       case "interface":
         content.innerHTML = this._buildInterfaceTab();
         this._attachInterfaceHandlers(content);
+        enhanceAllSelects(content);
         break;
       case "navigation":
         content.innerHTML = this._buildNavigationTab();
@@ -624,6 +626,7 @@ export class SettingsDialog {
       case "startup":
         content.innerHTML = this._buildStartupTab();
         this._attachStartupHandlers(content);
+        enhanceAllSelects(content);
         break;
       case "data":
         content.innerHTML = this._buildDataTab();
@@ -660,7 +663,7 @@ export class SettingsDialog {
               <span class="settings-field-hint">Choose your preferred color scheme</span>
             </div>
             <div class="settings-field-control">
-              <select id="settingTheme" class="settings-select">
+              <select id="settingTheme" class="settings-select" data-custom-select>
                 <option value="dark" ${iface.theme === "dark" ? "selected" : ""}>Dark</option>
                 <option value="light" ${iface.theme === "light" ? "selected" : ""}>Light</option>
               </select>
@@ -704,7 +707,7 @@ export class SettingsDialog {
               <span class="settings-field-hint">How often to refresh data</span>
             </div>
             <div class="settings-field-control">
-              <select id="settingPolling" class="settings-select">
+              <select id="settingPolling" class="settings-select" data-custom-select>
                 <option value="1000" ${iface.polling_interval_ms === 1000 ? "selected" : ""}>1 second</option>
                 <option value="2000" ${iface.polling_interval_ms === 2000 ? "selected" : ""}>2 seconds</option>
                 <option value="5000" ${iface.polling_interval_ms === 5000 || !iface.polling_interval_ms ? "selected" : ""}>5 seconds</option>
@@ -734,7 +737,7 @@ export class SettingsDialog {
               <span class="settings-field-hint">Default rows per table page</span>
             </div>
             <div class="settings-field-control">
-              <select id="settingPageSize" class="settings-select">
+              <select id="settingPageSize" class="settings-select" data-custom-select>
                 <option value="10" ${iface.table_page_size === 10 ? "selected" : ""}>10 rows</option>
                 <option value="25" ${iface.table_page_size === 25 || !iface.table_page_size ? "selected" : ""}>25 rows</option>
                 <option value="50" ${iface.table_page_size === 50 ? "selected" : ""}>50 rows</option>
@@ -1084,7 +1087,7 @@ export class SettingsDialog {
               <span class="settings-field-hint">Page to show when opening the app</span>
             </div>
             <div class="settings-field-control">
-              <select id="settingDefaultPage" class="settings-select">
+              <select id="settingDefaultPage" class="settings-select" data-custom-select>
                 <option value="dashboard" ${startup.default_page === "dashboard" || !startup.default_page ? "selected" : ""}>Dashboard</option>
                 <option value="tokens" ${startup.default_page === "tokens" ? "selected" : ""}>Tokens</option>
                 <option value="positions" ${startup.default_page === "positions" ? "selected" : ""}>Positions</option>

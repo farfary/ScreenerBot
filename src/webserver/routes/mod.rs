@@ -320,6 +320,7 @@ async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String>) -
         "notification_panel.js" => Some(templates::NOTIFICATION_PANEL_UI),
         "hint_popover.js" => Some(templates::HINT_POPOVER_UI),
         "search_dialog.js" => Some(templates::SEARCH_DIALOG_UI),
+        "custom_select.js" => Some(templates::CUSTOM_SELECT_UI),
         _ => None,
     };
 

@@ -165,7 +165,7 @@ class ContextMenuManager {
           ".token-name-group .token-name, .dt-name, [data-field='name'], .token-name"
         );
         const logoEl = rowEl.querySelector(
-          ".token-logo img, .dt-token-logo img, [data-field='logo'] img, img.token-icon"
+          ".token-logo img, .dt-token-logo img, [data-field='logo'] img, img.token-icon, img.token-logo"
         );
 
         return {

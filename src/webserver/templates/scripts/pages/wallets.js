@@ -10,6 +10,7 @@ import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import * as Utils from "../core/utils.js";
 import * as Hints from "../core/hints.js";
 import { HintPopover } from "../ui/hint_popover.js";
+import { enhanceAllSelects } from "../ui/custom_select.js";
 
 // =============================================================================
 // Constants
@@ -1646,6 +1647,9 @@ function setupBulkExportModal() {
   const confirmModal = $("#export-keys-confirm-modal");
 
   if (!modal) return;
+
+  // Enhance native selects with custom styling
+  enhanceAllSelects(modal);
 
   // Close buttons
   const closeBtn = $("#bulk-export-modal-close");

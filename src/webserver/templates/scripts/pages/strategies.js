@@ -5,6 +5,7 @@ import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { requestManager } from "../core/request_manager.js";
+import { enhanceAllSelects } from "../ui/custom_select.js";
 
 export function createLifecycle() {
   // State
@@ -957,6 +958,9 @@ export function createLifecycle() {
 
     list.innerHTML = conditions.map((c, idx) => renderConditionCard(c, idx)).join("");
 
+    // Enhance native selects with custom styling
+    enhanceAllSelects(list);
+
     // Wire card header click to expand/collapse (except when clicking on interactive elements)
     $$(".condition-card .card-header").forEach((header) => {
       const card = header.closest(".condition-card");
@@ -1286,7 +1290,7 @@ export function createLifecycle() {
             return `<option value="${Utils.escapeHtml(String(optValue))}" ${selected}>${Utils.escapeHtml(String(optLabel))}</option>`;
           })
           .join("");
-        return `<select id="${id}" ${data} class="select-field">${optionsHtml}</select>`;
+        return `<select id="${id}" ${data} class="select-field" data-custom-select>${optionsHtml}</select>`;
       }
       default:
         return `<input id="${id}" ${data} type="text" value="${Utils.escapeHtml(String(value))}">`;
@@ -1441,7 +1445,7 @@ export function createLifecycle() {
           const opts =
             schema.values && Array.isArray(schema.values) ? schema.values : schema.options || [];
           if (opts && Array.isArray(opts) && opts.length > 0) {
-            inputHtml = `<select class="property-input" id="param-${key}">
+            inputHtml = `<select class="property-input" id="param-${key}" data-custom-select>
               ${opts.map((v) => `<option value="${v}" ${v === effectiveValue ? "selected" : ""}>${v}</option>`).join("")}
             </select>`;
           } else {
@@ -1452,7 +1456,7 @@ export function createLifecycle() {
 
       default:
         if (schema.options && Array.isArray(schema.options) && schema.options.length > 0) {
-          inputHtml = `<select class="property-input" id="param-${key}">
+          inputHtml = `<select class="property-input" id="param-${key}" data-custom-select>
             ${schema.options.map((v) => `<option value="${v}" ${v === effectiveValue ? "selected" : ""}>${v}</option>`).join("")}
           </select>`;
         } else {
@@ -1510,6 +1514,9 @@ export function createLifecycle() {
     }
 
     body.innerHTML = html;
+
+    // Enhance native selects with custom styling
+    enhanceAllSelects(body);
 
     // Store reference to the current node being edited
     modal.dataset.editingNodeId = node.id;

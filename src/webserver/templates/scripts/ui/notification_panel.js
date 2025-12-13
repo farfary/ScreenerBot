@@ -3,6 +3,7 @@ import { notificationManager } from "../core/notifications.js";
 import { toastManager } from "../core/toast.js";
 import * as Utils from "../core/utils.js";
 import { ConfirmationDialog } from "./confirmation_dialog.js";
+import { enhanceAllSelects } from "./custom_select.js";
 
 let currentTab = "all";
 let isInitialized = false;
@@ -194,6 +195,12 @@ function setupFilters() {
       renderNotifications();
     };
     clearFiltersBtn.addEventListener("click", handlers.clearFilters);
+  }
+
+  // Enhance native selects with custom styled dropdowns
+  const filtersContainer = document.getElementById("notificationFilters");
+  if (filtersContainer) {
+    enhanceAllSelects(filtersContainer);
   }
 }
 

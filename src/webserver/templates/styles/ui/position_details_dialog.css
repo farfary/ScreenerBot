@@ -35,10 +35,21 @@
 }
 
 /* =============================================================================
+   BACKDROP
+   ============================================================================= */
+
+.position-details-dialog .dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(0, 0, 0, 0.6);
+  z-index: 0;
+}
+
+/* =============================================================================
    CONTENT CONTAINER
    ============================================================================= */
 
-.position-details-content {
+.position-details-dialog .dialog-container {
   position: relative;
   margin-top: 28px;
   margin-bottom: 24px;
@@ -71,9 +82,9 @@
    HEADER
    ============================================================================= */
 
-.position-details-header {
+.position-details-dialog .dialog-header {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: space-between;
   padding: 12px 16px;
   gap: 16px;
@@ -83,8 +94,15 @@
   flex-shrink: 0;
 }
 
-/* Token Info Section */
-.pdd-token-info {
+.position-details-dialog .header-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 16px;
+}
+
+.position-details-dialog .header-left {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -92,7 +110,7 @@
   min-width: 200px;
 }
 
-.pdd-token-logo {
+.position-details-dialog .header-logo {
   width: 36px;
   height: 36px;
   border-radius: 50%;
@@ -105,27 +123,33 @@
   flex-shrink: 0;
 }
 
-.pdd-token-logo img {
+.position-details-dialog .header-logo img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.pdd-token-logo .logo-placeholder {
+.position-details-dialog .header-logo .logo-placeholder {
   font-size: 12px;
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
 }
 
-.pdd-token-symbol {
+.position-details-dialog .header-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.position-details-dialog .header-title .title-main {
   font-size: 1rem;
   font-weight: 700;
   color: var(--text-primary);
   letter-spacing: -0.01em;
 }
 
-.pdd-token-name {
+.position-details-dialog .header-title .title-sub {
   font-size: 0.75rem;
   color: var(--text-secondary);
   font-weight: 400;
@@ -135,8 +159,45 @@
   white-space: nowrap;
 }
 
-/* Price Section */
-.pdd-price {
+.position-details-dialog .header-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Header Center - Price Section */
+.position-details-dialog .header-center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.position-details-dialog .header-price {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.position-details-dialog .price-loading {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.position-details-dialog .price-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.position-details-dialog .price-sol-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.position-details-dialog .price-sol {
   font-size: 1.125rem;
   font-weight: 600;
   color: var(--text-primary);
@@ -144,20 +205,141 @@
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
-  flex: 1;
-  text-align: center;
+}
+
+.position-details-dialog .price-sol-unit {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.position-details-dialog .price-label {
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.position-details-dialog .pnl-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+}
+
+.position-details-dialog .pnl-block.pdd-positive {
+  background: var(--success-alpha-10);
+}
+
+.position-details-dialog .pnl-block.pdd-negative {
+  background: var(--danger-alpha-10);
+}
+
+.position-details-dialog .pnl-value {
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+.position-details-dialog .pdd-positive .pnl-value {
+  color: var(--success-color);
+}
+
+.position-details-dialog .pdd-negative .pnl-value {
+  color: var(--danger);
+}
+
+.position-details-dialog .pnl-percent {
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.position-details-dialog .pdd-positive .pnl-percent {
+  color: var(--success-color);
+}
+
+.position-details-dialog .pdd-negative .pnl-percent {
+  color: var(--danger);
+}
+
+.position-details-dialog .price-metrics {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-left: 16px;
+  border-left: 1px solid var(--border-color);
+}
+
+.position-details-dialog .metric-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.position-details-dialog .metric-label {
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.position-details-dialog .metric-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 /* Header Right Section */
-.pdd-header-right {
+.position-details-dialog .header-right {
   display: flex;
   align-items: center;
   gap: 8px;
   flex: 0 0 auto;
 }
 
+.position-details-dialog .header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.position-details-dialog .header-actions .action-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+
+.position-details-dialog .header-actions .action-btn:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.position-details-dialog .header-actions .action-btn i {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+
 /* Badges */
-.pdd-badge {
+.position-details-dialog .pdd-badge {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -169,29 +351,29 @@
   letter-spacing: 0.03em;
 }
 
-.pdd-badge--open {
+.position-details-dialog .pdd-badge-success {
   background: var(--success-alpha-20);
   color: var(--success-color);
 }
 
-.pdd-badge--closed {
+.position-details-dialog .pdd-badge-secondary {
   background: var(--bg-secondary);
   color: var(--text-secondary);
   border: 1px solid var(--border-color);
 }
 
-.pdd-badge--dca {
+.position-details-dialog .pdd-badge-info {
   background: var(--primary-alpha-20);
   color: var(--primary-color);
 }
 
-.pdd-badge--partial {
+.position-details-dialog .pdd-badge-warning {
   background: var(--warning-alpha-20);
   color: var(--warning-color);
 }
 
 /* Close Button */
-.pdd-close-btn {
+.position-details-dialog .dialog-close {
   background: transparent;
   border: 1px solid transparent;
   color: var(--text-secondary);
@@ -207,13 +389,13 @@
   margin-left: 4px;
 }
 
-.pdd-close-btn:hover {
+.position-details-dialog .dialog-close:hover {
   background: var(--danger-alpha-20);
   color: var(--danger);
 }
 
-.pdd-close-btn svg,
-.pdd-close-btn i {
+.position-details-dialog .dialog-close svg,
+.position-details-dialog .dialog-close i {
   width: 16px;
   height: 16px;
   font-size: 16px;
@@ -223,7 +405,7 @@
    TAB BAR
    ============================================================================= */
 
-.position-details-tabs {
+.position-details-dialog .dialog-tabs {
   display: flex;
   align-items: center;
   gap: 2px;
@@ -234,7 +416,7 @@
   overflow-x: auto;
 }
 
-.pdd-tab {
+.position-details-dialog .tab-button {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -252,33 +434,33 @@
   position: relative;
 }
 
-.pdd-tab i {
+.position-details-dialog .tab-button i {
   font-size: 14px;
   opacity: 0.6;
   transition: opacity 0.15s ease;
 }
 
-.pdd-tab:hover {
+.position-details-dialog .tab-button:hover {
   color: var(--text-primary);
   background: var(--bg-card-hover);
 }
 
-.pdd-tab:hover i {
+.position-details-dialog .tab-button:hover i {
   opacity: 0.9;
 }
 
-.pdd-tab.active {
+.position-details-dialog .tab-button.active {
   color: var(--primary-color);
   background: var(--primary-alpha-10);
   font-weight: 600;
 }
 
-.pdd-tab.active i {
+.position-details-dialog .tab-button.active i {
   opacity: 1;
 }
 
 /* Active indicator line */
-.pdd-tab.active::after {
+.position-details-dialog .tab-button.active::after {
   content: "";
   position: absolute;
   bottom: -6px;
@@ -294,14 +476,14 @@
    BODY & TAB CONTENT
    ============================================================================= */
 
-.position-details-body {
+.position-details-dialog .dialog-body {
   flex: 1;
   overflow: hidden;
   position: relative;
   background: var(--bg-primary);
 }
 
-.pdd-tab-content {
+.position-details-dialog .tab-content {
   position: absolute;
   inset: 0;
   padding: 16px;
@@ -309,387 +491,12 @@
   display: none;
 }
 
-.pdd-tab-content.active {
+.position-details-dialog .tab-content.active {
   display: block;
 }
 
-/* =============================================================================
-   CARDS GRID (Overview Tab)
-   ============================================================================= */
-
-.pdd-cards-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--spacing-md);
-}
-
-@media (width <= 1100px) {
-  .pdd-cards-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (width <= 600px) {
-  .pdd-cards-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.pdd-card {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-md);
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-}
-
-.pdd-card-title {
-  font-size: 0.625rem;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  margin-bottom: var(--spacing-xs);
-}
-
-.pdd-card-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-sm);
-}
-
-.pdd-card-label {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  font-weight: 400;
-}
-
-.pdd-card-value {
-  font-size: 0.875rem;
-  font-weight: 600;
-  color: var(--text-primary);
-  font-family: var(--font-data);
-  font-feature-settings:
-    "tnum" 1,
-    "zero" 1;
-}
-
-.pdd-card-value.positive {
-  color: var(--success-color);
-}
-
-.pdd-card-value.negative {
-  color: var(--danger);
-}
-
-/* =============================================================================
-   TIMELINE (History Tab)
-   ============================================================================= */
-
-.pdd-timeline {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-}
-
-.pdd-timeline-item {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-md);
-  border-left: 3px solid var(--border-color);
-  transition: background 0.15s ease;
-}
-
-.pdd-timeline-item:hover {
-  background: var(--bg-card-hover);
-}
-
-.pdd-timeline-item.entry {
-  border-left-color: var(--success-color);
-}
-
-.pdd-timeline-item.exit {
-  border-left-color: var(--danger);
-}
-
-.pdd-timeline-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: var(--spacing-sm);
-}
-
-.pdd-timeline-type {
-  font-size: 0.7rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  padding: 3px 8px;
-  border-radius: var(--radius-sm);
-}
-
-.pdd-timeline-item.entry .pdd-timeline-type {
-  background: var(--success-alpha-20);
-  color: var(--success-color);
-}
-
-.pdd-timeline-item.exit .pdd-timeline-type {
-  background: var(--danger-alpha-20);
-  color: var(--danger);
-}
-
-.pdd-timeline-time {
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  font-family: var(--font-data);
-}
-
-.pdd-timeline-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-xs);
-}
-
-.pdd-timeline-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-sm);
-  font-size: 0.8rem;
-}
-
-.pdd-timeline-row-label {
-  color: var(--text-secondary);
-}
-
-.pdd-timeline-row-value {
-  color: var(--text-primary);
-  font-family: var(--font-data);
-  font-weight: 500;
-}
-
-.pdd-timeline-sig {
-  font-size: 0.7rem;
-  font-family: var(--font-mono);
-  color: var(--link-color);
-  cursor: pointer;
-  text-decoration: none;
-  padding: var(--spacing-xs) var(--spacing-sm);
-  background: var(--bg-primary);
-  border-radius: var(--radius-sm);
-  margin-top: var(--spacing-xs);
-  display: inline-block;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transition: all 0.15s ease;
-}
-
-.pdd-timeline-sig:hover {
-  color: var(--link-hover, var(--primary-hover));
-  background: var(--primary-alpha-10);
-}
-
-/* =============================================================================
-   TRANSACTIONS TAB
-   ============================================================================= */
-
-.pdd-tx-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-sm);
-}
-
-.pdd-tx-item {
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  padding: var(--spacing-md);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacing-md);
-  transition: background 0.15s ease;
-}
-
-.pdd-tx-item:hover {
-  background: var(--bg-card-hover);
-}
-
-.pdd-tx-sig {
-  font-size: 0.75rem;
-  font-family: var(--font-mono);
-  color: var(--link-color);
-  cursor: pointer;
-  text-decoration: none;
-  max-width: 300px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  transition: color 0.15s ease;
-}
-
-.pdd-tx-sig:hover {
-  color: var(--link-hover, var(--primary-hover));
-}
-
-.pdd-tx-status {
-  font-size: 0.65rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  padding: 3px 8px;
-  border-radius: var(--radius-sm);
-}
-
-.pdd-tx-status.confirmed {
-  background: var(--success-alpha-20);
-  color: var(--success-color);
-}
-
-.pdd-tx-status.pending {
-  background: var(--warning-alpha-20);
-  color: var(--warning-color);
-}
-
-.pdd-tx-status.failed {
-  background: var(--danger-alpha-20);
-  color: var(--danger);
-}
-
-/* State Timeline Section */
-.pdd-state-timeline {
-  margin-top: var(--spacing-lg);
-  padding-top: var(--spacing-lg);
-  border-top: 1px solid var(--border-color);
-}
-
-.pdd-state-timeline-title {
-  font-size: 0.75rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  margin-bottom: var(--spacing-md);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-/* =============================================================================
-   ACTIONS
-   ============================================================================= */
-
-.pdd-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-md);
-  background: var(--bg-secondary);
-  border-top: 1px solid var(--border-color);
-  flex-shrink: 0;
-}
-
-.pdd-action-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  white-space: nowrap;
-}
-
-.pdd-action-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.pdd-action-btn.primary {
-  background: var(--primary-color);
-  color: var(--text-primary);
-}
-
-.pdd-action-btn.primary:hover:not(:disabled) {
-  background: var(--primary-hover);
-}
-
-.pdd-action-btn.success {
-  color: var(--success-color);
-  background: var(--success-alpha-10);
-  border-color: var(--success-alpha-20);
-}
-
-.pdd-action-btn.success:hover:not(:disabled) {
-  background: var(--success-alpha-20);
-  border-color: var(--success-color);
-}
-
-.pdd-action-btn.danger {
-  color: var(--danger);
-  background: var(--danger-alpha-10);
-  border-color: var(--danger-alpha-20);
-}
-
-.pdd-action-btn.danger:hover:not(:disabled) {
-  background: var(--danger-alpha-20);
-  border-color: var(--danger);
-}
-
-.pdd-action-btn.secondary {
-  color: var(--text-secondary);
-  background: transparent;
-  border-color: var(--border-color);
-}
-
-.pdd-action-btn.secondary:hover:not(:disabled) {
-  background: var(--bg-card-hover);
-  color: var(--text-primary);
-}
-
-.pdd-action-btn i,
-.pdd-action-btn svg {
-  width: 14px;
-  height: 14px;
-  font-size: 14px;
-}
-
-/* =============================================================================
-   UTILITIES
-   ============================================================================= */
-
-.pdd-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  min-height: 200px;
-  color: var(--text-secondary);
-  text-align: center;
-  gap: var(--spacing-md);
-  padding: var(--spacing-lg);
-}
-
-.pdd-empty i {
-  font-size: 32px;
-  opacity: 0.5;
-}
-
-.pdd-empty p {
-  margin: 0;
-  font-size: 0.9rem;
-}
-
-.pdd-loading {
+/* Loading spinner */
+.position-details-dialog .loading-spinner {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -699,7 +506,7 @@
   gap: var(--spacing-sm);
 }
 
-.pdd-loading::before {
+.position-details-dialog .loading-spinner::before {
   content: "";
   width: 16px;
   height: 16px;
@@ -716,56 +523,589 @@
 }
 
 /* =============================================================================
+   OVERVIEW TAB - Cards Grid
+   ============================================================================= */
+
+.position-details-dialog .pdd-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-md);
+}
+
+@media (width <= 800px) {
+  .position-details-dialog .pdd-overview-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.position-details-dialog .pdd-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.position-details-dialog .pdd-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: var(--spacing-xs);
+}
+
+.position-details-dialog .pdd-card-title i {
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.position-details-dialog .pdd-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.position-details-dialog .pdd-stat-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding: 4px 0;
+}
+
+.position-details-dialog .pdd-stat-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.position-details-dialog .pdd-stat-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+.position-details-dialog .pdd-verified {
+  color: var(--success-color);
+}
+
+.position-details-dialog .pdd-unverified {
+  color: var(--warning-color);
+}
+
+/* P&L Display */
+.position-details-dialog .pdd-pnl-display {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 12px;
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-sm);
+}
+
+.position-details-dialog .pdd-pnl-display.pdd-positive {
+  background: var(--success-alpha-10);
+}
+
+.position-details-dialog .pdd-pnl-display.pdd-negative {
+  background: var(--danger-alpha-10);
+}
+
+.position-details-dialog .pdd-pnl-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+.position-details-dialog .pdd-positive .pdd-pnl-value {
+  color: var(--success-color);
+}
+
+.position-details-dialog .pdd-negative .pdd-pnl-value {
+  color: var(--danger);
+}
+
+.position-details-dialog .pdd-pnl-percent {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.position-details-dialog .pdd-positive .pdd-pnl-percent {
+  color: var(--success-color);
+}
+
+.position-details-dialog .pdd-negative .pdd-pnl-percent {
+  color: var(--danger);
+}
+
+/* Actions Card */
+.position-details-dialog .pdd-actions-card .pdd-card-content {
+  gap: var(--spacing-md);
+}
+
+.position-details-dialog .pdd-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+}
+
+.position-details-dialog .pdd-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  background: var(--bg-primary);
+}
+
+.position-details-dialog .pdd-action-btn i {
+  font-size: 14px;
+}
+
+.position-details-dialog .pdd-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.position-details-dialog .pdd-action-add {
+  color: var(--success-color);
+  border-color: var(--success-alpha-30);
+}
+
+.position-details-dialog .pdd-action-add:hover:not(:disabled) {
+  background: var(--success-alpha-10);
+  border-color: var(--success-color);
+}
+
+.position-details-dialog .pdd-action-partial {
+  color: var(--warning-color);
+  border-color: var(--warning-alpha-30);
+}
+
+.position-details-dialog .pdd-action-partial:hover:not(:disabled) {
+  background: var(--warning-alpha-10);
+  border-color: var(--warning-color);
+}
+
+.position-details-dialog .pdd-action-close {
+  color: var(--danger);
+  border-color: var(--danger-alpha-30);
+}
+
+.position-details-dialog .pdd-action-close:hover:not(:disabled) {
+  background: var(--danger-alpha-10);
+  border-color: var(--danger);
+}
+
+.position-details-dialog .pdd-action-view {
+  color: var(--primary-color);
+  border-color: var(--primary-alpha-30);
+}
+
+.position-details-dialog .pdd-action-view:hover:not(:disabled) {
+  background: var(--primary-alpha-10);
+  border-color: var(--primary-color);
+}
+
+/* =============================================================================
+   HISTORY TAB - Timeline
+   ============================================================================= */
+
+.position-details-dialog .pdd-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.position-details-dialog .pdd-timeline-item {
+  display: flex;
+  gap: var(--spacing-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-md);
+  transition: background 0.15s ease;
+}
+
+.position-details-dialog .pdd-timeline-item:hover {
+  background: var(--bg-card-hover);
+}
+
+.position-details-dialog .pdd-timeline-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.position-details-dialog .pdd-timeline-entry .pdd-timeline-icon {
+  background: var(--success-alpha-20);
+  color: var(--success-color);
+}
+
+.position-details-dialog .pdd-timeline-exit .pdd-timeline-icon {
+  background: var(--danger-alpha-20);
+  color: var(--danger);
+}
+
+.position-details-dialog .pdd-timeline-icon i {
+  font-size: 16px;
+}
+
+.position-details-dialog .pdd-timeline-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.position-details-dialog .pdd-timeline-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: var(--spacing-sm);
+  flex-wrap: wrap;
+}
+
+.position-details-dialog .pdd-timeline-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.position-details-dialog .pdd-timeline-entry .pdd-timeline-label {
+  color: var(--success-color);
+}
+
+.position-details-dialog .pdd-timeline-exit .pdd-timeline-label {
+  color: var(--danger);
+}
+
+.position-details-dialog .pdd-timeline-time {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+  margin-left: auto;
+}
+
+.position-details-dialog .pdd-timeline-details {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-sm);
+}
+
+.position-details-dialog .pdd-timeline-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.position-details-dialog .pdd-timeline-stat .label {
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.position-details-dialog .pdd-timeline-stat .value {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+}
+
+.position-details-dialog .pdd-timeline-signature {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: var(--spacing-xs);
+}
+
+.position-details-dialog .pdd-signature-text {
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  color: var(--link-color);
+  cursor: pointer;
+  padding: 4px 8px;
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  transition: all 0.15s ease;
+}
+
+.position-details-dialog .pdd-signature-text:hover {
+  background: var(--primary-alpha-10);
+}
+
+.position-details-dialog .pdd-signature-link {
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.position-details-dialog .pdd-signature-link:hover {
+  color: var(--link-color);
+}
+
+.position-details-dialog .pdd-signature-link i {
+  font-size: 12px;
+}
+
+/* =============================================================================
+   TRANSACTIONS TAB
+   ============================================================================= */
+
+.position-details-dialog .pdd-tx-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.position-details-dialog .pdd-tx-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  transition: background 0.15s ease;
+}
+
+.position-details-dialog .pdd-tx-item:hover {
+  background: var(--bg-card-hover);
+}
+
+.position-details-dialog .pdd-tx-main {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex: 1;
+  min-width: 0;
+}
+
+.position-details-dialog .pdd-tx-status-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.position-details-dialog .pdd-tx-status-icon.pdd-status-success {
+  background: var(--success-alpha-20);
+  color: var(--success-color);
+}
+
+.position-details-dialog .pdd-tx-status-icon.pdd-status-failed {
+  background: var(--danger-alpha-20);
+  color: var(--danger);
+}
+
+.position-details-dialog .pdd-tx-status-icon i {
+  font-size: 14px;
+}
+
+.position-details-dialog .pdd-tx-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.position-details-dialog .pdd-tx-type {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.position-details-dialog .pdd-tx-sig {
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  color: var(--link-color);
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.position-details-dialog .pdd-tx-sig:hover {
+  color: var(--link-hover, var(--primary-hover));
+}
+
+.position-details-dialog .pdd-tx-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  flex-shrink: 0;
+}
+
+.position-details-dialog .pdd-tx-fee {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+}
+
+.position-details-dialog .pdd-tx-time {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+}
+
+.position-details-dialog .pdd-tx-link {
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.position-details-dialog .pdd-tx-link:hover {
+  color: var(--link-color);
+}
+
+.position-details-dialog .pdd-tx-link i {
+  font-size: 14px;
+}
+
+/* State Timeline Section */
+.position-details-dialog .pdd-state-timeline {
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--border-color);
+}
+
+.position-details-dialog .pdd-state-timeline-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-md);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* =============================================================================
+   UTILITIES
+   ============================================================================= */
+
+.position-details-dialog .pdd-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 200px;
+  color: var(--text-secondary);
+  text-align: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+}
+
+.position-details-dialog .pdd-empty-state i {
+  font-size: 32px;
+  opacity: 0.5;
+}
+
+.position-details-dialog .pdd-empty-state p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+/* =============================================================================
    RESPONSIVE ADJUSTMENTS
    ============================================================================= */
 
 @media (width <= 800px) {
-  .position-details-header {
+  .position-details-dialog .dialog-header {
     flex-wrap: wrap;
     gap: 12px;
     padding: 12px;
   }
 
-  .pdd-token-info {
+  .position-details-dialog .header-top-row {
+    flex-wrap: wrap;
+  }
+
+  .position-details-dialog .header-left {
     min-width: auto;
   }
 
-  .pdd-price {
+  .position-details-dialog .header-center {
     order: 3;
     flex: 1 0 100%;
-    text-align: left;
-    font-size: 1rem;
+    justify-content: flex-start;
   }
 
-  .pdd-header-right {
+  .position-details-dialog .header-price {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .position-details-dialog .price-metrics {
+    border-left: none;
+    padding-left: 0;
+  }
+
+  .position-details-dialog .header-right {
     margin-left: auto;
   }
 
-  .pdd-tab-content {
+  .position-details-dialog .tab-content {
     padding: 12px;
   }
 
-  .pdd-actions {
-    flex-wrap: wrap;
+  .position-details-dialog .pdd-action-buttons {
     justify-content: center;
   }
 }
 
 @media (width <= 500px) {
-  .pdd-token-name {
+  .position-details-dialog .header-title .title-sub {
     display: none;
   }
 
-  .position-details-tabs {
+  .position-details-dialog .dialog-tabs {
     padding: 6px 12px;
   }
 
-  .pdd-tab {
+  .position-details-dialog .tab-button {
     padding: 6px 10px;
     font-size: 0.7rem;
   }
 
-  .pdd-tab i {
+  .position-details-dialog .tab-button i {
     display: none;
+  }
+
+  .position-details-dialog .pdd-timeline-details {
+    flex-direction: column;
+    gap: var(--spacing-sm);
+  }
+
+  .position-details-dialog .pdd-tx-meta {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 4px;
   }
 }
