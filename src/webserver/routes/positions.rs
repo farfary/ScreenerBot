@@ -12,6 +12,8 @@ use std::sync::Arc;
 
 use crate::logger::{self, LogTag};
 use crate::positions;
+use crate::pools;
+use crate::sol_price;
 use crate::tokens;
 use crate::transactions::{
     get_transaction, TokenTransfer, Transaction, TransactionDirection, TransactionStatus,
@@ -110,6 +112,69 @@ pub struct ExitRecordResponse {
     pub fees_sol: Option<f64>,
 }
 
+/// Token information for position detail view
+#[derive(Debug, Serialize)]
+pub struct PositionTokenInfo {
+    pub decimals: Option<u8>,
+    pub description: Option<String>,
+    pub image_url: Option<String>,
+    pub website: Option<String>,
+    pub twitter: Option<String>,
+    pub telegram: Option<String>,
+}
+
+/// Market data for position detail view
+#[derive(Debug, Serialize)]
+pub struct PositionMarketData {
+    pub market_cap: Option<f64>,
+    pub fdv: Option<f64>,
+    pub liquidity_usd: Option<f64>,
+    pub volume_24h: Option<f64>,
+    pub price_change_h1: Option<f64>,
+    pub price_change_h24: Option<f64>,
+    pub holder_count: Option<i64>,
+}
+
+/// Security summary for position detail view
+#[derive(Debug, Serialize)]
+pub struct PositionSecuritySummary {
+    pub score_normalized: Option<i32>,
+    pub risk_level: String,
+    pub has_mint_authority: bool,
+    pub has_freeze_authority: bool,
+    pub top_risks: Vec<String>,
+}
+
+/// Pool info for position detail view
+#[derive(Debug, Serialize)]
+pub struct PositionPoolInfo {
+    pub pool_address: Option<String>,
+    pub dex_name: Option<String>,
+    pub liquidity_sol: Option<f64>,
+}
+
+/// External links for blockchain explorers and tools
+#[derive(Debug, Serialize)]
+pub struct ExternalLinks {
+    pub solscan: String,
+    pub dexscreener: String,
+    pub birdeye: String,
+    pub rugcheck: String,
+    pub photon: String,
+}
+
+impl ExternalLinks {
+    pub fn for_mint(mint: &str) -> Self {
+        Self {
+            solscan: format!("https://solscan.io/token/{}", mint),
+            dexscreener: format!("https://dexscreener.com/solana/{}", mint),
+            birdeye: format!("https://birdeye.so/token/{}?chain=solana", mint),
+            rugcheck: format!("https://rugcheck.xyz/tokens/{}", mint),
+            photon: format!("https://photon-sol.tinyastro.io/en/lp/{}", mint),
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 pub struct PositionDetailResponse {
     pub position: Option<PositionDetail>,
@@ -118,6 +183,13 @@ pub struct PositionDetailResponse {
     pub executions: Vec<PositionExecutionRow>,
     pub transactions: Vec<PositionTransactionSummary>,
     pub state_history: Vec<PositionStateTimelineEntry>,
+    pub token_info: Option<PositionTokenInfo>,
+    pub market_data: Option<PositionMarketData>,
+    pub security: Option<PositionSecuritySummary>,
+    pub pool_info: Option<PositionPoolInfo>,
+    pub external_links: ExternalLinks,
+    pub position_age_seconds: Option<i64>,
+    pub sol_price_usd: Option<f64>,
     pub fetched_at: String,
 }
 
@@ -316,11 +388,101 @@ async fn map_position_to_response_async(p: &positions::Position) -> PositionResp
 async fn get_position_details(Path(key): Path<String>) -> Response {
     match resolve_position_by_key(&key).await {
         Ok(Some(position)) => {
+            let mint = &position.mint;
+            
+            // Fetch all data concurrently for better performance
             let detail = map_position_to_detail(&position).await;
             let executions = build_execution_rows(&position);
             let transactions = build_transaction_summaries(&position).await;
             let state_history = load_state_history_entries(&position).await;
             let (entries, exits) = load_entry_exit_history(&position).await;
+            
+            // Fetch token data from database
+            let token_data = tokens::database::get_full_token_async(mint)
+                .await
+                .ok()
+                .flatten();
+            
+            // Build token info from token database
+            let token_info = token_data.as_ref().map(|token| {
+                let website = token.websites.first().map(|w| w.url.clone());
+                let twitter = token
+                    .socials
+                    .iter()
+                    .find(|s| s.link_type.to_lowercase().contains("twitter"))
+                    .map(|s| s.url.clone());
+                let telegram = token
+                    .socials
+                    .iter()
+                    .find(|s| s.link_type.to_lowercase().contains("telegram"))
+                    .map(|s| s.url.clone());
+                
+                PositionTokenInfo {
+                    decimals: Some(token.decimals),
+                    description: token.description.clone(),
+                    image_url: token.image_url.clone(),
+                    website,
+                    twitter,
+                    telegram,
+                }
+            });
+            
+            // Build market data from token database
+            let market_data = token_data.as_ref().map(|token| PositionMarketData {
+                market_cap: token.market_cap,
+                fdv: token.fdv,
+                liquidity_usd: token.liquidity_usd,
+                volume_24h: token.volume_h24,
+                price_change_h1: token.price_change_h1,
+                price_change_h24: token.price_change_h24,
+                holder_count: token.total_holders,
+            });
+            
+            // Build security summary from token database
+            let security = token_data.as_ref().map(|token| {
+                let risk_level = match token.security_score_normalised {
+                    Some(score) if score >= 80 => "low".to_string(),
+                    Some(score) if score >= 50 => "medium".to_string(),
+                    Some(_) => "high".to_string(),
+                    None => "unknown".to_string(),
+                };
+                
+                let top_risks: Vec<String> = token
+                    .security_risks
+                    .iter()
+                    .take(3)
+                    .map(|r| r.name.clone())
+                    .collect();
+                
+                PositionSecuritySummary {
+                    score_normalized: token.security_score_normalised,
+                    risk_level,
+                    has_mint_authority: token.mint_authority.is_some(),
+                    has_freeze_authority: token.freeze_authority.is_some(),
+                    top_risks,
+                }
+            });
+            
+            // Get pool info from pool service
+            let pool_info = pools::get_pool_price(mint).map(|price_result| {
+                PositionPoolInfo {
+                    pool_address: Some(price_result.pool_address.clone()),
+                    dex_name: price_result.source_pool.clone(),
+                    liquidity_sol: Some(price_result.sol_reserves),
+                }
+            });
+            
+            // Build external links
+            let external_links = ExternalLinks::for_mint(mint);
+            
+            // Calculate position age in seconds
+            let position_age_seconds = Some(Utc::now().signed_duration_since(position.entry_time).num_seconds());
+            
+            // Get SOL price in USD
+            let sol_price_usd = {
+                let price = sol_price::get_sol_price();
+                if price > 0.0 { Some(price) } else { None }
+            };
 
             success_response(PositionDetailResponse {
                 position: Some(detail),
@@ -329,6 +491,13 @@ async fn get_position_details(Path(key): Path<String>) -> Response {
                 executions,
                 transactions,
                 state_history,
+                token_info,
+                market_data,
+                security,
+                pool_info,
+                external_links,
+                position_age_seconds,
+                sol_price_usd,
                 fetched_at: Utc::now().to_rfc3339(),
             })
         }
