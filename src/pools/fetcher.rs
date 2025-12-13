@@ -10,7 +10,7 @@ use super::utils::is_sol_mint;
 use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::logger::{self, LogTag};
 use crate::pools::service;
-use crate::rpc::{get_rpc_client, RpcClient};
+use crate::rpc::{get_new_rpc_client, RpcClientMethods};
 
 use futures::future::join_all;
 use solana_sdk::{account::Account, pubkey::Pubkey};
@@ -141,8 +141,6 @@ impl PoolAccountBundle {
 
 /// Account fetcher service
 pub struct AccountFetcher {
-    /// RPC client for fetching data
-    rpc_client: Arc<RpcClient>,
     /// Pool directory for getting account requirements
     pool_directory: Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>,
     /// Fetched account bundles by pool ID
@@ -163,13 +161,11 @@ pub struct AccountFetcher {
 impl AccountFetcher {
     /// Create new account fetcher
     pub fn new(
-        rpc_client: Arc<RpcClient>,
         pool_directory: Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>,
     ) -> Self {
         let (fetcher_tx, fetcher_rx) = mpsc::unbounded_channel();
 
         Self {
-            rpc_client,
             pool_directory,
             account_bundles: Arc::new(RwLock::new(HashMap::new())),
             account_last_fetch: Arc::new(RwLock::new(HashMap::new())),
@@ -207,7 +203,6 @@ impl AccountFetcher {
     pub async fn start_fetcher_task(&self, shutdown: Arc<Notify>) {
         logger::info(LogTag::PoolFetcher, "Starting account fetcher task");
 
-        let rpc_client = self.rpc_client.clone();
         let pool_directory = self.pool_directory.clone();
         let account_bundles = self.account_bundles.clone();
         let account_last_fetch = self.account_last_fetch.clone();
@@ -281,7 +276,6 @@ impl AccountFetcher {
                         // Process pending accounts if any
                         if !pending_accounts.is_empty() {
                             Self::process_pending_accounts(
-                                &rpc_client,
                                 &pool_directory,
                                 &account_bundles,
                                 &account_last_fetch,
@@ -450,7 +444,6 @@ impl AccountFetcher {
 
     /// Process pending accounts by fetching them in batches
     async fn process_pending_accounts(
-        rpc_client: &Arc<RpcClient>,
         pool_directory: &Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>,
         account_bundles: &Arc<RwLock<HashMap<Pubkey, PoolAccountBundle>>>,
         account_last_fetch: &Arc<RwLock<HashMap<Pubkey, Instant>>>,
@@ -544,7 +537,7 @@ impl AccountFetcher {
             ))
             .await;
 
-            match Self::fetch_account_batch(rpc_client, batch).await {
+            match Self::fetch_account_batch(batch).await {
                 Ok((account_data_list, missing_accounts)) => {
                     let batch_duration = batch_start.elapsed();
 
@@ -817,7 +810,6 @@ impl AccountFetcher {
 
     /// Fetch a batch of accounts
     async fn fetch_account_batch(
-        rpc_client: &Arc<RpcClient>,
         accounts: &[Pubkey],
     ) -> Result<(Vec<AccountData>, Vec<Pubkey>), String> {
         // Check connectivity before RPC batch fetch - graceful degradation
@@ -843,7 +835,8 @@ impl AccountFetcher {
             &format!("Fetching batch of {} accounts", accounts.len()),
         );
 
-        // Fetch accounts using RPC client
+        // Fetch accounts using new RPC client
+        let rpc_client = get_new_rpc_client();
         let rpc_start = Instant::now();
         let account_results = match rpc_client.get_multiple_accounts(accounts).await {
             Ok(results) => {

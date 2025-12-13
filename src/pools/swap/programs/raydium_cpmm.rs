@@ -11,7 +11,7 @@ use crate::pools::decoders::raydium_cpmm::{RaydiumCpmmDecoder, RaydiumCpmmPoolIn
 use crate::pools::swap::executor::SwapExecutor;
 use crate::pools::swap::types::{SwapDirection, SwapError, SwapParams, SwapRequest, SwapResult};
 use crate::pools::AccountData;
-use crate::rpc::get_rpc_client;
+use crate::rpc::{get_new_rpc_client, RpcClientMethods};
 use crate::utils::sol_to_lamports;
 
 use solana_sdk::{
@@ -91,8 +91,6 @@ impl RaydiumCpmmSwap {
     request: &SwapRequest,
     pool_info: &RaydiumCpmmPoolInfo,
   ) -> Result<SwapParams, SwapError> {
-    let rpc_client = get_rpc_client();
-
     // Get vault balances
     let vault_0_balance = Self::get_token_account_balance(&pool_info.token_0_vault).await?;
     let vault_1_balance = Self::get_token_account_balance(&pool_info.token_1_vault).await?;
@@ -204,8 +202,6 @@ impl RaydiumCpmmSwap {
     };
 
     // Create token accounts if needed
-    let rpc_client = get_rpc_client();
-
     if !Self::account_exists(&wsol_ata).await? {
       instructions.push(
         spl_associated_token_account::instruction::create_associated_token_account(
@@ -270,6 +266,7 @@ impl RaydiumCpmmSwap {
     }
 
     // Get recent blockhash and create transaction
+    let rpc_client = get_new_rpc_client();
     let recent_blockhash = rpc_client
       .get_latest_blockhash()
       .await
@@ -373,22 +370,24 @@ impl RaydiumCpmmSwap {
 
   /// Helper functions
   async fn account_exists(pubkey: &Pubkey) -> Result<bool, SwapError> {
-    let rpc_client = get_rpc_client();
+    let rpc_client = get_new_rpc_client();
     match rpc_client.get_account(pubkey).await {
-      Ok(_) => Ok(true),
+      Ok(Some(_)) => Ok(true),
+      Ok(None) => Ok(false),
       Err(_) => Ok(false),
     }
   }
 
   async fn get_token_account_balance(account_address: &str) -> Result<u64, SwapError> {
-    let rpc_client = get_rpc_client();
+    let rpc_client = get_new_rpc_client();
     let account_pubkey = Pubkey::from_str(account_address)
       .map_err(|e| SwapError::InvalidInput(format!("Invalid account address: {}", e)))?;
 
     let account = rpc_client
       .get_account(&account_pubkey)
       .await
-      .map_err(|e| SwapError::RpcError(format!("Failed to get token account: {}", e)))?;
+      .map_err(|e| SwapError::RpcError(format!("Failed to get token account: {}", e)))?
+      .ok_or_else(|| SwapError::RpcError(format!("Token account not found: {}", account_address)))?;
 
     // Decode token account amount (at offset 64)
     if account.data.len() < 72 {

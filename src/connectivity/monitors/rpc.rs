@@ -1,9 +1,10 @@
 use crate::config::get_config_clone;
 use crate::connectivity::monitor::EndpointMonitor;
 use crate::connectivity::types::{EndpointCriticality, FallbackStrategy, HealthCheckResult};
+use crate::rpc::{get_new_rpc_client, RpcClientMethods};
 use async_trait::async_trait;
 
-/// RPC endpoint monitor - checks health of all configured RPC URLs
+/// RPC endpoint monitor - checks health of all configured RPC providers
 pub struct RpcMonitor;
 
 impl RpcMonitor {
@@ -32,56 +33,56 @@ impl EndpointMonitor for RpcMonitor {
     }
 
     async fn check_health(&self) -> HealthCheckResult {
-        let cfg = get_config_clone();
-        let timeout_secs = cfg.connectivity.endpoints.rpc.timeout_secs.max(1);
-        let rpc_client = crate::rpc::get_rpc_client();
-        let rpc_urls = rpc_client.get_all_urls();
-
-        if rpc_urls.is_empty() {
-            return HealthCheckResult::failure("No RPC URLs configured".to_string());
+        let rpc_client = get_new_rpc_client();
+        
+        // Get provider health info from new RPC architecture
+        let provider_health = rpc_client.get_provider_health().await;
+        
+        if provider_health.is_empty() {
+            return HealthCheckResult::failure("No RPC providers configured".to_string());
         }
 
-        let mut successful_checks = 0;
-        let mut total_latency = 0u64;
-        let mut errors = Vec::new();
+        let total_providers = provider_health.len();
+        let healthy_providers: Vec<_> = provider_health.iter().filter(|p| p.is_healthy).collect();
+        let healthy_count = healthy_providers.len();
+        
+        // Calculate average latency from healthy providers
+        let avg_latency = if !healthy_providers.is_empty() {
+            let total_latency: f64 = healthy_providers.iter().map(|p| p.avg_latency_ms).sum();
+            (total_latency / healthy_count as f64) as u64
+        } else {
+            0
+        };
 
-        // Check all RPC URLs
-        for url in &rpc_urls {
-            match rpc_client.probe_get_health(url, timeout_secs).await {
-                Ok(latency) => {
-                    successful_checks += 1;
-                    total_latency += latency;
-                }
-                Err(e) => {
-                    errors.push(format!("{}: {}", url, e));
-                }
-            }
-        }
+        // Collect errors from unhealthy providers
+        let errors: Vec<String> = provider_health
+            .iter()
+            .filter(|p| !p.is_healthy)
+            .map(|p| format!("{} ({}): {:?}", p.url_masked, p.kind, p.circuit_state))
+            .collect();
 
         // If at least one RPC is healthy, consider the endpoint available
-        if successful_checks > 0 {
-            let avg_latency = total_latency / successful_checks;
-
-            if (successful_checks as usize) < rpc_urls.len() {
-                // Some RPCs failed
+        if healthy_count > 0 {
+            if healthy_count < total_providers {
+                // Some providers failed
                 HealthCheckResult::degraded(
                     avg_latency,
                     format!(
-                        "{}/{} RPC URLs healthy. Failures: {}",
-                        successful_checks,
-                        rpc_urls.len(),
+                        "{}/{} RPC providers healthy. Unhealthy: {}",
+                        healthy_count,
+                        total_providers,
                         errors.join("; ")
                     ),
                 )
             } else {
-                // All RPCs healthy
+                // All providers healthy
                 HealthCheckResult::success(avg_latency)
             }
         } else {
-            // All RPCs failed
+            // All providers failed
             HealthCheckResult::failure(format!(
-                "All {} RPC URLs unreachable: {}",
-                rpc_urls.len(),
+                "All {} RPC providers unreachable: {}",
+                total_providers,
                 errors.join("; ")
             ))
         }

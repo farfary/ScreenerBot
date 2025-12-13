@@ -326,6 +326,20 @@ impl std::fmt::Display for RateLimitError {
 // BACKWARD COMPATIBILITY: Error conversions from standard library types
 // =============================================================================
 
+impl From<String> for ScreenerBotError {
+    fn from(err: String) -> Self {
+        ScreenerBotError::Network(NetworkError::Generic { message: err })
+    }
+}
+
+impl From<&str> for ScreenerBotError {
+    fn from(err: &str) -> Self {
+        ScreenerBotError::Network(NetworkError::Generic {
+            message: err.to_string(),
+        })
+    }
+}
+
 impl From<reqwest::Error> for ScreenerBotError {
     fn from(err: reqwest::Error) -> Self {
         ScreenerBotError::Network(NetworkError::Generic {

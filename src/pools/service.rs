@@ -12,7 +12,7 @@ use super::{cache, db, PoolError};
 use crate::config::with_config;
 use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::logger::{self, LogTag};
-use crate::rpc::{get_rpc_client, RpcClient};
+use crate::rpc::get_new_rpc_client;
 
 use once_cell::sync::Lazy;
 use solana_sdk::pubkey::Pubkey;
@@ -438,10 +438,9 @@ async fn initialize_service_components() -> Result<(), String> {
     );
   }
 
-  let rpc_client_ref = get_rpc_client();
-  let shared_rpc_client = Arc::new(rpc_client_ref.clone());
-
-  let rpc_urls_count = rpc_client_ref.get_all_urls().len();
+  // Get RPC provider count for logging
+  let rpc_client = get_new_rpc_client();
+  let rpc_urls_count = rpc_client.provider_count().await;
 
   // Initialize pool directory (shared between components)
   let pool_directory = Arc::new(RwLock::new(HashMap::new()));
@@ -449,11 +448,9 @@ async fn initialize_service_components() -> Result<(), String> {
   // Initialize components in dependency order
   let pool_discovery = Arc::new(PoolDiscovery::new());
   let pool_analyzer = Arc::new(PoolAnalyzer::new(
-    shared_rpc_client.clone(),
     pool_directory.clone(),
   ));
   let account_fetcher = Arc::new(AccountFetcher::new(
-    shared_rpc_client.clone(),
     pool_directory.clone(),
   ));
   let price_calculator = Arc::new(PriceCalculator::new(pool_directory.clone()));

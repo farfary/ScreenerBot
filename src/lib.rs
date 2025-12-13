@@ -23,6 +23,7 @@ pub mod process_lock;
 pub mod profiling;
 pub mod reset;
 pub mod rpc;
+pub mod rpc_legacy;
 pub mod run;
 pub mod nfts;
 pub mod secure_storage;

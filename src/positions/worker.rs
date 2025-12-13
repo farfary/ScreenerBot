@@ -14,7 +14,7 @@ use super::{
 };
 use crate::{
   logger::{self, LogTag},
-  rpc::get_rpc_client,
+  rpc::{get_new_rpc_client, RpcClientMethods},
 };
 use serde_json::json;
 use std::sync::Arc;
@@ -396,7 +396,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
 
         // Clean up expired items - only fetch block height if needed
         let current_height = if queue_has_items_with_expiry().await {
-          get_rpc_client().get_block_height().await.ok()
+          get_new_rpc_client().get_block_height().await.ok()
         } else {
           None
         };

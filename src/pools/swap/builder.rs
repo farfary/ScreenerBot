@@ -14,7 +14,7 @@ use crate::logger::{self, LogTag};
 use crate::pools::decoders::PoolDecoder;
 use crate::pools::types::ProgramKind;
 use crate::pools::AccountData;
-use crate::rpc::get_rpc_client;
+use crate::rpc::{get_new_rpc_client, RpcClientMethods};
 
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
@@ -99,13 +99,14 @@ impl SwapBuilder {
   async fn fetch_pool_data(
     pool_address: &Pubkey,
   ) -> Result<(AccountData, ProgramKind), SwapError> {
-    let rpc_client = get_rpc_client();
+    let rpc_client = get_new_rpc_client();
 
     // Get pool account
     let pool_account = rpc_client
       .get_account(pool_address)
       .await
-      .map_err(|e| SwapError::RpcError(format!("Failed to fetch pool: {}", e)))?;
+      .map_err(|e| SwapError::RpcError(format!("Failed to fetch pool: {}", e)))?
+      .ok_or_else(|| SwapError::RpcError(format!("Pool account not found: {}", pool_address)))?;
 
     // Create AccountData
     let account_data = AccountData::from_account(*pool_address, pool_account, 0);

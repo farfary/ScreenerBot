@@ -94,7 +94,7 @@ pub fn is_token_2022_cached(mint: &str) -> Option<bool> {
 /// Result is cached for future calls.
 pub async fn is_token_2022(mint: &str) -> bool {
     use crate::constants::TOKEN_2022_PROGRAM_ID;
-    use crate::rpc::get_rpc_client;
+    use crate::rpc::{get_new_rpc_client, RpcClientMethods};
     use solana_sdk::pubkey::Pubkey;
     use std::str::FromStr;
 
@@ -118,9 +118,9 @@ pub async fn is_token_2022(mint: &str) -> bool {
         }
     };
 
-    let rpc_client = get_rpc_client();
+    let rpc_client = get_new_rpc_client();
     match rpc_client.get_account(&mint_pubkey).await {
-        Ok(account) => {
+        Ok(Some(account)) => {
             let is_2022 = account.owner.to_string() == TOKEN_2022_PROGRAM_ID;
             cache_token_2022(mint, is_2022);
             if is_2022 {
@@ -130,6 +130,13 @@ pub async fn is_token_2022(mint: &str) -> bool {
                 );
             }
             is_2022
+        }
+        Ok(None) => {
+            logger::warning(
+                LogTag::Tokens,
+                &format!("Mint account not found: mint={}", mint),
+            );
+            false
         }
         Err(e) => {
             logger::warning(
@@ -247,7 +254,7 @@ pub async fn get(mint: &str) -> Option<u8> {
 
 /// Fetch token decimals directly from Solana blockchain (public for debug bins)
 pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
-    use crate::rpc::get_rpc_client;
+    use crate::rpc::{get_new_rpc_client, RpcClientMethods};
     use solana_program::program_pack::Pack;
     use solana_sdk::pubkey::Pubkey;
     use spl_token::state::Mint as SplMint;
@@ -263,10 +270,10 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
     let mint_pubkey = Pubkey::from_str(mint).map_err(|e| format!("Invalid mint address: {}", e))?;
 
     // Get RPC client
-    let rpc_client = get_rpc_client();
+    let rpc_client = get_new_rpc_client();
 
     // Fetch account data
-    let account = rpc_client.get_account(&mint_pubkey).await.map_err(|e| {
+    let account_opt = rpc_client.get_account(&mint_pubkey).await.map_err(|e| {
         if e.contains("could not find account") || e.contains("Account not found") {
             "Account not found".to_string()
         } else if e.contains("429") || e.to_lowercase().contains("rate limit") {
@@ -275,6 +282,8 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
             format!("Failed to fetch account: {}", e)
         }
     })?;
+
+    let account = account_opt.ok_or_else(|| "Account not found".to_string())?;
 
     // Check account data
     if account.data.is_empty() {

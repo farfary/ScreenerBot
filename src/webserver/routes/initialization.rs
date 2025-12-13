@@ -379,6 +379,7 @@ async fn complete_initialization(Json(request): Json<CompleteInitializationReque
         wallet_nonce: encrypted.nonce,
         rpc: crate::config::schemas::RpcConfig {
             urls: working_rpc_urls,
+            ..Default::default()
         },
         ..Default::default()
     };

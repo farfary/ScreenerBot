@@ -28,7 +28,7 @@ use tokio::sync::{Mutex, Notify, RwLock};
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::nfts::fetch_nft_metadata_batch;
-use crate::rpc::{get_rpc_client, TokenAccountInfo};
+use crate::rpc::{get_new_rpc_client, RpcClientMethods, TokenAccountInfo};
 // Use tokens::store accessors directly when needed
 use crate::transactions::get_transaction_database;
 use crate::utils::get_wallet_address;
@@ -2496,7 +2496,7 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
     let wallet_address =
         get_wallet_address().map_err(|e| format!("Failed to get wallet address: {}", e))?;
 
-    let rpc_client = get_rpc_client();
+    let rpc_client = get_new_rpc_client();
     let snapshot_time = Utc::now();
 
     logger::debug(
@@ -2520,7 +2520,7 @@ async fn collect_wallet_snapshot() -> Result<WalletSnapshot, String> {
 
     // Get all token accounts (includes both tokens and NFTs)
     let token_accounts = rpc_client
-        .get_all_token_accounts(&wallet_address)
+        .get_all_token_accounts_str(&wallet_address)
         .await
         .map_err(|e| format!("Failed to get token accounts: {}", e))?;
 

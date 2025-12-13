@@ -18,7 +18,8 @@ use super::utils::{is_sol_mint, PoolMintVaultInfo};
 use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::logger::{self, LogTag};
 use crate::pools::service;
-use crate::rpc::RpcClient;
+use crate::rpc::client::RpcClient;
+use crate::rpc::{get_new_rpc_client, RpcClientMethods};
 
 use solana_sdk::pubkey::Pubkey;
 use std::collections::{HashMap, HashSet};
@@ -47,8 +48,6 @@ pub enum AnalyzerMessage {
 pub struct PoolAnalyzer {
     /// Analyzed pool directory
     pool_directory: Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>,
-    /// RPC client for on-chain data fetching
-    rpc_client: Arc<RpcClient>,
     /// Channel for receiving analysis requests
     analyzer_rx: Arc<RwLock<Option<mpsc::UnboundedReceiver<AnalyzerMessage>>>>,
     /// Channel sender for sending analysis requests
@@ -62,14 +61,12 @@ pub struct PoolAnalyzer {
 impl PoolAnalyzer {
     /// Create new pool analyzer
     pub fn new(
-        rpc_client: Arc<RpcClient>,
         pool_directory: Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>,
     ) -> Self {
         let (analyzer_tx, analyzer_rx) = mpsc::unbounded_channel();
 
         Self {
             pool_directory,
-            rpc_client,
             analyzer_rx: Arc::new(RwLock::new(Some(analyzer_rx))),
             analyzer_tx,
             operations: Arc::new(std::sync::atomic::AtomicU64::new(0)),
@@ -103,7 +100,6 @@ impl PoolAnalyzer {
         logger::info(LogTag::PoolAnalyzer, "Starting pool analyzer task");
 
         let pool_directory = self.pool_directory.clone();
-        let rpc_client = self.rpc_client.clone();
 
         // Clone metrics for tracking in background task
         let operations = Arc::clone(&self.operations);
@@ -118,6 +114,9 @@ impl PoolAnalyzer {
 
         tokio::spawn(async move {
             logger::info(LogTag::PoolAnalyzer, "Pool analyzer task started");
+            
+            // Get RPC client inside the task
+            let rpc_client = get_new_rpc_client();
 
             loop {
                 tokio::select! {
@@ -157,7 +156,7 @@ impl PoolAnalyzer {
                                         quote_mint,
                                         liquidity_usd,
                                         volume_h24_usd,
-                                        &rpc_client
+                                        rpc_client
                                     ).await {
                                         // Track metrics
                                         operations.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -248,12 +247,42 @@ impl PoolAnalyzer {
         let actual_program_id = if program_id == Pubkey::default() {
             // This is an Unknown pool from discovery - fetch the account to get the real program ID
             match rpc_client.get_account(&pool_id).await {
-                Ok(account) => {
+                Ok(Some(account)) => {
                     logger::debug(
                         LogTag::PoolAnalyzer,
                         &format!("Pool {} owner: {}", pool_id, account.owner),
                     );
                     account.owner
+                }
+                Ok(None) => {
+                    let target_mint = if is_sol_mint(&base_mint.to_string()) {
+                        quote_mint.to_string()
+                    } else {
+                        base_mint.to_string()
+                    };
+
+                    record_safe(Event::error(
+                        EventCategory::Pool,
+                        Some("pool_account_fetch_failed".to_string()),
+                        Some(target_mint.clone()),
+                        Some(pool_id.to_string()),
+                        serde_json::json!({
+                            "pool_id": pool_id.to_string(),
+                            "target_mint": target_mint,
+                            "error": "Account not found",
+                            "action": "get_account"
+                        }),
+                    ))
+                    .await;
+
+                    logger::warning(
+                        LogTag::PoolAnalyzer,
+                        &format!(
+                            "Pool account {} not found for token analysis",
+                            pool_id
+                        ),
+                    );
+                    return None;
                 }
                 Err(e) => {
                     let target_mint = if is_sol_mint(&base_mint.to_string()) {
@@ -448,7 +477,7 @@ impl PoolAnalyzer {
                 let mut accounts = vec![*pool_id];
 
                 // Fetch pool account to extract vault addresses using decoder function
-                if let Ok(pool_account) = rpc_client.get_account(pool_id).await {
+                if let Ok(Some(pool_account)) = rpc_client.get_account(pool_id).await {
                     if let Some(vault_addresses) =
                         super::decoders::meteora_dbc::MeteoraDbcDecoder::extract_reserve_accounts(
                             &pool_account.data,
@@ -532,7 +561,14 @@ impl PoolAnalyzer {
     ) -> Option<Vec<Pubkey>> {
         // Fetch the pool account to extract vault addresses using decoder function
         let pool_account = match rpc_client.get_account(pool_id).await {
-            Ok(account) => account,
+            Ok(Some(account)) => account,
+            Ok(None) => {
+                logger::error(
+                    LogTag::PoolAnalyzer,
+                    &format!("Pool account {} not found", pool_id),
+                );
+                return None;
+            }
             Err(e) => {
                 logger::error(
                     LogTag::PoolAnalyzer,
@@ -579,7 +615,7 @@ impl PoolAnalyzer {
         let mut accounts = vec![*pool_id];
 
         // Fetch pool account to extract vault addresses using decoder function
-        if let Ok(pool_account) = rpc_client.get_account(pool_id).await {
+        if let Ok(Some(pool_account)) = rpc_client.get_account(pool_id).await {
             if let Some(vault_addresses) =
                 RaydiumLegacyAmmDecoder::extract_reserve_accounts(&pool_account.data)
             {
@@ -634,7 +670,7 @@ impl PoolAnalyzer {
         let mut accounts = vec![*pool_id];
 
         // Fetch pool account to extract vault addresses using decoder function
-        if let Ok(pool_account) = rpc_client.get_account(pool_id).await {
+        if let Ok(Some(pool_account)) = rpc_client.get_account(pool_id).await {
             if let Some(vault_addresses) =
                 RaydiumClmmDecoder::extract_reserve_accounts(&pool_account.data)
             {
@@ -677,7 +713,7 @@ impl PoolAnalyzer {
         let mut accounts = vec![*pool_id];
 
         // Fetch pool account to extract vault addresses using decoder function
-        if let Ok(pool_account) = rpc_client.get_account(pool_id).await {
+        if let Ok(Some(pool_account)) = rpc_client.get_account(pool_id).await {
             if let Some(vault_addresses) =
                 OrcaWhirlpoolDecoder::extract_reserve_accounts(&pool_account.data)
             {
@@ -728,7 +764,7 @@ impl PoolAnalyzer {
         let mut accounts = vec![*pool_id];
 
         // Fetch pool account to extract vault addresses using decoder function
-        if let Ok(pool_account) = rpc_client.get_account(pool_id).await {
+        if let Ok(Some(pool_account)) = rpc_client.get_account(pool_id).await {
             if let Some(vault_addresses) =
                 MeteoraDammDecoder::extract_reserve_accounts(&pool_account.data)
             {
@@ -765,7 +801,14 @@ impl PoolAnalyzer {
     ) -> Option<Vec<Pubkey>> {
         // Fetch the pool account to extract vault addresses using decoder function
         let pool_account = match rpc_client.get_account(pool_id).await {
-            Ok(account) => account,
+            Ok(Some(account)) => account,
+            Ok(None) => {
+                logger::error(
+                    LogTag::PoolAnalyzer,
+                    &format!("DLMM pool account {} not found", pool_id),
+                );
+                return None;
+            }
             Err(e) => {
                 logger::error(
                     LogTag::PoolAnalyzer,
@@ -809,7 +852,7 @@ impl PoolAnalyzer {
         let mut accounts = vec![*pool_id];
 
         // Fetch pool account to extract vault addresses using decoder function
-        if let Ok(pool_account) = rpc_client.get_account(pool_id).await {
+        if let Ok(Some(pool_account)) = rpc_client.get_account(pool_id).await {
             if let Some(vault_addresses) =
                 PumpFunAmmDecoder::extract_reserve_accounts(&pool_account.data)
             {
@@ -870,7 +913,14 @@ impl PoolAnalyzer {
     ) -> Option<Vec<Pubkey>> {
         // Fetch the pool account to extract vault addresses using decoder function
         let pool_account = match rpc_client.get_account(pool_id).await {
-            Ok(account) => account,
+            Ok(Some(account)) => account,
+            Ok(None) => {
+                logger::error(
+                    LogTag::PoolAnalyzer,
+                    &format!("FluxBeam pool account {} not found", pool_id),
+                );
+                return None;
+            }
             Err(e) => {
                 logger::error(
                     LogTag::PoolAnalyzer,

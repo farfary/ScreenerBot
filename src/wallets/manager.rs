@@ -6,6 +6,7 @@ use once_cell::sync::Lazy;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
 use std::collections::HashMap;
+use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -18,7 +19,7 @@ use super::types::{
     UpdateWalletRequest, Wallet, WalletRole, WalletType, WalletWithKey, WalletsSummary,
 };
 use crate::logger::{self, LogTag};
-use crate::rpc::get_rpc_client;
+use crate::rpc::{get_new_rpc_client, RpcClientMethods};
 
 // =============================================================================
 // GLOBAL STATE
@@ -861,9 +862,12 @@ pub async fn update_wallet_balances(wallet_id: i64) -> Result<usize, String> {
         .await?
         .ok_or("Wallet not found")?;
 
-    let rpc_client = get_rpc_client();
+    let wallet_pubkey = solana_sdk::pubkey::Pubkey::from_str(&wallet.address)
+        .map_err(|e| format!("Invalid wallet address: {}", e))?;
+
+    let rpc_client = get_new_rpc_client();
     let token_accounts = rpc_client
-        .get_all_token_accounts(&wallet.address)
+        .get_all_token_accounts(&wallet_pubkey)
         .await
         .map_err(|e| format!("Failed to fetch token accounts: {}", e))?;
 

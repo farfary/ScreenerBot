@@ -3,6 +3,7 @@ use crate::errors::blockchain::{parse_structured_solana_error, BlockchainError};
 use crate::errors::parse_solana_error;
 use crate::errors::ScreenerBotError;
 use crate::logger::{self, LogTag};
+use crate::rpc::{get_new_rpc_client, RpcClientMethods};
 use chrono::{DateTime, Utc};
 use solana_sdk::pubkey::Pubkey;
 use std::fs;
@@ -311,8 +312,11 @@ pub async fn cleanup_all_empty_atas() -> Result<(u32, Vec<String>), ScreenerBotE
 
 /// Checks wallet balance for SOL
 pub async fn get_sol_balance(wallet_address: &str) -> Result<f64, ScreenerBotError> {
-  let rpc_client = crate::rpc::get_rpc_client();
-  rpc_client.get_sol_balance(wallet_address).await
+  let rpc_client = get_new_rpc_client();
+  rpc_client
+    .get_sol_balance(wallet_address)
+    .await
+    .map_err(ScreenerBotError::from)
 }
 
 /// Checks wallet balance for a specific token (SINGLE ACCOUNT ONLY - use get_total_token_balance for exits)
@@ -333,7 +337,7 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
     ),
   );
 
-  let rpc_client = crate::rpc::get_rpc_client();
+  let rpc_client = get_new_rpc_client();
 
   logger::debug(
     LogTag::Wallet,
@@ -369,7 +373,7 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
           e
         ),
       );
-      Err(e)
+      Err(ScreenerBotError::from(e))
     }
   }
 }
@@ -440,8 +444,11 @@ pub async fn get_total_token_balance(
 pub async fn get_all_token_accounts(
   wallet_address: &str,
 ) -> Result<Vec<crate::rpc::TokenAccountInfo>, ScreenerBotError> {
-  let rpc_client = crate::rpc::get_rpc_client();
-  rpc_client.get_all_token_accounts(wallet_address).await
+  let rpc_client = get_new_rpc_client();
+  rpc_client
+    .get_all_token_accounts_str(wallet_address)
+    .await
+    .map_err(ScreenerBotError::from)
 }
 
 /// Closes a single empty ATA (Associated Token Account) for a specific mint
@@ -827,7 +834,7 @@ pub async fn close_token_account_with_context(
     ),
   );
 
-  let rpc_client = crate::rpc::get_rpc_client();
+  let rpc_client = get_new_rpc_client();
   let is_token_2022 = rpc_client
     .is_token_account_token_2022(&token_account)
     .await
@@ -904,10 +911,11 @@ async fn get_associated_token_account(
   wallet_address: &str,
   mint: &str,
 ) -> Result<String, ScreenerBotError> {
-  let rpc_client = crate::rpc::get_rpc_client();
+  let rpc_client = get_new_rpc_client();
   rpc_client
     .get_associated_token_account(wallet_address, mint)
     .await
+    .map_err(ScreenerBotError::from)
 }
 
 /// Closes ATA using proper Solana SDK for real ATA closing
@@ -1098,8 +1106,11 @@ async fn build_and_send_close_instruction(
  &format!("ATA_BLOCKHASH: fetching recent blockhash via RPC"),
   );
 
-  let rpc_client = crate::rpc::get_rpc_client();
-  let recent_blockhash = rpc_client.get_latest_blockhash().await?;
+  let rpc_client = get_new_rpc_client();
+  let recent_blockhash = rpc_client
+    .get_latest_blockhash()
+    .await
+    .map_err(ScreenerBotError::from)?;
 
   logger::debug(
     LogTag::Wallet,
@@ -1137,7 +1148,9 @@ async fn build_and_send_close_instruction(
 
   let result = rpc_client
     .send_and_confirm_signed_transaction(&transaction)
-    .await;
+    .await
+    .map(|sig| sig.to_string())
+    .map_err(ScreenerBotError::from);
 
   match &result {
     Ok(signature) => {
