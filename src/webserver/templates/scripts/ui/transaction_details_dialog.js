@@ -141,9 +141,6 @@ export class TransactionDetailsDialog {
 
   _getDialogHTML() {
     const tx = this.transactionData;
-    const shortSig = tx.signature
-      ? `${tx.signature.slice(0, 8)}...${tx.signature.slice(-8)}`
-      : "Unknown";
     const typeLabel = this._getTypeLabel(tx.transaction_type);
     const statusBadge = this._getStatusBadge(tx.status, tx.success);
 
@@ -158,7 +155,7 @@ export class TransactionDetailsDialog {
               </div>
               <div class="header-title">
                 <span class="title-main">${typeLabel}</span>
-                <span class="title-sub mono-text">${Utils.escapeHtml(shortSig)}</span>
+                <span class="title-sub mono-text" id="headerSignature">${Utils.escapeHtml(tx.signature)}</span>
               </div>
             </div>
             <div class="header-center">
@@ -175,11 +172,19 @@ export class TransactionDetailsDialog {
                 <a href="https://solscan.io/tx/${Utils.escapeHtml(tx.signature)}" target="_blank" class="action-btn" title="View on Solscan">
                   <i class="icon-external-link"></i>
                 </a>
+                <a href="https://solana.fm/tx/${Utils.escapeHtml(tx.signature)}" target="_blank" class="action-btn" title="View on Solana FM">
+                  <i class="icon-external-link"></i>
+                </a>
               </div>
               <button class="dialog-close" type="button" title="Close (ESC)">
                 <i class="icon-x"></i>
               </button>
             </div>
+          </div>
+          <div class="header-meta-row" id="headerMetaRow">
+            <span class="meta-item" id="metaTimestamp"><i class="icon-clock"></i> <span>—</span></span>
+            <span class="meta-item" id="metaSlot"><i class="icon-layers"></i> Slot: <span>—</span></span>
+            <span class="meta-item" id="metaFee"><i class="icon-zap"></i> Fee: <span>—</span></span>
           </div>
         </div>
 
@@ -256,6 +261,23 @@ export class TransactionDetailsDialog {
     const logsBadge = this.dialogEl?.querySelector("#logsBadge");
     if (logsBadge) {
       logsBadge.textContent = tx.log_messages?.length || 0;
+    }
+
+    // Update metadata row
+    const metaTimestamp = this.dialogEl?.querySelector("#metaTimestamp span");
+    if (metaTimestamp) {
+      const timestamp = tx.timestamp || tx.block_time;
+      metaTimestamp.textContent = timestamp ? Utils.formatTimestamp(timestamp) : "—";
+    }
+
+    const metaSlot = this.dialogEl?.querySelector("#metaSlot span");
+    if (metaSlot) {
+      metaSlot.textContent = tx.slot ? Utils.formatNumber(tx.slot, { decimals: 0 }) : "—";
+    }
+
+    const metaFee = this.dialogEl?.querySelector("#metaFee span");
+    if (metaFee) {
+      metaFee.textContent = tx.fee_sol ? Utils.formatSol(tx.fee_sol, { decimals: 9 }) : "—";
     }
   }
 
@@ -979,15 +1001,15 @@ export class TransactionDetailsDialog {
 
   _buildAddressLink(address, type = "account") {
     if (!address) return "—";
-    const short = this._shortenAddress(address);
     const url =
       type === "token"
         ? `https://solscan.io/token/${address}`
         : `https://solscan.io/account/${address}`;
+    // Show FULL address, not shortened
     return `
-      <span class="address-link">
-        <a href="${url}" target="_blank" class="mono-text" title="${Utils.escapeHtml(address)}">${short}</a>
-        <button class="copy-btn-mini" data-copy="${Utils.escapeHtml(address)}" title="Copy">
+      <span class="address-full">
+        <a href="${url}" target="_blank" rel="noopener" class="mono-text address-link" title="View on Solscan">${Utils.escapeHtml(address)}</a>
+        <button class="copy-btn-mini" data-copy="${Utils.escapeHtml(address)}" title="Copy address">
           <i class="icon-copy"></i>
         </button>
       </span>

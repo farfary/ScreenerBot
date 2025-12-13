@@ -176,6 +176,11 @@
             <i class="action-icon icon-search"></i>
           </button>
 
+          <!-- Billboard -->
+          <button class="header-action-btn" id="billboard-btn" aria-label="Billboard - Featured Tokens" title="Billboard - Featured Tokens">
+            <i class="action-icon icon-megaphone"></i>
+          </button>
+
           <!-- Notifications -->
           <button class="header-action-btn" id="notificationBtn" aria-label="Notifications">
             <i class="action-icon icon-bell"></i>
@@ -453,6 +458,12 @@
       if (searchBtn) {
         searchBtn.addEventListener('click', openDialog);
       }
+    </script>
+
+    <!-- Initialize billboard dialog -->
+    <script type="module">
+      import { initBillboard } from '/scripts/ui/billboard_dialog.js?v={{ASSET_VERSION}}';
+      initBillboard();
     </script>
 
     <!-- Splash, Onboarding, and Setup Controllers (non-module for immediate execution) -->

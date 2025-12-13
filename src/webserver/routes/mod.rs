@@ -7,6 +7,7 @@ use axum::{
 use std::sync::Arc;
 
 pub mod actions;
+pub mod billboard;
 pub mod blacklist;
 pub mod config;
 pub mod connectivity;
@@ -176,6 +177,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .merge(actions::routes())
         .merge(header::routes())
         .merge(ui_state::routes())
+        .merge(billboard::routes())
         .nest("/connectivity", connectivity::routes())
         .nest("/initialization", initialization::routes())
         .nest("/trading", trading::routes())
