@@ -4,7 +4,7 @@
 /// including transaction signing and broadcasting.
 use super::types::{SwapError, SwapParams, SwapResult};
 use crate::logger::{self, LogTag};
-use crate::rpc::{get_new_rpc_client, RpcClientMethods};
+use crate::rpc::{get_rpc_client, RpcClientMethods};
 
 use base64::Engine;
 use solana_sdk::transaction::Transaction;
@@ -37,7 +37,7 @@ impl SwapExecutor {
     let transaction_base64 = base64::engine::general_purpose::STANDARD.encode(&serialized_tx);
 
     // Send transaction using centralized signing service with main wallet
-    let rpc_client = get_new_rpc_client();
+    let rpc_client = get_rpc_client();
 
     logger::info(LogTag::System, "Sending transaction to blockchain...");
 

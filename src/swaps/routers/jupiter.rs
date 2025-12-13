@@ -3,6 +3,7 @@
 use crate::config::with_config;
 use crate::errors::ScreenerBotError;
 use crate::logger::{self, LogTag};
+use crate::rpc::RpcClientMethods;
 use crate::swaps::router::{Quote, QuoteRequest, SwapMode, SwapResult, SwapRouter};
 use crate::tokens::decimals::is_token_2022;
 use crate::tokens::Token;
@@ -403,7 +404,7 @@ impl SwapRouter for JupiterRouter {
         // Transaction is already base64 encoded, send it directly
         let rpc_client = crate::rpc::get_rpc_client();
         let signature = rpc_client
-            .sign_send_and_confirm_transaction(&swap_response.swap_transaction)
+            .sign_send_and_confirm_transaction_simple(&swap_response.swap_transaction)
             .await
             .map_err(|e| {
                 ScreenerBotError::network_error(format!("Transaction send failed: {}", e))

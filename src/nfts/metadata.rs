@@ -5,7 +5,7 @@
 
 use crate::constants::METAPLEX_PROGRAM_ID;
 use crate::logger::{self, LogTag};
-use crate::rpc::{get_new_rpc_client, RpcClientMethods};
+use crate::rpc::{get_rpc_client, RpcClientMethods};
 use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
@@ -274,7 +274,7 @@ pub async fn fetch_nft_metadata(mint: &str) -> Result<NftMetadata, NftMetadataEr
     let metadata_pda = derive_metadata_pda(&mint_pubkey)?;
 
     // Fetch account data from RPC
-    let rpc_client = get_new_rpc_client();
+    let rpc_client = get_rpc_client();
     let account = rpc_client
         .get_account(&metadata_pda)
         .await
@@ -367,7 +367,7 @@ pub async fn fetch_nft_metadata_batch(
     }
 
     // Batch fetch accounts (max 100 at a time for RPC limits)
-    let rpc_client = get_new_rpc_client();
+    let rpc_client = get_rpc_client();
     let pdas: Vec<Pubkey> = pda_to_mint.keys().cloned().collect();
 
     for chunk in pdas.chunks(50) {

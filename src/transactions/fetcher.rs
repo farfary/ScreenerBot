@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use tokio::time::sleep;
 
 use crate::logger::{self, LogTag};
-use crate::rpc::get_rpc_client;
+use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::transactions::{types::*, utils::*};
 
 // =============================================================================
@@ -196,7 +196,10 @@ impl TransactionFetcher {
             .await
             .map_err(|e| format!("RPC signature fetch failed: {}", e))?;
 
-        let signatures: Vec<String> = sig_infos.into_iter().map(|info| info.signature).collect();
+        let signatures: Vec<String> = sig_infos
+            .into_iter()
+            .map(|info| info.signature.to_string())
+            .collect();
 
         Ok(signatures)
     }

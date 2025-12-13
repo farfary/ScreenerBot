@@ -429,6 +429,46 @@ pub trait RpcClientMethods {
         commitment: CommitmentLevel,
         timeout: Duration,
     ) -> impl std::future::Future<Output = Result<Signature, String>> + Send;
+
+    // =========================================================================
+    // Legacy Compatibility Aliases
+    // =========================================================================
+
+    /// Get wallet signatures (legacy alias for get_signatures_for_address)
+    ///
+    /// Provided for backward compatibility with code expecting this method name.
+    fn get_wallet_signatures_main_rpc(
+        &self,
+        wallet_pubkey: &Pubkey,
+        limit: usize,
+        before: Option<&str>,
+    ) -> impl std::future::Future<Output = Result<Vec<SignatureInfo>, String>> + Send;
+
+    /// Get transaction details (legacy API - returns legacy TransactionDetails type)
+    ///
+    /// Provided for backward compatibility with code expecting this method name.
+    /// Uses jsonParsed encoding for proper decoding.
+    fn get_transaction_details(
+        &self,
+        signature: &str,
+    ) -> impl std::future::Future<Output = Result<crate::rpc_legacy::TransactionDetails, String>>
+           + Send;
+
+    /// Sign, send and confirm transaction with main wallet (simple API)
+    ///
+    /// Legacy convenience method that uses default commitment and timeout.
+    /// For more control, use sign_send_and_confirm_with_main_wallet.
+    fn sign_send_and_confirm_transaction_simple(
+        &self,
+        transaction_base64: &str,
+    ) -> impl std::future::Future<Output = Result<Signature, String>> + Send;
+
+    /// Sign, send and confirm with explicit keypair (legacy alias)
+    fn sign_send_and_confirm_with_keypair(
+        &self,
+        transaction_base64: &str,
+        keypair: &Keypair,
+    ) -> impl std::future::Future<Output = Result<Signature, String>> + Send;
 }
 
 impl RpcClientMethods for RpcClient {
@@ -1575,6 +1615,82 @@ impl RpcClientMethods for RpcClient {
         // Delegate to sign_send_and_confirm_transaction
         self.sign_send_and_confirm_transaction(transaction_base64, &keypair, commitment, timeout)
             .await
+    }
+
+    // =========================================================================
+    // Legacy Compatibility Implementations
+    // =========================================================================
+
+    async fn get_wallet_signatures_main_rpc(
+        &self,
+        wallet_pubkey: &Pubkey,
+        limit: usize,
+        before: Option<&str>,
+    ) -> Result<Vec<SignatureInfo>, String> {
+        let before_sig = match before {
+            Some(sig_str) => Some(
+                Signature::from_str(sig_str)
+                    .map_err(|e| format!("Invalid before signature: {}", e))?,
+            ),
+            None => None,
+        };
+        self.get_signatures_for_address(wallet_pubkey, Some(limit), before_sig.as_ref())
+            .await
+    }
+
+    async fn get_transaction_details(
+        &self,
+        signature: &str,
+    ) -> Result<crate::rpc_legacy::TransactionDetails, String> {
+        // Use jsonParsed encoding for proper decoding (required for v0 transactions with LUTs)
+        let params = serde_json::json!([
+            signature,
+            {
+                "encoding": "jsonParsed",
+                "maxSupportedTransactionVersion": 0
+            }
+        ]);
+
+        let result = self
+            .manager
+            .execute_raw("getTransaction", params)
+            .await
+            .map_err(|e| e.to_string())?;
+
+        if result.is_null() {
+            return Err(format!("Transaction not found: {}", signature));
+        }
+
+        serde_json::from_value(result)
+            .map_err(|e| format!("Failed to parse transaction details: {}", e))
+    }
+
+    async fn sign_send_and_confirm_transaction_simple(
+        &self,
+        transaction_base64: &str,
+    ) -> Result<Signature, String> {
+        // Use default commitment and timeout
+        self.sign_send_and_confirm_with_main_wallet(
+            transaction_base64,
+            CommitmentLevel::Confirmed,
+            Duration::from_secs(60),
+        )
+        .await
+    }
+
+    async fn sign_send_and_confirm_with_keypair(
+        &self,
+        transaction_base64: &str,
+        keypair: &Keypair,
+    ) -> Result<Signature, String> {
+        // Use default commitment and timeout
+        self.sign_send_and_confirm_transaction(
+            transaction_base64,
+            keypair,
+            CommitmentLevel::Confirmed,
+            Duration::from_secs(60),
+        )
+        .await
     }
 }
 

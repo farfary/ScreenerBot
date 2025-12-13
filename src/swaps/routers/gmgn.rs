@@ -3,6 +3,7 @@ use crate::config::with_config;
 use crate::constants::SOL_MINT;
 use crate::errors::ScreenerBotError;
 use crate::logger::{self, LogTag};
+use crate::rpc::RpcClientMethods;
 use crate::swaps::router::{Quote, QuoteRequest, SwapResult, SwapRouter};
 use crate::swaps::types::deserialize_optional_string_or_number;
 use crate::tokens::Token;
@@ -297,12 +298,13 @@ impl GmgnRouter {
 
         let rpc_client = crate::rpc::get_rpc_client();
         let signature = rpc_client
-            .sign_send_and_confirm_transaction(&swap_data.raw_tx.swap_transaction)
+            .sign_send_and_confirm_transaction_simple(&swap_data.raw_tx.swap_transaction)
             .await?;
 
+        let sig_str = signature.to_string();
         logger::info(
             LogTag::Swap,
-            &format!("GMGN swap confirmed: {}", &signature[..8]),
+            &format!("GMGN swap confirmed: {}", &sig_str[..8]),
         );
 
         // Parse amounts with proper error handling
@@ -337,7 +339,7 @@ impl GmgnRouter {
             });
 
         crate::events::record_swap_event(
-            &signature,
+            &sig_str,
             input_mint,
             output_mint,
             in_amount,
@@ -347,7 +349,7 @@ impl GmgnRouter {
         )
         .await;
 
-        Ok(signature)
+        Ok(sig_str)
     }
 }
 

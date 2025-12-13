@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tokio::time::{sleep, Duration};
 
 use crate::logger::{self, LogTag};
-use crate::rpc::{get_new_rpc_client, RpcClientMethods};
+use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::tools::database::{
     get_va_session, get_va_swaps, insert_va_session, insert_va_swap, update_va_session_metrics,
     update_va_session_status, update_va_swap_result,
@@ -139,7 +139,7 @@ impl VolumeAggregator {
         }
 
         // Validate wallet balances
-        let rpc_client = get_new_rpc_client();
+        let rpc_client = get_rpc_client();
         let mut valid_wallets = Vec::new();
 
         for wallet in selected_wallets {

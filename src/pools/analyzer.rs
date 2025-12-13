@@ -19,7 +19,7 @@ use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::logger::{self, LogTag};
 use crate::pools::service;
 use crate::rpc::client::RpcClient;
-use crate::rpc::{get_new_rpc_client, RpcClientMethods};
+use crate::rpc::{get_rpc_client, RpcClientMethods};
 
 use solana_sdk::pubkey::Pubkey;
 use std::collections::{HashMap, HashSet};
@@ -116,7 +116,7 @@ impl PoolAnalyzer {
             logger::info(LogTag::PoolAnalyzer, "Pool analyzer task started");
             
             // Get RPC client inside the task
-            let rpc_client = get_new_rpc_client();
+            let rpc_client = get_rpc_client();
 
             loop {
                 tokio::select! {

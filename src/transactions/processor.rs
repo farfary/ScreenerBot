@@ -382,6 +382,9 @@ impl TransactionProcessor {
     transaction.status = TransactionStatus::Confirmed;
     transaction.last_updated = Utc::now();
 
+    // Populate log_messages and instructions from raw_transaction_data
+    transaction.populate_from_raw_data();
+
     Ok(transaction)
   }
 }

@@ -19,7 +19,7 @@ use super::types::{
     UpdateWalletRequest, Wallet, WalletRole, WalletType, WalletWithKey, WalletsSummary,
 };
 use crate::logger::{self, LogTag};
-use crate::rpc::{get_new_rpc_client, RpcClientMethods};
+use crate::rpc::{get_rpc_client, RpcClientMethods};
 
 // =============================================================================
 // GLOBAL STATE
@@ -865,7 +865,7 @@ pub async fn update_wallet_balances(wallet_id: i64) -> Result<usize, String> {
     let wallet_pubkey = solana_sdk::pubkey::Pubkey::from_str(&wallet.address)
         .map_err(|e| format!("Invalid wallet address: {}", e))?;
 
-    let rpc_client = get_new_rpc_client();
+    let rpc_client = get_rpc_client();
     let token_accounts = rpc_client
         .get_all_token_accounts(&wallet_pubkey)
         .await

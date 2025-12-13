@@ -33,11 +33,11 @@ pub fn sol_to_lamports(sol_amount: f64) -> u64 {
 /// Uses a 10-second cache to avoid excessive RPC calls.
 /// Falls back to default ATA rent (2039280 lamports) on errors.
 pub async fn get_ata_rent_from_chain() -> Result<u64, String> {
-    use crate::rpc::compat::get_new_rpc_client;
+    use crate::rpc::compat::get_rpc_client;
     use crate::rpc::RpcClientMethods;
 
     // Use the new client
-    let client = get_new_rpc_client();
+    let client = get_rpc_client();
 
     // ATA data size is 165 bytes
     client.get_minimum_balance_for_rent_exemption(165).await

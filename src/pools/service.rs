@@ -12,7 +12,7 @@ use super::{cache, db, PoolError};
 use crate::config::with_config;
 use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::logger::{self, LogTag};
-use crate::rpc::get_new_rpc_client;
+use crate::rpc::get_rpc_client;
 
 use once_cell::sync::Lazy;
 use solana_sdk::pubkey::Pubkey;
@@ -439,7 +439,7 @@ async fn initialize_service_components() -> Result<(), String> {
   }
 
   // Get RPC provider count for logging
-  let rpc_client = get_new_rpc_client();
+  let rpc_client = get_rpc_client();
   let rpc_urls_count = rpc_client.provider_count().await;
 
   // Initialize pool directory (shared between components)

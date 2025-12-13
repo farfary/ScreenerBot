@@ -1083,7 +1083,7 @@ impl TransactionDatabase {
 
                 let fee_sol: f64 = row.get::<_, Option<f64>>(23)?.unwrap_or(0.0);
 
-                Ok(Transaction {
+                let mut tx = Transaction {
                     signature: row.get(0)?,
                     slot: row.get(1)?,
                     block_time: row.get(2)?,
@@ -1110,7 +1110,7 @@ impl TransactionDatabase {
                     analysis_duration_ms,
                     cached_analysis,
                     last_updated: Utc::now(),
-                    // These require deeper parsing from raw_transaction_data
+                    // These are populated from raw_transaction_data below
                     wallet_lamport_change: 0,
                     wallet_signed: false,
                     log_messages: Vec::new(),
@@ -1122,7 +1122,12 @@ impl TransactionDatabase {
                     calculated_token_price_sol: None,
                     token_symbol: None,
                     token_decimals: None,
-                })
+                };
+                
+                // Populate log_messages and instructions from raw_transaction_data
+                tx.populate_from_raw_data();
+                
+                Ok(tx)
             },
         );
 

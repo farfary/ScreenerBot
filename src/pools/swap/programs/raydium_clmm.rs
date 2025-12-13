@@ -12,7 +12,7 @@ use crate::pools::decoders::raydium_clmm::{ClmmPoolInfo, RaydiumClmmDecoder};
 use crate::pools::swap::executor::SwapExecutor;
 use crate::pools::swap::types::{SwapDirection, SwapError, SwapParams, SwapRequest, SwapResult};
 use crate::pools::AccountData;
-use crate::rpc::{get_new_rpc_client, RpcClientMethods};
+use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::utils::sol_to_lamports;
 
 use solana_sdk::{
@@ -315,7 +315,7 @@ impl RaydiumClmmSwap {
     instructions.push(close_wsol_ix);
 
     // Create transaction
-    let rpc_client = get_new_rpc_client();
+    let rpc_client = get_rpc_client();
     let recent_blockhash = rpc_client
       .get_latest_blockhash()
       .await
@@ -425,7 +425,7 @@ impl RaydiumClmmSwap {
 
   /// Helper functions
   async fn account_exists(pubkey: &Pubkey) -> Result<bool, SwapError> {
-    let rpc_client = get_new_rpc_client();
+    let rpc_client = get_rpc_client();
     match rpc_client.get_account(pubkey).await {
       Ok(Some(_)) => Ok(true),
       Ok(None) => Ok(false),
@@ -435,7 +435,7 @@ impl RaydiumClmmSwap {
 
   /// Determine the correct token program for a mint
   async fn get_token_program_for_mint(mint_address: &str) -> Result<Pubkey, SwapError> {
-    let rpc_client = get_new_rpc_client();
+    let rpc_client = get_rpc_client();
     let mint_pubkey = Pubkey::from_str(mint_address)
       .map_err(|e| SwapError::RpcError(format!("Invalid mint address: {}", e)))?;
 
@@ -455,7 +455,7 @@ impl RaydiumClmmSwap {
   }
 
   async fn get_token_account_balance(account_address: &str) -> Result<u64, SwapError> {
-    let rpc_client = get_new_rpc_client();
+    let rpc_client = get_rpc_client();
     let pubkey = Pubkey::from_str(account_address)
       .map_err(|e| SwapError::RpcError(format!("Invalid account address: {}", e)))?;
 

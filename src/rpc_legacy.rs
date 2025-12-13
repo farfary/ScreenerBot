@@ -5651,8 +5651,11 @@ pub async fn start_rpc_stats_auto_save_service(shutdown: Arc<tokio::sync::Notify
         break;
       }
       _ = interval.tick() => {
+        // Skip silently if RPC client not yet initialized (during startup)
         if let Err(e) = save_global_rpc_stats() {
-          logger::error(LogTag::Rpc, &format!("Auto-save failed: {}", e));
+          if !e.contains("not initialized") {
+            logger::error(LogTag::Rpc, &format!("Auto-save failed: {}", e));
+          }
         }
       }
     }

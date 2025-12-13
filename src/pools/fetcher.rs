@@ -10,7 +10,7 @@ use super::utils::is_sol_mint;
 use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::logger::{self, LogTag};
 use crate::pools::service;
-use crate::rpc::{get_new_rpc_client, RpcClientMethods};
+use crate::rpc::{get_rpc_client, RpcClientMethods};
 
 use futures::future::join_all;
 use solana_sdk::{account::Account, pubkey::Pubkey};
@@ -836,7 +836,7 @@ impl AccountFetcher {
         );
 
         // Fetch accounts using new RPC client
-        let rpc_client = get_new_rpc_client();
+        let rpc_client = get_rpc_client();
         let rpc_start = Instant::now();
         let account_results = match rpc_client.get_multiple_accounts(accounts).await {
             Ok(results) => {

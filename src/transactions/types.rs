@@ -153,6 +153,88 @@ impl Transaction {
       cached_analysis: None,
     }
   }
+
+  /// Populate log_messages and instructions from raw_transaction_data
+  /// Call this after loading from database to hydrate these fields
+  pub fn populate_from_raw_data(&mut self) {
+    if let Some(raw_data) = &self.raw_transaction_data {
+      // Extract log messages from meta.logMessages
+      if let Some(log_messages) = raw_data
+        .get("meta")
+        .and_then(|m| m.get("logMessages"))
+        .and_then(|logs| logs.as_array())
+      {
+        self.log_messages = log_messages
+          .iter()
+          .filter_map(|v| v.as_str().map(|s| s.to_string()))
+          .collect();
+      }
+
+      // Extract instructions from transaction.message.instructions
+      if let Some(instructions) = raw_data
+        .get("transaction")
+        .and_then(|t| t.get("message"))
+        .and_then(|m| m.get("instructions"))
+        .and_then(|i| i.as_array())
+      {
+        self.instructions = instructions
+          .iter()
+          .filter_map(|inst| {
+            let program_id = inst.get("programId")?.as_str()?.to_string();
+            let accounts = inst
+              .get("accounts")
+              .and_then(|a| a.as_array())
+              .map(|arr| {
+                arr
+                  .iter()
+                  .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                  .collect()
+              })
+              .unwrap_or_default();
+            let data = inst.get("data").and_then(|d| d.as_str()).map(|s| s.to_string());
+
+            // Try to determine instruction type from parsed info or program ID
+            let instruction_type = inst
+              .get("parsed")
+              .and_then(|p| p.get("type"))
+              .and_then(|t| t.as_str())
+              .map(|s| s.to_string())
+              .unwrap_or_else(|| Self::infer_instruction_type(&program_id));
+
+            Some(InstructionInfo {
+              program_id,
+              instruction_type,
+              accounts,
+              data,
+            })
+          })
+          .collect();
+
+        // Also populate instruction_info for compatibility
+        if self.instruction_info.is_empty() {
+          self.instruction_info = self.instructions.clone();
+        }
+      }
+    }
+  }
+
+  /// Infer instruction type from program ID
+  fn infer_instruction_type(program_id: &str) -> String {
+    match program_id {
+      "ComputeBudget111111111111111111111111111111" => "ComputeBudget".to_string(),
+      "11111111111111111111111111111111" => "SystemProgram".to_string(),
+      "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" => "TokenProgram".to_string(),
+      "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb" => "Token2022".to_string(),
+      "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL" => "AssociatedTokenAccount".to_string(),
+      "JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4" => "JupiterV6".to_string(),
+      "675kPX9MHTjS2zt1qfr1NYHuzeLXfQM9H24wFSUt1Mp8" => "RaydiumAMM".to_string(),
+      "CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK" => "RaydiumCLMM".to_string(),
+      "CPMMoo8L3F4NbTegBCKVNunggL7H1ZpdTHKxQB5qKP1C" => "RaydiumCPMM".to_string(),
+      "whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc" => "OrcaWhirlpool".to_string(),
+      "LBUZKhRxPF3XUpBCjp4YzTKgLccjZhTSDM9YuVaPwxo" => "MeteoraDLMM".to_string(),
+      _ => "Unknown".to_string(),
+    }
+  }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

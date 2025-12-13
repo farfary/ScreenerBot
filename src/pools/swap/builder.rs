@@ -14,7 +14,7 @@ use crate::logger::{self, LogTag};
 use crate::pools::decoders::PoolDecoder;
 use crate::pools::types::ProgramKind;
 use crate::pools::AccountData;
-use crate::rpc::{get_new_rpc_client, RpcClientMethods};
+use crate::rpc::{get_rpc_client, RpcClientMethods};
 
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
@@ -99,7 +99,7 @@ impl SwapBuilder {
   async fn fetch_pool_data(
     pool_address: &Pubkey,
   ) -> Result<(AccountData, ProgramKind), SwapError> {
-    let rpc_client = get_new_rpc_client();
+    let rpc_client = get_rpc_client();
 
     // Get pool account
     let pool_account = rpc_client

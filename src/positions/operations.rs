@@ -22,7 +22,7 @@ use crate::{
   logger::{self, LogTag},
   pools::get_pool_price,
   pools::PriceResult,
-  rpc::{get_new_rpc_client, RpcClientMethods},
+  rpc::{get_rpc_client, RpcClientMethods},
   swaps::{
     execute_swap_with_fallback, get_best_quote, get_best_quote_for_opening, QuoteRequest,
     SwapMode,
@@ -592,7 +592,7 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
   .await;
 
   // Get block height for expiration
-  let expiry_height = get_new_rpc_client()
+  let expiry_height = get_rpc_client()
     .get_block_height()
     .await
     .map(|h| h + SOLANA_BLOCKHASH_VALIDITY_SLOTS)
@@ -922,7 +922,7 @@ pub async fn close_position_direct(
   .await;
 
   // Get block height for expiration
-  let expiry_height = get_new_rpc_client()
+  let expiry_height = get_rpc_client()
     .get_block_height()
     .await
     .map(|h| h + SOLANA_BLOCKHASH_VALIDITY_SLOTS)
@@ -1140,7 +1140,7 @@ pub async fn partial_close_position(
   let transaction_signature = swap_result.transaction_signature.clone();
 
   let expiry_height =
-    get_new_rpc_client().get_block_height().await.unwrap_or(0) + SOLANA_BLOCKHASH_VALIDITY_SLOTS;
+    get_rpc_client().get_block_height().await.unwrap_or(0) + SOLANA_BLOCKHASH_VALIDITY_SLOTS;
 
   let pending_partial = PendingPartialExit {
     signature: transaction_signature.clone(),
@@ -1333,7 +1333,7 @@ pub async fn add_to_position(token_mint: &str, dca_amount_sol: f64) -> Result<St
   let transaction_signature = swap_result.transaction_signature.clone();
 
   // Pre-compute expiry height for verification + persistence
-  let expiry_height = get_new_rpc_client()
+  let expiry_height = get_rpc_client()
     .get_block_height()
     .await
     .ok()

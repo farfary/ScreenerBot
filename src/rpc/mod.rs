@@ -158,10 +158,16 @@ pub use utils::{
 // Re-exports - Compatibility Layer (get_rpc_client, etc.)
 // ============================================================================
 
-pub use compat::{get_new_rpc_client, init_new_rpc_client, is_new_rpc_initialized};
+pub use compat::{get_rpc_client, init_rpc_client, is_rpc_initialized, try_get_rpc_client};
 
 // ============================================================================
-// Re-exports - Legacy Types (for backward compatibility during migration)
+// Re-exports - Client Type
+// ============================================================================
+
+pub use client::RpcClient;
+
+// ============================================================================
+// Re-exports - Legacy Types (data structures still used throughout codebase)
 // ============================================================================
 
 pub use legacy_types::{
@@ -171,25 +177,16 @@ pub use legacy_types::{
     UiTokenAmount,
     // Legacy stats types (prefer rpc::stats for new code)
     PersistedRpcStats, RpcMinuteBucket, RpcRateLimiter, RpcSessionSnapshot, RpcStats,
-    // Legacy RpcClient (for gradual migration)
-    LegacyRpcClient,
 };
 
 // ============================================================================
-// Global RPC Client Access
+// Re-exports - Legacy Utility Functions (still used by some code)
 // ============================================================================
 
-// Re-export the global client access from rpc_legacy
-// This provides the primary get_rpc_client() function and the legacy RpcClient type
 pub use crate::rpc_legacy::{
-    get_global_rpc_stats, get_rpc_client, init_rpc_client, parse_pubkey,
-    save_global_rpc_stats, spl_token_program_id, start_rpc_stats_auto_save_service,
-    // The legacy RpcClient type used by all existing code
-    RpcClient,
+    get_global_rpc_stats, parse_pubkey, save_global_rpc_stats, spl_token_program_id,
+    start_rpc_stats_auto_save_service,
 };
-
-// Re-export new RpcClient type under different name to avoid confusion
-pub use client::RpcClient as NewRpcClient;
 
 // ============================================================================
 // Convenience Functions
@@ -199,7 +196,7 @@ pub use client::RpcClient as NewRpcClient;
 ///
 /// Returns the primary configured RPC URL with sensitive parts masked.
 pub async fn get_rpc_url() -> String {
-    if let Some(client) = compat::try_get_new_rpc_client() {
+    if let Some(client) = compat::try_get_rpc_client() {
         client.primary_url_masked().await
     } else {
         String::from("(not initialized)")
@@ -217,7 +214,7 @@ pub fn get_ws_url() -> Result<String, crate::errors::ScreenerBotError> {
 ///
 /// Performs a health check on the RPC connection.
 pub async fn is_rpc_healthy() -> bool {
-    if let Some(client) = compat::try_get_new_rpc_client() {
+    if let Some(client) = compat::try_get_rpc_client() {
         client.get_health().await.is_ok()
     } else {
         false
@@ -227,10 +224,8 @@ pub async fn is_rpc_healthy() -> bool {
 /// Get RPC stats for API response
 ///
 /// Returns aggregated RPC statistics suitable for API responses.
-pub async fn get_new_rpc_stats() -> Option<stats::RpcStatsResponse> {
-    compat::try_get_new_rpc_client().map(|client| {
-        // Use block_on for sync contexts, or return a future
-        // For now, we create a simple stats from the manager
+pub async fn get_rpc_stats() -> Option<stats::RpcStatsResponse> {
+    compat::try_get_rpc_client().map(|client| {
         tokio::task::block_in_place(|| {
             tokio::runtime::Handle::current().block_on(client.get_stats())
         })
@@ -241,7 +236,7 @@ pub async fn get_new_rpc_stats() -> Option<stats::RpcStatsResponse> {
 ///
 /// Returns detailed health information for each configured provider.
 pub async fn get_all_provider_health() -> Vec<client::ProviderHealthInfo> {
-    if let Some(client) = compat::try_get_new_rpc_client() {
+    if let Some(client) = compat::try_get_rpc_client() {
         client.get_provider_health().await
     } else {
         Vec::new()

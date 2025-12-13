@@ -12,7 +12,7 @@ use std::str::FromStr;
 use crate::config::with_config;
 use crate::constants::SOL_MINT;
 use crate::logger::{self, LogTag};
-use crate::rpc::get_rpc_client;
+use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::swaps::registry::get_registry;
 use crate::swaps::router::{Quote, QuoteRequest, SwapMode};
 use crate::wallets::WalletWithKey;
@@ -228,5 +228,5 @@ async fn execute_swap_with_keypair(
         .await
         .map_err(|e| format!("Transaction failed: {}", e))?;
 
-    Ok(signature)
+    Ok(signature.to_string())
 }

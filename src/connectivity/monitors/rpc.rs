@@ -1,7 +1,7 @@
 use crate::config::get_config_clone;
 use crate::connectivity::monitor::EndpointMonitor;
 use crate::connectivity::types::{EndpointCriticality, FallbackStrategy, HealthCheckResult};
-use crate::rpc::{get_new_rpc_client, RpcClientMethods};
+use crate::rpc::{get_rpc_client, RpcClientMethods};
 use async_trait::async_trait;
 
 /// RPC endpoint monitor - checks health of all configured RPC providers
@@ -33,7 +33,7 @@ impl EndpointMonitor for RpcMonitor {
     }
 
     async fn check_health(&self) -> HealthCheckResult {
-        let rpc_client = get_new_rpc_client();
+        let rpc_client = get_rpc_client();
         
         // Get provider health info from new RPC architecture
         let provider_health = rpc_client.get_provider_health().await;
