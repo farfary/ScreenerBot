@@ -6,6 +6,7 @@ import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { TradeActionDialog } from "../ui/trade_action_dialog.js";
+import { PositionDetailsDialog } from "../ui/position_details_dialog.js";
 
 const SUB_TABS = [
   { id: "open", label: '<i class="icon-trending-up"></i> Open' },
@@ -41,6 +42,7 @@ function createLifecycle() {
   let poller = null;
   let tabBar = null;
   let tradeDialog = null;
+  let positionDetailsDialog = null;
   let walletBalance = 0;
 
   const state = {
@@ -352,8 +354,9 @@ function createLifecycle() {
 
   return {
     init(ctx) {
-      // Initialize trade dialog
+      // Initialize dialogs
       tradeDialog = new TradeActionDialog();
+      positionDetailsDialog = new PositionDetailsDialog();
 
       // Sub-tabs
       tabBar = new TabBar({
@@ -516,6 +519,25 @@ function createLifecycle() {
       if (containerEl) {
         containerEl.addEventListener("click", handleRowActionClick);
         ctx.onDispose(() => containerEl.removeEventListener("click", handleRowActionClick));
+
+        // Row click handler for position details dialog
+        const handleRowClick = (e) => {
+          // Skip if clicking on action buttons, links, or buttons
+          if (e.target.closest(".row-action") || e.target.closest("a") || e.target.closest("button"))
+            return;
+
+          const row = e.target.closest("tr[data-row-id]");
+          if (!row) return;
+
+          const mint = row.dataset.rowId;
+          const position = table?.getData()?.find((p) => p.mint === mint);
+          if (position && positionDetailsDialog) {
+            positionDetailsDialog.show(position);
+          }
+        };
+
+        containerEl.addEventListener("click", handleRowClick);
+        ctx.onDispose(() => containerEl.removeEventListener("click", handleRowClick));
       }
     },
 
@@ -560,6 +582,10 @@ function createLifecycle() {
       if (tradeDialog) {
         tradeDialog.destroy();
         tradeDialog = null;
+      }
+      if (positionDetailsDialog) {
+        positionDetailsDialog.destroy();
+        positionDetailsDialog = null;
       }
       if (table) {
         table.destroy();

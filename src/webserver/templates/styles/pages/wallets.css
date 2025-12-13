@@ -182,50 +182,6 @@
 }
 
 /* =============================================================================
-   Subtabs Container
-   ============================================================================= */
-
-.wallets-tabs-container {
-  display: flex;
-  gap: var(--spacing-xs);
-  padding: var(--spacing-xs);
-  border-radius: var(--radius-md);
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-}
-
-.wallets-tabs-container .sub-tab {
-  flex: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacing-xs);
-  padding: 10px var(--spacing-md);
-  border: none;
-  border-radius: var(--radius-sm);
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 0.8rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.wallets-tabs-container .sub-tab i {
-  font-size: 0.85rem;
-}
-
-.wallets-tabs-container .sub-tab:hover {
-  color: var(--text-primary);
-  background: var(--hover-bg);
-}
-
-.wallets-tabs-container .sub-tab[aria-selected="true"] {
-  background: var(--primary-color);
-  color: #fff;
-}
-
-/* =============================================================================
    Tab Panels
    ============================================================================= */
 
@@ -1207,14 +1163,6 @@
 
   .wallets-stats {
     grid-template-columns: 1fr;
-  }
-
-  .wallets-tabs-container {
-    flex-direction: column;
-  }
-
-  .wallets-tabs-container .sub-tab {
-    justify-content: flex-start;
   }
 
   .modal-dialog {

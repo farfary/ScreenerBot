@@ -46,6 +46,8 @@ const ADVANCED_CHART_STYLES: &str = include_str!("templates/styles/ui/advanced_c
 const TOKEN_DETAILS_DIALOG_STYLES: &str = include_str!("templates/styles/token_details_dialog.css");
 const TRANSACTION_DETAILS_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/transaction_details_dialog.css");
+const POSITION_DETAILS_DIALOG_STYLES: &str =
+    include_str!("templates/styles/ui/position_details_dialog.css");
 const SETTINGS_DIALOG_STYLES: &str = include_str!("templates/styles/settings_dialog.css");
 const STATUS_BAR_STYLES: &str = include_str!("templates/styles/status_bar.css");
 const HINT_POPOVER_STYLES: &str = include_str!("templates/styles/ui/hint_popover.css");
@@ -107,6 +109,9 @@ pub const TOKEN_DETAILS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/token_details_dialog.js");
 pub const TRANSACTION_DETAILS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/transaction_details_dialog.js");
+pub const POSITION_DETAILS_DIALOG_UI: &str =
+    include_str!("templates/scripts/ui/position_details_dialog.js");
+pub const TOOL_FAVORITES_UI: &str = include_str!("templates/scripts/ui/tool_favorites.js");
 pub const CONTEXT_MENU_UI: &str = include_str!("templates/scripts/ui/context_menu.js");
 pub const ADVANCED_CHART_UI: &str = include_str!("templates/scripts/ui/advanced_chart.js");
 pub const SETTINGS_DIALOG_UI: &str = include_str!("templates/scripts/ui/settings_dialog.js");
@@ -208,6 +213,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         ADVANCED_CHART_STYLES,
         TOKEN_DETAILS_DIALOG_STYLES,
         TRANSACTION_DETAILS_DIALOG_STYLES,
+        POSITION_DETAILS_DIALOG_STYLES,
         SETTINGS_DIALOG_STYLES,
         HINT_POPOVER_STYLES,
         SEARCH_DIALOG_STYLES,

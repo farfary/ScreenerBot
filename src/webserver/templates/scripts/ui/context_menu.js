@@ -40,6 +40,7 @@ const ICONS = {
   clipboard: "icon-clipboard",
   link: "icon-link",
   x: "icon-x",
+  zap: "icon-zap",
 };
 
 /**
@@ -58,6 +59,10 @@ class ContextMenuManager {
     this.hideTimeout = null;
     this.isVisible = false;
     this.isTransitioning = false;
+
+    // Favorites cache for quick lookup
+    this.favoritesCache = new Map(); // mint -> boolean
+    this.favoritesCacheLoaded = false;
 
     // Check if devtools are enabled (set by Tauri/backend)
     this.devtoolsEnabled = window.__SCREENERBOT_DEVTOOLS__ === true;
@@ -330,23 +335,22 @@ class ContextMenuManager {
       action: () => this._viewTokenDetails(context),
     });
 
+    // Favorites toggle
+    const isFavorite = this._isFavorite(context.mint);
+    items.push({
+      type: "item",
+      label: isFavorite ? "Remove from Favorites" : "Add to Favorites",
+      icon: "star",
+      className: isFavorite ? "favorite-active" : "",
+      action: () => this._toggleFavorite(context, isFavorite),
+    });
+
     items.push({
       type: "item",
       label: "View on Explorer",
       icon: "externalLink",
       submenu: [
-        {
-          type: "item",
-          label: "Solscan",
-          icon: "globe",
-          action: () => this._openExplorer(context.mint, "solscan"),
-        },
-        {
-          type: "item",
-          label: "Solana FM",
-          icon: "globe",
-          action: () => this._openExplorer(context.mint, "solanafm"),
-        },
+        { type: "header", label: "Trading" },
         {
           type: "item",
           label: "DexScreener",
@@ -358,6 +362,40 @@ class ContextMenuManager {
           label: "Birdeye",
           icon: "eye",
           action: () => this._openExplorer(context.mint, "birdeye"),
+        },
+        {
+          type: "item",
+          label: "Photon",
+          icon: "zap",
+          action: () => this._openExplorer(context.mint, "photon"),
+        },
+        { type: "separator" },
+        { type: "header", label: "Analysis" },
+        {
+          type: "item",
+          label: "RugCheck",
+          icon: "shield",
+          action: () => this._openExplorer(context.mint, "rugcheck"),
+        },
+        {
+          type: "item",
+          label: "Bubblemaps",
+          icon: "globe",
+          action: () => this._openExplorer(context.mint, "bubblemaps"),
+        },
+        { type: "separator" },
+        { type: "header", label: "Explorers" },
+        {
+          type: "item",
+          label: "Solscan",
+          icon: "globe",
+          action: () => this._openExplorer(context.mint, "solscan"),
+        },
+        {
+          type: "item",
+          label: "Solana FM",
+          icon: "globe",
+          action: () => this._openExplorer(context.mint, "solanafm"),
         },
       ],
     });
@@ -423,11 +461,56 @@ class ContextMenuManager {
       action: () => this._viewTokenDetails(context),
     });
 
+    // Favorites toggle
+    const isFavorite = this._isFavorite(context.mint);
+    items.push({
+      type: "item",
+      label: isFavorite ? "Remove from Favorites" : "Add to Favorites",
+      icon: "star",
+      className: isFavorite ? "favorite-active" : "",
+      action: () => this._toggleFavorite(context, isFavorite),
+    });
+
     items.push({
       type: "item",
       label: "View on Explorer",
       icon: "externalLink",
       submenu: [
+        { type: "header", label: "Trading" },
+        {
+          type: "item",
+          label: "DexScreener",
+          icon: "chart",
+          action: () => this._openExplorer(context.mint, "dexscreener"),
+        },
+        {
+          type: "item",
+          label: "Birdeye",
+          icon: "eye",
+          action: () => this._openExplorer(context.mint, "birdeye"),
+        },
+        {
+          type: "item",
+          label: "Photon",
+          icon: "zap",
+          action: () => this._openExplorer(context.mint, "photon"),
+        },
+        { type: "separator" },
+        { type: "header", label: "Analysis" },
+        {
+          type: "item",
+          label: "RugCheck",
+          icon: "shield",
+          action: () => this._openExplorer(context.mint, "rugcheck"),
+        },
+        {
+          type: "item",
+          label: "Bubblemaps",
+          icon: "globe",
+          action: () => this._openExplorer(context.mint, "bubblemaps"),
+        },
+        { type: "separator" },
+        { type: "header", label: "Explorers" },
         {
           type: "item",
           label: "Solscan",
@@ -436,9 +519,9 @@ class ContextMenuManager {
         },
         {
           type: "item",
-          label: "DexScreener",
-          icon: "chart",
-          action: () => this._openExplorer(context.mint, "dexscreener"),
+          label: "Solana FM",
+          icon: "globe",
+          action: () => this._openExplorer(context.mint, "solanafm"),
         },
       ],
     });
@@ -589,10 +672,15 @@ class ContextMenuManager {
   /**
    * Show context menu at position
    */
-  show(x, y, context) {
+  async show(x, y, context) {
     // Prevent showing while transitioning
     if (this.isTransitioning) {
       return;
+    }
+
+    // Load favorites cache for token/position contexts
+    if (context.type === "token" || context.type === "position") {
+      await this._loadFavoritesCache();
     }
 
     // Immediately hide any existing menu
@@ -1247,8 +1335,96 @@ class ContextMenuManager {
       solanafm: `https://solana.fm/address/${mint}`,
       dexscreener: `https://dexscreener.com/solana/${mint}`,
       birdeye: `https://birdeye.so/token/${mint}?chain=solana`,
+      photon: `https://photon-sol.tinyastro.io/en/lp/${mint}`,
+      rugcheck: `https://rugcheck.xyz/tokens/${mint}`,
+      bubblemaps: `https://app.bubblemaps.io/sol/token/${mint}`,
     };
     window.open(urls[explorer] || urls.solscan, "_blank");
+  }
+
+  /**
+   * Load favorites cache from API
+   */
+  async _loadFavoritesCache() {
+    if (this.favoritesCacheLoaded) return;
+    try {
+      const response = await fetch("/api/tokens/favorites");
+      if (response.ok) {
+        const data = await response.json();
+        const favorites = data.favorites || [];
+        this.favoritesCache.clear();
+        favorites.forEach((fav) => this.favoritesCache.set(fav.mint, true));
+        this.favoritesCacheLoaded = true;
+      } else {
+        console.warn("[ContextMenu] Failed to load favorites:", response.status);
+      }
+    } catch (e) {
+      console.warn("[ContextMenu] Failed to load favorites cache:", e);
+    }
+  }
+
+  /**
+   * Check if a token is in favorites
+   */
+  _isFavorite(mint) {
+    return this.favoritesCache.get(mint) === true;
+  }
+
+  /**
+   * Update favorites cache after toggle
+   */
+  _updateFavoriteCache(mint, isFavorite) {
+    if (isFavorite) {
+      this.favoritesCache.set(mint, true);
+    } else {
+      this.favoritesCache.delete(mint);
+    }
+  }
+
+  /**
+   * Toggle favorite status for a token
+   */
+  async _toggleFavorite(context, currentlyFavorite) {
+    try {
+      if (currentlyFavorite) {
+        const response = await fetch(
+          `/api/tokens/favorites/${encodeURIComponent(context.mint)}`,
+          { method: "DELETE" }
+        );
+        if (!response.ok) throw new Error("Failed to remove favorite");
+        this._updateFavoriteCache(context.mint, false);
+        window.showToast?.(
+          `${context.symbol || "Token"} removed from favorites`,
+          "success"
+        );
+      } else {
+        const response = await fetch("/api/tokens/favorites", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            mint: context.mint,
+            symbol: context.symbol || null,
+            name: context.name || null,
+            logo_url: context.icon || null,
+          }),
+        });
+        if (!response.ok) throw new Error("Failed to add favorite");
+        this._updateFavoriteCache(context.mint, true);
+        window.showToast?.(
+          `${context.symbol || "Token"} added to favorites`,
+          "success"
+        );
+      }
+
+      // Emit event for other UI components
+      window.dispatchEvent(
+        new CustomEvent("screenerbot:favorites-changed", {
+          detail: { mint: context.mint, isFavorite: !currentlyFavorite },
+        })
+      );
+    } catch (error) {
+      window.showToast?.(error.message || "Failed to update favorites", "error");
+    }
   }
 
   async _copyToClipboard(text, label) {

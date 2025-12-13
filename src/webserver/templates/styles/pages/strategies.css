@@ -1960,6 +1960,309 @@
   line-height: 1.4;
 }
 
+/* ==========================================================================
+   Filter Tabs
+   ========================================================================== */
+.filter-tabs {
+  display: flex;
+  padding: 0.5rem;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--surface-color);
+}
+
+.filter-tab {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.filter-tab:hover {
+  background: var(--hover-color);
+  color: var(--text-color);
+}
+
+.filter-tab.active {
+  background: var(--primary-color);
+  color: white;
+}
+
+/* ==========================================================================
+   Strategy Type Badge (Editor Header)
+   ========================================================================== */
+.strategy-type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.strategy-type-badge i {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.strategy-type-badge.entry {
+  background: rgb(16, 185, 129, 0.15);
+  color: var(--success-color);
+  border: 1px solid rgb(16, 185, 129, 0.3);
+}
+
+.strategy-type-badge.exit {
+  background: rgb(239, 68, 68, 0.15);
+  color: var(--danger-color);
+  border: 1px solid rgb(239, 68, 68, 0.3);
+}
+
+/* ==========================================================================
+   Enable Toggle (Editor Header)
+   ========================================================================== */
+.enable-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  cursor: pointer;
+  user-select: none;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  transition: background 0.2s ease;
+}
+
+.enable-toggle:hover {
+  background: var(--hover-color);
+}
+
+.enable-toggle input {
+  display: none;
+}
+
+.toggle-track {
+  width: 36px;
+  height: 20px;
+  background: var(--border-color);
+  border-radius: 10px;
+  position: relative;
+  transition: background 0.2s ease;
+}
+
+.toggle-track::after {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: 50%;
+  top: 2px;
+  left: 2px;
+  transition: transform 0.2s ease;
+  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.2);
+}
+
+.enable-toggle input:checked + .toggle-track {
+  background: var(--success, #10b981);
+}
+
+.enable-toggle input:checked + .toggle-track::after {
+  transform: translateX(16px);
+}
+
+.toggle-label {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.enable-toggle input:checked ~ .toggle-label {
+  color: var(--success, #10b981);
+}
+
+/* ==========================================================================
+   Strategy Type Icon (Sidebar List)
+   ========================================================================== */
+.strategy-type-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.strategy-type-icon.entry {
+  background: rgb(16, 185, 129, 0.15);
+  color: var(--success-color);
+}
+
+.strategy-type-icon.exit {
+  background: rgb(239, 68, 68, 0.15);
+  color: var(--danger-color);
+}
+
+.strategy-item-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.strategy-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ==========================================================================
+   Create Strategy Modal
+   ========================================================================== */
+.create-strategy-modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+
+.create-strategy-modal.active {
+  display: flex;
+}
+
+.create-strategy-modal .modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+}
+
+.create-strategy-modal .modal-content {
+  position: relative;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 1.5rem;
+  max-width: 480px;
+  width: 90%;
+  box-shadow: 0 20px 50px rgb(0, 0, 0, 0.3);
+  animation: modal-appear 0.2s ease;
+}
+
+@keyframes modal-appear {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.create-strategy-modal h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-color);
+  margin: 0 0 0.5rem;
+}
+
+.create-strategy-modal .modal-desc {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  margin: 0 0 1.25rem;
+}
+
+.strategy-type-cards {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.type-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1.25rem 1rem;
+  background: var(--background-color);
+  border: 2px solid var(--border-color);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.type-card:hover {
+  border-color: var(--primary-color);
+  background: var(--hover-color);
+  transform: translateY(-2px);
+}
+
+.type-card:active {
+  transform: translateY(0);
+}
+
+.type-card .type-icon {
+  font-size: 1.75rem;
+  line-height: 1;
+}
+
+.type-card .type-icon i {
+  font-size: 28px;
+}
+
+.type-card[data-type="ENTRY"] .type-icon {
+  color: var(--success-color);
+}
+
+.type-card[data-type="EXIT"] .type-icon {
+  color: var(--danger-color);
+}
+
+.type-card .type-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.type-card .type-desc {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.create-strategy-modal .btn-secondary {
+  width: 100%;
+  padding: 0.625rem;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+}
+
+.create-strategy-modal .btn-secondary:hover {
+  background: var(--hover-color);
+  color: var(--text-color);
+}
+
 /* Responsive */
 @media (width <= 1400px) {
   .strategies-page {

@@ -10,6 +10,12 @@
       </div>
     </div>
 
+    <div class="filter-tabs">
+      <button class="filter-tab active" data-filter="all">All</button>
+      <button class="filter-tab" data-filter="entry">Entry</button>
+      <button class="filter-tab" data-filter="exit">Exit</button>
+    </div>
+
     <div class="sidebar-content">
       <div class="strategy-list" id="strategy-list">
         <div class="empty-state">
@@ -39,34 +45,27 @@
     <header class="editor-header">
       <div class="header-main">
         <div class="strategy-identity">
-          <i class="icon-file-edit strategy-icon"></i>
+          <span class="strategy-type-badge entry" id="strategy-type-badge">
+            <i class="icon-trending-up"></i> ENTRY
+          </span>
           <input
             type="text"
             id="strategy-name"
             placeholder="Strategy Name"
             class="strategy-name-input"
           />
-          <div class="strategy-type-toggle" id="strategy-type-toggle">
-            <button class="type-option active" data-type="entry">
-              <i class="icon-log-in"></i>
-              <span>Entry</span>
-            </button>
-            <button class="type-option" data-type="exit">
-              <i class="icon-log-out"></i>
-              <span>Exit</span>
-            </button>
-          </div>
-          <div class="strategy-status-badge draft" id="strategy-status">Draft</div>
         </div>
         <div class="header-actions">
+          <label class="enable-toggle">
+            <input type="checkbox" id="strategy-enabled-toggle" />
+            <span class="toggle-track"></span>
+            <span class="toggle-label">Enable</span>
+          </label>
           <button class="btn" id="validate-strategy" title="Validate Strategy">
             <i class="icon-check"></i> Validate
           </button>
           <button class="btn primary" id="save-strategy" title="Save Strategy">
             <i class="icon-save"></i> Save
-          </button>
-          <button class="btn success" id="deploy-strategy" title="Deploy Strategy">
-            <i class="icon-rocket"></i> Deploy
           </button>
         </div>
       </div>
@@ -147,6 +146,28 @@
         <button class="btn" id="cancel-parameter-edit">Cancel</button>
         <button class="btn primary" id="apply-parameter-edit">Apply Changes</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Create Strategy Type Selection Modal -->
+  <div class="create-strategy-modal" id="create-strategy-modal">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <h3>Create New Strategy</h3>
+      <p class="modal-desc">Choose the type of strategy you want to create:</p>
+      <div class="strategy-type-cards">
+        <button class="type-card" data-type="ENTRY">
+          <span class="type-icon"><i class="icon-trending-up"></i></span>
+          <span class="type-name">Entry Strategy</span>
+          <span class="type-desc">Define conditions for when to BUY a token</span>
+        </button>
+        <button class="type-card" data-type="EXIT">
+          <span class="type-icon"><i class="icon-trending-down"></i></span>
+          <span class="type-name">Exit Strategy</span>
+          <span class="type-desc">Define conditions for when to SELL a token</span>
+        </button>
+      </div>
+      <button class="btn btn-secondary" id="cancel-create-strategy">Cancel</button>
     </div>
   </div>
 </div>

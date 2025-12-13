@@ -1,0 +1,771 @@
+/* Position Details Dialog Styles */
+
+/* =============================================================================
+   BASE DIALOG STRUCTURE - Full Screen Desktop App Style
+   Dialog covers full screen with consistent background including traffic lights
+   Content area respects macOS title bar (28px) and status bar (24px)
+   ============================================================================= */
+
+.position-details-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.position-details-dialog.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Title bar area - same background as dialog content for seamless look */
+.position-details-dialog::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  background: var(--bg-secondary);
+  z-index: 1;
+}
+
+/* =============================================================================
+   CONTENT CONTAINER
+   ============================================================================= */
+
+.position-details-content {
+  position: relative;
+  margin-top: 28px;
+  margin-bottom: 24px;
+  background: var(--bg-primary);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  width: 100%;
+  flex: 1;
+  max-width: none;
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: pdd-fade-in 0.25s ease-out;
+  z-index: 2;
+}
+
+@keyframes pdd-fade-in {
+  0% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+/* =============================================================================
+   HEADER
+   ============================================================================= */
+
+.position-details-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  gap: 16px;
+  min-height: 64px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+/* Token Info Section */
+.pdd-token-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  min-width: 200px;
+}
+
+.pdd-token-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.pdd-token-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.pdd-token-logo .logo-placeholder {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.pdd-token-symbol {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.pdd-token-name {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 400;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Price Section */
+.pdd-price {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+  flex: 1;
+  text-align: center;
+}
+
+/* Header Right Section */
+.pdd-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+/* Badges */
+.pdd-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.pdd-badge--open {
+  background: var(--success-alpha-20);
+  color: var(--success-color);
+}
+
+.pdd-badge--closed {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.pdd-badge--dca {
+  background: var(--primary-alpha-20);
+  color: var(--primary-color);
+}
+
+.pdd-badge--partial {
+  background: var(--warning-alpha-20);
+  color: var(--warning-color);
+}
+
+/* Close Button */
+.pdd-close-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: var(--text-secondary);
+  width: 30px;
+  height: 30px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.pdd-close-btn:hover {
+  background: var(--danger-alpha-20);
+  color: var(--danger);
+}
+
+.pdd-close-btn svg,
+.pdd-close-btn i {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+}
+
+/* =============================================================================
+   TAB BAR
+   ============================================================================= */
+
+.position-details-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.pdd-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.pdd-tab i {
+  font-size: 14px;
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+.pdd-tab:hover {
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+}
+
+.pdd-tab:hover i {
+  opacity: 0.9;
+}
+
+.pdd-tab.active {
+  color: var(--primary-color);
+  background: var(--primary-alpha-10);
+  font-weight: 600;
+}
+
+.pdd-tab.active i {
+  opacity: 1;
+}
+
+/* Active indicator line */
+.pdd-tab.active::after {
+  content: "";
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 2px;
+  background: var(--primary-color);
+  border-radius: 2px;
+}
+
+/* =============================================================================
+   BODY & TAB CONTENT
+   ============================================================================= */
+
+.position-details-body {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg-primary);
+}
+
+.pdd-tab-content {
+  position: absolute;
+  inset: 0;
+  padding: 16px;
+  overflow-y: auto;
+  display: none;
+}
+
+.pdd-tab-content.active {
+  display: block;
+}
+
+/* =============================================================================
+   CARDS GRID (Overview Tab)
+   ============================================================================= */
+
+.pdd-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-md);
+}
+
+@media (width <= 1100px) {
+  .pdd-cards-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (width <= 600px) {
+  .pdd-cards-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.pdd-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.pdd-card-title {
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: var(--spacing-xs);
+}
+
+.pdd-card-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+}
+
+.pdd-card-label {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+.pdd-card-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+.pdd-card-value.positive {
+  color: var(--success-color);
+}
+
+.pdd-card-value.negative {
+  color: var(--danger);
+}
+
+/* =============================================================================
+   TIMELINE (History Tab)
+   ============================================================================= */
+
+.pdd-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.pdd-timeline-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-md);
+  border-left: 3px solid var(--border-color);
+  transition: background 0.15s ease;
+}
+
+.pdd-timeline-item:hover {
+  background: var(--bg-card-hover);
+}
+
+.pdd-timeline-item.entry {
+  border-left-color: var(--success-color);
+}
+
+.pdd-timeline-item.exit {
+  border-left-color: var(--danger);
+}
+
+.pdd-timeline-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-sm);
+}
+
+.pdd-timeline-type {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.pdd-timeline-item.entry .pdd-timeline-type {
+  background: var(--success-alpha-20);
+  color: var(--success-color);
+}
+
+.pdd-timeline-item.exit .pdd-timeline-type {
+  background: var(--danger-alpha-20);
+  color: var(--danger);
+}
+
+.pdd-timeline-time {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+}
+
+.pdd-timeline-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.pdd-timeline-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  font-size: 0.8rem;
+}
+
+.pdd-timeline-row-label {
+  color: var(--text-secondary);
+}
+
+.pdd-timeline-row-value {
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-weight: 500;
+}
+
+.pdd-timeline-sig {
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  color: var(--link-color);
+  cursor: pointer;
+  text-decoration: none;
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  margin-top: var(--spacing-xs);
+  display: inline-block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.pdd-timeline-sig:hover {
+  color: var(--link-hover, var(--primary-hover));
+  background: var(--primary-alpha-10);
+}
+
+/* =============================================================================
+   TRANSACTIONS TAB
+   ============================================================================= */
+
+.pdd-tx-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+}
+
+.pdd-tx-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: var(--spacing-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  transition: background 0.15s ease;
+}
+
+.pdd-tx-item:hover {
+  background: var(--bg-card-hover);
+}
+
+.pdd-tx-sig {
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  color: var(--link-color);
+  cursor: pointer;
+  text-decoration: none;
+  max-width: 300px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: color 0.15s ease;
+}
+
+.pdd-tx-sig:hover {
+  color: var(--link-hover, var(--primary-hover));
+}
+
+.pdd-tx-status {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+}
+
+.pdd-tx-status.confirmed {
+  background: var(--success-alpha-20);
+  color: var(--success-color);
+}
+
+.pdd-tx-status.pending {
+  background: var(--warning-alpha-20);
+  color: var(--warning-color);
+}
+
+.pdd-tx-status.failed {
+  background: var(--danger-alpha-20);
+  color: var(--danger);
+}
+
+/* State Timeline Section */
+.pdd-state-timeline {
+  margin-top: var(--spacing-lg);
+  padding-top: var(--spacing-lg);
+  border-top: 1px solid var(--border-color);
+}
+
+.pdd-state-timeline-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-md);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* =============================================================================
+   ACTIONS
+   ============================================================================= */
+
+.pdd-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.pdd-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.pdd-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.pdd-action-btn.primary {
+  background: var(--primary-color);
+  color: var(--text-primary);
+}
+
+.pdd-action-btn.primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.pdd-action-btn.success {
+  color: var(--success-color);
+  background: var(--success-alpha-10);
+  border-color: var(--success-alpha-20);
+}
+
+.pdd-action-btn.success:hover:not(:disabled) {
+  background: var(--success-alpha-20);
+  border-color: var(--success-color);
+}
+
+.pdd-action-btn.danger {
+  color: var(--danger);
+  background: var(--danger-alpha-10);
+  border-color: var(--danger-alpha-20);
+}
+
+.pdd-action-btn.danger:hover:not(:disabled) {
+  background: var(--danger-alpha-20);
+  border-color: var(--danger);
+}
+
+.pdd-action-btn.secondary {
+  color: var(--text-secondary);
+  background: transparent;
+  border-color: var(--border-color);
+}
+
+.pdd-action-btn.secondary:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.pdd-action-btn i,
+.pdd-action-btn svg {
+  width: 14px;
+  height: 14px;
+  font-size: 14px;
+}
+
+/* =============================================================================
+   UTILITIES
+   ============================================================================= */
+
+.pdd-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 200px;
+  color: var(--text-secondary);
+  text-align: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-lg);
+}
+
+.pdd-empty i {
+  font-size: 32px;
+  opacity: 0.5;
+}
+
+.pdd-empty p {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
+.pdd-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  gap: var(--spacing-sm);
+}
+
+.pdd-loading::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: pdd-spin 0.8s linear infinite;
+}
+
+@keyframes pdd-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* =============================================================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================================================= */
+
+@media (width <= 800px) {
+  .position-details-header {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .pdd-token-info {
+    min-width: auto;
+  }
+
+  .pdd-price {
+    order: 3;
+    flex: 1 0 100%;
+    text-align: left;
+    font-size: 1rem;
+  }
+
+  .pdd-header-right {
+    margin-left: auto;
+  }
+
+  .pdd-tab-content {
+    padding: 12px;
+  }
+
+  .pdd-actions {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
+@media (width <= 500px) {
+  .pdd-token-name {
+    display: none;
+  }
+
+  .position-details-tabs {
+    padding: 6px 12px;
+  }
+
+  .pdd-tab {
+    padding: 6px 10px;
+    font-size: 0.7rem;
+  }
+
+  .pdd-tab i {
+    display: none;
+  }
+}

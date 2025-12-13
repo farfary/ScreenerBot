@@ -1,6 +1,7 @@
 //! Tools API routes for wallet utilities, token operations, and trading tools
 
 use axum::{response::Response, routing::{get, post}, Json, Router};
+use chrono::DateTime;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
@@ -204,6 +205,127 @@ impl From<&VolumeSession> for VolumeSessionResponse {
 }
 
 // =============================================================================
+// Volume Aggregator Session History Types
+// =============================================================================
+
+/// Response for VA session history
+#[derive(Debug, Serialize)]
+pub struct VaSessionHistoryResponse {
+    pub sessions: Vec<VaSessionSummary>,
+    pub analytics: VaAnalyticsSummaryResponse,
+    pub total: usize,
+}
+
+/// Summary of a single VA session for history view
+#[derive(Debug, Serialize)]
+pub struct VaSessionSummary {
+    pub session_id: String,
+    pub token_mint: String,
+    pub target_volume_sol: f64,
+    pub actual_volume_sol: f64,
+    pub successful_buys: i32,
+    pub successful_sells: i32,
+    pub failed_count: i32,
+    pub success_rate: f64,
+    pub status: String,
+    pub started_at: Option<String>,
+    pub ended_at: Option<String>,
+    pub duration_secs: i64,
+    pub created_at: String,
+    pub can_resume: bool,
+}
+
+/// Analytics summary response
+#[derive(Debug, Serialize)]
+pub struct VaAnalyticsSummaryResponse {
+    pub total_sessions: i64,
+    pub total_volume_sol: f64,
+    pub avg_success_rate: f64,
+    pub completed_sessions: i64,
+    pub failed_sessions: i64,
+    pub aborted_sessions: i64,
+}
+
+// =============================================================================
+// Tool Favorites Types
+// =============================================================================
+
+/// Response for tool favorites list
+#[derive(Debug, Serialize)]
+pub struct ToolFavoritesListResponse {
+    pub favorites: Vec<crate::tools::database::ToolFavoriteRow>,
+    pub total: usize,
+}
+
+/// Request to add a tool favorite
+#[derive(Debug, Deserialize)]
+pub struct AddToolFavoriteRequest {
+    pub mint: String,
+    pub symbol: Option<String>,
+    pub name: Option<String>,
+    pub logo_url: Option<String>,
+    pub tool_type: String,
+    pub config_json: Option<String>,
+    pub label: Option<String>,
+    pub notes: Option<String>,
+}
+
+/// Request to update a tool favorite
+#[derive(Debug, Deserialize)]
+pub struct UpdateToolFavoriteRequest {
+    pub config_json: Option<String>,
+    pub label: Option<String>,
+    pub notes: Option<String>,
+}
+
+impl From<crate::tools::database::VaSessionRow> for VaSessionSummary {
+    fn from(row: crate::tools::database::VaSessionRow) -> Self {
+        let total_ops = row.successful_buys + row.successful_sells + row.failed_count;
+        let success_rate = if total_ops > 0 {
+            (row.successful_buys + row.successful_sells) as f64 / total_ops as f64 * 100.0
+        } else {
+            0.0
+        };
+
+        // Calculate duration
+        let duration_secs = match (&row.started_at, &row.ended_at) {
+            (Some(start), Some(end)) => {
+                if let (Ok(s), Ok(e)) = (
+                    DateTime::parse_from_rfc3339(start),
+                    DateTime::parse_from_rfc3339(end),
+                ) {
+                    (e - s).num_seconds()
+                } else {
+                    0
+                }
+            }
+            _ => 0,
+        };
+
+        // Can resume if not completed and has remaining volume
+        let can_resume = matches!(row.status.as_str(), "failed" | "aborted")
+            && row.actual_volume_sol < row.target_volume_sol;
+
+        Self {
+            session_id: row.session_id,
+            token_mint: row.token_mint,
+            target_volume_sol: row.target_volume_sol,
+            actual_volume_sol: row.actual_volume_sol,
+            successful_buys: row.successful_buys,
+            successful_sells: row.successful_sells,
+            failed_count: row.failed_count,
+            success_rate,
+            status: row.status,
+            started_at: row.started_at,
+            ended_at: row.ended_at,
+            duration_secs,
+            created_at: row.created_at,
+            can_resume,
+        }
+    }
+}
+
+// =============================================================================
 // Routes
 // =============================================================================
 
@@ -222,6 +344,13 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/volume-aggregator/start", post(start_volume_aggregator))
         .route("/volume-aggregator/status", get(get_volume_aggregator_status))
         .route("/volume-aggregator/stop", post(stop_volume_aggregator))
+        .route("/volume-aggregator/sessions", get(get_volume_aggregator_sessions))
+        // Tool Favorites
+        .route("/favorites", get(get_favorites_list))
+        .route("/favorites", post(add_favorite))
+        .route("/favorites/:id", axum::routing::patch(update_favorite))
+        .route("/favorites/:id", axum::routing::delete(delete_favorite))
+        .route("/favorites/:id/use", post(mark_favorite_used))
 }
 
 // =============================================================================
@@ -505,6 +634,9 @@ async fn start_volume_aggregator(Json(request): Json<StartVolumeAggregatorReques
         ),
     );
 
+    // Mark tool as started (pauses background token updates)
+    crate::global::tool_started();
+
     // Spawn execution task
     tokio::spawn(async move {
         let result = aggregator.execute().await;
@@ -528,6 +660,9 @@ async fn start_volume_aggregator(Json(request): Json<StartVolumeAggregatorReques
             }
         }
         state.abort_flag = None;
+
+        // Mark tool as finished (resumes background token updates)
+        crate::global::tool_finished();
     });
 
     success_response(serde_json::json!({
@@ -577,5 +712,192 @@ async fn stop_volume_aggregator() -> Response {
             "Cannot stop - no abort flag available",
             None,
         )
+    }
+}
+
+/// Get volume aggregator session history
+async fn get_volume_aggregator_sessions() -> Response {
+    use crate::tools::database::{get_recent_va_sessions, get_va_sessions_analytics};
+
+    // Fetch recent sessions (limit 50)
+    let sessions = match get_recent_va_sessions(50) {
+        Ok(rows) => rows
+            .into_iter()
+            .map(VaSessionSummary::from)
+            .collect::<Vec<_>>(),
+        Err(e) => {
+            logger::error(LogTag::Tools, &format!("Failed to get VA sessions: {}", e));
+            return error_response(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "DATABASE_ERROR",
+                "Failed to fetch session history",
+                Some(&e),
+            );
+        }
+    };
+
+    // Fetch analytics
+    let analytics = match get_va_sessions_analytics() {
+        Ok(summary) => VaAnalyticsSummaryResponse {
+            total_sessions: summary.total_sessions,
+            total_volume_sol: summary.total_volume_sol,
+            avg_success_rate: summary.avg_success_rate,
+            completed_sessions: summary.completed_sessions,
+            failed_sessions: summary.failed_sessions,
+            aborted_sessions: summary.aborted_sessions,
+        },
+        Err(e) => {
+            logger::warning(
+                LogTag::Tools,
+                &format!("Failed to get VA analytics: {}", e),
+            );
+            VaAnalyticsSummaryResponse {
+                total_sessions: 0,
+                total_volume_sol: 0.0,
+                avg_success_rate: 0.0,
+                completed_sessions: 0,
+                failed_sessions: 0,
+                aborted_sessions: 0,
+            }
+        }
+    };
+
+    let total = sessions.len();
+
+    success_response(VaSessionHistoryResponse {
+        sessions,
+        analytics,
+        total,
+    })
+}
+
+// =============================================================================
+// Tool Favorites Handlers
+// =============================================================================
+
+use axum::extract::Path;
+use crate::tools::database::{
+    get_tool_favorites, upsert_tool_favorite, remove_tool_favorite,
+    update_tool_favorite as db_update_tool_favorite, increment_tool_favorite_use,
+};
+
+/// Get all tool favorites (optionally filtered by tool_type query param)
+async fn get_favorites_list(
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Response {
+    let tool_type = params.get("tool_type").map(|s| s.as_str());
+    
+    match get_tool_favorites(tool_type) {
+        Ok(favorites) => {
+            let total = favorites.len();
+            success_response(ToolFavoritesListResponse { favorites, total })
+        }
+        Err(e) => error_response(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "DATABASE_ERROR",
+            "Failed to get favorites",
+            Some(&e),
+        ),
+    }
+}
+
+/// Add a new tool favorite
+async fn add_favorite(Json(request): Json<AddToolFavoriteRequest>) -> Response {
+    // Validate tool_type
+    let valid_types = ["volume_aggregator", "buy_multi", "sell_multi", "token_watch"];
+    if !valid_types.contains(&request.tool_type.as_str()) {
+        return error_response(
+            axum::http::StatusCode::BAD_REQUEST,
+            "INVALID_TOOL_TYPE",
+            "Invalid tool type",
+            Some(&format!("Must be one of: {:?}", valid_types)),
+        );
+    }
+
+    match upsert_tool_favorite(
+        &request.mint,
+        request.symbol.as_deref(),
+        request.name.as_deref(),
+        request.logo_url.as_deref(),
+        &request.tool_type,
+        request.config_json.as_deref(),
+        request.label.as_deref(),
+        request.notes.as_deref(),
+    ) {
+        Ok(id) => {
+            logger::info(
+                LogTag::Tools,
+                &format!("Added tool favorite: {} for {}", request.mint, request.tool_type),
+            );
+            success_response(serde_json::json!({ "id": id, "success": true }))
+        }
+        Err(e) => error_response(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "DATABASE_ERROR",
+            "Failed to add favorite",
+            Some(&e),
+        ),
+    }
+}
+
+/// Update a tool favorite
+async fn update_favorite(
+    Path(id): Path<i64>,
+    Json(request): Json<UpdateToolFavoriteRequest>,
+) -> Response {
+    match db_update_tool_favorite(
+        id,
+        request.config_json.as_deref(),
+        request.label.as_deref(),
+        request.notes.as_deref(),
+    ) {
+        Ok(true) => success_response(serde_json::json!({ "success": true })),
+        Ok(false) => error_response(
+            axum::http::StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "Favorite not found",
+            None,
+        ),
+        Err(e) => error_response(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "DATABASE_ERROR",
+            "Failed to update favorite",
+            Some(&e),
+        ),
+    }
+}
+
+/// Delete a tool favorite
+async fn delete_favorite(Path(id): Path<i64>) -> Response {
+    match remove_tool_favorite(id) {
+        Ok(true) => {
+            logger::info(LogTag::Tools, &format!("Removed tool favorite: {}", id));
+            success_response(serde_json::json!({ "success": true }))
+        }
+        Ok(false) => error_response(
+            axum::http::StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            "Favorite not found",
+            None,
+        ),
+        Err(e) => error_response(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "DATABASE_ERROR",
+            "Failed to delete favorite",
+            Some(&e),
+        ),
+    }
+}
+
+/// Mark a favorite as used (increment counter)
+async fn mark_favorite_used(Path(id): Path<i64>) -> Response {
+    match increment_tool_favorite_use(id) {
+        Ok(()) => success_response(serde_json::json!({ "success": true })),
+        Err(e) => error_response(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "DATABASE_ERROR",
+            "Failed to update use count",
+            Some(&e),
+        ),
     }
 }

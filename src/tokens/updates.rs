@@ -39,6 +39,11 @@ use tokio::sync::{Mutex, Notify, Semaphore};
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
+/// Check if updates should be paused due to active tools
+fn should_skip_for_tools() -> bool {
+    crate::global::are_tools_active()
+}
+
 // ============================================================================
 // RATE LIMIT COORDINATOR
 // ============================================================================
@@ -807,6 +812,14 @@ pub fn start_update_loop(
 
 /// Seed market data for tokens that have never been updated
 async fn update_uninitialized_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
+    if should_skip_for_tools() {
+        logger::debug(
+            LogTag::Tokens,
+            "Token update (uninitialized) skipped - tools active (reducing RPC contention)",
+        );
+        return;
+    }
+
     const MAX_INITIAL_BATCH: usize = 30;
 
     let tokens = match db.get_tokens_without_market_data(MAX_INITIAL_BATCH) {
@@ -885,6 +898,14 @@ async fn update_uninitialized_tokens(db: &TokenDatabase, coordinator: &RateLimit
 
 /// Update open position tokens (tokens with active trading positions)
 async fn update_open_position_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
+    if should_skip_for_tools() {
+        logger::debug(
+            LogTag::Tokens,
+            "Token update (open positions) skipped - tools active (reducing RPC contention)",
+        );
+        return;
+    }
+
     let tokens = match db.get_tokens_by_priority(Priority::OpenPosition.to_value(), 200) {
         Ok(tokens) => tokens,
         Err(e) => {
@@ -961,6 +982,14 @@ async fn update_open_position_tokens(db: &TokenDatabase, coordinator: &RateLimit
 
 /// Update pool-tracked tokens (Pool Service tracked tokens)
 async fn update_pool_tracked_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
+    if should_skip_for_tools() {
+        logger::debug(
+            LogTag::Tokens,
+            "Token update (pool tracked) skipped - tools active (reducing RPC contention)",
+        );
+        return;
+    }
+
     let tokens = match db.get_tokens_by_priority(Priority::PoolTracked.to_value(), 200) {
         Ok(tokens) => tokens,
         Err(e) => {
@@ -1047,6 +1076,14 @@ async fn update_pool_tracked_tokens(db: &TokenDatabase, coordinator: &RateLimitC
 
 /// Update filter-passed tokens (tokens that passed filtering criteria)
 async fn update_filter_passed_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
+    if should_skip_for_tools() {
+        logger::debug(
+            LogTag::Tokens,
+            "Token update (filter passed) skipped - tools active (reducing RPC contention)",
+        );
+        return;
+    }
+
     let tokens = match db.get_tokens_by_priority(Priority::FilterPassed.to_value(), 200) {
         Ok(tokens) => tokens,
         Err(e) => {
@@ -1121,6 +1158,14 @@ async fn update_filter_passed_tokens(db: &TokenDatabase, coordinator: &RateLimit
 
 /// Update background tokens (oldest non-blacklisted tokens)
 async fn update_background_tokens(db: &TokenDatabase, coordinator: &RateLimitCoordinator) {
+    if should_skip_for_tools() {
+        logger::debug(
+            LogTag::Tokens,
+            "Token update (background) skipped - tools active (reducing RPC contention)",
+        );
+        return;
+    }
+
     // Get oldest 30 non-blacklisted tokens (batch size)
     let tokens = match db.get_oldest_non_blacklisted(30) {
         Ok(tokens) => tokens,

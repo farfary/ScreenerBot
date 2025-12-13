@@ -17,6 +17,7 @@ use crate::{
   },
   logger::{self, LogTag},
   pools, positions,
+  sol_price::get_sol_price,
   tokens::cleanup,
   tokens::database::get_global_database,
   tokens::favorites::{AddFavoriteRequest, FavoriteToken, UpdateFavoriteRequest},
@@ -240,6 +241,97 @@ pub struct OhlcvPoint {
   pub low: f64,
   pub close: f64,
   pub volume: f64,
+}
+
+// =============================================================================
+// TOKEN ANALYSIS RESPONSE TYPES
+// =============================================================================
+
+/// Comprehensive token analysis response for the Token Analyzer feature
+#[derive(Debug, Serialize)]
+pub struct TokenAnalysisResponse {
+  pub success: bool,
+  pub overview: TokenOverview,
+  pub security: Option<SecurityAnalysis>,
+  pub market: Option<MarketAnalysis>,
+  pub liquidity: Option<LiquidityAnalysis>,
+  pub fetched_at: String,
+}
+
+/// Token overview information
+#[derive(Debug, Serialize)]
+pub struct TokenOverview {
+  pub mint: String,
+  pub symbol: Option<String>,
+  pub name: Option<String>,
+  pub description: Option<String>,
+  pub logo_url: Option<String>,
+  pub decimals: u8,
+  pub supply: Option<String>,
+  pub price_sol: Option<f64>,
+  pub price_usd: Option<f64>,
+  pub total_holders: Option<i64>,
+  pub website: Option<String>,
+  pub twitter: Option<String>,
+  pub telegram: Option<String>,
+}
+
+/// Security analysis data
+#[derive(Debug, Serialize)]
+pub struct SecurityAnalysis {
+  /// Raw risk score from Rugcheck (0-150000+, HIGHER = MORE RISKY)
+  pub score: Option<i32>,
+  /// Normalized safety score from Rugcheck (0-100, HIGHER = SAFER)
+  pub normalized_score: Option<i32>,
+  pub mint_authority: Option<String>,
+  pub freeze_authority: Option<String>,
+  pub has_transfer_fee: bool,
+  pub is_mutable: bool,
+  pub top_holders_pct: Option<f64>,
+  pub risks: Vec<AnalysisSecurityRisk>,
+}
+
+/// Security risk item for analysis
+#[derive(Debug, Serialize)]
+pub struct AnalysisSecurityRisk {
+  pub name: String,
+  pub level: String,
+  pub description: String,
+}
+
+/// Market analysis data
+#[derive(Debug, Serialize)]
+pub struct MarketAnalysis {
+  pub price_sol: f64,
+  pub price_usd: Option<f64>,
+  pub volume_h24: Option<f64>,
+  pub volume_h6: Option<f64>,
+  pub volume_h1: Option<f64>,
+  pub price_change_h24: Option<f64>,
+  pub price_change_h6: Option<f64>,
+  pub price_change_h1: Option<f64>,
+  pub txns_buys_h24: Option<i64>,
+  pub txns_sells_h24: Option<i64>,
+  pub fdv: Option<f64>,
+  pub market_cap: Option<f64>,
+}
+
+/// Liquidity analysis data
+#[derive(Debug, Serialize)]
+pub struct LiquidityAnalysis {
+  pub total_liquidity_sol: f64,
+  pub total_liquidity_usd: Option<f64>,
+  pub pool_count: i32,
+  pub pools: Vec<AnalysisPoolInfo>,
+}
+
+/// Pool info for liquidity analysis
+#[derive(Debug, Serialize)]
+pub struct AnalysisPoolInfo {
+  pub address: String,
+  pub dex: String,
+  pub liquidity_sol: f64,
+  pub is_canonical: bool,
 }
 
 fn normalize_optional_text(value: Option<String>) -> Option<String> {
@@ -562,6 +654,7 @@ pub fn routes() -> Router<Arc<AppState>> {
     .route("/tokens/favorites/:mint", delete(remove_favorite))
     .route("/tokens/favorites/:mint", patch(update_favorite))
     .route("/tokens/:mint", get(get_token_detail))
+    .route("/tokens/:mint/analysis", get(get_token_analysis))
     .route("/tokens/:mint/refresh", post(refresh_token_data))
     .route("/tokens/:mint/ohlcv", get(get_token_ohlcv))
     .route("/tokens/:mint/ohlcv/refresh", post(refresh_token_ohlcv))
@@ -814,6 +907,226 @@ async fn search_tokens(
       ))
     }
   }
+}
+
+/// GET /api/tokens/:mint/analysis
+///
+/// Comprehensive token analysis endpoint for the Token Analyzer feature.
+/// Aggregates data from multiple sources: token database, pool service, security data.
+async fn get_token_analysis(
+  Path(mint): Path<String>,
+) -> Result<Json<TokenAnalysisResponse>, (StatusCode, Json<serde_json::Value>)> {
+  let request_start = std::time::Instant::now();
+
+  logger::debug(
+    LogTag::Webserver,
+    &format!("Token analysis requested: mint={}", mint),
+  );
+
+  // Fetch token from database
+  let token = match crate::tokens::get_full_token_async(&mint).await {
+    Ok(Some(t)) => t,
+    Ok(None) => {
+      logger::debug(
+        LogTag::Webserver,
+        &format!("Token not found: mint={}", mint),
+      );
+      return Err((
+        StatusCode::NOT_FOUND,
+        Json(serde_json::json!({
+          "success": false,
+          "error": "Token not found"
+        })),
+      ));
+    }
+    Err(e) => {
+      logger::warning(
+        LogTag::Webserver,
+        &format!("Failed to fetch token: mint={} error={}", mint, e),
+      );
+      return Err((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(serde_json::json!({
+          "success": false,
+          "error": format!("Failed to fetch token: {}", e)
+        })),
+      ));
+    }
+  };
+
+  // Get pool data for liquidity analysis
+  let pool_descriptors = pools::get_token_pools(&mint);
+  let canonical_pool_id = pool_descriptors.first().map(|p| p.pool_id);
+
+  // Get real-time pool price
+  let pool_price = pools::get_pool_price(&mint);
+
+  // Get SOL/USD price for conversions (get_sol_price returns f64 directly)
+  let sol_price_usd = get_sol_price();
+
+  // Calculate effective prices (prefer pool price over cached token price)
+  let effective_price_sol = pool_price
+    .as_ref()
+    .map(|p| p.price_sol)
+    .unwrap_or(token.price_sol);
+  let effective_price_usd = effective_price_sol * sol_price_usd;
+
+  // Build overview
+  let overview = TokenOverview {
+    mint: token.mint.clone(),
+    symbol: Some(token.symbol.clone()),
+    name: Some(token.name.clone()),
+    description: normalize_optional_text(token.description.clone()),
+    logo_url: token.image_url.clone(),
+    decimals: token.decimals,
+    supply: token.supply.clone(),
+    price_sol: if effective_price_sol > 0.0 {
+      Some(effective_price_sol)
+    } else {
+      None
+    },
+    price_usd: if effective_price_usd > 0.0 {
+      Some(effective_price_usd)
+    } else {
+      None
+    },
+    total_holders: token.total_holders,
+    website: token.websites.first().map(|w| w.url.clone()),
+    twitter: token
+      .socials
+      .iter()
+      .find(|s| s.link_type.to_lowercase() == "twitter")
+      .map(|s| s.url.clone()),
+    telegram: token
+      .socials
+      .iter()
+      .find(|s| s.link_type.to_lowercase() == "telegram")
+      .map(|s| s.url.clone()),
+  };
+
+  // Build security analysis
+  let security = if token.security_score.is_some()
+    || token.security_score_normalised.is_some()
+    || !token.security_risks.is_empty()
+  {
+    let has_transfer_fee = token.transfer_fee_pct.map(|f| f > 0.0).unwrap_or(false);
+    // is_mutable approximated by presence of mint_authority
+    let is_mutable = token.mint_authority.is_some();
+
+    Some(SecurityAnalysis {
+      score: token.security_score,
+      normalized_score: token.security_score_normalised,
+      mint_authority: token.mint_authority.clone(),
+      freeze_authority: token.freeze_authority.clone(),
+      has_transfer_fee,
+      is_mutable,
+      top_holders_pct: if !token.top_holders.is_empty() {
+        Some(token.top_holders.iter().take(10).map(|h| h.pct).sum())
+      } else {
+        None
+      },
+      risks: token
+        .security_risks
+        .iter()
+        .map(|r| AnalysisSecurityRisk {
+          name: r.name.clone(),
+          level: r.level.clone(),
+          description: r.description.clone(),
+        })
+        .collect(),
+    })
+  } else {
+    None
+  };
+
+  // Build market analysis using the effective_price_sol computed earlier
+  let has_market_data = effective_price_sol > 0.0 || token.volume_h24.is_some();
+
+  let market = if has_market_data {
+    Some(MarketAnalysis {
+      price_sol: effective_price_sol,
+      price_usd: Some(effective_price_usd),
+      volume_h24: token.volume_h24,
+      volume_h6: token.volume_h6,
+      volume_h1: token.volume_h1,
+      price_change_h24: token.price_change_h24,
+      price_change_h6: token.price_change_h6,
+      price_change_h1: token.price_change_h1,
+      txns_buys_h24: token.txns_h24_buys,
+      txns_sells_h24: token.txns_h24_sells,
+      fdv: token.fdv,
+      market_cap: token.market_cap,
+    })
+  } else {
+    None
+  };
+
+  // Build liquidity analysis from pool descriptors
+  let liquidity = if !pool_descriptors.is_empty() {
+    let total_liquidity_sol: f64 = pool_descriptors
+      .iter()
+      .map(|p| {
+        // liquidity_usd / sol_price gives approximate SOL liquidity
+        if p.liquidity_usd > 0.0 && sol_price_usd > 0.0 {
+          p.liquidity_usd / sol_price_usd
+        } else {
+          0.0
+        }
+      })
+      .sum();
+
+    let total_liquidity_usd: f64 = pool_descriptors.iter().map(|p| p.liquidity_usd).sum();
+
+    let pools: Vec<AnalysisPoolInfo> = pool_descriptors
+      .iter()
+      .map(|p| {
+        let liquidity_sol = if p.liquidity_usd > 0.0 && sol_price_usd > 0.0 {
+          p.liquidity_usd / sol_price_usd
+        } else {
+          0.0
+        };
+        AnalysisPoolInfo {
+          address: p.pool_id.to_string(),
+          dex: p.program_kind.display_name().to_string(),
+          liquidity_sol,
+          is_canonical: canonical_pool_id
+            .map(|c| c == p.pool_id)
+            .unwrap_or(false),
+        }
+      })
+      .collect();
+
+    Some(LiquidityAnalysis {
+      total_liquidity_sol,
+      total_liquidity_usd: if total_liquidity_usd > 0.0 {
+        Some(total_liquidity_usd)
+      } else {
+        None
+      },
+      pool_count: pool_descriptors.len() as i32,
+      pools,
+    })
+  } else {
+    None
+  };
+
+  let elapsed_ms = request_start.elapsed().as_millis();
+  logger::debug(
+    LogTag::Webserver,
+    &format!(
+      "Token analysis completed: mint={} elapsed={}ms",
+      mint, elapsed_ms
+    ),
+  );
+
+  Ok(Json(TokenAnalysisResponse {
+    success: true,
+    overview,
+    security,
+    market,
+    liquidity,
+    fetched_at: chrono::Utc::now().to_rfc3339(),
+  }))
 }
 
 /// GET /api/tokens/list

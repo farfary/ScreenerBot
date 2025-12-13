@@ -86,8 +86,35 @@ pub struct PositionsStatsResponse {
 }
 
 #[derive(Debug, Serialize)]
+pub struct EntryRecordResponse {
+    pub id: Option<i64>,
+    pub timestamp: i64,
+    pub amount: u64,
+    pub price: f64,
+    pub sol_spent: f64,
+    pub transaction_signature: String,
+    pub is_dca: bool,
+    pub fees_sol: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ExitRecordResponse {
+    pub id: Option<i64>,
+    pub timestamp: i64,
+    pub amount: u64,
+    pub price: f64,
+    pub sol_received: f64,
+    pub transaction_signature: String,
+    pub is_partial: bool,
+    pub percentage: f64,
+    pub fees_sol: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
 pub struct PositionDetailResponse {
     pub position: Option<PositionDetail>,
+    pub entries: Vec<EntryRecordResponse>,
+    pub exits: Vec<ExitRecordResponse>,
     pub executions: Vec<PositionExecutionRow>,
     pub transactions: Vec<PositionTransactionSummary>,
     pub state_history: Vec<PositionStateTimelineEntry>,
@@ -293,9 +320,12 @@ async fn get_position_details(Path(key): Path<String>) -> Response {
             let executions = build_execution_rows(&position);
             let transactions = build_transaction_summaries(&position).await;
             let state_history = load_state_history_entries(&position).await;
+            let (entries, exits) = load_entry_exit_history(&position).await;
 
             success_response(PositionDetailResponse {
                 position: Some(detail),
+                entries,
+                exits,
                 executions,
                 transactions,
                 state_history,
@@ -500,6 +530,66 @@ async fn load_state_history_entries(
             Vec::new()
         }
     }
+}
+
+/// Load entry and exit history for a position
+async fn load_entry_exit_history(
+    position: &positions::Position,
+) -> (Vec<EntryRecordResponse>, Vec<ExitRecordResponse>) {
+    let Some(id) = position.id else {
+        return (Vec::new(), Vec::new());
+    };
+
+    // Load entries
+    let entries = match positions::get_entry_history(id).await {
+        Ok(records) => records
+            .into_iter()
+            .map(|r| EntryRecordResponse {
+                id: r.id,
+                timestamp: r.timestamp.timestamp(),
+                amount: r.amount,
+                price: r.price,
+                sol_spent: r.sol_spent,
+                transaction_signature: r.transaction_signature,
+                is_dca: r.is_dca,
+                fees_sol: r.fees_lamports.map(lamports_to_sol),
+            })
+            .collect(),
+        Err(err) => {
+            logger::debug(
+                LogTag::Webserver,
+                &format!("Failed to load entry history for position {}: {}", id, err),
+            );
+            Vec::new()
+        }
+    };
+
+    // Load exits
+    let exits = match positions::get_exit_history(id).await {
+        Ok(records) => records
+            .into_iter()
+            .map(|r| ExitRecordResponse {
+                id: r.id,
+                timestamp: r.timestamp.timestamp(),
+                amount: r.amount,
+                price: r.price,
+                sol_received: r.sol_received,
+                transaction_signature: r.transaction_signature,
+                is_partial: r.is_partial,
+                percentage: r.percentage,
+                fees_sol: r.fees_lamports.map(lamports_to_sol),
+            })
+            .collect(),
+        Err(err) => {
+            logger::debug(
+                LogTag::Webserver,
+                &format!("Failed to load exit history for position {}: {}", id, err),
+            );
+            Vec::new()
+        }
+    };
+
+    (entries, exits)
 }
 
 impl PositionTransactionSummary {

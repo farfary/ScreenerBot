@@ -164,6 +164,11 @@ pub async fn run_discovery_once(
     db: &TokenDatabase,
     coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<DiscoveryStats, String> {
+    // Check if tools are running - skip discovery to reduce RPC contention
+    if crate::global::are_tools_active() {
+        return Ok(DiscoveryStats::skipped("tools active (reducing RPC contention)"));
+    }
+
     let start = Instant::now();
     let cfg = config::get_config_clone();
     let discovery_cfg = &cfg.tokens.discovery;

@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, AtomicU32};
 
 // Startup timestamp to track when the bot started for trading logic
 pub static STARTUP_TIME: Lazy<DateTime<Utc>> = Lazy::new(|| Utc::now());
@@ -141,5 +141,52 @@ pub fn validate_security_token(token: &str) -> bool {
     Some(stored) => stored == token,
     None => false, // No token generated yet
   }
+}
+
+// ================================================================================================
+// TOOLS EXECUTION STATE - PAUSES BACKGROUND SERVICES WHEN TOOLS ARE RUNNING
+// ================================================================================================
+
+/// Number of tools currently running (0 = none, >0 = pause background services)
+pub static TOOLS_ACTIVE_COUNT: AtomicU32 = AtomicU32::new(0);
+
+/// Mark a tool as started (increments counter, pauses background services)
+pub fn tool_started() {
+  let prev = TOOLS_ACTIVE_COUNT.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+  if prev == 0 {
+    crate::logger::info(
+      crate::logger::LogTag::Tools,
+      "Tool started - pausing token discovery and market updates",
+    );
+  }
+}
+
+/// Mark a tool as finished (decrements counter, resumes when no tools running)
+pub fn tool_finished() {
+  let prev = TOOLS_ACTIVE_COUNT.fetch_sub(1, std::sync::atomic::Ordering::SeqCst);
+  if prev == 1 {
+    crate::logger::info(
+      crate::logger::LogTag::Tools,
+      "All tools finished - resuming token discovery and market updates",
+    );
+  } else if prev == 0 {
+    // Safety: called when already 0, log warning
+    crate::logger::warning(
+      crate::logger::LogTag::Tools,
+      "tool_finished called when no tools were active",
+    );
+    // Reset to 0 to prevent underflow
+    TOOLS_ACTIVE_COUNT.store(0, std::sync::atomic::Ordering::SeqCst);
+  }
+}
+
+/// Check if any tools are currently running
+pub fn are_tools_active() -> bool {
+  TOOLS_ACTIVE_COUNT.load(std::sync::atomic::Ordering::SeqCst) > 0
+}
+
+/// Get count of active tools (for diagnostics)
+pub fn active_tools_count() -> u32 {
+  TOOLS_ACTIVE_COUNT.load(std::sync::atomic::Ordering::SeqCst)
 }
 

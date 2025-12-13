@@ -1284,6 +1284,7 @@
   // Keep window.Utils for legacy compatibility during migration
   if (typeof window !== "undefined") {
     window.Utils = Utils;
+    window.showToast = showToast;
   }
 
   return Utils;

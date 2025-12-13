@@ -543,12 +543,21 @@ Secondary wallets are not used by auto-trading unless explicitly configured.`,
       title: "Wallet Cleanup Tool",
       content: `**Reclaim SOL from Empty Token Accounts**
 
-Every token you interact with creates an Associated Token Account (ATA) that requires ~0.002 SOL in rent.
+**What are ATAs?**
+Associated Token Accounts (ATAs) are Solana accounts that hold your tokens. Each token you interact with creates an ATA that requires ~0.002 SOL in rent.
+
+**Why clean up empty ATAs?**
+• Reclaim rent (~0.002 SOL per ATA)
+• Active traders can accumulate hundreds of empty ATAs
+• 100 empty ATAs = ~0.2 SOL reclaimable
 
 **How it works:**
 • Scans your wallet for ATAs with zero balance
 • Shows total reclaimable SOL amount
 • Closes empty accounts to recover rent
+
+**Auto Cleanup:**
+When enabled, automatically scans and closes empty ATAs every 5 minutes in the background.
 
 **Important:**
 • Only closes accounts with exactly 0 balance

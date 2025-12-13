@@ -16,7 +16,6 @@ export function createLifecycle() {
 
   // Editor state (vertical cards)
   let conditions = []; // [{ type, name, enabled, params: {k: v} }]
-  let activeTab = "ENTRY"; // ENTRY | EXIT
 
   // Pollers
   let strategiesPoller = null;
@@ -137,30 +136,25 @@ export function createLifecycle() {
 
   // Strategy Type Toggle
   function setupTypeToggle() {
-    const toggleButtons = document.querySelectorAll(".type-option");
+    // Setup filter tabs in sidebar
+    const filterTabs = document.querySelectorAll(".filter-tab");
 
-    toggleButtons.forEach((button) => {
-      button.addEventListener("click", () => {
-        const type = button.dataset.type.toUpperCase();
-        activeTab = type;
+    filterTabs.forEach((tab) => {
+      tab.addEventListener("click", () => {
+        const filter = tab.dataset.filter.toUpperCase();
 
         // Update active state
-        toggleButtons.forEach((btn) => btn.classList.remove("active"));
-        button.classList.add("active");
+        filterTabs.forEach((t) => t.classList.remove("active"));
+        tab.classList.add("active");
 
         // Filter sidebar strategies by type
-        filterStrategies(type);
-
-        // Update current strategy type if creating new
-        if (currentStrategy && !currentStrategy.id) {
-          currentStrategy.strategy_type = type;
-        }
+        filterStrategies(filter);
       });
     });
   }
 
   // Filters
-  function filterStrategies(type) {
+  function filterStrategies(filter) {
     const items = $$(".strategy-item");
     items.forEach((item) => {
       const strategyId = item.dataset.strategyId;
@@ -171,23 +165,26 @@ export function createLifecycle() {
         return;
       }
 
-      if (type === "ALL") {
+      if (filter === "ALL") {
         item.style.display = "";
       } else {
-        item.style.display = strategy.type === type ? "" : "none";
+        item.style.display = strategy.type === filter ? "" : "none";
       }
     });
   }
 
   // Sidebar Actions
   function setupSidebarActions() {
-    // Create new strategy
+    // Create new strategy - show type selection modal
     const createBtn = $("#create-strategy");
     if (createBtn) {
       addTrackedListener(createBtn, "click", () => {
-        createNewStrategy();
+        showCreateStrategyModal();
       });
     }
+
+    // Setup create strategy modal
+    setupCreateStrategyModal();
 
     // Import strategy
     const importBtn = $("#import-strategy");
@@ -205,6 +202,39 @@ export function createLifecycle() {
         // Removed success toast - silent refresh, only show errors
       });
     }
+  }
+
+  function showCreateStrategyModal() {
+    const modal = $("#create-strategy-modal");
+    if (modal) modal.classList.add("active");
+  }
+
+  function hideCreateStrategyModal() {
+    const modal = $("#create-strategy-modal");
+    if (modal) modal.classList.remove("active");
+  }
+
+  function setupCreateStrategyModal() {
+    const modal = $("#create-strategy-modal");
+    const cancelBtn = $("#cancel-create-strategy");
+    const typeCards = $$(".type-card");
+    const backdrop = modal?.querySelector(".modal-backdrop");
+
+    if (cancelBtn) {
+      addTrackedListener(cancelBtn, "click", hideCreateStrategyModal);
+    }
+
+    if (backdrop) {
+      addTrackedListener(backdrop, "click", hideCreateStrategyModal);
+    }
+
+    typeCards.forEach((card) => {
+      addTrackedListener(card, "click", () => {
+        const type = card.dataset.type;
+        hideCreateStrategyModal();
+        createNewStrategy(type);
+      });
+    });
   }
 
   // Editor actions (add condition, load template)
@@ -302,7 +332,7 @@ export function createLifecycle() {
     const duplicateBtn = $("#duplicate-strategy");
     const validateBtn = $("#validate-strategy");
     const testBtn = $("#test-strategy");
-    const deployBtn = $("#deploy-strategy");
+    const enableToggle = $("#strategy-enabled-toggle");
     const nameInput = $("#strategy-name");
 
     // Sync strategy name in real-time as user types
@@ -316,6 +346,12 @@ export function createLifecycle() {
 
     if (saveBtn) {
       addTrackedListener(saveBtn, "click", async () => {
+        // Validate first before saving
+        const isValid = await validateStrategy();
+        if (!isValid) {
+          window.showToast?.("Please fix validation errors before saving", "error");
+          return;
+        }
         await saveStrategy();
       });
     }
@@ -344,10 +380,59 @@ export function createLifecycle() {
       });
     }
 
-    if (deployBtn) {
-      addTrackedListener(deployBtn, "click", async () => {
-        await deployStrategy();
+    // Enable toggle - saves immediately
+    if (enableToggle) {
+      addTrackedListener(enableToggle, "change", async (e) => {
+        if (currentStrategy) {
+          currentStrategy.enabled = e.target.checked;
+          // If strategy is saved, update via API immediately
+          if (currentStrategy.id) {
+            await toggleCurrentStrategyEnabled();
+          }
+        }
       });
+    }
+  }
+
+  async function toggleCurrentStrategyEnabled() {
+    if (!currentStrategy?.id) return;
+
+    try {
+      const body = {
+        name: currentStrategy.name,
+        description: currentStrategy.description || null,
+        strategy_type: currentStrategy.type,
+        enabled: currentStrategy.enabled,
+        priority: currentStrategy.priority ?? 10,
+        rules: currentStrategy.rules || null,
+        parameters: currentStrategy.parameters || {},
+        author: currentStrategy.author || null,
+      };
+
+      await requestManager.fetch(`/api/strategies/${currentStrategy.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        priority: "high",
+      });
+
+      await loadStrategies();
+      Utils.showToast({
+        type: "success",
+        title: currentStrategy.enabled ? "Strategy Enabled" : "Strategy Disabled",
+        message: `"${currentStrategy.name}" ${currentStrategy.enabled ? "enabled" : "disabled"}`,
+      });
+    } catch (error) {
+      console.error("Failed to toggle strategy:", error);
+      Utils.showToast({
+        type: "error",
+        title: "Toggle Failed",
+        message: "Failed to update strategy status",
+      });
+      // Revert toggle state
+      const toggle = $("#strategy-enabled-toggle");
+      if (toggle) toggle.checked = !currentStrategy.enabled;
+      currentStrategy.enabled = !currentStrategy.enabled;
     }
   }
 
@@ -454,24 +539,26 @@ export function createLifecycle() {
       <div class="strategy-item ${currentStrategy?.id === strategy.id ? "active" : ""}" 
            data-strategy-id="${strategy.id}">
         <div class="strategy-item-header">
-          <div class="strategy-item-title">
+          <span class="strategy-type-icon ${strategy.type.toLowerCase()}">
             <i class="${strategy.type === "ENTRY" ? "icon-trending-up" : "icon-trending-down"}"></i>
-            ${Utils.escapeHtml(strategy.name)}
+          </span>
+          <div class="strategy-item-info">
+            <div class="strategy-item-title">
+              ${Utils.escapeHtml(strategy.name)}
+            </div>
+            <div class="strategy-item-meta">
+              <span class="strategy-badge ${strategy.type.toLowerCase()}">${strategy.type}</span>
+              <span class="strategy-badge ${strategy.enabled ? "enabled" : "disabled"}">
+                ${strategy.enabled ? "Enabled" : "Disabled"}
+              </span>
+            </div>
           </div>
           <div class="strategy-item-actions">
-            <button class="btn-icon" data-action="edit" title="Edit"><i class="icon-pencil"></i></button>
             <button class="btn-icon" data-action="toggle" title="${strategy.enabled ? "Disable" : "Enable"}">
-              ${strategy.enabled ? '<i class="icon-check"></i>' : '<i class="icon-circle"></i>'}
+              ${strategy.enabled ? '<i class="icon-toggle-right"></i>' : '<i class="icon-toggle-left"></i>'}
             </button>
             <button class="btn-icon" data-action="delete" title="Delete"><i class="icon-trash-2"></i></button>
           </div>
-        </div>
-        <div class="strategy-item-meta">
-          <span class="strategy-badge ${strategy.type.toLowerCase()}">${strategy.type}</span>
-          <span class="strategy-badge ${strategy.enabled ? "enabled" : "disabled"}">
-            ${strategy.enabled ? "Enabled" : "Disabled"}
-          </span>
-          ${strategy.priority ? `<span class="strategy-badge">Priority: ${strategy.priority}</span>` : ""}
         </div>
       </div>
     `
@@ -494,21 +581,8 @@ export function createLifecycle() {
       );
 
       // Action buttons
-      const editBtn = item.querySelector("[data-action='edit']");
       const toggleBtn = item.querySelector("[data-action='toggle']");
       const deleteBtn = item.querySelector("[data-action='delete']");
-
-      if (editBtn) {
-        addTrackedListener(
-          editBtn,
-          "click",
-          (e) => {
-            e.stopPropagation();
-            loadStrategy(strategyId);
-          },
-          CleanupScope.STRATEGIES_LIST
-        );
-      }
 
       if (toggleBtn) {
         addTrackedListener(
@@ -535,8 +609,10 @@ export function createLifecycle() {
       }
     });
 
-    // Apply current filter
-    filterStrategies(activeTab);
+    // Apply current filter from active tab
+    const activeFilter = $(".filter-tab.active");
+    const filter = activeFilter ? activeFilter.dataset.filter.toUpperCase() : "ALL";
+    filterStrategies(filter);
   }
 
   function renderTemplates() {
@@ -837,28 +913,14 @@ export function createLifecycle() {
       });
 
     // Auto-create strategy if none exists (first condition added)
+    // Show modal to select type first
     if (!currentStrategy) {
-      currentStrategy = {
-        id: null,
-        name: "New Strategy",
-        type: activeTab,
-        enabled: true,
-        priority: 10,
-        rules: null,
-        parameters: {},
-      };
-
-      // Update UI to reflect new strategy
-      const nameInput = $("#strategy-name");
-      if (nameInput && !nameInput.value) {
-        nameInput.value = currentStrategy.name;
-      } else if (nameInput && nameInput.value) {
-        // Use user-entered name if already typed
-        currentStrategy.name = nameInput.value;
-      }
-
-      const statusBadge = $("#strategy-status");
-      if (statusBadge) statusBadge.textContent = `Draft (${activeTab})`;
+      Utils.showToast({
+        type: "warning",
+        title: "Create Strategy First",
+        message: "Click 'New Strategy' to create a strategy before adding conditions",
+      });
+      return;
     }
 
     const params = {};
@@ -1536,11 +1598,11 @@ export function createLifecycle() {
   }
 
   // Strategy Operations
-  function createNewStrategy() {
+  function createNewStrategy(strategyType = "ENTRY") {
     currentStrategy = {
       id: null,
       name: "New Strategy",
-      type: activeTab,
+      type: strategyType,
       enabled: true,
       priority: 10,
       rules: null,
@@ -1551,8 +1613,12 @@ export function createLifecycle() {
     const nameInput = $("#strategy-name");
     if (nameInput) nameInput.value = currentStrategy.name;
 
-    const statusBadge = $("#strategy-status");
-    if (statusBadge) statusBadge.textContent = `Draft (${activeTab})`;
+    // Update type badge
+    updateTypeBadge(strategyType);
+
+    // Update enable toggle
+    const enableToggle = $("#strategy-enabled-toggle");
+    if (enableToggle) enableToggle.checked = true;
 
     // Clear editor conditions
     conditions = [];
@@ -1562,8 +1628,17 @@ export function createLifecycle() {
     Utils.showToast({
       type: "success",
       title: "New Strategy",
-      message: "Created new strategy",
+      message: `Created new ${strategyType.toLowerCase()} strategy`,
     });
+  }
+
+  function updateTypeBadge(type) {
+    const badge = $("#strategy-type-badge");
+    if (!badge) return;
+
+    badge.className = `strategy-type-badge ${type.toLowerCase()}`;
+    const icon = type === "ENTRY" ? "icon-trending-up" : "icon-trending-down";
+    badge.innerHTML = `<i class="${icon}"></i> ${type}`;
   }
 
   async function loadStrategy(strategyId) {
@@ -1590,11 +1665,12 @@ export function createLifecycle() {
       const nameInput = $("#strategy-name");
       if (nameInput) nameInput.value = currentStrategy.name;
 
-      const statusBadge = $("#strategy-status");
-      if (statusBadge) {
-        statusBadge.textContent = `${currentStrategy.enabled ? "Active" : "Disabled"} (${currentStrategy.type})`;
-        statusBadge.className = `strategy-status-badge ${currentStrategy.enabled ? "enabled" : "disabled"}`;
-      }
+      // Update type badge
+      updateTypeBadge(currentStrategy.type);
+
+      // Update enable toggle
+      const enableToggle = $("#strategy-enabled-toggle");
+      if (enableToggle) enableToggle.checked = currentStrategy.enabled;
 
       // Render strategy into vertical editor
       parseRuleTreeToConditions(currentStrategy.rules);
@@ -1765,7 +1841,7 @@ export function createLifecycle() {
   async function validateStrategy() {
     if (!currentStrategy) {
       Utils.showToast("No strategy to validate", "warning");
-      return;
+      return false;
     }
 
     try {
@@ -1777,14 +1853,17 @@ export function createLifecycle() {
       if (data.valid) {
         updateValidationStatus(true, "Strategy is valid");
         Utils.showToast("Strategy is valid", "success");
+        return true;
       } else {
         updateValidationStatus(false, data.errors?.join(", ") || "Invalid strategy");
         Utils.showToast("Strategy has errors", "error");
+        return false;
       }
     } catch (error) {
       console.error("Validation failed:", error);
       updateValidationStatus(false, error.message);
       Utils.showToast("Validation failed", "error");
+      return false;
     }
   }
 
@@ -1806,36 +1885,6 @@ export function createLifecycle() {
     } catch (error) {
       console.error("Test failed:", error);
       Utils.showToast("Test failed", "error");
-    }
-  }
-
-  async function deployStrategy() {
-    if (!currentStrategy?.id) {
-      Utils.showToast("Please save the strategy first", "warning");
-      return;
-    }
-
-    const { confirmed } = await ConfirmationDialog.show({
-      title: "Deploy Strategy",
-      message: `Deploy strategy "${currentStrategy.name}"? This will enable it for live trading.`,
-      confirmLabel: "Deploy",
-      cancelLabel: "Cancel",
-      variant: "warning",
-    });
-
-    if (!confirmed) return;
-
-    try {
-      await requestManager.fetch(`/api/strategies/${currentStrategy.id}/deploy`, {
-        method: "POST",
-        priority: "high",
-      });
-
-      await loadStrategies();
-      Utils.showToast("Strategy deployed successfully", "success");
-    } catch (error) {
-      console.error("Deploy failed:", error);
-      Utils.showToast("Deploy failed", "error");
     }
   }
 

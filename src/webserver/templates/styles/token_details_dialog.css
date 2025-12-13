@@ -813,13 +813,44 @@
 }
 
 /* Token Tags */
+.token-tags-wrapper {
+  min-height: 28px; /* Reserve space for tags to prevent layout jump */
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--border-color);
+}
+
 .token-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
-  margin-top: var(--spacing-sm);
-  padding-top: var(--spacing-sm);
-  border-top: 1px solid var(--border-color);
+  opacity: 0;
+  animation: fade-in-tags 0.2s ease-out forwards;
+}
+
+@keyframes fade-in-tags {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.token-tags-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 18px;
+  color: var(--text-muted);
+  font-size: 0.65rem;
+}
+
+.token-tags-placeholder::before {
+  content: "—";
 }
 
 .token-tag {
@@ -829,6 +860,12 @@
   border: 1px solid var(--border-color);
   border-radius: 8px;
   color: var(--text-secondary);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.token-tag:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--text-muted);
 }
 
 /* Pool Address Link */
@@ -1853,21 +1890,44 @@
   font-size: 0.85rem;
 }
 
-/* Top Holders List */
+/* Top Holders List - Table-like layout */
 .holders-list {
   display: flex;
   flex-direction: column;
-  gap: var(--spacing-xs);
+  gap: 2px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  padding: 4px;
+}
+
+.holders-header {
+  display: grid;
+  grid-template-columns: 28px minmax(100px, 1fr) 64px 90px 90px;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 2px;
 }
 
 .holder-row {
   display: grid;
-  grid-template-columns: 32px 1fr 70px 100px auto;
+  grid-template-columns: 28px minmax(100px, 1fr) 64px 90px 90px;
   align-items: center;
-  gap: var(--spacing-sm);
-  padding: var(--spacing-xs) var(--spacing-sm);
+  gap: 8px;
+  padding: 8px 10px;
   background: var(--bg-primary);
   border-radius: var(--radius-sm);
+  transition: background 0.15s ease;
+}
+
+.holder-row:hover {
+  background: var(--bg-card-hover);
 }
 
 .holder-row.insider {
@@ -1875,62 +1935,106 @@
   border: 1px solid var(--warning-alpha-20);
 }
 
+.holder-row.insider:hover {
+  background: var(--warning-alpha-15);
+}
+
 .holder-rank {
-  font-size: 0.75rem;
-  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  font-size: 0.7rem;
+  font-weight: 700;
   color: var(--text-muted);
-  text-align: center;
+  background: var(--bg-secondary);
+  border-radius: 50%;
+}
+
+.holder-row:nth-child(-n + 4) .holder-rank {
+  /* Top 3 holders get accent colors */
+  color: var(--primary-color);
+  background: var(--primary-alpha-15);
 }
 
 .holder-address {
   font-family: var(--font-mono);
   font-size: 0.75rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .holder-address a {
   color: var(--link-color);
+  transition: color 0.15s ease;
 }
 
 .holder-address a:hover {
+  color: var(--text-primary);
   text-decoration: underline;
 }
 
 .holder-pct {
   font-size: 0.8rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--text-primary);
   font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
   text-align: right;
 }
 
-.holder-row .holder-bar {
-  height: 6px;
+.holder-bar-container {
+  position: relative;
+  height: 8px;
   background: var(--bg-secondary);
-  border-radius: 3px;
+  border-radius: 4px;
   overflow: hidden;
 }
 
-.holder-row .holder-bar .bar-fill {
+.holder-bar-container .bar-fill {
   height: 100%;
-  background: var(--primary-color);
+  background: linear-gradient(90deg, var(--primary-color), var(--primary-alpha-50));
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.holder-badges {
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 
 .insider-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
   font-size: 0.6rem;
   font-weight: 600;
   padding: 2px 6px;
   border-radius: 6px;
   color: var(--warning-color);
   background: var(--warning-alpha-20);
+  white-space: nowrap;
+}
+
+.insider-badge::before {
+  content: "⚠";
+  font-size: 0.55rem;
 }
 
 .owner-badge {
+  display: inline-flex;
+  align-items: center;
   font-size: 0.6rem;
   font-weight: 500;
   padding: 2px 6px;
   border-radius: 6px;
   color: var(--text-secondary);
   background: var(--bg-secondary);
+  white-space: nowrap;
 }
 
 /* Security Risks */
@@ -2495,6 +2599,388 @@
 
 .btn-copy-mini:hover {
   opacity: 1;
+}
+
+/* =============================================================================
+   TRANSACTION PAIR - Entry/Exit symmetric display for position cards
+   ============================================================================= */
+
+.tx-pair-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+
+.tx-pair-title {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.tx-pair-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.tx-pair-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.tx-pair-item:hover:not(.empty) {
+  background: var(--bg-card-hover);
+}
+
+.tx-pair-item.empty {
+  justify-content: center;
+  opacity: 0.5;
+}
+
+.tx-pair-empty {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+/* Entry (buy) styling */
+.tx-pair-item.entry {
+  border-left: 3px solid var(--success-color);
+}
+
+.tx-pair-item.entry .tx-pair-icon {
+  color: var(--success-color);
+  background: var(--success-alpha-15);
+}
+
+.tx-pair-item.entry .tx-pair-label {
+  color: var(--success-color);
+}
+
+/* Exit (sell) styling - symmetric with entry */
+.tx-pair-item.exit {
+  border-left: 3px solid var(--danger);
+}
+
+.tx-pair-item.exit .tx-pair-icon {
+  color: var(--danger);
+  background: var(--danger-alpha-15);
+}
+
+.tx-pair-item.exit .tx-pair-label {
+  color: var(--danger);
+}
+
+.tx-pair-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tx-pair-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.tx-pair-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.tx-pair-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.tx-pair-signature {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--link-color);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tx-pair-signature:hover {
+  text-decoration: underline;
+}
+
+.tx-pair-item .btn-copy-mini {
+  flex-shrink: 0;
+  opacity: 0.4;
+}
+
+.tx-pair-item:hover .btn-copy-mini {
+  opacity: 0.8;
+}
+
+/* =============================================================================
+   TRANSACTION HISTORY - Entries & Exits with symmetric layout
+   ============================================================================= */
+
+.transaction-history {
+  margin-top: 12px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 12px;
+}
+
+.transaction-history-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.transaction-history-title svg {
+  width: 14px;
+  height: 14px;
+  opacity: 0.6;
+}
+
+.transaction-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Transaction row - symmetric entry/exit design */
+.transaction-row {
+  display: grid;
+  grid-template-columns: 24px 70px 1fr 100px 100px 40px;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.transaction-row:hover {
+  background: var(--bg-card-hover);
+}
+
+/* Entry (buy) styling */
+.transaction-row.entry {
+  border-left: 3px solid var(--success-color);
+}
+
+.transaction-row.entry .transaction-icon {
+  color: var(--success-color);
+  background: var(--success-alpha-15);
+}
+
+/* Exit (sell) styling - symmetric with entry */
+.transaction-row.exit {
+  border-left: 3px solid var(--danger);
+}
+
+.transaction-row.exit .transaction-icon {
+  color: var(--danger);
+  background: var(--danger-alpha-15);
+}
+
+/* DCA entry styling */
+.transaction-row.dca {
+  border-left: 3px solid var(--primary-color);
+}
+
+.transaction-row.dca .transaction-icon {
+  color: var(--primary-color);
+  background: var(--primary-alpha-15);
+}
+
+.transaction-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+
+.transaction-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.transaction-type {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.transaction-type-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.transaction-row.entry .transaction-type-label {
+  color: var(--success-color);
+}
+
+.transaction-row.exit .transaction-type-label {
+  color: var(--danger);
+}
+
+.transaction-row.dca .transaction-type-label {
+  color: var(--primary-color);
+}
+
+.transaction-type-time {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+}
+
+.transaction-price {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.transaction-price-label {
+  font-size: 0.55rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.transaction-price-value {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+.transaction-amount {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: right;
+}
+
+.transaction-amount-label {
+  font-size: 0.55rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.transaction-amount-value {
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+.transaction-row.entry .transaction-amount-value {
+  color: var(--danger); /* Spent SOL */
+}
+
+.transaction-row.exit .transaction-amount-value {
+  color: var(--success-color); /* Received SOL */
+}
+
+.transaction-row.dca .transaction-amount-value {
+  color: var(--danger); /* Spent SOL */
+}
+
+.transaction-sol {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: right;
+}
+
+.transaction-sol-label {
+  font-size: 0.55rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.transaction-sol-value {
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+.transaction-row.entry .transaction-sol-value,
+.transaction-row.dca .transaction-sol-value {
+  color: var(--danger);
+}
+
+.transaction-row.exit .transaction-sol-value {
+  color: var(--success-color);
+}
+
+.transaction-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.transaction-link a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.transaction-link a:hover {
+  background: var(--bg-secondary);
+  color: var(--link-color);
+}
+
+.transaction-link svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Empty transaction state */
+.transaction-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-color);
 }
 
 /* =============================================================================

@@ -21,8 +21,10 @@ pub use types::{DelayConfig, DistributionStrategy, SizingConfig, ToolResult, Too
 
 // Re-export database types
 pub use database::{
-    FailedAtaRow, VaSessionRow, VaSwapRow,
-    init_tools_db,
+    FailedAtaRow, ToolFavoriteRow, VaAnalyticsSummary, VaSessionRow, VaSwapRow,
+    get_recent_va_sessions, get_va_sessions_analytics, init_tools_db,
+    get_tool_favorites, upsert_tool_favorite, remove_tool_favorite,
+    update_tool_favorite, increment_tool_favorite_use,
 };
 
 // Re-export swap executor

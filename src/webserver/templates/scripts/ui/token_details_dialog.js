@@ -909,11 +909,12 @@ export class TokenDetailsDialog {
         ? Utils.formatTimeAgo(new Date(token.created_at * 1000))
         : "—";
 
-    // Build tags display
-    const tagsHtml =
+    // Build tags display with wrapper to prevent height jump
+    const tagsContent =
       token.tags && token.tags.length > 0
         ? `<div class="token-tags">${token.tags.map((t) => `<span class="token-tag">${this._escapeHtml(t)}</span>`).join("")}</div>`
-        : "";
+        : '<div class="token-tags-placeholder">No tags</div>';
+    const tagsHtml = `<div class="token-tags-wrapper">${tagsContent}</div>`;
 
     return `
       <div class="info-card compact">
@@ -1333,7 +1334,7 @@ export class TokenDetailsDialog {
               </div>
               <div class="authority-warning">Can mint new tokens</div>
               `
-                  : `<div class="authority-safe">Cannot create new tokens</div>`
+                  : "<div class=\"authority-safe\">Cannot create new tokens</div>"
               }
             </div>
             <div class="authority-item">
@@ -1350,7 +1351,7 @@ export class TokenDetailsDialog {
               </div>
               <div class="authority-warning">Can freeze accounts</div>
               `
-                  : `<div class="authority-safe">Cannot freeze accounts</div>`
+                  : "<div class=\"authority-safe\">Cannot freeze accounts</div>"
               }
             </div>
           </div>
@@ -1436,7 +1437,7 @@ export class TokenDetailsDialog {
       <div class="security-card ${hasFee ? "has-fee" : ""}">
         <div class="card-header">
           <span>Transfer Fee (Token-2022)</span>
-          ${hasFee ? `<span class="fee-badge">⚠️ ${token.transfer_fee_pct}%</span>` : `<span class="no-fee-badge">✓ No Fee</span>`}
+          ${hasFee ? `<span class="fee-badge">⚠️ ${token.transfer_fee_pct}%</span>` : "<span class=\"no-fee-badge\">✓ No Fee</span>"}
         </div>
         <div class="card-body">
           ${
@@ -1495,23 +1496,36 @@ export class TokenDetailsDialog {
       .map((holder, idx) => {
         const insiderClass = holder.is_insider ? "insider" : "";
         const ownerLabel = holder.owner_type || "";
+        const badges = [];
+        if (holder.is_insider) badges.push('<span class="insider-badge">Insider</span>');
+        if (ownerLabel) badges.push(`<span class="owner-badge">${this._escapeHtml(ownerLabel)}</span>`);
 
         return `
         <div class="holder-row ${insiderClass}">
-          <span class="holder-rank">#${idx + 1}</span>
-          <span class="holder-address" title="${holder.address}">
-            <a href="https://solscan.io/account/${holder.address}" target="_blank" rel="noopener">${this._formatShortAddress(holder.address)}</a>
+          <span class="holder-rank">${idx + 1}</span>
+          <span class="holder-address" title="${this._escapeHtml(holder.address)}">
+            <a href="https://solscan.io/account/${this._escapeHtml(holder.address)}" target="_blank" rel="noopener">${this._formatShortAddress(holder.address)}</a>
           </span>
           <span class="holder-pct">${holder.percentage.toFixed(2)}%</span>
-          <div class="holder-bar">
+          <div class="holder-bar-container">
             <div class="bar-fill" style="width: ${Math.min(holder.percentage, 100)}%"></div>
           </div>
-          ${holder.is_insider ? `<span class="insider-badge">Insider</span>` : ""}
-          ${ownerLabel ? `<span class="owner-badge">${ownerLabel}</span>` : ""}
+          <div class="holder-badges">${badges.join("")}</div>
         </div>
       `;
       })
       .join("");
+
+    // Build header row for table-like display
+    const headerRow = `
+      <div class="holders-header">
+        <span>#</span>
+        <span>Address</span>
+        <span style="text-align: right;">%</span>
+        <span>Share</span>
+        <span style="text-align: right;">Labels</span>
+      </div>
+    `;
 
     return `
       <div class="security-card full-width">
@@ -1521,6 +1535,7 @@ export class TokenDetailsDialog {
         </div>
         <div class="card-body">
           <div class="holders-list">
+            ${headerRow}
             ${holderRows}
           </div>
         </div>
@@ -1752,7 +1767,7 @@ export class TokenDetailsDialog {
             <span class="position-status open">OPEN</span>
             ${pos.dca_count > 0 ? `<span class="position-badge dca">DCA ×${pos.dca_count}</span>` : ""}
             ${pos.partial_exit_count > 0 ? `<span class="position-badge partial">Partial ×${pos.partial_exit_count}</span>` : ""}
-            ${pos.transaction_entry_verified ? `<span class="position-badge verified">✓ Verified</span>` : ""}
+            ${pos.transaction_entry_verified ? "<span class=\"position-badge verified\">✓ Verified</span>" : ""}
           </div>
           <div class="position-actions">
             <button class="btn-position-add" data-mint="${pos.mint}" title="Add to position (DCA)">
@@ -1831,20 +1846,8 @@ export class TokenDetailsDialog {
             `
                 : ""
             }
-            ${
-              pos.entry_transaction_signature
-                ? `
-            <div class="detail-row">
-              <span class="detail-label">Entry TX</span>
-              <span class="detail-value signature">
-                <a href="https://solscan.io/tx/${pos.entry_transaction_signature}" target="_blank" rel="noopener">${pos.entry_transaction_signature.slice(0, 8)}...${pos.entry_transaction_signature.slice(-8)}</a>
-                <button class="btn-copy-mini" data-copy="${pos.entry_transaction_signature}" title="Copy signature">📋</button>
-              </span>
-            </div>
-            `
-                : ""
-            }
           </div>
+          ${this._buildPositionTransactionPair(pos)}
         </div>
       </div>
     `;
@@ -1861,7 +1864,7 @@ export class TokenDetailsDialog {
             <span class="position-status closed">CLOSED</span>
             ${pos.dca_count > 0 ? `<span class="position-badge dca">DCA ×${pos.dca_count}</span>` : ""}
             ${pos.partial_exit_count > 0 ? `<span class="position-badge partial">Partial ×${pos.partial_exit_count}</span>` : ""}
-            ${pos.synthetic_exit ? `<span class="position-badge synthetic">Synthetic</span>` : ""}
+            ${pos.synthetic_exit ? "<span class=\"position-badge synthetic\">Synthetic</span>" : ""}
             ${pos.closed_reason ? `<span class="position-badge reason">${pos.closed_reason}</span>` : ""}
           </div>
           <span class="position-time">${Utils.formatTimestamp(pos.exit_time)}</span>
@@ -1918,31 +1921,152 @@ export class TokenDetailsDialog {
             `
                 : ""
             }
-            ${
-              pos.entry_transaction_signature
-                ? `
-            <div class="detail-row">
-              <span class="detail-label">Entry TX</span>
-              <span class="detail-value signature">
-                <a href="https://solscan.io/tx/${pos.entry_transaction_signature}" target="_blank" rel="noopener">${pos.entry_transaction_signature.slice(0, 8)}...${pos.entry_transaction_signature.slice(-8)}</a>
-              </span>
-            </div>
-            `
-                : ""
-            }
-            ${
-              pos.exit_transaction_signature
-                ? `
-            <div class="detail-row">
-              <span class="detail-label">Exit TX</span>
-              <span class="detail-value signature">
-                <a href="https://solscan.io/tx/${pos.exit_transaction_signature}" target="_blank" rel="noopener">${pos.exit_transaction_signature.slice(0, 8)}...${pos.exit_transaction_signature.slice(-8)}</a>
-              </span>
-            </div>
-            `
-                : ""
-            }
           </div>
+          ${this._buildPositionTransactionPair(pos)}
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Build symmetric entry/exit transaction pair display for a position
+   * @param {Object} pos - Position with entry/exit transaction signatures
+   * @returns {string} HTML for transaction pair
+   */
+  _buildPositionTransactionPair(pos) {
+    const hasEntry = !!pos.entry_transaction_signature;
+    const hasExit = !!pos.exit_transaction_signature;
+
+    if (!hasEntry && !hasExit) {
+      return "";
+    }
+
+    const entryTx = hasEntry
+      ? `
+        <div class="tx-pair-item entry">
+          <div class="tx-pair-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7-7 7 7"/></svg>
+          </div>
+          <div class="tx-pair-content">
+            <div class="tx-pair-label">Entry</div>
+            <a href="https://solscan.io/tx/${pos.entry_transaction_signature}" target="_blank" rel="noopener" class="tx-pair-signature">${pos.entry_transaction_signature.slice(0, 6)}...${pos.entry_transaction_signature.slice(-6)}</a>
+          </div>
+          <button class="btn-copy-mini" data-copy="${pos.entry_transaction_signature}" title="Copy signature">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          </button>
+        </div>
+      `
+      : '<div class="tx-pair-item entry empty"><span class="tx-pair-empty">—</span></div>';
+
+    const exitTx = hasExit
+      ? `
+        <div class="tx-pair-item exit">
+          <div class="tx-pair-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7 7 7-7"/></svg>
+          </div>
+          <div class="tx-pair-content">
+            <div class="tx-pair-label">Exit</div>
+            <a href="https://solscan.io/tx/${pos.exit_transaction_signature}" target="_blank" rel="noopener" class="tx-pair-signature">${pos.exit_transaction_signature.slice(0, 6)}...${pos.exit_transaction_signature.slice(-6)}</a>
+          </div>
+          <button class="btn-copy-mini" data-copy="${pos.exit_transaction_signature}" title="Copy signature">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+          </button>
+        </div>
+      `
+      : '<div class="tx-pair-item exit empty"><span class="tx-pair-empty">—</span></div>';
+
+    return `
+      <div class="tx-pair-section">
+        <div class="tx-pair-title">Transactions</div>
+        <div class="tx-pair-grid">
+          ${entryTx}
+          ${exitTx}
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Build transaction history section with symmetric entry/exit display
+   * @param {Object} position - Position data with entries/exits arrays
+   * @returns {string} HTML for transaction history
+   */
+  _buildTransactionHistory(position) {
+    const entries = position.entries || [];
+    const exits = position.exits || [];
+
+    // Combine and sort by timestamp
+    const allTransactions = [
+      ...entries.map((e, idx) => ({
+        type: idx === 0 ? "entry" : "dca",
+        timestamp: e.timestamp,
+        price: e.price,
+        amount: e.amount,
+        sol: e.sol_spent,
+        signature: e.transaction_signature,
+        fees: e.fees_sol,
+      })),
+      ...exits.map((e) => ({
+        type: "exit",
+        timestamp: e.timestamp,
+        price: e.price,
+        amount: e.amount,
+        sol: e.sol_received,
+        signature: e.transaction_signature,
+        fees: e.fees_sol,
+        percentage: e.percentage,
+      })),
+    ].sort((a, b) => a.timestamp - b.timestamp);
+
+    if (allTransactions.length === 0) {
+      return "";
+    }
+
+    const transactionRows = allTransactions.map((tx) => {
+      const isEntry = tx.type === "entry" || tx.type === "dca";
+      const typeLabel = tx.type === "entry" ? "Buy" : tx.type === "dca" ? "DCA" : "Sell";
+      const typeClass = tx.type;
+      const icon = isEntry
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7-7 7 7"/></svg>'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7 7 7-7"/></svg>';
+
+      const amountLabel = isEntry ? "Spent" : "Received";
+      const solAmount = tx.sol ? Utils.formatSol(tx.sol) : "—";
+
+      return `
+        <div class="transaction-row ${typeClass}">
+          <div class="transaction-icon">${icon}</div>
+          <div class="transaction-type">
+            <span class="transaction-type-label">${typeLabel}</span>
+            <span class="transaction-type-time">${Utils.formatTimestamp(tx.timestamp * 1000)}</span>
+          </div>
+          <div class="transaction-price">
+            <span class="transaction-price-label">Price</span>
+            <span class="transaction-price-value">${tx.price ? Utils.formatPriceSol(tx.price, { decimals: 9 }) + " SOL" : "—"}</span>
+          </div>
+          <div class="transaction-amount">
+            <span class="transaction-amount-label">${amountLabel}</span>
+            <span class="transaction-amount-value">${solAmount} SOL</span>
+          </div>
+          <div class="transaction-sol">
+            <span class="transaction-sol-label">Fees</span>
+            <span class="transaction-sol-value">${tx.fees ? Utils.formatSol(tx.fees) + " SOL" : "—"}</span>
+          </div>
+          <div class="transaction-link">
+            ${tx.signature ? `<a href="https://solscan.io/tx/${this._escapeHtml(tx.signature)}" target="_blank" rel="noopener" title="View on Solscan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>` : ""}
+          </div>
+        </div>
+      `;
+    }).join("");
+
+    return `
+      <div class="transaction-history">
+        <div class="transaction-history-title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+          Transaction History
+        </div>
+        <div class="transaction-list">
+          ${transactionRows}
         </div>
       </div>
     `;

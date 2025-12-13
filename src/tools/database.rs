@@ -205,6 +205,43 @@ CREATE INDEX IF NOT EXISTS idx_ata_failed_permanent ON ata_failed_cache(is_perma
 CREATE INDEX IF NOT EXISTS idx_ata_failed_next_retry ON ata_failed_cache(next_retry_at);
 "#;
 
+/// Tool favorites table
+const SCHEMA_TOOL_FAVORITES: &str = r#"
+CREATE TABLE IF NOT EXISTS tool_favorites (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    
+    -- Token identification
+    mint TEXT NOT NULL,
+    symbol TEXT,
+    name TEXT,
+    logo_url TEXT,
+    
+    -- Tool context
+    tool_type TEXT NOT NULL,
+    
+    -- Custom configuration (JSON)
+    config_json TEXT,
+    
+    -- User metadata
+    label TEXT,
+    notes TEXT,
+    
+    -- Usage tracking
+    use_count INTEGER NOT NULL DEFAULT 0,
+    last_used_at TEXT,
+    
+    -- Timestamps
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    
+    UNIQUE(mint, tool_type)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_favorites_mint ON tool_favorites(mint);
+CREATE INDEX IF NOT EXISTS idx_tool_favorites_tool_type ON tool_favorites(tool_type);
+CREATE INDEX IF NOT EXISTS idx_tool_favorites_use_count ON tool_favorites(use_count DESC);
+"#;
+
 // =============================================================================
 // CONNECTION POOL
 // =============================================================================
@@ -289,6 +326,9 @@ pub fn init_tools_db() -> Result<(), String> {
 
         conn.execute_batch(SCHEMA_ATA_FAILED_CACHE)
             .map_err(|e| format!("Failed to create ata_failed_cache table: {}", e))?;
+
+        conn.execute_batch(SCHEMA_TOOL_FAVORITES)
+            .map_err(|e| format!("Failed to create tool_favorites table: {}", e))?;
 
         // Update version
         conn.execute(
@@ -503,6 +543,41 @@ pub fn get_recent_va_sessions(limit: i32) -> Result<Vec<VaSessionRow>, String> {
     }
 
     Ok(sessions)
+}
+
+/// Get VA session analytics summary
+pub fn get_va_sessions_analytics() -> Result<VaAnalyticsSummary, String> {
+    let conn = get_connection()?;
+
+    conn.query_row(
+        r#"
+        SELECT 
+            COUNT(*) as total_sessions,
+            COALESCE(SUM(actual_volume_sol), 0) as total_volume_sol,
+            COALESCE(AVG(
+                CASE WHEN (successful_buys + successful_sells + failed_count) > 0 
+                THEN CAST(successful_buys + successful_sells AS REAL) / 
+                     (successful_buys + successful_sells + failed_count) * 100
+                ELSE 0 END
+            ), 0) as avg_success_rate,
+            COUNT(CASE WHEN status = 'completed' THEN 1 END) as completed_sessions,
+            COUNT(CASE WHEN status = 'failed' THEN 1 END) as failed_sessions,
+            COUNT(CASE WHEN status = 'aborted' THEN 1 END) as aborted_sessions
+        FROM va_sessions
+        "#,
+        [],
+        |row| {
+            Ok(VaAnalyticsSummary {
+                total_sessions: row.get(0)?,
+                total_volume_sol: row.get(1)?,
+                avg_success_rate: row.get(2)?,
+                completed_sessions: row.get(3)?,
+                failed_sessions: row.get(4)?,
+                aborted_sessions: row.get(5)?,
+            })
+        },
+    )
+    .map_err(|e| format!("Failed to get VA analytics: {}", e))
 }
 
 // =============================================================================
@@ -841,6 +916,17 @@ impl VaSwapRow {
     }
 }
 
+/// VA session analytics summary
+#[derive(Debug, Clone)]
+pub struct VaAnalyticsSummary {
+    pub total_sessions: i64,
+    pub total_volume_sol: f64,
+    pub avg_success_rate: f64,
+    pub completed_sessions: i64,
+    pub failed_sessions: i64,
+    pub aborted_sessions: i64,
+}
+
 /// Failed ATA database row
 #[derive(Debug, Clone)]
 pub struct FailedAtaRow {
@@ -870,4 +956,196 @@ impl FailedAtaRow {
             is_permanent_failure: is_permanent_int != 0,
         })
     }
+}
+
+/// Tool favorite database row
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct ToolFavoriteRow {
+    pub id: i64,
+    pub mint: String,
+    pub symbol: Option<String>,
+    pub name: Option<String>,
+    pub logo_url: Option<String>,
+    pub tool_type: String,
+    pub config_json: Option<String>,
+    pub label: Option<String>,
+    pub notes: Option<String>,
+    pub use_count: i64,
+    pub last_used_at: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl ToolFavoriteRow {
+    fn from_row(row: &rusqlite::Row<'_>) -> Result<Self, String> {
+        Ok(Self {
+            id: row.get(0).map_err(|e| e.to_string())?,
+            mint: row.get(1).map_err(|e| e.to_string())?,
+            symbol: row.get(2).map_err(|e| e.to_string())?,
+            name: row.get(3).map_err(|e| e.to_string())?,
+            logo_url: row.get(4).map_err(|e| e.to_string())?,
+            tool_type: row.get(5).map_err(|e| e.to_string())?,
+            config_json: row.get(6).map_err(|e| e.to_string())?,
+            label: row.get(7).map_err(|e| e.to_string())?,
+            notes: row.get(8).map_err(|e| e.to_string())?,
+            use_count: row.get(9).map_err(|e| e.to_string())?,
+            last_used_at: row.get(10).map_err(|e| e.to_string())?,
+            created_at: row.get(11).map_err(|e| e.to_string())?,
+            updated_at: row.get(12).map_err(|e| e.to_string())?,
+        })
+    }
+}
+
+// =============================================================================
+// TOOL FAVORITES OPERATIONS
+// =============================================================================
+
+/// Add or update a tool favorite (upsert)
+pub fn upsert_tool_favorite(
+    mint: &str,
+    symbol: Option<&str>,
+    name: Option<&str>,
+    logo_url: Option<&str>,
+    tool_type: &str,
+    config_json: Option<&str>,
+    label: Option<&str>,
+    notes: Option<&str>,
+) -> Result<i64, String> {
+    let conn = get_connection()?;
+    let now = Utc::now().to_rfc3339();
+
+    conn.execute(
+        r#"
+        INSERT INTO tool_favorites (mint, symbol, name, logo_url, tool_type, config_json, label, notes, created_at, updated_at)
+        VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9)
+        ON CONFLICT(mint, tool_type) DO UPDATE SET
+            symbol = COALESCE(?2, symbol),
+            name = COALESCE(?3, name),
+            logo_url = COALESCE(?4, logo_url),
+            config_json = COALESCE(?6, config_json),
+            label = COALESCE(?7, label),
+            notes = COALESCE(?8, notes),
+            updated_at = ?9
+        "#,
+        params![mint, symbol, name, logo_url, tool_type, config_json, label, notes, now],
+    )
+    .map_err(|e| format!("Failed to upsert tool favorite: {}", e))?;
+
+    // Get the ID (either inserted or existing)
+    conn.query_row(
+        "SELECT id FROM tool_favorites WHERE mint = ?1 AND tool_type = ?2",
+        params![mint, tool_type],
+        |row| row.get(0),
+    )
+    .map_err(|e| format!("Failed to get favorite ID: {}", e))
+}
+
+/// Get all tool favorites, optionally filtered by tool type
+pub fn get_tool_favorites(tool_type: Option<&str>) -> Result<Vec<ToolFavoriteRow>, String> {
+    let conn = get_connection()?;
+
+    let mut favorites = Vec::new();
+
+    if let Some(tt) = tool_type {
+        let mut stmt = conn
+            .prepare(
+                r#"
+                SELECT id, mint, symbol, name, logo_url, tool_type, config_json, label, notes,
+                       use_count, last_used_at, created_at, updated_at
+                FROM tool_favorites
+                WHERE tool_type = ?1
+                ORDER BY use_count DESC, updated_at DESC
+                "#,
+            )
+            .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+
+        let rows = stmt
+            .query_map(params![tt], |row| Ok(ToolFavoriteRow::from_row(row)))
+            .map_err(|e| format!("Failed to query favorites: {}", e))?;
+
+        for row in rows {
+            match row {
+                Ok(Ok(fav)) => favorites.push(fav),
+                Ok(Err(e)) => return Err(e),
+                Err(e) => return Err(format!("Failed to read row: {}", e)),
+            }
+        }
+    } else {
+        let mut stmt = conn
+            .prepare(
+                r#"
+                SELECT id, mint, symbol, name, logo_url, tool_type, config_json, label, notes,
+                       use_count, last_used_at, created_at, updated_at
+                FROM tool_favorites
+                ORDER BY use_count DESC, updated_at DESC
+                "#,
+            )
+            .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+
+        let rows = stmt
+            .query_map([], |row| Ok(ToolFavoriteRow::from_row(row)))
+            .map_err(|e| format!("Failed to query favorites: {}", e))?;
+
+        for row in rows {
+            match row {
+                Ok(Ok(fav)) => favorites.push(fav),
+                Ok(Err(e)) => return Err(e),
+                Err(e) => return Err(format!("Failed to read row: {}", e)),
+            }
+        }
+    }
+
+    Ok(favorites)
+}
+
+/// Remove a tool favorite by ID
+pub fn remove_tool_favorite(id: i64) -> Result<bool, String> {
+    let conn = get_connection()?;
+
+    let rows = conn
+        .execute("DELETE FROM tool_favorites WHERE id = ?1", params![id])
+        .map_err(|e| format!("Failed to remove tool favorite: {}", e))?;
+
+    Ok(rows > 0)
+}
+
+/// Increment use count for a favorite
+pub fn increment_tool_favorite_use(id: i64) -> Result<(), String> {
+    let conn = get_connection()?;
+    let now = Utc::now().to_rfc3339();
+
+    conn.execute(
+        "UPDATE tool_favorites SET use_count = use_count + 1, last_used_at = ?1, updated_at = ?1 WHERE id = ?2",
+        params![now, id],
+    )
+    .map_err(|e| format!("Failed to increment use count: {}", e))?;
+
+    Ok(())
+}
+
+/// Update a tool favorite's config/label/notes
+pub fn update_tool_favorite(
+    id: i64,
+    config_json: Option<&str>,
+    label: Option<&str>,
+    notes: Option<&str>,
+) -> Result<bool, String> {
+    let conn = get_connection()?;
+    let now = Utc::now().to_rfc3339();
+
+    let rows = conn
+        .execute(
+            r#"
+            UPDATE tool_favorites SET
+                config_json = COALESCE(?1, config_json),
+                label = COALESCE(?2, label),
+                notes = COALESCE(?3, notes),
+                updated_at = ?4
+            WHERE id = ?5
+            "#,
+            params![config_json, label, notes, now, id],
+        )
+        .map_err(|e| format!("Failed to update tool favorite: {}", e))?;
+
+    Ok(rows > 0)
 }
