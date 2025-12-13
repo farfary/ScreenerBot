@@ -1,6 +1,6 @@
 [package]
 name = "screenerbot"
-version = "0.1.93"
+version = "0.1.94"
 edition = "2021"
 default-run = "screenerbot"
 # Disable automatic binary discovery - we only want the main binary
@@ -121,6 +121,10 @@ unicode-width = "0.2"
 
 # Concurrency
 dashmap = "5.5"
+
+# Rate limiting with GCRA algorithm
+governor = "0.6"
+nonzero_ext = "0.3"
 
 # Service management dependencies
 async-trait = "0.1"
