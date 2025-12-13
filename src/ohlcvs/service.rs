@@ -134,6 +134,25 @@ impl OhlcvServiceImpl {
         .await
         .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))??;
 
+        // Fallback: if no candles found for specific pool, try querying without pool filter
+        // This handles cases where candles were stored under a different pool address
+        if candles.is_empty() {
+            let db = Arc::clone(&self.db);
+            let mint_owned = mint.to_string();
+            candles = tokio::task::spawn_blocking(move || {
+                db.get_candles(
+                    &mint_owned,
+                    None, // Query any pool for this mint
+                    timeframe,
+                    from_timestamp,
+                    to_timestamp,
+                    Some(limit),
+                )
+            })
+            .await
+            .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))??;
+        }
+
         if candles.is_empty() {
             return Ok(Vec::new());
         }

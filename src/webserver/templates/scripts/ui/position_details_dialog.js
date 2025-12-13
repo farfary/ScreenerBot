@@ -407,11 +407,12 @@ export class PositionDetailsDialog {
 
   /**
    * Build header price section HTML
+   * Note: Position data is flattened (no summary wrapper) due to serde(flatten) on backend
    */
   _buildHeaderPrice(pos) {
-    const currentPrice = pos.summary?.current_price;
-    const entryPrice = pos.summary?.average_entry_price || pos.summary?.entry_price;
-    const isOpen = pos.summary?.position_type !== "closed";
+    const currentPrice = pos?.current_price;
+    const entryPrice = pos?.average_entry_price || pos?.entry_price;
+    const isOpen = pos?.position_type !== "closed";
 
     let priceHtml = "";
     if (currentPrice !== null && currentPrice !== undefined) {
@@ -428,22 +429,22 @@ export class PositionDetailsDialog {
 
     // P&L display
     let pnlHtml = "";
-    if (isOpen && pos.summary?.unrealized_pnl !== undefined) {
-      const pnl = pos.summary.unrealized_pnl;
-      const pnlPct = pos.summary.unrealized_pnl_percent;
-      const pnlClass = (pnl != null && pnl >= 0) ? "pdd-positive" : "pdd-negative";
-      const sign = (pnl != null && pnl >= 0) ? "+" : "";
+    if (isOpen && pos?.unrealized_pnl !== undefined) {
+      const pnl = pos.unrealized_pnl;
+      const pnlPct = pos.unrealized_pnl_percent;
+      const pnlClass = pnl != null && pnl >= 0 ? "pdd-positive" : "pdd-negative";
+      const sign = pnl != null && pnl >= 0 ? "+" : "";
       pnlHtml = `
         <div class="pnl-block ${pnlClass}">
           <span class="pnl-value">${sign}${Utils.formatSol(pnl, { decimals: 4, suffix: "" })}</span>
           <span class="pnl-percent">${sign}${Utils.formatNumber(pnlPct, 2)}%</span>
         </div>
       `;
-    } else if (!isOpen && pos.summary?.pnl !== undefined) {
-      const pnl = pos.summary.pnl;
-      const pnlPct = pos.summary.pnl_percent;
-      const pnlClass = (pnl != null && pnl >= 0) ? "pdd-positive" : "pdd-negative";
-      const sign = (pnl != null && pnl >= 0) ? "+" : "";
+    } else if (!isOpen && pos?.pnl !== undefined) {
+      const pnl = pos.pnl;
+      const pnlPct = pos.pnl_percent;
+      const pnlClass = pnl != null && pnl >= 0 ? "pdd-positive" : "pdd-negative";
+      const sign = pnl != null && pnl >= 0 ? "+" : "";
       pnlHtml = `
         <div class="pnl-block ${pnlClass}">
           <span class="pnl-value">${sign}${Utils.formatSol(pnl, { decimals: 4, suffix: "" })}</span>
@@ -462,7 +463,7 @@ export class PositionDetailsDialog {
         </div>
         <div class="metric-item">
           <span class="metric-label">Invested</span>
-          <span class="metric-value">${Utils.formatSol(pos.summary?.total_size_sol, { decimals: 4 })}</span>
+          <span class="metric-value">${Utils.formatSol(pos?.total_size_sol, { decimals: 4 })}</span>
         </div>
       </div>
     `;
@@ -748,17 +749,14 @@ export class PositionDetailsDialog {
     const verified = pos.transaction_entry_verified;
     const partialExitCount = pos.partial_exit_count || 0;
 
-    // Calculate holdings percentage
+    // Calculate holdings percentage (both values are raw u64, so ratio works directly)
     let holdingsPercent = 100;
     if (originalTokens && remainingTokens) {
       holdingsPercent = (remainingTokens / originalTokens) * 100;
     }
 
-    // Calculate current value
-    let currentValue = null;
-    if (currentPrice && remainingTokens) {
-      currentValue = currentPrice * remainingTokens;
-    }
+    // Calculate current value in SOL using proper decimals conversion
+    const currentValue = this._calculateCurrentValue(pos);
 
     if (isOpen) {
       return `
@@ -1026,21 +1024,21 @@ export class PositionDetailsDialog {
       ? `
         <button class="pdd-action-btn pdd-action-add" id="pddAddBtn">
           <i class="icon-plus-circle"></i>
-          Add to Position
+          <span>Add to Position</span>
         </button>
         <button class="pdd-action-btn pdd-action-partial" id="pddPartialBtn">
           <i class="icon-scissors"></i>
-          Partial Sell
+          <span>Partial Sell</span>
         </button>
         <button class="pdd-action-btn pdd-action-close" id="pddCloseBtn">
           <i class="icon-x-circle"></i>
-          Close Position
+          <span>Close Position</span>
         </button>
       `
       : `
-        <button class="pdd-action-btn pdd-action-view" id="pddViewTokenBtn">
+        <button class="pdd-action-btn pdd-action-view pdd-action-full-width" id="pddViewTokenBtn">
           <i class="icon-external-link"></i>
-          View Token Details
+          <span>View Token Details</span>
         </button>
       `;
 
@@ -1048,7 +1046,11 @@ export class PositionDetailsDialog {
 
     return `
       <div class="pdd-actions-card">
-        <div class="pdd-actions-row">
+        <h3 class="pdd-actions-title">
+          <i class="icon-zap"></i>
+          Quick Actions
+        </h3>
+        <div class="pdd-actions-row${!isOpen ? ' pdd-actions-single' : ''}">
           ${actionButtons}
         </div>
         <div class="pdd-external-links">
@@ -1375,7 +1377,12 @@ export class PositionDetailsDialog {
     const statsArea = this.dialogEl?.querySelector("#pddChartStats");
     if (!chartArea) return;
 
-    chartArea.innerHTML = '<div class="loading-spinner">Loading chart data...</div>';
+    // Only show loading state if we don't have cached chart data
+    // This prevents the annoying flash when switching back to chart tab
+    const hasCachedData = this._chartData && this._chartData.length > 0;
+    if (!hasCachedData) {
+      chartArea.innerHTML = '<div class="loading-spinner">Loading chart data...</div>';
+    }
 
     try {
       const data = await requestManager.fetch(
@@ -1927,10 +1934,12 @@ export class PositionDetailsDialog {
     content.innerHTML = `
       <div class="pdd-analytics-tab">
         ${this._buildPerformanceSummary(pos, isOpen, positionAge, solPriceUsd)}
-        ${this._buildPriceAnalysis(pos)}
+        <div class="pdd-analytics-grid">
+          ${this._buildPriceAnalysis(pos)}
+          ${this._buildFeeAnalysis(pos, entries, exits)}
+        </div>
         ${this._buildDcaSummary(pos, entries)}
         ${this._buildExitSummary(pos, exits, solPriceUsd)}
-        ${this._buildFeeAnalysis(pos, entries, exits)}
       </div>
     `;
   }
@@ -1939,9 +1948,9 @@ export class PositionDetailsDialog {
    * Build performance summary card for analytics tab
    */
   _buildPerformanceSummary(pos, isOpen, positionAge, solPriceUsd) {
-    // Calculate ROI
+    // Calculate ROI using proper value conversion
     const totalInvested = pos.total_size_sol || 0;
-    const currentValue = (pos.current_price || 0) * (pos.remaining_token_amount || 0);
+    const currentValue = this._calculateCurrentValue(pos) || 0;
     const solReceived = pos.sol_received || 0;
     const totalValue = isOpen ? currentValue : solReceived;
     const roi = totalInvested > 0 ? ((totalValue - totalInvested) / totalInvested) * 100 : 0;
@@ -2356,6 +2365,24 @@ export class PositionDetailsDialog {
         </div>`
       : "";
 
+    // Build security section HTML
+    const securityHtml = security ? `
+      <div class="pdd-security-full">
+        <h4>Security Assessment</h4>
+        <div class="pdd-security-header">
+          <div class="pdd-score-display">
+            ${score !== null ? `<div class="pdd-score-circle" style="--score: ${score}; --score-color: ${this._getScoreColor(score)}">${score}</div>` : '<div class="pdd-score-circle pdd-score-unknown">?</div>'}
+            <span class="pdd-risk-label ${riskLabelClass}">${riskLabelText}</span>
+          </div>
+        </div>
+        <div class="pdd-security-details">
+          ${mintAuthorityHtml}
+          ${freezeAuthorityHtml}
+        </div>
+        ${risksListHtml}
+      </div>
+    ` : "";
+
     content.innerHTML = `
       <div class="pdd-token-tab">
         <div class="pdd-token-identity">
@@ -2372,26 +2399,16 @@ export class PositionDetailsDialog {
           </div>
         </div>
 
-        ${security ? `
-        <div class="pdd-security-full">
-          <h4>Security Assessment</h4>
-          <div class="pdd-security-header">
-            <div class="pdd-score-display">
-              ${score !== null ? `<div class="pdd-score-circle" style="--score: ${score}; --score-color: ${this._getScoreColor(score)}">${score}</div>` : '<div class="pdd-score-circle pdd-score-unknown">?</div>'}
-              <span class="pdd-risk-label ${riskLabelClass}">${riskLabelText}</span>
-            </div>
-          </div>
-          <div class="pdd-security-details">
-            ${mintAuthorityHtml}
-            ${freezeAuthorityHtml}
-          </div>
-          ${risksListHtml}
+        ${socialLinksHtml}
+
+        ${(securityHtml || poolInfoHtml) ? `
+        <div class="pdd-overview-grid">
+          ${securityHtml}
+          ${poolInfoHtml}
         </div>
         ` : ""}
 
-        ${socialLinksHtml}
         ${marketDataHtml}
-        ${poolInfoHtml}
         ${explorerLinksHtml}
       </div>
     `;
@@ -2426,6 +2443,38 @@ export class PositionDetailsDialog {
     if (score >= 80) return "var(--success)";
     if (score >= 50) return "var(--warning)";
     return "var(--error)";
+  }
+
+  /**
+   * Get token decimals from fullDetails or position data
+   * Defaults to 9 (most Solana SPL tokens) if not available
+   */
+  _getDecimals() {
+    return this.fullDetails?.token_info?.decimals ?? 9;
+  }
+
+  /**
+   * Convert raw token amount (u64) to UI amount using decimals
+   * @param {number} rawAmount - Raw token amount in smallest units
+   * @returns {number} UI amount (human-readable)
+   */
+  _toUiAmount(rawAmount) {
+    if (!rawAmount) return 0;
+    const decimals = this._getDecimals();
+    return rawAmount / Math.pow(10, decimals);
+  }
+
+  /**
+   * Calculate current position value in SOL
+   * @param {Object} pos - Position object with current_price and remaining_token_amount
+   * @returns {number|null} Current value in SOL or null if not calculable
+   */
+  _calculateCurrentValue(pos) {
+    const currentPrice = pos?.current_price;
+    const remainingTokens = pos?.remaining_token_amount;
+    if (!currentPrice || !remainingTokens) return null;
+    const uiAmount = this._toUiAmount(remainingTokens);
+    return currentPrice * uiAmount;
   }
 
   // ===========================================================================

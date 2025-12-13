@@ -84,7 +84,7 @@
 
 .position-details-dialog .dialog-header {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   justify-content: space-between;
   padding: 12px 16px;
   gap: 16px;
@@ -302,14 +302,16 @@
 .position-details-dialog .header-right {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 12px;
   flex: 0 0 auto;
+  height: 100%;
 }
 
 .position-details-dialog .header-actions {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  height: 100%;
 }
 
 .position-details-dialog .header-actions .action-btn {
@@ -974,67 +976,81 @@
 .position-details-dialog .pdd-action-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 10px 16px;
-  font-size: 0.75rem;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 20px;
+  font-size: 0.875rem;
   font-weight: 600;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 0.15s ease;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
   white-space: nowrap;
-  background: var(--bg-primary);
+  min-height: 48px;
 }
 
 .position-details-dialog .pdd-action-btn i {
-  font-size: 14px;
+  font-size: 18px;
 }
 
 .position-details-dialog .pdd-action-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+  transform: none;
 }
 
+/* Add to Position - Primary action, filled green */
 .position-details-dialog .pdd-action-add {
-  color: var(--success-color);
-  border-color: var(--success-alpha-30);
+  background: var(--success-color);
+  color: #fff;
+  border-color: var(--success-color);
+  box-shadow: 0 2px 8px rgb(0, 0, 0, 0.2);
 }
 
 .position-details-dialog .pdd-action-add:hover:not(:disabled) {
-  background: var(--success-alpha-10);
-  border-color: var(--success-color);
+  background: var(--success-color-dark);
+  border-color: var(--success-color-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.3);
 }
 
+/* Partial Sell - Secondary action, outlined warning */
 .position-details-dialog .pdd-action-partial {
-  color: var(--warning-color);
-  border-color: var(--warning-alpha-30);
-}
-
-.position-details-dialog .pdd-action-partial:hover:not(:disabled) {
   background: var(--warning-alpha-10);
+  color: var(--warning-color);
   border-color: var(--warning-color);
 }
 
-.position-details-dialog .pdd-action-close {
-  color: var(--danger);
-  border-color: var(--danger-alpha-30);
+.position-details-dialog .pdd-action-partial:hover:not(:disabled) {
+  background: var(--warning-alpha-20);
+  transform: translateY(-1px);
 }
 
-.position-details-dialog .pdd-action-close:hover:not(:disabled) {
+/* Close Position - Danger action, outlined red */
+.position-details-dialog .pdd-action-close {
   background: var(--danger-alpha-10);
+  color: var(--danger);
   border-color: var(--danger);
 }
 
+.position-details-dialog .pdd-action-close:hover:not(:disabled) {
+  background: var(--danger-alpha-20);
+  transform: translateY(-1px);
+}
+
+/* View Token - Primary action for closed positions */
 .position-details-dialog .pdd-action-view {
-  color: var(--primary-color);
-  border-color: var(--primary-alpha-30);
+  background: var(--primary-color);
+  color: #fff;
+  border-color: var(--primary-color);
+  box-shadow: 0 2px 8px rgb(0, 0, 0, 0.2);
 }
 
 .position-details-dialog .pdd-action-view:hover:not(:disabled) {
-  background: var(--primary-alpha-10);
-  border-color: var(--primary-color);
+  background: var(--primary-color-dark, #2563eb);
+  border-color: var(--primary-color-dark, #2563eb);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.3);
 }
 
 /* P&L Analysis Card */
@@ -1284,17 +1300,50 @@
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  padding: var(--spacing-md);
+  padding: var(--spacing-lg);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-md);
 }
 
-.position-details-dialog .pdd-actions-row {
+.position-details-dialog .pdd-actions-title {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--spacing-sm);
-  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0;
+}
+
+.position-details-dialog .pdd-actions-title i {
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+.position-details-dialog .pdd-actions-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--spacing-md);
+}
+
+/* Single action for closed positions - full width */
+.position-details-dialog .pdd-actions-row.pdd-actions-single {
+  grid-template-columns: 1fr;
+}
+
+.position-details-dialog .pdd-action-full-width {
+  max-width: 400px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+@media (width <= 700px) {
+  .position-details-dialog .pdd-actions-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .position-details-dialog .pdd-external-links {
@@ -1303,7 +1352,7 @@
   align-items: center;
   justify-content: center;
   gap: var(--spacing-sm);
-  padding-top: var(--spacing-sm);
+  padding-top: var(--spacing-md);
   border-top: 1px solid var(--border-color);
 }
 
@@ -2509,6 +2558,19 @@
   flex-direction: column;
   gap: var(--spacing-md);
   padding: var(--spacing-md);
+}
+
+/* Analytics Grid - Side by side cards */
+.position-details-dialog .pdd-analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--spacing-md);
+}
+
+@media (width <= 800px) {
+  .position-details-dialog .pdd-analytics-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 /* Analytics Cards */
