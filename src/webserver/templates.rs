@@ -30,6 +30,7 @@ const UPDATES_PAGE_STYLES: &str = include_str!("templates/styles/pages/updates.c
 const SPLASH_PAGE_STYLES: &str = include_str!("templates/styles/pages/splash.css");
 const ONBOARDING_PAGE_STYLES: &str = include_str!("templates/styles/pages/onboarding.css");
 const SETUP_PAGE_STYLES: &str = include_str!("templates/styles/pages/setup.css");
+const LOCKSCREEN_PAGE_STYLES: &str = include_str!("templates/styles/pages/lockscreen.css");
 const DATA_TABLE_STYLES: &str = include_str!("templates/styles/ui/data_table.css");
 const TABLE_TOOLBAR_STYLES: &str = include_str!("templates/styles/ui/table_toolbar.css");
 const EVENTS_DIALOG_STYLES: &str = include_str!("templates/styles/ui/events_dialog.css");
@@ -56,6 +57,7 @@ const CUSTOM_SELECT_STYLES: &str = include_str!("templates/styles/ui/custom_sele
 const BILLBOARD_DIALOG_STYLES: &str = include_str!("templates/styles/ui/billboard_dialog.css");
 const BILLBOARD_ROW_STYLES: &str = include_str!("templates/styles/ui/billboard_row.css");
 const POOL_SELECTOR_STYLES: &str = include_str!("templates/styles/ui/pool_selector.css");
+const EXIT_DIALOG_STYLES: &str = include_str!("templates/styles/ui/exit_dialog.css");
 
 // Assets (logos, icons)
 pub const LOGO_SVG: &str = include_str!("assets/logo.svg");
@@ -93,6 +95,7 @@ pub const CORE_ONBOARDING: &str = include_str!("templates/scripts/core/onboardin
 pub const CORE_SETUP: &str = include_str!("templates/scripts/core/setup.js");
 pub const CORE_STATUS_BAR: &str = include_str!("templates/scripts/core/status_bar.js");
 pub const CORE_HINTS: &str = include_str!("templates/scripts/core/hints.js");
+pub const CORE_LOCKSCREEN: &str = include_str!("templates/scripts/core/lockscreen.js");
 
 const THEME_SCRIPTS: &str = include_str!("templates/scripts/theme.js");
 
@@ -126,6 +129,7 @@ pub const CUSTOM_SELECT_UI: &str = include_str!("templates/scripts/ui/custom_sel
 pub const BILLBOARD_DIALOG_UI: &str = include_str!("templates/scripts/ui/billboard_dialog.js");
 pub const BILLBOARD_ROW_UI: &str = include_str!("templates/scripts/ui/billboard_row.js");
 pub const POOL_SELECTOR_UI: &str = include_str!("templates/scripts/ui/pool_selector.js");
+pub const EXIT_DIALOG_UI: &str = include_str!("templates/scripts/ui/exit_dialog.js");
 
 pub const SERVICES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/services.js");
 pub const TRANSACTIONS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/transactions.js");
@@ -159,6 +163,7 @@ const ABOUT_PAGE: &str = include_str!("templates/pages/about.html");
 const SPLASH_PAGE: &str = include_str!("templates/pages/splash.html");
 const ONBOARDING_PAGE: &str = include_str!("templates/pages/onboarding.html");
 const SETUP_PAGE: &str = include_str!("templates/pages/setup.html");
+const LOCKSCREEN_PAGE: &str = include_str!("templates/pages/lockscreen.html");
 
 /// Render the base layout with shared chrome and inject the requested content.
 pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
@@ -186,10 +191,11 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     html = html.replace("{{IS_GUI_MODE}}", if is_gui { "true" } else { "false" });
     html = html.replace("{{ASSET_VERSION}}", asset_version.as_str());
 
-    // Inject splash, onboarding, and setup screens
+    // Inject splash, onboarding, setup, and lockscreen screens
     html = html.replace("{{SPLASH_SCREEN}}", SPLASH_PAGE);
     html = html.replace("{{ONBOARDING_SCREEN}}", ONBOARDING_PAGE);
     html = html.replace("{{SETUP_SCREEN}}", SETUP_PAGE);
+    html = html.replace("{{LOCKSCREEN}}", LOCKSCREEN_PAGE);
 
     // Prepare Lucide icon font CSS with corrected paths
     let lucide_css = LUCIDE_ICON_CSS
@@ -229,10 +235,13 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         BILLBOARD_DIALOG_STYLES,
         BILLBOARD_ROW_STYLES,
         POOL_SELECTOR_STYLES,
+        EXIT_DIALOG_STYLES,
         // Splash, onboarding, and setup screens (always included for proper transitions)
         SPLASH_PAGE_STYLES,
         ONBOARDING_PAGE_STYLES,
         SETUP_PAGE_STYLES,
+        // Lockscreen overlay (security)
+        LOCKSCREEN_PAGE_STYLES,
         // Status bar (always visible at bottom)
         STATUS_BAR_STYLES,
         // All page styles included upfront to prevent FOUC (Flash of Unstyled Content)

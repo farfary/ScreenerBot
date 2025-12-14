@@ -9,7 +9,7 @@
   left: 0;
   right: 0;
   height: 26px;
-  z-index: 10001;
+  z-index: var(--z-status-bar, 10001);
   background: var(--header-bg, linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1c2128 100%));
   border-top: 1px solid var(--header-border, #30363d);
   display: flex;

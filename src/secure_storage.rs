@@ -116,6 +116,87 @@ pub fn has_encrypted_wallet(ciphertext: &str, nonce: &str) -> bool {
     !ciphertext.is_empty() && !nonce.is_empty()
 }
 
+// =============================================================================
+// PASSWORD HASHING FOR LOCKSCREEN
+// =============================================================================
+
+/// Generate a random 16-byte salt for password hashing
+///
+/// # Returns
+/// Base64-encoded salt string
+pub fn generate_password_salt() -> String {
+    let salt: [u8; 16] = rand::random();
+    BASE64.encode(salt)
+}
+
+/// Hash a password using BLAKE3 with salt
+///
+/// Uses BLAKE3 keyed hash for password hashing which provides:
+/// - Fast hashing (important for PIN verification UX)
+/// - Cryptographic security
+/// - Resistance to rainbow table attacks (via salt)
+///
+/// # Arguments
+/// * `password` - The plaintext password to hash
+/// * `salt` - Base64-encoded salt
+///
+/// # Returns
+/// Base64-encoded hash string
+pub fn hash_password(password: &str, salt: &str) -> Result<String, String> {
+    let salt_bytes = BASE64
+        .decode(salt)
+        .map_err(|e| format!("Invalid salt encoding: {}", e))?;
+
+    // Derive a key from salt for keyed hashing
+    let mut key = [0u8; 32];
+    let mut key_hasher = blake3::Hasher::new();
+    key_hasher.update(&salt_bytes);
+    key_hasher.update(b"screenerbot-lockscreen-v1");
+    let key_hash = key_hasher.finalize();
+    key.copy_from_slice(key_hash.as_bytes());
+
+    // Hash password with the derived key
+    let mut hasher = blake3::Hasher::new_keyed(&key);
+    hasher.update(password.as_bytes());
+    let hash = hasher.finalize();
+
+    Ok(BASE64.encode(hash.as_bytes()))
+}
+
+/// Verify a password against a stored hash using constant-time comparison
+///
+/// # Arguments
+/// * `password` - The password attempt to verify
+/// * `salt` - Base64-encoded salt used when hashing
+/// * `stored_hash` - Base64-encoded stored hash to compare against
+///
+/// # Returns
+/// `true` if password matches, `false` otherwise
+pub fn verify_password(password: &str, salt: &str, stored_hash: &str) -> bool {
+    // Hash the attempt
+    let attempt_hash = match hash_password(password, salt) {
+        Ok(h) => h,
+        Err(_) => return false,
+    };
+
+    // Constant-time comparison to prevent timing attacks
+    constant_time_compare(attempt_hash.as_bytes(), stored_hash.as_bytes())
+}
+
+/// Constant-time byte comparison to prevent timing attacks
+///
+/// Returns true only if both slices have equal length and content.
+fn constant_time_compare(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+
+    // XOR all bytes and accumulate - result is 0 only if all bytes match
+    let result = a.iter().zip(b.iter()).fold(0u8, |acc, (x, y)| acc | (x ^ y));
+
+    result == 0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

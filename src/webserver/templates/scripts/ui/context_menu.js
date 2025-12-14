@@ -683,7 +683,7 @@ class ContextMenuManager {
     try {
       // Clean up any existing menu FIRST, before async operations
       this._hideImmediate();
-      
+
       // Also clean up any orphaned elements from previous instances
       this._cleanupOrphanedElements();
 
@@ -732,13 +732,13 @@ class ContextMenuManager {
    */
   _cleanupOrphanedElements() {
     // Remove any stray overlays
-    document.querySelectorAll(".context-menu-overlay").forEach(el => {
+    document.querySelectorAll(".context-menu-overlay").forEach((el) => {
       if (el !== this.overlayEl) {
         el.remove();
       }
     });
     // Remove any stray menus
-    document.querySelectorAll(".context-menu").forEach(el => {
+    document.querySelectorAll(".context-menu").forEach((el) => {
       if (el !== this.menuEl) {
         el.remove();
       }

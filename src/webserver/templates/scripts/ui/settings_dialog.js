@@ -487,6 +487,10 @@ export class SettingsDialog {
               <i class="icon-database"></i>
               <span>Data</span>
             </button>
+            <button class="settings-nav-item" data-tab="security">
+              <i class="icon-lock"></i>
+              <span>Security</span>
+            </button>
             <div class="settings-nav-divider"></div>
             <button class="settings-nav-item" data-tab="updates">
               <i class="icon-refresh-cw"></i>
@@ -524,6 +528,9 @@ export class SettingsDialog {
               <div class="settings-loading">Loading...</div>
             </div>
             <div class="settings-tab" data-tab-content="data">
+              <div class="settings-loading">Loading...</div>
+            </div>
+            <div class="settings-tab" data-tab-content="security">
               <div class="settings-loading">Loading...</div>
             </div>
             <div class="settings-tab" data-tab-content="updates">
@@ -631,6 +638,9 @@ export class SettingsDialog {
       case "data":
         content.innerHTML = this._buildDataTab();
         this._attachDataHandlers(content);
+        break;
+      case "security":
+        this._loadSecurityTab(content);
         break;
       case "updates":
         content.innerHTML = this._buildUpdatesTab();
@@ -1773,6 +1783,458 @@ export class SettingsDialog {
       Utils.showToast(`${presetDisplayName} preset applied successfully`, "success");
     } catch (err) {
       Utils.showToast("Failed to apply preset: " + err.message, "error");
+    }
+  }
+
+  // ==========================================================================
+  // SECURITY TAB - Lockscreen settings
+  // ==========================================================================
+
+  /**
+   * Load and build Security tab content (async because we need to fetch status)
+   */
+  async _loadSecurityTab(content) {
+    content.innerHTML =
+      '<div class="settings-loading"><i class="icon-loader spin"></i> Loading security settings...</div>';
+
+    try {
+      // Fetch lockscreen status from API
+      const response = await fetch("/api/lockscreen/status");
+      let status = {
+        enabled: false,
+        has_password: false,
+        password_type: "pin6",
+        auto_lock_timeout_minutes: 0,
+        lock_on_blur: false,
+      };
+
+      if (response.ok) {
+        const data = await response.json();
+        status = data.data || data;
+      }
+
+      content.innerHTML = this._buildSecurityTab(status);
+      this._attachSecurityHandlers(content, status);
+      enhanceAllSelects(content);
+    } catch (error) {
+      console.error("[Settings] Failed to load security status:", error);
+      content.innerHTML = '<div class="settings-error">Failed to load security settings</div>';
+    }
+  }
+
+  /**
+   * Build Security tab HTML
+   */
+  _buildSecurityTab(status) {
+    const hasPassword = status.has_password;
+    const isEnabled = status.enabled && hasPassword;
+    const passwordType = status.password_type || "pin6";
+    const autoLockSecs = status.auto_lock_timeout_secs || 0;
+    const lockOnBlur = status.lock_on_blur || false;
+
+    // Password type display name
+    const typeNames = {
+      pin4: "4-Digit PIN",
+      pin6: "6-Digit PIN",
+      text: "Text Password",
+    };
+    const typeName = typeNames[passwordType] || "Not Set";
+
+    return `
+      <div class="settings-section">
+        <h3 class="settings-section-title">
+          <i class="icon-lock"></i>
+          Dashboard Lockscreen
+        </h3>
+        <p class="settings-section-description">
+          Protect your dashboard with a PIN or password. The lockscreen will appear when triggered, requiring authentication to continue.
+        </p>
+
+        <div class="settings-group">
+          <!-- Enable/Disable Lockscreen -->
+          <div class="settings-field">
+            <div class="settings-field-info">
+              <label>Enable Lockscreen</label>
+              <span class="settings-field-hint">Protect your dashboard with password authentication</span>
+            </div>
+            <div class="settings-field-control">
+              <label class="settings-toggle">
+                <input type="checkbox" id="securityEnableLockscreen" ${isEnabled ? "checked" : ""} ${!hasPassword ? "disabled" : ""}>
+                <span class="settings-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Password Status -->
+          <div class="settings-field">
+            <div class="settings-field-info">
+              <label>Password Status</label>
+              <span class="settings-field-hint">
+                ${hasPassword ? `Current: ${typeName}` : "No password set"}
+              </span>
+            </div>
+            <div class="settings-field-control security-password-actions">
+              ${
+                hasPassword
+                  ? `
+                <button class="btn btn-secondary btn-sm" id="securityChangePasswordBtn">
+                  <i class="icon-edit-2"></i> Change
+                </button>
+                <button class="btn btn-warning btn-sm" id="securityRemovePasswordBtn">
+                  <i class="icon-trash-2"></i> Remove
+                </button>
+              `
+                  : `
+                <button class="btn btn-primary btn-sm" id="securitySetPasswordBtn">
+                  <i class="icon-key"></i> Set Password
+                </button>
+              `
+              }
+            </div>
+          </div>
+
+          <!-- Auto-Lock Timeout -->
+          <div class="settings-field">
+            <div class="settings-field-info">
+              <label>Auto-Lock After Inactivity</label>
+              <span class="settings-field-hint">Automatically lock after period of no activity</span>
+            </div>
+            <div class="settings-field-control">
+              <select id="securityAutoLockTimeout" class="settings-select" data-custom-select ${!hasPassword ? "disabled" : ""}>
+                <option value="0" ${autoLockSecs === 0 ? "selected" : ""}>Never</option>
+                <option value="60" ${autoLockSecs === 60 ? "selected" : ""}>1 minute</option>
+                <option value="300" ${autoLockSecs === 300 ? "selected" : ""}>5 minutes</option>
+                <option value="900" ${autoLockSecs === 900 ? "selected" : ""}>15 minutes</option>
+                <option value="1800" ${autoLockSecs === 1800 ? "selected" : ""}>30 minutes</option>
+                <option value="3600" ${autoLockSecs === 3600 ? "selected" : ""}>1 hour</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Lock on Blur -->
+          <div class="settings-field">
+            <div class="settings-field-info">
+              <label>Lock When Window Loses Focus</label>
+              <span class="settings-field-hint">Automatically lock when you switch to another application</span>
+            </div>
+            <div class="settings-field-control">
+              <label class="settings-toggle">
+                <input type="checkbox" id="securityLockOnBlur" ${lockOnBlur ? "checked" : ""} ${!hasPassword ? "disabled" : ""}>
+                <span class="settings-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lock Now Action -->
+      <div class="settings-section">
+        <h3 class="settings-section-title">
+          <i class="icon-shield"></i>
+          Quick Actions
+        </h3>
+        
+        <div class="settings-group">
+          <div class="settings-field">
+            <div class="settings-field-info">
+              <label>Lock Dashboard Now</label>
+              <span class="settings-field-hint">Immediately lock the dashboard</span>
+            </div>
+            <div class="settings-field-control">
+              <button class="btn btn-primary btn-sm" id="securityLockNowBtn" ${!hasPassword || !isEnabled ? "disabled" : ""}>
+                <i class="icon-lock"></i> Lock Now
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Password Setup Modal Container -->
+      <div id="securityPasswordModal" class="security-modal" style="display: none;">
+        <div class="security-modal-backdrop"></div>
+        <div class="security-modal-content">
+          <div class="security-modal-header">
+            <h3 id="securityModalTitle">Set Password</h3>
+            <button class="security-modal-close" id="securityModalClose">
+              <i class="icon-x"></i>
+            </button>
+          </div>
+          <div class="security-modal-body" id="securityModalBody">
+            <!-- Content injected dynamically -->
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Attach handlers for Security tab
+   */
+  _attachSecurityHandlers(content, status) {
+    // Enable/disable toggle
+    const enableToggle = content.querySelector("#securityEnableLockscreen");
+    if (enableToggle) {
+      enableToggle.addEventListener("change", async (e) => {
+        await this._updateSecuritySetting("enabled", e.target.checked);
+      });
+    }
+
+    // Auto-lock timeout
+    const timeoutSelect = content.querySelector("#securityAutoLockTimeout");
+    if (timeoutSelect) {
+      timeoutSelect.addEventListener("change", async (e) => {
+        await this._updateSecuritySetting(
+          "auto_lock_timeout_secs",
+          parseInt(e.target.value, 10)
+        );
+      });
+    }
+
+    // Lock on blur toggle
+    const blurToggle = content.querySelector("#securityLockOnBlur");
+    if (blurToggle) {
+      blurToggle.addEventListener("change", async (e) => {
+        await this._updateSecuritySetting("lock_on_blur", e.target.checked);
+      });
+    }
+
+    // Set password button
+    const setBtn = content.querySelector("#securitySetPasswordBtn");
+    if (setBtn) {
+      setBtn.addEventListener("click", () => this._showPasswordModal("set", content));
+    }
+
+    // Change password button
+    const changeBtn = content.querySelector("#securityChangePasswordBtn");
+    if (changeBtn) {
+      changeBtn.addEventListener("click", () => this._showPasswordModal("change", content));
+    }
+
+    // Remove password button
+    const removeBtn = content.querySelector("#securityRemovePasswordBtn");
+    if (removeBtn) {
+      removeBtn.addEventListener("click", () => this._removePassword(content));
+    }
+
+    // Lock now button
+    const lockBtn = content.querySelector("#securityLockNowBtn");
+    if (lockBtn) {
+      lockBtn.addEventListener("click", () => {
+        if (window.Lockscreen && window.Lockscreen.lockNow()) {
+          this.close();
+        } else {
+          Utils.showToast("Cannot lock - lockscreen not ready", "error");
+        }
+      });
+    }
+  }
+
+  /**
+   * Update a security setting via API
+   */
+  async _updateSecuritySetting(key, value) {
+    try {
+      const response = await fetch("/api/lockscreen/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ [key]: value }),
+      });
+
+      if (response.ok) {
+        Utils.showToast("Security setting updated", "success");
+        // Update lockscreen controller if available
+        if (window.Lockscreen) {
+          window.Lockscreen.loadStatus();
+        }
+      } else {
+        const data = await response.json();
+        Utils.showToast(data.message || "Failed to update setting", "error");
+      }
+    } catch (error) {
+      Utils.showToast("Failed to update setting: " + error.message, "error");
+    }
+  }
+
+  /**
+   * Show password setup/change modal
+   */
+  _showPasswordModal(mode, content) {
+    const modal = content.querySelector("#securityPasswordModal");
+    const title = content.querySelector("#securityModalTitle");
+    const body = content.querySelector("#securityModalBody");
+    const closeBtn = content.querySelector("#securityModalClose");
+    const backdrop = modal.querySelector(".security-modal-backdrop");
+
+    if (!modal || !body) return;
+
+    title.textContent = mode === "set" ? "Set Password" : "Change Password";
+
+    body.innerHTML = `
+      <div class="security-form">
+        ${
+          mode === "change"
+            ? `
+          <div class="security-form-group">
+            <label>Current Password</label>
+            <input type="password" id="securityCurrentPassword" class="settings-input" placeholder="Enter current password" />
+          </div>
+        `
+            : ""
+        }
+        
+        <div class="security-form-group">
+          <label>Password Type</label>
+          <select id="securityPasswordType" class="settings-select" data-custom-select>
+            <option value="pin4">4-Digit PIN</option>
+            <option value="pin6" selected>6-Digit PIN</option>
+            <option value="text">Text Password</option>
+          </select>
+        </div>
+
+        <div class="security-form-group">
+          <label>New Password</label>
+          <input type="password" id="securityNewPassword" class="settings-input" placeholder="Enter new password" />
+        </div>
+
+        <div class="security-form-group">
+          <label>Confirm Password</label>
+          <input type="password" id="securityConfirmPassword" class="settings-input" placeholder="Confirm password" />
+        </div>
+
+        <div class="security-form-actions">
+          <button class="btn btn-secondary" id="securityCancelBtn">Cancel</button>
+          <button class="btn btn-primary" id="securitySavePasswordBtn">
+            <i class="icon-check"></i> ${mode === "set" ? "Set Password" : "Update Password"}
+          </button>
+        </div>
+      </div>
+    `;
+
+    modal.style.display = "flex";
+    enhanceAllSelects(body);
+
+    // Close handlers
+    const closeModal = () => {
+      modal.style.display = "none";
+    };
+
+    closeBtn.onclick = closeModal;
+    backdrop.onclick = closeModal;
+    body.querySelector("#securityCancelBtn").onclick = closeModal;
+
+    // Type change handler - validate input
+    const typeSelect = body.querySelector("#securityPasswordType");
+    const newPasswordInput = body.querySelector("#securityNewPassword");
+
+    typeSelect.addEventListener("change", () => {
+      const type = typeSelect.value;
+      if (type === "pin4" || type === "pin6") {
+        newPasswordInput.type = "password";
+        newPasswordInput.inputMode = "numeric";
+        newPasswordInput.pattern = type === "pin4" ? "[0-9]{4}" : "[0-9]{6}";
+        newPasswordInput.placeholder = type === "pin4" ? "Enter 4-digit PIN" : "Enter 6-digit PIN";
+      } else {
+        newPasswordInput.type = "password";
+        newPasswordInput.inputMode = "text";
+        newPasswordInput.pattern = "";
+        newPasswordInput.placeholder = "Enter password";
+      }
+    });
+
+    // Save handler
+    body.querySelector("#securitySavePasswordBtn").onclick = async () => {
+      const passwordType = typeSelect.value;
+      const newPassword = newPasswordInput.value;
+      const confirmPassword = body.querySelector("#securityConfirmPassword").value;
+      const currentPassword =
+        mode === "change" ? body.querySelector("#securityCurrentPassword")?.value : null;
+
+      // Validation
+      if (!newPassword) {
+        Utils.showToast("Please enter a password", "error");
+        return;
+      }
+
+      if (newPassword !== confirmPassword) {
+        Utils.showToast("Passwords do not match", "error");
+        return;
+      }
+
+      // Validate PIN format
+      if (passwordType === "pin4" && !/^\d{4}$/.test(newPassword)) {
+        Utils.showToast("PIN must be exactly 4 digits", "error");
+        return;
+      }
+      if (passwordType === "pin6" && !/^\d{6}$/.test(newPassword)) {
+        Utils.showToast("PIN must be exactly 6 digits", "error");
+        return;
+      }
+      if (passwordType === "text" && newPassword.length < 4) {
+        Utils.showToast("Password must be at least 4 characters", "error");
+        return;
+      }
+
+      try {
+        const payload = {
+          password_type: passwordType,
+          new_password: newPassword,
+        };
+        if (currentPassword) {
+          payload.current_password = currentPassword;
+        }
+
+        const response = await fetch("/api/lockscreen/password", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+
+        if (response.ok) {
+          Utils.showToast("Password saved successfully", "success");
+          closeModal();
+          // Reload security tab
+          this._loadSecurityTab(content);
+          // Update lockscreen controller
+          if (window.Lockscreen) {
+            window.Lockscreen.loadStatus();
+          }
+        } else {
+          const data = await response.json();
+          Utils.showToast(data.message || "Failed to save password", "error");
+        }
+      } catch (error) {
+        Utils.showToast("Failed to save password: " + error.message, "error");
+      }
+    };
+  }
+
+  /**
+   * Remove password
+   */
+  async _removePassword(content) {
+    if (!window.confirm("Remove lockscreen password? This will disable the lockscreen.")) {
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/lockscreen/password", {
+        method: "DELETE",
+      });
+
+      if (response.ok) {
+        Utils.showToast("Password removed", "success");
+        // Reload security tab
+        this._loadSecurityTab(content);
+        // Update lockscreen controller
+        if (window.Lockscreen) {
+          window.Lockscreen.loadStatus();
+        }
+      } else {
+        const data = await response.json();
+        Utils.showToast(data.message || "Failed to remove password", "error");
+      }
+    } catch (error) {
+      Utils.showToast("Failed to remove password: " + error.message, "error");
     }
   }
 

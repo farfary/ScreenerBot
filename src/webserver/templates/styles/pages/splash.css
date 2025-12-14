@@ -3,7 +3,7 @@
 .splash-screen {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  z-index: var(--z-splash, 99999); /* Highest layer - above all elements during loading */
   display: flex;
   flex-direction: column;
   align-items: center;

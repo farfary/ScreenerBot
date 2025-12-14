@@ -16,6 +16,7 @@ pub mod events;
 pub mod filtering_api;
 pub mod header;
 pub mod initialization;
+pub mod lockscreen;
 pub mod ohlcv;
 pub mod positions;
 pub mod services;
@@ -187,6 +188,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .nest("/strategies", strategies::routes())
         .nest("/tools", tools::routes())
         .nest("/wallets", wallets::routes())
+        .nest("/lockscreen", lockscreen::routes())
         .merge(updates::routes())
         .route("/pages/:page", axum::routing::get(get_page_content))
 }
@@ -248,6 +250,7 @@ async fn get_core_script(axum::extract::Path(file): axum::extract::Path<String>)
         "setup.js" => Some(templates::CORE_SETUP),
         "status_bar.js" => Some(templates::CORE_STATUS_BAR),
         "hints.js" => Some(templates::CORE_HINTS),
+        "lockscreen.js" => Some(templates::CORE_LOCKSCREEN),
         _ => None,
     };
 
@@ -326,6 +329,7 @@ async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String>) -
         "billboard_dialog.js" => Some(templates::BILLBOARD_DIALOG_UI),
         "billboard_row.js" => Some(templates::BILLBOARD_ROW_UI),
         "pool_selector.js" => Some(templates::POOL_SELECTOR_UI),
+        "exit_dialog.js" => Some(templates::EXIT_DIALOG_UI),
         _ => None,
     };
 

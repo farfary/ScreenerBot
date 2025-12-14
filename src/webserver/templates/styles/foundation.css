@@ -149,6 +149,16 @@
   --radius-lg: 8px;
   --radius-xl: 12px;
 
+  /* Z-Index Scale - Layering hierarchy */
+  --z-header: 1000;
+  --z-dropdown: 9999;
+  --z-dialog: 10000;
+  --z-status-bar: 10001;
+  --z-toast: 10002;
+  --z-exit-dialog: 10010;
+  --z-splash: 99999;
+  --z-lockscreen: 100000; /* Highest - security lockscreen above everything */
+
   /* Typography System */
   --font-sans: -apple-system, blinkmacsystemfont, "Segoe UI", roboto, sans-serif;
   --font-mono: "JetBrains Mono", "SF Mono", monaco, "Cascadia Code", "Roboto Mono", monospace;

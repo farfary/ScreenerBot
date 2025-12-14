@@ -1,0 +1,88 @@
+<!-- Lockscreen Overlay - Security lock for dashboard -->
+<div id="lockscreen" class="lockscreen" aria-hidden="true">
+  <div class="lockscreen-backdrop"></div>
+
+  <div class="lockscreen-content">
+    <!-- Logo and branding -->
+    <div class="lockscreen-header">
+      <div class="lockscreen-logo">
+        <img src="/assets/logo.svg" alt="ScreenerBot" class="lockscreen-logo-img" />
+      </div>
+      <div class="lockscreen-brand">ScreenerBot</div>
+      <div class="lockscreen-subtitle">Dashboard Locked</div>
+    </div>
+
+    <!-- PIN Input Container (for 4 or 6 digit PIN) -->
+    <div id="lockscreenPinContainer" class="lockscreen-pin-container" style="display: none">
+      <div class="lockscreen-pin-display">
+        <div class="lockscreen-pin-digits" id="lockscreenPinDigits">
+          <!-- Digits will be populated based on PIN length (4 or 6) -->
+        </div>
+      </div>
+
+      <!-- Numeric Keypad -->
+      <div class="lockscreen-keypad">
+        <button type="button" class="lockscreen-key" data-key="1">1</button>
+        <button type="button" class="lockscreen-key" data-key="2">2</button>
+        <button type="button" class="lockscreen-key" data-key="3">3</button>
+        <button type="button" class="lockscreen-key" data-key="4">4</button>
+        <button type="button" class="lockscreen-key" data-key="5">5</button>
+        <button type="button" class="lockscreen-key" data-key="6">6</button>
+        <button type="button" class="lockscreen-key" data-key="7">7</button>
+        <button type="button" class="lockscreen-key" data-key="8">8</button>
+        <button type="button" class="lockscreen-key" data-key="9">9</button>
+        <button type="button" class="lockscreen-key lockscreen-key-empty" disabled></button>
+        <button type="button" class="lockscreen-key" data-key="0">0</button>
+        <button
+          type="button"
+          class="lockscreen-key lockscreen-key-backspace"
+          data-key="backspace"
+          aria-label="Backspace"
+        >
+          <i class="icon-delete"></i>
+        </button>
+      </div>
+    </div>
+
+    <!-- Text Password Container -->
+    <div
+      id="lockscreenPasswordContainer"
+      class="lockscreen-password-container"
+      style="display: none"
+    >
+      <div class="lockscreen-password-field">
+        <input
+          type="password"
+          id="lockscreenPasswordInput"
+          class="lockscreen-password-input"
+          placeholder="Enter password"
+          autocomplete="current-password"
+          spellcheck="false"
+        />
+        <button
+          type="button"
+          id="lockscreenPasswordToggle"
+          class="lockscreen-password-toggle"
+          aria-label="Toggle password visibility"
+        >
+          <i class="icon-eye" id="lockscreenPasswordIcon"></i>
+        </button>
+      </div>
+      <button type="button" id="lockscreenPasswordSubmit" class="lockscreen-password-submit">
+        <i class="icon-unlock"></i>
+        <span>Unlock</span>
+      </button>
+    </div>
+
+    <!-- Error Message -->
+    <div id="lockscreenError" class="lockscreen-error" aria-live="polite">
+      <i class="icon-alert-circle"></i>
+      <span id="lockscreenErrorText">Incorrect password</span>
+    </div>
+  </div>
+
+  <!-- Version Footer -->
+  <div class="lockscreen-footer">
+    <span class="lockscreen-version" id="lockscreenVersion"></span>
+  </div>
+</div>

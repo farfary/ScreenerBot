@@ -24,6 +24,32 @@ config_struct! {
 
         /// Navigation tab settings
         navigation: NavigationConfig = NavigationConfig::default(),
+
+        /// Lockscreen security settings
+        lockscreen: LockscreenConfig = LockscreenConfig::default(),
+    }
+}
+
+config_struct! {
+    /// Lockscreen security settings
+    pub struct LockscreenConfig {
+        /// Whether lockscreen is enabled
+        enabled: bool = false,
+
+        /// Password type: "pin4", "pin6", "text"
+        password_type: String = "pin4".to_string(),
+
+        /// Hashed password (BLAKE3 hash, base64-encoded)
+        password_hash: String = String::new(),
+
+        /// Password salt (random, base64-encoded)
+        password_salt: String = String::new(),
+
+        /// Auto-lock timeout in seconds (0 = never)
+        auto_lock_timeout_secs: u64 = 300,
+
+        /// Lock on app minimize/blur (Tauri only)
+        lock_on_blur: bool = false,
     }
 }
 

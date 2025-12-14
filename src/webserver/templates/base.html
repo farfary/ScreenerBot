@@ -110,6 +110,9 @@
     <!-- Setup Screen - Initial configuration (hidden by default) -->
     <div id="setupScreenWrapper" style="display: none">{{SETUP_SCREEN}}</div>
 
+    <!-- Lockscreen - Security overlay (hidden by default) -->
+    {{LOCKSCREEN}}
+
     <!-- Tauri: Title bar background area (matches header color behind traffic lights) -->
     <div class="tauri-titlebar-bg" data-tauri-drag-region></div>
 
@@ -447,6 +450,7 @@
     <!-- UI Components -->
     <script type="module" src="/scripts/ui/context_menu.js?v={{ASSET_VERSION}}"></script>
     <script type="module" src="/scripts/ui/search_dialog.js?v={{ASSET_VERSION}}"></script>
+    <script type="module" src="/scripts/ui/exit_dialog.js?v={{ASSET_VERSION}}"></script>
     <script src="/scripts/ui/advanced_chart.js?v={{ASSET_VERSION}}"></script>
 
     <!-- Initialize global search dialog -->
@@ -466,11 +470,12 @@
       initBillboard();
     </script>
 
-    <!-- Splash, Onboarding, and Setup Controllers (non-module for immediate execution) -->
+    <!-- Splash, Onboarding, Setup, and Lockscreen Controllers (non-module for immediate execution) -->
     <script src="/scripts/core/splash.js?v={{ASSET_VERSION}}"></script>
     <script src="/scripts/core/onboarding.js?v={{ASSET_VERSION}}"></script>
     <script src="/scripts/core/setup.js?v={{ASSET_VERSION}}"></script>
     <script src="/scripts/core/status_bar.js?v={{ASSET_VERSION}}"></script>
+    <script src="/scripts/core/lockscreen.js?v={{ASSET_VERSION}}"></script>
 
     <!-- Theme toggle (non-module) -->
     <script>
