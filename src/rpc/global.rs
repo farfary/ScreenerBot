@@ -1,4 +1,4 @@
-//! RPC Client Access Layer
+//! RPC Client Global Access Layer
 //!
 //! Provides the global `RpcClient` instance that uses `RpcManager` internally.
 //! This is the main entry point for RPC operations throughout the codebase.

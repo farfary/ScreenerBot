@@ -1,18 +1,50 @@
 /**
- * Billboard Dialog - Shows featured tokens from the website
+ * Billboard Dialog - Shows featured tokens and external sources
  *
- * Displays community-submitted tokens with their logos, descriptions,
- * social links, and optional featured badge for highlighted tokens.
+ * Displays community-submitted tokens plus Jupiter and DexScreener trending tokens
+ * in a Netflix-style category layout with horizontal scrolling rows.
  */
 
 import { $ } from "../core/dom.js";
 
 const DIALOG_ID = "billboard-dialog";
 
+// Category definitions with metadata
+const CATEGORIES = [
+  {
+    id: "featured",
+    title: "Featured Tokens",
+    icon: "icon-star",
+    key: "featured",
+    isFeatured: true,
+  },
+  {
+    id: "jupiter-organic",
+    title: "Jupiter Top Organic",
+    icon: "icon-trending-up",
+    key: "jupiter_organic",
+    source: "jupiter",
+  },
+  {
+    id: "jupiter-traded",
+    title: "Jupiter Top Traded",
+    icon: "icon-activity",
+    key: "jupiter_traded",
+    source: "jupiter",
+  },
+  {
+    id: "dexscreener-trending",
+    title: "DexScreener Trending",
+    icon: "icon-zap",
+    key: "dexscreener_trending",
+    source: "dexscreener",
+  },
+];
+
 class BillboardDialog {
   constructor() {
     this.isOpen = false;
-    this.tokens = [];
+    this.data = null;
     this.dialogEl = null;
   }
 
@@ -24,12 +56,12 @@ class BillboardDialog {
     this._showLoading();
 
     try {
-      const response = await fetch("/api/billboard");
+      const response = await fetch("/api/billboard/all");
       const data = await response.json();
 
-      if (data.success && data.tokens) {
-        this.tokens = data.tokens;
-        this._renderTokens();
+      if (data.success) {
+        this.data = data;
+        this._renderCategories();
       } else {
         this._showError(data.error || "Failed to load billboard");
       }
@@ -40,8 +72,16 @@ class BillboardDialog {
 
   close() {
     if (this.dialogEl) {
-      this.dialogEl.remove();
-      this.dialogEl = null;
+      this.dialogEl.classList.remove("visible");
+      setTimeout(() => {
+        if (this.dialogEl) {
+          this.dialogEl.remove();
+          this.dialogEl = null;
+        }
+      }, 250);
+    }
+    if (this._handleKeydown) {
+      document.removeEventListener("keydown", this._handleKeydown);
     }
     this.isOpen = false;
   }
@@ -55,19 +95,19 @@ class BillboardDialog {
     dialog.id = DIALOG_ID;
     dialog.className = "billboard-dialog-overlay";
     dialog.innerHTML = `
-      <div class="billboard-dialog">
+      <div class="billboard-dialog billboard-dialog-categories">
         <div class="billboard-header">
           <div class="billboard-title">
             <i class="icon-megaphone"></i>
             <h2>Billboard</h2>
           </div>
-          <p class="billboard-subtitle">Featured tokens from the community</p>
+          <p class="billboard-subtitle">Featured tokens & trending across Solana</p>
           <button class="billboard-close-btn" title="Close">
             <i class="icon-x"></i>
           </button>
         </div>
         <div class="billboard-body">
-          <div class="billboard-tokens" id="billboard-tokens"></div>
+          <div class="billboard-categories" id="billboard-categories"></div>
         </div>
         <div class="billboard-footer">
           <a href="https://screenerbot.io/submit-token" target="_blank" rel="noopener noreferrer" class="billboard-submit-link">
@@ -105,19 +145,19 @@ class BillboardDialog {
   }
 
   _showLoading() {
-    const container = $("#billboard-tokens");
+    const container = $("#billboard-categories");
     if (container) {
       container.innerHTML = `
         <div class="billboard-state billboard-loading">
           <i class="icon-loader spin"></i>
-          <span>Loading featured tokens...</span>
+          <span>Loading billboard...</span>
         </div>
       `;
     }
   }
 
   _showError(message) {
-    const container = $("#billboard-tokens");
+    const container = $("#billboard-categories");
     if (container) {
       container.innerHTML = `
         <div class="billboard-state billboard-error">
@@ -128,27 +168,19 @@ class BillboardDialog {
     }
   }
 
-  _renderTokens() {
-    const container = $("#billboard-tokens");
-    if (!container) return;
+  _renderCategories() {
+    const container = $("#billboard-categories");
+    if (!container || !this.data) return;
 
-    if (this.tokens.length === 0) {
-      container.innerHTML = `
-        <div class="billboard-state billboard-empty">
-          <i class="icon-inbox"></i>
-          <span>No featured tokens yet</span>
-          <a href="https://screenerbot.io/submit-token" target="_blank" rel="noopener noreferrer">
-            Be the first to submit!
-          </a>
-        </div>
-      `;
-      return;
-    }
+    container.innerHTML = CATEGORIES.map((cat) => this._renderCategory(cat)).join("");
 
-    container.innerHTML = this.tokens.map((token) => this._renderTokenCard(token)).join("");
+    // Attach scroll handlers for each category
+    CATEGORIES.forEach((cat) => {
+      this._initScrollBehavior(cat.id);
+    });
 
     // Attach copy handlers
-    container.querySelectorAll(".billboard-copy-btn").forEach((btn) => {
+    container.querySelectorAll(".billboard-cat-copy-btn").forEach((btn) => {
       btn.addEventListener("click", (e) => {
         e.preventDefault();
         e.stopPropagation();
@@ -168,60 +200,132 @@ class BillboardDialog {
     });
   }
 
-  _renderTokenCard(token) {
-    const logoUrl = token.logo || "/icon.png";
-    const socials = this._buildSocialLinks(token);
-    const featuredClass = token.featured ? "featured" : "";
+  _renderCategory(category) {
+    const tokens = this.data[category.key] || [];
+
+    if (tokens.length === 0 && !category.isFeatured) {
+      return ""; // Skip empty external categories
+    }
+
+    const emptyState = tokens.length === 0
+      ? `<div class="billboard-cat-empty"><i class="icon-inbox"></i><span>No tokens yet</span></div>`
+      : "";
+
+    const tokenCards = tokens
+      .map((token) => this._renderTokenCard(token))
+      .join("");
+
+    const sourceTag = category.source
+      ? `<span class="billboard-cat-source">${category.source}</span>`
+      : "";
 
     return `
-      <div class="billboard-token-card ${featuredClass}">
-        ${token.banner ? `<div class="billboard-token-banner" style="background-image: url('${this._escapeHtml(token.banner)}')"></div>` : ""}
-        <div class="billboard-token-main">
-          <img 
-            src="${this._escapeHtml(logoUrl)}" 
-            alt="${this._escapeHtml(token.symbol)}" 
-            class="billboard-token-logo" 
-            onerror="this.src='/icon.png'"
-          />
-          <div class="billboard-token-info">
-            <h3 class="billboard-token-name">${this._escapeHtml(token.name)}</h3>
-            <span class="billboard-token-symbol">${this._escapeHtml(token.symbol)}</span>
+      <div class="billboard-category" data-category="${category.id}">
+        <div class="billboard-cat-header">
+          <div class="billboard-cat-title">
+            <i class="${category.icon}"></i>
+            <span>${category.title}</span>
+            ${sourceTag}
           </div>
-          ${token.featured ? '<span class="billboard-featured-badge"><i class="icon-star"></i> Featured</span>' : ""}
+          <span class="billboard-cat-count">${tokens.length} tokens</span>
         </div>
-        <div class="billboard-token-mint">
-          <span class="billboard-mint-address">${token.mint}</span>
-          <button class="billboard-copy-btn" data-mint="${token.mint}" title="Copy mint address">
-            <i class="icon-copy"></i>
+        <div class="billboard-cat-scroll-wrapper">
+          <button class="billboard-cat-arrow billboard-cat-arrow-left hidden" data-dir="left">
+            <i class="icon-chevron-left"></i>
           </button>
-        </div>
-        ${token.description ? `<p class="billboard-token-description">${this._escapeHtml(token.description)}</p>` : ""}
-        <div class="billboard-token-links">
-          ${token.website ? `<a href="${this._escapeHtml(token.website)}" target="_blank" rel="noopener noreferrer" class="billboard-link-btn" title="Website"><i class="icon-globe"></i></a>` : ""}
-          ${socials}
+          <div class="billboard-cat-tokens" id="billboard-cat-${category.id}">
+            ${emptyState || tokenCards}
+          </div>
+          <button class="billboard-cat-arrow billboard-cat-arrow-right ${tokens.length <= 4 ? "hidden" : ""}" data-dir="right">
+            <i class="icon-chevron-right"></i>
+          </button>
         </div>
       </div>
     `;
   }
 
-  _buildSocialLinks(token) {
-    const links = [];
+  _renderTokenCard(token) {
+    const logoUrl = token.logo || token.icon || "/icon.png";
+    const name = token.name || "Unknown";
+    const symbol = token.symbol || "???";
+    const mint = token.mint || token.id || "";
+    const featuredClass = token.featured ? "featured" : "";
+    const socials = this._buildSocialIcons(token);
+
+    const badge = token.featured
+      ? '<span class="billboard-cat-badge"><i class="icon-star"></i></span>'
+      : "";
+
+    return `
+      <div class="billboard-cat-card ${featuredClass}" data-mint="${mint}" title="${name} (${symbol})">
+        ${badge}
+        <img 
+          src="${this._escapeHtml(logoUrl)}" 
+          alt="${this._escapeHtml(symbol)}" 
+          class="billboard-cat-logo" 
+          onerror="this.src='/icon.png'"
+        />
+        <div class="billboard-cat-info">
+          <span class="billboard-cat-name">${this._escapeHtml(name)}</span>
+          <span class="billboard-cat-symbol">${this._escapeHtml(symbol)}</span>
+        </div>
+        <div class="billboard-cat-actions">
+          ${socials}
+          <button class="billboard-cat-copy-btn" data-mint="${mint}" title="Copy mint address">
+            <i class="icon-copy"></i>
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
+  _buildSocialIcons(token) {
+    const icons = [];
+    if (token.website) {
+      icons.push(`<a href="${this._escapeHtml(token.website)}" target="_blank" rel="noopener noreferrer" class="billboard-cat-social" title="Website"><i class="icon-globe"></i></a>`);
+    }
     if (token.twitter) {
-      links.push(
-        `<a href="${this._escapeHtml(token.twitter)}" target="_blank" rel="noopener noreferrer" class="billboard-link-btn" title="Twitter/X"><i class="icon-twitter"></i></a>`
-      );
+      icons.push(`<a href="${this._escapeHtml(token.twitter)}" target="_blank" rel="noopener noreferrer" class="billboard-cat-social" title="Twitter"><i class="icon-twitter"></i></a>`);
     }
     if (token.telegram) {
-      links.push(
-        `<a href="${this._escapeHtml(token.telegram)}" target="_blank" rel="noopener noreferrer" class="billboard-link-btn" title="Telegram"><i class="icon-send"></i></a>`
-      );
+      icons.push(`<a href="${this._escapeHtml(token.telegram)}" target="_blank" rel="noopener noreferrer" class="billboard-cat-social" title="Telegram"><i class="icon-send"></i></a>`);
     }
     if (token.discord) {
-      links.push(
-        `<a href="${this._escapeHtml(token.discord)}" target="_blank" rel="noopener noreferrer" class="billboard-link-btn" title="Discord"><i class="icon-message-circle"></i></a>`
-      );
+      icons.push(`<a href="${this._escapeHtml(token.discord)}" target="_blank" rel="noopener noreferrer" class="billboard-cat-social" title="Discord"><i class="icon-message-circle"></i></a>`);
     }
-    return links.join("");
+    return icons.join("");
+  }
+
+  _initScrollBehavior(categoryId) {
+    const container = document.getElementById(`billboard-cat-${categoryId}`);
+    if (!container) return;
+
+    const wrapper = container.closest(".billboard-cat-scroll-wrapper");
+    if (!wrapper) return;
+
+    const leftArrow = wrapper.querySelector(".billboard-cat-arrow-left");
+    const rightArrow = wrapper.querySelector(".billboard-cat-arrow-right");
+
+    const updateArrows = () => {
+      const { scrollLeft, scrollWidth, clientWidth } = container;
+      const atStart = scrollLeft <= 0;
+      const atEnd = scrollLeft + clientWidth >= scrollWidth - 10;
+      if (leftArrow) leftArrow.classList.toggle("hidden", atStart);
+      if (rightArrow) rightArrow.classList.toggle("hidden", atEnd);
+    };
+
+    container.addEventListener("scroll", updateArrows);
+    if (leftArrow) {
+      leftArrow.addEventListener("click", () => {
+        container.scrollBy({ left: -300, behavior: "smooth" });
+      });
+    }
+    if (rightArrow) {
+      rightArrow.addEventListener("click", () => {
+        container.scrollBy({ left: 300, behavior: "smooth" });
+      });
+    }
+    updateArrows();
   }
 
   _escapeHtml(text) {

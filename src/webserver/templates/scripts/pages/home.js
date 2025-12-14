@@ -3,6 +3,7 @@ import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";
 import { requestManager, createScopedFetcher } from "../core/request_manager.js";
+import { showBillboardRow, hideBillboardRow } from "../ui/billboard_row.js";
 
 function createLifecycle() {
   let poller = null;
@@ -372,10 +373,17 @@ function createLifecycle() {
 
       poller.start({ silent: true });
       fetchData();
+
+      // Show billboard promotional row
+      showBillboardRow();
     },
 
     deactivate: () => {
       console.log("[Home] Deactivating dashboard");
+
+      // Hide billboard row when leaving page
+      hideBillboardRow();
+
       if (poller) {
         poller.stop({ silent: true });
         poller = null;

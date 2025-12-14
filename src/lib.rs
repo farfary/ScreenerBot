@@ -15,6 +15,7 @@ pub mod gui;
 pub mod logger;
 #[cfg(target_os = "macos")]
 pub mod macos_window;
+pub mod nfts;
 pub mod ohlcvs;
 pub mod paths;
 pub mod pools;
@@ -23,9 +24,7 @@ pub mod process_lock;
 pub mod profiling;
 pub mod reset;
 pub mod rpc;
-pub mod rpc_legacy;
 pub mod run;
-pub mod nfts;
 pub mod secure_storage;
 pub mod services;
 pub mod sol_price;

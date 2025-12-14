@@ -1,6 +1,6 @@
 //! RPC client methods implementation
 //!
-//! These methods mirror the legacy RpcClient API but use the new RpcManager internally.
+//! These methods provide a standard RpcClient API backed by the RpcManager.
 
 use super::RpcClient;
 use crate::constants::{SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID};
@@ -24,8 +24,7 @@ use solana_transaction_status::{EncodedConfirmedTransactionWithStatusMeta, Trans
 use std::str::FromStr;
 use std::time::Duration;
 
-// Re-use the existing TokenAccountInfo from legacy_types for compatibility
-use crate::rpc::legacy_types::TokenAccountInfo;
+use crate::rpc::types::TokenAccountInfo;
 
 /// Health information for a single RPC provider
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -210,7 +209,7 @@ pub trait RpcClientMethods {
     // Health
     fn get_health(&self) -> impl std::future::Future<Output = Result<(), String>> + Send;
 
-    // URL access (for compatibility)
+    // URL access
     fn url(&self) -> impl std::future::Future<Output = String> + Send;
 
     // =========================================================================
@@ -289,7 +288,7 @@ pub trait RpcClientMethods {
         Self: Sized;
 
     // =========================================================================
-    // String-based Convenience Methods (for legacy compatibility)
+    // String-based Convenience Methods
     // =========================================================================
 
     /// Get all token accounts using string address (convenience wrapper)
@@ -431,12 +430,12 @@ pub trait RpcClientMethods {
     ) -> impl std::future::Future<Output = Result<Signature, String>> + Send;
 
     // =========================================================================
-    // Legacy Compatibility Aliases
+    // Convenience Aliases
     // =========================================================================
 
-    /// Get wallet signatures (legacy alias for get_signatures_for_address)
+    /// Get wallet signatures (alias for get_signatures_for_address)
     ///
-    /// Provided for backward compatibility with code expecting this method name.
+    /// Convenience alias for code using this method name.
     fn get_wallet_signatures_main_rpc(
         &self,
         wallet_pubkey: &Pubkey,
@@ -444,26 +443,25 @@ pub trait RpcClientMethods {
         before: Option<&str>,
     ) -> impl std::future::Future<Output = Result<Vec<SignatureInfo>, String>> + Send;
 
-    /// Get transaction details (legacy API - returns legacy TransactionDetails type)
+    /// Get transaction details (returns TransactionDetails type)
     ///
-    /// Provided for backward compatibility with code expecting this method name.
-    /// Uses jsonParsed encoding for proper decoding.
+    /// Convenience alias. Uses jsonParsed encoding for proper decoding.
     fn get_transaction_details(
         &self,
         signature: &str,
-    ) -> impl std::future::Future<Output = Result<crate::rpc_legacy::TransactionDetails, String>>
+    ) -> impl std::future::Future<Output = Result<crate::rpc::types::TransactionDetails, String>>
            + Send;
 
     /// Sign, send and confirm transaction with main wallet (simple API)
     ///
-    /// Legacy convenience method that uses default commitment and timeout.
+    /// Convenience method that uses default commitment and timeout.
     /// For more control, use sign_send_and_confirm_with_main_wallet.
     fn sign_send_and_confirm_transaction_simple(
         &self,
         transaction_base64: &str,
     ) -> impl std::future::Future<Output = Result<Signature, String>> + Send;
 
-    /// Sign, send and confirm with explicit keypair (legacy alias)
+    /// Sign, send and confirm with explicit keypair
     fn sign_send_and_confirm_with_keypair(
         &self,
         transaction_base64: &str,
@@ -1618,7 +1616,7 @@ impl RpcClientMethods for RpcClient {
     }
 
     // =========================================================================
-    // Legacy Compatibility Implementations
+    // Convenience Implementations
     // =========================================================================
 
     async fn get_wallet_signatures_main_rpc(
@@ -1641,7 +1639,7 @@ impl RpcClientMethods for RpcClient {
     async fn get_transaction_details(
         &self,
         signature: &str,
-    ) -> Result<crate::rpc_legacy::TransactionDetails, String> {
+    ) -> Result<crate::rpc::types::TransactionDetails, String> {
         // Use jsonParsed encoding for proper decoding (required for v0 transactions with LUTs)
         let params = serde_json::json!([
             signature,

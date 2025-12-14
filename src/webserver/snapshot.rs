@@ -15,7 +15,7 @@ use crate::{
         TOKENS_SYSTEM_READY, TRANSACTIONS_SYSTEM_READY,
     },
     logger::{self, LogTag},
-    rpc::{get_global_rpc_stats, RpcMinuteBucket, RpcSessionSnapshot},
+    rpc::{get_global_rpc_stats, RpcMinuteBucket, RpcSessionSnapshot, RpcStats},
     trader::is_trader_running,
     wallet::{get_current_wallet_status, get_snapshot_token_balances},
     webserver::{state::get_app_state, utils::format_duration},
@@ -44,8 +44,8 @@ struct RpcMetricsSummary {
     recent_calls_per_minute: f64,
 }
 
-impl From<&crate::rpc::RpcStats> for RpcMetricsSummary {
-    fn from(stats: &crate::rpc::RpcStats) -> Self {
+impl From<&RpcStats> for RpcMetricsSummary {
+    fn from(stats: &RpcStats) -> Self {
         Self {
             total_calls: stats.total_calls(),
             total_errors: stats.total_errors(),

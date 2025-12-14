@@ -34,7 +34,7 @@ impl Service for RpcStatsService {
         monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String> {
         let handle = tokio::spawn(monitor.instrument(async move {
-            crate::rpc::start_rpc_stats_auto_save_service(shutdown).await;
+            crate::rpc::stats::start_rpc_stats_auto_save_service(shutdown).await;
         }));
 
         Ok(vec![handle])

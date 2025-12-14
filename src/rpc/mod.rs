@@ -34,9 +34,8 @@
 
 pub mod circuit_breaker;
 pub mod client;
-pub mod compat;
 pub mod errors;
-pub mod legacy_types;
+pub mod global;
 pub mod manager;
 pub mod provider;
 pub mod rate_limiter;
@@ -59,8 +58,8 @@ pub use circuit_breaker::{
 // Re-exports - Client
 // ============================================================================
 
-// The new RpcClient is available as `rpc::client::RpcClient` (not re-exported at top level)
-// This avoids confusion with the legacy RpcClient which is still used by most code
+// The RpcClient is available as `rpc::client::RpcClient` (not re-exported at top level)
+// Access via get_rpc_client() helper which returns the global RpcClient instance
 pub use client::{
     ProviderHealthInfo, RpcClientMethods,
     // Transaction history types
@@ -113,9 +112,10 @@ pub use selector::{create_selector, ProviderSelector};
 // ============================================================================
 
 pub use stats::{
-    get_rpc_stats_db_path, MethodStats, ProviderStats, RpcCallRecord, RpcStatsDatabase,
-    RpcStatsResponse, SessionStats, StatsCollector, StatsManager, StatsMessage, StatsSnapshot,
-    TimeBucketStats,
+    get_global_rpc_stats, get_rpc_stats_db_path, parse_pubkey, spl_token_program_id,
+    start_rpc_stats_auto_save_service, MethodStats, ProviderStats, RpcCallRecord,
+    RpcMinuteBucket, RpcSessionSnapshot, RpcStats, RpcStatsDatabase, RpcStatsResponse,
+    SessionStats, StatsCollector, StatsManager, StatsMessage, StatsSnapshot, TimeBucketStats,
 };
 
 // ============================================================================
@@ -155,10 +155,10 @@ pub use utils::{
 };
 
 // ============================================================================
-// Re-exports - Compatibility Layer (get_rpc_client, etc.)
+// Re-exports - Global Access Layer (get_rpc_client, etc.)
 // ============================================================================
 
-pub use compat::{get_rpc_client, init_rpc_client, is_rpc_initialized, try_get_rpc_client};
+pub use global::{get_rpc_client, init_rpc_client, is_rpc_initialized, try_get_rpc_client};
 
 // ============================================================================
 // Re-exports - Client Type
@@ -167,25 +167,14 @@ pub use compat::{get_rpc_client, init_rpc_client, is_rpc_initialized, try_get_rp
 pub use client::RpcClient;
 
 // ============================================================================
-// Re-exports - Legacy Types (data structures still used throughout codebase)
+// Re-exports - Transaction & Account Types
 // ============================================================================
 
-pub use legacy_types::{
+pub use types::{
     // Transaction types used throughout the codebase
     PaginatedAccountsResponse, SignatureStatusData, SignatureStatusResponse, SignatureStatusResult,
     TokenAccountInfo, TokenBalance, TransactionData, TransactionDetails, TransactionMeta,
     UiTokenAmount,
-    // Legacy stats types (prefer rpc::stats for new code)
-    PersistedRpcStats, RpcMinuteBucket, RpcRateLimiter, RpcSessionSnapshot, RpcStats,
-};
-
-// ============================================================================
-// Re-exports - Legacy Utility Functions (still used by some code)
-// ============================================================================
-
-pub use crate::rpc_legacy::{
-    get_global_rpc_stats, parse_pubkey, save_global_rpc_stats, spl_token_program_id,
-    start_rpc_stats_auto_save_service,
 };
 
 // ============================================================================
@@ -196,7 +185,7 @@ pub use crate::rpc_legacy::{
 ///
 /// Returns the primary configured RPC URL with sensitive parts masked.
 pub async fn get_rpc_url() -> String {
-    if let Some(client) = compat::try_get_rpc_client() {
+    if let Some(client) = global::try_get_rpc_client() {
         client.primary_url_masked().await
     } else {
         String::from("(not initialized)")
@@ -214,7 +203,7 @@ pub fn get_ws_url() -> Result<String, crate::errors::ScreenerBotError> {
 ///
 /// Performs a health check on the RPC connection.
 pub async fn is_rpc_healthy() -> bool {
-    if let Some(client) = compat::try_get_rpc_client() {
+    if let Some(client) = global::try_get_rpc_client() {
         client.get_health().await.is_ok()
     } else {
         false
@@ -225,18 +214,15 @@ pub async fn is_rpc_healthy() -> bool {
 ///
 /// Returns aggregated RPC statistics suitable for API responses.
 pub async fn get_rpc_stats() -> Option<stats::RpcStatsResponse> {
-    compat::try_get_rpc_client().map(|client| {
-        tokio::task::block_in_place(|| {
-            tokio::runtime::Handle::current().block_on(client.get_stats())
-        })
-    })
+    let client = global::try_get_rpc_client()?;
+    Some(client.get_stats().await)
 }
 
 /// Get health info for all RPC providers
 ///
 /// Returns detailed health information for each configured provider.
 pub async fn get_all_provider_health() -> Vec<client::ProviderHealthInfo> {
-    if let Some(client) = compat::try_get_rpc_client() {
+    if let Some(client) = global::try_get_rpc_client() {
         client.get_provider_health().await
     } else {
         Vec::new()

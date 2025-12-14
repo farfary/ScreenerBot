@@ -9,6 +9,7 @@ import { TradeActionDialog } from "../ui/trade_action_dialog.js";
 import { TokenDetailsDialog } from "../ui/token_details_dialog.js";
 import * as Hints from "../core/hints.js";
 import { HintTrigger } from "../ui/hint_popover.js";
+import { showBillboardRow, hideBillboardRow } from "../ui/billboard_row.js";
 
 // Sub-tabs (views) configuration with hint references
 const TOKEN_VIEWS = [
@@ -2660,9 +2661,15 @@ function createLifecycle() {
       if ((table?.getData?.() ?? []).length === 0) {
         requestReload("initial", { silent: false, resetScroll: true }).catch(() => {});
       }
+
+      // Show billboard promotional row on tokens page
+      showBillboardRow();
     },
 
     deactivate() {
+      // Hide billboard row when leaving page
+      hideBillboardRow();
+
       table?.cancelPendingLoad();
       // Lifecycle automatically stops managed pollers
       // Pause OHLCV poller if active

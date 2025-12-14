@@ -243,7 +243,7 @@ impl From<reqwest::Error> for RpcError {
     }
 }
 
-/// Convert to String for compatibility
+/// Convert RpcError to String
 impl From<RpcError> for String {
     fn from(err: RpcError) -> Self {
         err.to_string()

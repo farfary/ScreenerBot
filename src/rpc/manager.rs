@@ -557,7 +557,7 @@ impl RpcManager {
         stats.get_stats_response(provider_count, healthy_count)
     }
 
-    /// Get first provider URL (for compatibility)
+    /// Get first (primary) provider URL
     pub async fn primary_url(&self) -> Option<String> {
         let providers = self.providers.read().await;
         providers.first().map(|p| p.url.clone())

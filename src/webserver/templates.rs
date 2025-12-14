@@ -54,6 +54,7 @@ const HINT_POPOVER_STYLES: &str = include_str!("templates/styles/ui/hint_popover
 const SEARCH_DIALOG_STYLES: &str = include_str!("templates/styles/ui/search_dialog.css");
 const CUSTOM_SELECT_STYLES: &str = include_str!("templates/styles/ui/custom_select.css");
 const BILLBOARD_DIALOG_STYLES: &str = include_str!("templates/styles/ui/billboard_dialog.css");
+const BILLBOARD_ROW_STYLES: &str = include_str!("templates/styles/ui/billboard_row.css");
 
 // Assets (logos, icons)
 pub const LOGO_SVG: &str = include_str!("assets/logo.svg");
@@ -122,6 +123,7 @@ pub const HINT_POPOVER_UI: &str = include_str!("templates/scripts/ui/hint_popove
 pub const SEARCH_DIALOG_UI: &str = include_str!("templates/scripts/ui/search_dialog.js");
 pub const CUSTOM_SELECT_UI: &str = include_str!("templates/scripts/ui/custom_select.js");
 pub const BILLBOARD_DIALOG_UI: &str = include_str!("templates/scripts/ui/billboard_dialog.js");
+pub const BILLBOARD_ROW_UI: &str = include_str!("templates/scripts/ui/billboard_row.js");
 
 pub const SERVICES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/services.js");
 pub const TRANSACTIONS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/transactions.js");
@@ -223,6 +225,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         SEARCH_DIALOG_STYLES,
         CUSTOM_SELECT_STYLES,
         BILLBOARD_DIALOG_STYLES,
+        BILLBOARD_ROW_STYLES,
         // Splash, onboarding, and setup screens (always included for proper transitions)
         SPLASH_PAGE_STYLES,
         ONBOARDING_PAGE_STYLES,

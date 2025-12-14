@@ -1,0 +1,301 @@
+/**
+ * Billboard Row Styles
+ *
+ * Horizontal scrolling promotional row for featured tokens.
+ * Netflix-style horizontal scroll with compact token cards.
+ */
+
+/* ============================================
+   CONTAINER
+   ============================================ */
+
+.billboard-row {
+  position: relative;
+  width: 100%;
+  background: var(--bg-secondary, #161b22);
+  border-top: 1px solid var(--border-color, #30363d);
+  padding: var(--spacing-sm, 8px) 0;
+  flex-shrink: 0;
+}
+
+.billboard-row-inner {
+  max-width: 100%;
+  padding: 0 var(--spacing-md, 16px);
+}
+
+/* ============================================
+   HEADER
+   ============================================ */
+
+.billboard-row-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-xs, 4px);
+}
+
+.billboard-row-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs, 4px);
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-secondary, #8b949e);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.billboard-row-title i {
+  font-size: 0.75rem;
+  color: var(--link-color, #58a6ff);
+}
+
+.billboard-row-view-all {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  background: transparent;
+  border: none;
+  color: var(--link-color, #58a6ff);
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 0.625rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: var(--radius-sm, 4px);
+  transition: all 0.15s ease;
+}
+
+.billboard-row-view-all:hover {
+  background: rgb(88, 166, 255, 0.1);
+  text-decoration: none;
+}
+
+.billboard-row-view-all i {
+  font-size: 0.625rem;
+}
+
+/* ============================================
+   SCROLL CONTAINER
+   ============================================ */
+
+.billboard-row-scroll {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.billboard-row-tokens {
+  display: flex;
+  gap: var(--spacing-sm, 8px);
+  overflow: hidden auto;
+  scroll-behavior: smooth;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  padding: var(--spacing-xs, 4px) 0;
+  flex: 1;
+}
+
+.billboard-row-tokens::-webkit-scrollbar {
+  display: none;
+}
+
+/* ============================================
+   SCROLL ARROWS
+   ============================================ */
+
+.billboard-row-arrow {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary, #0d1117);
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: 50%;
+  color: var(--text-secondary, #8b949e);
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 8px rgb(0, 0, 0, 0.3);
+}
+
+.billboard-row-arrow:hover {
+  background: var(--bg-card-hover, #1c2128);
+  color: var(--text-primary, #e6edf3);
+  border-color: var(--link-color, #58a6ff);
+}
+
+.billboard-row-arrow-left {
+  left: 0;
+}
+
+.billboard-row-arrow-right {
+  right: 0;
+}
+
+.billboard-row-arrow.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.billboard-row-arrow i {
+  font-size: 0.875rem;
+}
+
+/* ============================================
+   TOKEN CARDS (COMPACT)
+   ============================================ */
+
+.billboard-row-card {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs, 4px);
+  padding: var(--spacing-xs, 4px) var(--spacing-sm, 8px);
+  background: var(--bg-card, #161b22);
+  border: 1px solid var(--border-color, #30363d);
+  border-radius: var(--radius-md, 6px);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  min-width: 120px;
+  max-width: 160px;
+  position: relative;
+}
+
+.billboard-row-card:hover {
+  border-color: var(--link-color, #58a6ff);
+  background: var(--bg-card-hover, #1c2128);
+  transform: translateY(-1px);
+}
+
+.billboard-row-card.featured {
+  border-color: #f59e0b;
+}
+
+.billboard-row-card.featured:hover {
+  border-color: #fbbf24;
+  box-shadow: 0 4px 12px rgb(245, 158, 11, 0.15);
+}
+
+/* Logo */
+.billboard-row-card-logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--bg-primary, #0d1117);
+  border: 1px solid rgb(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+/* Info */
+.billboard-row-card-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.billboard-row-card-name {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--text-primary, #e6edf3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+.billboard-row-card-symbol {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 0.5625rem;
+  color: var(--text-secondary, #8b949e);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+
+/* Featured badge */
+.billboard-row-card-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  border-radius: 50%;
+  color: #000;
+}
+
+.billboard-row-card-badge i {
+  font-size: 0.5rem;
+}
+
+/* ============================================
+   STATES
+   ============================================ */
+
+.billboard-row-state {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm, 8px);
+  padding: var(--spacing-sm, 8px) var(--spacing-md, 16px);
+  color: var(--text-secondary, #8b949e);
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 0.75rem;
+}
+
+.billboard-row-state i {
+  font-size: 0.875rem;
+}
+
+/* Spin animation */
+.billboard-row .spin {
+  animation: billboard-row-spin 1s linear infinite;
+}
+
+@keyframes billboard-row-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+
+@media (width <= 640px) {
+  .billboard-row-inner {
+    padding: 0 var(--spacing-sm, 8px);
+  }
+
+  .billboard-row-card {
+    min-width: 100px;
+    max-width: 130px;
+    padding: 0.25rem 0.375rem;
+  }
+
+  .billboard-row-card-logo {
+    width: 24px;
+    height: 24px;
+  }
+
+  .billboard-row-arrow {
+    width: 24px;
+    height: 24px;
+  }
+}
