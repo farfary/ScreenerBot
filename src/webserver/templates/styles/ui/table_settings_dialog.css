@@ -59,20 +59,27 @@
 }
 
 .table-settings-close {
-  border: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  border: 1px solid transparent;
   background: transparent;
-  color: var(--text-muted, #9aa3c6);
-  font-size: 1.5rem;
-  line-height: 1;
-  cursor: pointer;
-  padding: 4px;
   border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
 }
 
 .table-settings-close:hover,
 .table-settings-close:focus-visible {
-  color: var(--text-primary, #f5f7ff);
-  background: rgb(82, 90, 130, 0.2);
+  background: var(--danger-alpha-15);
+  border-color: var(--danger-alpha-30);
+  color: var(--danger);
 }
 
 .table-settings-body {

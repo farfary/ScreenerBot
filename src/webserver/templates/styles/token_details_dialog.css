@@ -331,14 +331,14 @@
 .header-right {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex: 0 0 auto;
 }
 
 .header-trade-actions {
   display: flex;
+  align-items: center;
   gap: 6px;
-  margin-right: 6px;
   padding-right: 10px;
   border-right: 1px solid var(--border-color);
 }
@@ -393,15 +393,18 @@
 
 .header-actions {
   display: flex;
+  align-items: center;
   gap: 4px;
 }
 
 .action-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 30px;
   height: 30px;
+  min-width: 30px;
+  min-height: 30px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -409,6 +412,7 @@
   cursor: pointer;
   transition: all 0.15s ease;
   text-decoration: none;
+  flex-shrink: 0;
 }
 
 .action-btn:hover {
@@ -417,35 +421,43 @@
   color: var(--text-primary);
 }
 
-.action-btn svg {
+.action-btn svg,
+.action-btn i {
   width: 14px;
   height: 14px;
+  font-size: 14px;
+  line-height: 1;
 }
 
 .dialog-close {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--text-secondary);
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
   transition: all 0.15s ease;
   flex-shrink: 0;
-  margin-left: 4px;
 }
 
 .dialog-close:hover {
-  background: var(--danger-alpha-15, rgb(248, 81, 73, 0.15));
+  background: var(--danger-alpha-15);
+  border-color: var(--danger-alpha-30);
   color: var(--danger);
 }
 
-.dialog-close svg {
+.dialog-close svg,
+.dialog-close i {
   width: 16px;
   height: 16px;
+  font-size: 16px;
+  line-height: 1;
 }
 
 /* =============================================================================

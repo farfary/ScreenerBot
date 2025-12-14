@@ -59,6 +59,7 @@ class ContextMenuManager {
     this.hideTimeout = null;
     this.isVisible = false;
     this.isTransitioning = false;
+    this.isShowing = false; // Guard against concurrent show() calls
 
     // Favorites cache for quick lookup
     this.favoritesCache = new Map(); // mint -> boolean
@@ -673,38 +674,75 @@ class ContextMenuManager {
    * Show context menu at position
    */
   async show(x, y, context) {
-    // Prevent showing while transitioning
-    if (this.isTransitioning) {
+    // Prevent concurrent show() calls - critical for preventing hangs
+    if (this.isShowing || this.isTransitioning) {
       return;
     }
+    this.isShowing = true;
 
-    // Load favorites cache for token/position contexts
-    if (context.type === "token" || context.type === "position") {
-      await this._loadFavoritesCache();
+    try {
+      // Clean up any existing menu FIRST, before async operations
+      this._hideImmediate();
+      
+      // Also clean up any orphaned elements from previous instances
+      this._cleanupOrphanedElements();
+
+      // Load favorites cache for token/position contexts
+      if (context.type === "token" || context.type === "position") {
+        await this._loadFavoritesCache();
+      }
+
+      // Double-check we're still supposed to show (another show() could have been called)
+      if (!this.isShowing) {
+        return;
+      }
+
+      this.currentContext = context;
+      this.items = this._buildMenuItems(context);
+      this._buildFlatItems();
+
+      this._createMenuElement();
+      this._positionMenu(x, y);
+
+      // Show with animation
+      requestAnimationFrame(() => {
+        if (this.menuEl) {
+          this.menuEl.classList.add("visible");
+          this.isVisible = true;
+        }
+      });
+
+      // Remove any existing listeners before adding (defensive)
+      document.removeEventListener("keydown", this._boundHandleKeyDown);
+      window.removeEventListener("scroll", this._boundHandleScroll, true);
+      window.removeEventListener("resize", this._boundHandleResize);
+
+      // Add event listeners
+      document.addEventListener("keydown", this._boundHandleKeyDown);
+      window.addEventListener("scroll", this._boundHandleScroll, true);
+      window.addEventListener("resize", this._boundHandleResize);
+    } finally {
+      this.isShowing = false;
     }
+  }
 
-    // Immediately hide any existing menu
-    this._hideImmediate();
-
-    this.currentContext = context;
-    this.items = this._buildMenuItems(context);
-    this._buildFlatItems();
-
-    this._createMenuElement();
-    this._positionMenu(x, y);
-
-    // Show with animation
-    requestAnimationFrame(() => {
-      if (this.menuEl) {
-        this.menuEl.classList.add("visible");
-        this.isVisible = true;
+  /**
+   * Clean up any orphaned context menu elements from DOM
+   * This prevents element accumulation if cleanup was missed
+   */
+  _cleanupOrphanedElements() {
+    // Remove any stray overlays
+    document.querySelectorAll(".context-menu-overlay").forEach(el => {
+      if (el !== this.overlayEl) {
+        el.remove();
       }
     });
-
-    // Add event listeners
-    document.addEventListener("keydown", this._boundHandleKeyDown);
-    window.addEventListener("scroll", this._boundHandleScroll, true);
-    window.addEventListener("resize", this._boundHandleResize);
+    // Remove any stray menus
+    document.querySelectorAll(".context-menu").forEach(el => {
+      if (el !== this.menuEl) {
+        el.remove();
+      }
+    });
   }
 
   /**
@@ -748,6 +786,7 @@ class ContextMenuManager {
     this._clearTimeouts();
     this._cleanup();
     this.isTransitioning = false;
+    this.isShowing = false; // Reset showing flag
   }
 
   /**
@@ -764,6 +803,7 @@ class ContextMenuManager {
     }
 
     this.isVisible = false;
+    this.isShowing = false; // Reset showing flag
     this.activeItemIndex = -1;
     this.items = [];
     this.flatItems = [];

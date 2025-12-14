@@ -60,6 +60,27 @@
   font-size: 0.875rem;
 }
 
+/* Header hint trigger - styled as subtle button */
+.hint-trigger--header {
+  width: 32px;
+  height: 32px;
+  font-size: 1rem;
+  margin-left: 0;
+  background: var(--success-alpha-10);
+  border-color: var(--success-alpha-20);
+  color: var(--success-color);
+}
+
+.hint-trigger--header:hover {
+  background: var(--success-alpha-20);
+  border-color: var(--success-alpha-30);
+  color: var(--success-color);
+}
+
+.hint-trigger--header:focus {
+  box-shadow: 0 0 0 2px var(--success-alpha-30);
+}
+
 .hint-trigger i {
   display: flex;
   align-items: center;

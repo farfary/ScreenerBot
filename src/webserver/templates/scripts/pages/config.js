@@ -1381,7 +1381,8 @@ function renderTelegramActions(container) {
 
       if (response.ok && data.success) {
         statusEl.className = "config-action-status success";
-        statusEl.innerHTML = '<i class="icon-check-circle"></i> Test message sent successfully! Check your Telegram.';
+        statusEl.innerHTML =
+          '<i class="icon-check-circle"></i> Test message sent successfully! Check your Telegram.';
         Utils.showToast("Telegram test message sent", "success");
       } else {
         throw new Error(data.message || data.error || "Failed to send test message");

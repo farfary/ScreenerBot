@@ -4,6 +4,21 @@
   --config-sidebar-width: clamp(220px, 24vw, 320px);
   --config-field-control-width: clamp(240px, 32vw, 420px);
 
+  /* Theme-aware config colors */
+  --config-bg-subtle: var(--bg-secondary);
+  --config-bg-elevated: var(--bg-card);
+  --config-bg-field: var(--bg-card-hover);
+  --config-border-subtle: var(--border-color);
+  --config-accent: var(--primary-color);
+  --config-accent-light: var(--primary-alpha-10);
+  --config-accent-medium: var(--primary-alpha-20);
+  --config-success: var(--success-color);
+  --config-success-light: var(--success-alpha-10);
+  --config-error: var(--error-color);
+  --config-error-light: var(--danger-alpha-10);
+  --config-warning: var(--warning-color);
+  --config-warning-light: var(--warning-alpha-10);
+
   display: grid;
   grid-template-columns: var(--config-sidebar-width) minmax(0, 1fr);
   gap: 0;
@@ -47,7 +62,7 @@
 .config-search input:focus {
   outline: none;
   border-color: var(--link-color);
-  box-shadow: 0 0 0 2px rgb(59 130 246 / 0.2);
+  box-shadow: 0 0 0 2px var(--primary-alpha-20);
 }
 
 .config-sidebar-body {
@@ -67,7 +82,7 @@
   gap: 10px;
   padding: 8px 12px;
   border: none;
-  border-bottom: 1px solid rgb(148, 163, 184, 0.15);
+  border-bottom: 1px solid var(--config-border-subtle);
   background: transparent;
   color: var(--text-primary);
   font-size: 0.85rem;
@@ -83,17 +98,17 @@
 }
 
 .config-section-item:hover {
-  background: rgb(59 130 246 / 0.08);
+  background: var(--config-accent-light);
 }
 
 .config-section-item.active {
-  background: linear-gradient(135deg, rgb(59 130 246 / 0.2), rgb(59 130 246 / 0.05));
-  border-left: 3px solid rgb(59 130 246);
+  background: linear-gradient(135deg, var(--config-accent-medium), var(--config-accent-light));
+  border-left: 3px solid var(--config-accent);
   padding-left: 9px;
 }
 
 .config-section-item.search-match:not(.active) {
-  background: rgb(34 197 94 / 0.1);
+  background: var(--config-success-light);
 }
 
 .config-section-label {
@@ -119,8 +134,8 @@
 .config-section-count {
   padding: 1px 6px;
   border-radius: 999px;
-  background: rgb(59 130 246 / 0.12);
-  color: rgb(59 130 246);
+  background: var(--config-accent-light);
+  color: var(--config-accent);
   font-weight: 600;
   font-size: 0.65rem;
 }
@@ -128,14 +143,14 @@
 .config-section-pending {
   padding: 1px 6px;
   border-radius: 999px;
-  background: rgb(248 113 113 / 0.18);
-  color: rgb(248 113 113);
+  background: var(--config-error-light);
+  color: var(--config-error);
   font-weight: 600;
   font-size: 0.65rem;
 }
 
 .config-section-item.pending .config-section-count {
-  background: rgb(59 130 246 / 0.2);
+  background: var(--config-accent-medium);
 }
 
 .config-section-item.disabled {
@@ -149,7 +164,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  background: linear-gradient(180deg, rgb(15 23 42 / 0.25), transparent);
+  background: var(--bg-card-hover);
 }
 
 .config-action-btn {
@@ -159,8 +174,8 @@
   gap: 8px;
   padding: 10px 12px;
   border-radius: 10px;
-  border: 1px solid rgb(148, 163, 184, 0.25);
-  background: rgb(30 41 59 / 0.45);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
   color: var(--text-primary);
   font-size: 0.8rem;
   font-weight: 600;
@@ -172,18 +187,18 @@
 }
 
 .config-action-btn:hover {
-  background: rgb(59 130 246 / 0.15);
-  border-color: rgb(59 130 246 / 0.35);
+  background: var(--config-accent-light);
+  border-color: var(--config-accent);
 }
 
 .config-action-btn.danger {
-  color: rgb(248 113 113);
-  border-color: rgb(248 113 113 / 0.35);
-  background: rgb(248 113 113 / 0.08);
+  color: var(--config-error);
+  border-color: var(--config-error);
+  background: var(--config-error-light);
 }
 
 .config-action-btn.danger:hover {
-  background: rgb(248 113 113 / 0.15);
+  background: var(--danger-alpha-20);
 }
 
 .config-action-btn[disabled] {
@@ -208,8 +223,8 @@
   align-items: center;
   gap: 12px;
   padding: 14px 16px;
-  background: linear-gradient(135deg, rgb(15 23 42 / 0.5), rgb(15 23 42 / 0.2));
-  border-bottom: 1px solid rgb(148, 163, 184, 0.18);
+  background: var(--bg-card-hover);
+  border-bottom: 1px solid var(--border-color);
 }
 
 .config-section-title {
@@ -226,7 +241,7 @@
   align-items: center;
   justify-content: center;
   font-size: 1.4rem;
-  background: rgb(59 130 246 / 0.1);
+  background: var(--config-accent-light);
 }
 
 .config-section-text {
@@ -253,21 +268,21 @@
 .config-summary-badge {
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgb(30 41 59 / 0.6);
-  border: 1px solid rgb(148, 163, 184, 0.25);
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border-color);
   font-weight: 600;
 }
 
 .config-summary-badge.positive {
-  color: rgb(59 130 246);
-  border-color: rgb(59 130 246 / 0.45);
-  background: rgb(59 130 246 / 0.12);
+  color: var(--config-accent);
+  border-color: var(--config-accent);
+  background: var(--config-accent-light);
 }
 
 .config-summary-badge.warning {
-  color: rgb(248 113 113);
-  border-color: rgb(248 113 113 / 0.5);
-  background: rgb(248 113 113 / 0.12);
+  color: var(--config-error);
+  border-color: var(--config-error);
+  background: var(--config-error-light);
 }
 
 .config-header-actions {
@@ -280,8 +295,8 @@
 .config-header-action {
   padding: 6px 12px;
   border-radius: 8px;
-  border: 1px solid rgb(148, 163, 184, 0.35);
-  background: rgb(15, 23, 42, 0.3);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
   color: var(--text-primary);
   font-size: 0.8rem;
   font-weight: 600;
@@ -293,30 +308,30 @@
 }
 
 .config-header-action:hover {
-  background: rgb(59 130 246 / 0.15);
-  border-color: rgb(59 130 246 / 0.35);
+  background: var(--config-accent-light);
+  border-color: var(--config-accent);
 }
 
 .config-header-action.primary {
-  background: rgb(59 130 246);
-  border-color: rgb(59 130 246);
+  background: var(--config-accent);
+  border-color: var(--config-accent);
   color: #fff;
 }
 
 .config-header-action.primary:hover {
-  background: rgb(59 130 246 / 0.85);
+  background: var(--primary-hover);
 }
 
 .config-header-action.ghost {
   background: transparent;
-  border-color: rgb(148, 163, 184, 0.3);
+  border-color: var(--border-color);
   color: var(--text-secondary);
 }
 
 .config-header-action.destructive {
-  background: rgb(248 113 113 / 0.12);
-  border-color: rgb(248 113 113 / 0.35);
-  color: rgb(248 113 113);
+  background: var(--config-error-light);
+  border-color: var(--config-error);
+  color: var(--config-error);
 }
 
 .config-header-action[disabled] {
@@ -330,8 +345,8 @@
   flex-wrap: wrap;
   gap: 10px;
   padding: 8px 16px;
-  border-bottom: 1px solid rgb(148, 163, 184, 0.15);
-  background: linear-gradient(180deg, rgb(15 23 42 / 0.25), transparent);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
 }
 
 .config-info-chip {
@@ -340,8 +355,8 @@
   gap: 6px;
   padding: 4px 10px;
   border-radius: 999px;
-  background: rgb(30 41 59 / 0.55);
-  border: 1px solid rgb(148, 163, 184, 0.25);
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border-color);
   font-size: 0.75rem;
   color: var(--text-secondary);
 }
@@ -352,15 +367,15 @@
 }
 
 .config-info-chip.success {
-  background: rgb(34 197 94 / 0.15);
-  border-color: rgb(34 197 94 / 0.35);
-  color: rgb(34 197 94);
+  background: var(--config-success-light);
+  border-color: var(--config-success);
+  color: var(--config-success);
 }
 
 .config-info-chip.warning {
-  background: rgb(248 113 113 / 0.15);
-  border-color: rgb(248 113 113 / 0.4);
-  color: rgb(248 113 113);
+  background: var(--config-error-light);
+  border-color: var(--config-error);
+  color: var(--config-error);
 }
 
 .config-info-chip button {
@@ -385,15 +400,15 @@
   padding: 24px;
   margin-bottom: 20px;
   border-radius: 12px;
-  border: 1px dashed rgb(148, 163, 184, 0.35);
-  background: linear-gradient(145deg, rgb(15 23 42 / 0.35), rgb(15 23 42 / 0.1));
+  border: 1px dashed var(--border-color);
+  background: var(--bg-card-hover);
   color: var(--text-secondary);
   font-size: 0.85rem;
 }
 
 .config-state.error {
-  border-color: rgb(248 113 113 / 0.45);
-  color: rgb(248 113 113);
+  border-color: var(--config-error);
+  color: var(--config-error);
 }
 
 .config-state.loading {
@@ -452,10 +467,10 @@
 }
 
 .config-category {
-  border: 1px solid rgb(148, 163, 184, 0.18);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
-  background: rgb(15 23 42 / 0.28);
-  box-shadow: 0 8px 22px rgb(15 23 42 / 0.2);
+  background: var(--bg-card);
+  box-shadow: 0 2px 8px var(--shadow-sm);
   overflow: hidden;
   transition:
     border-color 0.2s ease,
@@ -519,15 +534,15 @@
 .config-category-chip {
   padding: 2px 6px;
   border-radius: 999px;
-  border: 1px solid rgb(148, 163, 184, 0.3);
-  background: rgb(30, 41, 59, 0.6);
+  border: 1px solid var(--border-color);
+  background: var(--bg-card-hover);
   font-weight: 600;
 }
 
 .config-category-chip.pending {
-  color: rgb(59 130 246);
-  border-color: rgb(59 130 246 / 0.4);
-  background: rgb(59 130 246 / 0.12);
+  color: var(--config-accent);
+  border-color: var(--config-accent);
+  background: var(--config-accent-light);
 }
 
 .config-category-body {
@@ -544,8 +559,8 @@
   padding: 12px 14px;
   border-radius: 10px;
   border: 1px solid transparent;
-  background: rgb(15 23 42 / 0.28);
-  box-shadow: inset 0 -1px 0 0 rgb(148 163 184 / 0.1);
+  background: var(--bg-card-hover);
+  box-shadow: inset 0 -1px 0 0 var(--border-color);
   transition:
     border-color 0.2s ease,
     background 0.2s ease,
@@ -553,8 +568,8 @@
 }
 
 .config-field:hover {
-  background: rgb(59 130 246 / 0.08);
-  box-shadow: inset 0 -1px 0 0 rgb(59 130 246 / 0.18);
+  background: var(--config-accent-light);
+  box-shadow: inset 0 -1px 0 0 var(--config-accent);
 }
 
 .config-category-body
@@ -563,23 +578,23 @@
     .config-field--match,
     .config-field--error
   ) {
-  background: rgb(15 23 42 / 0.24);
+  background: var(--bg-secondary);
 }
 
 .config-field.config-field--changed {
-  border-color: rgb(59 130 246 / 0.5);
-  background: rgb(59 130 246 / 0.1);
-  box-shadow: inset 3px 0 0 0 rgb(59 130 246 / 0.6);
+  border-color: var(--config-accent);
+  background: var(--config-accent-light);
+  box-shadow: inset 3px 0 0 0 var(--config-accent);
 }
 
 .config-field.config-field--match {
-  border-color: rgb(34 197 94 / 0.5);
-  box-shadow: 0 0 0 1px rgb(34 197 94 / 0.25);
+  border-color: var(--config-success);
+  box-shadow: 0 0 0 1px var(--config-success-light);
 }
 
 .config-field.config-field--error {
-  border-color: rgb(248 113 113 / 0.65);
-  background: rgb(248 113 113 / 0.08);
+  border-color: var(--config-error);
+  background: var(--config-error-light);
 }
 
 /* Object fields need full width layout */
@@ -633,34 +648,34 @@
   text-transform: uppercase;
   letter-spacing: 0.3px;
   font-size: 0.65rem;
-  background: rgb(148, 163, 184, 0.2);
+  background: var(--bg-card-hover);
   color: var(--text-secondary);
 }
 
 .config-field-impact.critical {
-  background: rgb(248 113 113 / 0.2);
-  color: rgb(248 113 113);
+  background: var(--config-error-light);
+  color: var(--config-error);
 }
 
 .config-field-impact.high {
-  background: rgb(249 115 22 / 0.2);
-  color: rgb(249 115 22);
+  background: var(--config-warning-light);
+  color: var(--config-warning);
 }
 
 .config-field-impact.medium {
-  background: rgb(234 179 8 / 0.2);
-  color: rgb(234 179 8);
+  background: var(--warning-alpha-20);
+  color: var(--warning-color);
 }
 
 .config-field-impact.low {
-  background: rgb(34 197 94 / 0.2);
-  color: rgb(34 197 94);
+  background: var(--config-success-light);
+  color: var(--config-success);
 }
 
 .config-field-default {
   font-size: 0.7rem;
   color: var(--text-secondary);
-  word-break: break-word;
+  overflow-wrap: break-word;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -694,9 +709,9 @@
   font-weight: 600;
   color: var(--text-primary);
   padding: 8px 12px;
-  background: linear-gradient(135deg, rgb(59 130 246 / 0.12), rgb(59 130 246 / 0.06));
+  background: var(--config-accent-light);
   border-radius: 8px;
-  border: 1px solid rgb(59 130 246 / 0.3);
+  border: 1px solid var(--config-accent);
   cursor: pointer;
   transition:
     background 0.2s ease,
@@ -704,8 +719,7 @@
 }
 
 .config-object-header:hover {
-  background: linear-gradient(135deg, rgb(59 130 246 / 0.18), rgb(59 130 246 / 0.1));
-  border-color: rgb(59 130 246 / 0.45);
+  background: var(--config-accent-medium);
 }
 
 .config-object-chevron {
@@ -725,8 +739,8 @@
   gap: 10px;
   padding: 14px;
   border-radius: 10px;
-  background: rgb(15 23 42 / 0.3);
-  border: 1px solid rgb(148, 163, 184, 0.18);
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border-color);
 }
 
 .config-object-field {
@@ -735,47 +749,47 @@
   gap: 14px;
   padding: 12px 14px;
   border-radius: 9px;
-  border: 1px solid rgb(148, 163, 184, 0.25);
-  background: rgb(15 23 42 / 0.45);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
   transition:
     border-color 0.2s ease,
     background 0.2s ease;
 }
 
 .config-object-field:hover {
-  background: rgb(59 130 246 / 0.08);
-  border-color: rgb(148, 163, 184, 0.4);
+  background: var(--config-accent-light);
+  border-color: var(--text-muted);
 }
 
 .config-object-field--changed {
-  border-color: rgb(59 130 246 / 0.5);
-  background: rgb(59 130 246 / 0.12);
-  box-shadow: inset 2px 0 0 0 rgb(59 130 246 / 0.55);
+  border-color: var(--config-accent);
+  background: var(--config-accent-light);
+  box-shadow: inset 2px 0 0 0 var(--config-accent);
 }
 
 .config-object-field--match {
-  border-color: rgb(34 197 94 / 0.5);
-  box-shadow: 0 0 0 1px rgb(34 197 94 / 0.25);
+  border-color: var(--config-success);
+  box-shadow: 0 0 0 1px var(--config-success-light);
 }
 
 /* Nested object fields need full width layout too */
 .config-object-field:has(.config-object-wrapper) {
   grid-template-columns: 1fr;
   gap: 10px;
-  background: rgb(15 23 42 / 0.6);
-  border-color: rgb(148, 163, 184, 0.3);
+  background: var(--bg-card);
+  border-color: var(--border-color);
 }
 
 /* Add visual depth for multiple nesting levels */
 .config-object-group .config-object-group {
-  background: rgb(15 23 42 / 0.4);
-  border-color: rgb(148, 163, 184, 0.2);
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
   margin-left: 8px;
 }
 
 .config-object-group .config-object-group .config-object-group {
-  background: rgb(15 23 42 / 0.5);
-  border-color: rgb(148, 163, 184, 0.22);
+  background: var(--bg-card-hover);
+  border-color: var(--border-color);
   margin-left: 12px;
 }
 
@@ -800,8 +814,8 @@
   width: 100%;
   padding: 6px 9px;
   border-radius: 8px;
-  border: 1px solid rgb(148, 163, 184, 0.35);
-  background: rgb(15, 23, 42, 0.6);
+  border: 1px solid var(--border-color);
+  background: var(--input-bg);
   color: var(--text-primary);
   font-size: 0.85rem;
   transition:
@@ -810,8 +824,8 @@
 }
 
 .config-field-control .config-field-error-input {
-  border-color: rgb(248 113 113 / 0.6);
-  box-shadow: 0 0 0 2px rgb(248 113 113 / 0.18);
+  border-color: var(--config-error);
+  box-shadow: 0 0 0 2px var(--config-error-light);
 }
 
 .config-field-control input[type="number"] {
@@ -832,21 +846,21 @@
 .config-field-control textarea:focus {
   outline: none;
   border-color: var(--link-color);
-  box-shadow: 0 0 0 2px rgb(59 130 246 / 0.25);
+  box-shadow: 0 0 0 2px var(--primary-alpha-20);
 }
 
 .config-field-control input[type="checkbox"] {
   width: 20px;
   height: 20px;
   cursor: pointer;
-  accent-color: rgb(59 130 246);
+  accent-color: var(--config-accent);
 }
 
 .config-field-reset {
   align-self: flex-end;
   padding: 2px 8px;
   border-radius: 6px;
-  border: 1px solid rgb(148, 163, 184, 0.35);
+  border: 1px solid var(--border-color);
   background: transparent;
   color: var(--text-secondary);
   font-size: 0.7rem;
@@ -858,9 +872,9 @@
 }
 
 .config-field-reset:hover {
-  background: rgb(59 130 246 / 0.12);
-  border-color: rgb(59 130 246 / 0.4);
-  color: rgb(59 130 246);
+  background: var(--config-accent-light);
+  border-color: var(--config-accent);
+  color: var(--config-accent);
 }
 
 .config-field-reset:disabled {
@@ -871,7 +885,7 @@
   width: 100%;
   text-align: right;
   font-size: 0.72rem;
-  color: rgb(248 113 113);
+  color: var(--config-error);
   min-height: 1em;
 }
 
@@ -949,17 +963,17 @@
 .config-header-action:focus-visible,
 .config-action-btn:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgb(59 130 246 / 0.35);
-  background: rgb(59 130 246 / 0.12);
+  box-shadow: 0 0 0 2px var(--primary-alpha-30);
+  background: var(--config-accent-light);
 }
 
 /* Category match highlighting during search */
 .config-category.has-match .config-category-header {
-  background: rgb(34 197 94 / 0.06);
+  background: var(--config-success-light);
 }
 
 .config-category.has-match .config-category-label .chevron {
-  color: rgb(34 197 94);
+  color: var(--config-success);
 }
 
 /* =============================================================================
@@ -968,7 +982,7 @@
 
 .config-section-actions {
   margin-top: var(--spacing-lg, 24px);
-  background: var(--card-bg, #161b22);
+  background: var(--card-bg);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg, 8px);
   overflow: hidden;
@@ -979,7 +993,7 @@
   align-items: center;
   gap: var(--spacing-sm, 8px);
   padding: var(--spacing-sm, 8px) var(--spacing-md, 16px);
-  background: rgb(255, 255, 255, 0.03);
+  background: var(--bg-card-hover);
   border-bottom: 1px solid var(--border-color);
   font-size: 0.75rem;
   font-weight: 600;
@@ -1036,15 +1050,15 @@
 }
 
 .config-action-status.success {
-  background: rgb(16, 185, 129, 0.1);
-  color: var(--success-color, #10b981);
-  border: 1px solid rgb(16, 185, 129, 0.2);
+  background: var(--success-alpha-10);
+  color: var(--success-color);
+  border: 1px solid var(--success-alpha-20);
 }
 
 .config-action-status.error {
-  background: rgb(248, 81, 73, 0.1);
-  color: var(--error-color, #f85149);
-  border: 1px solid rgb(248, 81, 73, 0.2);
+  background: var(--danger-alpha-10);
+  color: var(--error-color);
+  border: 1px solid var(--danger-alpha-20);
 }
 
 .config-action-status i {

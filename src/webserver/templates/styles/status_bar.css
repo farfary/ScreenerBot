@@ -1,5 +1,6 @@
 /* ============================================================================
    STATUS BAR - Fixed bottom bar with system metrics
+   Must stay on top of all dialogs (dialogs use z-index: 10000)
    ============================================================================ */
 
 .status-bar {
@@ -8,7 +9,7 @@
   left: 0;
   right: 0;
   height: 26px;
-  z-index: 999;
+  z-index: 10001;
   background: var(--header-bg, linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1c2128 100%));
   border-top: 1px solid var(--header-border, #30363d);
   display: flex;
@@ -47,10 +48,13 @@
 }
 
 .status-icon {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 12px;
   height: 12px;
   opacity: 0.6;
+  vertical-align: middle;
 }
 
 .status-label {

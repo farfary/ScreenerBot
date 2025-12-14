@@ -347,18 +347,57 @@ body {
 
 /* Re-enable selection ONLY for specific value elements */
 
-/* These classes mark numeric values that users may want to copy */
+/* Generic selectable class - use for any copyable content */
 .selectable,
+[data-selectable="true"] {
+  user-select: text;
+  cursor: text;
+}
+
+/* Numeric values that users may want to copy */
 .data-numeric,
 .data-price,
 .data-percent,
+.font-data,
 .pnl-positive,
 .pnl-negative,
 .pnl-neutral,
 .value-positive,
-.value-negative,
+.value-negative {
+  user-select: text;
+  cursor: text;
+}
+
+/* Addresses, signatures, hashes - always copyable */
 .font-mono,
-[data-selectable="true"] {
+.mint-code,
+.mint-cell,
+.pool-address,
+.address-value,
+.holder-address,
+.tx-pair-signature,
+.link-signature,
+.ta-authority-address,
+.tw-mint,
+.wallet-address,
+.token-address,
+.signature,
+[class*="-mint"],
+[class*="-address"],
+[class*="-signature"] {
+  user-select: text;
+  cursor: text;
+}
+
+/* Log and error content - users need to copy for debugging */
+.log-message,
+.log-content,
+.error-message,
+.error-content,
+.events-dialog-message,
+.setup-error-messages,
+pre,
+code {
   user-select: text;
   cursor: text;
 }
@@ -366,6 +405,7 @@ body {
 /* Form inputs must always be selectable */
 input,
 textarea,
+select,
 [contenteditable="true"] {
   user-select: text;
 }

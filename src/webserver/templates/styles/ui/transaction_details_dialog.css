@@ -151,21 +151,24 @@
 .transaction-details-dialog .header-right {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex: 0 0 auto;
 }
 
 .transaction-details-dialog .header-actions {
   display: flex;
+  align-items: center;
   gap: 4px;
 }
 
 .transaction-details-dialog .action-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 30px;
   height: 30px;
+  min-width: 30px;
+  min-height: 30px;
   background: transparent;
   border: 1px solid transparent;
   border-radius: 6px;
@@ -173,6 +176,7 @@
   cursor: pointer;
   transition: all 0.15s ease;
   text-decoration: none;
+  flex-shrink: 0;
 }
 
 .transaction-details-dialog .action-btn:hover {
@@ -181,25 +185,41 @@
   color: var(--text-primary);
 }
 
+.transaction-details-dialog .action-btn i {
+  width: 14px;
+  height: 14px;
+  font-size: 14px;
+  line-height: 1;
+}
+
 .transaction-details-dialog .dialog-close {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--text-secondary);
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
   transition: all 0.15s ease;
   flex-shrink: 0;
-  margin-left: 4px;
 }
 
 .transaction-details-dialog .dialog-close:hover {
-  background: var(--danger-alpha-15, rgb(248, 81, 73, 0.15));
+  background: var(--danger-alpha-15);
+  border-color: var(--danger-alpha-30);
   color: var(--danger);
+}
+
+.transaction-details-dialog .dialog-close i {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  line-height: 1;
 }
 
 /* Header Metadata Row */

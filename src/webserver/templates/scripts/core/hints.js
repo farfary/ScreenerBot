@@ -570,14 +570,22 @@ When enabled, automatically scans and closes empty ATAs every 5 minutes in the b
       title: "Burn Tokens Tool",
       content: `**Permanently Destroy Tokens**
 
-Burning tokens removes them from circulation forever.
+Burning tokens permanently removes them from your wallet and from circulation.
 
-**Use cases:**
-• Clean up worthless dust tokens
-• Reduce token supply (if you're the creator)
-• Remove scam/spam tokens
+**What happens when you burn:**
+• Tokens are sent to a burn address (unrecoverable)
+• Token balance becomes zero
+• ATA can then be closed via Wallet Cleanup to reclaim ~0.002 SOL rent
 
-**Warning:** This action is irreversible. Burned tokens cannot be recovered.`,
+**Token Categories:**
+• **Open Positions** - Cannot burn (active trades)
+• **Closed Positions** - Leftovers from past trades
+• **Has Value** - Tokens with liquidity (consider selling instead)
+• **Zero Liquidity** - Dust/worthless tokens (safe to burn)
+
+**⚠️ Warning:** This action is **irreversible**. Burned tokens cannot be recovered under any circumstances.
+
+**After burning:** Run Wallet Cleanup to close empty ATAs and reclaim SOL rent.`,
     },
 
     walletGenerator: {

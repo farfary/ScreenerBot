@@ -14,7 +14,7 @@
   left: 0;
   right: 0;
   bottom: 26px; /* Position above status bar (26px height) */
-  z-index: 998; /* Below status bar (999) */
+  z-index: 10000; /* Same as dialogs, but below status bar (10001) */
   width: 100%;
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);

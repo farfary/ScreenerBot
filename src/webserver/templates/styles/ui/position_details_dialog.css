@@ -302,35 +302,37 @@
 .position-details-dialog .header-right {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex: 0 0 auto;
-  height: 100%;
 }
 
 .position-details-dialog .header-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
-  height: 100%;
+  gap: 4px;
 }
 
 .position-details-dialog .header-actions .action-btn {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--text-secondary);
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
   transition: all 0.15s ease;
   text-decoration: none;
+  flex-shrink: 0;
 }
 
 .position-details-dialog .header-actions .action-btn:hover {
   background: var(--bg-card-hover);
+  border-color: var(--border-color);
   color: var(--text-primary);
 }
 
@@ -338,6 +340,7 @@
   width: 16px;
   height: 16px;
   font-size: 16px;
+  line-height: 1;
 }
 
 /* Badges */
@@ -376,23 +379,25 @@
 
 /* Close Button */
 .position-details-dialog .dialog-close {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--text-secondary);
-  width: 30px;
-  height: 30px;
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
   transition: all 0.15s ease;
   flex-shrink: 0;
-  margin-left: 4px;
 }
 
 .position-details-dialog .dialog-close:hover {
-  background: var(--danger-alpha-20);
+  background: var(--danger-alpha-15);
+  border-color: var(--danger-alpha-30);
   color: var(--danger);
 }
 
@@ -401,6 +406,7 @@
   width: 16px;
   height: 16px;
   font-size: 16px;
+  line-height: 1;
 }
 
 /* =============================================================================

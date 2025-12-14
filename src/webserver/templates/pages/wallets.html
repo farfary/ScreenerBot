@@ -15,6 +15,9 @@
     </div>
     <div class="header-right">
       <div class="header-actions">
+        <button class="hint-trigger hint-trigger--header" id="security-hint-btn" type="button" aria-label="Security information" data-tooltip="Bank-Grade Encryption">
+          <i class="icon-shield-check"></i>
+        </button>
         <button class="btn" id="refresh-wallets-btn" type="button" data-tooltip="Refresh wallet list" aria-label="Refresh wallet list">
           <i class="icon-refresh-cw"></i>
         </button>
@@ -33,17 +36,6 @@
 
   <!-- Main Content -->
   <main class="wallets-main">
-    <!-- Security Info Banner (compact with hint) -->
-    <div class="security-banner security-banner--compact">
-      <div class="security-content">
-        <i class="icon-shield-check"></i>
-        <span><strong>Bank-Grade Encryption</strong> — Private keys secured with AES-256-GCM</span>
-      </div>
-      <button class="hint-trigger hint-trigger--sm" id="security-hint-btn" type="button" aria-label="Learn more about security">
-        <i class="icon-circle-question-mark"></i>
-      </button>
-    </div>
-
     <!-- Sub-tabs Container -->
     <div id="wallets-tabs-container" class="sub-tabs-container"></div>
 
