@@ -72,7 +72,7 @@ class BillboardDialog {
 
   close() {
     if (this.dialogEl) {
-      this.dialogEl.classList.remove("visible");
+      this.dialogEl.classList.remove("active");
       setTimeout(() => {
         if (this.dialogEl) {
           this.dialogEl.remove();
@@ -93,27 +93,30 @@ class BillboardDialog {
 
     const dialog = document.createElement("div");
     dialog.id = DIALOG_ID;
-    dialog.className = "billboard-dialog-overlay";
+    dialog.className = "billboard-dialog";
     dialog.innerHTML = `
-      <div class="billboard-dialog billboard-dialog-categories">
+      <div class="billboard-backdrop"></div>
+      <div class="billboard-container">
         <div class="billboard-header">
-          <div class="billboard-title">
-            <i class="icon-megaphone"></i>
-            <h2>Billboard</h2>
+          <div class="billboard-header-left">
+            <div class="billboard-icon"><i class="icon-megaphone"></i></div>
+            <div class="billboard-title">
+              <h2>Billboard</h2>
+              <span class="billboard-subtitle">Featured tokens & trending across Solana</span>
+            </div>
           </div>
-          <p class="billboard-subtitle">Featured tokens & trending across Solana</p>
-          <button class="billboard-close-btn" title="Close">
-            <i class="icon-x"></i>
-          </button>
+          <div class="billboard-header-actions">
+            <a href="https://screenerbot.io/submit-token" target="_blank" rel="noopener noreferrer" class="billboard-submit-btn">
+              <i class="icon-plus"></i>
+              <span>Submit Token</span>
+            </a>
+            <button class="billboard-close-btn" title="Close (ESC)">
+              <i class="icon-x"></i>
+            </button>
+          </div>
         </div>
         <div class="billboard-body">
           <div class="billboard-categories" id="billboard-categories"></div>
-        </div>
-        <div class="billboard-footer">
-          <a href="https://screenerbot.io/submit-token" target="_blank" rel="noopener noreferrer" class="billboard-submit-link">
-            <i class="icon-plus"></i>
-            <span>Submit Your Token</span>
-          </a>
         </div>
       </div>
     `;
@@ -127,11 +130,6 @@ class BillboardDialog {
       closeBtn.addEventListener("click", () => this.close());
     }
 
-    // Close on backdrop click
-    dialog.addEventListener("click", (e) => {
-      if (e.target === dialog) this.close();
-    });
-
     // Close on Escape key
     this._handleKeydown = (e) => {
       if (e.key === "Escape") this.close();
@@ -140,7 +138,7 @@ class BillboardDialog {
 
     // Animate in
     requestAnimationFrame(() => {
-      dialog.classList.add("visible");
+      dialog.classList.add("active");
     });
   }
 

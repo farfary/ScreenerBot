@@ -182,14 +182,14 @@
   box-shadow: 0 4px 12px rgb(245, 158, 11, 0.15);
 }
 
-/* Logo */
+/* Logo - 32px for better visibility */
 .billboard-row-card-logo {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   object-fit: cover;
   background: var(--bg-primary, #0d1117);
-  border: 1px solid rgb(255, 255, 255, 0.1);
+  border: 2px solid rgb(255, 255, 255, 0.1);
   flex-shrink: 0;
 }
 
@@ -198,11 +198,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--bg-secondary, #161b22), var(--bg-primary, #0d1117));
-  border: 1px solid rgb(255, 255, 255, 0.1);
+  border: 2px solid rgb(255, 255, 255, 0.1);
   flex-shrink: 0;
 }
 

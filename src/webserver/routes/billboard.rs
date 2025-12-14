@@ -1,7 +1,8 @@
 //! Billboard API routes
 //!
 //! Fetches featured tokens from the website's billboard API,
-//! plus external sources (Jupiter top tokens, DexScreener trending)
+//! plus external sources (Jupiter top tokens, DexScreener trending).
+//! Enriches featured tokens with local database data when available.
 
 use axum::{
     response::{IntoResponse, Response},
@@ -14,6 +15,7 @@ use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
 use crate::apis::get_api_manager;
+use crate::tokens;
 use crate::webserver::{state::AppState, utils::success_response};
 
 // ============================================================================
@@ -73,6 +75,41 @@ pub struct BillboardAllResponse {
     pub jupiter_organic: Vec<ExternalToken>,
     pub jupiter_traded: Vec<ExternalToken>,
     pub dexscreener_trending: Vec<ExternalToken>,
+}
+
+/// Enriched billboard token with data from local token database
+#[derive(Debug, Clone, Serialize)]
+pub struct EnrichedBillboardToken {
+    // Original billboard fields (flattened)
+    #[serde(flatten)]
+    pub base: BillboardToken,
+
+    // Enriched fields from our database
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub price_sol: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub price_usd: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub market_cap_usd: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fdv_usd: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub liquidity_usd: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub volume_24h: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub price_change_1h: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub price_change_24h: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub holder_count: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub security_score: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub security_score_normalised: Option<i32>,
+    pub is_in_database: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub data_source: Option<String>,
 }
 
 // ============================================================================
@@ -388,16 +425,101 @@ async fn get_dexscreener_trending() -> Vec<ExternalToken> {
 }
 
 // ============================================================================
+// TOKEN ENRICHMENT
+// ============================================================================
+
+/// Enrich a billboard token with data from local token database
+async fn enrich_billboard_token(token: BillboardToken) -> EnrichedBillboardToken {
+    let mint = token.mint.clone();
+
+    // Try to get full token data from our database
+    match tokens::get_full_token_async(&mint).await {
+        Ok(Some(db_token)) => {
+            EnrichedBillboardToken {
+                base: token,
+                price_sol: Some(db_token.price_sol),
+                price_usd: Some(db_token.price_usd),
+                market_cap_usd: db_token.market_cap,
+                fdv_usd: db_token.fdv,
+                liquidity_usd: db_token.liquidity_usd,
+                volume_24h: db_token.volume_h24,
+                price_change_1h: db_token.price_change_h1,
+                price_change_24h: db_token.price_change_h24,
+                holder_count: db_token.total_holders,
+                security_score: db_token.security_score,
+                security_score_normalised: db_token.security_score_normalised,
+                is_in_database: true,
+                data_source: Some(db_token.data_source.as_str().to_string()),
+            }
+        }
+        Ok(None) | Err(_) => {
+            // Token not in database - return base with no enrichment
+            EnrichedBillboardToken {
+                base: token,
+                price_sol: None,
+                price_usd: None,
+                market_cap_usd: None,
+                fdv_usd: None,
+                liquidity_usd: None,
+                volume_24h: None,
+                price_change_1h: None,
+                price_change_24h: None,
+                holder_count: None,
+                security_score: None,
+                security_score_normalised: None,
+                is_in_database: false,
+                data_source: None,
+            }
+        }
+    }
+}
+
+/// Enrich multiple billboard tokens concurrently
+async fn enrich_billboard_tokens(tokens: Vec<BillboardToken>) -> Vec<EnrichedBillboardToken> {
+    let futures: Vec<_> = tokens.into_iter().map(enrich_billboard_token).collect();
+    futures::future::join_all(futures).await
+}
+
+/// Ensure billboard tokens are tracked in our database (for future updates)
+/// This runs in the background and doesn't block the response
+fn ensure_tokens_tracked(tokens: &[BillboardToken]) {
+    let mints: Vec<String> = tokens.iter().map(|t| t.mint.clone()).collect();
+    let names: Vec<Option<String>> = tokens.iter().map(|t| Some(t.name.clone())).collect();
+    let symbols: Vec<Option<String>> = tokens.iter().map(|t| Some(t.symbol.clone())).collect();
+
+    tokio::spawn(async move {
+        let db = match tokens::get_global_database() {
+            Some(db) => db,
+            None => return,
+        };
+
+        for (i, mint) in mints.iter().enumerate() {
+            let name = names.get(i).and_then(|n| n.as_deref());
+            let symbol = symbols.get(i).and_then(|s| s.as_deref());
+
+            // upsert_token will create tracking entry if token doesn't exist
+            let _ = db.upsert_token(mint, symbol, name, None);
+        }
+    });
+}
+
+// ============================================================================
 // HANDLERS
 // ============================================================================
 
-/// GET /api/billboard - Get featured tokens (legacy endpoint)
+/// GET /api/billboard - Get featured tokens with enrichment
 async fn get_billboard_handler() -> Response {
     match get_billboard().await {
         Ok(tokens) => {
-            let count = tokens.len();
+            // Ensure tokens are tracked for future updates
+            ensure_tokens_tracked(&tokens);
+
+            // Enrich with local database data
+            let enriched = enrich_billboard_tokens(tokens).await;
+            let count = enriched.len();
+
             success_response(serde_json::json!({
-                "tokens": tokens,
+                "tokens": enriched,
                 "count": count
             }))
         }
@@ -411,7 +533,7 @@ async fn get_billboard_handler() -> Response {
     }
 }
 
-/// GET /api/billboard/all - Get all billboard categories
+/// GET /api/billboard/all - Get all billboard categories with enriched featured tokens
 async fn get_billboard_all_handler() -> Response {
     // Fetch all sources concurrently
     let (featured_result, jupiter_organic, jupiter_traded, dexscreener_trending) = tokio::join!(
@@ -423,9 +545,15 @@ async fn get_billboard_all_handler() -> Response {
 
     let featured = featured_result.unwrap_or_default();
 
+    // Ensure featured tokens are tracked for future updates
+    ensure_tokens_tracked(&featured);
+
+    // Enrich featured tokens with local database data
+    let enriched_featured = enrich_billboard_tokens(featured).await;
+
     success_response(serde_json::json!({
         "success": true,
-        "featured": featured,
+        "featured": enriched_featured,
         "jupiter_organic": jupiter_organic,
         "jupiter_traded": jupiter_traded,
         "dexscreener_trending": dexscreener_trending
