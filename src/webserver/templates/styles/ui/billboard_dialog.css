@@ -358,8 +358,9 @@
   box-shadow: 0 8px 24px rgb(245, 158, 11, 0.2);
 }
 
-/* Token logo - BIGGER size (48px) */
+/* Token logo - BIGGER size (48px) with animated glow */
 .billboard-cat-logo {
+  position: relative;
   width: 48px;
   height: 48px;
   border-radius: 50%;
@@ -367,10 +368,58 @@
   background: var(--bg-primary, #0d1117);
   border: 2px solid rgb(255, 255, 255, 0.1);
   flex-shrink: 0;
+  z-index: 1;
+}
+
+/* Animated glow effect behind logo */
+.billboard-cat-logo::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  background: radial-gradient(
+    circle,
+    rgb(88, 166, 255, 0.25) 0%,
+    rgb(139, 92, 246, 0.15) 50%,
+    transparent 70%
+  );
+  border-radius: 50%;
+  z-index: -1;
+  animation: logo-pulse 3s ease-in-out infinite;
+}
+
+/* Placeholder also gets the glow effect */
+.billboard-cat-logo-placeholder::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  background: radial-gradient(
+    circle,
+    rgb(139, 92, 246, 0.2) 0%,
+    rgb(88, 166, 255, 0.1) 50%,
+    transparent 70%
+  );
+  border-radius: 50%;
+  z-index: -1;
+  animation: logo-pulse 3s ease-in-out infinite;
+  animation-delay: 0.5s;
+}
+
+@keyframes logo-pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
 }
 
 /* Token logo placeholder - shown when no valid URL */
 .billboard-cat-logo-placeholder {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -384,6 +433,7 @@
   );
   border: 2px solid rgb(255, 255, 255, 0.1);
   flex-shrink: 0;
+  z-index: 1;
 }
 
 .billboard-cat-logo-placeholder span {

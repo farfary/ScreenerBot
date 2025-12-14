@@ -57,8 +57,8 @@ const TOOL_DEFINITIONS = {
   },
   "token-watch": {
     id: "token-watch",
-    title: "Token Watch",
-    description: "Monitor token activity and price movements",
+    title: "Holder Watch",
+    description: "Track and monitor new token holders in real-time",
     icon: "icon-eye",
     category: "token",
     render: renderTokenWatchTool,
