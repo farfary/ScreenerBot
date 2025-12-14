@@ -37,8 +37,9 @@ mod types;
 
 // Re-export types
 pub use types::{
-    CreateWalletRequest, ExportWalletResponse, ImportWalletRequest, TokenBalance,
-    UpdateWalletRequest, Wallet, WalletRole, WalletType, WalletWithKey, WalletsSummary,
+    CreateWalletRequest, ExportWalletResponse, ImportWalletRequest, SimpleTokenBalance,
+    TokenBalance, UpdateWalletRequest, Wallet, WalletBalanceSummary, WalletRole, WalletType,
+    WalletWithKey, WalletWithTokenBalance, WalletsSummary,
 };
 
 // Re-export manager functions
@@ -68,6 +69,7 @@ pub use manager::{
     update_wallet,
     // Bulk operations
     bulk_import_wallets,
+    create_wallets_batch,
     export_wallets,
     get_existing_wallet_addresses,
     // Tools integration
@@ -77,7 +79,9 @@ pub use manager::{
     // Token balance operations
     clear_token_balances,
     get_all_token_balances,
+    get_all_wallet_balances,
     get_token_balances,
+    get_wallets_with_token,
     update_all_wallet_balances,
     update_wallet_balances,
     upsert_token_balance,

@@ -6,13 +6,17 @@
 //! - `ata_cleanup` - Scan and close empty ATAs to reclaim rent
 //! - `volume_aggregator` - Generate trading volume using multiple wallets
 //! - `swap_executor` - Execute swaps with custom keypairs (no position tracking)
+//! - `multi_wallet` - Multi-wallet trading tools (buy/sell/consolidate)
+//! - `trade_watcher` - Monitor external wallet trades and trigger actions
 //!
 //! ## Database
 //! - `database` - Persistent storage for tool sessions and operations
 
 pub mod ata_cleanup;
 pub mod database;
+pub mod multi_wallet;
 pub mod swap_executor;
+pub mod trade_watcher;
 mod types;
 pub mod volume_aggregator;
 
@@ -45,4 +49,33 @@ pub use ata_cleanup::{
     scan_wallet_atas, start_ata_cleanup_service, trigger_immediate_cleanup,
     // Backward compatibility aliases
     get_ata_cleanup_statistics, trigger_immediate_ata_cleanup, get_ata_cleanup_stats,
+};
+
+// Re-export multi-wallet types and operations
+pub use multi_wallet::{
+    // Configuration types
+    MultiBuyConfig, MultiSellConfig, ConsolidateConfig,
+    // Result types
+    SessionResult, WalletOpResult, WalletPlan,
+    SessionStatus as MultiWalletSessionStatus,
+    // Transfer utilities
+    transfer_sol, transfer_token, fund_wallets, collect_sol,
+    close_ata as close_token_ata,
+    // Operations
+    execute_multi_buy, execute_multi_sell, execute_consolidation,
+};
+
+// Re-export trade watcher types and functions
+pub use trade_watcher::{
+    // Types
+    DetectedTrade, PoolInfo, PoolSource, TradeMonitorStatus, WatchType,
+    WatchedToken, WatchedTokenConfig,
+    // Pool search
+    get_best_pool, search_pools, search_pools_by_source, search_pools_with_min_liquidity,
+    // Monitor control
+    clear_tracked_signatures, get_trade_monitor_status, is_trade_monitor_running,
+    refresh_own_wallets, start_trade_monitor, stop_trade_monitor,
+    // Database operations
+    add_watched_token, delete_watched_token, get_active_watched_tokens, get_watched_tokens,
+    update_watched_token_status, update_watched_token_tracking,
 };

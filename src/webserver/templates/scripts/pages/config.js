@@ -4,6 +4,8 @@ import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { requestManager } from "../core/request_manager.js";
+import * as Hints from "../core/hints.js";
+import { HintTrigger } from "../ui/hint_popover.js";
 
 const CONFIG_STATE_KEY = "config.page";
 const DEFAULT_SECTION = "trader";
@@ -22,6 +24,7 @@ const SECTION_ICONS = {
   monitoring: "icon-trending-up",
   ohlcv: "icon-clock",
   summary: "icon-file-text",
+  telegram: "icon-send",
 };
 
 const SECTION_LABEL_OVERRIDES = {
@@ -38,6 +41,7 @@ const SECTION_LABEL_OVERRIDES = {
   monitoring: "Monitoring",
   ohlcv: "OHLCV",
   summary: "Summary",
+  telegram: "Telegram",
 };
 
 const SECTION_DISPLAY_ORDER = [
@@ -48,6 +52,7 @@ const SECTION_DISPLAY_ORDER = [
   "swaps",
   "tokens",
   "sol_price",
+  "telegram",
   "events",
   "webserver",
   "services",
@@ -1274,6 +1279,83 @@ function renderCategories(sectionId) {
     categoryEl.appendChild(body);
     container.appendChild(categoryEl);
   }
+
+  // Render section-specific actions after categories
+  renderSectionActions(sectionId, container);
+}
+
+/**
+ * Render section-specific action panels (e.g., Telegram test connection)
+ */
+function renderSectionActions(sectionId, container) {
+  if (sectionId === "telegram") {
+    renderTelegramActions(container);
+  }
+}
+
+/**
+ * Render Telegram-specific actions (Test Connection button)
+ */
+function renderTelegramActions(container) {
+  const hint = Hints.getHint("configTelegram.overview");
+  const hintHtml = hint ? HintTrigger.render(hint, "configTelegram.overview", { size: "sm" }) : "";
+
+  const actionsPanel = create("div", { className: "config-section-actions" });
+  actionsPanel.innerHTML = `
+    <div class="config-actions-header">
+      <i class="icon-send"></i>
+      <span>Actions</span>
+      ${hintHtml}
+    </div>
+    <div class="config-actions-body">
+      <div class="config-action-item">
+        <div class="config-action-info">
+          <div class="config-action-title">Test Connection</div>
+          <div class="config-action-desc">Send a test message to verify your Telegram configuration is working</div>
+        </div>
+        <button type="button" class="btn primary" id="telegram-test-btn">
+          <i class="icon-send"></i> Send Test Message
+        </button>
+      </div>
+      <div class="config-action-status" id="telegram-status"></div>
+    </div>
+  `;
+
+  container.appendChild(actionsPanel);
+
+  // Initialize hint triggers
+  HintTrigger.initAll();
+
+  // Wire up test button
+  const testBtn = actionsPanel.querySelector("#telegram-test-btn");
+  const statusEl = actionsPanel.querySelector("#telegram-status");
+
+  on(testBtn, "click", async () => {
+    testBtn.disabled = true;
+    testBtn.innerHTML = '<i class="icon-loader spin"></i> Sending...';
+    statusEl.className = "config-action-status";
+    statusEl.textContent = "";
+
+    try {
+      const response = await fetch("/api/tools/telegram/test", { method: "POST" });
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        statusEl.className = "config-action-status success";
+        statusEl.innerHTML = '<i class="icon-check-circle"></i> Test message sent successfully! Check your Telegram.';
+        Utils.showToast("Telegram test message sent", "success");
+      } else {
+        throw new Error(data.message || data.error || "Failed to send test message");
+      }
+    } catch (error) {
+      statusEl.className = "config-action-status error";
+      statusEl.innerHTML = `<i class="icon-alert-circle"></i> ${Utils.escapeHtml(error.message)}`;
+      Utils.showToast(error.message, "error");
+    } finally {
+      testBtn.disabled = false;
+      testBtn.innerHTML = '<i class="icon-send"></i> Send Test Message';
+    }
+  });
 }
 
 function render() {

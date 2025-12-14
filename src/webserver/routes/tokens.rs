@@ -345,6 +345,171 @@ fn normalize_optional_text(value: Option<String>) -> Option<String> {
   })
 }
 
+/// Attempt to fetch token from external APIs (DexScreener, GeckoTerminal) and add to database
+///
+/// This is used when a token is requested but not found in the local database.
+/// Returns the Token if found and successfully added, None otherwise.
+async fn fetch_and_add_token_from_external(mint: &str) -> Option<crate::tokens::Token> {
+  use crate::apis::get_api_manager;
+
+  logger::debug(
+    LogTag::Webserver,
+    &format!("Token not in DB, attempting external fetch: mint={}", mint),
+  );
+
+  let apis = get_api_manager();
+  let db = get_global_database()?;
+
+  // Try DexScreener first - most reliable for Solana tokens
+  if apis.dexscreener.is_enabled() {
+    match apis.dexscreener.fetch_token_pools(mint, None).await {
+      Ok(pools) => {
+        if let Some(pool) = pools.first() {
+          let symbol = if !pool.base_token_symbol.is_empty() {
+            Some(pool.base_token_symbol.clone())
+          } else {
+            None
+          };
+          let name = if !pool.base_token_name.is_empty() {
+            Some(pool.base_token_name.clone())
+          } else {
+            None
+          };
+
+          // Clone values for the spawn_blocking closure
+          let db_clone = db.clone();
+          let mint_owned = mint.to_string();
+          let symbol_clone = symbol.clone();
+          let name_clone = name.clone();
+
+          // Wrap blocking DB call in spawn_blocking
+          let upsert_result = tokio::task::spawn_blocking(move || {
+            db_clone.upsert_token(
+              &mint_owned,
+              symbol_clone.as_deref(),
+              name_clone.as_deref(),
+              None,
+            )
+          })
+          .await;
+
+          match upsert_result {
+            Ok(Ok(())) => {
+              logger::info(
+                LogTag::Webserver,
+                &format!(
+                  "Token added from DexScreener: mint={} symbol={:?} name={:?}",
+                  mint, symbol, name
+                ),
+              );
+
+              // Now fetch the token from database
+              if let Ok(Some(token)) = crate::tokens::get_full_token_async(mint).await {
+                return Some(token);
+              }
+            }
+            Ok(Err(e)) => {
+              logger::warning(
+                LogTag::Webserver,
+                &format!(
+                  "Failed to add token from DexScreener: mint={} error={}",
+                  mint, e
+                ),
+              );
+            }
+            Err(e) => {
+              logger::warning(
+                LogTag::Webserver,
+                &format!(
+                  "spawn_blocking failed for DexScreener upsert: mint={} error={}",
+                  mint, e
+                ),
+              );
+            }
+          }
+        }
+      }
+      Err(e) => {
+        logger::debug(
+          LogTag::Webserver,
+          &format!("DexScreener fetch failed for {}: {}", mint, e),
+        );
+      }
+    }
+  }
+
+  // Try GeckoTerminal as fallback
+  if apis.geckoterminal.is_enabled() {
+    match apis.geckoterminal.fetch_pools(mint).await {
+      Ok(pools) => {
+        if let Some(pool) = pools.first() {
+          // Extract symbol from pool name (format: "SYMBOL/SOL")
+          let symbol = pool
+            .pool_name
+            .split('/')
+            .next()
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+
+          // Clone values for the spawn_blocking closure
+          let db_clone = db.clone();
+          let mint_owned = mint.to_string();
+          let symbol_clone = symbol.clone();
+
+          // Wrap blocking DB call in spawn_blocking
+          let upsert_result = tokio::task::spawn_blocking(move || {
+            db_clone.upsert_token(&mint_owned, symbol_clone.as_deref(), None, None)
+          })
+          .await;
+
+          match upsert_result {
+            Ok(Ok(())) => {
+              logger::info(
+                LogTag::Webserver,
+                &format!(
+                  "Token added from GeckoTerminal: mint={} symbol={:?}",
+                  mint, symbol
+                ),
+              );
+
+              // Now fetch the token from database
+              if let Ok(Some(token)) = crate::tokens::get_full_token_async(mint).await {
+                return Some(token);
+              }
+            }
+            Ok(Err(e)) => {
+              logger::warning(
+                LogTag::Webserver,
+                &format!(
+                  "Failed to add token from GeckoTerminal: mint={} error={}",
+                  mint, e
+                ),
+              );
+            }
+            Err(e) => {
+              logger::warning(
+                LogTag::Webserver,
+                &format!(
+                  "spawn_blocking failed for GeckoTerminal upsert: mint={} error={}",
+                  mint, e
+                ),
+              );
+            }
+          }
+        }
+      }
+      Err(e) => {
+        logger::debug(
+          LogTag::Webserver,
+          &format!("GeckoTerminal fetch failed for {}: {}", mint, e),
+        );
+      }
+    }
+  }
+
+  None
+}
+
 /// Token statistics response
 #[derive(Debug, Serialize)]
 pub struct TokenStatsResponse {
@@ -640,6 +805,32 @@ pub struct FavoriteResponse {
 }
 
 // =============================================================================
+// BLACKLIST TYPES
+// =============================================================================
+
+/// Request to add a token to blacklist
+#[derive(Debug, Clone, Deserialize)]
+pub struct AddBlacklistRequest {
+  pub mint: String,
+  #[serde(default = "default_blacklist_reason")]
+  pub reason: String,
+}
+
+fn default_blacklist_reason() -> String {
+  "Manual blacklist via UI".to_string()
+}
+
+/// Response for blacklist operations
+#[derive(Debug, Serialize)]
+pub struct BlacklistResponse {
+  pub success: bool,
+  pub mint: String,
+  pub is_blacklisted: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub message: Option<String>,
+}
+
+// =============================================================================
 // ROUTE REGISTRATION
 // =============================================================================
 
@@ -660,6 +851,9 @@ pub fn routes() -> Router<Arc<AppState>> {
     .route("/tokens/:mint/ohlcv/refresh", post(refresh_token_ohlcv))
     .route("/tokens/:mint/ohlcv/deprioritize", post(deprioritize_token_ohlcv))
     .route("/tokens/:mint/dexscreener", get(get_token_dexscreener))
+    .route("/tokens/:mint/blacklist", post(add_to_blacklist))
+    .route("/tokens/:mint/blacklist", delete(remove_from_blacklist))
+    .route("/tokens/:mint/blacklist", get(get_blacklist_status))
 }
 
 // =============================================================================
@@ -850,6 +1044,224 @@ async fn update_favorite(
   }
 }
 
+// =============================================================================
+// BLACKLIST HANDLERS
+// =============================================================================
+
+/// POST /api/tokens/:mint/blacklist
+///
+/// Add a token to the blacklist
+async fn add_to_blacklist(
+  Path(mint): Path<String>,
+  Json(request): Json<Option<AddBlacklistRequest>>,
+) -> Result<Json<BlacklistResponse>, (StatusCode, Json<serde_json::Value>)> {
+  let reason = request
+    .map(|r| r.reason)
+    .unwrap_or_else(|| "Manual blacklist via UI".to_string());
+
+  logger::debug(
+    LogTag::Webserver,
+    &format!("Adding to blacklist: mint={}, reason={}", mint, reason),
+  );
+
+  let db = match get_global_database() {
+    Some(db) => db,
+    None => {
+      return Err((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(serde_json::json!({
+          "success": false,
+          "error": "Token database not available"
+        })),
+      ));
+    }
+  };
+
+  // Use spawn_blocking for sync database operation
+  let mint_clone = mint.clone();
+  let reason_clone = reason.clone();
+  match tokio::task::spawn_blocking(move || {
+    cleanup::blacklist_token(&mint_clone, &reason_clone, &db)
+  })
+  .await
+  {
+    Ok(Ok(())) => {
+      logger::info(
+        LogTag::Webserver,
+        &format!("Token blacklisted: mint={}, reason={}", mint, reason),
+      );
+      Ok(Json(BlacklistResponse {
+        success: true,
+        mint,
+        is_blacklisted: true,
+        message: Some(format!("Token blacklisted: {}", reason)),
+      }))
+    }
+    Ok(Err(e)) => {
+      logger::warning(
+        LogTag::Webserver,
+        &format!("Failed to blacklist token mint={}: {}", mint, e),
+      );
+      Err((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(serde_json::json!({
+          "success": false,
+          "error": format!("Failed to blacklist token: {}", e)
+        })),
+      ))
+    }
+    Err(join_err) => {
+      logger::warning(
+        LogTag::Webserver,
+        &format!("Join error blacklisting token mint={}: {}", mint, join_err),
+      );
+      Err((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(serde_json::json!({
+          "success": false,
+          "error": "Internal error during blacklist operation"
+        })),
+      ))
+    }
+  }
+}
+
+/// DELETE /api/tokens/:mint/blacklist
+///
+/// Remove a token from the blacklist
+async fn remove_from_blacklist(
+  Path(mint): Path<String>,
+) -> Result<Json<BlacklistResponse>, (StatusCode, Json<serde_json::Value>)> {
+  logger::debug(
+    LogTag::Webserver,
+    &format!("Removing from blacklist: mint={}", mint),
+  );
+
+  let db = match get_global_database() {
+    Some(db) => db,
+    None => {
+      return Err((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(serde_json::json!({
+          "success": false,
+          "error": "Token database not available"
+        })),
+      ));
+    }
+  };
+
+  // Use spawn_blocking for sync database operation
+  let mint_clone = mint.clone();
+  match tokio::task::spawn_blocking(move || cleanup::unblacklist_token(&mint_clone, &db)).await {
+    Ok(Ok(())) => {
+      logger::info(
+        LogTag::Webserver,
+        &format!("Token removed from blacklist: mint={}", mint),
+      );
+      Ok(Json(BlacklistResponse {
+        success: true,
+        mint,
+        is_blacklisted: false,
+        message: Some("Token removed from blacklist".to_string()),
+      }))
+    }
+    Ok(Err(e)) => {
+      logger::warning(
+        LogTag::Webserver,
+        &format!("Failed to remove from blacklist mint={}: {}", mint, e),
+      );
+      Err((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(serde_json::json!({
+          "success": false,
+          "error": format!("Failed to remove from blacklist: {}", e)
+        })),
+      ))
+    }
+    Err(join_err) => {
+      logger::warning(
+        LogTag::Webserver,
+        &format!(
+          "Join error removing from blacklist mint={}: {}",
+          mint, join_err
+        ),
+      );
+      Err((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(serde_json::json!({
+          "success": false,
+          "error": "Internal error during unblacklist operation"
+        })),
+      ))
+    }
+  }
+}
+
+/// GET /api/tokens/:mint/blacklist
+///
+/// Get blacklist status for a token
+async fn get_blacklist_status(
+  Path(mint): Path<String>,
+) -> Result<Json<BlacklistResponse>, (StatusCode, Json<serde_json::Value>)> {
+  logger::debug(
+    LogTag::Webserver,
+    &format!("Checking blacklist status: mint={}", mint),
+  );
+
+  let db = match get_global_database() {
+    Some(db) => db,
+    None => {
+      return Err((
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(serde_json::json!({
+          "success": false,
+          "error": "Token database not available"
+        })),
+      ));
+    }
+  };
+
+  // Use spawn_blocking for sync database operation
+  let mint_clone = mint.clone();
+  match tokio::task::spawn_blocking(move || db.is_blacklisted(&mint_clone)).await {
+    Ok(Ok(is_blacklisted)) => Ok(Json(BlacklistResponse {
+      success: true,
+      mint,
+      is_blacklisted,
+      message: None,
+    })),
+    Ok(Err(e)) => {
+      logger::warning(
+        LogTag::Webserver,
+        &format!("Failed to check blacklist status mint={}: {}", mint, e),
+      );
+      Err((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(serde_json::json!({
+          "success": false,
+          "error": format!("Failed to check blacklist status: {}", e)
+        })),
+      ))
+    }
+    Err(join_err) => {
+      logger::warning(
+        LogTag::Webserver,
+        &format!(
+          "Join error checking blacklist status mint={}: {}",
+          mint, join_err
+        ),
+      );
+      Err((
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(serde_json::json!({
+          "success": false,
+          "error": "Internal error checking blacklist status"
+        })),
+      ))
+    }
+  }
+}
+
 /// GET /api/tokens/search
 ///
 /// Search for tokens by name, symbol, or mint address.
@@ -913,6 +1325,9 @@ async fn search_tokens(
 ///
 /// Comprehensive token analysis endpoint for the Token Analyzer feature.
 /// Aggregates data from multiple sources: token database, pool service, security data.
+///
+/// If the token is not in the local database, attempts to fetch it from external
+/// APIs (DexScreener, GeckoTerminal) and adds it to the database before proceeding.
 async fn get_token_analysis(
   Path(mint): Path<String>,
 ) -> Result<Json<TokenAnalysisResponse>, (StatusCode, Json<serde_json::Value>)> {
@@ -923,21 +1338,41 @@ async fn get_token_analysis(
     &format!("Token analysis requested: mint={}", mint),
   );
 
-  // Fetch token from database
+  // Fetch token from database, or try external APIs if not found
   let token = match crate::tokens::get_full_token_async(&mint).await {
     Ok(Some(t)) => t,
     Ok(None) => {
+      // Token not in database - try to fetch from external APIs
       logger::debug(
         LogTag::Webserver,
-        &format!("Token not found: mint={}", mint),
+        &format!("Token not in DB, trying external APIs: mint={}", mint),
       );
-      return Err((
-        StatusCode::NOT_FOUND,
-        Json(serde_json::json!({
-          "success": false,
-          "error": "Token not found"
-        })),
-      ));
+
+      match fetch_and_add_token_from_external(&mint).await {
+        Some(t) => {
+          logger::info(
+            LogTag::Webserver,
+            &format!(
+              "Token fetched from external API and added to DB: mint={} symbol={}",
+              mint, t.symbol
+            ),
+          );
+          t
+        }
+        None => {
+          logger::debug(
+            LogTag::Webserver,
+            &format!("Token not found in DB or external APIs: mint={}", mint),
+          );
+          return Err((
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+              "success": false,
+              "error": "Token not found in database or external sources"
+            })),
+          ));
+        }
+      }
     }
     Err(e) => {
       logger::warning(

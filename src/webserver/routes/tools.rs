@@ -1,11 +1,17 @@
 //! Tools API routes for wallet utilities, token operations, and trading tools
 
-use axum::{response::Response, routing::{get, post}, Json, Router};
+use axum::{
+    extract::Path,
+    response::Response,
+    routing::{delete, get, post},
+    Json, Router,
+};
 use chrono::DateTime;
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signer::Signer;
+use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -16,8 +22,15 @@ use crate::ata_cleanup::{
     trigger_immediate_ata_cleanup,
 };
 use crate::logger::{self, LogTag};
-use crate::tools::{ToolStatus, VolumeAggregator, VolumeConfig, VolumeSession};
+use crate::rpc::{get_rpc_client, RpcClientMethods};
+use crate::tokens::decimals;
+use crate::tools::multi_wallet::{
+    execute_consolidation, execute_multi_buy, execute_multi_sell, ConsolidateConfig,
+    MultiBuyConfig, MultiSellConfig, SessionResult, SessionStatus,
+};
+use crate::tools::{DelayConfig, ToolStatus, VolumeAggregator, VolumeConfig, VolumeSession};
 use crate::utils::{get_all_token_accounts, get_wallet_address};
+use crate::wallets;
 use crate::webserver::state::AppState;
 use crate::webserver::utils::{error_response, success_response};
 
@@ -48,6 +61,418 @@ impl Default for VolumeAggregatorState {
 /// Global volume aggregator state
 static VOLUME_AGGREGATOR_STATE: Lazy<Arc<RwLock<VolumeAggregatorState>>> =
     Lazy::new(|| Arc::new(RwLock::new(VolumeAggregatorState::default())));
+
+// =============================================================================
+// Multi-Wallet Global State
+// =============================================================================
+
+/// Session tracking for multi-wallet operations
+struct MultiWalletSession {
+    /// Session result (updated as operations progress)
+    result: SessionResult,
+    /// Current status
+    status: SessionStatus,
+    /// Abort flag for the running session
+    abort_flag: Arc<AtomicBool>,
+    /// Operation type for display
+    operation_type: String,
+    /// Token mint being traded
+    token_mint: String,
+    /// Started timestamp
+    started_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Global multi-wallet sessions state
+static MULTI_WALLET_SESSIONS: Lazy<Arc<RwLock<HashMap<String, MultiWalletSession>>>> =
+    Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
+
+/// Session cleanup interval (1 hour in seconds)
+const SESSION_CLEANUP_INTERVAL_SECS: i64 = 3600;
+
+/// Check if there's an active (non-completed) multi-wallet session
+async fn has_active_multi_wallet_session() -> bool {
+    let sessions = MULTI_WALLET_SESSIONS.read().await;
+    sessions.values().any(|s| {
+        matches!(
+            s.status,
+            SessionStatus::Pending | SessionStatus::Funding | SessionStatus::Executing | SessionStatus::Consolidating
+        )
+    })
+}
+
+/// Cleanup old completed sessions (older than 1 hour)
+async fn cleanup_old_sessions() {
+    let now = chrono::Utc::now();
+    let mut sessions = MULTI_WALLET_SESSIONS.write().await;
+    
+    let old_session_ids: Vec<String> = sessions
+        .iter()
+        .filter(|(_, s)| {
+            // Only clean up completed sessions older than 1 hour
+            let is_complete = matches!(
+                s.status,
+                SessionStatus::Completed | SessionStatus::Failed | SessionStatus::Aborted
+            );
+            let age_secs = (now - s.started_at).num_seconds();
+            is_complete && age_secs > SESSION_CLEANUP_INTERVAL_SECS
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
+    
+    for id in old_session_ids {
+        sessions.remove(&id);
+        logger::debug(
+            LogTag::Tools,
+            &format!("Cleaned up old multi-wallet session: {}", &id[..8]),
+        );
+    }
+}
+
+// =============================================================================
+// Multi-Wallet Request/Response Types
+// =============================================================================
+
+/// Request to preview multi-buy operation
+#[derive(Debug, Deserialize)]
+pub struct MultiBuyPreviewRequest {
+    /// Token mint address
+    pub token_mint: String,
+    /// Number of wallets to use
+    pub wallet_count: usize,
+    /// Minimum SOL per buy
+    pub min_amount_sol: f64,
+    /// Maximum SOL per buy
+    pub max_amount_sol: f64,
+    /// SOL buffer to leave in each wallet (default 0.015)
+    #[serde(default = "default_sol_buffer")]
+    pub sol_buffer: f64,
+    /// Maximum total SOL to spend
+    pub total_sol_limit: Option<f64>,
+}
+
+fn default_sol_buffer() -> f64 {
+    0.015
+}
+
+/// Response for multi-buy preview
+#[derive(Debug, Serialize)]
+pub struct MultiBuyPreviewResponse {
+    /// Number of wallets that will be created/used
+    pub wallets_to_create: usize,
+    /// Existing secondary wallets available
+    pub existing_wallets: usize,
+    /// Total SOL needed for operation
+    pub total_sol_needed: f64,
+    /// Average SOL per wallet buy
+    pub per_wallet_sol: f64,
+    /// Current main wallet balance
+    pub main_wallet_balance: f64,
+    /// Whether operation can proceed
+    pub can_proceed: bool,
+    /// Warning message if any
+    pub warning: Option<String>,
+    /// Wallet plans (preview of what will happen)
+    pub wallet_plans: Vec<WalletPlanResponse>,
+}
+
+/// Wallet plan for API response
+#[derive(Debug, Serialize)]
+pub struct WalletPlanResponse {
+    pub wallet_id: i64,
+    pub wallet_address: String,
+    pub wallet_name: String,
+    pub current_sol_balance: f64,
+    pub planned_buy_amount: f64,
+    pub needs_funding: bool,
+    pub funding_amount: f64,
+}
+
+/// Request to start multi-buy operation
+#[derive(Debug, Deserialize)]
+pub struct MultiBuyStartRequest {
+    /// Token mint address
+    pub token_mint: String,
+    /// Number of wallets to use
+    pub wallet_count: usize,
+    /// Minimum SOL per buy
+    pub min_amount_sol: f64,
+    /// Maximum SOL per buy
+    pub max_amount_sol: f64,
+    /// SOL buffer to leave in each wallet
+    #[serde(default = "default_sol_buffer")]
+    pub sol_buffer: f64,
+    /// Maximum total SOL to spend
+    pub total_sol_limit: Option<f64>,
+    /// Delay between operations in milliseconds
+    #[serde(default = "default_delay_ms")]
+    pub delay_ms: u64,
+    /// Maximum delay for random mode
+    pub delay_max_ms: Option<u64>,
+    /// Number of concurrent operations
+    #[serde(default = "default_concurrency")]
+    pub concurrency: usize,
+    /// Slippage in basis points
+    #[serde(default = "default_slippage")]
+    pub slippage_bps: u64,
+    /// Router to use (jupiter, raydium, gmgn)
+    pub router: Option<String>,
+}
+
+fn default_delay_ms() -> u64 {
+    1000
+}
+
+fn default_concurrency() -> usize {
+    1
+}
+
+fn default_slippage() -> u64 {
+    500
+}
+
+/// Request to preview multi-sell operation
+#[derive(Debug, Deserialize)]
+pub struct MultiSellPreviewRequest {
+    /// Token mint address
+    pub token_mint: String,
+    /// Specific wallet IDs to sell from (None = all with balance)
+    pub wallet_ids: Option<Vec<i64>>,
+    /// Percentage to sell (1-100)
+    #[serde(default = "default_sell_percentage")]
+    pub sell_percentage: f64,
+}
+
+fn default_sell_percentage() -> f64 {
+    100.0
+}
+
+/// Response for multi-sell preview
+#[derive(Debug, Serialize)]
+pub struct MultiSellPreviewResponse {
+    /// Token symbol (if known)
+    pub token_symbol: Option<String>,
+    /// Number of wallets with token balance
+    pub wallets_with_balance: usize,
+    /// Total token balance across all wallets
+    pub total_token_balance: f64,
+    /// Token amount to be sold
+    pub token_to_sell: f64,
+    /// Estimated SOL proceeds (if available)
+    pub estimated_sol: Option<f64>,
+    /// Whether operation can proceed
+    pub can_proceed: bool,
+    /// Warning message if any
+    pub warning: Option<String>,
+    /// Wallet details
+    pub wallets: Vec<WalletTokenBalanceResponse>,
+}
+
+/// Wallet token balance for API response
+#[derive(Debug, Serialize)]
+pub struct WalletTokenBalanceResponse {
+    pub wallet_id: i64,
+    pub wallet_address: String,
+    pub wallet_name: String,
+    pub sol_balance: f64,
+    pub token_balance: f64,
+    pub needs_sol_topup: bool,
+}
+
+/// Request to start multi-sell operation
+#[derive(Debug, Deserialize)]
+pub struct MultiSellStartRequest {
+    /// Token mint address
+    pub token_mint: String,
+    /// Specific wallet IDs to sell from
+    pub wallet_ids: Option<Vec<i64>>,
+    /// Percentage to sell (1-100)
+    #[serde(default = "default_sell_percentage")]
+    pub sell_percentage: f64,
+    /// Minimum SOL for transaction fees
+    #[serde(default = "default_min_sol_fee")]
+    pub min_sol_for_fee: f64,
+    /// Auto top-up wallets with insufficient SOL
+    #[serde(default = "default_auto_topup")]
+    pub auto_topup: bool,
+    /// Delay between operations in milliseconds
+    #[serde(default = "default_delay_ms")]
+    pub delay_ms: u64,
+    /// Maximum delay for random mode
+    pub delay_max_ms: Option<u64>,
+    /// Number of concurrent operations
+    #[serde(default = "default_concurrency")]
+    pub concurrency: usize,
+    /// Slippage in basis points
+    #[serde(default = "default_slippage")]
+    pub slippage_bps: u64,
+    /// Consolidate SOL to main wallet after sell
+    #[serde(default = "default_consolidate_after")]
+    pub consolidate_after: bool,
+    /// Close token ATAs after selling
+    #[serde(default = "default_close_atas")]
+    pub close_atas_after: bool,
+    /// Router to use
+    pub router: Option<String>,
+}
+
+fn default_min_sol_fee() -> f64 {
+    0.01
+}
+
+fn default_auto_topup() -> bool {
+    true
+}
+
+fn default_consolidate_after() -> bool {
+    true
+}
+
+fn default_close_atas() -> bool {
+    true
+}
+
+/// Response for session start (both buy and sell)
+#[derive(Debug, Serialize)]
+pub struct SessionStartResponse {
+    /// Unique session ID
+    pub session_id: String,
+    /// Status message
+    pub message: String,
+}
+
+/// Response for session status
+#[derive(Debug, Serialize)]
+pub struct SessionStatusResponse {
+    /// Session ID
+    pub session_id: String,
+    /// Current status
+    pub status: String,
+    /// Operation type (multi_buy, multi_sell, consolidate)
+    pub operation_type: String,
+    /// Token mint
+    pub token_mint: String,
+    /// Total wallets involved
+    pub total_wallets: usize,
+    /// Successful operations
+    pub successful_ops: usize,
+    /// Failed operations
+    pub failed_ops: usize,
+    /// Total SOL spent
+    pub total_sol_spent: f64,
+    /// Total SOL recovered
+    pub total_sol_recovered: f64,
+    /// Started timestamp
+    pub started_at: String,
+    /// Whether operation is complete
+    pub is_complete: bool,
+    /// Error message if failed
+    pub error: Option<String>,
+}
+
+/// Response for wallets summary
+#[derive(Debug, Serialize)]
+pub struct WalletsSummaryResponse {
+    /// Total wallets
+    pub total_wallets: usize,
+    /// Active secondary wallets
+    pub secondary_wallets: usize,
+    /// Main wallet info
+    pub main_wallet: Option<WalletInfoResponse>,
+    /// Total SOL across all wallets
+    pub total_sol: f64,
+    /// Per-wallet details
+    pub wallets: Vec<WalletInfoResponse>,
+}
+
+/// Wallet info for API response
+#[derive(Debug, Clone, Serialize)]
+pub struct WalletInfoResponse {
+    pub id: i64,
+    pub address: String,
+    pub name: String,
+    pub role: String,
+    pub sol_balance: f64,
+    pub is_active: bool,
+}
+
+/// Request for consolidation
+#[derive(Debug, Deserialize)]
+pub struct ConsolidateRequest {
+    /// Specific wallet IDs to consolidate (None = all)
+    pub wallet_ids: Option<Vec<i64>>,
+    /// Transfer SOL to main wallet
+    #[serde(default = "default_transfer_sol")]
+    pub transfer_sol: bool,
+    /// Token mints to transfer
+    pub transfer_tokens: Option<Vec<String>>,
+    /// Close empty ATAs
+    #[serde(default = "default_close_atas")]
+    pub close_atas: bool,
+    /// Include Token-2022 accounts
+    #[serde(default = "default_include_token_2022")]
+    pub include_token_2022: bool,
+    /// Leave rent-exempt amount in wallets
+    #[serde(default)]
+    pub leave_rent_exempt: bool,
+}
+
+fn default_transfer_sol() -> bool {
+    true
+}
+
+fn default_include_token_2022() -> bool {
+    true
+}
+
+/// Response for consolidation
+#[derive(Debug, Serialize)]
+pub struct ConsolidateResponse {
+    /// Session ID
+    pub session_id: String,
+    /// Total wallets processed
+    pub total_wallets: usize,
+    /// Successful operations
+    pub successful_ops: usize,
+    /// Failed operations
+    pub failed_ops: usize,
+    /// SOL recovered
+    pub sol_recovered: f64,
+    /// Status message
+    pub message: String,
+}
+
+/// Request for ATA cleanup on sub-wallets
+#[derive(Debug, Deserialize)]
+pub struct SubWalletAtaCleanupRequest {
+    /// Specific wallet IDs (None = all secondary)
+    pub wallet_ids: Option<Vec<i64>>,
+    /// Include Token-2022 accounts
+    #[serde(default = "default_include_token_2022")]
+    pub include_token_2022: bool,
+}
+
+/// Response for sessions list
+#[derive(Debug, Serialize)]
+pub struct SessionsListResponse {
+    /// Recent sessions
+    pub sessions: Vec<SessionSummaryResponse>,
+    /// Total count
+    pub total: usize,
+}
+
+/// Session summary for list
+#[derive(Debug, Serialize)]
+pub struct SessionSummaryResponse {
+    pub session_id: String,
+    pub operation_type: String,
+    pub token_mint: String,
+    pub status: String,
+    pub total_wallets: usize,
+    pub successful_ops: usize,
+    pub failed_ops: usize,
+    pub started_at: String,
+    pub is_complete: bool,
+}
 
 // =============================================================================
 // Response Types
@@ -329,6 +754,27 @@ impl From<crate::tools::database::VaSessionRow> for VaSessionSummary {
 // Routes
 // =============================================================================
 
+/// Create multi-wallet routes
+fn multi_wallet_routes() -> Router<Arc<AppState>> {
+    Router::new()
+        // Multi-Buy
+        .route("/multi-buy/preview", post(preview_multi_buy))
+        .route("/multi-buy/start", post(start_multi_buy))
+        .route("/multi-buy/:id", get(get_multi_buy_status))
+        .route("/multi-buy/:id/abort", post(abort_multi_buy))
+        // Multi-Sell
+        .route("/multi-sell/preview", post(preview_multi_sell))
+        .route("/multi-sell/start", post(start_multi_sell))
+        .route("/multi-sell/:id", get(get_multi_sell_status))
+        .route("/multi-sell/:id/abort", post(abort_multi_sell))
+        // Wallet Management
+        .route("/wallets/summary", get(get_wallets_summary))
+        .route("/wallets/consolidate", post(consolidate_wallets))
+        .route("/wallets/cleanup-atas", post(cleanup_subwallet_atas))
+        // Sessions
+        .route("/multi-wallet/sessions", get(get_multi_wallet_sessions))
+}
+
 /// Create tools routes
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
@@ -351,6 +797,19 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/favorites/:id", axum::routing::patch(update_favorite))
         .route("/favorites/:id", axum::routing::delete(delete_favorite))
         .route("/favorites/:id/use", post(mark_favorite_used))
+        // Trade Watcher
+        .route("/search-pools/:mint", get(search_pools_handler))
+        .route("/watched-tokens", get(get_watched_tokens_handler))
+        .route("/watched-tokens", post(add_watched_token_handler))
+        .route("/watched-tokens/:id", delete(delete_watched_token_handler))
+        .route("/trade-watcher/start", post(start_trade_watcher_handler))
+        .route("/trade-watcher/stop", post(stop_trade_watcher_handler))
+        .route("/trade-watcher/status", get(get_trade_watcher_status_handler))
+        // Telegram
+        .route("/telegram/test", post(test_telegram_handler))
+        .route("/telegram/status", get(get_telegram_status_handler))
+        // Merge multi-wallet routes
+        .merge(multi_wallet_routes())
 }
 
 // =============================================================================
@@ -775,7 +1234,6 @@ async fn get_volume_aggregator_sessions() -> Response {
 // Tool Favorites Handlers
 // =============================================================================
 
-use axum::extract::Path;
 use crate::tools::database::{
     get_tool_favorites, upsert_tool_favorite, remove_tool_favorite,
     update_tool_favorite as db_update_tool_favorite, increment_tool_favorite_use,
@@ -901,3 +1359,1137 @@ async fn mark_favorite_used(Path(id): Path<i64>) -> Response {
         ),
     }
 }
+
+// =============================================================================
+// Multi-Wallet Handlers
+// =============================================================================
+
+/// Preview multi-buy operation
+async fn preview_multi_buy(Json(request): Json<MultiBuyPreviewRequest>) -> Response {
+    logger::debug(
+        LogTag::Tools,
+        &format!(
+            "Multi-buy preview: token={}, wallets={}, amount={}-{} SOL",
+            &request.token_mint,
+            request.wallet_count,
+            request.min_amount_sol,
+            request.max_amount_sol
+        ),
+    );
+
+    // Validate token mint
+    if Pubkey::from_str(&request.token_mint).is_err() {
+        return error_response(
+            axum::http::StatusCode::BAD_REQUEST,
+            "INVALID_MINT",
+            "Invalid token mint address",
+            None,
+        );
+    }
+
+    // Get main wallet balance
+    let main_wallet = match wallets::get_main_wallet().await {
+        Ok(Some(w)) => w,
+        Ok(None) => {
+            return error_response(
+                axum::http::StatusCode::BAD_REQUEST,
+                "NO_MAIN_WALLET",
+                "No main wallet configured",
+                None,
+            );
+        }
+        Err(e) => {
+            return error_response(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "WALLET_ERROR",
+                "Failed to get main wallet",
+                Some(&e),
+            );
+        }
+    };
+
+    // Get main wallet SOL balance
+    let rpc = get_rpc_client();
+    let main_balance = match rpc.get_sol_balance(&main_wallet.address).await {
+        Ok(sol) => sol,
+        Err(e) => {
+            return error_response(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "RPC_ERROR",
+                "Failed to get wallet balance",
+                Some(&e),
+            );
+        }
+    };
+
+    // Get existing secondary wallets
+    let existing_wallets = match wallets::get_wallets_with_keys().await {
+        Ok(w) => w
+            .into_iter()
+            .filter(|w| w.wallet.role == wallets::WalletRole::Secondary && w.wallet.is_active)
+            .collect::<Vec<_>>(),
+        Err(e) => {
+            return error_response(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "WALLET_ERROR",
+                "Failed to get wallets",
+                Some(&e),
+            );
+        }
+    };
+
+    let existing_count = existing_wallets.len();
+    let wallets_to_create = if request.wallet_count > existing_count {
+        request.wallet_count - existing_count
+    } else {
+        0
+    };
+
+    // Calculate SOL needed
+    let avg_buy = (request.min_amount_sol + request.max_amount_sol) / 2.0;
+    let per_wallet_sol = avg_buy + request.sol_buffer;
+    let total_sol_needed = per_wallet_sol * request.wallet_count as f64;
+
+    // Check if we can proceed
+    let can_proceed = main_balance >= total_sol_needed;
+    let warning = if !can_proceed {
+        Some(format!(
+            "Insufficient balance. Need {:.4} SOL, have {:.4} SOL",
+            total_sol_needed, main_balance
+        ))
+    } else if let Some(limit) = request.total_sol_limit {
+        if total_sol_needed > limit {
+            Some(format!(
+                "Total SOL needed ({:.4}) exceeds limit ({:.4})",
+                total_sol_needed, limit
+            ))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+
+    // Build wallet plans (preview) - fetch balances for each wallet
+    let mut wallet_plans = Vec::new();
+    for w in existing_wallets.iter().take(request.wallet_count) {
+        let sol_balance = rpc.get_sol_balance(&w.wallet.address).await.unwrap_or(0.0);
+        let needs_funding = sol_balance < per_wallet_sol;
+        let funding_amount = if needs_funding {
+            per_wallet_sol - sol_balance
+        } else {
+            0.0
+        };
+        wallet_plans.push(WalletPlanResponse {
+            wallet_id: w.wallet.id,
+            wallet_address: w.wallet.address.clone(),
+            wallet_name: w.wallet.name.clone(),
+            current_sol_balance: sol_balance,
+            planned_buy_amount: avg_buy,
+            needs_funding,
+            funding_amount,
+        });
+    }
+
+    success_response(MultiBuyPreviewResponse {
+        wallets_to_create,
+        existing_wallets: existing_count,
+        total_sol_needed,
+        per_wallet_sol,
+        main_wallet_balance: main_balance,
+        can_proceed,
+        warning,
+        wallet_plans,
+    })
+}
+
+/// Start multi-buy operation
+async fn start_multi_buy(Json(request): Json<MultiBuyStartRequest>) -> Response {
+    logger::info(
+        LogTag::Tools,
+        &format!(
+            "Starting multi-buy: token={}, wallets={}, amount={}-{} SOL",
+            &request.token_mint,
+            request.wallet_count,
+            request.min_amount_sol,
+            request.max_amount_sol
+        ),
+    );
+
+    // Check for concurrent sessions
+    if has_active_multi_wallet_session().await {
+        return error_response(
+            axum::http::StatusCode::CONFLICT,
+            "SESSION_ACTIVE",
+            "Another multi-wallet operation is already in progress",
+            None,
+        );
+    }
+
+    // Cleanup old sessions
+    cleanup_old_sessions().await;
+
+    // Validate token mint
+    if Pubkey::from_str(&request.token_mint).is_err() {
+        return error_response(
+            axum::http::StatusCode::BAD_REQUEST,
+            "INVALID_MINT",
+            "Invalid token mint address",
+            None,
+        );
+    }
+
+    // Build delay config
+    let delay = if let Some(max_ms) = request.delay_max_ms {
+        DelayConfig::Random {
+            min_ms: request.delay_ms,
+            max_ms,
+        }
+    } else {
+        DelayConfig::Fixed {
+            delay_ms: request.delay_ms,
+        }
+    };
+
+    // Generate session ID and abort flag first
+    let session_id = uuid::Uuid::new_v4().to_string();
+    let abort_flag = Arc::new(AtomicBool::new(false));
+    let token_mint = request.token_mint.clone();
+
+    // Build config with abort flag
+    let mut config = MultiBuyConfig {
+        token_mint: request.token_mint.clone(),
+        wallet_count: request.wallet_count,
+        total_sol_limit: request.total_sol_limit,
+        min_amount_sol: request.min_amount_sol,
+        max_amount_sol: request.max_amount_sol,
+        sol_buffer: request.sol_buffer,
+        delay,
+        concurrency: request.concurrency,
+        slippage_bps: request.slippage_bps,
+        router: request.router.clone(),
+        abort_flag: Some(abort_flag.clone()),
+    };
+
+    // Validate config
+    if let Err(e) = config.validate() {
+        return error_response(
+            axum::http::StatusCode::BAD_REQUEST,
+            "INVALID_CONFIG",
+            &e,
+            None,
+        );
+    }
+
+    // Create session entry
+    {
+        let mut sessions = MULTI_WALLET_SESSIONS.write().await;
+        sessions.insert(
+            session_id.clone(),
+            MultiWalletSession {
+                result: SessionResult::new(session_id.clone()),
+                status: SessionStatus::Pending,
+                abort_flag: abort_flag.clone(),
+                operation_type: "multi_buy".to_string(),
+                token_mint: token_mint.clone(),
+                started_at: chrono::Utc::now(),
+            },
+        );
+    }
+
+    // Spawn background task
+    let session_id_clone = session_id.clone();
+    tokio::spawn(async move {
+        // Update status to executing
+        {
+            let mut sessions = MULTI_WALLET_SESSIONS.write().await;
+            if let Some(session) = sessions.get_mut(&session_id_clone) {
+                session.status = SessionStatus::Executing;
+            }
+        }
+
+        // Execute multi-buy
+        let result = execute_multi_buy(config).await;
+
+        // Update session with result
+        {
+            let mut sessions = MULTI_WALLET_SESSIONS.write().await;
+            if let Some(session) = sessions.get_mut(&session_id_clone) {
+                match result {
+                    Ok(res) => {
+                        session.result = res;
+                        session.status = SessionStatus::Completed;
+                    }
+                    Err(e) => {
+                        session.result.error = Some(e.clone());
+                        session.result.success = false;
+                        session.status = SessionStatus::Failed;
+                        logger::error(
+                            LogTag::Tools,
+                            &format!("Multi-buy session {} failed: {}", &session_id_clone[..8], e),
+                        );
+                    }
+                }
+            }
+        }
+    });
+
+    success_response(SessionStartResponse {
+        session_id,
+        message: "Multi-buy session started".to_string(),
+    })
+}
+
+/// Get multi-buy session status
+async fn get_multi_buy_status(Path(id): Path<String>) -> Response {
+    get_session_status(&id, "multi_buy").await
+}
+
+/// Abort multi-buy session
+async fn abort_multi_buy(Path(id): Path<String>) -> Response {
+    abort_session(&id).await
+}
+
+/// Preview multi-sell operation
+async fn preview_multi_sell(Json(request): Json<MultiSellPreviewRequest>) -> Response {
+    logger::debug(
+        LogTag::Tools,
+        &format!(
+            "Multi-sell preview: token={}, wallets={:?}, {}%",
+            &request.token_mint, request.wallet_ids, request.sell_percentage
+        ),
+    );
+
+    // Validate token mint
+    if Pubkey::from_str(&request.token_mint).is_err() {
+        return error_response(
+            axum::http::StatusCode::BAD_REQUEST,
+            "INVALID_MINT",
+            "Invalid token mint address",
+            None,
+        );
+    }
+
+    // Get wallets with their balances
+    let all_wallets = match wallets::get_wallets_with_keys().await {
+        Ok(w) => w,
+        Err(e) => {
+            return error_response(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "WALLET_ERROR",
+                "Failed to get wallets",
+                Some(&e),
+            );
+        }
+    };
+
+    // Filter to secondary wallets
+    let secondary_wallets: Vec<_> = all_wallets
+        .into_iter()
+        .filter(|w| {
+            if w.wallet.role != wallets::WalletRole::Secondary || !w.wallet.is_active {
+                return false;
+            }
+            // Filter by specific IDs if provided
+            if let Some(ref ids) = request.wallet_ids {
+                return ids.contains(&w.wallet.id);
+            }
+            true
+        })
+        .collect();
+
+    if secondary_wallets.is_empty() {
+        return success_response(MultiSellPreviewResponse {
+            token_symbol: None,
+            wallets_with_balance: 0,
+            total_token_balance: 0.0,
+            token_to_sell: 0.0,
+            estimated_sol: None,
+            can_proceed: false,
+            warning: Some("No secondary wallets found".to_string()),
+            wallets: vec![],
+        });
+    }
+
+    // Get token balances for each wallet
+    let rpc = get_rpc_client();
+    let mut wallets_with_balance = Vec::new();
+    let mut total_token_balance = 0.0;
+
+    // Fetch token decimals once for display conversion
+    let token_decimals = decimals::get(&request.token_mint).await.unwrap_or(9);
+    let divisor = 10f64.powi(token_decimals as i32);
+
+    for wallet in secondary_wallets {
+        // Get token balance (returns raw amount in smallest units)
+        let token_balance_raw = match rpc
+            .get_token_balance(&wallet.wallet.address, &request.token_mint)
+            .await
+        {
+            Ok(amount) => amount,
+            Err(_) => 0,
+        };
+
+        // Convert to UI amount using actual decimals
+        let token_balance = token_balance_raw as f64 / divisor;
+
+        if token_balance > 0.0 {
+            total_token_balance += token_balance;
+
+            // Get SOL balance
+            let sol_balance = rpc
+                .get_sol_balance(&wallet.wallet.address)
+                .await
+                .unwrap_or(0.0);
+
+            wallets_with_balance.push(WalletTokenBalanceResponse {
+                wallet_id: wallet.wallet.id,
+                wallet_address: wallet.wallet.address.clone(),
+                wallet_name: wallet.wallet.name.clone(),
+                sol_balance,
+                token_balance,
+                needs_sol_topup: sol_balance < 0.01,
+            });
+        }
+    }
+
+    let token_to_sell = total_token_balance * (request.sell_percentage / 100.0);
+    let can_proceed = !wallets_with_balance.is_empty();
+    let warning = if !can_proceed {
+        Some("No wallets have token balance".to_string())
+    } else {
+        None
+    };
+
+    success_response(MultiSellPreviewResponse {
+        token_symbol: None, // Could fetch from tokens DB
+        wallets_with_balance: wallets_with_balance.len(),
+        total_token_balance,
+        token_to_sell,
+        estimated_sol: None, // Would need price oracle
+        can_proceed,
+        warning,
+        wallets: wallets_with_balance,
+    })
+}
+
+/// Start multi-sell operation
+async fn start_multi_sell(Json(request): Json<MultiSellStartRequest>) -> Response {
+    logger::info(
+        LogTag::Tools,
+        &format!(
+            "Starting multi-sell: token={}, {}%, consolidate={}",
+            &request.token_mint, request.sell_percentage, request.consolidate_after
+        ),
+    );
+
+    // Check for concurrent sessions
+    if has_active_multi_wallet_session().await {
+        return error_response(
+            axum::http::StatusCode::CONFLICT,
+            "SESSION_ACTIVE",
+            "Another multi-wallet operation is already in progress",
+            None,
+        );
+    }
+
+    // Cleanup old sessions
+    cleanup_old_sessions().await;
+
+    // Validate token mint
+    if Pubkey::from_str(&request.token_mint).is_err() {
+        return error_response(
+            axum::http::StatusCode::BAD_REQUEST,
+            "INVALID_MINT",
+            "Invalid token mint address",
+            None,
+        );
+    }
+
+    // Build delay config
+    let delay = if let Some(max_ms) = request.delay_max_ms {
+        DelayConfig::Random {
+            min_ms: request.delay_ms,
+            max_ms,
+        }
+    } else {
+        DelayConfig::Fixed {
+            delay_ms: request.delay_ms,
+        }
+    };
+
+    // Generate session ID and abort flag first
+    let session_id = uuid::Uuid::new_v4().to_string();
+    let abort_flag = Arc::new(AtomicBool::new(false));
+    let token_mint = request.token_mint.clone();
+
+    // Build config with abort flag
+    let mut config = MultiSellConfig {
+        token_mint: request.token_mint.clone(),
+        wallet_ids: request.wallet_ids.clone(),
+        sell_percentage: request.sell_percentage,
+        min_sol_for_fee: request.min_sol_for_fee,
+        auto_topup: request.auto_topup,
+        delay,
+        concurrency: request.concurrency,
+        slippage_bps: request.slippage_bps,
+        consolidate_after: request.consolidate_after,
+        close_atas_after: request.close_atas_after,
+        router: request.router.clone(),
+        abort_flag: Some(abort_flag.clone()),
+    };
+
+    // Validate config
+    if let Err(e) = config.validate() {
+        return error_response(
+            axum::http::StatusCode::BAD_REQUEST,
+            "INVALID_CONFIG",
+            &e,
+            None,
+        );
+    }
+
+    // Create session entry
+    {
+        let mut sessions = MULTI_WALLET_SESSIONS.write().await;
+        sessions.insert(
+            session_id.clone(),
+            MultiWalletSession {
+                result: SessionResult::new(session_id.clone()),
+                status: SessionStatus::Pending,
+                abort_flag: abort_flag.clone(),
+                operation_type: "multi_sell".to_string(),
+                token_mint: token_mint.clone(),
+                started_at: chrono::Utc::now(),
+            },
+        );
+    }
+
+    // Spawn background task
+    let session_id_clone = session_id.clone();
+    tokio::spawn(async move {
+        // Update status to executing
+        {
+            let mut sessions = MULTI_WALLET_SESSIONS.write().await;
+            if let Some(session) = sessions.get_mut(&session_id_clone) {
+                session.status = SessionStatus::Executing;
+            }
+        }
+
+        // Execute multi-sell
+        let result = execute_multi_sell(config).await;
+
+        // Update session with result
+        {
+            let mut sessions = MULTI_WALLET_SESSIONS.write().await;
+            if let Some(session) = sessions.get_mut(&session_id_clone) {
+                match result {
+                    Ok(res) => {
+                        session.result = res;
+                        session.status = SessionStatus::Completed;
+                    }
+                    Err(e) => {
+                        session.result.error = Some(e.clone());
+                        session.result.success = false;
+                        session.status = SessionStatus::Failed;
+                        logger::error(
+                            LogTag::Tools,
+                            &format!(
+                                "Multi-sell session {} failed: {}",
+                                &session_id_clone[..8],
+                                e
+                            ),
+                        );
+                    }
+                }
+            }
+        }
+    });
+
+    success_response(SessionStartResponse {
+        session_id,
+        message: "Multi-sell session started".to_string(),
+    })
+}
+
+/// Get multi-sell session status
+async fn get_multi_sell_status(Path(id): Path<String>) -> Response {
+    get_session_status(&id, "multi_sell").await
+}
+
+/// Abort multi-sell session
+async fn abort_multi_sell(Path(id): Path<String>) -> Response {
+    abort_session(&id).await
+}
+
+/// Get wallets summary
+async fn get_wallets_summary() -> Response {
+    // Get all wallets
+    let all_wallets = match wallets::list_active_wallets().await {
+        Ok(w) => w,
+        Err(e) => {
+            return error_response(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "WALLET_ERROR",
+                "Failed to get wallets",
+                Some(&e),
+            );
+        }
+    };
+
+    let rpc = get_rpc_client();
+    let mut wallets_info = Vec::new();
+    let mut main_wallet_info = None;
+    let mut total_sol = 0.0;
+    let mut secondary_count = 0;
+
+    for wallet in &all_wallets {
+        // Get SOL balance via RPC
+        let sol_balance = rpc.get_sol_balance(&wallet.address).await.unwrap_or(0.0);
+
+        total_sol += sol_balance;
+
+        let info = WalletInfoResponse {
+            id: wallet.id,
+            address: wallet.address.clone(),
+            name: wallet.name.clone(),
+            role: format!("{:?}", wallet.role).to_lowercase(),
+            sol_balance,
+            is_active: wallet.is_active,
+        };
+
+        if wallet.role == wallets::WalletRole::Main {
+            main_wallet_info = Some(info.clone());
+        } else if wallet.role == wallets::WalletRole::Secondary {
+            secondary_count += 1;
+        }
+
+        wallets_info.push(info);
+    }
+
+    success_response(WalletsSummaryResponse {
+        total_wallets: all_wallets.len(),
+        secondary_wallets: secondary_count,
+        main_wallet: main_wallet_info,
+        total_sol,
+        wallets: wallets_info,
+    })
+}
+
+/// Consolidate wallets
+async fn consolidate_wallets(Json(request): Json<ConsolidateRequest>) -> Response {
+    logger::info(
+        LogTag::Tools,
+        &format!(
+            "Starting consolidation: sol={}, tokens={:?}, close_atas={}",
+            request.transfer_sol,
+            request.transfer_tokens.as_ref().map(|t| t.len()),
+            request.close_atas
+        ),
+    );
+
+    let config = ConsolidateConfig {
+        wallet_ids: request.wallet_ids.clone(),
+        transfer_sol: request.transfer_sol,
+        transfer_tokens: request.transfer_tokens.clone(),
+        close_atas: request.close_atas,
+        include_token_2022: request.include_token_2022,
+        leave_rent_exempt: request.leave_rent_exempt,
+    };
+
+    // Validate config
+    if let Err(e) = config.validate() {
+        return error_response(
+            axum::http::StatusCode::BAD_REQUEST,
+            "INVALID_CONFIG",
+            &e,
+            None,
+        );
+    }
+
+    // Execute consolidation
+    match execute_consolidation(config).await {
+        Ok(result) => {
+            logger::info(
+                LogTag::Tools,
+                &format!(
+                    "Consolidation complete: {}/{} successful, {:.6} SOL recovered",
+                    result.successful_ops, result.total_wallets, result.total_sol_recovered
+                ),
+            );
+
+            success_response(ConsolidateResponse {
+                session_id: result.session_id,
+                total_wallets: result.total_wallets,
+                successful_ops: result.successful_ops,
+                failed_ops: result.failed_ops,
+                sol_recovered: result.total_sol_recovered,
+                message: format!(
+                    "Consolidated {} wallets, recovered {:.6} SOL",
+                    result.successful_ops, result.total_sol_recovered
+                ),
+            })
+        }
+        Err(e) => error_response(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "CONSOLIDATION_FAILED",
+            "Failed to consolidate wallets",
+            Some(&e),
+        ),
+    }
+}
+
+/// Cleanup ATAs on sub-wallets
+async fn cleanup_subwallet_atas(Json(request): Json<SubWalletAtaCleanupRequest>) -> Response {
+    logger::info(
+        LogTag::Tools,
+        &format!(
+            "Starting sub-wallet ATA cleanup: wallets={:?}",
+            request.wallet_ids
+        ),
+    );
+
+    // Use consolidation with only close_atas enabled
+    let config = ConsolidateConfig {
+        wallet_ids: request.wallet_ids.clone(),
+        transfer_sol: false,
+        transfer_tokens: None,
+        close_atas: true,
+        include_token_2022: request.include_token_2022,
+        leave_rent_exempt: true,
+    };
+
+    match execute_consolidation(config).await {
+        Ok(result) => {
+            logger::info(
+                LogTag::Tools,
+                &format!(
+                    "Sub-wallet ATA cleanup complete: {}/{} successful, {:.6} SOL recovered",
+                    result.successful_ops, result.total_wallets, result.total_sol_recovered
+                ),
+            );
+
+            success_response(ConsolidateResponse {
+                session_id: result.session_id,
+                total_wallets: result.total_wallets,
+                successful_ops: result.successful_ops,
+                failed_ops: result.failed_ops,
+                sol_recovered: result.total_sol_recovered,
+                message: format!(
+                    "Cleaned up ATAs on {} wallets, reclaimed {:.6} SOL",
+                    result.successful_ops, result.total_sol_recovered
+                ),
+            })
+        }
+        Err(e) => error_response(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "CLEANUP_FAILED",
+            "Failed to cleanup ATAs",
+            Some(&e),
+        ),
+    }
+}
+
+/// Get multi-wallet sessions list
+async fn get_multi_wallet_sessions() -> Response {
+    let sessions = MULTI_WALLET_SESSIONS.read().await;
+
+    let mut session_list: Vec<SessionSummaryResponse> = sessions
+        .values()
+        .map(|s| {
+            let is_complete = matches!(
+                s.status,
+                SessionStatus::Completed | SessionStatus::Failed | SessionStatus::Aborted
+            );
+            SessionSummaryResponse {
+                session_id: s.result.session_id.clone(),
+                operation_type: s.operation_type.clone(),
+                token_mint: s.token_mint.clone(),
+                status: s.status.to_string(),
+                total_wallets: s.result.total_wallets,
+                successful_ops: s.result.successful_ops,
+                failed_ops: s.result.failed_ops,
+                started_at: s.started_at.to_rfc3339(),
+                is_complete,
+            }
+        })
+        .collect();
+
+    // Sort by started_at descending
+    session_list.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+
+    // Limit to recent sessions
+    let total = session_list.len();
+    session_list.truncate(50);
+
+    success_response(SessionsListResponse {
+        sessions: session_list,
+        total,
+    })
+}
+
+// =============================================================================
+// Multi-Wallet Helper Functions
+// =============================================================================
+
+/// Get session status by ID
+async fn get_session_status(id: &str, expected_type: &str) -> Response {
+    let sessions = MULTI_WALLET_SESSIONS.read().await;
+
+    match sessions.get(id) {
+        Some(session) => {
+            if session.operation_type != expected_type {
+                return error_response(
+                    axum::http::StatusCode::BAD_REQUEST,
+                    "TYPE_MISMATCH",
+                    &format!("Session is {} not {}", session.operation_type, expected_type),
+                    None,
+                );
+            }
+
+            let is_complete = matches!(
+                session.status,
+                SessionStatus::Completed | SessionStatus::Failed | SessionStatus::Aborted
+            );
+
+            success_response(SessionStatusResponse {
+                session_id: session.result.session_id.clone(),
+                status: session.status.to_string(),
+                operation_type: session.operation_type.clone(),
+                token_mint: session.token_mint.clone(),
+                total_wallets: session.result.total_wallets,
+                successful_ops: session.result.successful_ops,
+                failed_ops: session.result.failed_ops,
+                total_sol_spent: session.result.total_sol_spent,
+                total_sol_recovered: session.result.total_sol_recovered,
+                started_at: session.started_at.to_rfc3339(),
+                is_complete,
+                error: session.result.error.clone(),
+            })
+        }
+        None => error_response(
+            axum::http::StatusCode::NOT_FOUND,
+            "SESSION_NOT_FOUND",
+            "Session not found",
+            Some(id),
+        ),
+    }
+}
+
+/// Abort a session by ID
+async fn abort_session(id: &str) -> Response {
+    let mut sessions = MULTI_WALLET_SESSIONS.write().await;
+
+    match sessions.get_mut(id) {
+        Some(session) => {
+            if matches!(
+                session.status,
+                SessionStatus::Completed | SessionStatus::Failed | SessionStatus::Aborted
+            ) {
+                return error_response(
+                    axum::http::StatusCode::BAD_REQUEST,
+                    "SESSION_COMPLETE",
+                    "Session is already complete",
+                    None,
+                );
+            }
+
+            // Set abort flag
+            session.abort_flag.store(true, Ordering::SeqCst);
+            session.status = SessionStatus::Aborted;
+
+            logger::info(
+                LogTag::Tools,
+                &format!("Aborted {} session {}", session.operation_type, &id[..8]),
+            );
+
+            success_response(serde_json::json!({
+                "success": true,
+                "message": "Session aborted"
+            }))
+        }
+        None => error_response(
+            axum::http::StatusCode::NOT_FOUND,
+            "SESSION_NOT_FOUND",
+            "Session not found",
+            Some(id),
+        ),
+    }
+}
+
+// =============================================================================
+// Trade Watcher Handlers
+// =============================================================================
+
+/// Request to add a watched token
+#[derive(Debug, Deserialize)]
+struct AddWatchedTokenRequest {
+    mint: String,
+    symbol: Option<String>,
+    pool_address: String,
+    pool_source: String,
+    pool_dex: Option<String>,
+    watch_type: String,
+    trigger_amount_sol: Option<f64>,
+    action_amount_sol: Option<f64>,
+}
+
+/// Search pools for a token
+async fn search_pools_handler(Path(mint): Path<String>) -> Response {
+    use crate::tools::trade_watcher::search_pools;
+
+    logger::debug(
+        LogTag::Tools,
+        &format!("[TRADE_WATCHER] API: Searching pools for mint={}", mint),
+    );
+
+    match search_pools(&mint).await {
+        Ok(pools) => {
+            logger::debug(
+                LogTag::Tools,
+                &format!("[TRADE_WATCHER] Found {} pools for mint={}", pools.len(), mint),
+            );
+            success_response(serde_json::json!({ "pools": pools }))
+        }
+        Err(e) => {
+            logger::warning(
+                LogTag::Tools,
+                &format!("[TRADE_WATCHER] Pool search failed for mint={}: {}", mint, e),
+            );
+            error_response(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "POOL_SEARCH_ERROR",
+                &e,
+                Some(&mint),
+            )
+        }
+    }
+}
+
+/// Get all watched tokens
+async fn get_watched_tokens_handler() -> Response {
+    use crate::tools::database::get_watched_tokens;
+
+    match get_watched_tokens() {
+        Ok(tokens) => success_response(serde_json::json!({ "tokens": tokens })),
+        Err(e) => error_response(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "DATABASE_ERROR",
+            &e,
+            None,
+        ),
+    }
+}
+
+/// Add a watched token
+async fn add_watched_token_handler(Json(req): Json<AddWatchedTokenRequest>) -> Response {
+    use crate::tools::database::{add_watched_token, WatchedTokenConfig};
+
+    logger::info(
+        LogTag::Tools,
+        &format!(
+            "[TRADE_WATCHER] Adding watched token: mint={}, pool={}, watch_type={}",
+            req.mint, req.pool_address, req.watch_type
+        ),
+    );
+
+    let config = WatchedTokenConfig {
+        mint: req.mint.clone(),
+        symbol: req.symbol,
+        pool_address: req.pool_address,
+        pool_source: req.pool_source,
+        pool_dex: req.pool_dex,
+        pool_pair: None,
+        pool_liquidity: None,
+        watch_type: req.watch_type,
+        trigger_amount_sol: req.trigger_amount_sol,
+        action_amount_sol: req.action_amount_sol,
+        slippage_bps: Some(500),
+    };
+
+    match add_watched_token(&config) {
+        Ok(id) => {
+            logger::info(
+                LogTag::Tools,
+                &format!("[TRADE_WATCHER] Added watched token: id={}, mint={}", id, req.mint),
+            );
+            success_response(serde_json::json!({ "id": id, "success": true }))
+        }
+        Err(e) => {
+            logger::error(
+                LogTag::Tools,
+                &format!("[TRADE_WATCHER] Failed to add watched token: {}", e),
+            );
+            error_response(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "DATABASE_ERROR",
+                &e,
+                None,
+            )
+        }
+    }
+}
+
+/// Delete a watched token
+async fn delete_watched_token_handler(Path(id): Path<i64>) -> Response {
+    use crate::tools::database::delete_watched_token;
+
+    logger::info(
+        LogTag::Tools,
+        &format!("[TRADE_WATCHER] Deleting watched token: id={}", id),
+    );
+
+    match delete_watched_token(id) {
+        Ok(()) => {
+            logger::info(
+                LogTag::Tools,
+                &format!("[TRADE_WATCHER] Deleted watched token: id={}", id),
+            );
+            success_response(serde_json::json!({ "success": true }))
+        }
+        Err(e) => {
+            logger::error(
+                LogTag::Tools,
+                &format!("[TRADE_WATCHER] Failed to delete watched token id={}: {}", id, e),
+            );
+            error_response(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "DATABASE_ERROR",
+                &e,
+                None,
+            )
+        }
+    }
+}
+
+/// Start the trade watcher monitor
+async fn start_trade_watcher_handler() -> Response {
+    use crate::tools::trade_watcher::start_trade_monitor;
+
+    logger::info(LogTag::Tools, "[TRADE_WATCHER] Starting trade monitor via API");
+    start_trade_monitor().await;
+
+    success_response(serde_json::json!({
+        "success": true,
+        "message": "Trade watcher started"
+    }))
+}
+
+/// Stop the trade watcher monitor
+async fn stop_trade_watcher_handler() -> Response {
+    use crate::tools::trade_watcher::stop_trade_monitor;
+
+    logger::info(LogTag::Tools, "[TRADE_WATCHER] Stopping trade monitor via API");
+    stop_trade_monitor().await;
+
+    success_response(serde_json::json!({
+        "success": true,
+        "message": "Trade watcher stopped"
+    }))
+}
+
+/// Get trade watcher status
+async fn get_trade_watcher_status_handler() -> Response {
+    use crate::tools::trade_watcher::get_trade_monitor_status;
+
+    let status = get_trade_monitor_status().await;
+    success_response(serde_json::json!({
+        "is_running": status.is_running,
+        "watched_count": status.watched_count,
+        "active_count": status.active_count,
+        "total_trades_detected": status.total_trades_detected,
+        "total_actions_triggered": status.total_actions_triggered
+    }))
+}
+
+// =============================================================================
+// Telegram Handlers
+// =============================================================================
+
+/// Telegram status response
+#[derive(Debug, Serialize)]
+struct TelegramStatusResponse {
+    enabled: bool,
+    configured: bool,
+    commands_enabled: bool,
+}
+
+/// Test Telegram connection by sending a test message
+async fn test_telegram_handler() -> Response {
+    use crate::config::with_config;
+    use crate::notifications::TelegramNotifier;
+
+    let config = with_config(|cfg| cfg.telegram.clone());
+
+    if !config.enabled {
+        return error_response(
+            axum::http::StatusCode::BAD_REQUEST,
+            "TELEGRAM_DISABLED",
+            "Telegram notifications are disabled in config",
+            None,
+        );
+    }
+
+    if config.bot_token.is_empty() || config.chat_id.is_empty() {
+        return error_response(
+            axum::http::StatusCode::BAD_REQUEST,
+            "TELEGRAM_NOT_CONFIGURED",
+            "Telegram bot_token or chat_id is not configured",
+            None,
+        );
+    }
+
+    match TelegramNotifier::new(&config.bot_token, &config.chat_id) {
+        Ok(notifier) => {
+            match notifier.send_message("🤖 ScreenerBot test message - connection successful!").await {
+                Ok(()) => {
+                    logger::info(LogTag::Notifications, "Telegram test message sent successfully");
+                    success_response(serde_json::json!({
+                        "success": true,
+                        "message": "Test message sent successfully"
+                    }))
+                }
+                Err(e) => {
+                    logger::error(
+                        LogTag::Notifications,
+                        &format!("Failed to send Telegram test message: {}", e),
+                    );
+                    error_response(
+                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        "TELEGRAM_SEND_ERROR",
+                        &e,
+                        None,
+                    )
+                }
+            }
+        }
+        Err(e) => {
+            logger::error(
+                LogTag::Notifications,
+                &format!("Failed to create Telegram notifier: {}", e),
+            );
+            error_response(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "TELEGRAM_INIT_ERROR",
+                &e,
+                None,
+            )
+        }
+    }
+}
+
+/// Get Telegram configuration status
+async fn get_telegram_status_handler() -> Response {
+    use crate::config::with_config;
+
+    let config = with_config(|cfg| cfg.telegram.clone());
+
+    let configured = !config.bot_token.is_empty() && !config.chat_id.is_empty();
+
+    success_response(TelegramStatusResponse {
+        enabled: config.enabled,
+        configured,
+        commands_enabled: config.commands_enabled,
+    })
+}
+

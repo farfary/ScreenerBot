@@ -206,6 +206,9 @@ fn format_tag(tag: &LogTag) -> ColoredString {
         LogTag::Webserver => format!("{:<width$}", "WEBSERVER", width = TAG_WIDTH)
             .bright_green()
             .bold(),
+        LogTag::Notifications => format!("{:<width$}", "NOTIFY", width = TAG_WIDTH)
+            .bright_purple()
+            .bold(),
         LogTag::Test => format!("{:<width$}", "TEST", width = TAG_WIDTH)
             .bright_blue()
             .bold(),

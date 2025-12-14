@@ -11,6 +11,7 @@ import { HintTrigger } from "../ui/hint_popover.js";
 import { DataTable } from "../ui/data_table.js";
 import { ToolFavorites } from "../ui/tool_favorites.js";
 import { enhanceAllSelects } from "../ui/custom_select.js";
+import { PoolSelector } from "../ui/pool_selector.js";
 
 // =============================================================================
 // Constants
@@ -60,32 +61,48 @@ const TOOL_DEFINITIONS = {
     title: "Holder Watch",
     description: "Track and monitor new token holders in real-time",
     icon: "icon-eye",
-    category: "token",
+    category: "single-token",
     render: renderTokenWatchTool,
+  },
+  "trade-watcher": {
+    id: "trade-watcher",
+    title: "Trade Watcher",
+    description: "Monitor token trades and trigger automatic buy/sell actions",
+    icon: "icon-activity",
+    category: "single-token",
+    render: renderTradeWatcherTool,
   },
   "volume-aggregator": {
     id: "volume-aggregator",
     title: "Volume Aggregator",
     description: "Generate trading volume using multiple wallets",
     icon: "icon-bar-chart-2",
-    category: "trading",
+    category: "single-token",
     render: renderVolumeAggregatorTool,
   },
   "buy-multi-wallets": {
     id: "buy-multi-wallets",
-    title: "Buy Multi Wallets",
-    description: "Execute coordinated buy orders across multiple wallets",
+    title: "Multi-Buy",
+    description: "Execute coordinated buy orders across multiple wallets with randomized amounts",
     icon: "icon-shopping-cart",
-    category: "trading",
+    category: "single-token",
     render: renderBuyMultiWalletsTool,
   },
   "sell-multi-wallets": {
     id: "sell-multi-wallets",
-    title: "Sell Multi Wallets",
-    description: "Execute coordinated sell orders across multiple wallets",
+    title: "Multi-Sell",
+    description: "Execute coordinated sell orders across multiple wallets with SOL consolidation",
     icon: "icon-package",
-    category: "trading",
+    category: "single-token",
     render: renderSellMultiWalletsTool,
+  },
+  "wallet-consolidation": {
+    id: "wallet-consolidation",
+    title: "Wallet Consolidation",
+    description: "Consolidate SOL and tokens from sub-wallets back to main wallet",
+    icon: "icon-git-merge",
+    category: "utilities",
+    render: renderWalletConsolidationTool,
   },
   "airdrop-checker": {
     id: "airdrop-checker",
@@ -226,7 +243,9 @@ function handleAutoCleanupToggle(event) {
   }
 
   Utils.showToast(
-    enabled ? "Auto cleanup enabled - empty ATAs will be closed automatically" : "Auto cleanup disabled",
+    enabled
+      ? "Auto cleanup enabled - empty ATAs will be closed automatically"
+      : "Auto cleanup disabled",
     enabled ? "success" : "info"
   );
 }
@@ -703,6 +722,7 @@ function renderTaTokenHeader(overview) {
   const logoUrl = overview.logo_url || "";
   const priceSol = overview.price_sol;
   const priceUsd = overview.price_usd;
+  const mint = overview.mint || taCurrentMint;
 
   headerEl.innerHTML = `
     <div class="ta-header-left">
@@ -714,11 +734,122 @@ function renderTaTokenHeader(overview) {
         <span class="ta-name">${escapeHtml(name)}</span>
       </div>
     </div>
+    <div class="ta-header-center">
+      <div class="ta-header-actions">
+        <button class="btn btn-sm btn-icon action-favorite" data-mint="${escapeHtml(mint)}" data-symbol="${escapeHtml(symbol)}" data-name="${escapeHtml(name)}" data-logo="${escapeHtml(logoUrl)}" title="Add to Favorites">
+          <i class="icon-star"></i>
+        </button>
+        <button class="btn btn-sm btn-icon action-blacklist" data-mint="${escapeHtml(mint)}" data-symbol="${escapeHtml(symbol)}" title="Add to Blacklist">
+          <i class="icon-slash"></i>
+        </button>
+        <button class="btn btn-sm btn-icon" onclick="navigator.clipboard.writeText('${escapeHtml(mint)}'); Utils.showToast('Mint copied', 'success');" title="Copy Mint Address">
+          <i class="icon-copy"></i>
+        </button>
+        <button class="btn btn-sm btn-icon" onclick="window.open('https://dexscreener.com/solana/${escapeHtml(mint)}', '_blank');" title="View on DexScreener">
+          <i class="icon-external-link"></i>
+        </button>
+      </div>
+    </div>
     <div class="ta-header-right">
       ${priceSol ? `<div class="ta-price-sol">${Utils.formatSol(priceSol)} SOL</div>` : ""}
       ${priceUsd ? `<div class="ta-price-usd">${Utils.formatCurrencyUSD(priceUsd)}</div>` : ""}
     </div>
   `;
+
+  // Attach event handlers for favorite and blacklist buttons
+  const favoriteBtn = headerEl.querySelector(".action-favorite");
+  const blacklistBtn = headerEl.querySelector(".action-blacklist");
+
+  if (favoriteBtn) {
+    on(favoriteBtn, "click", handleTaFavoriteClick);
+  }
+  if (blacklistBtn) {
+    on(blacklistBtn, "click", handleTaBlacklistClick);
+  }
+}
+
+/**
+ * Handle favorite button click in token analyzer
+ */
+async function handleTaFavoriteClick(e) {
+  const btn = e.currentTarget;
+  const mint = btn.dataset.mint;
+  const symbol = btn.dataset.symbol;
+  const name = btn.dataset.name;
+  const logoUrl = btn.dataset.logo;
+
+  btn.disabled = true;
+  btn.classList.add("loading");
+
+  try {
+    const response = await fetch("/api/tokens/favorites", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mint,
+        name,
+        symbol,
+        logo_url: logoUrl || null,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.success) {
+      Utils.showToast(`Added ${symbol || mint} to favorites`, "success");
+      btn.classList.add("active");
+      btn.title = "Already in Favorites";
+    } else {
+      throw new Error(data.error || "Failed to add to favorites");
+    }
+  } catch (error) {
+    Utils.showToast(`Error: ${error.message}`, "error");
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove("loading");
+  }
+}
+
+/**
+ * Handle blacklist button click in token analyzer
+ */
+async function handleTaBlacklistClick(e) {
+  const btn = e.currentTarget;
+  const mint = btn.dataset.mint;
+  const symbol = btn.dataset.symbol;
+
+  if (!window.confirm(`Blacklist ${symbol || mint}? This token will be excluded from trading.`)) {
+    return;
+  }
+
+  btn.disabled = true;
+  btn.classList.add("loading");
+
+  try {
+    const response = await fetch(`/api/tokens/${mint}/blacklist`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mint,
+        reason: "Manual blacklist via Token Analyzer",
+      }),
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.success) {
+      Utils.showToast(`Blacklisted ${symbol || mint}`, "success");
+      btn.classList.add("active");
+      btn.title = "Blacklisted";
+    } else {
+      throw new Error(data.error || "Failed to blacklist token");
+    }
+  } catch (error) {
+    Utils.showToast(`Error: ${error.message}`, "error");
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove("loading");
+  }
 }
 
 /**
@@ -830,18 +961,26 @@ function renderTaOverviewTab() {
             <span class="ta-info-label">Mint Address</span>
             <span class="ta-info-value mono">${escapeHtml(overview.mint)}</span>
           </div>
-          ${overview.description ? `
+          ${
+            overview.description
+              ? `
           <div class="ta-info-item ta-full-width">
             <span class="ta-info-label">Description</span>
             <span class="ta-info-value">${escapeHtml(overview.description)}</span>
           </div>
-          ` : ""}
-          ${overview.supply ? `
+          `
+              : ""
+          }
+          ${
+            overview.supply
+              ? `
           <div class="ta-info-item">
             <span class="ta-info-label">Supply</span>
             <span class="ta-info-value mono">${escapeHtml(overview.supply)}</span>
           </div>
-          ` : ""}
+          `
+              : ""
+          }
         </div>
         <div class="ta-links">
           ${overview.website ? `<a href="${escapeHtml(overview.website)}" target="_blank" rel="noopener" class="ta-link"><i class="icon-globe"></i> Website</a>` : ""}
@@ -917,7 +1056,9 @@ function renderTaSecurityTab() {
       </div>
 
       <!-- Top Holders Card -->
-      ${security.top_holders_pct ? `
+      ${
+        security.top_holders_pct
+          ? `
       <div class="ta-card">
         <div class="ta-card-title">
           <i class="icon-users"></i> Holder Concentration
@@ -930,25 +1071,34 @@ function renderTaSecurityTab() {
           <span class="ta-holder-label">held by top 10 holders</span>
         </div>
       </div>
-      ` : ""}
+      `
+          : ""
+      }
 
       <!-- Risks Card -->
-      ${security.risks && security.risks.length > 0 ? `
+      ${
+        security.risks && security.risks.length > 0
+          ? `
       <div class="ta-card ta-full-width">
         <div class="ta-card-title">
           <i class="icon-alert-triangle"></i> Security Risks (${security.risks.length})
         </div>
         <div class="ta-risk-list">
-          ${security.risks.map((risk) => `
+          ${security.risks
+            .map(
+              (risk) => `
             <div class="ta-risk-item ${risk.level.toLowerCase()}">
               <span class="ta-risk-level">${escapeHtml(risk.level)}</span>
               <span class="ta-risk-name">${escapeHtml(risk.name)}</span>
               <span class="ta-risk-desc">${escapeHtml(risk.description)}</span>
             </div>
-          `).join("")}
+          `
+            )
+            .join("")}
         </div>
       </div>
-      ` : `
+      `
+          : `
       <div class="ta-card ta-full-width">
         <div class="ta-card-title">
           <i class="icon-check-circle"></i> Security Risks
@@ -958,7 +1108,8 @@ function renderTaSecurityTab() {
           <p>No security risks detected</p>
         </div>
       </div>
-      `}
+      `
+      }
     </div>
   `;
 }
@@ -1135,14 +1286,18 @@ function renderTaLiquidityTab() {
               </tr>
             </thead>
             <tbody>
-              ${liquidity.pools.map((pool) => `
+              ${liquidity.pools
+                .map(
+                  (pool) => `
                 <tr class="${pool.is_canonical ? "canonical" : ""}">
                   <td class="dex">${escapeHtml(pool.dex)}</td>
                   <td class="address mono">${escapeHtml(pool.address.slice(0, 8))}...${escapeHtml(pool.address.slice(-6))}</td>
                   <td class="liquidity">${Utils.formatSol(pool.liquidity_sol)}</td>
                   <td class="status">${pool.is_canonical ? '<span class="canonical-badge">Primary</span>' : ""}</td>
                 </tr>
-              `).join("")}
+              `
+                )
+                .join("")}
             </tbody>
           </table>
         </div>
@@ -1242,6 +1397,516 @@ function escapeHtml(str) {
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#039;");
+}
+
+// =============================================================================
+// Trade Watcher Tool
+// =============================================================================
+
+// Trade Watcher state
+let twPoolSelector = null;
+let twSelectedPool = null;
+let twWatchesTable = null;
+let twWatchPoller = null;
+
+function renderTradeWatcherTool(container, actionsContainer) {
+  const hint = Hints.getHint("tools.tradeWatcher");
+  const hintHtml = hint ? HintTrigger.render(hint, "tools.tradeWatcher", { size: "sm" }) : "";
+
+  container.innerHTML = `
+    <div class="tool-panel trade-watcher-tool">
+      <div class="tool-section">
+        <div class="section-header">
+          <h3><i class="icon-target"></i> Setup Watch</h3>
+          <div class="section-header-actions">
+            ${hintHtml}
+          </div>
+        </div>
+        <div class="section-content">
+          <form class="tool-form" id="tw-form">
+            <div class="form-row">
+              <div class="form-group flex-2">
+                <label for="tw-mint">Token Mint Address</label>
+                <div class="input-with-action">
+                  <input type="text" id="tw-mint" placeholder="Enter token mint address..." />
+                  <button type="button" class="btn btn-sm" id="tw-search-pools-btn">
+                    <i class="icon-search"></i> Search Pools
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-row" id="tw-pool-row" style="display: none;">
+              <div class="form-group">
+                <label>Selected Pool</label>
+                <div class="selected-pool-card" id="tw-selected-pool">
+                  <span class="pool-info">No pool selected</span>
+                  <button type="button" class="btn btn-sm btn-icon" id="tw-clear-pool-btn" title="Clear pool">
+                    <i class="icon-x"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="tw-watch-type">Watch Type</label>
+                <select id="tw-watch-type">
+                  <option value="buy-on-sell">Buy on Sell</option>
+                  <option value="sell-on-buy">Sell on Buy</option>
+                  <option value="notify-only">Notify Only</option>
+                </select>
+                <small class="form-hint">Buy on Sell: Automatically buy when someone sells. Sell on Buy: Automatically sell when someone buys.</small>
+              </div>
+            </div>
+
+            <div class="form-row" id="tw-trigger-row">
+              <div class="form-group">
+                <label for="tw-trigger-amount">Trigger Amount (SOL)</label>
+                <input type="number" id="tw-trigger-amount" placeholder="0.1" min="0.001" step="0.001" value="0.1" />
+                <small class="form-hint">Minimum trade size in SOL to trigger the action</small>
+              </div>
+              <div class="form-group">
+                <label for="tw-action-amount">Action Amount (SOL)</label>
+                <input type="number" id="tw-action-amount" placeholder="0.1" min="0.001" step="0.001" value="0.1" />
+                <small class="form-hint">Amount to buy/sell when triggered</small>
+              </div>
+              <div class="form-group">
+                <label for="tw-slippage">Slippage (%)</label>
+                <input type="number" id="tw-slippage" placeholder="5" min="0.5" max="50" step="0.5" value="5" />
+                <small class="form-hint">Maximum acceptable slippage for trades</small>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <div class="tool-section">
+        <div class="section-header">
+          <h3><i class="icon-activity"></i> Active Watches</h3>
+          <span class="section-badge" id="tw-watch-count">0</span>
+        </div>
+        <div class="section-content">
+          <div class="tw-watches-table" id="tw-watches-table">
+            <div class="empty-state">
+              <i class="icon-eye-off"></i>
+              <p>No active watches</p>
+              <small>Configure a watch above and click "Start Watch" to begin monitoring</small>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  HintTrigger.initAll();
+  enhanceAllSelects(container);
+
+  actionsContainer.innerHTML = `
+    <button class="btn primary" id="tw-start-btn" disabled>
+      <i class="icon-play"></i> Start Watch
+    </button>
+    <button class="btn danger" id="tw-stop-all-btn" disabled>
+      <i class="icon-square"></i> Stop All
+    </button>
+  `;
+
+  // Wire up event handlers
+  initTradeWatcher();
+}
+
+/**
+ * Initialize Trade Watcher event handlers
+ */
+function initTradeWatcher() {
+  const mintInput = $("#tw-mint");
+  const searchPoolsBtn = $("#tw-search-pools-btn");
+  const clearPoolBtn = $("#tw-clear-pool-btn");
+  const watchTypeSelect = $("#tw-watch-type");
+  const startBtn = $("#tw-start-btn");
+  const stopAllBtn = $("#tw-stop-all-btn");
+
+  // Search pools button
+  if (searchPoolsBtn) {
+    on(searchPoolsBtn, "click", handleTwSearchPools);
+  }
+
+  // Clear pool button
+  if (clearPoolBtn) {
+    on(clearPoolBtn, "click", () => {
+      twSelectedPool = null;
+      updateTwPoolDisplay();
+      updateTwStartButtonState();
+    });
+  }
+
+  // Watch type change - hide/show trigger inputs for notify-only
+  if (watchTypeSelect) {
+    on(watchTypeSelect, "change", () => {
+      const triggerRow = $("#tw-trigger-row");
+      if (triggerRow) {
+        triggerRow.style.display = watchTypeSelect.value === "notify-only" ? "none" : "flex";
+      }
+    });
+  }
+
+  // Mint input validation
+  if (mintInput) {
+    on(mintInput, "input", () => {
+      updateTwStartButtonState();
+    });
+  }
+
+  // Start watch button
+  if (startBtn) {
+    on(startBtn, "click", handleTwStartWatch);
+  }
+
+  // Stop all button
+  if (stopAllBtn) {
+    on(stopAllBtn, "click", handleTwStopAllWatches);
+  }
+
+  // Load existing watches
+  loadTwActiveWatches();
+}
+
+/**
+ * Handle search pools button click
+ */
+function handleTwSearchPools() {
+  const mintInput = $("#tw-mint");
+  const mint = mintInput?.value?.trim();
+
+  if (!mint) {
+    Utils.showToast("Please enter a token mint address", "warning");
+    return;
+  }
+
+  // Validate mint format
+  if (!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint)) {
+    Utils.showToast("Invalid token mint address format", "error");
+    return;
+  }
+
+  // Create pool selector if not exists
+  if (!twPoolSelector) {
+    twPoolSelector = new PoolSelector({
+      onSelect: (pool, tokenMint) => {
+        twSelectedPool = pool;
+        updateTwPoolDisplay();
+        updateTwStartButtonState();
+        Utils.showToast(`Selected pool: ${pool.dex} ${pool.base_symbol}/${pool.quote_symbol}`, "success");
+      },
+    });
+  }
+
+  twPoolSelector.open(mint);
+}
+
+/**
+ * Update selected pool display
+ */
+function updateTwPoolDisplay() {
+  const poolRow = $("#tw-pool-row");
+  const poolCard = $("#tw-selected-pool");
+
+  if (!poolRow || !poolCard) return;
+
+  if (twSelectedPool) {
+    poolRow.style.display = "flex";
+    poolCard.innerHTML = `
+      <div class="pool-info">
+        <span class="pool-dex">${Utils.escapeHtml(twSelectedPool.dex || "Unknown")}</span>
+        <span class="pool-pair">${Utils.escapeHtml(twSelectedPool.base_symbol || "?")}/${Utils.escapeHtml(twSelectedPool.quote_symbol || "?")}</span>
+        <span class="pool-source ${(twSelectedPool.source || "").toLowerCase()}">${Utils.escapeHtml(twSelectedPool.source || "")}</span>
+      </div>
+      <button type="button" class="btn btn-sm btn-icon" id="tw-clear-pool-btn" title="Clear pool">
+        <i class="icon-x"></i>
+      </button>
+    `;
+
+    // Re-wire clear button
+    const clearBtn = $("#tw-clear-pool-btn");
+    if (clearBtn) {
+      on(clearBtn, "click", () => {
+        twSelectedPool = null;
+        updateTwPoolDisplay();
+        updateTwStartButtonState();
+      });
+    }
+  } else {
+    poolRow.style.display = "none";
+    poolCard.innerHTML = '<span class="pool-info">No pool selected</span>';
+  }
+}
+
+/**
+ * Update start button state based on form validity
+ */
+function updateTwStartButtonState() {
+  const startBtn = $("#tw-start-btn");
+  const mintInput = $("#tw-mint");
+  const watchType = $("#tw-watch-type");
+
+  if (!startBtn) return;
+
+  const mint = mintInput?.value?.trim();
+  const isValidMint = mint && /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(mint);
+  const hasPool = twSelectedPool !== null;
+  const isNotifyOnly = watchType?.value === "notify-only";
+
+  // For notify-only, only need valid mint
+  // For buy/sell actions, need pool selected
+  startBtn.disabled = !isValidMint || (!isNotifyOnly && !hasPool);
+}
+
+/**
+ * Handle start watch
+ */
+async function handleTwStartWatch() {
+  const mintInput = $("#tw-mint");
+  const watchTypeSelect = $("#tw-watch-type");
+  const triggerAmountInput = $("#tw-trigger-amount");
+  const actionAmountInput = $("#tw-action-amount");
+  const slippageInput = $("#tw-slippage");
+  const startBtn = $("#tw-start-btn");
+
+  const mint = mintInput?.value?.trim();
+  const watchType = watchTypeSelect?.value;
+  const triggerAmount = parseFloat(triggerAmountInput?.value) || 0.1;
+  const actionAmount = parseFloat(actionAmountInput?.value) || 0.1;
+  const slippage = parseFloat(slippageInput?.value) || 5;
+
+  if (!mint) {
+    Utils.showToast("Please enter a token mint address", "warning");
+    return;
+  }
+
+  startBtn.disabled = true;
+  startBtn.innerHTML = '<i class="icon-loader spin"></i> Starting...';
+
+  try {
+    const response = await fetch("/api/tools/trade-watcher/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mint,
+        pool_address: twSelectedPool?.address || null,
+        watch_type: watchType,
+        trigger_amount_sol: triggerAmount,
+        action_amount_sol: actionAmount,
+        slippage_bps: slippage * 100,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || "Failed to start watch");
+    }
+
+    Utils.showToast(`Watch started for ${data.symbol || mint.slice(0, 8)}...`, "success");
+
+    // Clear form
+    mintInput.value = "";
+    twSelectedPool = null;
+    updateTwPoolDisplay();
+    updateTwStartButtonState();
+
+    // Refresh watches list
+    loadTwActiveWatches();
+  } catch (error) {
+    Utils.showToast(`Error: ${error.message}`, "error");
+  } finally {
+    startBtn.disabled = false;
+    startBtn.innerHTML = '<i class="icon-play"></i> Start Watch';
+    updateTwStartButtonState();
+  }
+}
+
+/**
+ * Handle stop all watches
+ */
+async function handleTwStopAllWatches() {
+  const stopAllBtn = $("#tw-stop-all-btn");
+
+  stopAllBtn.disabled = true;
+  stopAllBtn.innerHTML = '<i class="icon-loader spin"></i> Stopping...';
+
+  try {
+    const response = await fetch("/api/tools/trade-watcher/stop-all", {
+      method: "POST",
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || "Failed to stop watches");
+    }
+
+    Utils.showToast("All watches stopped", "success");
+    loadTwActiveWatches();
+  } catch (error) {
+    Utils.showToast(`Error: ${error.message}`, "error");
+  } finally {
+    stopAllBtn.disabled = false;
+    stopAllBtn.innerHTML = '<i class="icon-square"></i> Stop All';
+  }
+}
+
+/**
+ * Load and display active watches
+ */
+async function loadTwActiveWatches() {
+  const tableEl = $("#tw-watches-table");
+  const countEl = $("#tw-watch-count");
+  const stopAllBtn = $("#tw-stop-all-btn");
+
+  if (!tableEl) return;
+
+  try {
+    const response = await fetch("/api/tools/trade-watcher/list");
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || "Failed to load watches");
+    }
+
+    const watches = data.watches || [];
+
+    if (countEl) countEl.textContent = watches.length;
+    if (stopAllBtn) stopAllBtn.disabled = watches.length === 0;
+
+    if (watches.length === 0) {
+      tableEl.innerHTML = `
+        <div class="empty-state">
+          <i class="icon-eye-off"></i>
+          <p>No active watches</p>
+          <small>Configure a watch above and click "Start Watch" to begin monitoring</small>
+        </div>
+      `;
+      return;
+    }
+
+    tableEl.innerHTML = `
+      <table class="tw-table">
+        <thead>
+          <tr>
+            <th>Token</th>
+            <th>Type</th>
+            <th>Trigger</th>
+            <th>Action</th>
+            <th>Triggered</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          ${watches
+            .map(
+              (watch) => `
+            <tr data-id="${watch.id}">
+              <td>
+                <div class="tw-token-cell">
+                  <span class="tw-symbol">${Utils.escapeHtml(watch.symbol || "Unknown")}</span>
+                  <span class="tw-mint">${watch.mint.slice(0, 8)}...</span>
+                </div>
+              </td>
+              <td>
+                <span class="tw-type-badge ${watch.watch_type}">${formatWatchType(watch.watch_type)}</span>
+              </td>
+              <td class="mono">${watch.trigger_amount_sol ? Utils.formatSol(watch.trigger_amount_sol) : "—"}</td>
+              <td class="mono">${watch.action_amount_sol ? Utils.formatSol(watch.action_amount_sol) : "—"}</td>
+              <td class="mono">${watch.trigger_count || 0}</td>
+              <td>
+                <button class="btn btn-sm btn-icon danger tw-stop-btn" title="Stop watch">
+                  <i class="icon-x"></i>
+                </button>
+              </td>
+            </tr>
+          `
+            )
+            .join("")}
+        </tbody>
+      </table>
+    `;
+
+    // Wire up stop buttons
+    tableEl.querySelectorAll(".tw-stop-btn").forEach((btn) => {
+      on(btn, "click", (e) => {
+        const row = e.target.closest("tr");
+        const watchId = row?.dataset.id;
+        if (watchId) {
+          stopTwWatch(watchId);
+        }
+      });
+    });
+  } catch (error) {
+    console.error("Failed to load watches:", error);
+    tableEl.innerHTML = `
+      <div class="error-state">
+        <i class="icon-alert-circle"></i>
+        <p>Failed to load watches</p>
+      </div>
+    `;
+  }
+}
+
+/**
+ * Stop a specific watch
+ */
+async function stopTwWatch(watchId) {
+  try {
+    const response = await fetch(`/api/tools/trade-watcher/stop/${watchId}`, {
+      method: "POST",
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || "Failed to stop watch");
+    }
+
+    Utils.showToast("Watch stopped", "success");
+    loadTwActiveWatches();
+  } catch (error) {
+    Utils.showToast(`Error: ${error.message}`, "error");
+  }
+}
+
+/**
+ * Format watch type for display
+ */
+function formatWatchType(type) {
+  switch (type) {
+    case "buy-on-sell":
+      return "Buy on Sell";
+    case "sell-on-buy":
+      return "Sell on Buy";
+    case "notify-only":
+      return "Notify";
+    default:
+      return type;
+  }
+}
+
+/**
+ * Cleanup Trade Watcher resources
+ */
+function cleanupTradeWatcher() {
+  if (twPoolSelector) {
+    twPoolSelector.dispose();
+    twPoolSelector = null;
+  }
+  if (twWatchesTable) {
+    twWatchesTable.dispose();
+    twWatchesTable = null;
+  }
+  if (twWatchPoller) {
+    twWatchPoller.stop();
+    twWatchPoller = null;
+  }
+  twSelectedPool = null;
 }
 
 // Volume aggregator state
@@ -1825,7 +2490,6 @@ function clearVolumeAggregatorLog() {
  * Switch between Volume Aggregator tabs
  */
 function switchVaTab(tabId) {
-
   // Update tab buttons
   const tabs = $$(".va-tabs .va-tab");
   tabs.forEach((tab) => {
@@ -2032,134 +2696,1304 @@ window.resumeVaSession = function (sessionId) {
   Utils.showToast("Resume functionality coming soon", "info");
 };
 
+// =============================================================================
+// Multi-Buy Tool
+// =============================================================================
+
+let multiBuyState = {
+  sessionId: null,
+  status: "idle", // idle, running, completed, failed
+  walletResults: [],
+  poller: null,
+};
+
 function renderBuyMultiWalletsTool(container, actionsContainer) {
+  const hint = Hints.getHint("tools.multiBuy");
+  const hintHtml = hint ? HintTrigger.render(hint, "tools.multiBuy", { size: "sm" }) : "";
+
   container.innerHTML = `
-    <div class="tool-panel multi-wallet-tool">
+    <div class="tool-panel multi-buy-tool">
+      <!-- Token Input -->
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-alert-triangle"></i> Advanced Feature</h3>
+          <h3><i class="icon-coins"></i> Token</h3>
+          ${hintHtml}
         </div>
         <div class="section-content">
-          <div class="warning-box">
-            <p>Multi-wallet trading requires additional wallet setup and carries higher risk.</p>
+          <div class="form-group">
+            <label for="mb-token-mint">Token Mint Address <span class="required">*</span></label>
+            <input type="text" id="mb-token-mint" placeholder="Paste token mint address..." />
+            <small>The token you want to buy across multiple wallets</small>
           </div>
         </div>
       </div>
 
+      <!-- Wallet Settings -->
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-wallet"></i> Wallets</h3>
+          <h3><i class="icon-wallet"></i> Wallet Settings</h3>
         </div>
         <div class="section-content">
-          <div class="wallet-list" id="buy-wallet-list">
-            <div class="empty-state">
-              <i class="icon-wallet"></i>
-              <p>No additional wallets configured</p>
-              <small>Configure wallets in Settings</small>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="tool-section">
-        <div class="section-header">
-          <h3><i class="icon-settings"></i> Buy Configuration</h3>
-        </div>
-        <div class="section-content">
-          <form class="tool-form" id="multi-buy-form">
-            <div class="form-group">
-              <label for="buy-token-mint">Token Mint</label>
-              <input type="text" id="buy-token-mint" placeholder="Token address..." />
-            </div>
-            <div class="form-group">
-              <label for="buy-amount-per-wallet">Amount per Wallet (SOL)</label>
-              <input type="number" id="buy-amount-per-wallet" placeholder="0.1" step="0.001" min="0" />
-            </div>
-            <div class="form-group">
-              <label for="buy-slippage">Slippage (%)</label>
-              <input type="number" id="buy-slippage" value="1" step="0.1" min="0.1" max="50" />
+          <form class="tool-form" id="mb-wallet-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="mb-wallet-count">Wallet Count</label>
+                <select id="mb-wallet-count" data-custom-select>
+                  <option value="2">2 wallets</option>
+                  <option value="3">3 wallets</option>
+                  <option value="4">4 wallets</option>
+                  <option value="5" selected>5 wallets</option>
+                  <option value="6">6 wallets</option>
+                  <option value="8">8 wallets</option>
+                  <option value="10">10 wallets</option>
+                </select>
+                <small>Number of sub-wallets to use</small>
+              </div>
+              <div class="form-group">
+                <label for="mb-sol-buffer">SOL Buffer per Wallet</label>
+                <input type="number" id="mb-sol-buffer" value="0.015" min="0.005" step="0.005" />
+                <small>Reserved for fees (0.015 SOL min)</small>
+              </div>
             </div>
           </form>
+        </div>
+      </div>
+
+      <!-- Amount Settings -->
+      <div class="tool-section">
+        <div class="section-header">
+          <h3><i class="icon-dollar-sign"></i> Amount Settings</h3>
+        </div>
+        <div class="section-content">
+          <form class="tool-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="mb-min-sol">Min SOL per Wallet</label>
+                <input type="number" id="mb-min-sol" value="0.01" min="0.001" step="0.01" />
+                <small>Minimum buy amount</small>
+              </div>
+              <div class="form-group">
+                <label for="mb-max-sol">Max SOL per Wallet</label>
+                <input type="number" id="mb-max-sol" value="0.05" min="0.001" step="0.01" />
+                <small>Maximum buy amount</small>
+              </div>
+              <div class="form-group">
+                <label for="mb-total-limit">Total SOL Limit (optional)</label>
+                <input type="number" id="mb-total-limit" placeholder="—" min="0" step="0.1" />
+                <small>Maximum total spend</small>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Execution Settings -->
+      <div class="tool-section">
+        <div class="section-header">
+          <h3><i class="icon-settings"></i> Execution Settings</h3>
+        </div>
+        <div class="section-content">
+          <form class="tool-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="mb-delay-min">Delay Min (ms)</label>
+                <input type="number" id="mb-delay-min" value="1000" min="500" step="100" />
+              </div>
+              <div class="form-group">
+                <label for="mb-delay-max">Delay Max (ms)</label>
+                <input type="number" id="mb-delay-max" value="2000" min="500" step="100" />
+              </div>
+              <div class="form-group">
+                <label for="mb-concurrency">Concurrency</label>
+                <select id="mb-concurrency" data-custom-select>
+                  <option value="1" selected>1 (Sequential)</option>
+                  <option value="2">2 parallel</option>
+                  <option value="3">3 parallel</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="mb-slippage">Slippage (%)</label>
+                <input type="number" id="mb-slippage" value="5" min="0.5" max="50" step="0.5" />
+              </div>
+              <div class="form-group">
+                <label for="mb-router">Router</label>
+                <select id="mb-router" data-custom-select>
+                  <option value="auto" selected>Auto (Best Route)</option>
+                  <option value="jupiter">Jupiter</option>
+                  <option value="raydium">Raydium</option>
+                </select>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Preview Section -->
+      <div class="tool-section" id="mb-preview-section" style="display: none;">
+        <div class="section-header">
+          <h3><i class="icon-eye"></i> Preview</h3>
+        </div>
+        <div class="section-content">
+          <div class="mw-preview-grid" id="mb-preview-grid">
+            <!-- Preview stats populated dynamically -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Progress Section -->
+      <div class="tool-section" id="mb-progress-section" style="display: none;">
+        <div class="section-header">
+          <h3><i class="icon-activity"></i> Progress</h3>
+        </div>
+        <div class="section-content">
+          <div class="mw-progress-container">
+            <div class="mw-progress-bar-wrapper">
+              <div class="mw-progress-bar">
+                <div class="mw-progress-fill" id="mb-progress-fill" style="width: 0%"></div>
+              </div>
+              <span class="mw-progress-percent" id="mb-progress-percent">0%</span>
+            </div>
+            <div class="mw-progress-status" id="mb-progress-status">Preparing...</div>
+          </div>
+          <div class="mw-results-table" id="mb-results-table">
+            <!-- Results populated dynamically -->
+          </div>
         </div>
       </div>
     </div>
   `;
 
+  HintTrigger.initAll();
+  enhanceAllSelects(container);
+
   actionsContainer.innerHTML = `
-    <button class="btn" id="simulate-buy-btn" disabled>
-      <i class="icon-play"></i> Simulate
+    <button class="btn" id="mb-preview-btn">
+      <i class="icon-eye"></i> Preview
     </button>
-    <button class="btn success" id="execute-buy-btn" disabled>
-      <i class="icon-shopping-cart"></i> Execute Buy
+    <button class="btn success" id="mb-start-btn" disabled>
+      <i class="icon-shopping-cart"></i> Start Multi-Buy
+    </button>
+    <button class="btn danger" id="mb-stop-btn" style="display: none;">
+      <i class="icon-x"></i> Stop
     </button>
   `;
 
-  // TODO: Wire up multi-wallet buy functionality
+  // Wire up event handlers
+  const previewBtn = $("#mb-preview-btn");
+  const startBtn = $("#mb-start-btn");
+  const stopBtn = $("#mb-stop-btn");
+
+  if (previewBtn) on(previewBtn, "click", handleMultiBuyPreview);
+  if (startBtn) on(startBtn, "click", handleMultiBuyStart);
+  if (stopBtn) on(stopBtn, "click", handleMultiBuyStop);
 }
 
+async function handleMultiBuyPreview() {
+  const tokenMint = $("#mb-token-mint")?.value?.trim();
+  if (!tokenMint) {
+    Utils.showToast("Please enter a token mint address", "error");
+    return;
+  }
+
+  const previewBtn = $("#mb-preview-btn");
+  const previewSection = $("#mb-preview-section");
+  const previewGrid = $("#mb-preview-grid");
+  const startBtn = $("#mb-start-btn");
+
+  if (!previewBtn || !previewSection || !previewGrid) return;
+
+  previewBtn.disabled = true;
+  previewBtn.innerHTML = '<i class="icon-loader spin"></i> Loading...';
+
+  const config = {
+    token_mint: tokenMint,
+    wallet_count: parseInt($("#mb-wallet-count")?.value || "5"),
+    sol_buffer: parseFloat($("#mb-sol-buffer")?.value || "0.015"),
+    min_sol: parseFloat($("#mb-min-sol")?.value || "0.01"),
+    max_sol: parseFloat($("#mb-max-sol")?.value || "0.05"),
+    total_limit: parseFloat($("#mb-total-limit")?.value) || null,
+  };
+
+  try {
+    const response = await fetch("/api/tools/multi-buy/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    const preview = await response.json();
+
+    previewSection.style.display = "block";
+    previewGrid.innerHTML = `
+      <div class="mw-preview-item">
+        <span class="mw-preview-label">Wallets to Create</span>
+        <span class="mw-preview-value">${preview.wallet_count}</span>
+      </div>
+      <div class="mw-preview-item">
+        <span class="mw-preview-label">Amount per Wallet</span>
+        <span class="mw-preview-value">${Utils.formatSol(config.min_sol)} - ${Utils.formatSol(config.max_sol)}</span>
+      </div>
+      <div class="mw-preview-item">
+        <span class="mw-preview-label">Total SOL Needed</span>
+        <span class="mw-preview-value">${Utils.formatSol(preview.total_needed)}</span>
+      </div>
+      <div class="mw-preview-item ${preview.sufficient_balance ? "success" : "error"}">
+        <span class="mw-preview-label">Main Balance</span>
+        <span class="mw-preview-value">${Utils.formatSol(preview.main_balance)} ${preview.sufficient_balance ? "✓" : "✗"}</span>
+      </div>
+    `;
+
+    if (startBtn) {
+      startBtn.disabled = !preview.sufficient_balance;
+    }
+  } catch (error) {
+    console.error("Multi-buy preview failed:", error);
+    Utils.showToast(`Preview failed: ${error.message}`, "error");
+    previewSection.style.display = "none";
+  } finally {
+    previewBtn.disabled = false;
+    previewBtn.innerHTML = '<i class="icon-eye"></i> Preview';
+  }
+}
+
+async function handleMultiBuyStart() {
+  const tokenMint = $("#mb-token-mint")?.value?.trim();
+  if (!tokenMint) return;
+
+  const startBtn = $("#mb-start-btn");
+  const stopBtn = $("#mb-stop-btn");
+  const progressSection = $("#mb-progress-section");
+
+  if (!startBtn || !stopBtn || !progressSection) return;
+
+  startBtn.style.display = "none";
+  stopBtn.style.display = "inline-flex";
+  progressSection.style.display = "block";
+
+  const config = {
+    token_mint: tokenMint,
+    wallet_count: parseInt($("#mb-wallet-count")?.value || "5"),
+    sol_buffer: parseFloat($("#mb-sol-buffer")?.value || "0.015"),
+    min_sol: parseFloat($("#mb-min-sol")?.value || "0.01"),
+    max_sol: parseFloat($("#mb-max-sol")?.value || "0.05"),
+    total_limit: parseFloat($("#mb-total-limit")?.value) || null,
+    delay_min_ms: parseInt($("#mb-delay-min")?.value || "1000"),
+    delay_max_ms: parseInt($("#mb-delay-max")?.value || "2000"),
+    concurrency: parseInt($("#mb-concurrency")?.value || "1"),
+    slippage_bps: parseFloat($("#mb-slippage")?.value || "5") * 100,
+    router: $("#mb-router")?.value || "auto",
+  };
+
+  try {
+    const response = await fetch("/api/tools/multi-buy/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    const result = await response.json();
+    multiBuyState.sessionId = result.session_id;
+    multiBuyState.status = "running";
+
+    // Start polling for status
+    startMultiBuyPolling();
+    Utils.showToast("Multi-buy started", "success");
+  } catch (error) {
+    console.error("Multi-buy start failed:", error);
+    Utils.showToast(`Failed to start: ${error.message}`, "error");
+    resetMultiBuyUI();
+  }
+}
+
+function startMultiBuyPolling() {
+  if (multiBuyState.poller) {
+    clearInterval(multiBuyState.poller);
+  }
+
+  multiBuyState.poller = setInterval(async () => {
+    if (!multiBuyState.sessionId) return;
+
+    try {
+      const response = await fetch(`/api/tools/multi-buy/${multiBuyState.sessionId}`);
+      if (!response.ok) return;
+
+      const status = await response.json();
+      updateMultiBuyProgress(status);
+
+      if (status.status === "completed" || status.status === "failed") {
+        stopMultiBuyPolling();
+        multiBuyState.status = status.status;
+        Utils.showToast(
+          status.status === "completed"
+            ? `Multi-buy completed! ${status.success_count}/${status.total_count} successful`
+            : "Multi-buy failed",
+          status.status === "completed" ? "success" : "error"
+        );
+      }
+    } catch (error) {
+      console.error("Multi-buy polling error:", error);
+    }
+  }, 2000);
+}
+
+function stopMultiBuyPolling() {
+  if (multiBuyState.poller) {
+    clearInterval(multiBuyState.poller);
+    multiBuyState.poller = null;
+  }
+}
+
+function updateMultiBuyProgress(status) {
+  const progressFill = $("#mb-progress-fill");
+  const progressPercent = $("#mb-progress-percent");
+  const progressStatus = $("#mb-progress-status");
+  const resultsTable = $("#mb-results-table");
+
+  const percent =
+    status.total_count > 0 ? Math.round((status.completed_count / status.total_count) * 100) : 0;
+
+  if (progressFill) progressFill.style.width = `${percent}%`;
+  if (progressPercent) progressPercent.textContent = `${percent}%`;
+  if (progressStatus) {
+    progressStatus.textContent = `${status.status === "running" ? "Executing buys..." : status.status} (${status.completed_count}/${status.total_count})`;
+  }
+
+  if (resultsTable && status.wallets) {
+    resultsTable.innerHTML = `
+      <table class="mw-results">
+        <thead>
+          <tr>
+            <th>Wallet</th>
+            <th>Address</th>
+            <th>SOL</th>
+            <th>Tokens</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${status.wallets
+            .map(
+              (w) => `
+            <tr class="${w.status}">
+              <td>${Utils.escapeHtml(w.name)}</td>
+              <td class="mono">${Utils.formatAddressCompact(w.address)}</td>
+              <td class="mono">${Utils.formatSol(w.sol_spent, { suffix: "" })}</td>
+              <td class="mono">${w.tokens_received ? Utils.formatNumber(w.tokens_received) : "—"}</td>
+              <td><span class="mw-status-badge ${w.status}">${formatWalletStatus(w.status)}</span></td>
+            </tr>
+          `
+            )
+            .join("")}
+        </tbody>
+      </table>
+    `;
+  }
+}
+
+function formatWalletStatus(status) {
+  const icons = {
+    pending: "⏳",
+    running: "🔄",
+    success: "✓",
+    failed: "✗",
+  };
+  return `${icons[status] || ""} ${status.charAt(0).toUpperCase() + status.slice(1)}`;
+}
+
+async function handleMultiBuyStop() {
+  if (!multiBuyState.sessionId) return;
+
+  try {
+    await fetch(`/api/tools/multi-buy/${multiBuyState.sessionId}/stop`, { method: "POST" });
+    stopMultiBuyPolling();
+    Utils.showToast("Multi-buy stopped", "info");
+    resetMultiBuyUI();
+  } catch (error) {
+    console.error("Failed to stop multi-buy:", error);
+  }
+}
+
+function resetMultiBuyUI() {
+  const startBtn = $("#mb-start-btn");
+  const stopBtn = $("#mb-stop-btn");
+
+  if (startBtn) startBtn.style.display = "inline-flex";
+  if (stopBtn) stopBtn.style.display = "none";
+
+  multiBuyState = { sessionId: null, status: "idle", walletResults: [], poller: null };
+}
+
+// =============================================================================
+// Multi-Sell Tool
+// =============================================================================
+
+let multiSellState = {
+  sessionId: null,
+  status: "idle",
+  walletResults: [],
+  poller: null,
+};
+
 function renderSellMultiWalletsTool(container, actionsContainer) {
+  const hint = Hints.getHint("tools.multiSell");
+  const hintHtml = hint ? HintTrigger.render(hint, "tools.multiSell", { size: "sm" }) : "";
+
   container.innerHTML = `
-    <div class="tool-panel multi-wallet-tool">
+    <div class="tool-panel multi-sell-tool">
+      <!-- Token Input -->
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-alert-triangle"></i> Advanced Feature</h3>
+          <h3><i class="icon-coins"></i> Token</h3>
+          ${hintHtml}
         </div>
         <div class="section-content">
-          <div class="warning-box">
-            <p>Multi-wallet trading requires additional wallet setup and carries higher risk.</p>
+          <div class="form-group">
+            <label for="ms-token-mint">Token Mint Address <span class="required">*</span></label>
+            <div class="input-group">
+              <input type="text" id="ms-token-mint" placeholder="Paste token mint address..." />
+              <button class="btn" id="ms-scan-btn" type="button">
+                <i class="icon-search"></i> Scan
+              </button>
+            </div>
+            <small>Enter a token address to scan for wallets holding it</small>
           </div>
         </div>
       </div>
 
+      <!-- Sell Settings -->
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-wallet"></i> Wallets</h3>
+          <h3><i class="icon-settings"></i> Sell Settings</h3>
         </div>
         <div class="section-content">
-          <div class="wallet-list" id="sell-wallet-list">
-            <div class="empty-state">
-              <i class="icon-wallet"></i>
-              <p>No additional wallets configured</p>
-              <small>Configure wallets in Settings</small>
+          <form class="tool-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="ms-sell-percent">Sell Percentage</label>
+                <input type="number" id="ms-sell-percent" value="100" min="1" max="100" step="1" />
+                <small>% of tokens to sell per wallet</small>
+              </div>
+              <div class="form-group">
+                <label for="ms-min-sol-fee">Min SOL for Fee</label>
+                <input type="number" id="ms-min-sol-fee" value="0.01" min="0.005" step="0.005" />
+                <small>Minimum SOL needed for tx fee</small>
+              </div>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="tool-section">
-        <div class="section-header">
-          <h3><i class="icon-settings"></i> Sell Configuration</h3>
-        </div>
-        <div class="section-content">
-          <form class="tool-form" id="multi-sell-form">
-            <div class="form-group">
-              <label for="sell-token-mint">Token Mint</label>
-              <input type="text" id="sell-token-mint" placeholder="Token address..." />
-            </div>
-            <div class="form-group">
-              <label for="sell-percentage">Sell Percentage</label>
-              <input type="number" id="sell-percentage" value="100" step="1" min="1" max="100" />
-            </div>
-            <div class="form-group">
-              <label for="sell-slippage">Slippage (%)</label>
-              <input type="number" id="sell-slippage" value="1" step="0.1" min="0.1" max="50" />
+            <div class="form-group checkbox-group">
+              <label>
+                <input type="checkbox" id="ms-auto-topup" checked />
+                Auto topup if needed
+              </label>
+              <small>Transfer SOL from main wallet if sub-wallet has insufficient balance</small>
             </div>
           </form>
+        </div>
+      </div>
+
+      <!-- Post-Sell Actions -->
+      <div class="tool-section">
+        <div class="section-header">
+          <h3><i class="icon-arrow-right"></i> Post-Sell Actions</h3>
+        </div>
+        <div class="section-content">
+          <form class="tool-form">
+            <div class="form-group checkbox-group">
+              <label>
+                <input type="checkbox" id="ms-consolidate" checked />
+                Consolidate SOL to main wallet
+              </label>
+              <small>Transfer all SOL from sub-wallets back to main wallet</small>
+            </div>
+            <div class="form-group checkbox-group">
+              <label>
+                <input type="checkbox" id="ms-close-atas" checked />
+                Close token ATAs after sell
+              </label>
+              <small>Reclaim ~0.002 SOL per ATA</small>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Execution Settings -->
+      <div class="tool-section">
+        <div class="section-header">
+          <h3><i class="icon-zap"></i> Execution Settings</h3>
+        </div>
+        <div class="section-content">
+          <form class="tool-form">
+            <div class="form-row">
+              <div class="form-group">
+                <label for="ms-delay-min">Delay Min (ms)</label>
+                <input type="number" id="ms-delay-min" value="1000" min="500" step="100" />
+              </div>
+              <div class="form-group">
+                <label for="ms-delay-max">Delay Max (ms)</label>
+                <input type="number" id="ms-delay-max" value="2000" min="500" step="100" />
+              </div>
+              <div class="form-group">
+                <label for="ms-concurrency">Concurrency</label>
+                <select id="ms-concurrency" data-custom-select>
+                  <option value="1" selected>1 (Sequential)</option>
+                  <option value="2">2 parallel</option>
+                  <option value="3">3 parallel</option>
+                </select>
+              </div>
+            </div>
+            <div class="form-row">
+              <div class="form-group">
+                <label for="ms-slippage">Slippage (%)</label>
+                <input type="number" id="ms-slippage" value="5" min="0.5" max="50" step="0.5" />
+              </div>
+              <div class="form-group">
+                <label for="ms-router">Router</label>
+                <select id="ms-router" data-custom-select>
+                  <option value="auto" selected>Auto (Best Route)</option>
+                  <option value="jupiter">Jupiter</option>
+                  <option value="raydium">Raydium</option>
+                </select>
+              </div>
+            </div>
+          </form>
+        </div>
+      </div>
+
+      <!-- Wallets with Token -->
+      <div class="tool-section" id="ms-wallets-section" style="display: none;">
+        <div class="section-header">
+          <h3><i class="icon-wallet"></i> Wallets with Token</h3>
+          <div class="section-actions">
+            <button class="btn btn-sm" id="ms-select-all-btn" type="button">Select All</button>
+          </div>
+        </div>
+        <div class="section-content">
+          <div class="mw-wallet-list" id="ms-wallet-list">
+            <!-- Populated by scan -->
+          </div>
+          <div class="mw-selection-summary" id="ms-selection-summary">
+            <!-- Selection summary -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Progress Section -->
+      <div class="tool-section" id="ms-progress-section" style="display: none;">
+        <div class="section-header">
+          <h3><i class="icon-activity"></i> Progress</h3>
+        </div>
+        <div class="section-content">
+          <div class="mw-progress-container">
+            <div class="mw-progress-bar-wrapper">
+              <div class="mw-progress-bar">
+                <div class="mw-progress-fill" id="ms-progress-fill" style="width: 0%"></div>
+              </div>
+              <span class="mw-progress-percent" id="ms-progress-percent">0%</span>
+            </div>
+            <div class="mw-progress-status" id="ms-progress-status">Preparing...</div>
+          </div>
+          <div class="mw-results-table" id="ms-results-table">
+            <!-- Results populated dynamically -->
+          </div>
         </div>
       </div>
     </div>
   `;
 
+  HintTrigger.initAll();
+  enhanceAllSelects(container);
+
   actionsContainer.innerHTML = `
-    <button class="btn" id="simulate-sell-btn" disabled>
-      <i class="icon-play"></i> Simulate
+    <button class="btn success" id="ms-start-btn" disabled>
+      <i class="icon-package"></i> Start Multi-Sell
     </button>
-    <button class="btn danger" id="execute-sell-btn" disabled>
-      <i class="icon-package"></i> Execute Sell
+    <button class="btn danger" id="ms-stop-btn" style="display: none;">
+      <i class="icon-x"></i> Stop
     </button>
   `;
 
-  // TODO: Wire up multi-wallet sell functionality
+  // Wire up event handlers
+  const scanBtn = $("#ms-scan-btn");
+  const selectAllBtn = $("#ms-select-all-btn");
+  const startBtn = $("#ms-start-btn");
+  const stopBtn = $("#ms-stop-btn");
+
+  if (scanBtn) on(scanBtn, "click", handleMultiSellScan);
+  if (selectAllBtn) on(selectAllBtn, "click", handleMultiSellSelectAll);
+  if (startBtn) on(startBtn, "click", handleMultiSellStart);
+  if (stopBtn) on(stopBtn, "click", handleMultiSellStop);
+}
+
+async function handleMultiSellScan() {
+  const tokenMint = $("#ms-token-mint")?.value?.trim();
+  if (!tokenMint) {
+    Utils.showToast("Please enter a token mint address", "error");
+    return;
+  }
+
+  const scanBtn = $("#ms-scan-btn");
+  const walletsSection = $("#ms-wallets-section");
+  const walletList = $("#ms-wallet-list");
+
+  if (!scanBtn || !walletsSection || !walletList) return;
+
+  scanBtn.disabled = true;
+  scanBtn.innerHTML = '<i class="icon-loader spin"></i>';
+
+  try {
+    const response = await fetch(
+      `/api/tools/multi-sell/scan?token_mint=${encodeURIComponent(tokenMint)}`
+    );
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.wallets.length === 0) {
+      walletList.innerHTML = `
+        <div class="empty-state">
+          <i class="icon-inbox"></i>
+          <p>No sub-wallets hold this token</p>
+        </div>
+      `;
+      walletsSection.style.display = "block";
+      return;
+    }
+
+    walletList.innerHTML = `
+      <table class="mw-wallet-table">
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="ms-check-all" checked /></th>
+            <th>Wallet</th>
+            <th>Tokens</th>
+            <th>SOL Balance</th>
+            <th>Needs Topup</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data.wallets
+            .map(
+              (w) => `
+            <tr data-wallet="${w.address}">
+              <td><input type="checkbox" class="ms-wallet-check" data-address="${w.address}" checked /></td>
+              <td>${Utils.escapeHtml(w.name)}</td>
+              <td class="mono">${Utils.formatNumber(w.token_balance)}</td>
+              <td class="mono">${Utils.formatSol(w.sol_balance, { suffix: "" })}</td>
+              <td>${w.needs_topup ? `<span class="warning">Yes (+${Utils.formatSol(w.topup_amount, { suffix: "" })})</span>` : '<span class="success">No</span>'}</td>
+            </tr>
+          `
+            )
+            .join("")}
+        </tbody>
+      </table>
+    `;
+
+    walletsSection.style.display = "block";
+    updateMultiSellSelectionSummary();
+
+    // Wire up checkbox changes
+    const checkAll = $("#ms-check-all");
+    if (checkAll) {
+      on(checkAll, "change", (e) => {
+        const checks = $$(".ms-wallet-check");
+        checks.forEach((c) => (c.checked = e.target.checked));
+        updateMultiSellSelectionSummary();
+      });
+    }
+
+    $$(".ms-wallet-check").forEach((check) => {
+      on(check, "change", updateMultiSellSelectionSummary);
+    });
+  } catch (error) {
+    console.error("Multi-sell scan failed:", error);
+    Utils.showToast(`Scan failed: ${error.message}`, "error");
+  } finally {
+    scanBtn.disabled = false;
+    scanBtn.innerHTML = '<i class="icon-search"></i> Scan';
+  }
+}
+
+function handleMultiSellSelectAll() {
+  const checks = $$(".ms-wallet-check");
+  const allChecked = Array.from(checks).every((c) => c.checked);
+  checks.forEach((c) => (c.checked = !allChecked));
+
+  const checkAll = $("#ms-check-all");
+  if (checkAll) checkAll.checked = !allChecked;
+
+  updateMultiSellSelectionSummary();
+}
+
+function updateMultiSellSelectionSummary() {
+  const summary = $("#ms-selection-summary");
+  const startBtn = $("#ms-start-btn");
+  const checks = $$(".ms-wallet-check:checked");
+
+  const selectedCount = checks.length;
+
+  if (summary) {
+    if (selectedCount === 0) {
+      summary.innerHTML = `<span class="text-muted">No wallets selected</span>`;
+    } else {
+      summary.innerHTML = `<span class="text-primary">Selected: ${selectedCount} wallet${selectedCount > 1 ? "s" : ""}</span>`;
+    }
+  }
+
+  if (startBtn) {
+    startBtn.disabled = selectedCount === 0;
+  }
+}
+
+async function handleMultiSellStart() {
+  const tokenMint = $("#ms-token-mint")?.value?.trim();
+  if (!tokenMint) return;
+
+  const selectedWallets = Array.from($$(".ms-wallet-check:checked")).map((c) => c.dataset.address);
+  if (selectedWallets.length === 0) {
+    Utils.showToast("Please select at least one wallet", "error");
+    return;
+  }
+
+  const startBtn = $("#ms-start-btn");
+  const stopBtn = $("#ms-stop-btn");
+  const progressSection = $("#ms-progress-section");
+
+  if (!startBtn || !stopBtn || !progressSection) return;
+
+  startBtn.style.display = "none";
+  stopBtn.style.display = "inline-flex";
+  progressSection.style.display = "block";
+
+  const config = {
+    token_mint: tokenMint,
+    wallets: selectedWallets,
+    sell_percent: parseFloat($("#ms-sell-percent")?.value || "100"),
+    min_sol_fee: parseFloat($("#ms-min-sol-fee")?.value || "0.01"),
+    auto_topup: $("#ms-auto-topup")?.checked ?? true,
+    consolidate: $("#ms-consolidate")?.checked ?? true,
+    close_atas: $("#ms-close-atas")?.checked ?? true,
+    delay_min_ms: parseInt($("#ms-delay-min")?.value || "1000"),
+    delay_max_ms: parseInt($("#ms-delay-max")?.value || "2000"),
+    concurrency: parseInt($("#ms-concurrency")?.value || "1"),
+    slippage_bps: parseFloat($("#ms-slippage")?.value || "5") * 100,
+    router: $("#ms-router")?.value || "auto",
+  };
+
+  try {
+    const response = await fetch("/api/tools/multi-sell/start", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    const result = await response.json();
+    multiSellState.sessionId = result.session_id;
+    multiSellState.status = "running";
+
+    startMultiSellPolling();
+    Utils.showToast("Multi-sell started", "success");
+  } catch (error) {
+    console.error("Multi-sell start failed:", error);
+    Utils.showToast(`Failed to start: ${error.message}`, "error");
+    resetMultiSellUI();
+  }
+}
+
+function startMultiSellPolling() {
+  if (multiSellState.poller) {
+    clearInterval(multiSellState.poller);
+  }
+
+  multiSellState.poller = setInterval(async () => {
+    if (!multiSellState.sessionId) return;
+
+    try {
+      const response = await fetch(`/api/tools/multi-sell/${multiSellState.sessionId}`);
+      if (!response.ok) return;
+
+      const status = await response.json();
+      updateMultiSellProgress(status);
+
+      if (status.status === "completed" || status.status === "failed") {
+        stopMultiSellPolling();
+        multiSellState.status = status.status;
+        Utils.showToast(
+          status.status === "completed"
+            ? `Multi-sell completed! ${Utils.formatSol(status.total_sol_received)} received`
+            : "Multi-sell failed",
+          status.status === "completed" ? "success" : "error"
+        );
+      }
+    } catch (error) {
+      console.error("Multi-sell polling error:", error);
+    }
+  }, 2000);
+}
+
+function stopMultiSellPolling() {
+  if (multiSellState.poller) {
+    clearInterval(multiSellState.poller);
+    multiSellState.poller = null;
+  }
+}
+
+function updateMultiSellProgress(status) {
+  const progressFill = $("#ms-progress-fill");
+  const progressPercent = $("#ms-progress-percent");
+  const progressStatus = $("#ms-progress-status");
+  const resultsTable = $("#ms-results-table");
+
+  const percent =
+    status.total_count > 0 ? Math.round((status.completed_count / status.total_count) * 100) : 0;
+
+  if (progressFill) progressFill.style.width = `${percent}%`;
+  if (progressPercent) progressPercent.textContent = `${percent}%`;
+  if (progressStatus) {
+    progressStatus.textContent = `${status.status === "running" ? "Executing sells..." : status.status} (${status.completed_count}/${status.total_count})`;
+  }
+
+  if (resultsTable && status.wallets) {
+    resultsTable.innerHTML = `
+      <table class="mw-results">
+        <thead>
+          <tr>
+            <th>Wallet</th>
+            <th>Tokens Sold</th>
+            <th>SOL Received</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${status.wallets
+            .map(
+              (w) => `
+            <tr class="${w.status}">
+              <td>${Utils.escapeHtml(w.name)}</td>
+              <td class="mono">${w.tokens_sold ? Utils.formatNumber(w.tokens_sold) : "—"}</td>
+              <td class="mono">${Utils.formatSol(w.sol_received, { suffix: "" })}</td>
+              <td><span class="mw-status-badge ${w.status}">${formatWalletStatus(w.status)}</span></td>
+            </tr>
+          `
+            )
+            .join("")}
+        </tbody>
+      </table>
+    `;
+  }
+}
+
+async function handleMultiSellStop() {
+  if (!multiSellState.sessionId) return;
+
+  try {
+    await fetch(`/api/tools/multi-sell/${multiSellState.sessionId}/stop`, { method: "POST" });
+    stopMultiSellPolling();
+    Utils.showToast("Multi-sell stopped", "info");
+    resetMultiSellUI();
+  } catch (error) {
+    console.error("Failed to stop multi-sell:", error);
+  }
+}
+
+function resetMultiSellUI() {
+  const startBtn = $("#ms-start-btn");
+  const stopBtn = $("#ms-stop-btn");
+
+  if (startBtn) startBtn.style.display = "inline-flex";
+  if (stopBtn) stopBtn.style.display = "none";
+
+  multiSellState = { sessionId: null, status: "idle", walletResults: [], poller: null };
+}
+
+// =============================================================================
+// Wallet Consolidation Tool
+// =============================================================================
+
+let consolidationState = {
+  wallets: [],
+  selectedAddresses: new Set(),
+};
+
+function renderWalletConsolidationTool(container, actionsContainer) {
+  const hint = Hints.getHint("tools.walletConsolidation");
+  const hintHtml = hint
+    ? HintTrigger.render(hint, "tools.walletConsolidation", { size: "sm" })
+    : "";
+
+  container.innerHTML = `
+    <div class="tool-panel wallet-consolidation-tool">
+      <!-- Summary Section -->
+      <div class="tool-section">
+        <div class="section-header">
+          <h3><i class="icon-pie-chart"></i> Summary</h3>
+          ${hintHtml}
+        </div>
+        <div class="section-content">
+          <div class="wc-summary-grid" id="wc-summary-grid">
+            <div class="wc-summary-item">
+              <span class="wc-summary-value" id="wc-wallet-count">—</span>
+              <span class="wc-summary-label">Sub-wallets</span>
+            </div>
+            <div class="wc-summary-item">
+              <span class="wc-summary-value" id="wc-total-sol">—</span>
+              <span class="wc-summary-label">Total SOL</span>
+            </div>
+            <div class="wc-summary-item">
+              <span class="wc-summary-value" id="wc-total-tokens">—</span>
+              <span class="wc-summary-label">Token Types</span>
+            </div>
+            <div class="wc-summary-item">
+              <span class="wc-summary-value" id="wc-reclaimable">—</span>
+              <span class="wc-summary-label">Reclaimable Rent</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Wallets Table -->
+      <div class="tool-section">
+        <div class="section-header">
+          <h3><i class="icon-wallet"></i> Wallets</h3>
+          <div class="section-actions">
+            <button class="btn btn-sm" id="wc-refresh-btn" type="button">
+              <i class="icon-refresh-cw"></i> Refresh
+            </button>
+          </div>
+        </div>
+        <div class="section-content">
+          <div class="wc-wallets-container" id="wc-wallets-container">
+            <div class="loading-state">
+              <i class="icon-loader spin"></i>
+              <p>Loading wallets...</p>
+            </div>
+          </div>
+          <div class="wc-selection-summary" id="wc-selection-summary">
+            <!-- Selection summary -->
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  HintTrigger.initAll();
+
+  actionsContainer.innerHTML = `
+    <button class="btn" id="wc-transfer-sol-btn" disabled>
+      <i class="icon-arrow-right"></i> Transfer SOL
+    </button>
+    <button class="btn" id="wc-transfer-tokens-btn" disabled>
+      <i class="icon-send"></i> Transfer All Tokens
+    </button>
+    <button class="btn primary" id="wc-cleanup-btn" disabled>
+      <i class="icon-trash-2"></i> Cleanup ATAs
+    </button>
+  `;
+
+  // Wire up event handlers
+  const refreshBtn = $("#wc-refresh-btn");
+  const transferSolBtn = $("#wc-transfer-sol-btn");
+  const transferTokensBtn = $("#wc-transfer-tokens-btn");
+  const cleanupBtn = $("#wc-cleanup-btn");
+
+  if (refreshBtn) on(refreshBtn, "click", loadConsolidationData);
+  if (transferSolBtn) on(transferSolBtn, "click", handleConsolidateSOL);
+  if (transferTokensBtn) on(transferTokensBtn, "click", handleConsolidateTokens);
+  if (cleanupBtn) on(cleanupBtn, "click", handleConsolidateCleanup);
+
+  // Load initial data
+  loadConsolidationData();
+}
+
+async function loadConsolidationData() {
+  const container = $("#wc-wallets-container");
+  const refreshBtn = $("#wc-refresh-btn");
+
+  if (!container) return;
+
+  if (refreshBtn) {
+    refreshBtn.disabled = true;
+    refreshBtn.innerHTML = '<i class="icon-loader spin"></i>';
+  }
+
+  container.innerHTML = `
+    <div class="loading-state">
+      <i class="icon-loader spin"></i>
+      <p>Loading wallet data...</p>
+    </div>
+  `;
+
+  try {
+    const response = await fetch("/api/tools/wallets/summary");
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+    consolidationState.wallets = data.wallets || [];
+
+    // Update summary
+    const walletCount = $("#wc-wallet-count");
+    const totalSol = $("#wc-total-sol");
+    const totalTokens = $("#wc-total-tokens");
+    const reclaimable = $("#wc-reclaimable");
+
+    if (walletCount) walletCount.textContent = data.wallet_count || 0;
+    if (totalSol) totalSol.textContent = Utils.formatSol(data.total_sol || 0);
+    if (totalTokens) totalTokens.textContent = data.token_types || 0;
+    if (reclaimable) reclaimable.textContent = `~${Utils.formatSol(data.reclaimable_rent || 0)}`;
+
+    // Render wallets table
+    if (consolidationState.wallets.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <i class="icon-wallet"></i>
+          <p>No sub-wallets found</p>
+          <small>Create sub-wallets using Multi-Buy to get started</small>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = `
+      <table class="wc-wallet-table">
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="wc-check-all" /></th>
+            <th>Name</th>
+            <th>Address</th>
+            <th>SOL Balance</th>
+            <th>Tokens</th>
+            <th>Empty ATAs</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${consolidationState.wallets
+            .map(
+              (w) => `
+            <tr data-address="${w.address}" class="${w.sol_balance === 0 && w.token_count === 0 ? "empty-wallet" : ""}">
+              <td><input type="checkbox" class="wc-wallet-check" data-address="${w.address}" /></td>
+              <td>${Utils.escapeHtml(w.name)}</td>
+              <td class="mono">${Utils.formatAddressCompact(w.address)}</td>
+              <td class="mono">${Utils.formatSol(w.sol_balance, { suffix: "" })}</td>
+              <td class="mono">${w.token_count}</td>
+              <td class="mono">${w.empty_atas}</td>
+            </tr>
+          `
+            )
+            .join("")}
+        </tbody>
+      </table>
+    `;
+
+    // Wire up checkboxes
+    const checkAll = $("#wc-check-all");
+    if (checkAll) {
+      on(checkAll, "change", (e) => {
+        const checks = $$(".wc-wallet-check");
+        checks.forEach((c) => {
+          c.checked = e.target.checked;
+          if (e.target.checked) {
+            consolidationState.selectedAddresses.add(c.dataset.address);
+          } else {
+            consolidationState.selectedAddresses.delete(c.dataset.address);
+          }
+        });
+        updateConsolidationSelectionSummary();
+      });
+    }
+
+    $$(".wc-wallet-check").forEach((check) => {
+      on(check, "change", (e) => {
+        if (e.target.checked) {
+          consolidationState.selectedAddresses.add(e.target.dataset.address);
+        } else {
+          consolidationState.selectedAddresses.delete(e.target.dataset.address);
+        }
+        updateConsolidationSelectionSummary();
+      });
+    });
+
+    updateConsolidationSelectionSummary();
+  } catch (error) {
+    console.error("Failed to load consolidation data:", error);
+    container.innerHTML = `
+      <div class="error-state">
+        <i class="icon-alert-circle"></i>
+        <p>Failed to load: ${error.message}</p>
+      </div>
+    `;
+  } finally {
+    if (refreshBtn) {
+      refreshBtn.disabled = false;
+      refreshBtn.innerHTML = '<i class="icon-refresh-cw"></i> Refresh';
+    }
+  }
+}
+
+function updateConsolidationSelectionSummary() {
+  const summary = $("#wc-selection-summary");
+  const transferSolBtn = $("#wc-transfer-sol-btn");
+  const transferTokensBtn = $("#wc-transfer-tokens-btn");
+  const cleanupBtn = $("#wc-cleanup-btn");
+
+  const selectedCount = consolidationState.selectedAddresses.size;
+
+  // Calculate totals for selected wallets
+  let totalSol = 0;
+  let totalTokens = 0;
+  let totalEmptyAtas = 0;
+
+  consolidationState.wallets
+    .filter((w) => consolidationState.selectedAddresses.has(w.address))
+    .forEach((w) => {
+      totalSol += w.sol_balance || 0;
+      totalTokens += w.token_count || 0;
+      totalEmptyAtas += w.empty_atas || 0;
+    });
+
+  if (summary) {
+    if (selectedCount === 0) {
+      summary.innerHTML = `<span class="text-muted">Select wallets to consolidate</span>`;
+    } else {
+      summary.innerHTML = `
+        <span class="text-primary">Selected: ${selectedCount} wallet${selectedCount > 1 ? "s" : ""}</span>
+        <span class="text-secondary">| ${Utils.formatSol(totalSol)} | ${totalTokens} tokens | ${totalEmptyAtas} empty ATAs</span>
+      `;
+    }
+  }
+
+  const hasSelection = selectedCount > 0;
+  if (transferSolBtn) transferSolBtn.disabled = !hasSelection || totalSol <= 0;
+  if (transferTokensBtn) transferTokensBtn.disabled = !hasSelection || totalTokens <= 0;
+  if (cleanupBtn) cleanupBtn.disabled = !hasSelection || totalEmptyAtas <= 0;
+}
+
+async function handleConsolidateSOL() {
+  const addresses = Array.from(consolidationState.selectedAddresses);
+  if (addresses.length === 0) return;
+
+  const transferSolBtn = $("#wc-transfer-sol-btn");
+  if (!transferSolBtn) return;
+
+  transferSolBtn.disabled = true;
+  transferSolBtn.innerHTML = '<i class="icon-loader spin"></i> Transferring...';
+
+  try {
+    const response = await fetch("/api/tools/wallets/consolidate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wallets: addresses, type: "sol" }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    const result = await response.json();
+    Utils.showToast(
+      `Transferred ${Utils.formatSol(result.total_transferred)} to main wallet`,
+      "success"
+    );
+    loadConsolidationData();
+  } catch (error) {
+    console.error("SOL consolidation failed:", error);
+    Utils.showToast(`Transfer failed: ${error.message}`, "error");
+  } finally {
+    transferSolBtn.disabled = false;
+    transferSolBtn.innerHTML = '<i class="icon-arrow-right"></i> Transfer SOL';
+  }
+}
+
+async function handleConsolidateTokens() {
+  const addresses = Array.from(consolidationState.selectedAddresses);
+  if (addresses.length === 0) return;
+
+  const transferTokensBtn = $("#wc-transfer-tokens-btn");
+  if (!transferTokensBtn) return;
+
+  transferTokensBtn.disabled = true;
+  transferTokensBtn.innerHTML = '<i class="icon-loader spin"></i> Transferring...';
+
+  try {
+    const response = await fetch("/api/tools/wallets/consolidate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wallets: addresses, type: "tokens" }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    const result = await response.json();
+    Utils.showToast(`Transferred ${result.tokens_transferred} tokens to main wallet`, "success");
+    loadConsolidationData();
+  } catch (error) {
+    console.error("Token consolidation failed:", error);
+    Utils.showToast(`Transfer failed: ${error.message}`, "error");
+  } finally {
+    transferTokensBtn.disabled = false;
+    transferTokensBtn.innerHTML = '<i class="icon-send"></i> Transfer All Tokens';
+  }
+}
+
+async function handleConsolidateCleanup() {
+  const addresses = Array.from(consolidationState.selectedAddresses);
+  if (addresses.length === 0) return;
+
+  const cleanupBtn = $("#wc-cleanup-btn");
+  if (!cleanupBtn) return;
+
+  cleanupBtn.disabled = true;
+  cleanupBtn.innerHTML = '<i class="icon-loader spin"></i> Cleaning...';
+
+  try {
+    const response = await fetch("/api/tools/wallets/cleanup-atas", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wallets: addresses }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || `HTTP ${response.status}`);
+    }
+
+    const result = await response.json();
+    Utils.showToast(
+      `Closed ${result.atas_closed} ATAs, reclaimed ${Utils.formatSol(result.sol_reclaimed)}`,
+      "success"
+    );
+    loadConsolidationData();
+  } catch (error) {
+    console.error("ATA cleanup failed:", error);
+    Utils.showToast(`Cleanup failed: ${error.message}`, "error");
+  } finally {
+    cleanupBtn.disabled = false;
+    cleanupBtn.innerHTML = '<i class="icon-trash-2"></i> Cleanup ATAs';
+  }
 }
 
 function renderAirdropCheckerTool(container, actionsContainer) {
@@ -2330,7 +4164,7 @@ function selectTool(toolId) {
     contentEl.innerHTML = "";
     actionsEl.innerHTML = "";
     definition.render(contentEl, actionsEl);
-    
+
     // Enhance any native select elements with custom styling
     enhanceAllSelects(contentEl);
   }
@@ -2468,6 +4302,14 @@ function createLifecycle() {
         vaToolFavorites.dispose();
         vaToolFavorites = null;
       }
+
+      // Clean up Multi-Buy resources
+      stopMultiBuyPolling();
+      resetMultiBuyUI();
+
+      // Clean up Multi-Sell resources
+      stopMultiSellPolling();
+      resetMultiSellUI();
     },
   };
 }
@@ -2484,6 +4326,9 @@ function showToolHelp() {
     "burn-tokens": "tools.burnTokens",
     "wallet-generator": "tools.walletGenerator",
     "volume-aggregator": "tools.volumeAggregator",
+    "buy-multi-wallets": "tools.multiBuy",
+    "sell-multi-wallets": "tools.multiSell",
+    "wallet-consolidation": "tools.walletConsolidation",
   };
 
   const hintPath = hintPathMap[currentTool];

@@ -2,11 +2,15 @@
 ///
 /// Provides unified search across multiple data sources with deduplication.
 /// DexScreener supports direct search, GeckoTerminal requires mint-based lookup.
+///
+/// When tokens are found via external APIs, they are automatically added to the
+/// local database for future lookups and analysis.
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::apis::get_api_manager;
 use crate::logger::{self, LogTag};
+use crate::tokens::database::get_global_database;
 
 // =============================================================================
 // SEARCH TYPES
@@ -32,6 +36,80 @@ pub struct SearchResults {
     pub results: Vec<TokenSearchResult>,
     pub query: String,
     pub total: usize,
+}
+
+// =============================================================================
+// DATABASE PERSISTENCE
+// =============================================================================
+
+/// Persist a token search result to the database
+///
+/// This ensures tokens discovered via search are available for future lookups
+/// and can be used by the token analyzer.
+/// Returns true if token was successfully persisted, false otherwise.
+async fn persist_token_to_database(result: &TokenSearchResult) -> bool {
+    let db = match get_global_database() {
+        Some(db) => db,
+        None => return false,
+    };
+
+    let mint = result.mint.clone();
+    let symbol = if !result.symbol.is_empty() {
+        Some(result.symbol.clone())
+    } else {
+        None
+    };
+    let name = if !result.name.is_empty() {
+        Some(result.name.clone())
+    } else {
+        None
+    };
+
+    // Wrap blocking DB call in spawn_blocking
+    let persist_result = tokio::task::spawn_blocking(move || {
+        db.upsert_token(
+            &mint,
+            symbol.as_deref(),
+            name.as_deref(),
+            None,
+        )
+    })
+    .await;
+
+    match persist_result {
+        Ok(Ok(())) => {
+            logger::debug(
+                LogTag::Tokens,
+                &format!(
+                    "[SEARCH] Token persisted to DB: mint={} symbol={:?} name={:?}",
+                    result.mint,
+                    if !result.symbol.is_empty() { Some(&result.symbol) } else { None },
+                    if !result.name.is_empty() { Some(&result.name) } else { None }
+                ),
+            );
+            true
+        }
+        Ok(Err(e)) => {
+            logger::warning(
+                LogTag::Tokens,
+                &format!(
+                    "[SEARCH] Failed to persist token to DB: mint={} error={}",
+                    result.mint, e
+                ),
+            );
+            false
+        }
+        Err(e) => {
+            logger::warning(
+                LogTag::Tokens,
+                &format!(
+                    "[SEARCH] spawn_blocking failed for token persist: mint={} error={}",
+                    result.mint, e
+                ),
+            );
+            false
+        }
+    }
 }
 
 // =============================================================================
@@ -191,13 +269,22 @@ pub async fn search_tokens(query: &str, limit: Option<usize>) -> Result<SearchRe
     });
     results.truncate(max_results);
 
+    // Persist all found tokens to the database
+    // This ensures tokens discovered via search can be used by analyzer and other features
+    let mut persisted_count = 0;
+    for result in &results {
+        if persist_token_to_database(result).await {
+            persisted_count += 1;
+        }
+    }
+
     let total = results.len();
 
     logger::info(
         LogTag::Api,
         &format!(
-            "Token search completed: query='{}', results={}",
-            query, total
+            "Token search completed: query='{}', results={}, persisted={}",
+            query, total, persisted_count
         ),
     );
 

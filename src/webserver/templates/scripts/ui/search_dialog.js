@@ -42,10 +42,13 @@ function formatCompactNumber(n) {
  */
 function formatCurrencyUSD(value) {
   if (value === null || value === undefined || !Number.isFinite(value)) return "—";
-  return "$" + value.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 6,
-  });
+  return (
+    "$" +
+    value.toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 6,
+    })
+  );
 }
 
 /**
@@ -229,6 +232,12 @@ function renderResults() {
         <div class="search-result-mcap">MCap: ${formatCompactNumber(token.market_cap)}</div>
       </div>
       <div class="search-result-actions">
+        <button class="search-action-btn action-favorite" data-action="favorite" title="Add to Favorites">
+          <i class="icon-star"></i>
+        </button>
+        <button class="search-action-btn action-blacklist" data-action="blacklist" title="Add to Blacklist">
+          <i class="icon-slash"></i>
+        </button>
         <button class="search-action-btn" data-action="copy" title="Copy Mint Address">
           <i class="icon-copy"></i>
         </button>
@@ -269,6 +278,10 @@ function handleResultClick(e) {
       copyMint(token);
     } else if (action === "view") {
       viewOnDexScreener(token);
+    } else if (action === "favorite") {
+      addToFavorites(token, actionBtn);
+    } else if (action === "blacklist") {
+      addToBlacklist(token, actionBtn);
     }
     return;
   }
@@ -295,6 +308,97 @@ async function copyMint(token) {
  */
 function viewOnDexScreener(token) {
   window.open(`https://dexscreener.com/solana/${token.mint}`, "_blank", "noopener,noreferrer");
+}
+
+/**
+ * Add token to favorites
+ */
+async function addToFavorites(token, btn) {
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add("loading");
+  }
+
+  try {
+    const response = await fetch("/api/tokens/favorites", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mint: token.mint,
+        name: token.name,
+        symbol: token.symbol,
+        logo_url: token.logo_url,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.success) {
+      showToast(`Added ${token.symbol || token.mint} to favorites`, "success");
+      if (btn) {
+        btn.classList.add("active");
+        btn.title = "Already in Favorites";
+      }
+    } else {
+      throw new Error(data.error || "Failed to add to favorites");
+    }
+  } catch (error) {
+    showToast(`Error: ${error.message}`, "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.remove("loading");
+    }
+  }
+}
+
+/**
+ * Add token to blacklist
+ */
+async function addToBlacklist(token, btn) {
+  // Confirm before blacklisting
+  if (
+    !window.confirm(
+      `Blacklist ${token.symbol || token.mint}? This token will be excluded from trading.`
+    )
+  ) {
+    return;
+  }
+
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add("loading");
+  }
+
+  try {
+    const response = await fetch(`/api/tokens/${token.mint}/blacklist`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mint: token.mint,
+        reason: "Manual blacklist via search",
+      }),
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.success) {
+      showToast(`Blacklisted ${token.symbol || token.mint}`, "success");
+      if (btn) {
+        btn.classList.add("active");
+        btn.title = "Blacklisted";
+      }
+    } else {
+      throw new Error(data.error || "Failed to blacklist token");
+    }
+  } catch (error) {
+    showToast(`Error: ${error.message}`, "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.classList.remove("loading");
+    }
+  }
 }
 
 // =============================================================================

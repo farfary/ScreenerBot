@@ -215,13 +215,12 @@ class BillboardDialog {
       return ""; // Skip empty external categories
     }
 
-    const emptyState = tokens.length === 0
-      ? "<div class=\"billboard-cat-empty\"><i class=\"icon-inbox\"></i><span>No tokens yet</span></div>"
-      : "";
+    const emptyState =
+      tokens.length === 0
+        ? '<div class="billboard-cat-empty"><i class="icon-inbox"></i><span>No tokens yet</span></div>'
+        : "";
 
-    const tokenCards = tokens
-      .map((token) => this._renderTokenCard(token))
-      .join("");
+    const tokenCards = tokens.map((token) => this._renderTokenCard(token)).join("");
 
     const sourceTag = category.source
       ? `<span class="billboard-cat-source">${category.source}</span>`
@@ -290,16 +289,24 @@ class BillboardDialog {
   _buildSocialIcons(token) {
     const icons = [];
     if (token.website) {
-      icons.push(`<a href="${this._escapeHtml(token.website)}" target="_blank" rel="noopener noreferrer" class="billboard-cat-social" title="Website"><i class="icon-globe"></i></a>`);
+      icons.push(
+        `<a href="${this._escapeHtml(token.website)}" target="_blank" rel="noopener noreferrer" class="billboard-cat-social" title="Website"><i class="icon-globe"></i></a>`
+      );
     }
     if (token.twitter) {
-      icons.push(`<a href="${this._escapeHtml(token.twitter)}" target="_blank" rel="noopener noreferrer" class="billboard-cat-social" title="Twitter"><i class="icon-twitter"></i></a>`);
+      icons.push(
+        `<a href="${this._escapeHtml(token.twitter)}" target="_blank" rel="noopener noreferrer" class="billboard-cat-social" title="Twitter"><i class="icon-twitter"></i></a>`
+      );
     }
     if (token.telegram) {
-      icons.push(`<a href="${this._escapeHtml(token.telegram)}" target="_blank" rel="noopener noreferrer" class="billboard-cat-social" title="Telegram"><i class="icon-send"></i></a>`);
+      icons.push(
+        `<a href="${this._escapeHtml(token.telegram)}" target="_blank" rel="noopener noreferrer" class="billboard-cat-social" title="Telegram"><i class="icon-send"></i></a>`
+      );
     }
     if (token.discord) {
-      icons.push(`<a href="${this._escapeHtml(token.discord)}" target="_blank" rel="noopener noreferrer" class="billboard-cat-social" title="Discord"><i class="icon-message-circle"></i></a>`);
+      icons.push(
+        `<a href="${this._escapeHtml(token.discord)}" target="_blank" rel="noopener noreferrer" class="billboard-cat-social" title="Discord"><i class="icon-message-circle"></i></a>`
+      );
     }
     return icons.join("");
   }

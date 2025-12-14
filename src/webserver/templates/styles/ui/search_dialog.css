@@ -314,6 +314,50 @@
   transform: scale(0.95);
 }
 
+/* Favorite button styling */
+.search-action-btn.action-favorite:hover {
+  border-color: var(--warning, #f0b429);
+  color: var(--warning, #f0b429);
+}
+
+.search-action-btn.action-favorite.active {
+  background: color-mix(in srgb, var(--warning, #f0b429) 20%, transparent);
+  border-color: var(--warning, #f0b429);
+  color: var(--warning, #f0b429);
+}
+
+/* Blacklist button styling */
+.search-action-btn.action-blacklist:hover {
+  border-color: var(--error, #f85149);
+  color: var(--error, #f85149);
+}
+
+.search-action-btn.action-blacklist.active {
+  background: color-mix(in srgb, var(--error, #f85149) 20%, transparent);
+  border-color: var(--error, #f85149);
+  color: var(--error, #f85149);
+}
+
+/* Loading state */
+.search-action-btn.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.search-action-btn.loading i {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* ============================================
    FOOTER / KEYBOARD HINTS
    ============================================ */

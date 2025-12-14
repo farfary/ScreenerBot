@@ -1334,7 +1334,7 @@ export class TokenDetailsDialog {
               </div>
               <div class="authority-warning">Can mint new tokens</div>
               `
-                  : "<div class=\"authority-safe\">Cannot create new tokens</div>"
+                  : '<div class="authority-safe">Cannot create new tokens</div>'
               }
             </div>
             <div class="authority-item">
@@ -1351,7 +1351,7 @@ export class TokenDetailsDialog {
               </div>
               <div class="authority-warning">Can freeze accounts</div>
               `
-                  : "<div class=\"authority-safe\">Cannot freeze accounts</div>"
+                  : '<div class="authority-safe">Cannot freeze accounts</div>'
               }
             </div>
           </div>
@@ -1437,7 +1437,7 @@ export class TokenDetailsDialog {
       <div class="security-card ${hasFee ? "has-fee" : ""}">
         <div class="card-header">
           <span>Transfer Fee (Token-2022)</span>
-          ${hasFee ? `<span class="fee-badge">⚠️ ${token.transfer_fee_pct}%</span>` : "<span class=\"no-fee-badge\">✓ No Fee</span>"}
+          ${hasFee ? `<span class="fee-badge">⚠️ ${token.transfer_fee_pct}%</span>` : '<span class="no-fee-badge">✓ No Fee</span>'}
         </div>
         <div class="card-body">
           ${
@@ -1498,7 +1498,8 @@ export class TokenDetailsDialog {
         const ownerLabel = holder.owner_type || "";
         const badges = [];
         if (holder.is_insider) badges.push('<span class="insider-badge">Insider</span>');
-        if (ownerLabel) badges.push(`<span class="owner-badge">${this._escapeHtml(ownerLabel)}</span>`);
+        if (ownerLabel)
+          badges.push(`<span class="owner-badge">${this._escapeHtml(ownerLabel)}</span>`);
 
         return `
         <div class="holder-row ${insiderClass}">
@@ -1767,7 +1768,7 @@ export class TokenDetailsDialog {
             <span class="position-status open">OPEN</span>
             ${pos.dca_count > 0 ? `<span class="position-badge dca">DCA ×${pos.dca_count}</span>` : ""}
             ${pos.partial_exit_count > 0 ? `<span class="position-badge partial">Partial ×${pos.partial_exit_count}</span>` : ""}
-            ${pos.transaction_entry_verified ? "<span class=\"position-badge verified\">✓ Verified</span>" : ""}
+            ${pos.transaction_entry_verified ? '<span class="position-badge verified">✓ Verified</span>' : ""}
           </div>
           <div class="position-actions">
             <button class="btn-position-add" data-mint="${pos.mint}" title="Add to position (DCA)">
@@ -1864,7 +1865,7 @@ export class TokenDetailsDialog {
             <span class="position-status closed">CLOSED</span>
             ${pos.dca_count > 0 ? `<span class="position-badge dca">DCA ×${pos.dca_count}</span>` : ""}
             ${pos.partial_exit_count > 0 ? `<span class="position-badge partial">Partial ×${pos.partial_exit_count}</span>` : ""}
-            ${pos.synthetic_exit ? "<span class=\"position-badge synthetic\">Synthetic</span>" : ""}
+            ${pos.synthetic_exit ? '<span class="position-badge synthetic">Synthetic</span>' : ""}
             ${pos.closed_reason ? `<span class="position-badge reason">${pos.closed_reason}</span>` : ""}
           </div>
           <span class="position-time">${Utils.formatTimestamp(pos.exit_time)}</span>
@@ -2022,18 +2023,19 @@ export class TokenDetailsDialog {
       return "";
     }
 
-    const transactionRows = allTransactions.map((tx) => {
-      const isEntry = tx.type === "entry" || tx.type === "dca";
-      const typeLabel = tx.type === "entry" ? "Buy" : tx.type === "dca" ? "DCA" : "Sell";
-      const typeClass = tx.type;
-      const icon = isEntry
-        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7-7 7 7"/></svg>'
-        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7 7 7-7"/></svg>';
+    const transactionRows = allTransactions
+      .map((tx) => {
+        const isEntry = tx.type === "entry" || tx.type === "dca";
+        const typeLabel = tx.type === "entry" ? "Buy" : tx.type === "dca" ? "DCA" : "Sell";
+        const typeClass = tx.type;
+        const icon = isEntry
+          ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12l7-7 7 7"/></svg>'
+          : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7 7 7-7"/></svg>';
 
-      const amountLabel = isEntry ? "Spent" : "Received";
-      const solAmount = tx.sol ? Utils.formatSol(tx.sol) : "—";
+        const amountLabel = isEntry ? "Spent" : "Received";
+        const solAmount = tx.sol ? Utils.formatSol(tx.sol) : "—";
 
-      return `
+        return `
         <div class="transaction-row ${typeClass}">
           <div class="transaction-icon">${icon}</div>
           <div class="transaction-type">
@@ -2057,7 +2059,8 @@ export class TokenDetailsDialog {
           </div>
         </div>
       `;
-    }).join("");
+      })
+      .join("");
 
     return `
       <div class="transaction-history">

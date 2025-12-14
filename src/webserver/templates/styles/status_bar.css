@@ -104,10 +104,15 @@
 /* The following block is a duplicate and contains syntax errors, so it is removed. */
 
 /* Reserve space for the fixed status bar at the bottom.
-   The status bar is 24px tall, so we need to reduce available
+   The status bar is 26px tall, so we need to reduce available
    height by that amount to prevent content from being hidden. */
 .content {
-  padding-bottom: 24px; /* Height of .status-bar */
+  padding-bottom: 26px; /* Height of .status-bar */
+}
+
+/* When billboard row is visible, add extra padding to content */
+.content.has-billboard {
+  padding-bottom: 60px; /* 26px status bar + ~34px billboard row */
 }
 
 /* Light theme adjustments */

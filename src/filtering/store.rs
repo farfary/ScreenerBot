@@ -597,6 +597,7 @@ fn collect_entries<'a>(
             .rejected_mints
             .iter()
             .filter_map(|mint| snapshot.tokens.get(mint))
+            .filter(|entry| !entry.token.is_blacklisted)
             .collect(),
         FilteringView::Blacklisted => snapshot
             .tokens

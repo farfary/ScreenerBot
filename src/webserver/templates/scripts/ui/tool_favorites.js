@@ -25,8 +25,7 @@ export class ToolFavorites {
   }
 
   render() {
-    const containerEl =
-      typeof this.container === "string" ? $(this.container) : this.container;
+    const containerEl = typeof this.container === "string" ? $(this.container) : this.container;
     if (!containerEl) return;
 
     containerEl.innerHTML = `
@@ -102,9 +101,7 @@ export class ToolFavorites {
 
   async loadFavorites() {
     try {
-      const response = await fetch(
-        `/api/tools/favorites?tool_type=${this.toolType}`
-      );
+      const response = await fetch(`/api/tools/favorites?tool_type=${this.toolType}`);
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const result = await response.json();
       this.favorites = result.data?.favorites || result.favorites || [];
@@ -120,20 +117,16 @@ export class ToolFavorites {
     // Update count badge
     if (this.countBadge) {
       this.countBadge.textContent = this.favorites.length;
-      this.countBadge.style.display =
-        this.favorites.length > 0 ? "inline" : "none";
+      this.countBadge.style.display = this.favorites.length > 0 ? "inline" : "none";
     }
 
     if (this.favorites.length === 0) {
-      this.listEl.innerHTML =
-        '<div class="favorites-empty">No favorites saved yet</div>';
+      this.listEl.innerHTML = '<div class="favorites-empty">No favorites saved yet</div>';
       return;
     }
 
     // Sort by use_count desc
-    const sorted = [...this.favorites].sort(
-      (a, b) => (b.use_count || 0) - (a.use_count || 0)
-    );
+    const sorted = [...this.favorites].sort((a, b) => (b.use_count || 0) - (a.use_count || 0));
 
     this.listEl.innerHTML = sorted
       .map(
@@ -160,18 +153,14 @@ export class ToolFavorites {
       const id = parseInt(item.dataset.id, 10);
       const fav = this.favorites.find((f) => f.id === id);
 
-      item
-        .querySelector('[data-action="select"]')
-        ?.addEventListener("click", () => {
-          this.selectFavorite(fav);
-        });
+      item.querySelector('[data-action="select"]')?.addEventListener("click", () => {
+        this.selectFavorite(fav);
+      });
 
-      item
-        .querySelector('[data-action="delete"]')
-        ?.addEventListener("click", (e) => {
-          e.stopPropagation();
-          this.deleteFavorite(id);
-        });
+      item.querySelector('[data-action="delete"]')?.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.deleteFavorite(id);
+      });
     });
   }
 
@@ -198,10 +187,7 @@ export class ToolFavorites {
     this.closeDropdown();
     this.onSelect({ ...favorite, config });
 
-    Utils.showToast(
-      `Loaded favorite: ${favorite.label || favorite.symbol || "Config"}`,
-      "success"
-    );
+    Utils.showToast(`Loaded favorite: ${favorite.label || favorite.symbol || "Config"}`, "success");
   }
 
   async saveCurrent() {
@@ -213,10 +199,7 @@ export class ToolFavorites {
     }
 
     // Prompt for label
-    const label = window.prompt(
-      "Enter a label for this favorite:",
-      config.symbol || ""
-    );
+    const label = window.prompt("Enter a label for this favorite:", config.symbol || "");
     if (label === null) return; // Cancelled
 
     try {

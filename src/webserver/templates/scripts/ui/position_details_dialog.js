@@ -619,8 +619,8 @@ export class PositionDetailsDialog {
     // P&L calculation
     const pnl = isOpen ? pos.unrealized_pnl : pos.pnl;
     const pnlPct = isOpen ? pos.unrealized_pnl_percent : pos.pnl_percent;
-    const pnlClass = (pnl != null && pnl >= 0) ? "pdd-positive" : "pdd-negative";
-    const sign = (pnl != null && pnl >= 0) ? "+" : "";
+    const pnlClass = pnl != null && pnl >= 0 ? "pdd-positive" : "pdd-negative";
+    const sign = pnl != null && pnl >= 0 ? "+" : "";
 
     // Price changes
     const priceChange1h = marketData?.price_change_h1;
@@ -709,12 +709,16 @@ export class PositionDetailsDialog {
             <span class="pdd-stat-label">Entry Price</span>
             <span class="pdd-stat-value">${this._formatPrice(entryPrice)} SOL</span>
           </div>
-          ${showAvgEntry ? `
+          ${
+            showAvgEntry
+              ? `
           <div class="pdd-stat-row">
             <span class="pdd-stat-label">Avg Entry Price</span>
             <span class="pdd-stat-value">${this._formatPrice(avgEntryPrice)} SOL</span>
           </div>
-          ` : ""}
+          `
+              : ""
+          }
           <div class="pdd-stat-row">
             <span class="pdd-stat-label">Total Invested</span>
             <span class="pdd-stat-value">${Utils.formatSol(totalInvested, { decimals: 4 })}</span>
@@ -998,19 +1002,27 @@ export class PositionDetailsDialog {
             <span class="pdd-score-value">${score !== null && score !== undefined ? score : "?"}</span>
             <span class="pdd-score-label">${scoreLabel}</span>
           </div>
-          ${warnings.length > 0 ? `
+          ${
+            warnings.length > 0
+              ? `
           <div class="pdd-security-warnings">
             ${warnings.map((w) => `<span class="pdd-warning-badge"><i class="icon-alert-triangle"></i> ${w}</span>`).join("")}
           </div>
-          ` : ""}
-          ${security.top_risks && security.top_risks.length > 0 ? `
+          `
+              : ""
+          }
+          ${
+            security.top_risks && security.top_risks.length > 0
+              ? `
           <div class="pdd-security-risks">
             <span class="pdd-risks-label">Top Risks:</span>
             <ul class="pdd-risks-list">
               ${security.top_risks.map((r) => `<li>${Utils.escapeHtml(r)}</li>`).join("")}
             </ul>
           </div>
-          ` : ""}
+          `
+              : ""
+          }
         </div>
       </div>
     `;
@@ -1050,7 +1062,7 @@ export class PositionDetailsDialog {
           <i class="icon-zap"></i>
           Quick Actions
         </h3>
-        <div class="pdd-actions-row${!isOpen ? ' pdd-actions-single' : ''}">
+        <div class="pdd-actions-row${!isOpen ? " pdd-actions-single" : ""}">
           ${actionButtons}
         </div>
         <div class="pdd-external-links">
@@ -1743,9 +1755,17 @@ export class PositionDetailsDialog {
         // Status
         const isSuccess = tx.success !== false;
         const isPending = tx.status === "pending";
-        const statusClass = isPending ? "pdd-status-pending" : isSuccess ? "pdd-status-success" : "pdd-status-failed";
+        const statusClass = isPending
+          ? "pdd-status-pending"
+          : isSuccess
+            ? "pdd-status-success"
+            : "pdd-status-failed";
         const statusLabel = isPending ? "Pending" : isSuccess ? "Confirmed" : "Failed";
-        const statusIcon = isPending ? "icon-clock" : isSuccess ? "icon-check-circle" : "icon-x-circle";
+        const statusIcon = isPending
+          ? "icon-clock"
+          : isSuccess
+            ? "icon-check-circle"
+            : "icon-x-circle";
 
         // Amount info
         const solChange = tx.sol_change;
@@ -1773,7 +1793,9 @@ export class PositionDetailsDialog {
 
         // Fee display
         const feeSol = tx.fee_sol ? Utils.formatSol(tx.fee_sol, { decimals: 6 }) : null;
-        const feeHtml = feeSol ? `<div class="pdd-tx-fee"><span class="label">Fee:</span> ${feeSol}</div>` : "";
+        const feeHtml = feeSol
+          ? `<div class="pdd-tx-fee"><span class="label">Fee:</span> ${feeSol}</div>`
+          : "";
 
         // P&L for exits
         let pnlHtml = "";
@@ -1792,7 +1814,9 @@ export class PositionDetailsDialog {
         }
 
         // Router info
-        const routerHtml = tx.router ? `<div class="pdd-tx-router">${Utils.escapeHtml(tx.router)}</div>` : "";
+        const routerHtml = tx.router
+          ? `<div class="pdd-tx-router">${Utils.escapeHtml(tx.router)}</div>`
+          : "";
 
         return `
           <div class="pdd-tx-card" data-tx-type="${txType}">
@@ -2102,24 +2126,36 @@ export class PositionDetailsDialog {
             <span class="pdd-row-label">Average Entry Price</span>
             <span class="pdd-row-value">${avgEntry ? this._formatPrice(avgEntry) + " SOL" : "—"}</span>
           </div>
-          ${minEntry !== null && maxEntry !== null ? `
+          ${
+            minEntry !== null && maxEntry !== null
+              ? `
           <div class="pdd-analysis-row">
             <span class="pdd-row-label">Entry Price Range</span>
             <span class="pdd-row-value">${this._formatPrice(minEntry)} - ${this._formatPrice(maxEntry)} SOL</span>
           </div>
-          ` : ""}
-          ${totalTokensAcquired > 0 ? `
+          `
+              : ""
+          }
+          ${
+            totalTokensAcquired > 0
+              ? `
           <div class="pdd-analysis-row">
             <span class="pdd-row-label">Total Tokens Acquired</span>
             <span class="pdd-row-value">${Utils.formatCompactNumber(totalTokensAcquired)}</span>
           </div>
-          ` : ""}
-          ${totalSolSpent > 0 ? `
+          `
+              : ""
+          }
+          ${
+            totalSolSpent > 0
+              ? `
           <div class="pdd-analysis-row">
             <span class="pdd-row-label">Total SOL Spent</span>
             <span class="pdd-row-value">${Utils.formatSol(totalSolSpent, { decimals: 4 })}</span>
           </div>
-          ` : ""}
+          `
+              : ""
+          }
         </div>
       </div>
     `;
@@ -2136,10 +2172,12 @@ export class PositionDetailsDialog {
       return "";
     }
 
-    const tokensSold = pos.total_exited_amount || exits.reduce((sum, e) => sum + (e.amount || 0), 0);
+    const tokensSold =
+      pos.total_exited_amount || exits.reduce((sum, e) => sum + (e.amount || 0), 0);
     const originalTokens = pos.token_amount || 0;
     const pctSold = originalTokens > 0 ? (tokensSold / originalTokens) * 100 : 0;
-    const solReceived = pos.sol_received || exits.reduce((sum, e) => sum + (e.sol_received || 0), 0);
+    const solReceived =
+      pos.sol_received || exits.reduce((sum, e) => sum + (e.sol_received || 0), 0);
 
     // Realized P&L
     const realizedPnl = pos.pnl;
@@ -2169,12 +2207,16 @@ export class PositionDetailsDialog {
             <span class="pdd-row-label">SOL Recovered</span>
             <span class="pdd-row-value">${Utils.formatSol(solReceived, { decimals: 4 })} ${solReceivedUsd}</span>
           </div>
-          ${realizedPnl !== undefined && realizedPnl !== null ? `
+          ${
+            realizedPnl !== undefined && realizedPnl !== null
+              ? `
           <div class="pdd-analysis-row">
             <span class="pdd-row-label">Realized P&L</span>
             <span class="pdd-row-value ${pnlClass}">${pnlSign}${Utils.formatSol(realizedPnl, { decimals: 4, suffix: "" })} SOL ${realizedPnlPct !== undefined ? `<span class="pdd-row-pct">(${pnlSign}${Utils.formatNumber(realizedPnlPct, 2)}%)</span>` : ""}</span>
           </div>
-          ` : ""}
+          `
+              : ""
+          }
         </div>
       </div>
     `;
@@ -2189,7 +2231,7 @@ export class PositionDetailsDialog {
     if (pos.entry_fee_lamports) {
       entryFees = pos.entry_fee_lamports / 1e9;
     } else if (entries.length > 0) {
-      entryFees = entries.reduce((sum, e) => sum + ((e.fee_lamports || 0) / 1e9), 0);
+      entryFees = entries.reduce((sum, e) => sum + (e.fee_lamports || 0) / 1e9, 0);
     }
 
     // Calculate exit fees from exits array or position summary
@@ -2197,7 +2239,7 @@ export class PositionDetailsDialog {
     if (pos.exit_fee_lamports) {
       exitFees = pos.exit_fee_lamports / 1e9;
     } else if (exits.length > 0) {
-      exitFees = exits.reduce((sum, e) => sum + ((e.fee_lamports || 0) / 1e9), 0);
+      exitFees = exits.reduce((sum, e) => sum + (e.fee_lamports || 0) / 1e9, 0);
     }
 
     const totalFees = entryFees + exitFees;
@@ -2263,37 +2305,41 @@ export class PositionDetailsDialog {
     // Security assessment section
     const score = security?.score_normalized ?? null;
     const riskLevel = security?.risk_level || "unknown";
-    const riskLabelClass = {
-      low: "pdd-risk-low",
-      medium: "pdd-risk-medium",
-      high: "pdd-risk-high",
-      unknown: "pdd-risk-unknown",
-    }[riskLevel] || "pdd-risk-unknown";
+    const riskLabelClass =
+      {
+        low: "pdd-risk-low",
+        medium: "pdd-risk-medium",
+        high: "pdd-risk-high",
+        unknown: "pdd-risk-unknown",
+      }[riskLevel] || "pdd-risk-unknown";
 
-    const riskLabelText = {
-      low: "Low Risk",
-      medium: "Medium Risk",
-      high: "High Risk",
-      unknown: "Unknown",
-    }[riskLevel] || "Unknown";
+    const riskLabelText =
+      {
+        low: "Low Risk",
+        medium: "Medium Risk",
+        high: "High Risk",
+        unknown: "Unknown",
+      }[riskLevel] || "Unknown";
 
-    const mintAuthorityHtml = security !== undefined
-      ? `<div class="pdd-authority-row">
+    const mintAuthorityHtml =
+      security !== undefined
+        ? `<div class="pdd-authority-row">
           <span class="label">Mint Authority:</span>
           <span class="pdd-status ${security.has_mint_authority ? "warning" : "safe"}">
             ${security.has_mint_authority ? "Active ⚠️" : "Revoked ✓"}
           </span>
         </div>`
-      : "";
+        : "";
 
-    const freezeAuthorityHtml = security !== undefined
-      ? `<div class="pdd-authority-row">
+    const freezeAuthorityHtml =
+      security !== undefined
+        ? `<div class="pdd-authority-row">
           <span class="label">Freeze Authority:</span>
           <span class="pdd-status ${security.has_freeze_authority ? "warning" : "safe"}">
             ${security.has_freeze_authority ? "Active ⚠️" : "Revoked ✓"}
           </span>
         </div>`
-      : "";
+        : "";
 
     const risksListHtml = security?.top_risks?.length
       ? `<div class="pdd-token-risks">
@@ -2307,13 +2353,19 @@ export class PositionDetailsDialog {
     // Social links section
     const socialLinks = [];
     if (tokenInfo?.website) {
-      socialLinks.push(`<a href="${tokenInfo.website}" target="_blank" class="pdd-social-link">🌐 Website</a>`);
+      socialLinks.push(
+        `<a href="${tokenInfo.website}" target="_blank" class="pdd-social-link">🌐 Website</a>`
+      );
     }
     if (tokenInfo?.twitter) {
-      socialLinks.push(`<a href="${tokenInfo.twitter}" target="_blank" class="pdd-social-link">🐦 Twitter</a>`);
+      socialLinks.push(
+        `<a href="${tokenInfo.twitter}" target="_blank" class="pdd-social-link">🐦 Twitter</a>`
+      );
     }
     if (tokenInfo?.telegram) {
-      socialLinks.push(`<a href="${tokenInfo.telegram}" target="_blank" class="pdd-social-link">📱 Telegram</a>`);
+      socialLinks.push(
+        `<a href="${tokenInfo.telegram}" target="_blank" class="pdd-social-link">📱 Telegram</a>`
+      );
     }
 
     const socialLinksHtml =
@@ -2366,7 +2418,8 @@ export class PositionDetailsDialog {
       : "";
 
     // Build security section HTML
-    const securityHtml = security ? `
+    const securityHtml = security
+      ? `
       <div class="pdd-security-full">
         <h4>Security Assessment</h4>
         <div class="pdd-security-header">
@@ -2381,7 +2434,8 @@ export class PositionDetailsDialog {
         </div>
         ${risksListHtml}
       </div>
-    ` : "";
+    `
+      : "";
 
     content.innerHTML = `
       <div class="pdd-token-tab">
@@ -2401,12 +2455,16 @@ export class PositionDetailsDialog {
 
         ${socialLinksHtml}
 
-        ${(securityHtml || poolInfoHtml) ? `
+        ${
+          securityHtml || poolInfoHtml
+            ? `
         <div class="pdd-overview-grid">
           ${securityHtml}
           ${poolInfoHtml}
         </div>
-        ` : ""}
+        `
+            : ""
+        }
 
         ${marketDataHtml}
         ${explorerLinksHtml}

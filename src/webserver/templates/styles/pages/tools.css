@@ -2046,6 +2046,57 @@
   color: var(--text-secondary);
 }
 
+/* Token Header Actions */
+.ta-header-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+}
+
+.ta-header-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.ta-header-actions .btn-icon {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+}
+
+.ta-header-actions .action-favorite:hover {
+  border-color: var(--warning, #f0b429);
+  color: var(--warning, #f0b429);
+}
+
+.ta-header-actions .action-favorite.active {
+  background: color-mix(in srgb, var(--warning, #f0b429) 20%, transparent);
+  border-color: var(--warning, #f0b429);
+  color: var(--warning, #f0b429);
+}
+
+.ta-header-actions .action-blacklist:hover {
+  border-color: var(--error, #f85149);
+  color: var(--error, #f85149);
+}
+
+.ta-header-actions .action-blacklist.active {
+  background: color-mix(in srgb, var(--error, #f85149) 20%, transparent);
+  border-color: var(--error, #f85149);
+  color: var(--error, #f85149);
+}
+
+.ta-header-actions .btn-icon.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
 .ta-header-right {
   display: flex;
   flex-direction: column;
@@ -2674,3 +2725,542 @@
 .ta-empty-tab small {
   font-size: 0.8rem;
 }
+
+/* =============================================================================
+   Multi-Wallet Tools (Multi-Buy, Multi-Sell, Consolidation)
+   ============================================================================= */
+
+/* Preview Grid */
+.mw-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: var(--spacing-sm);
+}
+
+.mw-preview-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  text-align: center;
+}
+
+.mw-preview-item.success {
+  background: var(--success-alpha-5);
+  border-color: var(--success-alpha-30);
+}
+
+.mw-preview-item.error {
+  background: var(--danger-alpha-5);
+  border-color: var(--danger-alpha-30);
+}
+
+.mw-preview-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.mw-preview-value {
+  font-size: 1rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1;
+  color: var(--text-primary);
+}
+
+.mw-preview-item.success .mw-preview-value {
+  color: var(--success-color);
+}
+
+.mw-preview-item.error .mw-preview-value {
+  color: var(--error-color);
+}
+
+/* Progress Container */
+.mw-progress-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+}
+
+.mw-progress-bar-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.mw-progress-bar {
+  flex: 1;
+  height: 10px;
+  border-radius: 5px;
+  background: var(--bg-secondary);
+  overflow: hidden;
+}
+
+.mw-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary-color), var(--success-color));
+  border-radius: 5px;
+  transition: width 0.3s ease;
+}
+
+.mw-progress-percent {
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+  min-width: 48px;
+  text-align: right;
+}
+
+.mw-progress-status {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+/* Results Table */
+.mw-results-table {
+  margin-top: var(--spacing-md);
+  overflow-x: auto;
+}
+
+.mw-results {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.mw-results th,
+.mw-results td {
+  padding: var(--spacing-sm) var(--spacing-md);
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.mw-results th {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+}
+
+.mw-results td {
+  color: var(--text-primary);
+}
+
+.mw-results td.mono {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1;
+}
+
+.mw-results tr.success {
+  background: var(--success-alpha-5);
+}
+
+.mw-results tr.failed {
+  background: var(--danger-alpha-5);
+}
+
+.mw-results tr.pending,
+.mw-results tr.running {
+  opacity: 0.7;
+}
+
+/* Status Badge */
+.mw-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.mw-status-badge.pending {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+}
+
+.mw-status-badge.running {
+  background: var(--warning-alpha-15);
+  color: var(--warning-color);
+}
+
+.mw-status-badge.success {
+  background: var(--success-alpha-15);
+  color: var(--success-color);
+}
+
+.mw-status-badge.failed {
+  background: var(--danger-alpha-15);
+  color: var(--error-color);
+}
+
+/* Wallet List/Table */
+.mw-wallet-list,
+.mw-wallet-table {
+  overflow-x: auto;
+}
+
+.mw-wallet-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.mw-wallet-table th,
+.mw-wallet-table td {
+  padding: var(--spacing-sm) var(--spacing-md);
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.mw-wallet-table th {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+}
+
+.mw-wallet-table td {
+  color: var(--text-primary);
+}
+
+.mw-wallet-table td.mono {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1;
+}
+
+.mw-wallet-table .warning {
+  color: var(--warning-color);
+}
+
+.mw-wallet-table .success {
+  color: var(--success-color);
+}
+
+.mw-wallet-table input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary-color);
+  cursor: pointer;
+}
+
+/* Selection Summary */
+.mw-selection-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  margin-top: var(--spacing-md);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  font-size: 0.85rem;
+}
+
+.mw-selection-summary .text-primary {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.mw-selection-summary .text-secondary {
+  color: var(--text-secondary);
+}
+
+.mw-selection-summary .text-muted {
+  color: var(--text-muted);
+}
+
+/* =============================================================================
+   Wallet Consolidation Tool
+   ============================================================================= */
+
+.wc-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--spacing-sm);
+}
+
+.wc-summary-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  text-align: center;
+}
+
+.wc-summary-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1;
+  color: var(--text-primary);
+}
+
+.wc-summary-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+}
+
+.wc-wallets-container {
+  max-height: 400px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.wc-wallet-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.wc-wallet-table th,
+.wc-wallet-table td {
+  padding: var(--spacing-sm) var(--spacing-md);
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.wc-wallet-table th {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.wc-wallet-table td {
+  color: var(--text-primary);
+}
+
+.wc-wallet-table td.mono {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1;
+}
+
+.wc-wallet-table input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary-color);
+  cursor: pointer;
+}
+
+.wc-wallet-table tr.empty-wallet {
+  opacity: 0.5;
+}
+
+.wc-wallet-table tr:hover {
+  background: var(--hover-bg);
+}
+
+.wc-selection-summary {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  margin-top: var(--spacing-md);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  font-size: 0.85rem;
+}
+
+.wc-selection-summary .text-primary {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.wc-selection-summary .text-secondary {
+  color: var(--text-secondary);
+}
+
+.wc-selection-summary .text-muted {
+  color: var(--text-muted);
+}
+
+/* =============================================================================
+   Trade Watcher Tool
+   ============================================================================= */
+
+.trade-watcher-tool .input-with-action {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.trade-watcher-tool .input-with-action input {
+  flex: 1;
+}
+
+/* Selected Pool Card */
+.selected-pool-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.selected-pool-card .pool-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.selected-pool-card .pool-dex {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.selected-pool-card .pool-pair {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.selected-pool-card .pool-source {
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+}
+
+.selected-pool-card .pool-source.geckoterminal {
+  background: rgb(16, 185, 129, 0.15);
+  color: var(--success-color);
+}
+
+.selected-pool-card .pool-source.dexscreener {
+  background: rgb(59, 130, 246, 0.15);
+  color: var(--link-color);
+}
+
+/* Section Badge */
+.section-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.5rem;
+  height: 1.5rem;
+  padding: 0 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--primary-alpha-10);
+  color: var(--primary-color);
+  border-radius: var(--radius-sm);
+}
+
+/* Trade Watcher Table */
+.tw-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.tw-table th,
+.tw-table td {
+  padding: var(--spacing-sm) var(--spacing-md);
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.tw-table th {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+}
+
+.tw-table td {
+  font-size: 0.8125rem;
+}
+
+.tw-table td.mono {
+  font-family: var(--font-mono);
+  font-feature-settings: "tnum" 1;
+}
+
+.tw-table tbody tr:hover {
+  background: var(--hover-bg);
+}
+
+.tw-token-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tw-symbol {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tw-mint {
+  font-size: 0.6875rem;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.tw-type-badge {
+  display: inline-flex;
+  padding: 2px 8px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.tw-type-badge.buy-on-sell {
+  background: rgb(16, 185, 129, 0.15);
+  color: var(--success-color);
+}
+
+.tw-type-badge.sell-on-buy {
+  background: rgb(248, 81, 73, 0.15);
+  color: var(--error-color);
+}
+
+.tw-type-badge.notify-only {
+  background: rgb(88, 166, 255, 0.15);
+  color: var(--link-color);
+}
+
+.tw-stop-btn {
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+.tw-table tbody tr:hover .tw-stop-btn {
+  opacity: 1;
+}
+

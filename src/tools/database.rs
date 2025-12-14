@@ -205,6 +205,76 @@ CREATE INDEX IF NOT EXISTS idx_ata_failed_permanent ON ata_failed_cache(is_perma
 CREATE INDEX IF NOT EXISTS idx_ata_failed_next_retry ON ata_failed_cache(next_retry_at);
 "#;
 
+/// Multi-wallet sessions table
+const SCHEMA_MW_SESSIONS: &str = r#"
+CREATE TABLE IF NOT EXISTS mw_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL UNIQUE,
+    session_type TEXT NOT NULL,
+    token_mint TEXT,
+    
+    -- Configuration
+    total_wallets INTEGER NOT NULL DEFAULT 0,
+    target_amount_sol REAL,
+    min_amount_sol REAL,
+    max_amount_sol REAL,
+    delay_ms INTEGER NOT NULL DEFAULT 1000,
+    delay_max_ms INTEGER,
+    concurrency INTEGER NOT NULL DEFAULT 1,
+    sol_buffer REAL NOT NULL DEFAULT 0.015,
+    
+    -- Status tracking
+    status TEXT NOT NULL DEFAULT 'pending',
+    started_at TEXT,
+    ended_at TEXT,
+    error_message TEXT,
+    
+    -- Metrics
+    wallets_funded INTEGER NOT NULL DEFAULT 0,
+    successful_ops INTEGER NOT NULL DEFAULT 0,
+    failed_ops INTEGER NOT NULL DEFAULT 0,
+    total_sol_spent REAL NOT NULL DEFAULT 0,
+    total_sol_recovered REAL NOT NULL DEFAULT 0,
+    
+    -- Timestamps
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_mw_sessions_session_id ON mw_sessions(session_id);
+CREATE INDEX IF NOT EXISTS idx_mw_sessions_type ON mw_sessions(session_type);
+CREATE INDEX IF NOT EXISTS idx_mw_sessions_status ON mw_sessions(status);
+"#;
+
+/// Multi-wallet individual operations table
+const SCHEMA_MW_WALLET_OPS: &str = r#"
+CREATE TABLE IF NOT EXISTS mw_wallet_ops (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id TEXT NOT NULL,
+    wallet_id INTEGER NOT NULL,
+    wallet_address TEXT NOT NULL,
+    op_index INTEGER NOT NULL,
+    
+    -- Operation details
+    op_type TEXT NOT NULL,
+    amount_sol REAL,
+    token_amount REAL,
+    signature TEXT,
+    
+    -- Status
+    status TEXT NOT NULL DEFAULT 'pending',
+    error_message TEXT,
+    executed_at TEXT,
+    
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    
+    FOREIGN KEY (session_id) REFERENCES mw_sessions(session_id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_mw_wallet_ops_session ON mw_wallet_ops(session_id);
+CREATE INDEX IF NOT EXISTS idx_mw_wallet_ops_wallet ON mw_wallet_ops(wallet_id);
+"#;
+
 /// Tool favorites table
 const SCHEMA_TOOL_FAVORITES: &str = r#"
 CREATE TABLE IF NOT EXISTS tool_favorites (
@@ -240,6 +310,39 @@ CREATE TABLE IF NOT EXISTS tool_favorites (
 CREATE INDEX IF NOT EXISTS idx_tool_favorites_mint ON tool_favorites(mint);
 CREATE INDEX IF NOT EXISTS idx_tool_favorites_tool_type ON tool_favorites(tool_type);
 CREATE INDEX IF NOT EXISTS idx_tool_favorites_use_count ON tool_favorites(use_count DESC);
+"#;
+
+/// Watched tokens table for copy trading / sniper functionality
+const SCHEMA_WATCHED_TOKENS: &str = r#"
+CREATE TABLE IF NOT EXISTS watched_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    mint TEXT NOT NULL,
+    symbol TEXT,
+    pool_address TEXT NOT NULL,
+    pool_source TEXT NOT NULL,
+    pool_dex TEXT,
+    pool_pair TEXT,
+    pool_liquidity REAL,
+    
+    -- Watch configuration
+    watch_type TEXT NOT NULL,
+    trigger_amount_sol REAL,
+    action_amount_sol REAL,
+    slippage_bps INTEGER DEFAULT 500,
+    is_active INTEGER NOT NULL DEFAULT 1,
+    
+    -- Tracking
+    last_checked_at TEXT,
+    last_trade_signature TEXT,
+    trades_detected INTEGER DEFAULT 0,
+    actions_triggered INTEGER DEFAULT 0,
+    
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_watched_tokens_mint ON watched_tokens(mint);
+CREATE INDEX IF NOT EXISTS idx_watched_tokens_active ON watched_tokens(is_active);
 "#;
 
 // =============================================================================
@@ -329,6 +432,15 @@ pub fn init_tools_db() -> Result<(), String> {
 
         conn.execute_batch(SCHEMA_TOOL_FAVORITES)
             .map_err(|e| format!("Failed to create tool_favorites table: {}", e))?;
+
+        conn.execute_batch(SCHEMA_MW_SESSIONS)
+            .map_err(|e| format!("Failed to create mw_sessions table: {}", e))?;
+
+        conn.execute_batch(SCHEMA_MW_WALLET_OPS)
+            .map_err(|e| format!("Failed to create mw_wallet_ops table: {}", e))?;
+
+        conn.execute_batch(SCHEMA_WATCHED_TOKENS)
+            .map_err(|e| format!("Failed to create watched_tokens table: {}", e))?;
 
         // Update version
         conn.execute(
@@ -996,6 +1108,114 @@ impl ToolFavoriteRow {
     }
 }
 
+/// Multi-wallet session database row
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MwSessionRow {
+    pub id: i64,
+    pub session_id: String,
+    pub session_type: String,
+    pub token_mint: Option<String>,
+    pub total_wallets: i32,
+    pub target_amount_sol: Option<f64>,
+    pub min_amount_sol: Option<f64>,
+    pub max_amount_sol: Option<f64>,
+    pub delay_ms: i64,
+    pub delay_max_ms: Option<i64>,
+    pub concurrency: i32,
+    pub sol_buffer: f64,
+    pub status: String,
+    pub started_at: Option<String>,
+    pub ended_at: Option<String>,
+    pub error_message: Option<String>,
+    pub wallets_funded: i32,
+    pub successful_ops: i32,
+    pub failed_ops: i32,
+    pub total_sol_spent: f64,
+    pub total_sol_recovered: f64,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl MwSessionRow {
+    fn from_row(row: &rusqlite::Row<'_>) -> Result<Self, String> {
+        Ok(Self {
+            id: row.get(0).map_err(|e| e.to_string())?,
+            session_id: row.get(1).map_err(|e| e.to_string())?,
+            session_type: row.get(2).map_err(|e| e.to_string())?,
+            token_mint: row.get(3).map_err(|e| e.to_string())?,
+            total_wallets: row.get(4).map_err(|e| e.to_string())?,
+            target_amount_sol: row.get(5).map_err(|e| e.to_string())?,
+            min_amount_sol: row.get(6).map_err(|e| e.to_string())?,
+            max_amount_sol: row.get(7).map_err(|e| e.to_string())?,
+            delay_ms: row.get(8).map_err(|e| e.to_string())?,
+            delay_max_ms: row.get(9).map_err(|e| e.to_string())?,
+            concurrency: row.get(10).map_err(|e| e.to_string())?,
+            sol_buffer: row.get(11).map_err(|e| e.to_string())?,
+            status: row.get(12).map_err(|e| e.to_string())?,
+            started_at: row.get(13).map_err(|e| e.to_string())?,
+            ended_at: row.get(14).map_err(|e| e.to_string())?,
+            error_message: row.get(15).map_err(|e| e.to_string())?,
+            wallets_funded: row.get(16).map_err(|e| e.to_string())?,
+            successful_ops: row.get(17).map_err(|e| e.to_string())?,
+            failed_ops: row.get(18).map_err(|e| e.to_string())?,
+            total_sol_spent: row.get(19).map_err(|e| e.to_string())?,
+            total_sol_recovered: row.get(20).map_err(|e| e.to_string())?,
+            created_at: row.get(21).map_err(|e| e.to_string())?,
+            updated_at: row.get(22).map_err(|e| e.to_string())?,
+        })
+    }
+
+    /// Parse status from row data
+    pub fn get_status(&self) -> ToolStatus {
+        match self.status.as_str() {
+            "pending" => ToolStatus::Ready,
+            "running" => ToolStatus::Running,
+            "completed" => ToolStatus::Completed,
+            "failed" => ToolStatus::Failed,
+            "aborted" => ToolStatus::Aborted,
+            _ => ToolStatus::Ready,
+        }
+    }
+}
+
+/// Multi-wallet operation database row
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct MwWalletOpRow {
+    pub id: i64,
+    pub session_id: String,
+    pub wallet_id: i32,
+    pub wallet_address: String,
+    pub op_index: i32,
+    pub op_type: String,
+    pub amount_sol: Option<f64>,
+    pub token_amount: Option<f64>,
+    pub signature: Option<String>,
+    pub status: String,
+    pub error_message: Option<String>,
+    pub executed_at: Option<String>,
+    pub created_at: String,
+}
+
+impl MwWalletOpRow {
+    fn from_row(row: &rusqlite::Row<'_>) -> Result<Self, String> {
+        Ok(Self {
+            id: row.get(0).map_err(|e| e.to_string())?,
+            session_id: row.get(1).map_err(|e| e.to_string())?,
+            wallet_id: row.get(2).map_err(|e| e.to_string())?,
+            wallet_address: row.get(3).map_err(|e| e.to_string())?,
+            op_index: row.get(4).map_err(|e| e.to_string())?,
+            op_type: row.get(5).map_err(|e| e.to_string())?,
+            amount_sol: row.get(6).map_err(|e| e.to_string())?,
+            token_amount: row.get(7).map_err(|e| e.to_string())?,
+            signature: row.get(8).map_err(|e| e.to_string())?,
+            status: row.get(9).map_err(|e| e.to_string())?,
+            error_message: row.get(10).map_err(|e| e.to_string())?,
+            executed_at: row.get(11).map_err(|e| e.to_string())?,
+            created_at: row.get(12).map_err(|e| e.to_string())?,
+        })
+    }
+}
+
 // =============================================================================
 // TOOL FAVORITES OPERATIONS
 // =============================================================================
@@ -1148,4 +1368,514 @@ pub fn update_tool_favorite(
         .map_err(|e| format!("Failed to update tool favorite: {}", e))?;
 
     Ok(rows > 0)
+}
+
+// =============================================================================
+// MULTI-WALLET SESSION OPERATIONS
+// =============================================================================
+
+/// Configuration for creating a multi-wallet session
+#[derive(Debug, Clone)]
+pub struct MwSessionConfig {
+    pub session_type: String,
+    pub token_mint: Option<String>,
+    pub total_wallets: i32,
+    pub target_amount_sol: Option<f64>,
+    pub min_amount_sol: Option<f64>,
+    pub max_amount_sol: Option<f64>,
+    pub delay_ms: i64,
+    pub delay_max_ms: Option<i64>,
+    pub concurrency: i32,
+    pub sol_buffer: f64,
+}
+
+/// Create a new multi-wallet session
+pub fn create_mw_session(config: &MwSessionConfig) -> Result<String, String> {
+    let conn = get_connection()?;
+    let session_id = uuid::Uuid::new_v4().to_string();
+
+    conn.execute(
+        r#"
+        INSERT INTO mw_sessions (
+            session_id, session_type, token_mint,
+            total_wallets, target_amount_sol, min_amount_sol, max_amount_sol,
+            delay_ms, delay_max_ms, concurrency, sol_buffer,
+            status
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 'pending')
+        "#,
+        params![
+            session_id,
+            config.session_type,
+            config.token_mint,
+            config.total_wallets,
+            config.target_amount_sol,
+            config.min_amount_sol,
+            config.max_amount_sol,
+            config.delay_ms,
+            config.delay_max_ms,
+            config.concurrency,
+            config.sol_buffer,
+        ],
+    )
+    .map_err(|e| format!("Failed to create MW session: {}", e))?;
+
+    Ok(session_id)
+}
+
+/// Get a multi-wallet session by session_id
+pub fn get_mw_session(session_id: &str) -> Result<MwSessionRow, String> {
+    let conn = get_connection()?;
+
+    conn.query_row(
+        r#"
+        SELECT id, session_id, session_type, token_mint,
+               total_wallets, target_amount_sol, min_amount_sol, max_amount_sol,
+               delay_ms, delay_max_ms, concurrency, sol_buffer,
+               status, started_at, ended_at, error_message,
+               wallets_funded, successful_ops, failed_ops,
+               total_sol_spent, total_sol_recovered,
+               created_at, updated_at
+        FROM mw_sessions WHERE session_id = ?1
+        "#,
+        params![session_id],
+        |row| MwSessionRow::from_row(row).map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)))),
+    )
+    .map_err(|e| format!("Failed to get MW session: {}", e))
+}
+
+/// Update multi-wallet session status
+pub fn update_mw_session_status(
+    session_id: &str,
+    status: &str,
+    error_message: Option<&str>,
+) -> Result<(), String> {
+    let conn = get_connection()?;
+    let now = Utc::now().to_rfc3339();
+
+    let started_at = if status == "running" {
+        Some(now.clone())
+    } else {
+        None
+    };
+
+    let ended_at = if matches!(status, "completed" | "failed" | "aborted") {
+        Some(now.clone())
+    } else {
+        None
+    };
+
+    conn.execute(
+        r#"
+        UPDATE mw_sessions 
+        SET status = ?1, 
+            error_message = ?2,
+            started_at = COALESCE(?3, started_at),
+            ended_at = COALESCE(?4, ended_at),
+            updated_at = ?5
+        WHERE session_id = ?6
+        "#,
+        params![
+            status,
+            error_message,
+            started_at,
+            ended_at,
+            now,
+            session_id,
+        ],
+    )
+    .map_err(|e| format!("Failed to update MW session status: {}", e))?;
+
+    Ok(())
+}
+
+/// Update multi-wallet session metrics
+pub fn update_mw_session_metrics(
+    session_id: &str,
+    wallets_funded: Option<i32>,
+    successful_ops: Option<i32>,
+    failed_ops: Option<i32>,
+    total_sol_spent: Option<f64>,
+    total_sol_recovered: Option<f64>,
+) -> Result<(), String> {
+    let conn = get_connection()?;
+    let now = Utc::now().to_rfc3339();
+
+    conn.execute(
+        r#"
+        UPDATE mw_sessions 
+        SET wallets_funded = COALESCE(?1, wallets_funded),
+            successful_ops = COALESCE(?2, successful_ops),
+            failed_ops = COALESCE(?3, failed_ops),
+            total_sol_spent = COALESCE(?4, total_sol_spent),
+            total_sol_recovered = COALESCE(?5, total_sol_recovered),
+            updated_at = ?6
+        WHERE session_id = ?7
+        "#,
+        params![
+            wallets_funded,
+            successful_ops,
+            failed_ops,
+            total_sol_spent,
+            total_sol_recovered,
+            now,
+            session_id,
+        ],
+    )
+    .map_err(|e| format!("Failed to update MW session metrics: {}", e))?;
+
+    Ok(())
+}
+
+/// Add a wallet operation to a session
+pub fn add_wallet_op(
+    session_id: &str,
+    wallet_id: i32,
+    wallet_address: &str,
+    op_index: i32,
+    op_type: &str,
+    amount_sol: Option<f64>,
+    token_amount: Option<f64>,
+) -> Result<i64, String> {
+    let conn = get_connection()?;
+
+    conn.execute(
+        r#"
+        INSERT INTO mw_wallet_ops (
+            session_id, wallet_id, wallet_address, op_index,
+            op_type, amount_sol, token_amount, status
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 'pending')
+        "#,
+        params![
+            session_id,
+            wallet_id,
+            wallet_address,
+            op_index,
+            op_type,
+            amount_sol,
+            token_amount,
+        ],
+    )
+    .map_err(|e| format!("Failed to add wallet op: {}", e))?;
+
+    Ok(conn.last_insert_rowid())
+}
+
+/// Update wallet operation status
+pub fn update_wallet_op_status(
+    op_id: i64,
+    status: &str,
+    signature: Option<&str>,
+    error_message: Option<&str>,
+) -> Result<(), String> {
+    let conn = get_connection()?;
+    let now = Utc::now().to_rfc3339();
+
+    conn.execute(
+        r#"
+        UPDATE mw_wallet_ops 
+        SET status = ?1,
+            signature = COALESCE(?2, signature),
+            error_message = ?3,
+            executed_at = ?4
+        WHERE id = ?5
+        "#,
+        params![status, signature, error_message, now, op_id],
+    )
+    .map_err(|e| format!("Failed to update wallet op status: {}", e))?;
+
+    Ok(())
+}
+
+/// Get all operations for a session
+pub fn get_session_ops(session_id: &str) -> Result<Vec<MwWalletOpRow>, String> {
+    let conn = get_connection()?;
+
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT id, session_id, wallet_id, wallet_address, op_index,
+                   op_type, amount_sol, token_amount, signature,
+                   status, error_message, executed_at, created_at
+            FROM mw_wallet_ops 
+            WHERE session_id = ?1
+            ORDER BY op_index ASC
+            "#,
+        )
+        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+
+    let rows = stmt
+        .query_map(params![session_id], |row| {
+            MwWalletOpRow::from_row(row)
+                .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e))))
+        })
+        .map_err(|e| format!("Failed to query session ops: {}", e))?;
+
+    let mut ops = Vec::new();
+    for row in rows {
+        match row {
+            Ok(op) => ops.push(op),
+            Err(e) => return Err(format!("Failed to read row: {}", e)),
+        }
+    }
+
+    Ok(ops)
+}
+
+/// Get recent multi-wallet sessions
+pub fn get_recent_mw_sessions(limit: i32) -> Result<Vec<MwSessionRow>, String> {
+    let conn = get_connection()?;
+
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT id, session_id, session_type, token_mint,
+                   total_wallets, target_amount_sol, min_amount_sol, max_amount_sol,
+                   delay_ms, delay_max_ms, concurrency, sol_buffer,
+                   status, started_at, ended_at, error_message,
+                   wallets_funded, successful_ops, failed_ops,
+                   total_sol_spent, total_sol_recovered,
+                   created_at, updated_at
+            FROM mw_sessions 
+            ORDER BY created_at DESC
+            LIMIT ?1
+            "#,
+        )
+        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+
+    let rows = stmt
+        .query_map(params![limit], |row| {
+            MwSessionRow::from_row(row)
+                .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e))))
+        })
+        .map_err(|e| format!("Failed to query sessions: {}", e))?;
+
+    let mut sessions = Vec::new();
+    for row in rows {
+        match row {
+            Ok(session) => sessions.push(session),
+            Err(e) => return Err(format!("Failed to read row: {}", e)),
+        }
+    }
+
+    Ok(sessions)
+}
+
+// =============================================================================
+// WATCHED TOKENS OPERATIONS
+// =============================================================================
+
+/// Watched token database row
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct WatchedToken {
+    pub id: i64,
+    pub mint: String,
+    pub symbol: Option<String>,
+    pub pool_address: String,
+    pub pool_source: String,
+    pub pool_dex: Option<String>,
+    pub pool_pair: Option<String>,
+    pub pool_liquidity: Option<f64>,
+    pub watch_type: String,
+    pub trigger_amount_sol: Option<f64>,
+    pub action_amount_sol: Option<f64>,
+    pub slippage_bps: i32,
+    pub is_active: bool,
+    pub last_checked_at: Option<String>,
+    pub last_trade_signature: Option<String>,
+    pub trades_detected: i32,
+    pub actions_triggered: i32,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl WatchedToken {
+    fn from_row(row: &rusqlite::Row<'_>) -> Result<Self, String> {
+        let is_active_int: i32 = row.get(12).map_err(|e| e.to_string())?;
+        Ok(Self {
+            id: row.get(0).map_err(|e| e.to_string())?,
+            mint: row.get(1).map_err(|e| e.to_string())?,
+            symbol: row.get(2).map_err(|e| e.to_string())?,
+            pool_address: row.get(3).map_err(|e| e.to_string())?,
+            pool_source: row.get(4).map_err(|e| e.to_string())?,
+            pool_dex: row.get(5).map_err(|e| e.to_string())?,
+            pool_pair: row.get(6).map_err(|e| e.to_string())?,
+            pool_liquidity: row.get(7).map_err(|e| e.to_string())?,
+            watch_type: row.get(8).map_err(|e| e.to_string())?,
+            trigger_amount_sol: row.get(9).map_err(|e| e.to_string())?,
+            action_amount_sol: row.get(10).map_err(|e| e.to_string())?,
+            slippage_bps: row.get(11).map_err(|e| e.to_string())?,
+            is_active: is_active_int != 0,
+            last_checked_at: row.get(13).map_err(|e| e.to_string())?,
+            last_trade_signature: row.get(14).map_err(|e| e.to_string())?,
+            trades_detected: row.get(15).map_err(|e| e.to_string())?,
+            actions_triggered: row.get(16).map_err(|e| e.to_string())?,
+            created_at: row.get(17).map_err(|e| e.to_string())?,
+            updated_at: row.get(18).map_err(|e| e.to_string())?,
+        })
+    }
+}
+
+/// Configuration for adding a watched token
+#[derive(Debug, Clone)]
+pub struct WatchedTokenConfig {
+    pub mint: String,
+    pub symbol: Option<String>,
+    pub pool_address: String,
+    pub pool_source: String,
+    pub pool_dex: Option<String>,
+    pub pool_pair: Option<String>,
+    pub pool_liquidity: Option<f64>,
+    pub watch_type: String,
+    pub trigger_amount_sol: Option<f64>,
+    pub action_amount_sol: Option<f64>,
+    pub slippage_bps: Option<i32>,
+}
+
+/// Add a new watched token
+pub fn add_watched_token(config: &WatchedTokenConfig) -> Result<i64, String> {
+    let conn = get_connection()?;
+
+    conn.execute(
+        r#"
+        INSERT INTO watched_tokens (
+            mint, symbol, pool_address, pool_source, pool_dex, pool_pair, pool_liquidity,
+            watch_type, trigger_amount_sol, action_amount_sol, slippage_bps, is_active
+        ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, 1)
+        "#,
+        params![
+            config.mint,
+            config.symbol,
+            config.pool_address,
+            config.pool_source,
+            config.pool_dex,
+            config.pool_pair,
+            config.pool_liquidity,
+            config.watch_type,
+            config.trigger_amount_sol,
+            config.action_amount_sol,
+            config.slippage_bps.unwrap_or(500),
+        ],
+    )
+    .map_err(|e| format!("Failed to add watched token: {}", e))?;
+
+    Ok(conn.last_insert_rowid())
+}
+
+/// Get all watched tokens
+pub fn get_watched_tokens() -> Result<Vec<WatchedToken>, String> {
+    let conn = get_connection()?;
+
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT id, mint, symbol, pool_address, pool_source, pool_dex, pool_pair, pool_liquidity,
+                   watch_type, trigger_amount_sol, action_amount_sol, slippage_bps, is_active,
+                   last_checked_at, last_trade_signature, trades_detected, actions_triggered,
+                   created_at, updated_at
+            FROM watched_tokens
+            ORDER BY created_at DESC
+            "#,
+        )
+        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+
+    let rows = stmt
+        .query_map([], |row| Ok(WatchedToken::from_row(row)))
+        .map_err(|e| format!("Failed to query watched tokens: {}", e))?;
+
+    let mut tokens = Vec::new();
+    for row in rows {
+        match row {
+            Ok(Ok(token)) => tokens.push(token),
+            Ok(Err(e)) => return Err(e),
+            Err(e) => return Err(format!("Failed to read row: {}", e)),
+        }
+    }
+
+    Ok(tokens)
+}
+
+/// Get active watched tokens only
+pub fn get_active_watched_tokens() -> Result<Vec<WatchedToken>, String> {
+    let conn = get_connection()?;
+
+    let mut stmt = conn
+        .prepare(
+            r#"
+            SELECT id, mint, symbol, pool_address, pool_source, pool_dex, pool_pair, pool_liquidity,
+                   watch_type, trigger_amount_sol, action_amount_sol, slippage_bps, is_active,
+                   last_checked_at, last_trade_signature, trades_detected, actions_triggered,
+                   created_at, updated_at
+            FROM watched_tokens
+            WHERE is_active = 1
+            ORDER BY created_at DESC
+            "#,
+        )
+        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+
+    let rows = stmt
+        .query_map([], |row| Ok(WatchedToken::from_row(row)))
+        .map_err(|e| format!("Failed to query active watched tokens: {}", e))?;
+
+    let mut tokens = Vec::new();
+    for row in rows {
+        match row {
+            Ok(Ok(token)) => tokens.push(token),
+            Ok(Err(e)) => return Err(e),
+            Err(e) => return Err(format!("Failed to read row: {}", e)),
+        }
+    }
+
+    Ok(tokens)
+}
+
+/// Update watched token active status
+pub fn update_watched_token_status(id: i64, is_active: bool) -> Result<(), String> {
+    let conn = get_connection()?;
+    let now = Utc::now().to_rfc3339();
+
+    conn.execute(
+        "UPDATE watched_tokens SET is_active = ?1, updated_at = ?2 WHERE id = ?3",
+        params![is_active as i32, now, id],
+    )
+    .map_err(|e| format!("Failed to update watched token status: {}", e))?;
+
+    Ok(())
+}
+
+/// Delete a watched token by ID
+pub fn delete_watched_token(id: i64) -> Result<(), String> {
+    let conn = get_connection()?;
+
+    conn.execute("DELETE FROM watched_tokens WHERE id = ?1", params![id])
+        .map_err(|e| format!("Failed to delete watched token: {}", e))?;
+
+    Ok(())
+}
+
+/// Update watched token tracking information
+pub fn update_watched_token_tracking(
+    id: i64,
+    last_checked_at: Option<&str>,
+    last_trade_signature: Option<&str>,
+    trades_detected: Option<i32>,
+    actions_triggered: Option<i32>,
+) -> Result<(), String> {
+    let conn = get_connection()?;
+    let now = Utc::now().to_rfc3339();
+
+    conn.execute(
+        r#"
+        UPDATE watched_tokens SET
+            last_checked_at = COALESCE(?1, last_checked_at),
+            last_trade_signature = COALESCE(?2, last_trade_signature),
+            trades_detected = COALESCE(?3, trades_detected),
+            actions_triggered = COALESCE(?4, actions_triggered),
+            updated_at = ?5
+        WHERE id = ?6
+        "#,
+        params![last_checked_at, last_trade_signature, trades_detected, actions_triggered, now, id],
+    )
+    .map_err(|e| format!("Failed to update watched token tracking: {}", e))?;
+
+    Ok(())
 }

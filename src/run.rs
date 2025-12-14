@@ -281,12 +281,15 @@ fn register_all_services(manager: &mut ServiceManager) {
   manager.register(Box::new(crate::trader::TraderService::new()));
   manager.register(Box::new(WebserverService));
 
+  // Notification service (Telegram integration)
+  manager.register(Box::new(NotificationService));
+
   // Background utility services
   manager.register(Box::new(UpdateCheckService));
 
-  let service_count = 20; // connectivity, events, transactions, sol_price, pool_discovery, pool_fetcher,
+  let service_count = 21; // connectivity, events, transactions, sol_price, pool_discovery, pool_fetcher,
                            // pool_calculator, pool_analyzer, pool_helpers, tokens, filtering, ohlcv,
-                           // positions, wallet, rpc_stats, ata_cleanup, trader, webserver, update_check
+                           // positions, wallet, rpc_stats, ata_cleanup, trader, webserver, notifications, update_check
   logger::info(
     LogTag::System,
     &format!("All services registered ({} total)", service_count),

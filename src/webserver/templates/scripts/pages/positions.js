@@ -523,7 +523,11 @@ function createLifecycle() {
         // Row click handler for position details dialog
         const handleRowClick = (e) => {
           // Skip if clicking on action buttons, links, or buttons
-          if (e.target.closest(".row-action") || e.target.closest("a") || e.target.closest("button"))
+          if (
+            e.target.closest(".row-action") ||
+            e.target.closest("a") ||
+            e.target.closest("button")
+          )
             return;
 
           const row = e.target.closest("tr[data-row-id]");

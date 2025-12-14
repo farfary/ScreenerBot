@@ -95,9 +95,7 @@ export class CustomSelect {
       container,
       options,
       placeholder:
-        selectElement.dataset.placeholder ||
-        selectElement.options[0]?.textContent ||
-        "Select...",
+        selectElement.dataset.placeholder || selectElement.options[0]?.textContent || "Select...",
       id: selectElement.id ? `${selectElement.id}-custom` : null,
       name: selectElement.name,
       disabled: selectElement.disabled,
@@ -335,8 +333,7 @@ export class CustomSelect {
 
     // Find matching option
     const matchIndex = this.options.findIndex(
-      (opt) =>
-        !opt.disabled && opt.label.toLowerCase().startsWith(this.searchString)
+      (opt) => !opt.disabled && opt.label.toLowerCase().startsWith(this.searchString)
     );
 
     if (matchIndex >= 0) {
@@ -381,9 +378,7 @@ export class CustomSelect {
     this.focusedIndex = index;
 
     if (index >= 0 && index < this.options.length) {
-      const optionEl = this.dropdownEl.querySelector(
-        `.cs-option[data-index="${index}"]`
-      );
+      const optionEl = this.dropdownEl.querySelector(`.cs-option[data-index="${index}"]`);
       if (optionEl) {
         optionEl.classList.add("focused");
         // Scroll into view
@@ -426,9 +421,7 @@ export class CustomSelect {
     this.el.setAttribute("aria-expanded", "true");
 
     // Set initial focus to selected option or first enabled option
-    const selectedIndex = this.options.findIndex(
-      (o) => o.value === this.selectedValue
-    );
+    const selectedIndex = this.options.findIndex((o) => o.value === this.selectedValue);
     if (selectedIndex >= 0) {
       this._setFocusIndex(selectedIndex);
     } else {
@@ -594,10 +587,7 @@ export class CustomSelect {
  * @param {string} [selector='select[data-custom-select]'] Selector for selects to enhance
  * @returns {CustomSelect[]} Array of created CustomSelect instances
  */
-export function enhanceAllSelects(
-  container = document,
-  selector = "select[data-custom-select]"
-) {
+export function enhanceAllSelects(container = document, selector = "select[data-custom-select]") {
   const selects = container.querySelectorAll(selector);
   const instances = [];
 

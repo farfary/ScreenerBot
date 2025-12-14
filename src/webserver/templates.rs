@@ -55,6 +55,7 @@ const SEARCH_DIALOG_STYLES: &str = include_str!("templates/styles/ui/search_dial
 const CUSTOM_SELECT_STYLES: &str = include_str!("templates/styles/ui/custom_select.css");
 const BILLBOARD_DIALOG_STYLES: &str = include_str!("templates/styles/ui/billboard_dialog.css");
 const BILLBOARD_ROW_STYLES: &str = include_str!("templates/styles/ui/billboard_row.css");
+const POOL_SELECTOR_STYLES: &str = include_str!("templates/styles/ui/pool_selector.css");
 
 // Assets (logos, icons)
 pub const LOGO_SVG: &str = include_str!("assets/logo.svg");
@@ -124,6 +125,7 @@ pub const SEARCH_DIALOG_UI: &str = include_str!("templates/scripts/ui/search_dia
 pub const CUSTOM_SELECT_UI: &str = include_str!("templates/scripts/ui/custom_select.js");
 pub const BILLBOARD_DIALOG_UI: &str = include_str!("templates/scripts/ui/billboard_dialog.js");
 pub const BILLBOARD_ROW_UI: &str = include_str!("templates/scripts/ui/billboard_row.js");
+pub const POOL_SELECTOR_UI: &str = include_str!("templates/scripts/ui/pool_selector.js");
 
 pub const SERVICES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/services.js");
 pub const TRANSACTIONS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/transactions.js");
@@ -226,6 +228,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         CUSTOM_SELECT_STYLES,
         BILLBOARD_DIALOG_STYLES,
         BILLBOARD_ROW_STYLES,
+        POOL_SELECTOR_STYLES,
         // Splash, onboarding, and setup screens (always included for proper transitions)
         SPLASH_PAGE_STYLES,
         ONBOARDING_PAGE_STYLES,

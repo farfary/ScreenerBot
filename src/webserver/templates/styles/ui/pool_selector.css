@@ -1,0 +1,290 @@
+/**
+ * Pool Selector Dialog Styles
+ *
+ * Overlay dialog for selecting a pool for a token.
+ * Matches the dark theme and glassmorphic design of other dialogs.
+ */
+
+/* ============================================
+   OVERLAY / BACKDROP
+   ============================================ */
+
+.pool-selector-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgb(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 12vh;
+  z-index: 10005;
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    visibility 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.pool-selector-overlay.visible {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* ============================================
+   DIALOG CONTAINER
+   ============================================ */
+
+.pool-selector-dialog {
+  width: 100%;
+  max-width: 520px;
+  max-height: 70vh;
+  background: rgb(18, 24, 39, 0.98);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgb(255, 255, 255, 0.1);
+  border-radius: var(--radius-xl, 12px);
+  box-shadow:
+    0 20px 60px rgb(0, 0, 0, 0.5),
+    0 0 0 1px rgb(255, 255, 255, 0.05) inset;
+  overflow: hidden;
+  transform: translateY(-10px) scale(0.98);
+  transition:
+    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+}
+
+.pool-selector-overlay.visible .pool-selector-dialog {
+  transform: translateY(0) scale(1);
+}
+
+/* ============================================
+   HEADER
+   ============================================ */
+
+.pool-selector-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-md, 16px);
+  border-bottom: 1px solid rgb(255, 255, 255, 0.08);
+}
+
+.pool-selector-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary, #e6edf3);
+}
+
+.pool-selector-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: rgb(255, 255, 255, 0.05);
+  border: 1px solid rgb(255, 255, 255, 0.1);
+  border-radius: var(--radius-sm, 6px);
+  color: var(--text-secondary, #8b949e);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pool-selector-close:hover {
+  background: rgb(255, 255, 255, 0.1);
+  color: var(--text-primary, #e6edf3);
+}
+
+/* ============================================
+   CONTENT
+   ============================================ */
+
+.pool-selector-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--spacing-md, 16px);
+}
+
+/* Loading State */
+.pool-selector-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl, 32px);
+  color: var(--text-secondary, #8b949e);
+  gap: var(--spacing-sm, 8px);
+}
+
+.pool-selector-loading i {
+  font-size: 1.5rem;
+  color: var(--link-color, #58a6ff);
+}
+
+/* Error State */
+.pool-selector-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-xl, 32px);
+  text-align: center;
+  gap: var(--spacing-sm, 8px);
+}
+
+.pool-selector-error i {
+  font-size: 2rem;
+  color: var(--error-color, #f85149);
+}
+
+.pool-selector-error p {
+  color: var(--text-secondary, #8b949e);
+  margin: 0;
+}
+
+.pool-selector-error button {
+  margin-top: var(--spacing-sm, 8px);
+}
+
+/* ============================================
+   POOL LIST
+   ============================================ */
+
+.pool-selector-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-sm, 8px);
+  font-size: 0.75rem;
+}
+
+.pool-count {
+  color: var(--text-secondary, #8b949e);
+}
+
+.pool-mint {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  color: var(--text-muted, #6e7681);
+  font-size: 0.6875rem;
+}
+
+.pool-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs, 4px);
+}
+
+.pool-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs, 4px);
+  padding: var(--spacing-sm, 8px) var(--spacing-md, 12px);
+  background: rgb(255, 255, 255, 0.03);
+  border: 1px solid rgb(255, 255, 255, 0.06);
+  border-radius: var(--radius-md, 8px);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pool-item:hover,
+.pool-item:focus {
+  background: rgb(255, 255, 255, 0.08);
+  border-color: rgb(255, 255, 255, 0.12);
+  outline: none;
+}
+
+.pool-item:focus {
+  box-shadow: 0 0 0 2px rgb(88, 166, 255, 0.3);
+}
+
+.pool-item-main {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm, 8px);
+}
+
+.pool-dex {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary, #e6edf3);
+}
+
+.pool-pair {
+  font-size: 0.75rem;
+  color: var(--text-secondary, #8b949e);
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+}
+
+.pool-source {
+  margin-left: auto;
+  font-size: 0.625rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm, 4px);
+  font-weight: 600;
+}
+
+/* Source-specific colors */
+.pool-source.geckoterminal {
+  background: rgb(16, 185, 129, 0.15);
+  color: var(--success-color, #10b981);
+}
+
+.pool-source.dexscreener {
+  background: rgb(59, 130, 246, 0.15);
+  color: var(--link-color, #3b82f6);
+}
+
+.pool-source.raydium {
+  background: rgb(168, 85, 247, 0.15);
+  color: #a855f7;
+}
+
+.pool-source.jupiter {
+  background: rgb(245, 158, 11, 0.15);
+  color: var(--warning-color, #f59e0b);
+}
+
+.pool-source.unknown {
+  background: rgb(107, 114, 128, 0.15);
+  color: var(--text-muted, #6b7280);
+}
+
+.pool-item-stats {
+  display: flex;
+  gap: var(--spacing-md, 16px);
+  font-size: 0.75rem;
+  color: var(--text-secondary, #8b949e);
+}
+
+.pool-liquidity,
+.pool-volume {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-feature-settings: "tnum" 1;
+}
+
+.pool-address {
+  font-size: 0.6875rem;
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  color: var(--text-muted, #6e7681);
+}
+
+/* ============================================
+   SPIN ANIMATION
+   ============================================ */
+
+.pool-selector-loading i.spin {
+  animation: pool-selector-spin 1s linear infinite;
+}
+
+@keyframes pool-selector-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}

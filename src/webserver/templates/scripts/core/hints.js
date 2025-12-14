@@ -627,6 +627,135 @@ Creates organic-looking trading activity for a token using multiple wallets.
 • High-frequency trading may trigger rate limits`,
       learnMoreUrl: "https://screenerbot.io/docs/tools/volume-aggregator",
     },
+
+    multiBuy: {
+      id: "tools.multi_buy",
+      title: "Multi-Buy Tool",
+      content: `**Coordinate Buys Across Multiple Wallets**
+
+Execute buy orders across multiple sub-wallets with randomized amounts to simulate organic buying activity.
+
+**How it works:**
+1. Creates or uses existing sub-wallets
+2. Distributes SOL from main wallet to sub-wallets
+3. Executes buy orders with randomized amounts and delays
+4. Each wallet buys independently with unique signatures
+
+**Wallet Settings:**
+• **Wallet Count** — number of sub-wallets to use (2-10)
+• **SOL Buffer** — SOL reserved per wallet for fees (~0.015)
+
+**Amount Settings:**
+• **Min/Max SOL** — range for buy amounts per wallet
+• **Total Limit** — optional cap on total SOL to spend
+
+**Execution Settings:**
+• **Delay** — random delay between transactions
+• **Concurrency** — parallel execution (1 = sequential)
+• **Slippage** — maximum acceptable slippage
+• **Router** — swap routing (Auto, Jupiter, Raydium)
+
+**Important:**
+• Requires sufficient SOL in main wallet
+• Failed buys are logged but don't stop the session
+• Sub-wallets can be reused across sessions`,
+      learnMoreUrl: "https://screenerbot.io/docs/tools/multi-buy",
+    },
+
+    multiSell: {
+      id: "tools.multi_sell",
+      title: "Multi-Sell Tool",
+      content: `**Coordinate Sells Across Multiple Wallets**
+
+Sell tokens from all sub-wallets holding a specific token with automatic SOL consolidation.
+
+**How it works:**
+1. Scans sub-wallets for token balances
+2. Optionally tops up wallets with low SOL for fees
+3. Executes sell orders with configurable percentage
+4. Consolidates proceeds back to main wallet
+
+**Sell Settings:**
+• **Sell %** — percentage of tokens to sell (default 100%)
+• **Min SOL for Fee** — minimum SOL needed for transaction
+• **Auto Topup** — transfer SOL from main if needed
+
+**Post-Sell Actions:**
+• **Consolidate SOL** — transfer all SOL back to main wallet
+• **Close ATAs** — close token accounts to reclaim rent (~0.002 SOL each)
+
+**Execution Settings:**
+• **Delay** — random delay between transactions
+• **Concurrency** — parallel execution
+• **Slippage** — maximum acceptable slippage
+• **Router** — swap routing preference
+
+**Tips:**
+• Preview shows all wallets holding the token
+• Deselect wallets you don't want to sell from
+• Consolidation happens after all sells complete`,
+      learnMoreUrl: "https://screenerbot.io/docs/tools/multi-sell",
+    },
+
+    tradeWatcher: {
+      id: "tools.trade_watcher",
+      title: "Trade Watcher Tool",
+      content: `**Monitor Trades & Trigger Automatic Actions**
+
+Watch a token's trading activity and automatically react when trades occur.
+
+**Watch Types:**
+• **Buy on Sell** — automatically buy when someone sells (catch dips)
+• **Sell on Buy** — automatically sell when someone buys (follow the market)
+• **Notify Only** — get alerts without taking action
+
+**How it works:**
+1. Enter a token mint address
+2. Click "Search Pools" to find available liquidity pools
+3. Select a pool to monitor (required for buy/sell actions)
+4. Set trigger amount (minimum trade size to react to)
+5. Set action amount (how much SOL to buy/sell)
+6. Start the watch
+
+**Requirements:**
+• Valid token mint address
+• Pool selection (for buy/sell actions)
+• Sufficient SOL balance for action amounts
+
+**Telegram Integration:**
+Configure Telegram in Config → Telegram to receive instant notifications when watches trigger.`,
+      learnMoreUrl: "https://screenerbot.io/docs/tools/trade-watcher",
+    },
+
+    walletConsolidation: {
+      id: "tools.wallet_consolidation",
+      title: "Wallet Consolidation Tool",
+      content: `**Manage and Consolidate Sub-Wallet Funds**
+
+View all sub-wallets and consolidate SOL, tokens, and reclaim ATA rent back to your main wallet.
+
+**Summary Shows:**
+• **Sub-wallets** — total count of created sub-wallets
+• **Total SOL** — combined SOL balance across all sub-wallets
+• **Token Types** — number of different tokens held
+• **Reclaimable Rent** — SOL locked in empty ATAs
+
+**Actions:**
+• **Transfer SOL** — move all SOL from selected wallets to main
+• **Transfer Tokens** — move all tokens to main wallet
+• **Cleanup ATAs** — close empty token accounts for rent refund
+
+**Table Info:**
+• Checkbox to select wallets for batch operations
+• Name, address, SOL balance, token count, empty ATAs
+• Empty wallets are dimmed for easy identification
+
+**Tips:**
+• Use after Multi-Sell to collect remaining SOL
+• Regularly cleanup ATAs to reclaim rent
+• Empty wallets can be reused for future operations`,
+      learnMoreUrl: "https://screenerbot.io/docs/tools/consolidation",
+    },
   },
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -647,6 +776,45 @@ Categories:
 
 Changes take effect immediately (hot reload).`,
       learnMoreUrl: "https://screenerbot.io/docs/dashboard/system/config",
+    },
+  },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CONFIG PAGE - TELEGRAM
+  // ═══════════════════════════════════════════════════════════════════════════
+  configTelegram: {
+    overview: {
+      id: "config.telegram",
+      title: "Telegram Notifications",
+      content: `**Receive instant trading alerts via Telegram**
+
+Get notified about trades, positions, and important events directly in Telegram.
+
+**Setup Steps:**
+
+1. **Create a bot:**
+   • Open Telegram and message @BotFather
+   • Send /newbot and follow the prompts
+   • Copy the bot token (looks like: 123456:ABC-DEF...)
+
+2. **Get your Chat ID:**
+   • Message @userinfobot or @getidsbot
+   • Copy the numeric ID it returns
+
+3. **Configure in ScreenerBot:**
+   • Enable notifications toggle
+   • Paste bot token and chat ID
+   • Click "Test Connection" to verify
+
+**What you'll receive:**
+• Trade execution confirmations
+• Position updates (entry/exit)
+• Trade Watcher alerts
+• Error notifications
+
+**Privacy:**
+Messages are sent directly from ScreenerBot to your Telegram bot — no third-party servers involved.`,
+      learnMoreUrl: "https://screenerbot.io/docs/config/telegram",
     },
   },
 

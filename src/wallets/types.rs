@@ -224,3 +224,58 @@ pub struct TokenBalance {
     /// When this balance was last updated
     pub updated_at: DateTime<Utc>,
 }
+
+// =============================================================================
+// WALLET WITH TOKEN BALANCE TYPES
+// =============================================================================
+
+/// Wallet with specific token balance information
+#[derive(Clone, Debug, Serialize)]
+pub struct WalletWithTokenBalance {
+    /// The wallet
+    pub wallet: Wallet,
+    /// SOL balance in SOL (not lamports)
+    pub sol_balance: f64,
+    /// Token balance (UI amount with decimals applied)
+    pub token_balance: f64,
+    /// Token decimals
+    pub token_decimals: u8,
+    /// Whether this wallet needs SOL top-up for transaction fees
+    pub needs_sol_topup: bool,
+    /// Amount of SOL needed for top-up (if any)
+    pub topup_amount: f64,
+}
+
+/// Simple token balance for summary
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SimpleTokenBalance {
+    /// Token mint address
+    pub mint: String,
+    /// Token symbol (if known)
+    pub symbol: Option<String>,
+    /// UI-friendly balance (with decimals applied)
+    pub balance: f64,
+    /// Token decimals
+    pub decimals: u8,
+}
+
+/// Wallet balance summary for consolidation UI
+#[derive(Clone, Debug, Serialize)]
+pub struct WalletBalanceSummary {
+    /// Wallet database ID
+    pub wallet_id: i64,
+    /// Wallet name
+    pub wallet_name: String,
+    /// Wallet address (base58)
+    pub address: String,
+    /// SOL balance in SOL (not lamports)
+    pub sol_balance: f64,
+    /// Number of tokens held (excluding empty ATAs)
+    pub token_count: u32,
+    /// Token balances
+    pub tokens: Vec<SimpleTokenBalance>,
+    /// Number of empty ATAs (token accounts with 0 balance)
+    pub empty_ata_count: u32,
+    /// Reclaimable SOL from closing empty ATAs (~0.00089088 per ATA)
+    pub reclaimable_sol: f64,
+}

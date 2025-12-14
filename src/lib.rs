@@ -16,6 +16,7 @@ pub mod logger;
 #[cfg(target_os = "macos")]
 pub mod macos_window;
 pub mod nfts;
+pub mod notifications;
 pub mod ohlcvs;
 pub mod paths;
 pub mod pools;

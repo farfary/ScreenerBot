@@ -1387,16 +1387,12 @@ class ContextMenuManager {
   async _toggleFavorite(context, currentlyFavorite) {
     try {
       if (currentlyFavorite) {
-        const response = await fetch(
-          `/api/tokens/favorites/${encodeURIComponent(context.mint)}`,
-          { method: "DELETE" }
-        );
+        const response = await fetch(`/api/tokens/favorites/${encodeURIComponent(context.mint)}`, {
+          method: "DELETE",
+        });
         if (!response.ok) throw new Error("Failed to remove favorite");
         this._updateFavoriteCache(context.mint, false);
-        window.showToast?.(
-          `${context.symbol || "Token"} removed from favorites`,
-          "success"
-        );
+        window.showToast?.(`${context.symbol || "Token"} removed from favorites`, "success");
       } else {
         const response = await fetch("/api/tokens/favorites", {
           method: "POST",
@@ -1410,10 +1406,7 @@ class ContextMenuManager {
         });
         if (!response.ok) throw new Error("Failed to add favorite");
         this._updateFavoriteCache(context.mint, true);
-        window.showToast?.(
-          `${context.symbol || "Token"} added to favorites`,
-          "success"
-        );
+        window.showToast?.(`${context.symbol || "Token"} added to favorites`, "success");
       }
 
       // Emit event for other UI components

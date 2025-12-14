@@ -15,6 +15,7 @@ mod services;
 mod sol_price;
 mod strategies;
 mod swaps;
+mod telegram;
 mod tokens;
 mod trader;
 mod wallet;
@@ -33,6 +34,7 @@ pub use services::*;
 pub use sol_price::*;
 pub use strategies::*;
 pub use swaps::*;
+pub use telegram::*;
 pub use tokens::*;
 pub use trader::*;
 pub use wallet::*;
@@ -101,5 +103,8 @@ config_struct! {
 
         /// Webserver configuration (headless/CLI mode only)
         webserver: WebserverConfig = WebserverConfig::default(),
+
+        /// Telegram bot configuration for notifications and commands
+        telegram: TelegramConfig = TelegramConfig::default(),
     }
 }

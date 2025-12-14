@@ -94,6 +94,12 @@ class BillboardRow {
     this._createContainer();
     this.isVisible = true;
 
+    // Add padding class to content to make room for billboard
+    const content = $(".content");
+    if (content) {
+      content.classList.add("has-billboard");
+    }
+
     // Show loading state
     this._showLoading();
 
@@ -122,6 +128,12 @@ class BillboardRow {
       this.containerEl = null;
     }
     this.isVisible = false;
+
+    // Remove padding class from content
+    const content = $(".content");
+    if (content) {
+      content.classList.remove("has-billboard");
+    }
   }
 
   /**
@@ -156,13 +168,8 @@ class BillboardRow {
       </div>
     `;
 
-    // Insert before status bar
-    const statusBar = $("#statusBar");
-    if (statusBar) {
-      statusBar.parentNode.insertBefore(container, statusBar);
-    } else {
-      document.body.appendChild(container);
-    }
+    // Append to body (billboard is fixed positioned above status bar)
+    document.body.appendChild(container);
 
     this.containerEl = container;
 

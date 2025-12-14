@@ -15,8 +15,9 @@ use super::crypto::{
 };
 use super::database::WalletsDatabase;
 use super::types::{
-    CreateWalletRequest, ExportWalletResponse, ImportWalletRequest, TokenBalance,
-    UpdateWalletRequest, Wallet, WalletRole, WalletType, WalletWithKey, WalletsSummary,
+    CreateWalletRequest, ExportWalletResponse, ImportWalletRequest, SimpleTokenBalance,
+    TokenBalance, UpdateWalletRequest, Wallet, WalletBalanceSummary, WalletRole, WalletType,
+    WalletWithKey, WalletWithTokenBalance, WalletsSummary,
 };
 use crate::logger::{self, LogTag};
 use crate::rpc::{get_rpc_client, RpcClientMethods};
@@ -996,4 +997,270 @@ pub async fn upsert_token_balance(
         name,
         is_token_2022,
     )
+}
+
+// =============================================================================
+// BATCH WALLET OPERATIONS
+// =============================================================================
+
+/// Rent-exempt minimum for ATA (~0.00089088 SOL)
+const ATA_RENT_EXEMPT: f64 = 0.00089088;
+
+/// Minimum SOL balance to operate a wallet (for transaction fees)
+const MIN_SOL_FOR_OPERATIONS: f64 = 0.005;
+
+/// Create multiple wallets at once with a name prefix
+///
+/// # Arguments
+/// * `count` - Number of wallets to create
+/// * `name_prefix` - Prefix for wallet names (e.g., "Trading" -> "Trading_1", "Trading_2", ...)
+/// * `notes` - Optional notes to attach to all created wallets
+///
+/// # Returns
+/// Vector of created wallets on success
+pub async fn create_wallets_batch(
+    count: u32,
+    name_prefix: &str,
+    notes: Option<&str>,
+) -> Result<Vec<Wallet>, String> {
+    if count == 0 {
+        return Err("Count must be greater than 0".to_string());
+    }
+
+    if count > 100 {
+        return Err("Maximum batch size is 100 wallets".to_string());
+    }
+
+    let mut created_wallets = Vec::with_capacity(count as usize);
+
+    for i in 1..=count {
+        let name = format!("{}_{}", name_prefix, i);
+
+        match create_wallet(CreateWalletRequest {
+            name: name.clone(),
+            notes: notes.map(|s| s.to_string()),
+            set_as_main: false,
+        })
+        .await
+        {
+            Ok(wallet) => {
+                created_wallets.push(wallet);
+            }
+            Err(e) => {
+                logger::warning(
+                    LogTag::Wallet,
+                    &format!(
+                        "Failed to create wallet {} in batch: {}. Continuing with {} already created.",
+                        name, e, created_wallets.len()
+                    ),
+                );
+                // Continue with remaining wallets, don't fail entire batch
+            }
+        }
+    }
+
+    if created_wallets.is_empty() {
+        return Err("Failed to create any wallets".to_string());
+    }
+
+    logger::info(
+        LogTag::Wallet,
+        &format!(
+            "Batch created {} wallets with prefix '{}'",
+            created_wallets.len(),
+            name_prefix
+        ),
+    );
+
+    Ok(created_wallets)
+}
+
+/// Get all active wallets that hold a specific token
+///
+/// # Arguments
+/// * `token_mint` - Token mint address to search for
+/// * `min_balance` - Optional minimum token balance filter (UI amount, not raw)
+///
+/// # Returns
+/// Vector of wallets with their SOL and token balances
+pub async fn get_wallets_with_token(
+    token_mint: &str,
+    min_balance: Option<f64>,
+) -> Result<Vec<WalletWithTokenBalance>, String> {
+    let wallets = list_active_wallets().await?;
+    let rpc_client = get_rpc_client();
+    let min_balance = min_balance.unwrap_or(0.0);
+
+    let mut results = Vec::new();
+
+    for wallet in wallets {
+        let wallet_pubkey = match solana_sdk::pubkey::Pubkey::from_str(&wallet.address) {
+            Ok(pk) => pk,
+            Err(_) => continue,
+        };
+
+        // Get SOL balance
+        let sol_balance = rpc_client
+            .get_sol_balance(&wallet.address)
+            .await
+            .unwrap_or(0.0);
+
+        // Get all token accounts for this wallet
+        let token_accounts = match rpc_client.get_all_token_accounts(&wallet_pubkey).await {
+            Ok(accounts) => accounts,
+            Err(_) => continue,
+        };
+
+        // Find the specific token
+        for token_account in token_accounts {
+            if token_account.mint == token_mint && !token_account.is_nft {
+                let ui_amount =
+                    token_account.balance as f64 / 10f64.powi(token_account.decimals as i32);
+
+                // Apply minimum balance filter
+                if ui_amount >= min_balance {
+                    let needs_sol_topup = sol_balance < MIN_SOL_FOR_OPERATIONS;
+                    let topup_amount = if needs_sol_topup {
+                        MIN_SOL_FOR_OPERATIONS - sol_balance
+                    } else {
+                        0.0
+                    };
+
+                    results.push(WalletWithTokenBalance {
+                        wallet: wallet.clone(),
+                        sol_balance,
+                        token_balance: ui_amount,
+                        token_decimals: token_account.decimals,
+                        needs_sol_topup,
+                        topup_amount,
+                    });
+                }
+                break; // Found the token, move to next wallet
+            }
+        }
+    }
+
+    logger::debug(
+        LogTag::Wallet,
+        &format!(
+            "Found {} wallets holding token {} (min_balance: {})",
+            results.len(),
+            token_mint,
+            min_balance
+        ),
+    );
+
+    Ok(results)
+}
+
+/// Get balance summaries for all sub-wallets (non-primary)
+///
+/// Returns comprehensive balance information for wallet consolidation UI.
+/// Excludes the main wallet from results.
+///
+/// # Returns
+/// Vector of wallet balance summaries with SOL, token counts, and reclaimable rent
+pub async fn get_all_wallet_balances() -> Result<Vec<WalletBalanceSummary>, String> {
+    let wallets = list_active_wallets().await?;
+    let rpc_client = get_rpc_client();
+
+    let mut results = Vec::new();
+
+    for wallet in wallets {
+        // Skip main wallet
+        if wallet.is_main() {
+            continue;
+        }
+
+        let wallet_pubkey = match solana_sdk::pubkey::Pubkey::from_str(&wallet.address) {
+            Ok(pk) => pk,
+            Err(e) => {
+                logger::warning(
+                    LogTag::Wallet,
+                    &format!(
+                        "Invalid wallet address {} ({}): {}",
+                        wallet.name, wallet.address, e
+                    ),
+                );
+                continue;
+            }
+        };
+
+        // Get SOL balance
+        let sol_balance = rpc_client
+            .get_sol_balance(&wallet.address)
+            .await
+            .unwrap_or(0.0);
+
+        // Get all token accounts for this wallet
+        let token_accounts = match rpc_client.get_all_token_accounts(&wallet_pubkey).await {
+            Ok(accounts) => accounts,
+            Err(e) => {
+                logger::warning(
+                    LogTag::Wallet,
+                    &format!(
+                        "Failed to get token accounts for {} ({}): {}",
+                        wallet.name, wallet.address, e
+                    ),
+                );
+                // Still include wallet with 0 token info
+                results.push(WalletBalanceSummary {
+                    wallet_id: wallet.id,
+                    wallet_name: wallet.name.clone(),
+                    address: wallet.address.clone(),
+                    sol_balance,
+                    token_count: 0,
+                    tokens: Vec::new(),
+                    empty_ata_count: 0,
+                    reclaimable_sol: 0.0,
+                });
+                continue;
+            }
+        };
+
+        let mut tokens = Vec::new();
+        let mut empty_ata_count = 0u32;
+
+        for token_account in token_accounts {
+            // Skip NFTs
+            if token_account.is_nft {
+                continue;
+            }
+
+            let ui_amount =
+                token_account.balance as f64 / 10f64.powi(token_account.decimals as i32);
+
+            if token_account.balance == 0 {
+                empty_ata_count += 1;
+            } else {
+                tokens.push(SimpleTokenBalance {
+                    mint: token_account.mint,
+                    symbol: None, // Could be populated from token service if needed
+                    balance: ui_amount,
+                    decimals: token_account.decimals,
+                });
+            }
+        }
+
+        let token_count = tokens.len() as u32;
+        let reclaimable_sol = empty_ata_count as f64 * ATA_RENT_EXEMPT;
+
+        results.push(WalletBalanceSummary {
+            wallet_id: wallet.id,
+            wallet_name: wallet.name.clone(),
+            address: wallet.address.clone(),
+            sol_balance,
+            token_count,
+            tokens,
+            empty_ata_count,
+            reclaimable_sol,
+        });
+    }
+
+    logger::debug(
+        LogTag::Wallet,
+        &format!("Retrieved balance summaries for {} sub-wallets", results.len()),
+    );
+
+    Ok(results)
 }
