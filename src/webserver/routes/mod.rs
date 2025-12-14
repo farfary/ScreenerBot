@@ -323,6 +323,8 @@ async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String>) -
         "hint_popover.js" => Some(templates::HINT_POPOVER_UI),
         "search_dialog.js" => Some(templates::SEARCH_DIALOG_UI),
         "custom_select.js" => Some(templates::CUSTOM_SELECT_UI),
+        "billboard_dialog.js" => Some(templates::BILLBOARD_DIALOG_UI),
+        "billboard_row.js" => Some(templates::BILLBOARD_ROW_UI),
         _ => None,
     };
 
