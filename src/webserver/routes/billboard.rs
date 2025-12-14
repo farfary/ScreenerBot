@@ -38,6 +38,13 @@ pub struct BillboardToken {
     pub created_at: String,
 }
 
+/// Website billboard API response wrapper
+#[derive(Debug, Deserialize)]
+struct WebsiteBillboardResponse {
+    success: bool,
+    tokens: Vec<BillboardToken>,
+}
+
 /// External token (Jupiter/DexScreener) - unified format for frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExternalToken {
@@ -117,12 +124,16 @@ async fn fetch_from_website() -> Result<Vec<BillboardToken>, String> {
         ));
     }
 
-    let tokens: Vec<BillboardToken> = response
+    let wrapper: WebsiteBillboardResponse = response
         .json()
         .await
         .map_err(|e| format!("Failed to parse billboard: {}", e))?;
 
-    Ok(tokens)
+    if !wrapper.success {
+        return Err("Billboard API returned success=false".to_string());
+    }
+
+    Ok(wrapper.tokens)
 }
 
 /// Fetch Jupiter top organic score tokens
