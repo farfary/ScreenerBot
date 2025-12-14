@@ -443,17 +443,160 @@ function renderCreateTokenTool(container, actionsContainer) {
 }
 
 function renderTokenWatchTool(container, actionsContainer) {
+  // Load holder watch config and render UI
   container.innerHTML = `
-    <div class="tool-panel token-watch-tool">
+    <div class="tool-panel holder-watch-tool">
+      <div class="hw-loading">
+        <i class="icon-loader spin"></i>
+        <p>Loading settings...</p>
+      </div>
+    </div>
+  `;
+
+  loadHolderWatchConfig().then((config) => {
+    renderHolderWatchContent(container, actionsContainer, config);
+  });
+}
+
+/**
+ * Load holder watch configuration from the server
+ */
+async function loadHolderWatchConfig() {
+  try {
+    const res = await fetch("/api/config");
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status}`);
+    }
+    const data = await res.json();
+    return (
+      data.data?.holder_watch || {
+        enabled: false,
+        check_interval_secs: 60,
+        notify_new_holders: true,
+        notify_holder_drop: true,
+        min_holder_change: 5,
+        holder_drop_percent: 10.0,
+        max_watched_tokens: 20,
+      }
+    );
+  } catch (e) {
+    console.error("[HolderWatch] Failed to load config:", e);
+    return {
+      enabled: false,
+      check_interval_secs: 60,
+      notify_new_holders: true,
+      notify_holder_drop: true,
+      min_holder_change: 5,
+      holder_drop_percent: 10.0,
+      max_watched_tokens: 20,
+    };
+  }
+}
+
+/**
+ * Save holder watch configuration to the server
+ */
+async function saveHolderWatchConfig() {
+  const config = {
+    enabled: $("#hw-enabled")?.checked ?? false,
+    check_interval_secs: parseInt($("#hw-interval")?.value, 10) || 60,
+    notify_new_holders: $("#hw-notify-new")?.checked ?? true,
+    notify_holder_drop: $("#hw-notify-drop")?.checked ?? true,
+    min_holder_change: parseInt($("#hw-min-change")?.value, 10) || 5,
+    holder_drop_percent: parseFloat($("#hw-drop-percent")?.value) || 10.0,
+    max_watched_tokens: parseInt($("#hw-max-tokens")?.value, 10) || 20,
+  };
+
+  try {
+    const res = await fetch("/api/config/holder_watch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(config),
+    });
+
+    if (res.ok) {
+      Utils.showToast("Holder Watch settings saved", "success");
+    } else {
+      const errData = await res.json().catch(() => ({}));
+      Utils.showToast(errData.error || "Failed to save settings", "error");
+    }
+  } catch (e) {
+    console.error("[HolderWatch] Save error:", e);
+    Utils.showToast("Error saving settings", "error");
+  }
+}
+
+/**
+ * Render the holder watch content after config is loaded
+ */
+function renderHolderWatchContent(container, actionsContainer, config) {
+  container.innerHTML = `
+    <div class="tool-panel holder-watch-tool">
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-plus"></i> Add Token to Watch</h3>
+          <h3><i class="icon-settings"></i> Holder Watch Settings</h3>
         </div>
         <div class="section-content">
-          <div class="input-group">
-            <input type="text" id="watch-token-input" placeholder="Enter token mint address..." />
-            <button class="btn primary" id="add-watch-btn">
-              <i class="icon-plus"></i> Add
+          <div class="hw-form-row">
+            <div class="hw-form-group hw-toggle-group">
+              <label for="hw-enabled">Enable Holder Watching</label>
+              <label class="toggle-switch">
+                <input type="checkbox" id="hw-enabled" ${config.enabled ? "checked" : ""}>
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="hw-form-row hw-two-cols">
+            <div class="hw-form-group">
+              <label for="hw-interval">Check Interval (seconds)</label>
+              <input type="number" id="hw-interval" class="form-input" 
+                value="${config.check_interval_secs || 60}" min="10" max="3600" step="10">
+              <span class="hint">How often to check holder counts (10-3600s)</span>
+            </div>
+            <div class="hw-form-group">
+              <label for="hw-max-tokens">Max Watched Tokens</label>
+              <input type="number" id="hw-max-tokens" class="form-input" 
+                value="${config.max_watched_tokens || 20}" min="1" max="100">
+              <span class="hint">Maximum tokens to watch simultaneously</span>
+            </div>
+          </div>
+
+          <div class="hw-form-row hw-two-cols">
+            <div class="hw-form-group hw-toggle-group">
+              <label for="hw-notify-new">Notify on New Holders</label>
+              <label class="toggle-switch">
+                <input type="checkbox" id="hw-notify-new" ${config.notify_new_holders ? "checked" : ""}>
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="hw-form-group hw-toggle-group">
+              <label for="hw-notify-drop">Notify on Holder Drop</label>
+              <label class="toggle-switch">
+                <input type="checkbox" id="hw-notify-drop" ${config.notify_holder_drop ? "checked" : ""}>
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="hw-form-row hw-two-cols">
+            <div class="hw-form-group">
+              <label for="hw-min-change">Min Holder Change</label>
+              <input type="number" id="hw-min-change" class="form-input" 
+                value="${config.min_holder_change || 5}" min="1" max="1000">
+              <span class="hint">Minimum holder change to trigger notification</span>
+            </div>
+            <div class="hw-form-group">
+              <label for="hw-drop-percent">Holder Drop Threshold (%)</label>
+              <input type="number" id="hw-drop-percent" class="form-input" 
+                value="${config.holder_drop_percent || 10.0}" min="1" max="100" step="0.5">
+              <span class="hint">Percentage drop to trigger alert</span>
+            </div>
+          </div>
+
+          <div class="hw-form-actions">
+            <button class="btn primary" id="hw-save-config">
+              <i class="icon-save"></i> Save Settings
             </button>
           </div>
         </div>
@@ -461,14 +604,21 @@ function renderTokenWatchTool(container, actionsContainer) {
 
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-list"></i> Watched Tokens</h3>
+          <h3><i class="icon-eye"></i> Watched Tokens</h3>
         </div>
         <div class="section-content">
-          <div class="watched-tokens-list" id="watched-tokens-list">
+          <div class="hw-add-token-group">
+            <input type="text" id="hw-token-input" class="form-input" 
+              placeholder="Enter token mint address...">
+            <button class="btn primary" id="hw-add-token">
+              <i class="icon-plus"></i> Add
+            </button>
+          </div>
+          <div id="hw-token-list" class="hw-token-list">
             <div class="empty-state">
               <i class="icon-eye-off"></i>
               <p>No tokens being watched</p>
-              <small>Add a token above to start monitoring</small>
+              <small>Add a token mint address above to start watching</small>
             </div>
           </div>
         </div>
@@ -476,16 +626,46 @@ function renderTokenWatchTool(container, actionsContainer) {
     </div>
   `;
 
+  // Wire up save config button
+  const saveBtn = $("#hw-save-config");
+  if (saveBtn) {
+    saveBtn.addEventListener("click", saveHolderWatchConfig);
+  }
+
+  // Wire up add token button (placeholder - database integration needed)
+  const addBtn = $("#hw-add-token");
+  const tokenInput = $("#hw-token-input");
+  if (addBtn && tokenInput) {
+    addBtn.addEventListener("click", () => {
+      const mint = tokenInput.value.trim();
+      if (mint && mint.length >= 32) {
+        Utils.showToast("Token watching feature coming soon", "info");
+        tokenInput.value = "";
+      } else {
+        Utils.showToast("Please enter a valid mint address", "error");
+      }
+    });
+
+    tokenInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") {
+        addBtn.click();
+      }
+    });
+  }
+
+  // Render action bar
   actionsContainer.innerHTML = `
-    <button class="btn" id="refresh-watch-btn">
-      <i class="icon-refresh-cw"></i> Refresh All
-    </button>
-    <button class="btn danger" id="clear-watch-btn">
-      <i class="icon-trash-2"></i> Clear All
+    <button class="btn" id="hw-refresh-action">
+      <i class="icon-refresh-cw"></i> Refresh
     </button>
   `;
 
-  // TODO: Wire up token watch functionality
+  const refreshBtn = $("#hw-refresh-action");
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", () => {
+      renderTokenWatchTool(container, actionsContainer);
+    });
+  }
 }
 
 // =============================================================================

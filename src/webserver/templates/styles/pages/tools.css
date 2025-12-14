@@ -3264,3 +3264,176 @@
   opacity: 1;
 }
 
+/* =============================================================================
+   Holder Watch Tool Styles
+   ============================================================================= */
+
+.holder-watch-tool .hw-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xl);
+  color: var(--text-secondary);
+}
+
+.holder-watch-tool .hw-loading .spin {
+  animation: spin 1s linear infinite;
+}
+
+.holder-watch-tool .hw-form-row {
+  margin-bottom: var(--spacing-md);
+}
+
+.holder-watch-tool .hw-form-row.hw-two-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--spacing-md);
+}
+
+@media (max-width: 768px) {
+  .holder-watch-tool .hw-form-row.hw-two-cols {
+    grid-template-columns: 1fr;
+  }
+}
+
+.holder-watch-tool .hw-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.holder-watch-tool .hw-form-group label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.holder-watch-tool .hw-form-group .hint {
+  font-size: 0.6875rem;
+  color: var(--text-muted);
+}
+
+.holder-watch-tool .hw-form-group.hw-toggle-group {
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--spacing-sm) 0;
+}
+
+.holder-watch-tool .form-input {
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-family: var(--font-mono);
+}
+
+.holder-watch-tool .form-input:focus {
+  outline: none;
+  border-color: var(--link-color);
+}
+
+.holder-watch-tool .hw-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--spacing-md);
+  border-top: 1px solid var(--border-color);
+  margin-top: var(--spacing-md);
+}
+
+.holder-watch-tool .hw-add-token-group {
+  display: flex;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.holder-watch-tool .hw-add-token-group .form-input {
+  flex: 1;
+}
+
+.holder-watch-tool .hw-token-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.holder-watch-tool .hw-token-list .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xl);
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.holder-watch-tool .hw-token-list .empty-state i {
+  font-size: 2rem;
+  opacity: 0.5;
+}
+
+.holder-watch-tool .hw-token-list .empty-state p {
+  margin: 0;
+  font-weight: 500;
+}
+
+.holder-watch-tool .hw-token-list .empty-state small {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+/* Toggle Switch for Holder Watch */
+.holder-watch-tool .toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.holder-watch-tool .toggle-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.holder-watch-tool .toggle-switch .slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: var(--bg-tertiary);
+  border-radius: 24px;
+  transition: background 0.2s;
+}
+
+.holder-watch-tool .toggle-switch .slider::before {
+  position: absolute;
+  content: "";
+  height: 18px;
+  width: 18px;
+  left: 3px;
+  bottom: 3px;
+  background: var(--text-secondary);
+  border-radius: 50%;
+  transition:
+    transform 0.2s,
+    background 0.2s;
+}
+
+.holder-watch-tool .toggle-switch input:checked + .slider {
+  background: var(--success-color);
+}
+
+.holder-watch-tool .toggle-switch input:checked + .slider::before {
+  transform: translateX(20px);
+  background: white;
+}

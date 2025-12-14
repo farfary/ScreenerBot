@@ -410,6 +410,47 @@
   gap: 12px;
 }
 
+/* Visibility separator for technical/advanced sections */
+.config-visibility-separator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0 8px;
+  padding: 0 4px;
+}
+
+.config-visibility-separator::before,
+.config-visibility-separator::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--border-color) 20%,
+    var(--border-color) 80%,
+    transparent
+  );
+}
+
+.config-visibility-separator span {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+/* Subtle visual distinction for technical categories */
+.config-category[data-visibility="technical"] {
+  opacity: 0.85;
+}
+
+.config-category[data-visibility="technical"]:hover {
+  opacity: 1;
+}
+
 .config-category {
   border: 1px solid rgb(148, 163, 184, 0.18);
   border-radius: 12px;

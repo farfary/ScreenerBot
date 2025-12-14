@@ -36,6 +36,9 @@ pub struct FieldMetadata {
     pub impact: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub category: Option<&'static str>,
+    /// Visibility level for UI rendering: "primary", "secondary", or "technical"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub visibility: Option<&'static str>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub min: Option<f64>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -74,6 +77,7 @@ impl FieldMetadata {
             unit: extras.unit,
             impact: extras.impact,
             category: extras.category,
+            visibility: None, // Set by collect_config_metadata based on category
             min: extras.min,
             max: extras.max,
             step: extras.step,
@@ -305,27 +309,39 @@ pub fn collect_config_metadata() -> ConfigMetadata {
                 children.retain(|_, child| !child.hidden.unwrap_or(false));
             }
 
-            let normalized = field.category.map(normalize_category).unwrap_or("General");
-            field.category = Some(normalized);
+            // Keep original category, derive visibility from it
+            let category = field.category.unwrap_or("General");
+            field.category = Some(category);
+            field.visibility = Some(derive_visibility(category));
         }
     }
 
     map
 }
 
-fn normalize_category(category: &str) -> &'static str {
-    if category.contains("Timeout") {
-        return "Developer";
-    }
-
+/// Determines visibility level for a category
+/// - "primary": Essential settings, expanded by default
+/// - "secondary": Important but less frequently changed, collapsed
+/// - "technical": Power-user settings (timeouts, retries, etc.), collapsed and grouped at bottom
+fn derive_visibility(category: &str) -> &'static str {
     match category {
-        "Activity" | "Age" | "Blacklist" | "Community" | "Confirmation" | "Core Trading"
-        | "Display" | "Liquidity" | "Maintenance" | "Market Cap" | "Performance" | "Profit"
-        | "Profit Management" | "Requirements" | "Security" | "Tokens Tab" | "Transactions" => {
-            "General"
-        }
-        "Debug" | "RPC" | "Validation" => "Developer",
-        _ => "Advanced",
+        // Primary - Essential user settings (expand by default)
+        "Core Trading" | "ROI Exit" | "DCA" | "Trailing Stop"
+        | "Liquidity" | "Market Cap" | "Security" | "Age"
+        | "Source Control" | "Global Control"
+        | "Connection" | "Notifications"
+        | "Endpoints" | "Router" | "Slippage"
+        | "Profit" | "Loss Detection" | "Partial Exit"
+        | "General" => "primary",
+
+        // Technical - Power-user settings (collapsed, grouped at bottom)
+        "Timeouts" | "Retries" | "Rate Limiting"
+        | "Circuit Breaker" | "Connection Pooling"
+        | "Statistics" | "Cache" | "Retention"
+        | "Debug" | "Validation" | "Provider Selection" => "technical",
+
+        // Secondary - Everything else (collapsed)
+        _ => "secondary",
     }
 }
 

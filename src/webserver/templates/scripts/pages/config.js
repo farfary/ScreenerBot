@@ -1049,6 +1049,30 @@ function renderSectionSummary(metadata) {
   return summaryItems.join("\n");
 }
 
+/**
+ * Sort categories by visibility level (primary first, then secondary, then technical)
+ * Within same visibility, sort alphabetically
+ */
+function sortCategoriesByVisibility(categories) {
+  const visibilityOrder = { primary: 0, secondary: 1, technical: 2 };
+  return categories.sort(([catA, fieldsA], [catB, fieldsB]) => {
+    const visA = fieldsA[0]?.[1]?.visibility ?? "secondary";
+    const visB = fieldsB[0]?.[1]?.visibility ?? "secondary";
+    const orderDiff = visibilityOrder[visA] - visibilityOrder[visB];
+    if (orderDiff !== 0) return orderDiff;
+    return catA.localeCompare(catB);
+  });
+}
+
+/**
+ * Create a visual separator for visibility sections
+ */
+function createVisibilitySeparator(label) {
+  const sep = create("div", { className: "config-visibility-separator" });
+  sep.innerHTML = `<span>${Utils.escapeHtml(label)}</span>`;
+  return sep;
+}
+
 function renderCategories(sectionId) {
   const container = $("#configCategories");
   if (!container) {
@@ -1080,9 +1104,12 @@ function renderCategories(sectionId) {
   const originalConfig = state.original?.[sectionId] ?? {};
 
   const categories = Array.from(grouped.entries());
-  categories.sort(([a], [b]) => a.localeCompare(b));
+  sortCategoriesByVisibility(categories);
 
+  let lastVisibility = null;
   for (const [category, fieldsList] of categories) {
+    // Get visibility of this category (from first field)
+    const categoryVisibility = fieldsList[0]?.[1]?.visibility ?? "secondary";
     // Sort fields: simple types first, then object types (with sub-configs), alphabetically within each group
     fieldsList.sort(([keyA, metaA], [keyB, metaB]) => {
       const isObjectA = metaA.type === "object";
@@ -1093,7 +1120,19 @@ function renderCategories(sectionId) {
       return keyA.localeCompare(keyB);
     });
 
-    const categoryEl = create("div", { className: "config-category collapsed" });
+    // Add separator before technical categories
+    if (categoryVisibility === "technical" && lastVisibility !== "technical") {
+      container.appendChild(createVisibilitySeparator("Technical Settings"));
+    }
+    lastVisibility = categoryVisibility;
+
+    // Primary visibility categories are expanded by default
+    const isCollapsedDefault = categoryVisibility !== "primary";
+    const categoryEl = create("div", {
+      className: isCollapsedDefault ? "config-category collapsed" : "config-category",
+    });
+    categoryEl.dataset.visibility = categoryVisibility;
+
     const header = create("button", {
       type: "button",
       className: "config-category-header",

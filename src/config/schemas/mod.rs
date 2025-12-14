@@ -6,6 +6,7 @@ mod connectivity;
 mod events;
 mod filtering;
 mod gui;
+mod holder_watch;
 mod monitoring;
 mod ohlcv;
 mod pools;
@@ -25,6 +26,7 @@ pub use connectivity::*;
 pub use events::*;
 pub use filtering::*;
 pub use gui::*;
+pub use holder_watch::*;
 pub use monitoring::*;
 pub use ohlcv::*;
 pub use pools::*;
@@ -106,5 +108,8 @@ config_struct! {
 
         /// Telegram bot configuration for notifications and commands
         telegram: TelegramConfig = TelegramConfig::default(),
+
+        /// Holder watch tool configuration
+        holder_watch: HolderWatchConfig = HolderWatchConfig::default(),
     }
 }

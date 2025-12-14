@@ -325,6 +325,7 @@ async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String>) -
         "custom_select.js" => Some(templates::CUSTOM_SELECT_UI),
         "billboard_dialog.js" => Some(templates::BILLBOARD_DIALOG_UI),
         "billboard_row.js" => Some(templates::BILLBOARD_ROW_UI),
+        "pool_selector.js" => Some(templates::POOL_SELECTOR_UI),
         _ => None,
     };
 
