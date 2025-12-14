@@ -193,11 +193,18 @@ class BillboardRow {
   }
 
   /**
-   * Show empty state
+   * Show empty state - keep row visible with message
    */
   _showEmpty() {
-    // Hide the row if no tokens
-    this.hide();
+    const container = this.containerEl?.querySelector("#billboard-row-tokens");
+    if (container) {
+      container.innerHTML = `
+        <div class="billboard-row-state billboard-row-empty">
+          <i class="icon-inbox"></i>
+          <span>No featured tokens yet</span>
+        </div>
+      `;
+    }
   }
 
   /**
@@ -230,17 +237,18 @@ class BillboardRow {
    * Render a single token card
    */
   _renderTokenCard(token) {
-    const logoUrl = token.logo || "/icon.png";
+    const logoUrl = this._getValidLogoUrl(token);
     const featuredClass = token.featured ? "featured" : "";
+    const symbol = token.symbol || "???";
+
+    // Use placeholder if no valid logo URL
+    const logoHtml = logoUrl
+      ? `<img src="${this._escapeHtml(logoUrl)}" alt="${this._escapeHtml(symbol)}" class="billboard-row-card-logo" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/><div class="billboard-row-card-logo-placeholder" style="display:none"><span>${this._escapeHtml(symbol.charAt(0).toUpperCase())}</span></div>`
+      : `<div class="billboard-row-card-logo-placeholder"><span>${this._escapeHtml(symbol.charAt(0).toUpperCase())}</span></div>`;
 
     return `
-      <div class="billboard-row-card ${featuredClass}" title="${this._escapeHtml(token.name)} (${this._escapeHtml(token.symbol)})">
-        <img 
-          src="${this._escapeHtml(logoUrl)}" 
-          alt="${this._escapeHtml(token.symbol)}" 
-          class="billboard-row-card-logo" 
-          onerror="this.src='/icon.png'"
-        />
+      <div class="billboard-row-card ${featuredClass}" title="${this._escapeHtml(token.name)} (${this._escapeHtml(symbol)})">
+        ${logoHtml}
         <div class="billboard-row-card-info">
           <span class="billboard-row-card-name">${this._escapeHtml(token.name)}</span>
           <span class="billboard-row-card-symbol">${this._escapeHtml(token.symbol)}</span>
@@ -258,6 +266,19 @@ class BillboardRow {
     const div = document.createElement("div");
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  /**
+   * Get a valid logo URL - only use if starts with http:// or https://
+   * @param {Object} token - Token object with potential logo fields
+   * @returns {string|null} Valid URL or null for placeholder
+   */
+  _getValidLogoUrl(token) {
+    const url = token.logo_url || token.logo || token.icon || null;
+    if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
+      return url;
+    }
+    return null;
   }
 }
 

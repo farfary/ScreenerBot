@@ -208,7 +208,7 @@ class BillboardDialog {
     }
 
     const emptyState = tokens.length === 0
-      ? `<div class="billboard-cat-empty"><i class="icon-inbox"></i><span>No tokens yet</span></div>`
+      ? "<div class=\"billboard-cat-empty\"><i class=\"icon-inbox\"></i><span>No tokens yet</span></div>"
       : "";
 
     const tokenCards = tokens
@@ -245,7 +245,7 @@ class BillboardDialog {
   }
 
   _renderTokenCard(token) {
-    const logoUrl = token.logo || token.icon || "/icon.png";
+    const logoUrl = this._getValidLogoUrl(token);
     const name = token.name || "Unknown";
     const symbol = token.symbol || "???";
     const mint = token.mint || token.id || "";
@@ -256,15 +256,15 @@ class BillboardDialog {
       ? '<span class="billboard-cat-badge"><i class="icon-star"></i></span>'
       : "";
 
+    // Use placeholder SVG if no valid logo URL
+    const logoHtml = logoUrl
+      ? `<img src="${this._escapeHtml(logoUrl)}" alt="${this._escapeHtml(symbol)}" class="billboard-cat-logo" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/><div class="billboard-cat-logo-placeholder" style="display:none"><span>${this._escapeHtml(symbol.charAt(0).toUpperCase())}</span></div>`
+      : `<div class="billboard-cat-logo-placeholder"><span>${this._escapeHtml(symbol.charAt(0).toUpperCase())}</span></div>`;
+
     return `
       <div class="billboard-cat-card ${featuredClass}" data-mint="${mint}" title="${name} (${symbol})">
         ${badge}
-        <img 
-          src="${this._escapeHtml(logoUrl)}" 
-          alt="${this._escapeHtml(symbol)}" 
-          class="billboard-cat-logo" 
-          onerror="this.src='/icon.png'"
-        />
+        ${logoHtml}
         <div class="billboard-cat-info">
           <span class="billboard-cat-name">${this._escapeHtml(name)}</span>
           <span class="billboard-cat-symbol">${this._escapeHtml(symbol)}</span>
@@ -333,6 +333,19 @@ class BillboardDialog {
     const div = document.createElement("div");
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  /**
+   * Get a valid logo URL - only use if starts with http:// or https://
+   * @param {Object} token - Token object with potential logo fields
+   * @returns {string|null} Valid URL or null for placeholder
+   */
+  _getValidLogoUrl(token) {
+    const url = token.logo_url || token.logo || token.icon || null;
+    if (url && (url.startsWith("http://") || url.startsWith("https://"))) {
+      return url;
+    }
+    return null;
   }
 }
 

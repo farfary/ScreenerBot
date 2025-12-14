@@ -193,6 +193,27 @@
   flex-shrink: 0;
 }
 
+/* Logo placeholder - shown when no valid URL */
+.billboard-row-card-logo-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--bg-secondary, #161b22), var(--bg-primary, #0d1117));
+  border: 1px solid rgb(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.billboard-row-card-logo-placeholder span {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary, #8b949e);
+  text-transform: uppercase;
+}
+
 /* Info */
 .billboard-row-card-info {
   display: flex;

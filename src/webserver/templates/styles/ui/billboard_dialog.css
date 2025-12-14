@@ -600,6 +600,27 @@
   flex-shrink: 0;
 }
 
+/* Token logo placeholder - shown when no valid URL */
+.billboard-cat-logo-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--bg-secondary, #161b22), var(--bg-primary, #0d1117));
+  border: 2px solid rgb(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.billboard-cat-logo-placeholder span {
+  font-family: var(--font-mono, "JetBrains Mono", monospace);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-secondary, #8b949e);
+  text-transform: uppercase;
+}
+
 /* Token info */
 .billboard-cat-info {
   display: flex;
