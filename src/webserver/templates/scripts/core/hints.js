@@ -800,6 +800,29 @@ Always verify security before trading significant amounts.`,
 The Pool Service calculates prices from the highest-liquidity SOL pair.`,
     },
   },
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // UI COMPONENTS
+  // ═══════════════════════════════════════════════════════════════════════════
+  ui: {
+    billboard: {
+      id: "ui.billboard",
+      title: "Billboard",
+      content: `Billboard showcases **featured tokens** and trending projects from the community.
+
+**What you'll see:**
+• Promoted tokens with verified listings
+• Featured projects highlighted with ⭐
+• Token logos and names for quick recognition
+
+**Submitting your token:**
+Want your token featured? Visit **screenerbot.io/submit-token** to apply for a listing.
+
+**Disabling Billboard:**
+If you prefer a cleaner interface, you can hide this row in **Settings → Interface → Show Billboard**.`,
+      learnMoreUrl: "https://screenerbot.io/submit-token",
+    },
+  },
 };
 
 /**

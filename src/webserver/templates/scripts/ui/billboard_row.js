@@ -1,21 +1,74 @@
 /**
  * Billboard Row - Horizontal scrollable promotional row
  *
- * Shows featured tokens from the billboard API in a Netflix-style
+ * Shows featured tokens from the billboard API in a compact
  * horizontal scrolling row at the bottom of specific pages.
  *
- * Visibility: Only on Home and Tokens pages
+ * Visibility: Only on Home and Tokens pages (when enabled in settings)
  */
 
 import { $ } from "../core/dom.js";
 import { openBillboard } from "./billboard_dialog.js";
+import * as Hints from "../core/hints.js";
+import { HintTrigger } from "./hint_popover.js";
 
 const CONTAINER_ID = "billboard-row";
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const MAX_NAME_LENGTH = 12; // Max characters for token name display
 
 // Cache for billboard data
 let cachedTokens = null;
 let cacheTimestamp = 0;
+
+// Cache for config setting
+let configEnabled = null;
+let configCheckTimestamp = 0;
+const CONFIG_CHECK_TTL_MS = 30 * 1000; // 30 seconds
+
+/**
+ * Check if billboard is enabled in config
+ */
+async function isBillboardEnabled() {
+  const now = Date.now();
+
+  // Return cached value if still valid
+  if (configEnabled !== null && now - configCheckTimestamp < CONFIG_CHECK_TTL_MS) {
+    return configEnabled;
+  }
+
+  try {
+    const response = await fetch("/api/config/gui");
+    if (response.ok) {
+      const result = await response.json();
+      const config = result.data?.data || result.data || result;
+      configEnabled = config?.dashboard?.interface?.show_billboard !== false;
+    } else {
+      configEnabled = true; // Default to showing on error
+    }
+  } catch {
+    configEnabled = true; // Default to showing on error
+  }
+
+  configCheckTimestamp = now;
+  return configEnabled;
+}
+
+/**
+ * Reset config cache (call when settings change)
+ */
+export function resetBillboardConfigCache() {
+  configEnabled = null;
+  configCheckTimestamp = 0;
+}
+
+/**
+ * Truncate text with ellipsis
+ */
+function truncateName(name, maxLength = MAX_NAME_LENGTH) {
+  if (!name) return "???";
+  if (name.length <= maxLength) return name;
+  return name.slice(0, maxLength - 1) + "…";
+}
 
 /**
  * Billboard Row Manager
@@ -31,6 +84,12 @@ class BillboardRow {
    */
   async show() {
     if (this.isVisible) return;
+
+    // Check if billboard is enabled in settings
+    const enabled = await isBillboardEnabled();
+    if (!enabled) {
+      return;
+    }
 
     this._createContainer();
     this.isVisible = true;
@@ -79,20 +138,18 @@ class BillboardRow {
     container.innerHTML = `
       <div class="billboard-row-inner">
         <div class="billboard-row-header">
-          <span class="billboard-row-title">
-            <i class="icon-megaphone"></i>
-            Featured Tokens
-          </span>
-          <button class="billboard-row-view-all" title="View All">
-            View All <i class="icon-chevron-right"></i>
+          <span class="billboard-row-label">Featured</span>
+          <button class="billboard-row-view-all" title="View All Listings">
+            <span>All</span>
+            <i class="icon-chevron-right"></i>
           </button>
         </div>
         <div class="billboard-row-scroll">
-          <button class="billboard-row-arrow billboard-row-arrow-left" title="Scroll left">
+          <button class="billboard-row-arrow billboard-row-arrow-left" aria-label="Scroll left">
             <i class="icon-chevron-left"></i>
           </button>
           <div class="billboard-row-tokens" id="billboard-row-tokens"></div>
-          <button class="billboard-row-arrow billboard-row-arrow-right" title="Scroll right">
+          <button class="billboard-row-arrow billboard-row-arrow-right" aria-label="Scroll right">
             <i class="icon-chevron-right"></i>
           </button>
         </div>
@@ -111,6 +168,33 @@ class BillboardRow {
 
     // Setup event listeners
     this._setupEventListeners();
+
+    // Add hint button
+    this._addHintButton();
+  }
+
+  /**
+   * Add hint button to header
+   */
+  async _addHintButton() {
+    await Hints.init();
+    if (!Hints.isEnabled()) return;
+
+    const hint = Hints.getHint("ui.billboard");
+    if (!hint || Hints.isDismissed(hint.id)) return;
+
+    const header = this.containerEl?.querySelector(".billboard-row-header");
+    if (!header) return;
+
+    // Insert hint trigger after the label
+    const label = header.querySelector(".billboard-row-label");
+    if (label) {
+      HintTrigger.attach(label.parentNode, hint, "ui.billboard", {
+        size: "sm",
+        position: "bottom",
+      });
+      HintTrigger.initAll();
+    }
   }
 
   /**
@@ -131,7 +215,7 @@ class BillboardRow {
     const rightArrow = this.containerEl.querySelector(".billboard-row-arrow-right");
 
     if (scrollContainer && leftArrow && rightArrow) {
-      const scrollAmount = 300;
+      const scrollAmount = 200;
 
       leftArrow.addEventListener("click", () => {
         scrollContainer.scrollBy({ left: -scrollAmount, behavior: "smooth" });
@@ -178,30 +262,56 @@ class BillboardRow {
   }
 
   /**
-   * Show loading state
+   * Show loading state with skeleton cards
    */
   _showLoading() {
     const container = this.containerEl?.querySelector("#billboard-row-tokens");
     if (container) {
-      container.innerHTML = `
-        <div class="billboard-row-state">
-          <i class="icon-loader spin"></i>
-          <span>Loading...</span>
+      // Show 5 skeleton cards
+      const skeletons = Array(5)
+        .fill(0)
+        .map(
+          () => `
+        <div class="billboard-row-card billboard-row-skeleton">
+          <div class="billboard-row-card-logo-placeholder skeleton-pulse"></div>
+          <span class="billboard-row-card-name skeleton-pulse"></span>
         </div>
-      `;
+      `
+        )
+        .join("");
+      container.innerHTML = skeletons;
     }
   }
 
   /**
-   * Show empty state - keep row visible with message
+   * Show empty state with placeholder cards
    */
   _showEmpty() {
     const container = this.containerEl?.querySelector("#billboard-row-tokens");
     if (container) {
       container.innerHTML = `
-        <div class="billboard-row-state billboard-row-empty">
-          <i class="icon-inbox"></i>
-          <span>No featured tokens yet</span>
+        <div class="billboard-row-empty">
+          <div class="billboard-row-empty-cards">
+            <div class="billboard-row-card billboard-row-card-placeholder">
+              <div class="billboard-row-card-logo-placeholder">
+                <i class="icon-coins"></i>
+              </div>
+              <span class="billboard-row-card-name">—</span>
+            </div>
+            <div class="billboard-row-card billboard-row-card-placeholder">
+              <div class="billboard-row-card-logo-placeholder">
+                <i class="icon-coins"></i>
+              </div>
+              <span class="billboard-row-card-name">—</span>
+            </div>
+            <div class="billboard-row-card billboard-row-card-placeholder">
+              <div class="billboard-row-card-logo-placeholder">
+                <i class="icon-coins"></i>
+              </div>
+              <span class="billboard-row-card-name">—</span>
+            </div>
+          </div>
+          <span class="billboard-row-empty-text">No featured tokens</span>
         </div>
       `;
     }
@@ -234,26 +344,26 @@ class BillboardRow {
   }
 
   /**
-   * Render a single token card
+   * Render a single compact token card (logo + name only)
    */
   _renderTokenCard(token) {
     const logoUrl = this._getValidLogoUrl(token);
     const featuredClass = token.featured ? "featured" : "";
     const symbol = token.symbol || "???";
+    const name = token.name || symbol;
+    const displayName = truncateName(name);
+    const fullTitle = `${name} (${symbol})`;
 
     // Use placeholder if no valid logo URL
     const logoHtml = logoUrl
-      ? `<img src="${this._escapeHtml(logoUrl)}" alt="${this._escapeHtml(symbol)}" class="billboard-row-card-logo" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/><div class="billboard-row-card-logo-placeholder" style="display:none"><span>${this._escapeHtml(symbol.charAt(0).toUpperCase())}</span></div>`
+      ? `<img src="${this._escapeHtml(logoUrl)}" alt="" class="billboard-row-card-logo" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/><div class="billboard-row-card-logo-placeholder" style="display:none"><span>${this._escapeHtml(symbol.charAt(0).toUpperCase())}</span></div>`
       : `<div class="billboard-row-card-logo-placeholder"><span>${this._escapeHtml(symbol.charAt(0).toUpperCase())}</span></div>`;
 
     return `
-      <div class="billboard-row-card ${featuredClass}" title="${this._escapeHtml(token.name)} (${this._escapeHtml(symbol)})">
+      <div class="billboard-row-card ${featuredClass}" title="${this._escapeHtml(fullTitle)}">
         ${logoHtml}
-        <div class="billboard-row-card-info">
-          <span class="billboard-row-card-name">${this._escapeHtml(token.name)}</span>
-          <span class="billboard-row-card-symbol">${this._escapeHtml(token.symbol)}</span>
-        </div>
-        ${token.featured ? '<span class="billboard-row-card-badge"><i class="icon-star"></i></span>' : ""}
+        <span class="billboard-row-card-name">${this._escapeHtml(displayName)}</span>
+        ${token.featured ? '<i class="icon-star billboard-row-card-star"></i>' : ""}
       </div>
     `;
   }

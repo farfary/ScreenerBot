@@ -860,7 +860,9 @@
   border: 1px solid var(--border-color);
   border-radius: 8px;
   color: var(--text-secondary);
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .token-tag:hover {
@@ -1981,7 +1983,9 @@
   font-weight: 700;
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   text-align: right;
 }
 
@@ -2634,7 +2638,9 @@
   background: var(--bg-secondary);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .tx-pair-item:hover:not(.empty) {
@@ -2775,7 +2781,9 @@
   background: var(--bg-primary);
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
-  transition: background 0.15s ease, border-color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
 }
 
 .transaction-row:hover {
@@ -2875,7 +2883,9 @@
   font-weight: 600;
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .transaction-amount {
@@ -2897,7 +2907,9 @@
   font-size: 0.75rem;
   font-weight: 600;
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .transaction-row.entry .transaction-amount-value {
@@ -2931,7 +2943,9 @@
   font-size: 0.75rem;
   font-weight: 700;
   font-family: var(--font-data);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .transaction-row.entry .transaction-sol-value,
@@ -2957,7 +2971,9 @@
   height: 24px;
   border-radius: 4px;
   color: var(--text-muted);
-  transition: background 0.15s ease, color 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
 }
 
 .transaction-link a:hover {

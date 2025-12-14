@@ -6,6 +6,7 @@
  */
 
 import { $ } from "../core/dom.js";
+import { openExternal } from "../core/utils.js";
 
 const DIALOG_ID = "billboard-dialog";
 
@@ -106,10 +107,10 @@ class BillboardDialog {
             </div>
           </div>
           <div class="billboard-header-actions">
-            <a href="https://screenerbot.io/submit-token" target="_blank" rel="noopener noreferrer" class="billboard-submit-btn">
+            <button type="button" class="billboard-submit-btn" data-external-url="https://screenerbot.io/submit-token">
               <i class="icon-plus"></i>
               <span>Submit Token</span>
-            </a>
+            </button>
             <button class="billboard-close-btn" title="Close (ESC)">
               <i class="icon-x"></i>
             </button>
@@ -128,6 +129,15 @@ class BillboardDialog {
     const closeBtn = dialog.querySelector(".billboard-close-btn");
     if (closeBtn) {
       closeBtn.addEventListener("click", () => this.close());
+    }
+
+    // Submit Token button - opens external URL
+    const submitBtn = dialog.querySelector(".billboard-submit-btn");
+    if (submitBtn) {
+      submitBtn.addEventListener("click", () => {
+        const url = submitBtn.dataset.externalUrl;
+        if (url) openExternal(url);
+      });
     }
 
     // Close on Escape key

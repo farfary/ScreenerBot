@@ -426,11 +426,7 @@
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: linear-gradient(
-    135deg,
-    var(--bg-secondary, #161b22),
-    var(--bg-primary, #0d1117)
-  );
+  background: linear-gradient(135deg, var(--bg-secondary, #161b22), var(--bg-primary, #0d1117));
   border: 2px solid rgb(255, 255, 255, 0.1);
   flex-shrink: 0;
   z-index: 1;

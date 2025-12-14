@@ -227,7 +227,9 @@
 
 .transaction-details-dialog .meta-item span {
   font-family: var(--font-mono);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 /* =============================================================================

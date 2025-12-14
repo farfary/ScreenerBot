@@ -53,6 +53,9 @@ config_struct! {
 
         /// Show contextual help hints throughout the dashboard
         show_hints: bool = true,
+
+        /// Show billboard row featuring promoted tokens on Home and Tokens pages
+        show_billboard: bool = true,
     }
 }
 

@@ -771,6 +771,19 @@ export class SettingsDialog {
               </label>
             </div>
           </div>
+
+          <div class="settings-field">
+            <div class="settings-field-info">
+              <label>Show Billboard Row</label>
+              <span class="settings-field-hint">Display featured tokens row on Home and Tokens pages</span>
+            </div>
+            <div class="settings-field-control">
+              <label class="settings-toggle">
+                <input type="checkbox" id="settingShowBillboard" ${iface.show_billboard !== false ? "checked" : ""}>
+                <span class="settings-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -789,6 +802,7 @@ export class SettingsDialog {
       pageSize: content.querySelector("#settingPageSize"),
       autoExpand: content.querySelector("#settingAutoExpand"),
       showHints: content.querySelector("#settingShowHints"),
+      showBillboard: content.querySelector("#settingShowBillboard"),
     };
 
     const updateSetting = (path, value) => {
@@ -834,6 +848,11 @@ export class SettingsDialog {
     if (fields.showHints) {
       fields.showHints.addEventListener("change", (e) =>
         updateSetting("show_hints", e.target.checked)
+      );
+    }
+    if (fields.showBillboard) {
+      fields.showBillboard.addEventListener("change", (e) =>
+        updateSetting("show_billboard", e.target.checked)
       );
     }
   }
