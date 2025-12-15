@@ -3,6 +3,7 @@
  * Full-screen dialog showing comprehensive position information with multiple tabs
  */
 import * as Utils from "../core/utils.js";
+import { createFocusTrap } from "../core/utils.js";
 import { Poller } from "../core/poller.js";
 import { requestManager } from "../core/request_manager.js";
 import { TradeActionDialog } from "./trade_action_dialog.js";
@@ -29,6 +30,7 @@ export class PositionDetailsDialog {
     this._copyMintHandler = null;
     this._actionHandlers = null;
     this._filterHandlers = null;
+    this._focusTrap = null;
   }
 
   /**
@@ -64,6 +66,16 @@ export class PositionDetailsDialog {
       requestAnimationFrame(() => {
         if (this.dialogEl) {
           this.dialogEl.classList.add("active");
+          // Add ARIA attributes for accessibility
+          const container = this.dialogEl.querySelector(".dialog-container");
+          if (container) {
+            container.setAttribute("role", "dialog");
+            container.setAttribute("aria-modal", "true");
+            container.setAttribute("aria-labelledby", "pdd-dialog-title");
+          }
+          // Activate focus trap
+          this._focusTrap = createFocusTrap(this.dialogEl);
+          this._focusTrap.activate();
         }
       });
 
@@ -170,6 +182,12 @@ export class PositionDetailsDialog {
    */
   close() {
     if (!this.dialogEl) return;
+
+    // Deactivate focus trap
+    if (this._focusTrap) {
+      this._focusTrap.deactivate();
+      this._focusTrap = null;
+    }
 
     this._stopPolling();
     this.dialogEl.classList.remove("active");

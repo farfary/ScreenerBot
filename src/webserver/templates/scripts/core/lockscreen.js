@@ -363,6 +363,7 @@ class LockscreenController {
 
     this.isVerifying = true;
     this._hideError();
+    this._setLoadingState(true);
 
     try {
       const response = await fetch("/api/lockscreen/verify", {
@@ -377,15 +378,56 @@ class LockscreenController {
         this.unlock();
       } else {
         this._showError(data.message || "Incorrect password");
+        this._showInputError();
         this._resetInputs();
       }
     } catch (error) {
       console.error("[Lockscreen] Verification failed:", error);
       this._showError("Verification failed");
+      this._showInputError();
       this._resetInputs();
     } finally {
       this.isVerifying = false;
+      this._setLoadingState(false);
     }
+  }
+
+  /**
+   * Set loading state on submit button
+   */
+  _setLoadingState(loading) {
+    const submitBtn = document.getElementById("lockscreenPasswordSubmit");
+    if (submitBtn) {
+      submitBtn.disabled = loading;
+      submitBtn.classList.toggle("verifying", loading);
+    }
+  }
+
+  /**
+   * Show error styling on inputs
+   */
+  _showInputError() {
+    // Add error class to inputs
+    if (this.passwordType === "pin4" || this.passwordType === "pin6") {
+      const digits = this.pinDigitsEl?.querySelectorAll(".lockscreen-pin-digit");
+      digits?.forEach((d) => d.classList.add("error"));
+    } else if (this.passwordInput) {
+      this.passwordInput.classList.add("error");
+    }
+
+    // Remove error class after timeout
+    setTimeout(() => {
+      this._clearInputError();
+    }, 2000);
+  }
+
+  /**
+   * Clear error styling from inputs
+   */
+  _clearInputError() {
+    const digits = this.pinDigitsEl?.querySelectorAll(".lockscreen-pin-digit");
+    digits?.forEach((d) => d.classList.remove("error"));
+    this.passwordInput?.classList.remove("error");
   }
 
   /**

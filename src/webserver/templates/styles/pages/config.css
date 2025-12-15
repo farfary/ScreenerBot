@@ -50,19 +50,23 @@
   width: 100%;
   padding: 8px 12px;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-md);
   background: var(--input-bg);
   color: var(--text-primary);
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   transition:
-    border-color 0.2s ease,
-    box-shadow 0.2s ease;
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.config-search input:hover:not(:disabled) {
+  border-color: var(--primary-color);
 }
 
 .config-search input:focus {
   outline: none;
-  border-color: var(--link-color);
-  box-shadow: 0 0 0 2px var(--primary-alpha-20);
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--primary-alpha-10);
 }
 
 .config-sidebar-body {
@@ -846,7 +850,12 @@
 .config-field-control textarea:focus {
   outline: none;
   border-color: var(--link-color);
-  box-shadow: 0 0 0 2px var(--primary-alpha-20);
+  box-shadow: 0 0 0 3px var(--primary-alpha-20);
+}
+
+.config-field-control input::placeholder,
+.config-field-control textarea::placeholder {
+  color: var(--text-muted);
 }
 
 .config-field-control input[type="checkbox"] {

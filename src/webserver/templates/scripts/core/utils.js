@@ -1232,6 +1232,66 @@
     };
   }
 
+  /**
+   * Creates a focus trap for modal dialogs
+   * @param {HTMLElement} container - The dialog container
+   * @returns {Object} - Object with activate() and deactivate() methods
+   */
+  function createFocusTrap(container) {
+    const focusableSelectors = [
+      'button:not([disabled]):not([tabindex="-1"])',
+      'input:not([disabled]):not([tabindex="-1"])',
+      'select:not([disabled]):not([tabindex="-1"])',
+      'textarea:not([disabled]):not([tabindex="-1"])',
+      '[href]:not([tabindex="-1"])',
+      '[tabindex]:not([tabindex="-1"])',
+    ].join(", ");
+
+    let previousActiveElement = null;
+
+    const getFocusableElements = () =>
+      Array.from(container.querySelectorAll(focusableSelectors)).filter(
+        (el) => el.offsetParent !== null
+      );
+
+    const handleKeydown = (e) => {
+      if (e.key !== "Tab") return;
+
+      const focusable = getFocusableElements();
+      if (focusable.length === 0) return;
+
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+
+    return {
+      activate: () => {
+        previousActiveElement = document.activeElement;
+        container.addEventListener("keydown", handleKeydown);
+        // Focus first focusable element
+        const focusable = getFocusableElements();
+        if (focusable.length > 0) {
+          setTimeout(() => focusable[0].focus(), 50);
+        }
+      },
+      deactivate: () => {
+        container.removeEventListener("keydown", handleKeydown);
+        // Restore focus
+        if (previousActiveElement && previousActiveElement.focus) {
+          previousActiveElement.focus();
+        }
+      },
+    };
+  }
+
   const Utils = {
     formatNumber,
     formatCompactNumber,
@@ -1279,6 +1339,7 @@
     openSolscan,
     debounce,
     throttle,
+    createFocusTrap,
   };
 
   // Keep window.Utils for legacy compatibility during migration
@@ -1338,6 +1399,7 @@ export const {
   openSolscan,
   debounce,
   throttle,
+  createFocusTrap,
 } = (function () {
   // Return Utils from IIFE above (it's in module scope)
   return (typeof window !== "undefined" && window.Utils) || {};

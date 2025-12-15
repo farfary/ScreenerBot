@@ -4,6 +4,7 @@
  */
 /* global createAdvancedChart, MutationObserver */
 import * as Utils from "../core/utils.js";
+import { createFocusTrap } from "../core/utils.js";
 import { Poller } from "../core/poller.js";
 import { requestManager } from "../core/request_manager.js";
 import { TradeActionDialog } from "./trade_action_dialog.js";
@@ -29,6 +30,7 @@ export class TokenDetailsDialog {
     this.walletBalanceFetchedAt = 0;
     this.advancedChart = null;
     this.chartDataLoaded = false; // Track whether OHLCV data has been loaded
+    this._focusTrap = null;
   }
 
   /**
@@ -80,6 +82,16 @@ export class TokenDetailsDialog {
       requestAnimationFrame(() => {
         if (this.dialogEl) {
           this.dialogEl.classList.add("active");
+          // Add ARIA attributes for accessibility
+          const container = this.dialogEl.querySelector(".dialog-container");
+          if (container) {
+            container.setAttribute("role", "dialog");
+            container.setAttribute("aria-modal", "true");
+            container.setAttribute("aria-labelledby", "tdd-dialog-title");
+          }
+          // Activate focus trap
+          this._focusTrap = createFocusTrap(this.dialogEl);
+          this._focusTrap.activate();
         }
       });
 
@@ -287,6 +299,12 @@ export class TokenDetailsDialog {
 
   close() {
     if (!this.dialogEl) return;
+
+    // Deactivate focus trap
+    if (this._focusTrap) {
+      this._focusTrap.deactivate();
+      this._focusTrap = null;
+    }
 
     // Deprioritize token OHLCV monitoring when dialog closes (fire and forget)
     if (this.tokenData?.mint) {

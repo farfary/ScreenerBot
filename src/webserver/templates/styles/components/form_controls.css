@@ -1,0 +1,796 @@
+/* =============================================================================
+   Form Controls - Unified Input System
+   =============================================================================
+   Standardized styles for all form inputs: text, number, select, checkbox,
+   toggle switches, and composed input patterns.
+   ============================================================================= */
+
+/* =============================================================================
+   CSS Custom Properties - Form Control Tokens
+   ============================================================================= */
+:root {
+  /* Input dimensions */
+  --input-padding-y: 8px;
+  --input-padding-x: 12px;
+  --input-border-width: 1px;
+  --input-border-radius: var(--radius-md);
+  --input-font-size: 0.875rem;
+  --input-height: 38px;
+  --input-height-sm: 32px;
+  --input-height-lg: 44px;
+
+  /* Focus ring */
+  --input-focus-ring-width: 3px;
+  --input-focus-ring-color: var(--primary-alpha-10);
+
+  /* Toggle dimensions */
+  --toggle-width: 40px;
+  --toggle-height: 22px;
+  --toggle-knob-size: 16px;
+  --toggle-knob-offset: 3px;
+
+  /* Checkbox dimensions */
+  --checkbox-size: 16px;
+  --checkbox-size-lg: 20px;
+  --checkbox-size-sm: 14px;
+
+  /* Input state colors */
+  --input-border-default: var(--border-color);
+  --input-border-hover: var(--text-muted);
+  --input-border-focus: var(--primary-color);
+  --input-border-error: var(--error-color);
+  --input-border-success: var(--success-color);
+}
+
+/* =============================================================================
+   Base Input Styles
+   =============================================================================
+   Applies to: text, number, password, email, search, url, tel, date, time
+   ============================================================================= */
+
+input[type="text"],
+input[type="number"],
+input[type="password"],
+input[type="email"],
+input[type="search"],
+input[type="url"],
+input[type="tel"],
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  height: var(--input-height);
+  padding: var(--input-padding-y) var(--input-padding-x);
+  font-family: var(--font-data);
+  font-size: var(--input-font-size);
+  font-feature-settings: "tnum" 1, "zero" 1;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--input-bg);
+  border: var(--input-border-width) solid var(--input-border-default);
+  border-radius: var(--input-border-radius);
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease,
+    background-color 0.15s ease;
+  width: 100%;
+}
+
+/* Hover state */
+input[type="text"]:hover:not(:disabled, :read-only),
+input[type="number"]:hover:not(:disabled, :read-only),
+input[type="password"]:hover:not(:disabled, :read-only),
+input[type="email"]:hover:not(:disabled, :read-only),
+input[type="search"]:hover:not(:disabled, :read-only),
+input[type="url"]:hover:not(:disabled, :read-only),
+input[type="tel"]:hover:not(:disabled, :read-only),
+input[type="date"]:hover:not(:disabled, :read-only),
+input[type="time"]:hover:not(:disabled, :read-only),
+input[type="datetime-local"]:hover:not(:disabled, :read-only) {
+  border-color: var(--input-border-hover);
+}
+
+/* Focus state */
+input[type="text"]:focus,
+input[type="number"]:focus,
+input[type="password"]:focus,
+input[type="email"]:focus,
+input[type="search"]:focus,
+input[type="url"]:focus,
+input[type="tel"]:focus,
+input[type="date"]:focus,
+input[type="time"]:focus,
+input[type="datetime-local"]:focus {
+  outline: none;
+  border-color: var(--input-border-focus);
+  box-shadow: 0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
+}
+
+/* Focus-visible for keyboard navigation */
+input[type="text"]:focus-visible,
+input[type="number"]:focus-visible,
+input[type="password"]:focus-visible,
+input[type="email"]:focus-visible,
+input[type="search"]:focus-visible,
+input[type="url"]:focus-visible,
+input[type="tel"]:focus-visible,
+input[type="date"]:focus-visible,
+input[type="time"]:focus-visible,
+input[type="datetime-local"]:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+/* Disabled state */
+input[type="text"]:disabled,
+input[type="number"]:disabled,
+input[type="password"]:disabled,
+input[type="email"]:disabled,
+input[type="search"]:disabled,
+input[type="url"]:disabled,
+input[type="tel"]:disabled,
+input[type="date"]:disabled,
+input[type="time"]:disabled,
+input[type="datetime-local"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--bg-card-hover);
+}
+
+/* Read-only state */
+input[type="text"]:read-only,
+input[type="number"]:read-only,
+input[type="password"]:read-only,
+input[type="email"]:read-only {
+  background: var(--bg-card-hover);
+  cursor: default;
+}
+
+/* Placeholder styling */
+input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+/* Error state */
+input.input-error,
+input[aria-invalid="true"] {
+  border-color: var(--input-border-error);
+}
+
+input.input-error:focus,
+input[aria-invalid="true"]:focus {
+  box-shadow: 0 0 0 var(--input-focus-ring-width) var(--danger-alpha-10);
+}
+
+/* Success state */
+input.input-success {
+  border-color: var(--input-border-success);
+}
+
+input.input-success:focus {
+  box-shadow: 0 0 0 var(--input-focus-ring-width) var(--success-alpha-10);
+}
+
+/* Size variants */
+input.input-sm {
+  height: var(--input-height-sm);
+  padding: 6px 10px;
+  font-size: 0.8125rem;
+}
+
+input.input-lg {
+  height: var(--input-height-lg);
+  padding: 10px 14px;
+  font-size: 1rem;
+}
+
+/* =============================================================================
+   Textarea
+   ============================================================================= */
+
+textarea {
+  padding: var(--input-padding-y) var(--input-padding-x);
+  font-family: var(--font-data);
+  font-size: var(--input-font-size);
+  font-feature-settings: "tnum" 1, "zero" 1;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--input-bg);
+  border: var(--input-border-width) solid var(--input-border-default);
+  border-radius: var(--input-border-radius);
+  resize: vertical;
+  min-height: 80px;
+  width: 100%;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+textarea:hover:not(:disabled, :read-only) {
+  border-color: var(--input-border-hover);
+}
+
+textarea:focus {
+  outline: none;
+  border-color: var(--input-border-focus);
+  box-shadow: 0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
+}
+
+textarea:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background: var(--bg-card-hover);
+}
+
+textarea:read-only {
+  background: var(--bg-card-hover);
+  cursor: default;
+}
+
+textarea::placeholder {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+/* =============================================================================
+   Select Dropdown
+   ============================================================================= */
+
+select {
+  appearance: none;
+  height: var(--input-height);
+  padding: var(--input-padding-y) var(--input-padding-x);
+  padding-right: 36px;
+  font-family: var(--font-data);
+  font-size: var(--input-font-size);
+  line-height: 1.5;
+  color: var(--text-primary);
+  background-color: var(--input-bg);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 12px;
+  border: var(--input-border-width) solid var(--input-border-default);
+  border-radius: var(--input-border-radius);
+  cursor: pointer;
+  width: 100%;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+/* Dark theme chevron */
+[data-theme="dark"] select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+}
+
+select:hover:not(:disabled) {
+  border-color: var(--input-border-hover);
+}
+
+select:focus {
+  outline: none;
+  border-color: var(--input-border-focus);
+  box-shadow: 0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
+}
+
+select:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: var(--bg-card-hover);
+}
+
+/* Size variants */
+select.select-sm {
+  height: var(--input-height-sm);
+  padding: 6px 10px;
+  padding-right: 32px;
+  font-size: 0.8125rem;
+}
+
+select.select-lg {
+  height: var(--input-height-lg);
+  padding: 10px 14px;
+  padding-right: 40px;
+  font-size: 1rem;
+}
+
+/* =============================================================================
+   Checkbox
+   ============================================================================= */
+
+input[type="checkbox"] {
+  appearance: none;
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
+  flex-shrink: 0;
+  background: var(--input-bg);
+  border: var(--input-border-width) solid var(--input-border-default);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  position: relative;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+input[type="checkbox"]:hover:not(:disabled) {
+  border-color: var(--input-border-hover);
+}
+
+input[type="checkbox"]:checked {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+/* Checkmark */
+input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 1px;
+  width: 5px;
+  height: 9px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+input[type="checkbox"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Checkbox size variants */
+input[type="checkbox"].checkbox-sm {
+  width: var(--checkbox-size-sm);
+  height: var(--checkbox-size-sm);
+}
+
+input[type="checkbox"].checkbox-sm:checked::after {
+  left: 3px;
+  top: 0;
+  width: 4px;
+  height: 8px;
+}
+
+input[type="checkbox"].checkbox-lg {
+  width: var(--checkbox-size-lg);
+  height: var(--checkbox-size-lg);
+}
+
+input[type="checkbox"].checkbox-lg:checked::after {
+  left: 6px;
+  top: 2px;
+  width: 6px;
+  height: 11px;
+}
+
+/* =============================================================================
+   Radio Button
+   ============================================================================= */
+
+input[type="radio"] {
+  appearance: none;
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
+  flex-shrink: 0;
+  background: var(--input-bg);
+  border: var(--input-border-width) solid var(--input-border-default);
+  border-radius: 50%;
+  cursor: pointer;
+  position: relative;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+input[type="radio"]:hover:not(:disabled) {
+  border-color: var(--input-border-hover);
+}
+
+input[type="radio"]:checked {
+  border-color: var(--primary-color);
+}
+
+/* Radio dot */
+input[type="radio"]:checked::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  background: var(--primary-color);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+input[type="radio"]:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+input[type="radio"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* =============================================================================
+   Toggle Switch
+   ============================================================================= */
+
+.toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  width: var(--toggle-width);
+  height: var(--toggle-height);
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+/* Hidden checkbox input */
+.toggle input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+/* Track */
+.toggle-track {
+  position: absolute;
+  inset: 0;
+  background: var(--border-color);
+  border-radius: calc(var(--toggle-height) / 2);
+  transition:
+    background-color 0.2s ease,
+    box-shadow 0.15s ease;
+}
+
+/* Knob */
+.toggle-track::after {
+  content: "";
+  position: absolute;
+  width: var(--toggle-knob-size);
+  height: var(--toggle-knob-size);
+  left: var(--toggle-knob-offset);
+  top: var(--toggle-knob-offset);
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.2);
+  transition: transform 0.2s ease;
+}
+
+/* Checked state */
+.toggle input:checked + .toggle-track {
+  background: var(--success-color);
+}
+
+.toggle input:checked + .toggle-track::after {
+  transform: translateX(calc(var(--toggle-width) - var(--toggle-knob-size) - var(--toggle-knob-offset) * 2));
+}
+
+/* Focus-visible for keyboard navigation */
+.toggle input:focus-visible + .toggle-track {
+  box-shadow: 0 0 0 var(--input-focus-ring-width) var(--input-focus-ring-color);
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+/* Disabled state */
+.toggle input:disabled + .toggle-track {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.toggle input:disabled ~ * {
+  cursor: not-allowed;
+}
+
+/* Toggle with label */
+.toggle-label {
+  margin-left: var(--spacing-sm);
+  font-size: var(--input-font-size);
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  transition: color 0.15s ease;
+}
+
+.toggle input:checked ~ .toggle-label {
+  color: var(--text-primary);
+}
+
+.toggle input:disabled ~ .toggle-label {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Toggle size variants */
+.toggle-sm {
+  --toggle-width: 32px;
+  --toggle-height: 18px;
+  --toggle-knob-size: 12px;
+  --toggle-knob-offset: 3px;
+}
+
+.toggle-lg {
+  --toggle-width: 48px;
+  --toggle-height: 26px;
+  --toggle-knob-size: 20px;
+  --toggle-knob-offset: 3px;
+}
+
+/* Toggle color variants */
+.toggle-primary input:checked + .toggle-track {
+  background: var(--primary-color);
+}
+
+.toggle-warning input:checked + .toggle-track {
+  background: var(--warning-color);
+}
+
+.toggle-danger input:checked + .toggle-track {
+  background: var(--error-color);
+}
+
+/* =============================================================================
+   Search Input Wrapper
+   ============================================================================= */
+
+.search-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-wrapper .search-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1;
+  pointer-events: none;
+  transition: color 0.15s ease;
+}
+
+.search-wrapper input {
+  padding-left: 38px;
+  padding-right: 38px;
+}
+
+.search-wrapper input:focus + .search-icon,
+.search-wrapper:focus-within .search-icon {
+  color: var(--primary-color);
+}
+
+.search-wrapper .search-clear {
+  position: absolute;
+  right: 8px;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.search-wrapper .search-clear:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.search-wrapper input:not(:placeholder-shown) ~ .search-clear {
+  display: flex;
+}
+
+/* =============================================================================
+   Input With Unit Suffix
+   ============================================================================= */
+
+.input-with-unit {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-with-unit input {
+  padding-right: 48px;
+}
+
+.input-with-unit .input-unit {
+  position: absolute;
+  right: 12px;
+  font-family: var(--font-data);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Wide unit support */
+.input-with-unit.unit-wide input {
+  padding-right: 64px;
+}
+
+/* =============================================================================
+   Input With Prefix
+   ============================================================================= */
+
+.input-with-prefix {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.input-with-prefix input {
+  padding-left: 32px;
+}
+
+.input-with-prefix .input-prefix {
+  position: absolute;
+  left: 12px;
+  font-family: var(--font-data);
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* =============================================================================
+   Form Group Pattern
+   ============================================================================= */
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs);
+}
+
+.form-group label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: 0.01em;
+}
+
+.form-group label.required::after {
+  content: " *";
+  color: var(--error-color);
+}
+
+.form-group .form-hint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.form-group .form-error {
+  font-size: 0.75rem;
+  color: var(--error-color);
+  line-height: 1.4;
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.form-group .form-error::before {
+  content: "";
+  width: 12px;
+  height: 12px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23ef4444' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Cline x1='12' y1='8' x2='12' y2='12'/%3E%3Cline x1='12' y1='16' x2='12.01' y2='16'/%3E%3C/svg%3E");
+  background-size: contain;
+  flex-shrink: 0;
+}
+
+/* =============================================================================
+   Inline Form Controls
+   ============================================================================= */
+
+.form-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.form-inline label {
+  font-size: var(--input-font-size);
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.form-inline input,
+.form-inline select {
+  flex: 1;
+  min-width: 0;
+}
+
+/* =============================================================================
+   Checkbox/Radio Label Pattern
+   ============================================================================= */
+
+.checkbox-label,
+.radio-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  cursor: pointer;
+  user-select: none;
+}
+
+.checkbox-label span,
+.radio-label span {
+  font-size: var(--input-font-size);
+  color: var(--text-primary);
+}
+
+.checkbox-label input:disabled ~ span,
+.radio-label input:disabled ~ span {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* =============================================================================
+   Input Group (Connected Inputs)
+   ============================================================================= */
+
+.input-group {
+  display: flex;
+  align-items: stretch;
+}
+
+.input-group input,
+.input-group select,
+.input-group .input-group-addon {
+  border-radius: 0;
+}
+
+.input-group > :first-child {
+  border-radius: var(--input-border-radius) 0 0 var(--input-border-radius);
+}
+
+.input-group > :last-child {
+  border-radius: 0 var(--input-border-radius) var(--input-border-radius) 0;
+}
+
+.input-group > :not(:first-child) {
+  margin-left: -1px;
+}
+
+.input-group-addon {
+  display: flex;
+  align-items: center;
+  padding: 0 var(--input-padding-x);
+  background: var(--bg-card-hover);
+  border: var(--input-border-width) solid var(--input-border-default);
+  font-size: var(--input-font-size);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}

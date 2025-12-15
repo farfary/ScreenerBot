@@ -1,5 +1,6 @@
 import { on, off } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
+import { createFocusTrap } from "../core/utils.js";
 
 // EventDetailsDialog renders a modal overlay for inspecting full event data.
 const SEVERITY_BADGES = {
@@ -72,6 +73,7 @@ export class EventDetailsDialog {
     this._closeListener = this._handleCloseClick.bind(this);
     this._keyListener = this._handleKeyDown.bind(this);
     this._copyListener = this._handleCopyClick.bind(this);
+    this._focusTrap = null;
 
     this._ensureElements();
   }
@@ -162,6 +164,10 @@ export class EventDetailsDialog {
 
     document.addEventListener("keydown", this._keyListener, true);
 
+    // Activate focus trap
+    this._focusTrap = createFocusTrap(this.dialog);
+    this._focusTrap.activate();
+
     requestAnimationFrame(() => {
       if (!this._isOpen) {
         return;
@@ -185,6 +191,12 @@ export class EventDetailsDialog {
     this._isOpen = false;
 
     document.removeEventListener("keydown", this._keyListener, true);
+
+    // Deactivate focus trap
+    if (this._focusTrap) {
+      this._focusTrap.deactivate();
+      this._focusTrap = null;
+    }
 
     if (
       restoreFocus &&

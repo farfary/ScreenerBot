@@ -3,6 +3,7 @@
  * Full-screen dialog showing comprehensive transaction information with multiple tabs
  */
 import * as Utils from "../core/utils.js";
+import { createFocusTrap } from "../core/utils.js";
 import { requestManager } from "../core/request_manager.js";
 
 export class TransactionDetailsDialog {
@@ -14,6 +15,7 @@ export class TransactionDetailsDialog {
     this.fullTransactionData = null;
     this.isLoading = false;
     this.logSearchQuery = "";
+    this._focusTrap = null;
   }
 
   /**
@@ -42,6 +44,16 @@ export class TransactionDetailsDialog {
     requestAnimationFrame(() => {
       if (this.dialogEl) {
         this.dialogEl.classList.add("active");
+        // Add ARIA attributes for accessibility
+        const container = this.dialogEl.querySelector(".dialog-container");
+        if (container) {
+          container.setAttribute("role", "dialog");
+          container.setAttribute("aria-modal", "true");
+          container.setAttribute("aria-labelledby", "txd-dialog-title");
+        }
+        // Activate focus trap
+        this._focusTrap = createFocusTrap(this.dialogEl);
+        this._focusTrap.activate();
       }
     });
 
@@ -85,6 +97,12 @@ export class TransactionDetailsDialog {
 
   close() {
     if (!this.dialogEl) return;
+
+    // Deactivate focus trap
+    if (this._focusTrap) {
+      this._focusTrap.deactivate();
+      this._focusTrap = null;
+    }
 
     this.dialogEl.classList.remove("active");
 

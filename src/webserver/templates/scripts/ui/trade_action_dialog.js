@@ -1,5 +1,6 @@
 import { on, off } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
+import { createFocusTrap } from "../core/utils.js";
 
 /**
  * TradeActionDialog - Modern modal for buy/add/sell actions
@@ -90,6 +91,7 @@ export class TradeActionDialog {
     this._keyListener = this._handleKeyDown.bind(this);
     this._presetClickListener = this._handlePresetClick.bind(this);
     this._inputChangeListener = this._handleInputChange.bind(this);
+    this._focusTrap = null;
 
     this._ensureElements();
   }
@@ -226,6 +228,10 @@ export class TradeActionDialog {
 
     document.addEventListener("keydown", this._keyListener, true);
 
+    // Activate focus trap
+    this._focusTrap = createFocusTrap(this.dialog);
+    this._focusTrap.activate();
+
     requestAnimationFrame(() => {
       if (!this._isOpen) {
         return;
@@ -255,6 +261,12 @@ export class TradeActionDialog {
     this._isOpen = false;
 
     document.removeEventListener("keydown", this._keyListener, true);
+
+    // Deactivate focus trap
+    if (this._focusTrap) {
+      this._focusTrap.deactivate();
+      this._focusTrap = null;
+    }
 
     if (
       restoreFocus &&

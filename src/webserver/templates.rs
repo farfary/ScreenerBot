@@ -12,6 +12,7 @@ const COMPONENT_STYLES: &str = include_str!("templates/styles/components.css");
 const HEADER_STYLES: &str = include_str!("templates/styles/header.css");
 const DROPDOWN_STYLES: &str = include_str!("templates/styles/dropdown.css");
 const COMMON_STYLES: &str = include_str!("templates/styles/common.css");
+const FORM_CONTROLS_STYLES: &str = include_str!("templates/styles/components/form_controls.css");
 const NOTIFICATION_STYLES: &str = include_str!("templates/styles/components/notifications.css");
 const TOAST_STYLES: &str = include_str!("templates/styles/components/toast.css");
 const SERVICES_PAGE_STYLES: &str = include_str!("templates/styles/pages/services.css");
@@ -213,6 +214,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         COMPONENT_STYLES,
         DROPDOWN_STYLES,
         COMMON_STYLES,
+        FORM_CONTROLS_STYLES,
         NOTIFICATION_STYLES,
         TOAST_STYLES,
         DATA_TABLE_STYLES,

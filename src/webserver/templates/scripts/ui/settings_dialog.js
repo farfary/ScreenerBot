@@ -3,6 +3,7 @@
  * Full-screen settings dialog with tabs for Interface, Startup, About, Updates
  */
 import * as Utils from "../core/utils.js";
+import { createFocusTrap } from "../core/utils.js";
 import { getCurrentPage } from "../core/router.js";
 import { setInterval as setPollingInterval, Poller } from "../core/poller.js";
 import { enhanceAllSelects } from "./custom_select.js";
@@ -32,6 +33,7 @@ export class SettingsDialog {
     this.pathsInfo = null;
     // Version info fetched from /api/version
     this.versionInfo = { version: "...", build_number: "...", platform: "..." };
+    this._focusTrap = null;
   }
 
   /**
@@ -53,6 +55,16 @@ export class SettingsDialog {
     requestAnimationFrame(() => {
       if (this.dialogEl) {
         this.dialogEl.classList.add("active");
+        // Add ARIA attributes for accessibility
+        const container = this.dialogEl.querySelector(".settings-container");
+        if (container) {
+          container.setAttribute("role", "dialog");
+          container.setAttribute("aria-modal", "true");
+          container.setAttribute("aria-labelledby", "settings-dialog-title");
+        }
+        // Activate focus trap
+        this._focusTrap = createFocusTrap(this.dialogEl);
+        this._focusTrap.activate();
       }
     });
   }
@@ -214,6 +226,12 @@ export class SettingsDialog {
    */
   close() {
     if (!this.dialogEl) return;
+
+    // Deactivate focus trap
+    if (this._focusTrap) {
+      this._focusTrap.deactivate();
+      this._focusTrap = null;
+    }
 
     // Stop any active pollers
     if (this.downloadPoller) {

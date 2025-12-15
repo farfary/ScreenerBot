@@ -1,8 +1,17 @@
 <!-- Lockscreen Overlay - Security lock for dashboard -->
-<div id="lockscreen" class="lockscreen" aria-hidden="true">
+<div
+  id="lockscreen"
+  class="lockscreen"
+  role="dialog"
+  aria-modal="true"
+  aria-labelledby="lockscreenTitle"
+  aria-hidden="true"
+>
   <div class="lockscreen-backdrop"></div>
 
   <div class="lockscreen-content">
+    <!-- Visually hidden title for screen readers -->
+    <h1 id="lockscreenTitle" class="sr-only">Dashboard Locked - Enter Password to Unlock</h1>
     <!-- Logo and branding -->
     <div class="lockscreen-header">
       <div class="lockscreen-logo">
@@ -31,7 +40,7 @@
         <button type="button" class="lockscreen-key" data-key="7">7</button>
         <button type="button" class="lockscreen-key" data-key="8">8</button>
         <button type="button" class="lockscreen-key" data-key="9">9</button>
-        <button type="button" class="lockscreen-key lockscreen-key-empty" disabled></button>
+        <button type="button" class="lockscreen-key lockscreen-key-empty" disabled aria-hidden="true" tabindex="-1"></button>
         <button type="button" class="lockscreen-key" data-key="0">0</button>
         <button
           type="button"

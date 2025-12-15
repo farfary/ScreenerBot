@@ -188,6 +188,10 @@
   transform: translateX(16px);
 }
 
+.source-switch input:focus-visible + .slider {
+  box-shadow: 0 0 0 3px var(--primary-alpha-20);
+}
+
 /* Main Content Area */
 .filtering-content {
   flex: 1 1 auto;
@@ -363,6 +367,10 @@
   transform: translateX(14px);
 }
 
+.category-switch input:focus-visible + .slider {
+  box-shadow: 0 0 0 3px var(--primary-alpha-20);
+}
+
 /* Scoped to filtering page to avoid conflicts with other pages */
 .filter-card .card-body {
   padding: var(--spacing-md) var(--spacing-md) var(--spacing-lg);
@@ -457,6 +465,10 @@
   outline: none;
   border-color: var(--link-color);
   box-shadow: 0 0 0 3px var(--primary-alpha-10);
+}
+
+.filtering-config-field input::placeholder {
+  color: var(--text-muted);
 }
 
 .filtering-config-field input[type="checkbox"] {
