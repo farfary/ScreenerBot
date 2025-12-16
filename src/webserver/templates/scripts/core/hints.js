@@ -996,7 +996,7 @@ Want your token featured? Visit **screenerbot.io/submit-token** to apply for a l
 
 **Disabling Billboard:**
 If you prefer a cleaner interface, you can hide this row in **Settings → Interface → Show Billboard**.`,
-      learnMoreUrl: "https://screenerbot.io/submit-token",
+      learnMoreUrl: "https://screenerbot.io/docs/dashboard/billboard",
     },
   },
 };
