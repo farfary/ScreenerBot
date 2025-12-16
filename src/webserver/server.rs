@@ -89,10 +89,13 @@ async fn find_available_port() -> Result<u16, String> {
 pub async fn start_server() -> Result<(), String> {
   let is_gui = global::is_gui_mode();
 
-  // Get config values for headless mode
-  let (config_port, config_host) = with_config(|cfg| {
-    (cfg.webserver.port, cfg.webserver.host.clone())
-  });
+  // Get config values for headless mode (use defaults if config not loaded yet)
+  let (config_port, config_host) = if crate::global::is_initialization_complete() {
+    with_config(|cfg| (cfg.webserver.port, cfg.webserver.host.clone()))
+  } else {
+    // Use defaults during initialization (will fall back to defaults below anyway)
+    (0, String::new())
+  };
 
   // Determine port and host to use
   let (port, host) = if is_gui {
