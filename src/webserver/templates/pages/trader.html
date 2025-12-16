@@ -96,6 +96,11 @@
             <div class="config-column">
               <div class="config-column-header">Exit Strategies</div>
               <div class="config-items-compact">
+                <div class="config-item-compact" id="stop-loss-status">
+                  <i class="icon-circle status-icon"></i>
+                  <span class="label">Stop Loss:</span>
+                  <span class="value">—</span>
+                </div>
                 <div class="config-item-compact" id="roi-status">
                   <i class="icon-circle status-icon"></i>
                   <span class="label">ROI Exit:</span>
@@ -260,6 +265,171 @@
         </div>
       </div>
     </div>
+
+    <!-- Stop Loss Tab -->
+    <div id="stop-loss-tab" class="trader-tab-content" style="display: none">
+      <div class="config-section">
+        <div class="config-card">
+          <!-- Enable/Disable -->
+          <div class="config-group config-group-primary">
+            <div class="config-toggle">
+              <div class="toggle-label">
+                <div class="toggle-header">
+                  <label for="stop-loss-enabled" class="toggle-title">
+                    <i class="icon-shield-off"></i>
+                    <span>Enable Stop Loss</span>
+                  </label>
+                  <div class="toggle-switch">
+                    <input type="checkbox" id="stop-loss-enabled" />
+                    <span class="toggle-slider"></span>
+                  </div>
+                </div>
+                <p class="toggle-description">
+                  Automatically exit position when loss exceeds threshold
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Stop Loss Threshold -->
+          <div class="config-group">
+            <div class="config-label-row">
+              <label for="stop-loss-threshold" class="config-label">
+                <i class="icon-trending-down"></i>
+                <span>Stop Loss Threshold</span>
+              </label>
+              <span class="config-badge config-badge-warning">Loss limit</span>
+            </div>
+            <p class="config-hint">
+              Immediately sells position when loss exceeds this percentage. Unlike trailing stop,
+              this works from the entry price regardless of any gains.
+            </p>
+            <div class="input-group-enhanced">
+              <input
+                type="number"
+                id="stop-loss-threshold"
+                min="1"
+                max="100"
+                step="1"
+                value="50"
+                class="input-large"
+              />
+              <span class="input-unit">%</span>
+            </div>
+            <div class="config-impact">
+              <span class="impact-label">Impact:</span>
+              <span class="impact-text" id="stop-loss-impact">Exit when down 50% from entry</span>
+            </div>
+          </div>
+
+          <!-- Allow Partial Exits -->
+          <div class="config-group">
+            <div class="config-toggle">
+              <div class="toggle-label">
+                <div class="toggle-header">
+                  <label for="stop-loss-allow-partial" class="toggle-title">
+                    <i class="icon-scissors"></i>
+                    <span>Allow Partial Exits</span>
+                  </label>
+                  <div class="toggle-switch">
+                    <input type="checkbox" id="stop-loss-allow-partial" />
+                    <span class="toggle-slider"></span>
+                  </div>
+                </div>
+                <p class="toggle-description">
+                  When enabled, stop loss can sell a portion of the position if configured. When
+                  disabled, sells the entire position.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Minimum Hold Time -->
+          <div class="config-group">
+            <div class="config-label-row">
+              <label for="stop-loss-min-hold" class="config-label">
+                <i class="icon-clock"></i>
+                <span>Minimum Hold Time</span>
+              </label>
+              <span class="config-badge config-badge-info">Optional delay</span>
+            </div>
+            <p class="config-hint">
+              Optional delay before stop loss can activate. Use this to avoid selling during initial
+              volatility. 0 means stop loss can trigger immediately.
+            </p>
+            <div class="input-group-enhanced">
+              <input
+                type="number"
+                id="stop-loss-min-hold"
+                min="0"
+                max="86400"
+                step="1"
+                value="0"
+                class="input-large"
+              />
+              <span class="input-unit">seconds</span>
+            </div>
+            <div class="config-impact">
+              <span class="impact-label">Current:</span>
+              <span class="impact-text" id="stop-loss-hold-time-display">Immediate</span>
+            </div>
+          </div>
+
+          <!-- Visual Example -->
+          <div class="visual-example">
+            <h4><i class="icon-chart-bar"></i> How It Works</h4>
+            <div class="example-timeline">
+              <div class="timeline-step">
+                <div class="step-icon step-icon-entry">
+                  <i class="icon-arrow-right"></i>
+                </div>
+                <div class="step-content">
+                  <div class="step-title">Entry</div>
+                  <div class="step-value" id="stop-loss-example-entry">0.010000 SOL</div>
+                  <div class="step-detail">Initial position</div>
+                </div>
+              </div>
+              <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
+              <div class="timeline-step">
+                <div class="step-icon step-icon-activation">
+                  <i class="icon-trending-down"></i>
+                </div>
+                <div class="step-content">
+                  <div class="step-title">Price Falls</div>
+                  <div class="step-value" id="stop-loss-example-trigger">-50%</div>
+                  <div class="step-detail">Threshold reached</div>
+                </div>
+              </div>
+              <div class="timeline-arrow"><i class="icon-chevron-right"></i></div>
+              <div class="timeline-step">
+                <div class="step-icon step-icon-exit">
+                  <i class="icon-log-out"></i>
+                </div>
+                <div class="step-content">
+                  <div class="step-title">Auto Exit</div>
+                  <div class="step-value" id="stop-loss-example-exit">0.005000 SOL</div>
+                  <div class="step-detail" id="stop-loss-partial-indicator">Full position exit</div>
+                </div>
+              </div>
+            </div>
+            <div class="example-summary">
+              <div class="summary-item summary-item-warning">
+                <i class="icon-shield-off"></i>
+                <span>Loss limited to <strong id="stop-loss-example-loss">-50%</strong></span>
+              </div>
+              <div class="summary-item summary-item-info">
+                <i class="icon-info"></i>
+                <span
+                  ><strong>Note:</strong> Stop loss protects against larger losses by exiting
+                  early</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- #stop-loss-tab -->
 
     <!-- Trailing Stop Tab -->
     <div id="trailing-stop-tab" class="trader-tab-content" style="display: none">

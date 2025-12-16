@@ -15,10 +15,22 @@
     </div>
     <div class="header-right">
       <div class="header-actions">
-        <button class="hint-trigger hint-trigger--header" id="security-hint-btn" type="button" aria-label="Security information" data-tooltip="Bank-Grade Encryption">
+        <button
+          class="hint-trigger hint-trigger--header"
+          id="security-hint-btn"
+          type="button"
+          aria-label="Security information"
+          data-tooltip="Bank-Grade Encryption"
+        >
           <i class="icon-shield-check"></i>
         </button>
-        <button class="btn" id="refresh-wallets-btn" type="button" data-tooltip="Refresh wallet list" aria-label="Refresh wallet list">
+        <button
+          class="btn"
+          id="refresh-wallets-btn"
+          type="button"
+          data-tooltip="Refresh wallet list"
+          aria-label="Refresh wallet list"
+        >
           <i class="icon-refresh-cw"></i>
         </button>
         <button class="btn" id="import-wallets-btn" type="button">
@@ -144,12 +156,23 @@
           <form class="wallet-form" id="create-wallet-form">
             <div class="form-group">
               <label for="create-name">Wallet Name <span class="required">*</span></label>
-              <input type="text" id="create-name" placeholder="e.g., Trading Wallet" required maxlength="50" />
+              <input
+                type="text"
+                id="create-name"
+                placeholder="e.g., Trading Wallet"
+                required
+                maxlength="50"
+              />
               <small>A friendly name to identify this wallet</small>
             </div>
             <div class="form-group">
               <label for="create-notes">Notes</label>
-              <textarea id="create-notes" placeholder="Optional description or purpose..." rows="2" maxlength="200"></textarea>
+              <textarea
+                id="create-notes"
+                placeholder="Optional description or purpose..."
+                rows="2"
+                maxlength="200"
+              ></textarea>
             </div>
             <div class="form-group checkbox-group">
               <label>
@@ -173,19 +196,41 @@
             <i class="icon-alert-triangle"></i>
             <div>
               <strong>Security Warning</strong>
-              <p>Only import private keys from trusted sources. Your key will be encrypted and stored securely on this device.</p>
+              <p>
+                Only import private keys from trusted sources. Your key will be encrypted and stored
+                securely on this device.
+              </p>
             </div>
           </div>
           <form class="wallet-form" id="import-wallet-form">
             <div class="form-group">
               <label for="import-name">Wallet Name <span class="required">*</span></label>
-              <input type="text" id="import-name" placeholder="e.g., My Wallet" required maxlength="50" />
+              <input
+                type="text"
+                id="import-name"
+                placeholder="e.g., My Wallet"
+                required
+                maxlength="50"
+              />
             </div>
             <div class="form-group">
               <label for="import-private-key">Private Key <span class="required">*</span></label>
               <div class="password-input-wrapper">
-                <textarea id="import-private-key" placeholder="Base58 string or JSON array [1,2,3,...]" rows="3" required class="secure-input"></textarea>
-                <button type="button" class="toggle-visibility" data-target="import-private-key" aria-label="Toggle private key visibility" aria-pressed="false" role="switch">
+                <textarea
+                  id="import-private-key"
+                  placeholder="Base58 string or JSON array [1,2,3,...]"
+                  rows="3"
+                  required
+                  class="secure-input"
+                ></textarea>
+                <button
+                  type="button"
+                  class="toggle-visibility"
+                  data-target="import-private-key"
+                  aria-label="Toggle private key visibility"
+                  aria-pressed="false"
+                  role="switch"
+                >
                   <i class="icon-eye"></i>
                 </button>
               </div>
@@ -193,7 +238,12 @@
             </div>
             <div class="form-group">
               <label for="import-notes">Notes</label>
-              <textarea id="import-notes" placeholder="Optional description..." rows="2" maxlength="200"></textarea>
+              <textarea
+                id="import-notes"
+                placeholder="Optional description..."
+                rows="2"
+                maxlength="200"
+              ></textarea>
             </div>
             <div class="form-group checkbox-group">
               <label>
@@ -227,14 +277,23 @@
           <i class="icon-alert-triangle"></i>
           <div>
             <strong>⚠️ Critical Security Warning</strong>
-            <p>Never share your private key with anyone. Anyone with access to this key can steal all funds from this wallet.</p>
+            <p>
+              Never share your private key with anyone. Anyone with access to this key can steal all
+              funds from this wallet.
+            </p>
           </div>
         </div>
         <div class="export-key-display hidden" id="export-key-display">
           <label>Private Key (Base58)</label>
           <div class="key-display">
             <code id="exported-key">...</code>
-            <button type="button" class="btn-icon" id="copy-key-btn" data-tooltip="Copy to clipboard" aria-label="Copy to clipboard">
+            <button
+              type="button"
+              class="btn-icon"
+              id="copy-key-btn"
+              data-tooltip="Copy to clipboard"
+              aria-label="Copy to clipboard"
+            >
               <i class="icon-copy"></i>
             </button>
           </div>
@@ -259,8 +318,12 @@
         </button>
       </div>
       <div class="modal-body">
-        <p class="confirm-text">Are you sure you want to archive <strong id="archive-wallet-name">this wallet</strong>?</p>
-        <p class="info-text">Archived wallets are not used in any operations but can be restored anytime.</p>
+        <p class="confirm-text">
+          Are you sure you want to archive <strong id="archive-wallet-name">this wallet</strong>?
+        </p>
+        <p class="info-text">
+          Archived wallets are not used in any operations but can be restored anytime.
+        </p>
         <div class="form-actions">
           <button type="button" class="btn" id="archive-cancel-btn">No</button>
           <button type="button" class="btn primary" id="confirm-archive-btn">
@@ -285,10 +348,15 @@
           <i class="icon-alert-triangle"></i>
           <div>
             <strong>This action cannot be undone!</strong>
-            <p>Deleting this wallet will permanently remove it and its encrypted private key from this device.</p>
+            <p>
+              Deleting this wallet will permanently remove it and its encrypted private key from
+              this device.
+            </p>
           </div>
         </div>
-        <p class="confirm-text">Are you sure you want to delete <strong id="delete-wallet-name">this wallet</strong>?</p>
+        <p class="confirm-text">
+          Are you sure you want to delete <strong id="delete-wallet-name">this wallet</strong>?
+        </p>
         <div class="form-actions">
           <button type="button" class="btn" id="delete-cancel-btn">No</button>
           <button type="button" class="btn danger" id="confirm-delete-btn">
@@ -304,7 +372,12 @@
     <div class="modal-dialog modal-lg">
       <div class="modal-header">
         <h2><i class="icon-upload"></i> Import Wallets</h2>
-        <button class="modal-close" type="button" id="bulk-import-modal-close" aria-label="Close modal">
+        <button
+          class="modal-close"
+          type="button"
+          id="bulk-import-modal-close"
+          aria-label="Close modal"
+        >
           <i class="icon-x"></i>
         </button>
       </div>
@@ -333,7 +406,10 @@
             <i class="icon-alert-triangle"></i>
             <div>
               <strong>Security Warning</strong>
-              <p>Only import files from trusted sources. Private keys will be encrypted and stored securely on this device.</p>
+              <p>
+                Only import files from trusted sources. Private keys will be encrypted and stored
+                securely on this device.
+              </p>
             </div>
           </div>
           <div class="file-dropzone" id="import-dropzone">
@@ -422,7 +498,12 @@
     <div class="modal-dialog modal-sm">
       <div class="modal-header">
         <h2><i class="icon-download"></i> Export Wallets</h2>
-        <button class="modal-close" type="button" id="bulk-export-modal-close" aria-label="Close modal">
+        <button
+          class="modal-close"
+          type="button"
+          id="bulk-export-modal-close"
+          aria-label="Close modal"
+        >
           <i class="icon-x"></i>
         </button>
       </div>
@@ -488,7 +569,12 @@
     <div class="modal-dialog modal-sm">
       <div class="modal-header">
         <h2><i class="icon-alert-triangle"></i> Confirm Dangerous Export</h2>
-        <button class="modal-close" type="button" id="export-keys-confirm-close" aria-label="Close modal">
+        <button
+          class="modal-close"
+          type="button"
+          id="export-keys-confirm-close"
+          aria-label="Close modal"
+        >
           <i class="icon-x"></i>
         </button>
       </div>
@@ -497,7 +583,10 @@
           <i class="icon-alert-triangle"></i>
           <div>
             <strong>⚠️ Critical Security Warning</strong>
-            <p>You are about to export <strong id="export-wallet-count">0</strong> private keys. This is extremely dangerous!</p>
+            <p>
+              You are about to export <strong id="export-wallet-count">0</strong> private keys. This
+              is extremely dangerous!
+            </p>
             <ul class="danger-list">
               <li>Anyone with this file can steal all funds</li>
               <li>Never share this file with anyone</li>
@@ -507,7 +596,12 @@
         </div>
         <div class="form-group">
           <label for="export-confirm-input">Type "EXPORT KEYS" to confirm</label>
-          <input type="text" id="export-confirm-input" placeholder="EXPORT KEYS" autocomplete="off" />
+          <input
+            type="text"
+            id="export-confirm-input"
+            placeholder="EXPORT KEYS"
+            autocomplete="off"
+          />
         </div>
         <div class="form-actions">
           <button type="button" class="btn" id="export-keys-confirm-cancel">Cancel</button>

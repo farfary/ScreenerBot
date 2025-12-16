@@ -13,6 +13,7 @@ pub mod config;
 pub mod connectivity;
 pub mod dashboard;
 pub mod events;
+pub mod features;
 pub mod filtering_api;
 pub mod header;
 pub mod initialization;
@@ -180,6 +181,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .merge(ui_state::routes())
         .merge(billboard::routes())
         .nest("/connectivity", connectivity::routes())
+        .nest("/features", features::routes())
         .nest("/initialization", initialization::routes())
         .nest("/trading", trading::routes())
         .nest("/trader", trader::routes())

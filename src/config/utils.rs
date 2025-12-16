@@ -196,6 +196,25 @@ fn validate_config(config: &Config) -> Result<(), String> {
     }
   }
 
+  // Stop loss validation
+  if config.trader.stop_loss_enabled {
+    if config.trader.stop_loss_threshold_pct <= 0.0 {
+      return Err(
+        "trader.stop_loss_threshold_pct must be greater than 0 (represents loss percentage)"
+          .to_string(),
+      );
+    }
+    if config.trader.stop_loss_threshold_pct > 100.0 {
+      return Err(
+        "trader.stop_loss_threshold_pct must be <= 100 (cannot lose more than 100%)"
+          .to_string(),
+      );
+    }
+    if !config.trader.stop_loss_threshold_pct.is_finite() {
+      return Err("trader.stop_loss_threshold_pct must be a finite number".to_string());
+    }
+  }
+
   // Positions validation
   if config.positions.profit_extra_needed_sol < 0.0
     || !config.positions.profit_extra_needed_sol.is_finite()

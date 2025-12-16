@@ -10,6 +10,7 @@ import { ActionBar, ActionBarManager } from "../ui/action_bar.js";
 // Sub-tabs configuration
 const SUB_TABS = [
   { id: "stats", label: '<i class="icon-chart-bar"></i> Stats' },
+  { id: "stop-loss", label: '<i class="icon-shield-off"></i> Stop Loss' },
   { id: "trailing-stop", label: '<i class="icon-trending-up"></i> Trailing Stop' },
   { id: "roi", label: '<i class="icon-target"></i> Take Profit' },
   { id: "time-rules", label: '<i class="icon-timer"></i> Time Rules' },
@@ -20,6 +21,59 @@ const SUB_TABS = [
 
 // Constants
 const DEFAULT_TAB = "stats";
+
+// =============================================================================
+// Feature Status Constants
+// =============================================================================
+
+/**
+ * Feature status values from the API
+ */
+const FEATURE_STATUS = {
+  AVAILABLE: "available",
+  COMING_SOON: "coming_soon",
+  BETA: "beta",
+  DISABLED: "disabled",
+};
+
+/**
+ * Maps tab IDs to feature API keys (trading features)
+ */
+const TAB_TO_FEATURE_MAP = {
+  roi: "roi_exit",
+  "trailing-stop": "trailing_stop",
+  "stop-loss": "stop_loss",
+  "time-rules": "time_override",
+  dca: "dca",
+  "strategy-control": "strategies",
+  // These tabs don't have feature flags - always available
+  stats: null,
+  "general-settings": null,
+};
+
+/**
+ * Status display configuration for badges
+ */
+const STATUS_CONFIG = {
+  [FEATURE_STATUS.COMING_SOON]: {
+    label: "Coming Soon",
+    cssClass: "coming-soon",
+    tooltip: "This feature is coming soon",
+    message: "This feature is coming soon and not yet available.",
+  },
+  [FEATURE_STATUS.BETA]: {
+    label: "Beta",
+    cssClass: "beta",
+    tooltip: "Beta feature - may have bugs",
+    message: null, // Beta features are usable
+  },
+  [FEATURE_STATUS.DISABLED]: {
+    label: "Disabled",
+    cssClass: "disabled",
+    tooltip: "This feature is currently disabled",
+    message: "This feature is currently disabled.",
+  },
+};
 
 function createLifecycle() {
   // Component references
@@ -32,6 +86,9 @@ function createLifecycle() {
   // Event cleanup tracking
   const eventCleanups = [];
 
+  // Feature status from API
+  let tradingFeatures = {};
+
   // Page state
   const state = {
     currentTab: DEFAULT_TAB,
@@ -39,6 +96,142 @@ function createLifecycle() {
     stats: null,
     strategies: [],
   };
+
+  // ============================================================================
+  // Feature Status Functions
+  // ============================================================================
+
+  /**
+   * Fetch trading feature status from the API
+   * @returns {Promise<Object>} Feature status by feature key
+   */
+  async function fetchFeatureStatus() {
+    try {
+      const response = await fetch("/api/features");
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const data = await response.json();
+      return data.trading || {};
+    } catch (error) {
+      console.warn("[Trader] Failed to fetch feature status, defaulting to available:", error);
+      return {};
+    }
+  }
+
+  /**
+   * Get the feature status for a tab
+   * @param {string} tabId - The tab ID (e.g., "roi", "stop-loss")
+   * @returns {string} The status ("available", "coming_soon", "beta", "disabled")
+   */
+  function getTabFeatureStatus(tabId) {
+    const featureKey = TAB_TO_FEATURE_MAP[tabId];
+    // Tabs without feature mapping are always available
+    if (!featureKey) {
+      return FEATURE_STATUS.AVAILABLE;
+    }
+    if (!tradingFeatures[featureKey]) {
+      return FEATURE_STATUS.AVAILABLE;
+    }
+    return tradingFeatures[featureKey];
+  }
+
+  /**
+   * Check if a tab is usable (can be clicked/used)
+   * @param {string} tabId - The tab ID
+   * @returns {boolean} True if tab is available or beta
+   */
+  function isTabUsable(tabId) {
+    const status = getTabFeatureStatus(tabId);
+    return status === FEATURE_STATUS.AVAILABLE || status === FEATURE_STATUS.BETA;
+  }
+
+  /**
+   * Apply feature status to all tab buttons
+   */
+  function applyFeatureStatusToTabs() {
+    const tabButtons = $$(".sub-tab[data-tab-id]");
+
+    tabButtons.forEach((button) => {
+      const tabId = button.getAttribute("data-tab-id");
+      const status = getTabFeatureStatus(tabId);
+
+      // Remove any existing status badges
+      const existingBadge = button.querySelector(".tab-status-badge");
+      if (existingBadge) {
+        existingBadge.remove();
+      }
+
+      // Remove existing status classes
+      button.classList.remove(
+        "tab-feature-disabled",
+        "tab-feature-beta",
+        "tab-feature-coming-soon"
+      );
+      button.removeAttribute("data-feature-status");
+
+      // If available, no modifications needed
+      if (status === FEATURE_STATUS.AVAILABLE) {
+        return;
+      }
+
+      // Get status configuration
+      const config = STATUS_CONFIG[status];
+      if (!config) return;
+
+      // Add data attribute for styling
+      button.setAttribute("data-feature-status", status);
+
+      // Add appropriate class
+      if (status === FEATURE_STATUS.DISABLED) {
+        button.classList.add("tab-feature-disabled");
+      } else if (status === FEATURE_STATUS.BETA) {
+        button.classList.add("tab-feature-beta");
+      } else if (status === FEATURE_STATUS.COMING_SOON) {
+        button.classList.add("tab-feature-coming-soon");
+      }
+
+      // Add status badge for non-available/non-beta statuses
+      if (status !== FEATURE_STATUS.BETA) {
+        const badge = document.createElement("span");
+        badge.className = `tab-status-badge ${config.cssClass}`;
+        badge.textContent = config.label;
+        button.appendChild(badge);
+      } else {
+        // Beta gets a small indicator badge
+        const badge = document.createElement("span");
+        badge.className = `tab-status-badge ${config.cssClass}`;
+        badge.textContent = config.label;
+        button.appendChild(badge);
+      }
+    });
+  }
+
+  /**
+   * Handle click on a feature-restricted tab
+   * @param {string} tabId - The tab ID being clicked
+   * @returns {boolean} True if tab switch should proceed
+   */
+  function handleFeatureRestrictedTab(tabId) {
+    const status = getTabFeatureStatus(tabId);
+
+    // Available and beta tabs can proceed
+    if (status === FEATURE_STATUS.AVAILABLE || status === FEATURE_STATUS.BETA) {
+      return true;
+    }
+
+    // Show toast for restricted tabs
+    const config = STATUS_CONFIG[status];
+    if (config && config.message) {
+      Utils.showToast({
+        type: "warning",
+        title: config.label,
+        message: config.message,
+      });
+    }
+
+    return false;
+  }
 
   // ============================================================================
   // Helper Functions
@@ -160,6 +353,62 @@ function createLifecycle() {
     // Update visual example
     if (exampleLoss) {
       exampleLoss.textContent = `${value}%`;
+    }
+  }
+
+  /**
+   * Update stop loss visual example calculations
+   */
+  function updateStopLossExample() {
+    const thresholdInput = $("#stop-loss-threshold");
+    const minHoldInput = $("#stop-loss-min-hold");
+    const allowPartialInput = $("#stop-loss-allow-partial");
+
+    if (!thresholdInput) return;
+
+    const threshold = parseFloat(thresholdInput.value) || 50;
+    const minHold = parseInt(minHoldInput?.value || "0", 10);
+    const allowPartial = allowPartialInput?.checked || false;
+
+    // Update impact text
+    const impactText = $("#stop-loss-impact");
+    if (impactText) {
+      impactText.textContent = `Exit when down ${threshold}% from entry`;
+    }
+
+    // Update example values
+    const exampleEntry = $("#stop-loss-example-entry");
+    const exampleTrigger = $("#stop-loss-example-trigger");
+    const exampleExit = $("#stop-loss-example-exit");
+    const exampleLoss = $("#stop-loss-example-loss");
+
+    // Example: Entry at 0.01 SOL
+    const entryPrice = 0.01;
+    const exitPrice = entryPrice * (1 - threshold / 100);
+
+    if (exampleEntry) exampleEntry.textContent = `${entryPrice.toFixed(6)} SOL`;
+    if (exampleTrigger) exampleTrigger.textContent = `-${threshold}%`;
+    if (exampleExit) exampleExit.textContent = `${exitPrice.toFixed(6)} SOL`;
+    if (exampleLoss) exampleLoss.textContent = `-${threshold}%`;
+
+    // Update hold time display
+    const holdTimeDisplay = $("#stop-loss-hold-time-display");
+    if (holdTimeDisplay) {
+      if (minHold === 0) {
+        holdTimeDisplay.textContent = "Immediate";
+      } else if (minHold < 60) {
+        holdTimeDisplay.textContent = `${minHold}s delay`;
+      } else if (minHold < 3600) {
+        holdTimeDisplay.textContent = `${Math.round(minHold / 60)}m delay`;
+      } else {
+        holdTimeDisplay.textContent = `${(minHold / 3600).toFixed(1)}h delay`;
+      }
+    }
+
+    // Update partial exit indicator
+    const partialIndicator = $("#stop-loss-partial-indicator");
+    if (partialIndicator) {
+      partialIndicator.textContent = allowPartial ? "Partial exits allowed" : "Full position exit";
     }
   }
 
@@ -290,6 +539,63 @@ function createLifecycle() {
       case "stats":
         // Stats tab is read-only, no actions needed
         actionBar.clear();
+        break;
+
+      case "stop-loss":
+        actionBar.configure({
+          title: "Stop Loss Configuration",
+          subtitle: "Automatic exit when loss exceeds threshold",
+          icon: "icon-shield-off",
+          actions: [
+            {
+              id: "reset",
+              label: "Reset to Defaults",
+              icon: "icon-rotate-ccw",
+              variant: "secondary",
+              onClick: async () => {
+                const { confirmed } = await ConfirmationDialog.show({
+                  title: "Reset Stop Loss",
+                  message:
+                    "This will reset stop loss settings to default values:\n• Disabled\n• Threshold: 50%\n• Partial exits: Disabled\n• Min hold time: 0s",
+                  confirmLabel: "Reset",
+                  cancelLabel: "Cancel",
+                  variant: "warning",
+                });
+
+                if (confirmed) {
+                  await saveConfig({
+                    trader: {
+                      stop_loss_enabled: false,
+                      stop_loss_threshold_pct: 50.0,
+                      stop_loss_allow_partial: false,
+                      stop_loss_min_hold_seconds: 0,
+                    },
+                  });
+                }
+              },
+            },
+            {
+              id: "save",
+              label: "Save Configuration",
+              icon: "icon-save",
+              variant: "primary",
+              onClick: async () => {
+                const enabled = $("#stop-loss-enabled")?.checked || false;
+                const threshold = parseFloat($("#stop-loss-threshold")?.value || "50");
+                const allowPartial = $("#stop-loss-allow-partial")?.checked || false;
+                const minHoldSeconds = parseInt($("#stop-loss-min-hold")?.value || "0", 10);
+                await saveConfig({
+                  trader: {
+                    stop_loss_enabled: enabled,
+                    stop_loss_threshold_pct: threshold,
+                    stop_loss_allow_partial: allowPartial,
+                    stop_loss_min_hold_seconds: minHoldSeconds,
+                  },
+                });
+              },
+            },
+          ],
+        });
         break;
 
       case "trailing-stop":
@@ -659,6 +965,7 @@ function createLifecycle() {
     // Show selected tab
     const tabMap = {
       stats: "stats-tab",
+      "stop-loss": "stop-loss-tab",
       "trailing-stop": "trailing-stop-tab",
       roi: "roi-tab",
       "time-rules": "time-rules-tab",
@@ -695,6 +1002,11 @@ function createLifecycle() {
       }
     }
 
+    // Load preview when switching to stop loss tab
+    if (tabId === "stop-loss") {
+      updateStopLossExample();
+    }
+
     // Load preview when switching to trailing stop tab
     if (tabId === "trailing-stop") {
       updateTrailingStopExample();
@@ -728,6 +1040,7 @@ function createLifecycle() {
       updateConfigOverview();
 
       // Update visual examples with loaded values
+      updateStopLossExample();
       updateRoiExample();
       updateTimeLossExample();
     } catch (error) {
@@ -750,6 +1063,11 @@ function createLifecycle() {
     const positions = state.config.positions || {};
 
     // Exit Strategies
+    updateConfigItem(
+      "stop-loss-status",
+      trader.stop_loss_enabled,
+      `${trader.stop_loss_threshold_pct || 50}%`
+    );
     updateConfigItem("roi-status", trader.roi_exit_enabled, `${trader.roi_target_percent || 20}%`);
     updateConfigItem(
       "trailing-status",
@@ -820,6 +1138,24 @@ function createLifecycle() {
 
     const trader = state.config.trader || {};
     const positions = state.config.positions || {};
+
+    // Stop Loss (from trader config)
+    const stopLossEnabled = $("#stop-loss-enabled");
+    const stopLossThreshold = $("#stop-loss-threshold");
+    const stopLossAllowPartial = $("#stop-loss-allow-partial");
+    const stopLossMinHold = $("#stop-loss-min-hold");
+    if (stopLossEnabled) {
+      stopLossEnabled.checked = trader.stop_loss_enabled || false;
+    }
+    if (stopLossThreshold) {
+      stopLossThreshold.value = trader.stop_loss_threshold_pct || 50.0;
+    }
+    if (stopLossAllowPartial) {
+      stopLossAllowPartial.checked = trader.stop_loss_allow_partial || false;
+    }
+    if (stopLossMinHold) {
+      stopLossMinHold.value = trader.stop_loss_min_hold_seconds || 0;
+    }
 
     // Trailing Stop (from positions config)
     const trailingEnabled = $("#trailing-enabled");
@@ -1343,6 +1679,30 @@ function createLifecycle() {
    * Note: Button handlers moved to ActionBar in configureActionBar()
    */
   function setupFormHandlers() {
+    // Stop loss threshold input listener
+    const stopLossThreshold = $("#stop-loss-threshold");
+    if (stopLossThreshold) {
+      addTrackedListener(stopLossThreshold, "input", () => {
+        updateStopLossExample();
+      });
+    }
+
+    // Stop loss min hold input listener
+    const stopLossMinHold = $("#stop-loss-min-hold");
+    if (stopLossMinHold) {
+      addTrackedListener(stopLossMinHold, "input", () => {
+        updateStopLossExample();
+      });
+    }
+
+    // Stop loss allow partial toggle listener
+    const stopLossAllowPartial = $("#stop-loss-allow-partial");
+    if (stopLossAllowPartial) {
+      addTrackedListener(stopLossAllowPartial, "change", () => {
+        updateStopLossExample();
+      });
+    }
+
     // Time unit change listener
     const timeUnit = $("#time-unit");
     if (timeUnit) {
@@ -1546,6 +1906,9 @@ function createLifecycle() {
     async init(ctx) {
       console.log("[Trader] Initializing page");
 
+      // Fetch feature status early (non-blocking, but before tab bar setup)
+      const featurePromise = fetchFeatureStatus();
+
       // Initialize ActionBar
       actionBar = new ActionBar({
         container: "#toolbarContainer",
@@ -1557,7 +1920,10 @@ function createLifecycle() {
       // Integrate with lifecycle for auto-cleanup (clears on deactivate, disposes on dispose)
       ctx.manageActionBar(actionBar);
 
-      // Initialize tab bar
+      // Wait for features before setting up tabs (important for initial tab selection)
+      tradingFeatures = await featurePromise;
+
+      // Initialize tab bar with beforeChange hook for feature validation
       tabBar = new TabBar({
         container: "#subTabsContainer",
         tabs: SUB_TABS,
@@ -1566,6 +1932,10 @@ function createLifecycle() {
         pageName: "trader",
         onChange: (tabId) => {
           switchTab(tabId);
+        },
+        beforeChange: (newTabId) => {
+          // Check if the tab is usable based on feature status
+          return handleFeatureRestrictedTab(newTabId);
         },
       });
 
@@ -1578,10 +1948,20 @@ function createLifecycle() {
       // Show the tab bar
       tabBar.show();
 
+      // Apply feature status badges/styling to tabs
+      applyFeatureStatusToTabs();
+
       // Sync state with tab bar's restored state (from server or URL hash)
       const activeTab = tabBar.getActiveTab();
       if (activeTab && activeTab !== state.currentTab) {
-        state.currentTab = activeTab;
+        // Ensure the restored tab is usable
+        if (isTabUsable(activeTab)) {
+          state.currentTab = activeTab;
+        } else {
+          // Fallback to default tab if restored tab is not usable
+          state.currentTab = DEFAULT_TAB;
+          tabBar.setActive(DEFAULT_TAB);
+        }
       }
 
       // Show the active tab content

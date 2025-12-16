@@ -237,6 +237,72 @@
   opacity: 0.8;
 }
 
+/* Beta Status */
+.nav-item[data-status="beta"] .nav-item-status {
+  background: var(--primary-color);
+  box-shadow: 0 0 6px var(--primary-alpha-30);
+}
+
+.nav-item[data-status="beta"] {
+  opacity: 0.9;
+}
+
+/* Disabled Status */
+.nav-item[data-status="disabled"] .nav-item-status {
+  background: var(--text-muted);
+  opacity: 0.3;
+}
+
+.nav-item[data-status="disabled"] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.nav-item[data-status="disabled"]:hover {
+  opacity: 0.5;
+  background: transparent;
+}
+
+.nav-item[data-status="disabled"] .nav-item-icon {
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+}
+
+.nav-item[data-status="disabled"]:hover .nav-item-icon {
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+}
+
+/* Status Badges */
+.status-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 0.5rem;
+  font-weight: 600;
+  padding: 2px 5px;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.status-badge.coming-soon {
+  background: var(--warning-alpha-20);
+  color: var(--warning-color);
+}
+
+.status-badge.beta {
+  background: var(--primary-alpha-20);
+  color: var(--primary-color);
+}
+
+.status-badge.disabled {
+  background: var(--text-muted);
+  color: var(--bg-primary);
+  opacity: 0.6;
+}
+
 @keyframes pulse {
   0%,
   100% {

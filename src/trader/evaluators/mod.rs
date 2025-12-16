@@ -6,13 +6,14 @@
 //! - DCA evaluation (dollar cost averaging logic)
 //! - Strategy evaluation (user-configured trading strategies)
 //!
-//! Built-in exit rules (roi, trailing stop, time override) are in separate files.
+//! Built-in exit rules (roi, trailing stop, stop loss, time override) are in separate files.
 //! These are NOT strategy-system strategies - they're hardcoded rules with config toggles.
 
 pub mod dca;
 pub mod entry;
 pub mod exit;
 pub mod exit_roi;
+pub mod exit_stop_loss;
 pub mod exit_time;
 pub mod exit_trailing;
 pub mod strategies;

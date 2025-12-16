@@ -3,10 +3,11 @@
 //! Evaluates whether an exit should be made for a position by checking in priority order:
 //! 1. Blacklist (emergency - sync)
 //! 2. Risk limits (>90% loss - emergency)
-//! 3. Trailing stop (high priority)
-//! 4. ROI target (normal priority)
-//! 5. Time override (normal priority)
-//! 6. Strategy exit (normal priority)
+//! 3. Stop loss (high priority - fixed threshold from entry)
+//! 4. Trailing stop (high priority - from peak)
+//! 5. ROI target (normal priority)
+//! 6. Time override (normal priority)
+//! 7. Strategy exit (normal priority)
 
 use crate::pools;
 use crate::positions::Position;
@@ -20,10 +21,11 @@ use crate::trader::{evaluators, safety};
 /// Priority order (matching current implementation + risk check):
 /// 1. **Blacklist** (emergency - sync): Token blacklisted → immediate exit
 /// 2. **Risk limits** (emergency): >90% loss → emergency exit
-/// 3. **Trailing stop** (high priority): Price dropped from peak by threshold
-/// 4. **ROI target** (normal): Target profit reached
-/// 5. **Time override** (normal): Position held too long
-/// 6. **Strategy exit** (normal): Strategy signals exit
+/// 3. **Stop loss** (high priority): Fixed threshold from entry price
+/// 4. **Trailing stop** (high priority): Price dropped from peak by threshold
+/// 5. **ROI target** (normal): Target profit reached
+/// 6. **Time override** (normal): Position held too long
+/// 7. **Strategy exit** (normal): Strategy signals exit
 ///
 /// Returns:
 /// - Ok(Some(TradeDecision)) if exit should be made
@@ -74,7 +76,43 @@ pub async fn evaluate_exit_for_position(
     return Ok(Some(decision));
   }
 
-  // Priority 3: Trailing stop (high priority)
+  // Priority 3: Stop loss (high priority - fixed threshold from entry)
+  match evaluators::exit_stop_loss::check_stop_loss(&fresh_position, current_price).await {
+    Ok(Some(decision)) => {
+      // Log already done in check_stop_loss with full context
+
+      // Record stop loss exit signal event
+      crate::events::record_trader_event(
+        "exit_signal_stop_loss",
+        crate::events::Severity::Warn,
+        Some(&fresh_position.mint),
+        None,
+        serde_json::json!({
+          "exit_type": "stop_loss",
+          "mint": fresh_position.mint,
+          "symbol": fresh_position.symbol,
+          "entry_price": fresh_position.average_entry_price,
+          "current_price": current_price,
+          "loss_pct": ((fresh_position.average_entry_price - current_price) / fresh_position.average_entry_price) * 100.0,
+        }),
+      )
+      .await;
+
+      return Ok(Some(decision));
+    }
+    Ok(None) => {}
+    Err(e) => {
+      crate::logger::warning(
+        crate::logger::LogTag::Trader,
+        &format!(
+          "Error checking stop loss for {}: {}",
+          fresh_position.symbol, e
+        ),
+      );
+    }
+  }
+
+  // Priority 4: Trailing stop (high priority)
   match evaluators::exit_trailing::check_trailing_stop(&fresh_position, current_price).await {
     Ok(Some(decision)) => {
       crate::logger::info(
@@ -111,7 +149,7 @@ pub async fn evaluate_exit_for_position(
     }
   }
 
-  // Priority 4: ROI target (normal priority)
+  // Priority 5: ROI target (normal priority)
   match evaluators::exit_roi::check_roi_exit(&fresh_position, current_price).await {
     Ok(Some(decision)) => {
       crate::logger::info(
@@ -148,7 +186,7 @@ pub async fn evaluate_exit_for_position(
     }
   }
 
-  // Priority 5: Time override (normal priority)
+  // Priority 6: Time override (normal priority)
   match evaluators::exit_time::check_time_override(&fresh_position, current_price).await {
     Ok(Some(decision)) => {
       crate::logger::info(
@@ -185,7 +223,7 @@ pub async fn evaluate_exit_for_position(
     }
   }
 
-  // Priority 6: Strategy exit (normal priority)
+  // Priority 7: Strategy exit (normal priority)
   match evaluators::StrategyEvaluator::check_exit_strategies(&fresh_position, current_price).await
   {
     Ok(Some(decision)) => {

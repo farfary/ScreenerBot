@@ -21,6 +21,58 @@ const TOOLS_STATE_KEY = "tools.page";
 const DEFAULT_TOOL = "wallet-cleanup";
 
 /**
+ * Feature status values from the API
+ */
+const FEATURE_STATUS = {
+  AVAILABLE: "available",
+  COMING_SOON: "coming_soon",
+  BETA: "beta",
+  DISABLED: "disabled",
+};
+
+/**
+ * Maps tool IDs (from HTML data-tool) to feature API keys
+ */
+const TOOL_TO_FEATURE_MAP = {
+  "wallet-cleanup": "wallet_cleanup",
+  "burn-tokens": "burn_tokens",
+  "token-analyzer": "token_analyzer",
+  "create-token": "create_token",
+  "trade-watcher": "trade_watcher",
+  "token-watch": "holder_watch",
+  "volume-aggregator": "volume_aggregator",
+  "buy-multi-wallets": "multi_buy",
+  "sell-multi-wallets": "multi_sell",
+  "wallet-consolidation": "wallet_consolidation",
+  "airdrop-checker": "airdrop_checker",
+  "wallet-generator": "wallet_generator",
+};
+
+/**
+ * Status display configuration
+ */
+const STATUS_CONFIG = {
+  [FEATURE_STATUS.COMING_SOON]: {
+    label: "Coming Soon",
+    cssClass: "coming-soon",
+    dataStatus: "coming",
+    tooltip: "Coming soon",
+  },
+  [FEATURE_STATUS.BETA]: {
+    label: "Beta",
+    cssClass: "beta",
+    dataStatus: "beta",
+    tooltip: "Beta - may have bugs",
+  },
+  [FEATURE_STATUS.DISABLED]: {
+    label: "Disabled",
+    cssClass: "disabled",
+    dataStatus: "disabled",
+    tooltip: "Currently disabled",
+  },
+};
+
+/**
  * Tool definitions with metadata and content generators
  */
 const TOOL_DEFINITIONS = {
@@ -128,6 +180,113 @@ const TOOL_DEFINITIONS = {
 
 let currentTool = null;
 let toolClickHandler = null;
+let featureStatus = {}; // Stores feature status from API
+
+// =============================================================================
+// Feature Status Functions
+// =============================================================================
+
+/**
+ * Fetch feature status from the API
+ * @returns {Promise<Object>} Feature status by tool key
+ */
+async function fetchFeatureStatus() {
+  try {
+    const response = await fetch("/api/features");
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const data = await response.json();
+    return data.tools || {};
+  } catch (error) {
+    console.warn("Failed to fetch feature status, defaulting to available:", error);
+    // Default to all available if API fails
+    return {};
+  }
+}
+
+/**
+ * Get the feature status for a tool
+ * @param {string} toolId - The tool ID (e.g., "wallet-cleanup")
+ * @returns {string} The status ("available", "coming_soon", "beta", "disabled")
+ */
+function getToolFeatureStatus(toolId) {
+  const featureKey = TOOL_TO_FEATURE_MAP[toolId];
+  if (!featureKey || !featureStatus[featureKey]) {
+    return FEATURE_STATUS.AVAILABLE;
+  }
+  return featureStatus[featureKey];
+}
+
+/**
+ * Check if a tool is available (can be clicked/used)
+ * @param {string} toolId - The tool ID
+ * @returns {boolean} True if tool is available or beta
+ */
+function _isToolAvailable(toolId) {
+  const status = getToolFeatureStatus(toolId);
+  return status === FEATURE_STATUS.AVAILABLE || status === FEATURE_STATUS.BETA;
+}
+
+/**
+ * Apply feature status to all tool navigation items
+ */
+function applyFeatureStatusToUI() {
+  const navItems = $$(".nav-item[data-tool]");
+
+  navItems.forEach((navItem) => {
+    const toolId = navItem.dataset.tool;
+    const status = getToolFeatureStatus(toolId);
+
+    // Remove any existing status badges
+    const existingBadge = navItem.querySelector(".status-badge");
+    if (existingBadge) {
+      existingBadge.remove();
+    }
+
+    // If available, ensure clean state
+    if (status === FEATURE_STATUS.AVAILABLE) {
+      navItem.dataset.status = "ready";
+      navItem.classList.remove("feature-disabled", "feature-beta", "feature-coming-soon");
+      const statusIndicator = navItem.querySelector(".nav-item-status");
+      if (statusIndicator) {
+        statusIndicator.dataset.tooltip = "Ready to use";
+      }
+      return;
+    }
+
+    // Get status configuration
+    const config = STATUS_CONFIG[status];
+    if (!config) return;
+
+    // Apply data-status attribute
+    navItem.dataset.status = config.dataStatus;
+
+    // Add appropriate class
+    navItem.classList.remove("feature-disabled", "feature-beta", "feature-coming-soon");
+    if (status === FEATURE_STATUS.DISABLED) {
+      navItem.classList.add("feature-disabled");
+    } else if (status === FEATURE_STATUS.BETA) {
+      navItem.classList.add("feature-beta");
+    } else if (status === FEATURE_STATUS.COMING_SOON) {
+      navItem.classList.add("feature-coming-soon");
+    }
+
+    // Update status indicator tooltip
+    const statusIndicator = navItem.querySelector(".nav-item-status");
+    if (statusIndicator) {
+      statusIndicator.dataset.tooltip = config.tooltip;
+    }
+
+    // Add status badge for non-available tools
+    if (status !== FEATURE_STATUS.AVAILABLE) {
+      const badge = document.createElement("span");
+      badge.className = `status-badge ${config.cssClass}`;
+      badge.textContent = config.label;
+      navItem.appendChild(badge);
+    }
+  });
+}
 
 // =============================================================================
 // Tool Renderers
@@ -5117,16 +5276,28 @@ function createLifecycle() {
       // Initialize hints system
       await Hints.init();
 
+      // Fetch feature status from API and apply to UI
+      featureStatus = await fetchFeatureStatus();
+      applyFeatureStatusToUI();
+
       // Set up tool navigation click handler
       toolClickHandler = (event) => {
         const toolItem = event.target.closest(".nav-item, .tool-item");
         if (toolItem && toolItem.dataset.tool) {
-          // Check if tool is coming soon
-          if (toolItem.dataset.status === "coming") {
+          const toolId = toolItem.dataset.tool;
+          const status = toolItem.dataset.status;
+
+          // Handle non-available tools
+          if (status === "coming") {
             Utils.showToast("This tool is coming soon!", "info");
             return;
           }
-          selectTool(toolItem.dataset.tool);
+          if (status === "disabled") {
+            Utils.showToast("This tool is currently disabled", "warning");
+            return;
+          }
+
+          selectTool(toolId);
         }
       };
 
@@ -5168,6 +5339,7 @@ function createLifecycle() {
       }
       toolClickHandler = null;
       currentTool = null;
+      featureStatus = {}; // Reset feature status
 
       // Clean up Volume Aggregator resources
       stopVolumeAggregatorPolling();

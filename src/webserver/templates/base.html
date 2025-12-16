@@ -175,12 +175,22 @@
         <!-- Quick Actions -->
         <div class="header-actions">
           <!-- Search -->
-          <button class="header-action-btn" id="searchBtn" aria-label="Search tokens (Cmd+K)" title="Search tokens (⌘K)">
+          <button
+            class="header-action-btn"
+            id="searchBtn"
+            aria-label="Search tokens (Cmd+K)"
+            title="Search tokens (⌘K)"
+          >
             <i class="action-icon icon-search"></i>
           </button>
 
           <!-- Billboard -->
-          <button class="header-action-btn" id="billboard-btn" aria-label="Billboard - Featured Tokens" title="Billboard - Featured Tokens">
+          <button
+            class="header-action-btn"
+            id="billboard-btn"
+            aria-label="Billboard - Featured Tokens"
+            title="Billboard - Featured Tokens"
+          >
             <i class="action-icon icon-megaphone"></i>
           </button>
 
@@ -261,11 +271,18 @@
             <h3 id="notificationDrawerTitle">Actions</h3>
             <div class="notification-connection" id="notificationConnection">
               <span class="notification-connection__dot" id="notificationConnectionDot"></span>
-              <span class="notification-connection__text" id="notificationConnectionText">Live</span>
+              <span class="notification-connection__text" id="notificationConnectionText"
+                >Live</span
+              >
             </div>
           </div>
           <div class="notification-panel-actions">
-            <button type="button" id="markAllReadBtn" class="panel-action-btn" title="Mark all as read">
+            <button
+              type="button"
+              id="markAllReadBtn"
+              class="panel-action-btn"
+              title="Mark all as read"
+            >
               <i class="icon-check"></i>
             </button>
             <button type="button" id="clearAllBtn" class="panel-action-btn" title="Clear all">
@@ -300,16 +317,40 @@
 
         <!-- Tab navigation -->
         <nav class="notification-tabs" role="tablist">
-          <button type="button" class="notification-tab active" data-tab="all" role="tab" aria-selected="true">
+          <button
+            type="button"
+            class="notification-tab active"
+            data-tab="all"
+            role="tab"
+            aria-selected="true"
+          >
             All <span class="tab-count" id="allCount">0</span>
           </button>
-          <button type="button" class="notification-tab" data-tab="active" role="tab" aria-selected="false">
+          <button
+            type="button"
+            class="notification-tab"
+            data-tab="active"
+            role="tab"
+            aria-selected="false"
+          >
             Active <span class="tab-count" id="activeCount">0</span>
           </button>
-          <button type="button" class="notification-tab" data-tab="completed" role="tab" aria-selected="false">
+          <button
+            type="button"
+            class="notification-tab"
+            data-tab="completed"
+            role="tab"
+            aria-selected="false"
+          >
             Done <span class="tab-count" id="completedCount">0</span>
           </button>
-          <button type="button" class="notification-tab" data-tab="failed" role="tab" aria-selected="false">
+          <button
+            type="button"
+            class="notification-tab"
+            data-tab="failed"
+            role="tab"
+            aria-selected="false"
+          >
             Failed <span class="tab-count" id="failedCount">0</span>
           </button>
         </nav>
@@ -348,13 +389,19 @@
         </div>
 
         <!-- Loading indicator for infinite scroll -->
-        <div class="notification-loading" id="notificationLoading" style="display: none;">
+        <div class="notification-loading" id="notificationLoading" style="display: none">
           <i class="icon-loader"></i>
           <span>Loading more...</span>
         </div>
 
         <!-- Back to top button -->
-        <button type="button" id="backToTopBtn" class="back-to-top-btn" style="display: none;" title="Back to top">
+        <button
+          type="button"
+          id="backToTopBtn"
+          class="back-to-top-btn"
+          style="display: none"
+          title="Back to top"
+        >
           <i class="icon-chevron-up"></i>
         </button>
       </section>
@@ -416,7 +463,9 @@
         <span class="status-item">
           <i class="status-icon icon-trending-up"></i>
           <span class="status-label">Trading</span>
-          <span class="status-value status-trading" id="statusBarTrading" data-active="false">—</span>
+          <span class="status-value status-trading" id="statusBarTrading" data-active="false"
+            >—</span
+          >
         </span>
         <span class="status-separator">•</span>
         <span class="status-item">
@@ -455,18 +504,21 @@
 
     <!-- Initialize global search dialog -->
     <script type="module">
-      import { initSearchDialog, openDialog } from '/scripts/ui/search_dialog.js?v={{ASSET_VERSION}}';
+      import {
+        initSearchDialog,
+        openDialog,
+      } from "/scripts/ui/search_dialog.js?v={{ASSET_VERSION}}";
       initSearchDialog();
       // Connect header search button
-      const searchBtn = document.getElementById('searchBtn');
+      const searchBtn = document.getElementById("searchBtn");
       if (searchBtn) {
-        searchBtn.addEventListener('click', openDialog);
+        searchBtn.addEventListener("click", openDialog);
       }
     </script>
 
     <!-- Initialize billboard dialog -->
     <script type="module">
-      import { initBillboard } from '/scripts/ui/billboard_dialog.js?v={{ASSET_VERSION}}';
+      import { initBillboard } from "/scripts/ui/billboard_dialog.js?v={{ASSET_VERSION}}";
       initBillboard();
     </script>
 

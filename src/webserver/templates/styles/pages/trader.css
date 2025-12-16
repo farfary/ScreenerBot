@@ -1735,6 +1735,65 @@
 }
 
 /* ============================================================================
+   Tab Feature Status Badges
+   ============================================================================ */
+
+/* Tab status badge */
+.sub-tab .tab-status-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  font-size: 0.5rem;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: var(--radius-sm, 4px);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+.sub-tab .tab-status-badge.coming-soon {
+  background: var(--warning-alpha-20, rgba(255, 193, 7, 0.2));
+  color: var(--warning-color, #ffc107);
+}
+
+.sub-tab .tab-status-badge.beta {
+  background: var(--primary-alpha-20, rgba(88, 166, 255, 0.2));
+  color: var(--primary-color, #58a6ff);
+}
+
+.sub-tab .tab-status-badge.disabled {
+  background: var(--text-muted, #6c757d);
+  color: var(--bg-primary, #0d1117);
+  opacity: 0.7;
+}
+
+/* Make tab buttons position relative for badge positioning */
+.sub-tab {
+  position: relative;
+}
+
+/* Disabled tab styling */
+.sub-tab.tab-feature-disabled,
+.sub-tab.tab-feature-coming-soon {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sub-tab.tab-feature-disabled:hover,
+.sub-tab.tab-feature-coming-soon:hover {
+  background: transparent;
+  color: var(--text-secondary);
+  border-color: transparent;
+}
+
+/* Beta tab styling - still usable but with indicator */
+.sub-tab.tab-feature-beta {
+  /* Beta tabs are fully functional, just have a badge */
+}
+
+/* ============================================================================
    Responsive Layout Adjustments
    ============================================================================ */
 
@@ -1778,5 +1837,10 @@
 
   .strategies-grid {
     grid-template-columns: 1fr;
+  }
+
+  /* Hide badges on very small screens to save space */
+  .sub-tab .tab-status-badge {
+    display: none;
   }
 }

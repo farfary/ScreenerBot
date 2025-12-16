@@ -2001,10 +2001,7 @@ export class SettingsDialog {
     const timeoutSelect = content.querySelector("#securityAutoLockTimeout");
     if (timeoutSelect) {
       timeoutSelect.addEventListener("change", async (e) => {
-        await this._updateSecuritySetting(
-          "auto_lock_timeout_secs",
-          parseInt(e.target.value, 10)
-        );
+        await this._updateSecuritySetting("auto_lock_timeout_secs", parseInt(e.target.value, 10));
       });
     }
 

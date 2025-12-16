@@ -144,6 +144,44 @@ config_struct! {
         })]
         time_override_loss_threshold_percent: f64 = -40.0,
 
+        // ==================== STOP LOSS CONFIGURATION ====================
+        #[metadata(field_metadata! {
+            label: "Enable Stop Loss",
+            hint: "Enable automatic exit when loss exceeds threshold (exits immediately, unlike time override)",
+            impact: "high",
+            category: "Stop Loss",
+        })]
+        stop_loss_enabled: bool = false,
+        #[metadata(field_metadata! {
+            label: "Stop Loss Threshold %",
+            hint: "Exit when loss exceeds this % (50 = exit at -50%)",
+            min: 1,
+            max: 100,
+            step: 1,
+            unit: "%",
+            impact: "critical",
+            category: "Stop Loss",
+        })]
+        stop_loss_threshold_pct: f64 = 50.0,
+        #[metadata(field_metadata! {
+            label: "Allow Partial Exit",
+            hint: "Allow partial exits for stop loss instead of full position close",
+            impact: "medium",
+            category: "Stop Loss",
+        })]
+        stop_loss_allow_partial: bool = false,
+        #[metadata(field_metadata! {
+            label: "Min Hold Time",
+            hint: "Minimum seconds to hold before stop loss can trigger (0 = immediate)",
+            min: 0,
+            max: 86400,
+            step: 1,
+            unit: "seconds",
+            impact: "medium",
+            category: "Stop Loss",
+        })]
+        stop_loss_min_hold_seconds: u64 = 0,
+
         // Position timing
         #[metadata(field_metadata! {
             label: "Close Cooldown",

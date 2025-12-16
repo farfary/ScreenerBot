@@ -29,9 +29,10 @@ pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, Strin
 
   // Determine exit type based on configuration and reason
   let partial_exit_enabled = with_config(|cfg| cfg.positions.partial_exit_enabled);
+  // Note: StopLoss is NOT an emergency exit - it respects stop_loss_allow_partial config
   let is_emergency_exit = matches!(
     decision.reason,
-    TradeReason::StopLoss | TradeReason::Blacklisted | TradeReason::ForceSell
+    TradeReason::Blacklisted | TradeReason::ForceSell | TradeReason::RiskManagement
   );
 
   // Emergency exits are always full exits, otherwise check config and percentage

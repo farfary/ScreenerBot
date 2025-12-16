@@ -9,6 +9,7 @@ pub mod connectivity;
 pub mod constants;
 pub mod errors;
 pub mod events;
+pub mod features;
 pub mod filtering;
 pub mod global;
 pub mod gui;
