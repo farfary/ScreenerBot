@@ -354,6 +354,7 @@ body {
 *,
 *::before,
 *::after {
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -362,6 +363,7 @@ body {
 /* Generic selectable class - use for any copyable content */
 .selectable,
 [data-selectable="true"] {
+  -webkit-user-select: text;
   user-select: text;
   cursor: text;
 }
@@ -376,6 +378,7 @@ body {
 .pnl-neutral,
 .value-positive,
 .value-negative {
+  -webkit-user-select: text;
   user-select: text;
   cursor: text;
 }
@@ -397,6 +400,7 @@ body {
 [class*="-mint"],
 [class*="-address"],
 [class*="-signature"] {
+  -webkit-user-select: text;
   user-select: text;
   cursor: text;
 }
@@ -410,6 +414,7 @@ body {
 .setup-error-messages,
 pre,
 code {
+  -webkit-user-select: text;
   user-select: text;
   cursor: text;
 }
@@ -419,6 +424,7 @@ input,
 textarea,
 select,
 [contenteditable="true"] {
+  -webkit-user-select: text;
   user-select: text;
 }
 

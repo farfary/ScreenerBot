@@ -1600,8 +1600,8 @@
   box-shadow: 0 0 0 3px var(--primary-alpha-20);
 }
 
-.form-group input[type="text"]:hover:not(:focus):not(:disabled),
-.form-group input[type="number"]:hover:not(:focus):not(:disabled) {
+.form-group input[type="text"]:hover:not(:focus, :disabled),
+.form-group input[type="number"]:hover:not(:focus, :disabled) {
   border-color: var(--text-muted);
 }
 
@@ -1929,12 +1929,12 @@
 }
 
 .sub-tab .tab-status-badge.coming-soon {
-  background: var(--warning-alpha-20, rgba(255, 193, 7, 0.2));
+  background: var(--warning-alpha-20, rgb(255, 193, 7, 0.2));
   color: var(--warning-color, #ffc107);
 }
 
 .sub-tab .tab-status-badge.beta {
-  background: var(--primary-alpha-20, rgba(88, 166, 255, 0.2));
+  background: var(--primary-alpha-20, rgb(88, 166, 255, 0.2));
   color: var(--primary-color, #58a6ff);
 }
 
