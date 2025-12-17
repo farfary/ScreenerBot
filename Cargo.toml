@@ -8,7 +8,7 @@ default-run = "screenerbot"
 autobins = false
 
 # Note: We do NOT use a [workspace] here because Tauri bundles ALL workspace binaries.
-# Debug binaries are in src/debug_bins/ - Tauri only looks for src/bin/
+# Debug binaries are in src/debug_bins/ - Tauri only oks lofor src/bin/
 # Alternative: use crates/debug-tools/ standalone crate
 
 # Dev profile — fastest possible compile + good debugging
@@ -34,12 +34,6 @@ strip = "symbols"       # Strip ALL symbols (no function names leak)
 debug-assertions = false  # No debug assertions in release
 overflow-checks = false   # No overflow checks (performance)
 
-# Optional: profile for maximum optimization (slow compile, best runtime)
-[profile.max-release]
-inherits = "release"
-opt-level = 3           # Maximum optimizations
-lto = "thin"            # Link-time optimization
-codegen-units = 1       # Best optimization (slow compile)
 
 [lib]
 name = "screenerbot"
