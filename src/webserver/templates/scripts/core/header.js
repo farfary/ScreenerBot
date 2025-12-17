@@ -9,6 +9,7 @@ import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { requestManager } from "./request_manager.js";
 import { subscribeToBootstrap, waitForReady } from "./bootstrap.js";
 import { showSettingsDialog } from "../ui/settings_dialog.js";
+import { playToggleOn, playToggleOff } from "./sounds.js";
 
 const MIN_STATUS_POLL_INTERVAL = 5000;
 const METRICS_POLL_INTERVAL = 5000; // Header metrics update every 5s
@@ -162,6 +163,33 @@ function updateConnectionStatus(isConnected) {
     elements.connectionIcon.className = "icon-circle-x";
     elements.connectionStatus.title = "Backend Disconnected";
   }
+}
+
+/**
+ * Create a ripple effect on click for interactive elements
+ */
+function createRippleEffect(element, event) {
+  const ripple = document.createElement("span");
+  ripple.className = "card-ripple";
+
+  const rect = element.getBoundingClientRect();
+  const size = Math.max(rect.width, rect.height);
+  const x = event.clientX - rect.left - size / 2;
+  const y = event.clientY - rect.top - size / 2;
+
+  ripple.style.cssText = `
+    width: ${size}px;
+    height: ${size}px;
+    left: ${x}px;
+    top: ${y}px;
+  `;
+
+  element.appendChild(ripple);
+
+  // Remove ripple after animation
+  ripple.addEventListener("animationend", () => {
+    ripple.remove();
+  });
 }
 
 function setLoading(isLoading) {
@@ -632,15 +660,34 @@ function initTraderControls() {
 }
 
 function initCardHandlers() {
-  // Bot card - toggle trader
+  // Bot card - toggle trader with ripple effect and sound
   const botCard = document.getElementById("botCard");
   if (botCard) {
-    botCard.addEventListener("click", () => {
+    botCard.addEventListener("click", (event) => {
       if (!state.available || state.loading) return;
+
+      // Create ripple effect
+      createRippleEffect(botCard, event);
+
+      // Add toggle animation class
+      botCard.classList.add("toggling");
+      setTimeout(() => botCard.classList.remove("toggling"), 600);
+
       const action = state.running ? "stop" : "start";
+
+      // Play appropriate sound
+      if (action === "start") {
+        playToggleOn();
+      } else {
+        playToggleOff();
+      }
+
       controlTrader(action);
     });
     botCard.style.cursor = "pointer";
+
+    // Add tooltip hint
+    botCard.setAttribute("title", "Click to toggle Auto Trader");
   }
 
   // Wallet card - navigate to wallet page

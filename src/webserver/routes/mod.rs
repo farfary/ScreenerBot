@@ -253,6 +253,7 @@ async fn get_core_script(axum::extract::Path(file): axum::extract::Path<String>)
         "status_bar.js" => Some(templates::CORE_STATUS_BAR),
         "hints.js" => Some(templates::CORE_HINTS),
         "lockscreen.js" => Some(templates::CORE_LOCKSCREEN),
+        "sounds.js" => Some(templates::CORE_SOUNDS),
         _ => None,
     };
 

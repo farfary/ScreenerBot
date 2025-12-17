@@ -3,7 +3,7 @@
 .onboarding-screen {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: var(--z-onboarding, 10005);
   display: grid;
   grid-template-rows: auto 1fr auto;
   background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1c2128 100%);

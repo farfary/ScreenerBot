@@ -2,6 +2,7 @@
 import { PageLifecycleRegistry } from "./lifecycle.js";
 import * as AppState from "./app_state.js";
 import { waitForReady } from "./bootstrap.js";
+import { playClick, playTabSwitch } from "./sounds.js";
 
 const assetVersion = window.__ASSET_VERSION__ || "";
 const assetQuery = assetVersion ? `?v=${encodeURIComponent(assetVersion)}` : "";
@@ -275,7 +276,7 @@ export async function loadPage(pageName) {
 }
 
 export function initRouter() {
-  // Handle navigation links
+  // Handle navigation links (main nav tabs)
   document.addEventListener("click", (e) => {
     const link = e.target.closest("a[data-page]");
     if (!link) return;
@@ -283,6 +284,8 @@ export function initRouter() {
     e.preventDefault();
     const pageName = link.getAttribute("data-page");
     if (pageName && pageName !== _state.currentPage) {
+      // Play tab switch sound for main navigation
+      playTabSwitch();
       loadPage(pageName);
     }
   });
@@ -391,6 +394,18 @@ async function bootstrapRouter() {
   } catch (e) {
     console.warn("[Router] Failed to initialize AppState from server:", e);
   }
+
+  // Global button click sound - subtle audio feedback for all buttons
+  document.addEventListener(
+    "click",
+    (e) => {
+      const target = e.target.closest("button, .btn, [role='button']");
+      if (target && !target.disabled) {
+        playClick();
+      }
+    },
+    true
+  );
 
   initRouter();
 }

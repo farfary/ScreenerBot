@@ -17,6 +17,36 @@ const SEARCH_DEBOUNCE_MS = 300;
 const MIN_QUERY_LENGTH = 2;
 
 let dialogEl = null;
+
+// =============================================================================
+// SETUP STATE CHECK
+// =============================================================================
+
+/**
+ * Check if setup, onboarding, or splash screens are currently visible.
+ * Search dialog should not open during these screens.
+ */
+function isSetupActive() {
+  // Check for splash screen
+  const splash = document.getElementById("splash-screen");
+  if (splash && splash.style.display !== "none" && !splash.classList.contains("hidden")) {
+    return true;
+  }
+
+  // Check for setup screen
+  const setup = document.getElementById("setup-screen");
+  if (setup && setup.style.display !== "none" && !setup.classList.contains("hidden")) {
+    return true;
+  }
+
+  // Check for onboarding screen
+  const onboarding = document.getElementById("onboarding-screen");
+  if (onboarding && onboarding.style.display !== "none" && !onboarding.classList.contains("hidden")) {
+    return true;
+  }
+
+  return false;
+}
 let isOpen = false;
 let selectedIndex = 0;
 let currentResults = [];
@@ -450,6 +480,10 @@ function handleGlobalKeydown(e) {
   // Cmd/Ctrl+K to toggle search
   if ((e.metaKey || e.ctrlKey) && e.key === "k") {
     e.preventDefault();
+    // Don't open during setup screens
+    if (isSetupActive()) {
+      return;
+    }
     if (isOpen) {
       closeDialog();
     } else {
@@ -473,6 +507,11 @@ function handleGlobalKeydown(e) {
  * Open the search dialog
  */
 export function openDialog() {
+  // Don't open during setup, onboarding, or splash screens
+  if (isSetupActive()) {
+    return;
+  }
+
   createDialog();
   show(dialogEl);
   dialogEl.classList.add("visible");

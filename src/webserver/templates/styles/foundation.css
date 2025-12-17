@@ -155,6 +155,8 @@
   --z-dialog: 10000;
   --z-status-bar: 10001;
   --z-toast: 10002;
+  --z-setup: 10005; /* Setup screen above all UI elements */
+  --z-onboarding: 10005; /* Onboarding slides above all UI elements */
   --z-exit-dialog: 10010;
   --z-splash: 99999;
   --z-lockscreen: 100000; /* Highest - security lockscreen above everything */

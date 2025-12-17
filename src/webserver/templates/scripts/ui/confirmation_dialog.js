@@ -8,7 +8,10 @@
  * - Variants: danger, warning, info
  * - Optional checkbox ("Don't ask again")
  * - Glassmorphic design matching toast/notification system
+ * - Sound feedback on actions
  */
+
+import { playPanelOpen, playPanelClose, playSuccess } from "../core/sounds.js";
 
 class ConfirmationDialog {
   static activeDialog = null;
@@ -132,6 +135,7 @@ class ConfirmationDialog {
     requestAnimationFrame(() => {
       this.backdrop.classList.add("confirmation-dialog-backdrop--visible");
       this.element.classList.add("confirmation-dialog--visible");
+      playPanelOpen();
     });
 
     // Focus confirm button by default
@@ -188,6 +192,7 @@ class ConfirmationDialog {
   }
 
   _handleConfirm() {
+    playSuccess();
     if (this.resolver) {
       this.resolver({
         confirmed: true,
@@ -199,6 +204,7 @@ class ConfirmationDialog {
   }
 
   _handleCancel() {
+    playPanelClose();
     if (this.resolver) {
       this.resolver({
         confirmed: false,

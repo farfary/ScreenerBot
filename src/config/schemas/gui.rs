@@ -82,6 +82,9 @@ config_struct! {
 
         /// Show billboard row featuring promoted tokens on Home and Tokens pages
         show_billboard: bool = true,
+
+        /// Enable sound effects throughout the dashboard
+        sounds_enabled: bool = true,
     }
 }
 

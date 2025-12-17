@@ -4,6 +4,7 @@ import { toastManager } from "../core/toast.js";
 import * as Utils from "../core/utils.js";
 import { ConfirmationDialog } from "./confirmation_dialog.js";
 import { enhanceAllSelects } from "./custom_select.js";
+import { playPanelOpen, playPanelClose, playTabSwitch } from "../core/sounds.js";
 
 let currentTab = "all";
 let isInitialized = false;
@@ -80,6 +81,9 @@ export function open() {
   drawer.setAttribute("aria-hidden", "false");
   document.body.classList.add("notification-drawer-open");
 
+  // Play panel open sound
+  playPanelOpen();
+
   // Notify toast manager about drawer state
   toastManager.onDrawerStateChange(true);
 
@@ -100,6 +104,9 @@ export function close() {
   drawer.setAttribute("data-state", "closed");
   drawer.setAttribute("aria-hidden", "true");
   document.body.classList.remove("notification-drawer-open");
+
+  // Play panel close sound
+  playPanelClose();
 
   // Notify toast manager about drawer state
   toastManager.onDrawerStateChange(false);
@@ -152,6 +159,7 @@ function setupTabs() {
       currentTab = tab.dataset.tab;
       resetScrollState();
       setActiveTab(tab);
+      playTabSwitch(); // Sound feedback for tab switch
       renderNotifications();
       toggleHistoryControls(currentTab === "completed" || currentTab === "failed");
     };

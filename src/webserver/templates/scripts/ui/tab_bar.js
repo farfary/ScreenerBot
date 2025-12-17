@@ -10,6 +10,7 @@
  * - Theme-aware CSS variables
  * - Deep linking support (hash-based)
  * - Async validation hooks
+ * - Sound feedback on tab switches
  *
  * Usage:
  * ```js
@@ -37,6 +38,7 @@
 /* global sessionStorage, history, queueMicrotask */
 
 import * as AppState from "../core/app_state.js";
+import { playTabSwitch } from "../core/sounds.js";
 
 // ============================================================================
 // TabBarContext - Event pub/sub for TabBar events
@@ -378,6 +380,11 @@ export class TabBar {
 
     const oldTab = this.activeTab;
     this.activeTab = tabId;
+
+    // Play tab switch sound (only for user-initiated switches, not silent/restore)
+    if (!silent) {
+      playTabSwitch();
+    }
 
     // Update DOM
     this._updateTabButtons();

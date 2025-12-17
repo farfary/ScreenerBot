@@ -146,6 +146,216 @@
     "zero" 1;
 }
 
+/* ===== Controls Bar ===== */
+.controls-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: var(--card-radius);
+  box-shadow: 0 1px 4px var(--shadow-sm);
+}
+
+.control-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.625rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.control-item.auto-trader-control {
+  padding-right: 0.5rem;
+}
+
+.control-item.quick-action {
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+.control-item.quick-action:hover {
+  background: var(--primary-alpha-10);
+  border-color: var(--primary-alpha-20);
+}
+
+.control-item.quick-action:active {
+  transform: scale(0.97);
+}
+
+.control-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  font-size: 1rem;
+  color: var(--text-secondary);
+  transition: all 0.2s ease;
+}
+
+.auto-trader-control .control-icon {
+  background: var(--bg-secondary);
+  color: var(--text-muted);
+}
+
+.auto-trader-control[data-status="running"] .control-icon {
+  background: var(--success-alpha-15);
+  color: var(--success-color);
+  animation: pulse-glow 2s ease-in-out infinite;
+}
+
+.auto-trader-control[data-status="stopped"] .control-icon {
+  background: var(--danger-alpha-15);
+  color: var(--danger-color);
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--success-alpha-30);
+  }
+
+  50% {
+    box-shadow: 0 0 8px 2px var(--success-alpha-20);
+  }
+}
+
+.control-info {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.control-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+}
+
+.control-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  font-family: var(--font-data);
+}
+
+.auto-trader-control[data-status="running"] .control-status {
+  color: var(--success-color);
+}
+
+.auto-trader-control[data-status="stopped"] .control-status {
+  color: var(--danger-color);
+}
+
+.control-divider {
+  width: 1px;
+  height: 24px;
+  background: var(--border-color);
+  margin: 0 0.25rem;
+}
+
+/* Control Switch (Toggle) */
+.control-switch {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+  margin-left: 0.375rem;
+}
+
+.control-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.control-switch-track {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.control-switch-track::before {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.2);
+}
+
+.control-switch input:checked + .control-switch-track {
+  background: var(--success-color);
+  border-color: var(--success-color);
+}
+
+.control-switch input:checked + .control-switch-track::before {
+  left: calc(100% - 16px);
+  background: #fff;
+}
+
+.control-switch input:disabled + .control-switch-track {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.control-switch:hover .control-switch-track {
+  border-color: var(--primary-alpha-50);
+}
+
+.control-switch input:focus-visible + .control-switch-track {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+/* Status dot */
+.control-icon.status-dot {
+  width: 24px;
+  height: 24px;
+  background: transparent;
+}
+
+.pulse-dot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success-color);
+  box-shadow: 0 0 0 0 var(--success-alpha-50);
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 var(--success-alpha-50);
+  }
+
+  50% {
+    box-shadow: 0 0 0 4px var(--success-alpha-20);
+  }
+}
+
+.status-item[data-status="disconnected"] .pulse-dot {
+  background: var(--danger-color);
+  animation: none;
+}
+
 /* ===== Content Grid - 3 Columns ===== */
 .content-grid {
   display: grid;

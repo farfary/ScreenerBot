@@ -7,6 +7,7 @@ import { createFocusTrap } from "../core/utils.js";
 import { getCurrentPage } from "../core/router.js";
 import { setInterval as setPollingInterval, Poller } from "../core/poller.js";
 import { enhanceAllSelects } from "./custom_select.js";
+import { setSoundsEnabled, playPanelOpen, playPanelClose, playTabSwitch } from "../core/sounds.js";
 
 // Global update state to persist across dialog opens
 let globalUpdateState = {
@@ -55,6 +56,8 @@ export class SettingsDialog {
     requestAnimationFrame(() => {
       if (this.dialogEl) {
         this.dialogEl.classList.add("active");
+        // Play panel open sound
+        playPanelOpen();
         // Add ARIA attributes for accessibility
         const container = this.dialogEl.querySelector(".settings-container");
         if (container) {
@@ -226,6 +229,9 @@ export class SettingsDialog {
    */
   close() {
     if (!this.dialogEl) return;
+
+    // Play panel close sound
+    playPanelClose();
 
     // Deactivate focus trap
     if (this._focusTrap) {
@@ -617,6 +623,9 @@ export class SettingsDialog {
    * Switch to a different tab
    */
   _switchTab(tab) {
+    // Play tab switch sound
+    playTabSwitch();
+
     // Update nav buttons
     this.dialogEl.querySelectorAll(".settings-nav-item").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.tab === tab);
@@ -814,6 +823,24 @@ export class SettingsDialog {
           </div>
         </div>
       </div>
+
+      <div class="settings-section">
+        <h3 class="settings-section-title">Sound Effects</h3>
+        <div class="settings-group">
+          <div class="settings-field">
+            <div class="settings-field-info">
+              <label>Enable Sounds</label>
+              <span class="settings-field-hint">Subtle audio feedback for button clicks and actions</span>
+            </div>
+            <div class="settings-field-control">
+              <label class="settings-toggle">
+                <input type="checkbox" id="settingSoundsEnabled" ${iface.sounds_enabled !== false ? "checked" : ""}>
+                <span class="settings-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
     `;
   }
 
@@ -831,6 +858,7 @@ export class SettingsDialog {
       autoExpand: content.querySelector("#settingAutoExpand"),
       showHints: content.querySelector("#settingShowHints"),
       showBillboard: content.querySelector("#settingShowBillboard"),
+      soundsEnabled: content.querySelector("#settingSoundsEnabled"),
     };
 
     const updateSetting = (path, value) => {
@@ -882,6 +910,12 @@ export class SettingsDialog {
       fields.showBillboard.addEventListener("change", (e) =>
         updateSetting("show_billboard", e.target.checked)
       );
+    }
+    if (fields.soundsEnabled) {
+      fields.soundsEnabled.addEventListener("change", (e) => {
+        updateSetting("sounds_enabled", e.target.checked);
+        setSoundsEnabled(e.target.checked);
+      });
     }
   }
 

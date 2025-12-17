@@ -6,6 +6,7 @@ import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { requestManager } from "../core/request_manager.js";
 import { ActionBar, ActionBarManager } from "../ui/action_bar.js";
+import { playToggleOn, playToggleOff, playError } from "../core/sounds.js";
 
 // Sub-tabs configuration
 const SUB_TABS = [
@@ -1674,11 +1675,146 @@ function createLifecycle() {
     }
   }
 
+  // ============================================================================
+  // Auto Trader Toggle Functions
+  // ============================================================================
+
+  /**
+   * Update all auto trader status bars on the page
+   */
+  function updateAutoTraderStatusBars(status) {
+    const isRunning = status?.running === true;
+    const isAvailable = status !== undefined && status !== null;
+    const statusText = isRunning ? "Running" : "Stopped";
+    const statusAttr = isRunning ? "running" : "stopped";
+    const toggleLabel = isRunning ? "ON" : "OFF";
+
+    // Update stats tab status bar
+    const statsBar = $("#trader-status-bar");
+    if (statsBar) {
+      statsBar.setAttribute("data-status", statusAttr);
+      const statsStatusText = $("#trader-status-text");
+      if (statsStatusText) statsStatusText.textContent = statusText;
+      const statsToggle = $("#stats-trader-toggle");
+      if (statsToggle) {
+        statsToggle.checked = isRunning;
+        statsToggle.disabled = !isAvailable;
+      }
+      const statsToggleLabel = $("#stats-toggle-label");
+      if (statsToggleLabel) statsToggleLabel.textContent = toggleLabel;
+    }
+
+    // Update settings tab status bar
+    const settingsBar = $("#settings-trader-status-bar");
+    if (settingsBar) {
+      settingsBar.setAttribute("data-status", statusAttr);
+      const settingsStatusText = $("#settings-trader-status-text");
+      if (settingsStatusText) settingsStatusText.textContent = statusText;
+      const settingsToggle = $("#settings-trader-toggle");
+      if (settingsToggle) {
+        settingsToggle.checked = isRunning;
+        settingsToggle.disabled = !isAvailable;
+      }
+      const settingsToggleLabel = $("#settings-toggle-label");
+      if (settingsToggleLabel) settingsToggleLabel.textContent = toggleLabel;
+    }
+  }
+
+  /**
+   * Toggle auto trader on/off
+   */
+  async function toggleAutoTrader(shouldStart, _triggerElement) {
+    // Disable all toggles while processing
+    const allToggles = [$("#stats-trader-toggle"), $("#settings-trader-toggle")];
+    allToggles.forEach((toggle) => {
+      if (toggle) toggle.disabled = true;
+    });
+
+    const endpoint = shouldStart ? "/api/trader/start" : "/api/trader/stop";
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to ${shouldStart ? "start" : "stop"} trader`);
+      }
+
+      // Play sound feedback
+      if (shouldStart) {
+        playToggleOn();
+      } else {
+        playToggleOff();
+      }
+
+      // Show toast
+      Utils.showToast(`Auto Trader ${shouldStart ? "started" : "stopped"}`, "success");
+
+      // Update status bars
+      updateAutoTraderStatusBars({ running: shouldStart });
+    } catch (error) {
+      console.error("Toggle auto trader error:", error);
+      Utils.showToast(error.message, "error");
+      playError();
+
+      // Revert toggle states
+      updateAutoTraderStatusBars({ running: !shouldStart });
+    } finally {
+      // Re-enable all toggles
+      allToggles.forEach((toggle) => {
+        if (toggle) toggle.disabled = false;
+      });
+    }
+  }
+
+  /**
+   * Setup auto trader toggle event handlers
+   */
+  function setupAutoTraderToggles() {
+    const statsToggle = $("#stats-trader-toggle");
+    const settingsToggle = $("#settings-trader-toggle");
+
+    if (statsToggle) {
+      addTrackedListener(statsToggle, "change", (e) => {
+        toggleAutoTrader(e.target.checked, statsToggle);
+      });
+    }
+
+    if (settingsToggle) {
+      addTrackedListener(settingsToggle, "change", (e) => {
+        toggleAutoTrader(e.target.checked, settingsToggle);
+      });
+    }
+
+    // Initial fetch of trader status
+    fetchTraderStatus();
+  }
+
+  /**
+   * Fetch and update trader status
+   */
+  async function fetchTraderStatus() {
+    try {
+      const response = await fetch("/api/trader/status");
+      if (response.ok) {
+        const data = await response.json();
+        updateAutoTraderStatusBars(data);
+      }
+    } catch (error) {
+      console.warn("[Trader] Failed to fetch trader status:", error);
+    }
+  }
+
   /**
    * Setup form submission handlers
    * Note: Button handlers moved to ActionBar in configureActionBar()
    */
   function setupFormHandlers() {
+    // Setup auto trader toggle handlers
+    setupAutoTraderToggles();
+
     // Stop loss threshold input listener
     const stopLossThreshold = $("#stop-loss-threshold");
     if (stopLossThreshold) {

@@ -3,6 +3,26 @@
   <div id="trader-content">
     <!-- Stats Tab -->
     <div id="stats-tab" class="trader-tab-content" style="display: none">
+      <!-- Auto Trader Status Control -->
+      <div class="trader-status-bar" id="trader-status-bar">
+        <div class="status-bar-main">
+          <div class="status-bar-icon" id="trader-status-icon">
+            <i class="icon-bot"></i>
+          </div>
+          <div class="status-bar-info">
+            <span class="status-bar-title">Auto Trader</span>
+            <span class="status-bar-status" id="trader-status-text">Loading...</span>
+          </div>
+        </div>
+        <div class="status-bar-toggle">
+          <label class="trader-toggle-switch">
+            <input type="checkbox" id="stats-trader-toggle" disabled />
+            <span class="trader-toggle-track"></span>
+            <span class="trader-toggle-label" id="stats-toggle-label">OFF</span>
+          </label>
+        </div>
+      </div>
+
       <div class="stats-grid">
         <!-- Key Performance Indicators -->
         <div class="stats-section stats-section-primary">
@@ -1074,6 +1094,26 @@
 
     <!-- General Settings Tab -->
     <div id="general-settings-tab" class="trader-tab-content" style="display: none">
+      <!-- Auto Trader Status Control -->
+      <div class="trader-status-bar" id="settings-trader-status-bar">
+        <div class="status-bar-main">
+          <div class="status-bar-icon" id="settings-trader-status-icon">
+            <i class="icon-bot"></i>
+          </div>
+          <div class="status-bar-info">
+            <span class="status-bar-title">Auto Trader</span>
+            <span class="status-bar-status" id="settings-trader-status-text">Loading...</span>
+          </div>
+        </div>
+        <div class="status-bar-toggle">
+          <label class="trader-toggle-switch">
+            <input type="checkbox" id="settings-trader-toggle" disabled />
+            <span class="trader-toggle-track"></span>
+            <span class="trader-toggle-label" id="settings-toggle-label">OFF</span>
+          </label>
+        </div>
+      </div>
+
       <!-- Position Sizing Section -->
       <div class="config-section">
         <div class="config-card">

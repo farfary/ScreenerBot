@@ -17,7 +17,7 @@
 .setup-screen {
   position: fixed;
   inset: 0;
-  z-index: 9998;
+  z-index: var(--z-setup, 10005);
   display: grid;
   grid-template-rows: auto 1fr auto;
   background: var(--bg-primary, #0d1117);

@@ -19,7 +19,7 @@ use chrono::{Duration, Utc};
 use crate::webserver::routes::dashboard::{
     BlacklistInfo, DashboardOverview, HomeDashboardResponse, MonitoringInfo, OpenPositionDetail,
     PositionPerformer, PositionsSummary, PositionsSnapshot, RpcInfo, ServiceStatus, SystemInfo,
-    SystemMetrics, TokenStatistics, TraderAnalytics, TradingPeriodStats, WalletAnalytics,
+    SystemMetrics, TokenStatistics, TraderAnalytics, TraderStatusInfo, TradingPeriodStats, WalletAnalytics,
     WalletInfo,
 };
 use crate::webserver::routes::header::{
@@ -512,6 +512,7 @@ pub fn get_demo_home_dashboard() -> HomeDashboardResponse {
         positions,
         system,
         tokens,
+        trader_status: TraderStatusInfo { running: true }, // Demo mode: always running
         timestamp: now.to_rfc3339(),
     }
 }

@@ -2132,7 +2132,7 @@
 .security-modal-backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgb(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
 }
 
@@ -2141,7 +2141,7 @@
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 20px 60px rgb(0, 0, 0, 0.4);
   width: 100%;
   max-width: 400px;
   animation: security-modal-in 0.2s ease-out;

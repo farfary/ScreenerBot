@@ -4,6 +4,7 @@ import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";
 import { requestManager, createScopedFetcher } from "../core/request_manager.js";
 import { showBillboardRow, hideBillboardRow } from "../ui/billboard_row.js";
+import { playToggleOn, playToggleOff, playError } from "../core/sounds.js";
 
 function createLifecycle() {
   let poller = null;
@@ -79,6 +80,9 @@ function createLifecycle() {
   function updateUI(data) {
     if (!data) return;
 
+    // Update auto trader control bar
+    updateAutoTraderControl(data.trader_status);
+
     // Update trading analytics for current period
     updateTraderStats(data.trader[currentPeriod]);
 
@@ -126,6 +130,70 @@ function createLifecycle() {
     }
     if (drawdownEl) {
       drawdownEl.textContent = `${Utils.formatNumber(stats.drawdown_percent, 2)}%`;
+    }
+  }
+
+  // Update auto trader control bar
+  function updateAutoTraderControl(status) {
+    const control = document.getElementById("autoTraderControl");
+    const statusEl = document.getElementById("autoTraderStatus");
+    const toggleEl = document.getElementById("autoTraderToggle");
+
+    if (!control || !statusEl || !toggleEl) return;
+
+    const isRunning = status?.running === true;
+    const isAvailable = status !== undefined && status !== null;
+
+    // Update data attribute for styling
+    control.setAttribute("data-status", isRunning ? "running" : "stopped");
+
+    // Update status text
+    statusEl.textContent = isRunning ? "Running" : "Stopped";
+
+    // Update toggle state
+    toggleEl.checked = isRunning;
+    toggleEl.disabled = !isAvailable;
+  }
+
+  // Toggle auto trader
+  async function toggleAutoTrader(shouldStart) {
+    const toggleEl = document.getElementById("autoTraderToggle");
+    if (toggleEl) toggleEl.disabled = true;
+
+    const endpoint = shouldStart ? "/api/trader/start" : "/api/trader/stop";
+
+    try {
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to ${shouldStart ? "start" : "stop"} trader`);
+      }
+
+      // Play sound feedback
+      if (shouldStart) {
+        playToggleOn();
+      } else {
+        playToggleOff();
+      }
+
+      // Show toast
+      Utils.showToast(`Auto Trader ${shouldStart ? "started" : "stopped"}`, "success");
+
+      // Refresh data
+      fetchData();
+    } catch (error) {
+      console.error("Toggle auto trader error:", error);
+      Utils.showToast(error.message, "error");
+      playError();
+
+      // Revert toggle state
+      if (toggleEl) {
+        toggleEl.checked = !shouldStart;
+        toggleEl.disabled = false;
+      }
     }
   }
 
@@ -337,6 +405,32 @@ function createLifecycle() {
     });
   }
 
+  // Setup auto trader toggle handler
+  function setupAutoTraderControl() {
+    const toggleEl = document.getElementById("autoTraderToggle");
+    const quickBuyEl = document.getElementById("quickBuyControl");
+    const quickSellEl = document.getElementById("quickSellControl");
+
+    if (toggleEl) {
+      addTrackedListener(toggleEl, "change", (e) => {
+        toggleAutoTrader(e.target.checked);
+      });
+    }
+
+    // Quick buy/sell buttons (navigate to tools page)
+    if (quickBuyEl) {
+      addTrackedListener(quickBuyEl, "click", () => {
+        window.location.hash = "#tools";
+      });
+    }
+
+    if (quickSellEl) {
+      addTrackedListener(quickSellEl, "click", () => {
+        window.location.hash = "#tools";
+      });
+    }
+  }
+
   return {
     init: (ctx) => {
       console.log("[Home] Initializing dashboard");
@@ -346,6 +440,7 @@ function createLifecycle() {
       // Data fetch happens in activate() to avoid double call
 
       setupPeriodTabs();
+      setupAutoTraderControl();
     },
 
     activate: (ctx) => {

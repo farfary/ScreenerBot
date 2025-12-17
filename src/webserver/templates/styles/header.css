@@ -294,6 +294,7 @@
 /* Bot Card Status Colors - Just text colors, no backgrounds */
 .bot-card[data-status="running"] .card-icon {
   color: #10b981;
+  animation: status-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 .bot-card[data-status="running"] .card-status {
@@ -317,10 +318,6 @@
 }
 
 /* Status Pulse Animation */
-.bot-card[data-status="running"] .card-icon {
-  animation: status-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
-
 @keyframes status-pulse {
   0%,
   100% {
@@ -332,6 +329,110 @@
     opacity: 0.7;
     filter: drop-shadow(0 0 8px currentcolor);
   }
+}
+
+/* Bot Card Interactive States */
+.bot-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.bot-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: transparent;
+  transition: background 0.25s ease;
+  pointer-events: none;
+}
+
+.bot-card:hover::before {
+  background: rgb(255, 255, 255, 0.05);
+}
+
+.bot-card:active::before {
+  background: rgb(255, 255, 255, 0.1);
+}
+
+.bot-card:hover {
+  transform: translateY(-1px);
+}
+
+.bot-card:active {
+  transform: scale(0.98);
+}
+
+/* Bot Card Toggle Animation */
+.bot-card.toggling {
+  animation: card-toggle 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes card-toggle {
+  0% {
+    transform: scale(1);
+  }
+
+  15% {
+    transform: scale(0.95);
+  }
+
+  30% {
+    transform: scale(1.02);
+  }
+
+  50% {
+    transform: scale(0.98);
+  }
+
+  70% {
+    transform: scale(1.01);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Ripple Effect */
+.card-ripple {
+  position: absolute;
+  border-radius: 50%;
+  background: rgb(255, 255, 255, 0.25);
+  transform: scale(0);
+  animation: ripple-effect 0.6s cubic-bezier(0, 0, 0.2, 1);
+  pointer-events: none;
+}
+
+@keyframes ripple-effect {
+  0% {
+    transform: scale(0);
+    opacity: 1;
+  }
+
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+
+/* Bot Card Glow on Running State */
+.bot-card[data-status="running"] {
+  box-shadow: 0 0 0 1px rgb(16, 185, 129, 0.2), 0 0 20px rgb(16, 185, 129, 0.1);
+}
+
+.bot-card[data-status="running"]:hover {
+  box-shadow: 0 0 0 1px rgb(16, 185, 129, 0.3), 0 0 25px rgb(16, 185, 129, 0.15);
+}
+
+.bot-card[data-status="stopped"] {
+  box-shadow: 0 0 0 1px rgb(239, 68, 68, 0.2);
+}
+
+.bot-card[data-status="stopped"]:hover {
+  box-shadow: 0 0 0 1px rgb(239, 68, 68, 0.3), 0 0 15px rgb(239, 68, 68, 0.1);
 }
 
 /* Quick Actions */

@@ -6,6 +6,7 @@ use crate::global::{
     POOL_SERVICE_READY, POSITIONS_SYSTEM_READY, TOKENS_SYSTEM_READY, TRANSACTIONS_SYSTEM_READY,
 };
 use crate::positions;
+use crate::trader::is_trader_running;
 use crate::rpc::get_global_rpc_stats;
 use crate::tokens::cleanup::get_blacklist_summary;
 use crate::tokens::database::get_global_database;
@@ -340,7 +341,13 @@ pub struct HomeDashboardResponse {
     pub positions: PositionsSnapshot,
     pub system: SystemMetrics,
     pub tokens: TokenStatistics,
+    pub trader_status: TraderStatusInfo,
     pub timestamp: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct TraderStatusInfo {
+    pub running: bool,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -756,12 +763,18 @@ async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<HomeDash
         found_all_time: total_in_database,
     };
 
+    // Get trader status
+    let trader_status = TraderStatusInfo {
+        running: is_trader_running(),
+    };
+
     Json(HomeDashboardResponse {
         trader,
         wallet,
         positions: positions_snapshot,
         system,
         tokens,
+        trader_status,
         timestamp: now.to_rfc3339(),
     })
 }

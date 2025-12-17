@@ -105,7 +105,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: var(--spacing-lg);
+  padding: 0 var(--spacing-lg) var(--spacing-lg);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-lg);

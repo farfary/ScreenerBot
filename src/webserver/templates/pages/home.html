@@ -25,6 +25,43 @@
     </div>
   </section>
 
+  <!-- Quick Controls Bar -->
+  <section class="controls-bar">
+    <div class="control-item auto-trader-control" id="autoTraderControl">
+      <div class="control-icon" id="autoTraderIcon">
+        <i class="icon-bot"></i>
+      </div>
+      <div class="control-info">
+        <span class="control-label">Auto Trader</span>
+        <span class="control-status" id="autoTraderStatus">Loading...</span>
+      </div>
+      <label class="control-switch">
+        <input type="checkbox" id="autoTraderToggle" disabled />
+        <span class="control-switch-track"></span>
+      </label>
+    </div>
+    <div class="control-divider"></div>
+    <div class="control-item quick-action" id="quickBuyControl">
+      <div class="control-icon">
+        <i class="icon-plus-circle"></i>
+      </div>
+      <span class="control-label">Quick Buy</span>
+    </div>
+    <div class="control-item quick-action" id="quickSellControl">
+      <div class="control-icon">
+        <i class="icon-minus-circle"></i>
+      </div>
+      <span class="control-label">Quick Sell</span>
+    </div>
+    <div class="control-divider"></div>
+    <div class="control-item status-item">
+      <div class="control-icon status-dot" id="connectivityDot">
+        <span class="pulse-dot"></span>
+      </div>
+      <span class="control-label" id="connectivityLabel">Connected</span>
+    </div>
+  </section>
+
   <!-- Main Content - 3 Column Layout -->
   <section class="content-grid">
     <!-- Column 1: Trading Analytics -->
