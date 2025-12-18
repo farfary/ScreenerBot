@@ -1066,7 +1066,6 @@
 .form-group.checkbox-group input[type="checkbox"] {
   width: 16px;
   height: 16px;
-  accent-color: var(--primary-color);
 }
 
 /* Input group */
@@ -3036,7 +3035,6 @@
 .mw-wallet-table input[type="checkbox"] {
   width: 16px;
   height: 16px;
-  accent-color: var(--primary-color);
   cursor: pointer;
 }
 
@@ -3146,7 +3144,6 @@
 .wc-wallet-table input[type="checkbox"] {
   width: 16px;
   height: 16px;
-  accent-color: var(--primary-color);
   cursor: pointer;
 }
 

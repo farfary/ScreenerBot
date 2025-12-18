@@ -387,7 +387,6 @@
 .indicator-dropdown-item input[type="checkbox"] {
   width: 14px;
   height: 14px;
-  accent-color: var(--primary-color);
 }
 
 .indicator-dropdown-item .indicator-color {

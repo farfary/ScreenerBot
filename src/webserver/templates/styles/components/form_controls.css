@@ -316,34 +316,48 @@ input[type="checkbox"] {
   flex-shrink: 0;
   background: var(--input-bg);
   border: var(--input-border-width) solid var(--input-border-default);
-  border-radius: var(--radius-sm);
+  border-radius: 4px;
   cursor: pointer;
   position: relative;
-  transition:
-    border-color 0.15s ease,
-    background-color 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 input[type="checkbox"]:hover:not(:disabled) {
   border-color: var(--input-border-hover);
+  background: var(--bg-card-hover);
 }
 
 input[type="checkbox"]:checked {
   background: var(--primary-color);
   border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px var(--primary-alpha-10);
 }
 
-/* Checkmark */
+/* Checkmark using SVG for perfect rendering and rounded ends */
 input[type="checkbox"]:checked::after {
   content: "";
   position: absolute;
-  left: 4px;
-  top: 1px;
-  width: 5px;
-  height: 9px;
-  border: solid white;
-  border-width: 0 2px 2px 0;
-  transform: rotate(45deg);
+  width: 100%;
+  height: 100%;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
+  background-size: 10px;
+  background-position: center;
+  background-repeat: no-repeat;
+  animation: checkbox-pop 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes checkbox-pop {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 input[type="checkbox"]:focus-visible {
@@ -354,6 +368,7 @@ input[type="checkbox"]:focus-visible {
 input[type="checkbox"]:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+  background: var(--bg-secondary);
 }
 
 /* Checkbox size variants */
@@ -363,10 +378,7 @@ input[type="checkbox"].checkbox-sm {
 }
 
 input[type="checkbox"].checkbox-sm:checked::after {
-  left: 3px;
-  top: 0;
-  width: 4px;
-  height: 8px;
+  background-size: 8px;
 }
 
 input[type="checkbox"].checkbox-lg {
@@ -375,10 +387,7 @@ input[type="checkbox"].checkbox-lg {
 }
 
 input[type="checkbox"].checkbox-lg:checked::after {
-  left: 6px;
-  top: 2px;
-  width: 6px;
-  height: 11px;
+  background-size: 14px;
 }
 
 /* =============================================================================

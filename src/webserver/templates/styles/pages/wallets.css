@@ -940,7 +940,6 @@
 .form-group.checkbox-group input[type="checkbox"] {
   width: 16px;
   height: 16px;
-  accent-color: var(--primary-color);
 }
 
 /* Password/Secure Input */

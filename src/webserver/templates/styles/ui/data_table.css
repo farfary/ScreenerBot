@@ -382,7 +382,6 @@ body.dt-column-resizing * {
   margin: 0;
   width: 16px;
   height: 16px;
-  accent-color: var(--primary-color);
 }
 
 .dt-column-label {

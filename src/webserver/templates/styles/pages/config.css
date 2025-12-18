@@ -862,7 +862,6 @@
   width: 20px;
   height: 20px;
   cursor: pointer;
-  accent-color: var(--config-accent);
 }
 
 .config-field-reset {
