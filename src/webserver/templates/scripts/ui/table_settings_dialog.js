@@ -60,6 +60,8 @@ export class TableSettingsDialog {
       columns: options.columns || [],
       currentOrder: options.currentOrder || [],
       currentVisibility: options.currentVisibility || {},
+      defaultOrder: options.defaultOrder || [],
+      defaultVisibility: options.defaultVisibility || {},
       onApply: typeof options.onApply === "function" ? options.onApply : null,
       // Pagination toggle options
       showPaginationToggle: options.showPaginationToggle || false,
@@ -71,16 +73,19 @@ export class TableSettingsDialog {
     this.root = null;
     this.dialog = null;
     this.columnListEl = null;
+    this.searchInput = null;
     this.applyBtn = null;
     this.cancelBtn = null;
     this.resetBtn = null;
 
     this._isOpen = false;
     this._previousActiveElement = null;
+    this._searchTerm = "";
 
     this._columnListeners = [];
     this._quickActionListeners = [];
     this._paginationToggleListener = null;
+    this._searchListener = this._handleSearch.bind(this);
 
     this._applyListener = this._handleApply.bind(this);
     this._resetListener = this._handleReset.bind(this);
@@ -92,16 +97,21 @@ export class TableSettingsDialog {
     this._workingState = this._createWorkingState();
   }
 
-  _createWorkingState() {
-    const orderedColumns = normalizeColumns(this.options.columns, this.options.currentOrder);
+  _createWorkingState(useDefaults = false) {
+    const orderSource = useDefaults ? this.options.defaultOrder : this.options.currentOrder;
+    const visibilitySource = useDefaults
+      ? this.options.defaultVisibility
+      : this.options.currentVisibility;
+
+    const orderedColumns = normalizeColumns(this.options.columns, orderSource);
     const visibility = {};
 
     orderedColumns.forEach((column) => {
       if (!column || !column.id) {
         return;
       }
-      if (Object.prototype.hasOwnProperty.call(this.options.currentVisibility, column.id)) {
-        visibility[column.id] = Boolean(this.options.currentVisibility[column.id]);
+      if (Object.prototype.hasOwnProperty.call(visibilitySource, column.id)) {
+        visibility[column.id] = Boolean(visibilitySource[column.id]);
       } else {
         visibility[column.id] = column.visible !== false;
       }
@@ -148,6 +158,9 @@ export class TableSettingsDialog {
               </div>
             </section>
           </div>
+          <div class="table-settings-search-container">
+            <input type="text" class="table-settings-search" placeholder="Filter columns..." aria-label="Filter columns">
+          </div>
           <div class="table-settings-column-list" role="list"></div>
         </div>
         <footer class="table-settings-footer">
@@ -165,6 +178,7 @@ export class TableSettingsDialog {
     this.root = overlay;
     this.dialog = overlay.querySelector(".table-settings-dialog");
     this.columnListEl = overlay.querySelector(".table-settings-column-list");
+    this.searchInput = overlay.querySelector(".table-settings-search");
     this.applyBtn = overlay.querySelector('[data-action="apply"]');
     this.cancelBtn = overlay.querySelector('[data-action="cancel"]');
     this.resetBtn = overlay.querySelector('[data-action="reset"]');
@@ -175,6 +189,9 @@ export class TableSettingsDialog {
     on(overlay, "click", this._overlayListener);
     if (closeBtn) {
       on(closeBtn, "click", this._closeListener);
+    }
+    if (this.searchInput) {
+      on(this.searchInput, "input", this._searchListener);
     }
     if (this.cancelBtn) {
       on(this.cancelBtn, "click", this._closeListener);
@@ -261,6 +278,10 @@ export class TableSettingsDialog {
 
     off(this.root, "click", this._overlayListener);
 
+    if (this.searchInput) {
+      off(this.searchInput, "input", this._searchListener);
+    }
+
     const closeBtn = this.root.querySelector('[data-action="close"]');
     if (closeBtn) {
       off(closeBtn, "click", this._closeListener);
@@ -298,6 +319,11 @@ export class TableSettingsDialog {
     this._columnListeners = [];
   }
 
+  _handleSearch(event) {
+    this._searchTerm = (event.target.value || "").toLowerCase().trim();
+    this._render();
+  }
+
   _render() {
     if (!this.columnListEl) {
       return;
@@ -313,8 +339,19 @@ export class TableSettingsDialog {
       return;
     }
 
-    this.columnListEl.innerHTML = columns
-      .map((column, index) => {
+    const filteredColumns = columns.map((col, idx) => ({ ...col, originalIndex: idx })).filter(col => {
+        if (!this._searchTerm) return true;
+        return (col.label || "").toLowerCase().includes(this._searchTerm);
+    });
+
+    if (filteredColumns.length === 0) {
+        this.columnListEl.innerHTML = '<div class="table-settings-empty">No columns match your search.</div>';
+        return;
+    }
+
+    this.columnListEl.innerHTML = filteredColumns
+      .map((column) => {
+        const index = column.originalIndex;
         const isVisible = visibility[column.id] !== false;
         const canToggle = canToggleVisibility(column);
         const disableToggleAttr = canToggle ? "" : " disabled";
@@ -325,8 +362,13 @@ export class TableSettingsDialog {
         const moveDownDisabled = index === columns.length - 1;
         const moveBottomDisabled = index === columns.length - 1;
 
+        // Disable move buttons if filtered, as index logic gets messy
+        const isFiltered = !!this._searchTerm;
+        const moveAttr = isFiltered ? "disabled" : "";
+
         return `
-          <div class="table-settings-column-item" data-column-id="${column.id}" role="listitem">
+          <div class="table-settings-column-item" draggable="${!isFiltered}" data-column-id="${column.id}" role="listitem">
+            <div class="table-settings-drag-handle" aria-hidden="true" title="Drag to reorder">⋮⋮</div>
             <span class="table-settings-column-index" aria-hidden="true">${index + 1}</span>
             <label class="table-settings-column-label${canToggle ? "" : " is-locked"}">
               <input type="checkbox" data-role="visibility-toggle" data-column-id="${column.id}" ${isVisible ? "checked" : ""}${disableToggleAttr} />
@@ -334,21 +376,21 @@ export class TableSettingsDialog {
             </label>
             <div class="table-settings-column-actions" aria-label="Ordering controls">
               <div class="table-settings-move-group" role="group" aria-label="Move up or down">
-                <button type="button" class="table-settings-btn-move" data-action="move-up" data-column-id="${column.id}" ${moveUpDisabled ? "disabled" : ""} title="Move up">
+                <button type="button" class="table-settings-btn-move" data-action="move-up" data-column-id="${column.id}" ${moveUpDisabled || isFiltered ? "disabled" : ""} title="Move up">
                   <span class="icon" aria-hidden="true">↑</span>
                   <span class="sr-only">Move up</span>
                 </button>
-                <button type="button" class="table-settings-btn-move" data-action="move-down" data-column-id="${column.id}" ${moveDownDisabled ? "disabled" : ""} title="Move down">
+                <button type="button" class="table-settings-btn-move" data-action="move-down" data-column-id="${column.id}" ${moveDownDisabled || isFiltered ? "disabled" : ""} title="Move down">
                   <span class="icon" aria-hidden="true">↓</span>
                   <span class="sr-only">Move down</span>
                 </button>
               </div>
               <div class="table-settings-move-group" role="group" aria-label="Move to extremes">
-                <button type="button" class="table-settings-btn-move" data-action="move-top" data-column-id="${column.id}" ${moveTopDisabled ? "disabled" : ""} title="Move to top">
+                <button type="button" class="table-settings-btn-move" data-action="move-top" data-column-id="${column.id}" ${moveTopDisabled || isFiltered ? "disabled" : ""} title="Move to top">
                   <span class="icon" aria-hidden="true">⇡</span>
                   <span class="sr-only">Move to top</span>
                 </button>
-                <button type="button" class="table-settings-btn-move" data-action="move-bottom" data-column-id="${column.id}" ${moveBottomDisabled ? "disabled" : ""} title="Move to bottom">
+                <button type="button" class="table-settings-btn-move" data-action="move-bottom" data-column-id="${column.id}" ${moveBottomDisabled || isFiltered ? "disabled" : ""} title="Move to bottom">
                   <span class="icon" aria-hidden="true">⇣</span>
                   <span class="sr-only">Move to bottom</span>
                 </button>
@@ -360,6 +402,21 @@ export class TableSettingsDialog {
       .join("");
 
     this._attachColumnListeners();
+  }
+
+  _handleDrop(sourceId, targetId) {
+    const columns = this._workingState.columns;
+    const sourceIndex = columns.findIndex((col) => col.id === sourceId);
+    const targetIndex = columns.findIndex((col) => col.id === targetId);
+
+    if (sourceIndex === -1 || targetIndex === -1 || sourceIndex === targetIndex) {
+      return;
+    }
+
+    const [column] = columns.splice(sourceIndex, 1);
+    columns.splice(targetIndex, 0, column);
+
+    this._render();
   }
 
   _attachColumnListeners() {
@@ -392,6 +449,66 @@ export class TableSettingsDialog {
       };
       on(button, "click", handler);
       this._columnListeners.push({ element: button, event: "click", handler });
+    });
+
+    const items = this.columnListEl.querySelectorAll('.table-settings-column-item[draggable="true"]');
+    items.forEach((item) => {
+      const dragStartHandler = (e) => {
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", item.dataset.columnId);
+        // Delay adding class so the drag image isn't affected
+        requestAnimationFrame(() => item.classList.add("is-dragging"));
+      };
+
+      const dragOverHandler = (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        item.classList.add("is-drag-over");
+      };
+
+      const dragLeaveHandler = (e) => {
+        // Only remove if leaving the element entirely (not entering a child)
+        if (item.contains(e.relatedTarget)) {
+          return;
+        }
+        item.classList.remove("is-drag-over");
+      };
+
+      const dropHandler = (e) => {
+        e.preventDefault();
+        item.classList.remove("is-drag-over");
+        const sourceId = e.dataTransfer.getData("text/plain");
+        const targetId = item.dataset.columnId;
+
+        if (sourceId && targetId && sourceId !== targetId) {
+          this._handleDrop(sourceId, targetId);
+        }
+      };
+
+      const dragEndHandler = (e) => {
+        item.classList.remove("is-dragging");
+        item.classList.remove("is-drag-over");
+        // Clean up any other potential drag-over classes
+        if (this.columnListEl) {
+          this.columnListEl
+            .querySelectorAll(".is-drag-over")
+            .forEach((el) => el.classList.remove("is-drag-over"));
+        }
+      };
+
+      on(item, "dragstart", dragStartHandler);
+      on(item, "dragover", dragOverHandler);
+      on(item, "dragleave", dragLeaveHandler);
+      on(item, "drop", dropHandler);
+      on(item, "dragend", dragEndHandler);
+
+      this._columnListeners.push(
+        { element: item, event: "dragstart", handler: dragStartHandler },
+        { element: item, event: "dragover", handler: dragOverHandler },
+        { element: item, event: "dragleave", handler: dragLeaveHandler },
+        { element: item, event: "drop", handler: dropHandler },
+        { element: item, event: "dragend", handler: dragEndHandler }
+      );
     });
   }
 
@@ -526,7 +643,7 @@ export class TableSettingsDialog {
       event.preventDefault();
       event.stopPropagation();
     }
-    this._workingState = this._createWorkingState();
+    this._workingState = this._createWorkingState(true);
     this._render();
   }
 

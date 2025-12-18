@@ -137,8 +137,8 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 12px;
-  border-radius: 10px;
+  padding: 6px 12px;
+  border-radius: 8px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   transition:
@@ -149,6 +149,39 @@
 .table-settings-column-item:hover {
   background: var(--bg-card-hover);
   border-color: var(--primary-color);
+}
+
+.table-settings-column-item[draggable="true"] {
+  cursor: grab;
+}
+
+.table-settings-column-item[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.table-settings-drag-handle {
+  color: var(--text-tertiary);
+  cursor: grab;
+  padding: 4px;
+  font-size: 1.2rem;
+  line-height: 1;
+  user-select: none;
+  opacity: 0.5;
+  transition: opacity 0.15s ease;
+}
+
+.table-settings-column-item:hover .table-settings-drag-handle {
+  opacity: 1;
+}
+
+.table-settings-column-item.is-dragging {
+  opacity: 0.5;
+  background: var(--bg-card-hover);
+}
+
+.table-settings-column-item.is-drag-over {
+  border-top: 2px solid var(--primary);
+  background: var(--bg-card-hover);
 }
 
 .table-settings-column-index {
@@ -198,17 +231,17 @@
 
 .table-settings-move-group {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-direction: row;
+  gap: 4px;
 }
 
 .table-settings-btn-move {
-  width: 38px;
-  height: 38px;
+  width: 28px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 10px;
+  border-radius: 6px;
   border: 1px solid var(--border-color);
   background: var(--bg-secondary);
   color: var(--text-secondary);
@@ -234,7 +267,7 @@
 }
 
 .table-settings-btn-move .icon {
-  font-size: 1.05rem;
+  font-size: 0.9rem;
   line-height: 1;
 }
 
@@ -251,9 +284,10 @@
 }
 
 .table-settings-empty {
-  padding: 24px;
+  padding: 20px;
   text-align: center;
-  color: var(--text-muted);
+  color: var(--text-secondary);
+  font-style: italic;
   background: var(--bg-secondary);
   border: 1px dashed var(--border-color);
   border-radius: 10px;
@@ -301,4 +335,26 @@ body.table-settings-open {
   color: var(--text-secondary);
   padding-left: 28px;
   line-height: 1.4;
+}
+
+/* Search */
+.table-settings-search-container {
+  padding: 0 20px;
+  margin-bottom: 10px;
+}
+
+.table-settings-search {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  transition: border-color 0.15s ease;
+}
+
+.table-settings-search:focus {
+  border-color: var(--primary);
+  outline: none;
 }

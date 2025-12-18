@@ -1629,3 +1629,62 @@ body.dt-column-resizing * {
     padding: 6px 10px;
   }
 }
+
+/* Drag and Drop Headers */
+.dt-header-column[draggable="true"] {
+  cursor: grab;
+}
+
+.dt-header-column[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.dt-header-column.is-dragging {
+  opacity: 0.4;
+  background: var(--bg-card-hover);
+}
+
+.dt-header-column.is-drag-over {
+  border-left: 2px solid var(--primary-color);
+  background: var(--bg-card-hover);
+}
+
+/* Context Menu */
+.dt-context-menu {
+  position: fixed;
+  z-index: 10000;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px var(--shadow-lg);
+  padding: 4px 0;
+  min-width: 180px;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.dt-context-menu-item {
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.dt-context-menu-item:hover {
+  background: var(--bg-card-hover);
+  color: var(--primary-color);
+}
+
+.dt-context-menu-item .icon {
+  width: 16px;
+  text-align: center;
+  font-size: 1rem;
+}
+
+.dt-context-menu-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+}
