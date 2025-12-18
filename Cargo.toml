@@ -1,6 +1,6 @@
 [package]
 name = "screenerbot"
-version = "0.1.98"
+version = "0.1.99"
 edition = "2021"
 default-run = "screenerbot"
 # Disable automatic binary discovery - we only want the main binary
@@ -39,7 +39,8 @@ overflow-checks = false   # No overflow checks (performance)
 name = "screenerbot"
 path = "src/lib.rs"
 doctest = false
-crate-type = ["staticlib", "cdylib", "rlib"]
+# Note: Default crate-type is "rlib" which is sufficient for desktop builds
+# Android builds will specify crate-type via build script when needed
 
 # Main binary - this is the ONLY binary included in Tauri bundle
 [[bin]]
