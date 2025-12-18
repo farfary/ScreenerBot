@@ -10,6 +10,12 @@ rustflags = ["-C", "link-arg=-fuse-ld=lld"]
 [target.aarch64-unknown-linux-gnu]
 linker = "aarch64-linux-gnu-gcc"
 
+# Windows ARM64 cross-compilation settings
+# Use LLD linker to avoid MSVC link.exe command-line length limits (~32KB)
+# LLD handles large projects with many dependencies better
+[target.aarch64-pc-windows-msvc]
+linker = "C:\\Program Files\\LLVM\\bin\\lld-link.exe"
+
 # Android ARM64 (aarch64) - primary target for modern devices
 [target.aarch64-linux-android]
 linker = "/usr/local/share/android-commandlinetools/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android34-clang"
