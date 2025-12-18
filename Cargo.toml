@@ -1,6 +1,6 @@
 [package]
 name = "screenerbot"
-version = "0.1.97"
+version = "0.1.98"
 edition = "2021"
 default-run = "screenerbot"
 # Disable automatic binary discovery - we only want the main binary
@@ -39,6 +39,7 @@ overflow-checks = false   # No overflow checks (performance)
 name = "screenerbot"
 path = "src/lib.rs"
 doctest = false
+crate-type = ["staticlib", "cdylib", "rlib"]
 
 # Main binary - this is the ONLY binary included in Tauri bundle
 [[bin]]
@@ -79,9 +80,12 @@ blake3 = "1.5"
 sha2 = "0.10"
 flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }
 
-# HTTP client and websockets
-reqwest = { version = "0.11", features = ["json", "rustls-tls", "blocking", "stream"] }
+# HTTP client and websockets - using rustls for Android compatibility
+reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls", "blocking", "stream"] }
 tokio-tungstenite = { version = "0.21", features = ["connect", "rustls-tls-native-roots"] }
+
+# OpenSSL - vendored build for Android cross-compilation
+openssl = { version = "0.10", features = ["vendored"], optional = true }
 
 # Database with bundled sqlite for faster builds
 rusqlite = { version = "0.37", features = ["bundled"] }
@@ -93,7 +97,6 @@ bs58 = "0.5"
 base64 = "0.22"
 toml = "0.9"
 aes-gcm = "0.10"
-machine-uid = "0.5"
 
 # CLI and logging - minimal features
 clap = { version = "4.0", features = ["derive"] }
@@ -175,6 +178,19 @@ raw-window-handle = "0.6"
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSGeometry", "NSArray", "NSObject"] }
 objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSScreen", "NSApplication", "NSRunningApplication", "NSWorkspace"] }
+machine-uid = "0.5"
+
+# Windows-specific dependencies
+[target.'cfg(target_os = "windows")'.dependencies]
+machine-uid = "0.5"
+
+# Linux-specific dependencies
+[target.'cfg(target_os = "linux")'.dependencies]
+machine-uid = "0.5"
+
+# Android target-specific dependencies - vendored OpenSSL for cross-compilation
+[target.'cfg(target_os = "android")'.dependencies]
+openssl = { version = "0.10", features = ["vendored"] }
 
 [build-dependencies]
 tauri-build = { version = "2.5", features = [] }

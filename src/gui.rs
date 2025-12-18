@@ -13,6 +13,7 @@ use serde::Deserialize;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::Manager;
+#[cfg(not(target_os = "android"))]
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut};
 
 /// Run bot in GUI mode with Tauri window
@@ -73,12 +74,20 @@ pub async fn run_gui_mode() -> Result<(), String> {
   let zoom_level = Arc::new(Mutex::new(initial_zoom));
 
   // Build and run Tauri application
-  tauri::Builder::default()
+  let mut builder = tauri::Builder::default()
     .plugin(tauri_plugin_shell::init())
     .plugin(tauri_plugin_opener::init())
-    .plugin(tauri_plugin_process::init())
-    .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-    .plugin(tauri_plugin_window_state::Builder::default().build())
+    .plugin(tauri_plugin_process::init());
+
+  // Desktop-only plugins (not available on Android)
+  #[cfg(not(target_os = "android"))]
+  {
+    builder = builder
+      .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+      .plugin(tauri_plugin_window_state::Builder::default().build());
+  }
+
+  builder
     .invoke_handler(tauri::generate_handler![smart_maximize, enable_window_drag])
     .setup({
       let zoom_level_clone = Arc::clone(&zoom_level);
@@ -89,14 +98,17 @@ pub async fn run_gui_mode() -> Result<(), String> {
         if let Some(window) = app.get_webview_window("main") {
           logger::info(LogTag::System, "Configuring window theme and title bar...");
 
-          // Set initial theme to dark
-          if let Err(e) = window.set_theme(Some(tauri::Theme::Dark)) {
-            logger::warning(
-              LogTag::System,
-              &format!("Failed to set window theme: {}", e),
-            );
-          } else {
-            logger::info(LogTag::System, "Window theme set to Dark");
+          // Set initial theme to dark (desktop-only)
+          #[cfg(not(target_os = "android"))]
+          {
+            if let Err(e) = window.set_theme(Some(tauri::Theme::Dark)) {
+              logger::warning(
+                LogTag::System,
+                &format!("Failed to set window theme: {}", e),
+              );
+            } else {
+              logger::info(LogTag::System, "Window theme set to Dark");
+            }
           }
 
           // macOS: Set overlay title bar style
@@ -144,7 +156,8 @@ pub async fn run_gui_mode() -> Result<(), String> {
           logger::warning(LogTag::System, "Main window not found during setup");
         }
 
-        // Register global keyboard shortcuts for zoom + reload
+        // Register global keyboard shortcuts for zoom + reload (desktop-only)
+        #[cfg(not(target_os = "android"))]
         register_window_shortcuts(app, Arc::clone(&zoom_level_clone))?;
 
         logger::info(
@@ -249,6 +262,7 @@ fn create_secure_client() -> reqwest::blocking::Client {
 }
 
 /// Register global keyboard shortcuts for zoom control + reload
+#[cfg(not(target_os = "android"))]
 fn register_window_shortcuts(
   app: &mut tauri::App,
   zoom_level: Arc<Mutex<f64>>,
@@ -693,23 +707,31 @@ fn navigate_and_show_window(
     }
   }
 
-  // Show the window
-  match window.show() {
-    Ok(_) => {
-      logger::info(LogTag::System, "GUI window shown with dashboard loaded");
+  // Show the window (desktop-only APIs)
+  #[cfg(not(target_os = "android"))]
+  {
+    match window.show() {
+      Ok(_) => {
+        logger::info(LogTag::System, "GUI window shown with dashboard loaded");
 
-      if let Err(e) = window.set_focus() {
-        logger::warning(
-          LogTag::System,
-          &format!("Could not focus window: {}", e),
-        );
-      } else {
-        logger::info(LogTag::System, "Window focused and brought to front");
+        if let Err(e) = window.set_focus() {
+          logger::warning(
+            LogTag::System,
+            &format!("Could not focus window: {}", e),
+          );
+        } else {
+          logger::info(LogTag::System, "Window focused and brought to front");
+        }
+      }
+      Err(e) => {
+        logger::error(LogTag::System, &format!("Failed to show window: {}", e));
       }
     }
-    Err(e) => {
-      logger::error(LogTag::System, &format!("Failed to show window: {}", e));
-    }
+  }
+
+  #[cfg(target_os = "android")]
+  {
+    logger::info(LogTag::System, "Android: Window ready (no show/focus needed)");
   }
 }
 
@@ -727,7 +749,7 @@ fn smart_maximize(window: tauri::WebviewWindow) -> Result<(), String> {
     crate::macos_window::smart_maximize_macos(&window)
   }
 
-  #[cfg(not(target_os = "macos"))]
+  #[cfg(all(not(target_os = "macos"), not(target_os = "android")))]
   {
     let is_maximized = window
       .is_maximized()
@@ -742,6 +764,13 @@ fn smart_maximize(window: tauri::WebviewWindow) -> Result<(), String> {
         .maximize()
         .map_err(|e| format!("Failed to maximize: {}", e))
     }
+  }
+
+  #[cfg(target_os = "android")]
+  {
+    // Android doesn't have window maximize/unmaximize
+    let _ = window;
+    Ok(())
   }
 }
 
@@ -766,4 +795,110 @@ fn enable_window_drag(window: tauri::WebviewWindow) -> Result<(), String> {
     let _ = window;
     Ok(())
   }
+}
+
+/// Mobile entry point for Android/iOS
+/// This is a simplified version of run_gui_mode for mobile platforms
+/// - No process lock (mobile apps handle this at OS level)
+/// - No keyboard shortcuts (touch-based UI)
+/// - No window state persistence (mobile apps restore via OS)
+#[cfg(target_os = "android")]
+pub fn run_mobile() {
+  use crate::run;
+
+  // Initialize paths and logger
+  if let Err(e) = crate::paths::ensure_all_directories() {
+    eprintln!("Failed to create required directories: {}", e);
+    return;
+  }
+  logger::init();
+  logger::info(LogTag::System, "ScreenerBot Android starting...");
+
+  // Set GUI mode for webserver security
+  global::set_gui_mode(true);
+
+  // Build Tauri runtime for Android
+  let runtime = tokio::runtime::Builder::new_multi_thread()
+    .enable_all()
+    .build()
+    .expect("Failed to create Tokio runtime");
+
+  // Start backend in background
+  runtime.spawn(async {
+    logger::info(LogTag::System, "Starting ScreenerBot backend services...");
+    match run::run_bot().await {
+      Ok(_) => logger::info(LogTag::System, "ScreenerBot backend completed"),
+      Err(e) => logger::error(LogTag::System, &format!("Backend error: {}", e)),
+    }
+  });
+
+  // Build Tauri app (mobile-compatible)
+  tauri::Builder::default()
+    .plugin(tauri_plugin_shell::init())
+    .plugin(tauri_plugin_opener::init())
+    .plugin(tauri_plugin_process::init())
+    .setup(move |app| {
+      logger::info(LogTag::System, "Tauri Android setup started");
+
+      let app_handle = app.handle().clone();
+
+      // Wait for webserver then navigate to dashboard
+      std::thread::spawn(move || {
+        let start = std::time::Instant::now();
+        let timeout = std::time::Duration::from_secs(120);
+
+        // Wait for webserver port
+        loop {
+          let port = global::get_webserver_port();
+          if port != 0 {
+            logger::info(
+              LogTag::System,
+              &format!("Webserver ready on port {} after {:?}", port, start.elapsed()),
+            );
+
+            // Get security token
+            let token = global::get_security_token().unwrap_or_default();
+
+            // Navigate to dashboard with security token
+            if let Some(window) = app_handle.get_webview_window("main") {
+              let url = format!("http://127.0.0.1:{}", port);
+
+              // Inject token via JavaScript
+              let js = format!(
+                r#"
+                window.__SCREENERBOT_TOKEN__ = '{}';
+                window.__SCREENERBOT_PORT__ = {};
+                window.location.href = '{}';
+                "#,
+                token, port, url
+              );
+
+              if let Err(e) = window.eval(&js) {
+                logger::error(LogTag::System, &format!("Failed to navigate: {}", e));
+              } else {
+                logger::info(LogTag::System, "Navigated to dashboard");
+              }
+            }
+            break;
+          }
+
+          if start.elapsed() > timeout {
+            logger::error(LogTag::System, "Timeout waiting for webserver");
+            break;
+          }
+
+          std::thread::sleep(std::time::Duration::from_millis(100));
+        }
+      });
+
+      Ok(())
+    })
+    .run(tauri::generate_context!())
+    .expect("Error running Tauri application");
+}
+
+/// Stub for non-Android platforms (should never be called)
+#[cfg(not(target_os = "android"))]
+pub fn run_mobile() {
+  panic!("run_mobile() should only be called on Android");
 }

@@ -22,13 +22,54 @@ pub struct EncryptedData {
     pub nonce: String,
 }
 
+/// Get the machine unique ID for key derivation
+///
+/// On desktop platforms (macOS, Windows, Linux), uses the machine-uid crate.
+/// On Android, uses a combination of app data directory hash as a fallback.
+fn get_machine_id() -> Result<String, String> {
+    #[cfg(not(target_os = "android"))]
+    {
+        machine_uid::get()
+            .map_err(|e| format!("Failed to get machine ID: {}", e))
+    }
+    
+    #[cfg(target_os = "android")]
+    {
+        // On Android, we use a hash of the app's unique installation ID
+        // This is stored in the app's private data directory and is unique per installation
+        use crate::paths::get_data_directory;
+        
+        let data_dir = get_data_directory();
+        
+        // Create a unique ID based on the data directory path and a stored UUID
+        let id_file = data_dir.join(".device_id");
+        
+        if id_file.exists() {
+            std::fs::read_to_string(&id_file)
+                .map_err(|e| format!("Failed to read device ID: {}", e))
+        } else {
+            // Generate a new UUID for this installation
+            let new_id = uuid::Uuid::new_v4().to_string();
+            
+            // Ensure directory exists
+            if let Some(parent) = id_file.parent() {
+                std::fs::create_dir_all(parent).ok();
+            }
+            
+            std::fs::write(&id_file, &new_id)
+                .map_err(|e| format!("Failed to write device ID: {}", e))?;
+            
+            Ok(new_id)
+        }
+    }
+}
+
 /// Derive a 256-bit encryption key from machine ID
 ///
 /// Uses BLAKE3 to hash: machine_id + app_salt → 32-byte key
 fn derive_encryption_key() -> Result<[u8; 32], String> {
     // Get machine unique ID
-    let machine_id = machine_uid::get()
-        .map_err(|e| format!("Failed to get machine ID: {}", e))?;
+    let machine_id = get_machine_id()?;
 
     // Derive key using BLAKE3: hash(machine_id || salt)
     let mut hasher = blake3::Hasher::new();

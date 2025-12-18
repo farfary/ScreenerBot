@@ -10,5 +10,21 @@ rustflags = ["-C", "link-arg=-fuse-ld=lld"]
 [target.aarch64-unknown-linux-gnu]
 linker = "aarch64-linux-gnu-gcc"
 
+# Android ARM64 (aarch64) - primary target for modern devices
+[target.aarch64-linux-android]
+linker = "/usr/local/share/android-commandlinetools/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/aarch64-linux-android34-clang"
+
+# Android ARM32 (armv7)
+[target.armv7-linux-androideabi]
+linker = "/usr/local/share/android-commandlinetools/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/armv7a-linux-androideabi34-clang"
+
+# Android x86_64 (for emulators)
+[target.x86_64-linux-android]
+linker = "/usr/local/share/android-commandlinetools/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/x86_64-linux-android34-clang"
+
+# Android i686 (for older emulators)
+[target.i686-linux-android]
+linker = "/usr/local/share/android-commandlinetools/ndk/27.0.12077973/toolchains/llvm/prebuilt/darwin-x86_64/bin/i686-linux-android34-clang"
+
 # Note: CC/CXX environment variables are set by each build script as needed
 # Do not set global [env] CC/CXX here as it breaks cross-platform builds

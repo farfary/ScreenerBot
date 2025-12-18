@@ -43,3 +43,11 @@ pub mod wallet;
 pub mod wallet_validation;
 pub mod wallets;
 pub mod webserver;
+
+// Mobile entry point for Android/iOS
+// This is required for Tauri to properly initialize the native library on mobile platforms
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+  // Initialize Tauri for mobile
+  gui::run_mobile();
+}
