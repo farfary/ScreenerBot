@@ -831,6 +831,22 @@ pub struct BlacklistResponse {
 }
 
 // =============================================================================
+// FOCUS TYPES - Dashboard priority boost
+// =============================================================================
+
+/// Response for token focus/unfocus operations
+/// Used when user opens/closes token details dialog to boost data fetching priority
+#[derive(Debug, Serialize)]
+pub struct FocusResponse {
+  pub success: bool,
+  pub mint: String,
+  pub focused: bool,
+  pub ohlcv_priority_updated: bool,
+  #[serde(skip_serializing_if = "Option::is_none")]
+  pub message: Option<String>,
+}
+
+// =============================================================================
 // ROUTE REGISTRATION
 // =============================================================================
 
@@ -850,6 +866,8 @@ pub fn routes() -> Router<Arc<AppState>> {
     .route("/tokens/:mint/ohlcv", get(get_token_ohlcv))
     .route("/tokens/:mint/ohlcv/refresh", post(refresh_token_ohlcv))
     .route("/tokens/:mint/ohlcv/deprioritize", post(deprioritize_token_ohlcv))
+    .route("/tokens/:mint/focus", post(focus_token))
+    .route("/tokens/:mint/unfocus", post(unfocus_token))
     .route("/tokens/:mint/dexscreener", get(get_token_dexscreener))
     .route("/tokens/:mint/blacklist", post(add_to_blacklist))
     .route("/tokens/:mint/blacklist", delete(remove_from_blacklist))
@@ -1042,6 +1060,111 @@ async fn update_favorite(
       ))
     }
   }
+}
+
+// =============================================================================
+// FOCUS HANDLERS - Dashboard priority boost
+// =============================================================================
+
+/// POST /api/tokens/:mint/focus
+///
+/// Called when user opens token details dialog.
+/// Sets this token as the dashboard-active token for priority data fetching.
+/// Also boosts OHLCV priority to Critical.
+async fn focus_token(
+  Path(mint): Path<String>,
+) -> Result<Json<FocusResponse>, (StatusCode, Json<serde_json::Value>)> {
+  logger::info(
+    LogTag::Webserver,
+    &format!("Token focus requested: mint={}", mint),
+  );
+
+  // Set as dashboard active token
+  crate::global::set_dashboard_active_token(Some(mint.clone()));
+
+  // Boost OHLCV priority to Critical
+  let ohlcv_updated = match crate::ohlcvs::update_token_priority(&mint, crate::ohlcvs::Priority::Critical).await {
+    Ok(_) => {
+      logger::debug(
+        LogTag::Webserver,
+        &format!("OHLCV priority boosted to Critical for mint={}", mint),
+      );
+      true
+    }
+    Err(e) => {
+      logger::debug(
+        LogTag::Webserver,
+        &format!("Could not boost OHLCV priority for mint={}: {} (token may not be monitored)", mint, e),
+      );
+      false
+    }
+  };
+
+  Ok(Json(FocusResponse {
+    success: true,
+    mint,
+    focused: true,
+    ohlcv_priority_updated: ohlcv_updated,
+    message: None,
+  }))
+}
+
+/// POST /api/tokens/:mint/unfocus
+///
+/// Called when user closes token details dialog.
+/// Clears the dashboard-active token and resets OHLCV priority.
+/// If the token has an open position, priority remains high.
+async fn unfocus_token(
+  Path(mint): Path<String>,
+) -> Result<Json<FocusResponse>, (StatusCode, Json<serde_json::Value>)> {
+  logger::debug(
+    LogTag::Webserver,
+    &format!("Token unfocus requested: mint={}", mint),
+  );
+
+  // Clear dashboard active token
+  crate::global::set_dashboard_active_token(None);
+
+  // Check if token has open position - if so, don't downgrade priority
+  let has_open_position = positions::is_open_position(&mint).await;
+
+  let ohlcv_updated = if has_open_position {
+    logger::debug(
+      LogTag::Webserver,
+      &format!("Token {} has open position, keeping high priority", mint),
+    );
+    false
+  } else {
+    // Reset to Medium priority for non-position tokens
+    match crate::ohlcvs::update_token_priority(&mint, crate::ohlcvs::Priority::Medium).await {
+      Ok(_) => {
+        logger::debug(
+          LogTag::Webserver,
+          &format!("OHLCV priority reset to Medium for mint={}", mint),
+        );
+        true
+      }
+      Err(e) => {
+        logger::debug(
+          LogTag::Webserver,
+          &format!("Could not reset OHLCV priority for mint={}: {}", mint, e),
+        );
+        false
+      }
+    }
+  };
+
+  Ok(Json(FocusResponse {
+    success: true,
+    mint,
+    focused: false,
+    ohlcv_priority_updated: ohlcv_updated,
+    message: if has_open_position {
+      Some("Token has open position - priority maintained".to_string())
+    } else {
+      None
+    },
+  }))
 }
 
 // =============================================================================

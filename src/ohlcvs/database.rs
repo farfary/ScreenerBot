@@ -787,7 +787,31 @@ impl OhlcvDatabase {
 
     // ==================== Cleanup ====================
 
+    /// Historical OHLCV candle data is preserved forever.
+    ///
+    /// This function intentionally does NOT delete candle data. Historical data is valuable for:
+    /// - Chart gap visualization (users can see where data was missing)
+    /// - Historical analysis and backtesting
+    /// - GeckoTerminal can backfill gaps on demand when needed
+    ///
+    /// The `retention_days` parameter is kept for backward compatibility but is ignored.
+    /// For database size management, use `cleanup_filled_gaps()` instead which removes
+    /// filled gap tracking records that are no longer needed.
+    #[allow(unused_variables)]
     pub fn cleanup_old_data(&self, retention_days: i64) -> OhlcvResult<usize> {
+        // Intentional no-op: OHLCV candle data is preserved forever
+        // Gap visualization is preferred over automatic data deletion
+        Ok(0)
+    }
+
+    /// Cleanup old filled gap records to manage database size.
+    ///
+    /// Gap records that are marked as filled (successfully backfilled) and older than
+    /// the specified retention days are deleted. Unfilled gaps are always preserved
+    /// for tracking and retry purposes.
+    ///
+    /// Note: This only affects gap tracking records, NOT actual candle data.
+    pub fn cleanup_filled_gaps(&self, retention_days: i64) -> OhlcvResult<usize> {
         let conn = self
             .conn
             .lock()
@@ -797,10 +821,10 @@ impl OhlcvDatabase {
 
         let deleted = conn
             .execute(
-                "DELETE FROM ohlcv_candles WHERE fetched_at < ?1",
+                "DELETE FROM ohlcv_gaps WHERE filled = 1 AND created_at < ?1",
                 params![cutoff],
             )
-            .map_err(|e| OhlcvError::DatabaseError(format!("Cleanup failed: {}", e)))?;
+            .map_err(|e| OhlcvError::DatabaseError(format!("Gap cleanup failed: {}", e)))?;
 
         Ok(deleted)
     }

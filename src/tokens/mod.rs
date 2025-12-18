@@ -122,6 +122,11 @@ pub use favorites::{
 /// This function provides on-demand token data refresh for use cases like
 /// viewing token details where user expects fresh data immediately.
 ///
+/// Fetches from ALL sources in parallel:
+/// - DexScreener (market data)
+/// - GeckoTerminal (market data)
+/// - Rugcheck (security data)
+///
 /// # Arguments
 /// * `mint` - Token address to update
 ///

@@ -4022,3 +4022,157 @@
     grid-template-columns: repeat(3, 1fr);
   }
 }
+
+/* =============================================================================
+   DATA SOURCES STATUS BAR - Shows loading status of each data source
+   ============================================================================= */
+
+.data-sources-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 16px;
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.65rem;
+  transition: opacity 0.3s ease, max-height 0.3s ease;
+  max-height: 32px;
+  overflow: hidden;
+}
+
+.data-sources-status.all-loaded {
+  opacity: 0;
+  max-height: 0;
+  padding: 0 16px;
+  pointer-events: none;
+}
+
+.source-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-icon {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background-color 0.2s ease;
+}
+
+.status-icon.pending {
+  background-color: var(--text-muted, #484f58);
+}
+
+.status-icon.loading {
+  background-color: var(--warning-color, #d29922);
+  animation: status-pulse 1s ease-in-out infinite;
+}
+
+.status-icon.success {
+  background-color: var(--success-color, #3fb950);
+}
+
+.status-icon.error {
+  background-color: var(--danger, #f85149);
+}
+
+.status-icon.cached {
+  background-color: var(--primary-color, #58a6ff);
+}
+
+@keyframes status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.status-label {
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 500;
+}
+
+/* =============================================================================
+   SECURITY TAB LOADING STATE
+   ============================================================================= */
+
+.security-loading-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.loading-spinner-small {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.security-score-container.security-loading .score-bg {
+  stroke: var(--border-color);
+  opacity: 0.5;
+}
+
+.security-score-container.security-loading .score-value {
+  color: var(--text-muted);
+  font-size: 1.2rem;
+}
+
+.security-placeholder {
+  padding: 24px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  text-align: center;
+}
+
+.security-placeholder p {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+/* Responsive adjustments for status bar */
+@media (width <= 600px) {
+  .data-sources-status {
+    gap: 8px;
+    padding: 4px 12px;
+    font-size: 0.6rem;
+  }
+
+  .status-label {
+    display: none;
+  }
+
+  .source-status {
+    gap: 0;
+  }
+
+  .source-status[title]::after {
+    content: none;
+  }
+}

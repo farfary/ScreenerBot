@@ -190,3 +190,55 @@ pub fn active_tools_count() -> u32 {
   TOOLS_ACTIVE_COUNT.load(std::sync::atomic::Ordering::SeqCst)
 }
 
+// ================================================================================================
+// DASHBOARD ACTIVE TOKEN - PRIORITY BOOST FOR USER-FOCUSED TOKEN
+// ================================================================================================
+
+/// Token mint currently being viewed in dashboard (None if no token details open)
+/// When a user opens a token details dialog, this token gets highest priority for data fetching.
+/// Background batch updates should yield to dashboard-triggered requests.
+static DASHBOARD_ACTIVE_TOKEN: RwLock<Option<String>> = RwLock::new(None);
+
+/// Set the token being actively viewed (called when token details opens)
+pub fn set_dashboard_active_token(mint: Option<String>) {
+  match DASHBOARD_ACTIVE_TOKEN.write() {
+    Ok(mut guard) => {
+      if let Some(ref m) = mint {
+        crate::logger::debug(
+          crate::logger::LogTag::Webserver,
+          &format!("Dashboard focus set: mint={}", m),
+        );
+      } else if guard.is_some() {
+        crate::logger::debug(
+          crate::logger::LogTag::Webserver,
+          "Dashboard focus cleared",
+        );
+      }
+      *guard = mint;
+    }
+    Err(e) => {
+      crate::logger::warning(
+        crate::logger::LogTag::Webserver,
+        &format!("Failed to set dashboard active token (poisoned lock): {}", e),
+      );
+    }
+  }
+}
+
+/// Get the currently active dashboard token
+pub fn get_dashboard_active_token() -> Option<String> {
+  match DASHBOARD_ACTIVE_TOKEN.read() {
+    Ok(guard) => guard.clone(),
+    Err(_) => None,
+  }
+}
+
+/// Check if a specific token is being actively viewed in the dashboard
+/// Used by background update loops to skip tokens that are getting priority updates via the UI
+pub fn is_token_active_in_dashboard(mint: &str) -> bool {
+  match DASHBOARD_ACTIVE_TOKEN.read() {
+    Ok(guard) => guard.as_ref().map(|m| m == mint).unwrap_or(false),
+    Err(_) => false,
+  }
+}
+

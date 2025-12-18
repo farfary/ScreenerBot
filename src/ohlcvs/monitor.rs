@@ -1519,21 +1519,37 @@ impl OhlcvMonitor {
 
       let retention_days = with_config(|cfg| cfg.ohlcv.retention_days);
 
+      // Note: OHLCV candle data is preserved forever for historical analysis.
+      // Only cleanup filled gap tracking records to manage database size.
+      // Unfilled gaps are kept for retry purposes.
       if retention_days > 0 {
-        if let Err(e) = self.db.cleanup_old_data(retention_days) {
-          logger::error(LogTag::Ohlcv, &format!("Cleanup error: {}", e));
-          record_ohlcv_event(
-            "cleanup_failed",
-            Severity::Error,
-            None,
-            None,
-            json!({
-              "message": "Failed to cleanup OHLCV database",
-              "error": e.to_string(),
-              "retention_days": retention_days,
-            }),
-          )
-          .await;
+        match self.db.cleanup_filled_gaps(retention_days) {
+          Ok(deleted) => {
+            if deleted > 0 {
+              logger::debug(
+                LogTag::Ohlcv,
+                &format!(
+                  "Cleaned up {} filled gap records older than {} days (candle data preserved)",
+                  deleted, retention_days
+                ),
+              );
+            }
+          }
+          Err(e) => {
+            logger::error(LogTag::Ohlcv, &format!("Gap cleanup error: {}", e));
+            record_ohlcv_event(
+              "gap_cleanup_failed",
+              Severity::Error,
+              None,
+              None,
+              json!({
+                "message": "Failed to cleanup filled gap records",
+                "error": e.to_string(),
+                "retention_days": retention_days,
+              }),
+            )
+            .await;
+          }
         }
       }
     }

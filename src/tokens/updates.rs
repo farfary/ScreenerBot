@@ -44,6 +44,27 @@ fn should_skip_for_tools() -> bool {
     crate::global::are_tools_active()
 }
 
+/// Filter out the token currently being viewed in the dashboard
+/// Dashboard-active tokens get priority updates via the UI, so skip them in batch updates
+fn filter_dashboard_active_token(tokens: Vec<String>) -> Vec<String> {
+    if let Some(active_mint) = crate::global::get_dashboard_active_token() {
+        let original_count = tokens.len();
+        let filtered: Vec<String> = tokens.into_iter().filter(|m| m != &active_mint).collect();
+        if filtered.len() < original_count {
+            logger::debug(
+                LogTag::Tokens,
+                &format!(
+                    "Skipping dashboard-active token {} in batch update (getting priority updates via UI)",
+                    active_mint
+                ),
+            );
+        }
+        filtered
+    } else {
+        tokens
+    }
+}
+
 // ============================================================================
 // RATE LIMIT COORDINATOR
 // ============================================================================
@@ -833,6 +854,9 @@ async fn update_uninitialized_tokens(db: &TokenDatabase, coordinator: &RateLimit
         }
     };
 
+    // Skip dashboard-active token (getting priority updates via UI)
+    let tokens = filter_dashboard_active_token(tokens);
+
     if tokens.is_empty() {
         return;
     }
@@ -917,6 +941,9 @@ async fn update_open_position_tokens(db: &TokenDatabase, coordinator: &RateLimit
         }
     };
 
+    // Skip dashboard-active token (getting priority updates via UI)
+    let tokens = filter_dashboard_active_token(tokens);
+
     if tokens.is_empty() {
         return;
     }
@@ -1000,6 +1027,9 @@ async fn update_pool_tracked_tokens(db: &TokenDatabase, coordinator: &RateLimitC
             return;
         }
     };
+
+    // Skip dashboard-active token (getting priority updates via UI)
+    let tokens = filter_dashboard_active_token(tokens);
 
     if tokens.is_empty() {
         return;
@@ -1095,6 +1125,9 @@ async fn update_filter_passed_tokens(db: &TokenDatabase, coordinator: &RateLimit
         }
     };
 
+    // Skip dashboard-active token (getting priority updates via UI)
+    let tokens = filter_dashboard_active_token(tokens);
+
     if tokens.is_empty() {
         return;
     }
@@ -1178,6 +1211,9 @@ async fn update_background_tokens(db: &TokenDatabase, coordinator: &RateLimitCoo
         }
     };
 
+    // Skip dashboard-active token (getting priority updates via UI)
+    let tokens = filter_dashboard_active_token(tokens);
+
     if tokens.is_empty() {
         return;
     }
@@ -1231,6 +1267,11 @@ async fn update_background_tokens(db: &TokenDatabase, coordinator: &RateLimitCoo
 /// This function is designed for on-demand updates when user explicitly
 /// requests fresh data (e.g., viewing token details dialog).
 ///
+/// Fetches from ALL sources in parallel:
+/// - DexScreener (market data)
+/// - GeckoTerminal (market data)
+/// - Rugcheck (security data)
+///
 /// Uses the same rate limit coordinator as scheduled updates but executes
 /// immediately without waiting for next loop iteration.
 ///
@@ -1240,7 +1281,7 @@ async fn update_background_tokens(db: &TokenDatabase, coordinator: &RateLimitCoo
 /// * `coordinator` - Rate limit coordinator
 ///
 /// # Returns
-/// UpdateResult with success/failure details
+/// UpdateResult with success/failure details from each source
 pub async fn force_update_token(
     mint: &str,
     db: Arc<TokenDatabase>,
@@ -1248,9 +1289,127 @@ pub async fn force_update_token(
 ) -> TokenResult<UpdateResult> {
     logger::debug(
         LogTag::Tokens,
-        &format!("Force update requested for mint={}", mint),
+        &format!("Force update (full) requested for mint={}", mint),
     );
 
-    // Use existing update_token function (same logic, same rate limits)
-    update_token(mint, &db, &coordinator).await
+    let mut successes = Vec::new();
+    let mut failures = Vec::new();
+
+    // Clone what we need for the async blocks
+    let mint_str = mint.to_string();
+    let db_ref = &db;
+    let coord_ref = &coordinator;
+
+    // Fetch from ALL sources in parallel using tokio::join!
+    let (dex_result, gecko_result, rug_result) = tokio::join!(
+        // DexScreener market data
+        async {
+            match coord_ref.acquire_dexscreener_batch().await {
+                Ok(_) => dexscreener::fetch_dexscreener_data(&mint_str, db_ref).await,
+                Err(e) => Err(e),
+            }
+        },
+        // GeckoTerminal market data
+        async {
+            match coord_ref.acquire_geckoterminal().await {
+                Ok(_) => geckoterminal::fetch_geckoterminal_data(&mint_str, db_ref).await,
+                Err(e) => Err(e),
+            }
+        },
+        // Rugcheck security data
+        async {
+            match coord_ref.acquire_rugcheck().await {
+                Ok(_) => rugcheck::fetch_rugcheck_data(&mint_str, db_ref).await,
+                Err(e) => Err(e),
+            }
+        }
+    );
+
+    // Process DexScreener result
+    match dex_result {
+        Ok(Some(_)) => successes.push("DexScreener".to_string()),
+        Ok(None) => failures.push("DexScreener: Token not listed".to_string()),
+        Err(e) => failures.push(format!("DexScreener: {}", e)),
+    }
+
+    // Process GeckoTerminal result
+    match gecko_result {
+        Ok(Some(_)) => successes.push("GeckoTerminal".to_string()),
+        Ok(None) => failures.push("GeckoTerminal: Token not listed".to_string()),
+        Err(e) => failures.push(format!("GeckoTerminal: {}", e)),
+    }
+
+    // Process Rugcheck result
+    match rug_result {
+        Ok(Some(_)) => successes.push("Rugcheck".to_string()),
+        Ok(None) => failures.push("Rugcheck: No security data available".to_string()),
+        Err(e) => failures.push(format!("Rugcheck: {}", e)),
+    }
+
+    // Update tracking timestamp if any market data source succeeded
+    let market_data_updated = successes.iter().any(|s| s == "DexScreener" || s == "GeckoTerminal");
+    if market_data_updated {
+        let _ = db.mark_market_data_updated(mint);
+    }
+
+    // Log result summary
+    if successes.is_empty() {
+        logger::warning(
+            LogTag::Tokens,
+            &format!(
+                "Force update failed for mint={}: all sources failed - {:?}",
+                mint, failures
+            ),
+        );
+    } else if !failures.is_empty() {
+        logger::debug(
+            LogTag::Tokens,
+            &format!(
+                "Force update partial success for mint={}: {} succeeded ({:?}), {} failed ({:?})",
+                mint,
+                successes.len(),
+                successes,
+                failures.len(),
+                failures
+            ),
+        );
+    } else {
+        logger::debug(
+            LogTag::Tokens,
+            &format!(
+                "Force update complete for mint={}: all sources succeeded ({:?})",
+                mint, successes
+            ),
+        );
+    }
+
+    // Record event for force update (not sampled - user-initiated action)
+    tokio::spawn({
+        let mint = mint.to_string();
+        let successes = successes.clone();
+        let failures = failures.clone();
+        async move {
+            record_token_event(
+                &mint,
+                "force_update_complete",
+                if successes.is_empty() {
+                    Severity::Warn
+                } else {
+                    Severity::Info
+                },
+                serde_json::json!({
+                    "sources_succeeded": successes,
+                    "sources_failed": failures,
+                    "is_partial": !successes.is_empty() && !failures.is_empty(),
+                }),
+            )
+            .await;
+        }
+    });
+
+    Ok(UpdateResult {
+        mint: mint.to_string(),
+        successes,
+        failures,
+    })
 }

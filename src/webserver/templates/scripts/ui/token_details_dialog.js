@@ -11,6 +11,15 @@ import { TradeActionDialog } from "./trade_action_dialog.js";
 import * as Hints from "../core/hints.js";
 import { HintTrigger } from "./hint_popover.js";
 
+// Data source status constants
+const DATA_SOURCE_STATUS = {
+  PENDING: "pending",
+  LOADING: "loading",
+  SUCCESS: "success",
+  ERROR: "error",
+  CACHED: "cached",
+};
+
 export class TokenDetailsDialog {
   constructor(options = {}) {
     this.onClose = options.onClose || (() => {});
@@ -31,6 +40,16 @@ export class TokenDetailsDialog {
     this.advancedChart = null;
     this.chartDataLoaded = false; // Track whether OHLCV data has been loaded
     this._focusTrap = null;
+    // Data source status tracking
+    this._dataSourceStatus = {
+      token: DATA_SOURCE_STATUS.PENDING,
+      dexscreener: DATA_SOURCE_STATUS.PENDING,
+      rugcheck: DATA_SOURCE_STATUS.PENDING,
+      ohlcv: DATA_SOURCE_STATUS.PENDING,
+    };
+    this._initialLoadComplete = false;
+    this._retryCount = 0;
+    this._maxRetries = 3;
   }
 
   /**
@@ -95,6 +114,11 @@ export class TokenDetailsDialog {
         }
       });
 
+      // Set this token as dashboard-active for priority data fetching (fire and forget)
+      this._focusToken().catch(() => {
+        // Silent - focus is best-effort
+      });
+
       // Trigger backend refresh endpoints in parallel (fire and forget)
       // These trigger high-priority data fetching on backend
       // Don't await - let them run in background while dialog shows
@@ -154,26 +178,108 @@ export class TokenDetailsDialog {
     return null;
   }
 
+  /**
+   * Set this token as dashboard-active for priority data fetching
+   * Background batch updates will skip this token while it's focused
+   */
+  async _focusToken() {
+    try {
+      const response = await requestManager.fetch(
+        `/api/tokens/${this.tokenData.mint}/focus`,
+        {
+          method: "POST",
+          priority: "high",
+        }
+      );
+      if (response.success) {
+        console.log("Token focused for priority updates:", response);
+      }
+      return response;
+    } catch (error) {
+      console.warn("Failed to focus token:", error);
+    }
+    return null;
+  }
+
+  /**
+   * Clear dashboard focus when dialog closes
+   * Resets OHLCV priority unless token has an open position
+   */
+  async _unfocusToken() {
+    try {
+      const response = await requestManager.fetch(
+        `/api/tokens/${this.tokenData.mint}/unfocus`,
+        {
+          method: "POST",
+          priority: "low",
+        }
+      );
+      if (response.success) {
+        console.log("Token unfocused:", response);
+      }
+      return response;
+    } catch (error) {
+      // Silent - unfocus is best-effort
+    }
+    return null;
+  }
+
   async _fetchTokenData() {
     if (this.isRefreshing) return;
     this.isRefreshing = true;
+
+    // Update status to loading on first fetch
+    if (!this._initialLoadComplete) {
+      this._updateDataSourceStatus("token", DATA_SOURCE_STATUS.LOADING);
+    }
 
     try {
       // Use requestManager with high priority for token detail fetch
       const newData = await requestManager.fetch(`/api/tokens/${this.tokenData.mint}`, {
         priority: "high",
       });
-      const isInitialLoad = !this.fullTokenData;
-      this.fullTokenData = newData;
-      this._updateHeader(this.fullTokenData);
 
-      if (isInitialLoad && this.currentTab === "overview") {
-        this._loadTabContent(this.currentTab);
-      } else if (!isInitialLoad && this.currentTab === "overview") {
-        this._refreshOverviewTab();
+      if (newData) {
+        const isInitialLoad = !this._initialLoadComplete;
+        this.fullTokenData = newData;
+        this._updateHeader(this.fullTokenData);
+        this._initialLoadComplete = true;
+        this._retryCount = 0;
+
+        // Update data source statuses based on what data we have
+        this._updateDataSourceStatus("token", DATA_SOURCE_STATUS.SUCCESS);
+        this._updateDataSourceFromToken(newData);
+
+        if (isInitialLoad && this.currentTab === "overview") {
+          this._loadTabContent(this.currentTab);
+        } else if (!isInitialLoad && this.currentTab === "overview") {
+          this._refreshOverviewTab();
+        }
+
+        // Also refresh security tab if it's active and was waiting for data
+        if (this.currentTab === "security") {
+          const content = this.dialogEl?.querySelector('[data-tab-content="security"]');
+          if (content && content.dataset.loaded !== "true") {
+            this._loadSecurityTab(content);
+          }
+        }
       }
     } catch (error) {
       console.error("Error loading token details:", error);
+      this._updateDataSourceStatus("token", DATA_SOURCE_STATUS.ERROR);
+
+      // Retry with exponential backoff for initial load
+      if (!this._initialLoadComplete && this._retryCount < this._maxRetries) {
+        this._retryCount++;
+        const delay = 1000 * Math.pow(2, this._retryCount - 1); // 1s, 2s, 4s
+        console.log(`Retrying token fetch (${this._retryCount}/${this._maxRetries}) in ${delay}ms`);
+        setTimeout(() => {
+          this.isRefreshing = false;
+          this._fetchTokenData();
+        }, delay);
+        return;
+      }
+
       const headerMetrics = this.dialogEl?.querySelector(".header-metrics");
       if (headerMetrics) {
         headerMetrics.innerHTML = '<div class="error-text">Failed to load details</div>';
@@ -183,13 +289,71 @@ export class TokenDetailsDialog {
     }
   }
 
+  /**
+   * Update data source statuses based on token data fields
+   */
+  _updateDataSourceFromToken(token) {
+    // Check DexScreener data
+    if (token.market_cap || token.volume_24h || token.liquidity_usd) {
+      this._updateDataSourceStatus("dexscreener", DATA_SOURCE_STATUS.SUCCESS);
+    } else if (this._dataSourceStatus.dexscreener === DATA_SOURCE_STATUS.PENDING) {
+      this._updateDataSourceStatus("dexscreener", DATA_SOURCE_STATUS.LOADING);
+    }
+
+    // Check Rugcheck data
+    if (token.safety_score !== undefined && token.safety_score !== null) {
+      this._updateDataSourceStatus("rugcheck", DATA_SOURCE_STATUS.SUCCESS);
+    } else if (this._dataSourceStatus.rugcheck === DATA_SOURCE_STATUS.PENDING) {
+      this._updateDataSourceStatus("rugcheck", DATA_SOURCE_STATUS.LOADING);
+    }
+
+    // Check OHLCV availability
+    if (token.has_ohlcv) {
+      this._updateDataSourceStatus("ohlcv", DATA_SOURCE_STATUS.SUCCESS);
+    } else if (this._dataSourceStatus.ohlcv === DATA_SOURCE_STATUS.PENDING) {
+      this._updateDataSourceStatus("ohlcv", DATA_SOURCE_STATUS.LOADING);
+    }
+  }
+
+  /**
+   * Update data source status and UI indicator
+   * @param {string} source - 'token' | 'dexscreener' | 'rugcheck' | 'ohlcv'
+   * @param {string} status - DATA_SOURCE_STATUS constant
+   */
+  _updateDataSourceStatus(source, status) {
+    this._dataSourceStatus[source] = status;
+
+    // Update UI indicator
+    const indicator = this.dialogEl?.querySelector(`.source-status[data-source="${source}"]`);
+    if (indicator) {
+      const icon = indicator.querySelector(".status-icon");
+      if (icon) {
+        icon.className = `status-icon ${status}`;
+      }
+    }
+
+    // Check if all sources are done loading
+    const allDone = Object.values(this._dataSourceStatus).every(
+      (s) => s === DATA_SOURCE_STATUS.SUCCESS || s === DATA_SOURCE_STATUS.ERROR || s === DATA_SOURCE_STATUS.CACHED
+    );
+
+    // Hide status bar when all sources are loaded successfully
+    if (allDone) {
+      const statusBar = this.dialogEl?.querySelector(".data-sources-status");
+      if (statusBar) {
+        statusBar.classList.add("all-loaded");
+      }
+    }
+  }
+
   _startPolling() {
     this._stopPolling();
+    // Use 5 second polling interval (reduced from 1 second)
     this.refreshPoller = new Poller(
       () => {
         this._fetchTokenData();
       },
-      { label: "TokenRefresh", interval: 1000 }
+      { label: "TokenRefresh", interval: 5000 }
     );
     this.refreshPoller.start();
   }
@@ -204,8 +368,8 @@ export class TokenDetailsDialog {
 
   _startChartPolling() {
     this._stopChartPolling();
-    // Use faster polling (1.5s) when waiting for data, slower (5s) when data loaded
-    const interval = this.chartDataLoaded ? 5000 : 1500;
+    // Use 3s polling when waiting for data, 10s when data loaded (reduced from 1.5s/5s)
+    const interval = this.chartDataLoaded ? 10000 : 3000;
     this.chartPoller = new Poller(
       () => {
         this._refreshChartData();
@@ -231,6 +395,11 @@ export class TokenDetailsDialog {
     const loadingOverlay = this.dialogEl?.querySelector("#chartLoadingOverlay");
     const loadingText = loadingOverlay?.querySelector(".chart-loading-text");
     const wasDataLoaded = this.chartDataLoaded;
+
+    // Update OHLCV status to loading if not yet loaded
+    if (!this.chartDataLoaded && this._dataSourceStatus.ohlcv !== DATA_SOURCE_STATUS.SUCCESS) {
+      this._updateDataSourceStatus("ohlcv", DATA_SOURCE_STATUS.LOADING);
+    }
 
     try {
       // Use requestManager with normal priority for periodic chart refresh
@@ -267,6 +436,10 @@ export class TokenDetailsDialog {
         loadingOverlay.classList.add("hidden");
       }
       this.chartDataLoaded = true;
+      this._chartErrorCount = 0; // Reset error counter on success
+
+      // Update OHLCV status to success
+      this._updateDataSourceStatus("ohlcv", DATA_SOURCE_STATUS.SUCCESS);
 
       // Update OHLCV display
       this._updateOhlcvDisplay(chartData);
@@ -282,6 +455,14 @@ export class TokenDetailsDialog {
       }
       if (!this.chartDataLoaded && loadingOverlay) {
         loadingOverlay.classList.remove("hidden");
+      }
+      // Track chart fetch failures - after multiple failures, mark as error
+      if (!this.chartDataLoaded) {
+        this._chartErrorCount = (this._chartErrorCount || 0) + 1;
+        // After 5 consecutive failures (~15-50s depending on interval), mark as error
+        if (this._chartErrorCount >= 5) {
+          this._updateDataSourceStatus("ohlcv", DATA_SOURCE_STATUS.ERROR);
+        }
       }
     }
   }
@@ -306,16 +487,13 @@ export class TokenDetailsDialog {
       this._focusTrap = null;
     }
 
-    // Deprioritize token OHLCV monitoring when dialog closes (fire and forget)
-    if (this.tokenData?.mint) {
-      requestManager
-        .fetch(`/api/tokens/${this.tokenData.mint}/ohlcv/deprioritize`, {
-          method: "POST",
-          priority: "low",
-        })
-        .catch(() => {
-          // Silent - deprioritize is best-effort
-        });
+    // Clear dashboard focus and deprioritize OHLCV when dialog closes (fire and forget)
+    // Store mint in local variable before tokenData is nulled
+    const mintToUnfocus = this.tokenData?.mint;
+    if (mintToUnfocus) {
+      this._unfocusToken().catch(() => {
+        // Silent - unfocus is best-effort
+      });
     }
 
     this._stopPolling();
@@ -352,6 +530,23 @@ export class TokenDetailsDialog {
           });
           this._tabHandlers = null;
         }
+
+        // Clean up buy/sell button handlers
+        if (this._buyHandler) {
+          const buyBtn = this.dialogEl.querySelector("#headerBuyBtn");
+          if (buyBtn) {
+            buyBtn.removeEventListener("click", this._buyHandler);
+          }
+          this._buyHandler = null;
+        }
+
+        if (this._sellHandler) {
+          const sellBtn = this.dialogEl.querySelector("#headerSellBtn");
+          if (sellBtn) {
+            sellBtn.removeEventListener("click", this._sellHandler);
+          }
+          this._sellHandler = null;
+        }
       }
 
       if (this.chartResizeObserver) {
@@ -385,6 +580,17 @@ export class TokenDetailsDialog {
       this.isOpening = false;
       this.tabHandlers.clear();
 
+      // Reset data source tracking
+      this._dataSourceStatus = {
+        token: DATA_SOURCE_STATUS.PENDING,
+        dexscreener: DATA_SOURCE_STATUS.PENDING,
+        rugcheck: DATA_SOURCE_STATUS.PENDING,
+        ohlcv: DATA_SOURCE_STATUS.PENDING,
+      };
+      this._initialLoadComplete = false;
+      this._retryCount = 0;
+      this._chartErrorCount = 0;
+
       this.onClose();
     }, 300);
   }
@@ -405,6 +611,24 @@ export class TokenDetailsDialog {
       <div class="dialog-backdrop"></div>
       <div class="dialog-container">
         <div class="dialog-header">
+          <div class="data-sources-status" role="status" aria-label="Data loading status">
+            <span class="source-status" data-source="token" title="Token info">
+              <span class="status-icon pending" aria-hidden="true"></span>
+              <span class="status-label">Token</span>
+            </span>
+            <span class="source-status" data-source="dexscreener" title="Market data">
+              <span class="status-icon pending" aria-hidden="true"></span>
+              <span class="status-label">Market</span>
+            </span>
+            <span class="source-status" data-source="rugcheck" title="Security analysis">
+              <span class="status-icon pending" aria-hidden="true"></span>
+              <span class="status-label">Security</span>
+            </span>
+            <span class="source-status" data-source="ohlcv" title="Chart data">
+              <span class="status-icon pending" aria-hidden="true"></span>
+              <span class="status-label">Chart</span>
+            </span>
+          </div>
           <div class="header-top-row">
             <div class="header-left">
               <div class="header-logo">
@@ -821,18 +1045,25 @@ export class TokenDetailsDialog {
   // =========================================================================
 
   _loadOverviewTab(content) {
-    if (!this.fullTokenData) {
+    // Use whatever data we have - show partial content rather than blocking
+    const tokenToUse = this.fullTokenData || this.tokenData;
+
+    if (!tokenToUse || !tokenToUse.mint) {
       content.innerHTML = '<div class="loading-spinner">Waiting for token data...</div>';
       return;
     }
 
-    content.innerHTML = this._buildOverviewHTML(this.fullTokenData);
+    // Build overview with available data - placeholders for missing fields
+    content.innerHTML = this._buildOverviewHTML(tokenToUse);
 
     setTimeout(() => {
-      this._initializeChart(this.fullTokenData.mint);
+      this._initializeChart(tokenToUse.mint);
     }, 100);
 
-    content.dataset.loaded = "true";
+    // Only mark as fully loaded if we have complete data
+    if (this.fullTokenData && this._initialLoadComplete) {
+      content.dataset.loaded = "true";
+    }
   }
 
   _buildOverviewHTML(token) {
@@ -1182,13 +1413,66 @@ export class TokenDetailsDialog {
   // =========================================================================
 
   _loadSecurityTab(content) {
-    if (!this.fullTokenData) {
+    // Use whatever data we have - show partial content rather than blocking
+    const tokenToUse = this.fullTokenData || this.tokenData;
+
+    if (!tokenToUse || !tokenToUse.mint) {
       content.innerHTML = '<div class="loading-spinner">Waiting for token data...</div>';
       return;
     }
 
-    content.innerHTML = this._buildSecurityContent(this.fullTokenData);
+    // Check if we have security data
+    const hasSecurityData = tokenToUse.safety_score !== undefined && tokenToUse.safety_score !== null;
+
+    if (!hasSecurityData) {
+      // Show partial content with loading indicator for security section
+      content.innerHTML = this._buildSecurityLoadingContent(tokenToUse);
+      return;
+    }
+
+    content.innerHTML = this._buildSecurityContent(tokenToUse);
     content.dataset.loaded = "true";
+  }
+
+  /**
+   * Build security tab with loading state for missing data
+   */
+  _buildSecurityLoadingContent(token) {
+    return `
+      <div class="security-container">
+        <div class="security-loading-notice">
+          <div class="loading-spinner-small"></div>
+          <span>Fetching security analysis from Rugcheck...</span>
+        </div>
+        <div class="security-left-col">
+          <div class="security-header">
+            <div class="security-header-title">
+              <span class="section-title">Security Analysis</span>
+              ${this._renderHintTrigger("tokenDetails.security")}
+            </div>
+            <div class="security-score-container security-loading">
+              <div class="security-score-circle">
+                <svg class="score-progress" width="100" height="100" viewBox="0 0 100 100">
+                  <circle class="score-bg" cx="50" cy="50" r="38"></circle>
+                </svg>
+                <div class="score-content">
+                  <span class="score-value">—</span>
+                </div>
+              </div>
+              <div class="score-info">
+                <span class="score-label">Analyzing...</span>
+              </div>
+            </div>
+          </div>
+          ${this._buildAuthoritiesCard(token)}
+        </div>
+        <div class="security-right-col">
+          <div class="security-placeholder">
+            <p>Security data will appear here once Rugcheck analysis completes.</p>
+          </div>
+        </div>
+      </div>
+    `;
   }
 
   _buildSecurityContent(token) {
