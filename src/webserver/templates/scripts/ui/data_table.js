@@ -2363,6 +2363,30 @@ export class DataTable {
     const { pageSizes } = this.options.clientPagination;
     const totalItems = this.state.filteredData.length;
 
+    // Ensure current pageSize is in the list
+    const allPageSizes = [...pageSizes];
+    const isAll = pageSize === "all";
+    const numericSize = isAll ? null : parseInt(pageSize, 10);
+    
+    const hasSize = allPageSizes.some(s => {
+        if (s === "all") return isAll;
+        return parseInt(s, 10) === numericSize;
+    });
+
+    if (!hasSize) {
+        if (isAll) {
+            allPageSizes.push("all");
+        } else if (Number.isFinite(numericSize)) {
+            allPageSizes.push(numericSize);
+            // Sort numbers, keep "all" at end
+            allPageSizes.sort((a, b) => {
+                if (a === "all") return 1;
+                if (b === "all") return -1;
+                return a - b;
+            });
+        }
+    }
+
     // Calculate range display
     let startItem = 0;
     let endItem = 0;
@@ -2379,7 +2403,7 @@ export class DataTable {
     }
 
     // Generate page size options
-    const pageSizeOptions = pageSizes
+    const pageSizeOptions = allPageSizes
       .map((size) => {
         const value = size === "all" ? "all" : size;
         const label = size === "all" ? "All" : size;
@@ -2825,6 +2849,12 @@ export class DataTable {
 
     this.state.serverPaginationState.pageSize = newSize;
     this.state.serverPaginationState.currentPage = 1;
+    
+    // Save state immediately
+    this._saveState();
+
+    // Optimistic update: update bar immediately to reflect selection
+    this._updateServerPaginationBar();
 
     // Reload first page with new size
     await this._loadServerPage(1);
@@ -2872,6 +2902,17 @@ export class DataTable {
     const { currentPage, pageSize, totalPages, totalItems } = this.state.serverPaginationState;
     const pageSizes = this._pagination.pageSizes || [10, 20, 50, 100];
 
+    // Ensure current pageSize is in the list to avoid UI mismatch
+    const allPageSizes = [...pageSizes];
+    const numericSize = parseInt(pageSize, 10);
+    
+    const hasSize = allPageSizes.some(s => parseInt(s, 10) === numericSize);
+
+    if (!hasSize && Number.isFinite(numericSize)) {
+      allPageSizes.push(numericSize);
+      allPageSizes.sort((a, b) => a - b);
+    }
+
     // Calculate range display
     let startItem = 0;
     let endItem = 0;
@@ -2882,9 +2923,9 @@ export class DataTable {
     }
 
     // Generate page size options
-    const pageSizeOptions = pageSizes
+    const pageSizeOptions = allPageSizes
       .map((size) => {
-        const selected = size === pageSize ? "selected" : "";
+        const selected = parseInt(size, 10) === numericSize ? "selected" : "";
         return `<option value="${size}" ${selected}>${size}</option>`;
       })
       .join("");
@@ -4107,6 +4148,12 @@ export class DataTable {
       } else {
         this.state.userResizedColumns = {};
       }
+      
+      // Restore server page size if saved
+      if (saved.serverPageSize && Number.isFinite(saved.serverPageSize)) {
+        this.state.serverPaginationState.pageSize = saved.serverPageSize;
+      }
+
       this._log("info", "State loaded", saved);
     }
 
@@ -4210,6 +4257,7 @@ export class DataTable {
       columnOrder: this.state.columnOrder,
       tableWidth: this.state.tableWidth,
       userResizedColumns: this.state.userResizedColumns,
+      serverPageSize: this.state.serverPaginationState.pageSize,
     };
     AppState.save(this.options.stateKey, toSave);
     this._log("debug", "State saved", toSave);
