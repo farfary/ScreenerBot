@@ -61,6 +61,11 @@ export class TableSettingsDialog {
       currentOrder: options.currentOrder || [],
       currentVisibility: options.currentVisibility || {},
       onApply: typeof options.onApply === "function" ? options.onApply : null,
+      // Pagination toggle options
+      showPaginationToggle: options.showPaginationToggle || false,
+      paginationEnabled: options.paginationEnabled !== false,
+      onPaginationToggle:
+        typeof options.onPaginationToggle === "function" ? options.onPaginationToggle : null,
     };
 
     this.root = null;
@@ -75,6 +80,7 @@ export class TableSettingsDialog {
 
     this._columnListeners = [];
     this._quickActionListeners = [];
+    this._paginationToggleListener = null;
 
     this._applyListener = this._handleApply.bind(this);
     this._resetListener = this._handleReset.bind(this);
@@ -124,6 +130,7 @@ export class TableSettingsDialog {
           <button type="button" class="table-settings-close" data-action="close" aria-label="Close dialog">&times;</button>
         </header>
         <div class="table-settings-body">
+          ${this._renderPaginationToggle()}
           <div class="table-settings-controls">
             <section class="table-settings-controls-group" aria-label="Visibility controls">
               <h3 class="table-settings-controls-title">Visibility</h3>
@@ -188,6 +195,9 @@ export class TableSettingsDialog {
       on(button, "click", handler);
       this._quickActionListeners.push({ element: button, handler });
     });
+
+    // Setup pagination toggle listener
+    this._attachPaginationToggleListener();
   }
 
   open() {
@@ -247,6 +257,7 @@ export class TableSettingsDialog {
 
     this._cleanupColumnListeners();
     this._cleanupQuickActionListeners();
+    this._cleanupPaginationToggleListener();
 
     off(this.root, "click", this._overlayListener);
 
@@ -534,6 +545,83 @@ export class TableSettingsDialog {
       event.preventDefault();
       event.stopPropagation();
       this.close();
+    }
+  }
+
+  /**
+   * Render the pagination toggle section HTML
+   * @returns {string} - HTML for pagination toggle or empty string if disabled
+   */
+  _renderPaginationToggle() {
+    if (!this.options.showPaginationToggle) {
+      return "";
+    }
+
+    const checked = this.options.paginationEnabled ? "checked" : "";
+
+    return `
+      <div class="table-settings-pagination-toggle" aria-label="Pagination settings">
+        <label class="table-settings-pagination-label">
+          <input type="checkbox" 
+                 data-role="pagination-toggle" 
+                 ${checked} />
+          <span class="table-settings-pagination-text">Enable Pagination</span>
+        </label>
+        <span class="table-settings-pagination-hint">Show data in pages instead of all at once</span>
+      </div>
+    `;
+  }
+
+  /**
+   * Attach listener to pagination toggle checkbox
+   */
+  _attachPaginationToggleListener() {
+    if (!this.options.showPaginationToggle || !this.root) {
+      return;
+    }
+
+    const checkbox = this.root.querySelector('[data-role="pagination-toggle"]');
+    if (!checkbox) {
+      return;
+    }
+
+    this._paginationToggleListener = (event) => {
+      const enabled = event.target.checked;
+      this.options.paginationEnabled = enabled;
+      if (this.options.onPaginationToggle) {
+        this.options.onPaginationToggle(enabled);
+      }
+    };
+
+    on(checkbox, "change", this._paginationToggleListener);
+  }
+
+  /**
+   * Cleanup pagination toggle listener
+   */
+  _cleanupPaginationToggleListener() {
+    if (!this._paginationToggleListener || !this.root) {
+      return;
+    }
+
+    const checkbox = this.root.querySelector('[data-role="pagination-toggle"]');
+    if (checkbox) {
+      off(checkbox, "change", this._paginationToggleListener);
+    }
+    this._paginationToggleListener = null;
+  }
+
+  /**
+   * Update pagination toggle state (for external updates)
+   * @param {boolean} enabled - Whether pagination is enabled
+   */
+  updatePaginationState(enabled) {
+    this.options.paginationEnabled = enabled;
+    if (this.root) {
+      const checkbox = this.root.querySelector('[data-role="pagination-toggle"]');
+      if (checkbox) {
+        checkbox.checked = enabled;
+      }
     }
   }
 }

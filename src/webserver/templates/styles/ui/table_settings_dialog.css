@@ -1,7 +1,7 @@
 .table-settings-overlay {
   position: fixed;
   inset: 0;
-  background: rgb(15, 18, 30, 0.75);
+  background: var(--shadow-lg);
   backdrop-filter: blur(3px);
   z-index: 10000; /* Same level as other main dialogs */
   display: flex;
@@ -22,10 +22,10 @@
   max-height: 90vh;
   display: flex;
   flex-direction: column;
-  background: var(--surface-raised, #141826);
+  background: var(--bg-card);
   border-radius: 12px;
-  box-shadow: 0 20px 60px rgb(7, 10, 25, 0.35);
-  border: 1px solid rgb(82, 90, 130, 0.35);
+  box-shadow: 0 20px 60px var(--shadow-lg);
+  border: 1px solid var(--border-color);
   padding: 0;
   outline: none;
 }
@@ -33,7 +33,7 @@
 .table-settings-header,
 .table-settings-footer {
   padding: 16px 20px;
-  border-bottom: 1px solid rgb(82, 90, 130, 0.2);
+  border-bottom: 1px solid var(--border-color);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -42,7 +42,7 @@
 
 .table-settings-footer {
   border-bottom: none;
-  border-top: 1px solid rgb(82, 90, 130, 0.2);
+  border-top: 1px solid var(--border-color);
 }
 
 .table-settings-footer-actions {
@@ -55,7 +55,7 @@
   margin: 0;
   font-size: 1.1rem;
   font-weight: 600;
-  color: var(--text-primary, #f5f7ff);
+  color: var(--text-primary);
 }
 
 .table-settings-close {
@@ -99,8 +99,8 @@
 .table-settings-controls-group {
   flex: 1 1 220px;
   min-width: 220px;
-  background: rgb(23, 28, 45, 0.85);
-  border: 1px solid rgb(82, 90, 130, 0.25);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   border-radius: 10px;
   padding: 12px;
   display: flex;
@@ -112,7 +112,7 @@
   margin: 0;
   font-size: 0.95rem;
   font-weight: 600;
-  color: var(--text-secondary, #c3caef);
+  color: var(--text-secondary);
 }
 
 .table-settings-controls-buttons {
@@ -139,16 +139,16 @@
   gap: 12px;
   padding: 10px 12px;
   border-radius: 10px;
-  background: rgb(23, 28, 45, 0.9);
-  border: 1px solid rgb(82, 90, 130, 0.25);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
   transition:
     background 120ms ease-in-out,
     border-color 120ms ease-in-out;
 }
 
 .table-settings-column-item:hover {
-  background: rgb(32, 38, 60, 0.95);
-  border-color: rgb(82, 90, 130, 0.35);
+  background: var(--bg-card-hover);
+  border-color: var(--primary-color);
 }
 
 .table-settings-column-index {
@@ -160,8 +160,8 @@
   justify-content: center;
   font-size: 0.85rem;
   font-weight: 600;
-  color: var(--text-secondary, #c3caef);
-  background: rgb(82, 90, 130, 0.25);
+  color: var(--text-secondary);
+  background: var(--bg-card-hover);
 }
 
 .table-settings-column-label {
@@ -170,17 +170,17 @@
   gap: 10px;
   flex: 1 1 auto;
   font-size: 0.95rem;
-  color: var(--text-primary, #f5f7ff);
+  color: var(--text-primary);
 }
 
 .table-settings-column-label input[type="checkbox"] {
   width: 18px;
   height: 18px;
-  accent-color: var(--accent, #6c7dff);
+  accent-color: var(--primary-color);
 }
 
 .table-settings-column-label.is-locked {
-  color: var(--text-muted, #9aa3c6);
+  color: var(--text-muted);
 }
 
 .table-settings-column-label .column-name {
@@ -208,9 +208,9 @@
   align-items: center;
   justify-content: center;
   border-radius: 10px;
-  border: 1px solid rgb(82, 90, 130, 0.3);
-  background: rgb(18, 22, 35, 0.95);
-  color: var(--text-secondary, #c3caef);
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
   cursor: pointer;
   transition:
     background 120ms ease,
@@ -221,9 +221,9 @@
 
 .table-settings-btn-move:hover:not(:disabled),
 .table-settings-btn-move:focus-visible:not(:disabled) {
-  background: rgb(36, 44, 68, 0.95);
-  border-color: rgb(108, 125, 255, 0.55);
-  color: var(--text-primary, #f5f7ff);
+  background: var(--bg-card-hover);
+  border-color: var(--primary-color);
+  color: var(--text-primary);
   transform: translateY(-1px);
 }
 
@@ -252,12 +252,53 @@
 .table-settings-empty {
   padding: 24px;
   text-align: center;
-  color: var(--text-muted, #9aa3c6);
-  background: rgb(23, 28, 45, 0.9);
-  border: 1px dashed rgb(82, 90, 130, 0.35);
+  color: var(--text-muted);
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border-color);
   border-radius: 10px;
 }
 
 body.table-settings-open {
   overflow: hidden;
+}
+
+/* Pagination Toggle Section */
+.table-settings-pagination-toggle {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  margin-bottom: 4px;
+}
+
+.table-settings-pagination-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 0.925rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.table-settings-pagination-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--primary-color);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.table-settings-pagination-text {
+  line-height: 1.3;
+}
+
+.table-settings-pagination-hint {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  padding-left: 28px;
+  line-height: 1.4;
 }

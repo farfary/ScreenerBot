@@ -1177,3 +1177,456 @@ body.dt-column-resizing * {
   font-weight: 600;
   color: var(--text-primary);
 }
+
+/* ==================== Client Pagination Bar ==================== */
+
+.dt-client-pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  font-size: 0.8125rem;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  flex-shrink: 0;
+}
+
+.dt-client-pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.dt-client-pagination-range strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.dt-client-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dt-client-pagination-pages {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0 4px;
+}
+
+.dt-client-pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.dt-client-pagination-btn:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+.dt-client-pagination-btn:focus {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 1px;
+}
+
+.dt-client-pagination-btn:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.dt-client-pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dt-client-pagination-btn.active {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: var(--bg-primary);
+  font-weight: 600;
+}
+
+.dt-client-pagination-btn.active:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+.dt-client-pagination-first,
+.dt-client-pagination-prev,
+.dt-client-pagination-next,
+.dt-client-pagination-last {
+  font-size: 1rem;
+  font-weight: 400;
+}
+
+.dt-client-pagination-ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  user-select: none;
+}
+
+.dt-client-pagination-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.dt-client-pagination-size__label {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+}
+
+.dt-client-pagination-size__select {
+  padding: 4px 24px 4px 8px;
+  height: 28px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  font-family: inherit;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.dt-client-pagination-size__select:hover {
+  border-color: var(--text-secondary);
+}
+
+.dt-client-pagination-size__select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgb(88 166 255 / 20%);
+}
+
+/* Responsive adjustments for pagination bar */
+@media (width <= 768px) {
+  .dt-client-pagination-bar {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 8px 12px;
+  }
+
+  .dt-client-pagination-info {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .dt-client-pagination-controls {
+    order: 1;
+    flex: 1;
+    justify-content: center;
+  }
+
+  .dt-client-pagination-size {
+    order: 2;
+  }
+
+  .dt-client-pagination-btn {
+    min-width: 36px;
+    height: 36px;
+  }
+
+  .dt-client-pagination-size__select {
+    height: 36px;
+    padding: 6px 28px 6px 10px;
+  }
+}
+
+@media (width <= 480px) {
+  .dt-client-pagination-pages {
+    display: none;
+  }
+
+  .dt-client-pagination-bar {
+    justify-content: center;
+  }
+}
+
+/* ==================== Pagination Mode Toggle ==================== */
+
+.dt-pagination-mode-toggle {
+  display: inline-flex;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-left: 8px;
+}
+
+.dt-pagination-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: 36px;
+  background: var(--bg-secondary);
+  border: none;
+  border-right: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 150ms ease,
+    color 150ms ease;
+}
+
+.dt-pagination-mode-btn:last-child {
+  border-right: none;
+}
+
+.dt-pagination-mode-btn:hover:not(.active) {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.dt-pagination-mode-btn.active {
+  background: var(--primary-color);
+  color: white;
+}
+
+.dt-pagination-mode-btn i {
+  font-size: 0.875rem;
+}
+
+/* ==================== Server Pagination Bar (Pages Mode) ==================== */
+
+.dt-server-pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 16px;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  font-size: 0.8125rem;
+  font-feature-settings: "tnum" 1, "zero" 1;
+  flex-shrink: 0;
+}
+
+.dt-server-pagination-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.dt-server-pagination-range strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.dt-server-pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.dt-server-pagination-pages {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0 4px;
+}
+
+.dt-server-pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease;
+}
+
+.dt-server-pagination-btn:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+.dt-server-pagination-btn:focus {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 1px;
+}
+
+.dt-server-pagination-btn:focus:not(:focus-visible) {
+  outline: none;
+}
+
+.dt-server-pagination-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.dt-server-pagination-btn.active {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: var(--bg-primary);
+  font-weight: 600;
+}
+
+.dt-server-pagination-btn.active:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+.dt-server-pagination-first,
+.dt-server-pagination-prev,
+.dt-server-pagination-next,
+.dt-server-pagination-last {
+  font-size: 1rem;
+  font-weight: 400;
+}
+
+.dt-server-pagination-ellipsis {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  user-select: none;
+}
+
+.dt-server-pagination-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.dt-server-pagination-size__label {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+}
+
+.dt-server-pagination-size__select {
+  padding: 4px 24px 4px 8px;
+  height: 28px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  font-family: inherit;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238b949e' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  transition:
+    border-color 0.15s ease,
+    background-color 0.15s ease;
+}
+
+.dt-server-pagination-size__select:hover {
+  border-color: var(--text-secondary);
+}
+
+.dt-server-pagination-size__select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgb(88 166 255 / 20%);
+}
+
+/* Responsive adjustments for server pagination bar */
+@media (width <= 768px) {
+  .dt-server-pagination-bar {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 8px 12px;
+  }
+
+  .dt-server-pagination-info {
+    order: 3;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .dt-server-pagination-controls {
+    order: 1;
+    flex: 1;
+    justify-content: center;
+  }
+
+  .dt-server-pagination-size {
+    order: 2;
+  }
+
+  .dt-server-pagination-btn {
+    min-width: 36px;
+    height: 36px;
+  }
+
+  .dt-server-pagination-size__select {
+    height: 36px;
+    padding: 6px 28px 6px 10px;
+  }
+
+  .dt-pagination-mode-toggle {
+    margin-left: 0;
+    margin-top: 8px;
+  }
+}
+
+@media (width <= 480px) {
+  .dt-server-pagination-pages {
+    display: none;
+  }
+
+  .dt-server-pagination-bar {
+    justify-content: center;
+  }
+
+  .dt-pagination-mode-btn span {
+    display: none;
+  }
+
+  .dt-pagination-mode-btn {
+    padding: 6px 10px;
+  }
+}

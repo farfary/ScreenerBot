@@ -14,15 +14,20 @@
   left: 0;
   right: 0;
   bottom: 26px; /* Position above status bar (26px height) */
-  z-index: var(--z-dialog, 10000); /* Same as dialogs, but below status bar */
+  z-index: 9998; /* Below dropdowns (9999) and dialogs (10000) */
   width: 100%;
+  height: 44px; /* Fixed height for predictable layout */
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
-  padding: 6px 0;
+  padding: 0; /* Remove vertical padding, use flex centering */
+  display: flex;
+  align-items: center;
   flex-shrink: 0;
+  box-sizing: border-box;
 }
 
 .billboard-row-inner {
+  width: 100%;
   max-width: 100%;
   padding: 0 var(--spacing-md);
   display: flex;

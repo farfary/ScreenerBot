@@ -618,7 +618,7 @@ function createLifecycle() {
     table.updateToolbarMeta(metaEntries);
   };
 
-  const buildQuery = ({ cursor = null } = {}) => {
+  const buildQuery = ({ cursor = null, page = null, pageSize = null } = {}) => {
     const params = new URLSearchParams();
     params.set("view", state.view);
     if (state.search) params.set("search", state.search);
@@ -643,9 +643,16 @@ function createLifecycle() {
     ) {
       params.set("rejection_reason", state.filters.rejection_reason);
     }
-    params.set("limit", String(PAGE_LIMIT));
-    if (cursor !== null && cursor !== undefined) {
-      params.set("cursor", String(cursor));
+    // Page-based pagination (for 'pages' mode)
+    if (page !== null && page !== undefined) {
+      params.set("page", String(page));
+      params.set("limit", String(pageSize || PAGE_LIMIT));
+    } else {
+      // Cursor-based pagination (for 'scroll' mode)
+      params.set("limit", String(PAGE_LIMIT));
+      if (cursor !== null && cursor !== undefined) {
+        params.set("cursor", String(cursor));
+      }
     }
     return params;
   };
@@ -712,7 +719,19 @@ function createLifecycle() {
     }).catch(() => {});
   };
 
-  const loadTokensPage = async ({ direction = "initial", cursor, reason, signal }) => {
+  const loadTokensPage = async ({
+    direction = "initial",
+    cursor,
+    page,
+    pageSize,
+    reason,
+    signal,
+  }) => {
+    // Handle page-based pagination (direction === 'page')
+    if (direction === "page" && page !== undefined) {
+      return loadTokensPageBased({ page, pageSize, reason, signal });
+    }
+
     if (direction === "prev") {
       const currentTotal = state.totalCount ?? table?.getData?.().length ?? 0;
       return {
@@ -865,6 +884,148 @@ function createLifecycle() {
         });
       } else if (reason !== "poll") {
         Utils.showToast("Failed to load tokens", "warning");
+      }
+      throw error;
+    }
+  };
+
+  /**
+   * Load tokens using page-based pagination (for 'pages' mode).
+   * Returns data in a format DataTable expects for server page navigation.
+   */
+  const loadTokensPageBased = async ({ page, pageSize, reason, signal }) => {
+    if (!state.hasLoadedOnce && reason !== "poll" && table?.showBlockingState) {
+      table.showBlockingState({
+        variant: "loading",
+        title: "Loading tokens page...",
+        description: "Fetching page data from server.",
+      });
+    }
+
+    const params = buildQuery({ page, pageSize });
+    const url = `/api/tokens/list?${params.toString()}`;
+
+    try {
+      const data = await requestManager.fetch(url, {
+        priority: "normal",
+      });
+      const items = Array.isArray(data?.items) ? data.items : [];
+
+      const rejectionReasons =
+        data &&
+        typeof data === "object" &&
+        data.rejection_reasons &&
+        typeof data.rejection_reasons === "object"
+          ? data.rejection_reasons
+          : null;
+
+      const blacklistSourcesMap =
+        data &&
+        typeof data === "object" &&
+        data.blacklist_reasons &&
+        typeof data.blacklist_reasons === "object"
+          ? data.blacklist_reasons
+          : null;
+
+      const normalizedItems = items.map((row) => {
+        if (!row || typeof row !== "object") return row;
+        const hasServerReason =
+          rejectionReasons &&
+          row.mint &&
+          Object.prototype.hasOwnProperty.call(rejectionReasons, row.mint);
+        const resolvedReason = hasServerReason
+          ? rejectionReasons[row.mint]
+          : (row.reject_reason ?? null);
+        const normalizedSources = normalizeBlacklistReasons(row.mint, blacklistSourcesMap);
+        return {
+          ...row,
+          reject_reason: resolvedReason ?? null,
+          blacklist_reasons: normalizedSources,
+        };
+      });
+
+      let rowsWithPriceMeta = normalizedItems;
+      if (state.view === "pool") {
+        rowsWithPriceMeta = normalizedItems.map((row) => annotatePriceChange(row));
+        if (!priceBaselineReady) {
+          priceBaselineReady = true;
+        }
+      }
+
+      // Update available rejection reasons
+      if (Array.isArray(data?.available_rejection_reasons)) {
+        state.availableRejectionReasons = data.available_rejection_reasons.filter(
+          (r) => typeof r === "string" && r.trim().length > 0
+        );
+      }
+
+      if (state.view === "rejected") {
+        updateRejectionReasonOptions();
+        if (table) {
+          table.setToolbarFilterValue("rejection_reason", state.filters.rejection_reason, {
+            apply: false,
+          });
+        }
+      }
+
+      // Update totals
+      if (typeof data?.total === "number" && Number.isFinite(data.total)) {
+        state.totalCount = data.total;
+      }
+
+      state.lastUpdate = data?.timestamp ?? null;
+      const pricedTotal =
+        typeof data?.priced_total === "number" ? data.priced_total : null;
+      const positionsTotal =
+        typeof data?.positions_total === "number" ? data.positions_total : null;
+      const blacklistedTotal =
+        typeof data?.blacklisted_total === "number" ? data.blacklisted_total : null;
+
+      state.summary = {
+        priced:
+          pricedTotal !== null
+            ? pricedTotal
+            : rowsWithPriceMeta.filter((row) => row.has_pool_price).length,
+        positions:
+          positionsTotal !== null
+            ? positionsTotal
+            : rowsWithPriceMeta.filter((row) => row.has_open_position).length,
+        blacklisted:
+          blacklistedTotal !== null
+            ? blacklistedTotal
+            : rowsWithPriceMeta.filter((row) => row.blacklisted).length,
+      };
+
+      state.hasLoadedOnce = true;
+      if (table?.hideBlockingState) {
+        table.hideBlockingState();
+      }
+
+      // Return page-based response with serverPage info
+      return {
+        rows: rowsWithPriceMeta,
+        total: state.totalCount ?? items.length,
+        meta: { timestamp: state.lastUpdate },
+        // Server page info for DataTable
+        serverPage: {
+          page: data?.page ?? page,
+          pageSize: data?.page_size ?? pageSize,
+          totalPages: data?.total_pages ?? Math.ceil((state.totalCount || items.length) / pageSize),
+        },
+      };
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw error;
+      }
+      console.error("[Tokens] Failed to load tokens page:", error);
+      if (!state.hasLoadedOnce) {
+        table?.showBlockingState?.({
+          variant: "error",
+          title: "Still loading tokens...",
+          description: "Waiting for the backend to respond. We will retry automatically.",
+        });
+      } else if (reason !== "poll") {
+        Utils.showToast("Failed to load tokens page", "warning");
       }
       throw error;
     }
@@ -1500,6 +1661,12 @@ function createLifecycle() {
         column: "candle_count",
         direction: "desc",
       },
+      clientPagination: {
+        enabled: true,
+        pageSizes: [10, 20, 50, 100, "all"],
+        defaultPageSize: 50,
+        stateKey: "tokens.ohlcv.pageSize",
+      },
       compact: true,
       stickyHeader: true,
       zebra: true,
@@ -1788,6 +1955,12 @@ function createLifecycle() {
         mode: "client",
         column: "created_at",
         direction: "desc",
+      },
+      clientPagination: {
+        enabled: true,
+        pageSizes: [10, 20, 50, 100, "all"],
+        defaultPageSize: 50,
+        stateKey: "tokens.favorites.pageSize",
       },
       compact: true,
       stickyHeader: true,
@@ -2310,6 +2483,13 @@ function createLifecycle() {
         autoSizeColumns: false,
         uniformRowHeight: 2,
         pagination: {
+          // Hybrid pagination modes: enable both scroll and pages
+          modes: ["scroll", "pages"],
+          defaultMode: "scroll",
+          modeStateKey: `tokens.${state.view}.paginationMode`,
+          defaultPageSize: 50,
+          pageSizes: [10, 20, 50, 100],
+          // Scroll mode settings
           threshold: 160,
           maxRows: 5000,
           loadPage: loadTokensPage,
