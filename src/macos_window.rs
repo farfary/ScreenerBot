@@ -6,7 +6,7 @@
 use crate::logger::{self, LogTag};
 use objc2::rc::Retained;
 use objc2::runtime::AnyObject;
-use objc2_app_kit::NSWindow;
+use objc2_app_kit::{NSColor, NSWindow};
 use objc2_foundation::{NSNumber, NSRect, NSString};
 use tauri::WebviewWindow;
 
@@ -268,6 +268,31 @@ pub fn set_accepts_first_mouse(window: &WebviewWindow, accepts: bool) -> Result<
       &format!("Set window acceptsMouseMovedEvents to {}", accepts),
     );
     
+    Ok(())
+  }
+}
+
+/// Set the window background color to dark to prevent white flash on startup
+pub fn set_window_background_color(window: &WebviewWindow) -> Result<(), String> {
+  unsafe {
+    let ns_window = get_ns_window(window)?;
+
+    // Create dark color #0d1117 (13, 17, 23)
+    let color: *mut AnyObject = objc2::msg_send![
+      objc2::class!(NSColor),
+      colorWithRed: 13.0 / 255.0
+      green: 17.0 / 255.0
+      blue: 23.0 / 255.0
+      alpha: 1.0
+    ];
+
+    let _: () = objc2::msg_send![&*ns_window, setBackgroundColor: color];
+
+    logger::debug(
+      LogTag::System,
+      "Set native window background color to #0d1117",
+    );
+
     Ok(())
   }
 }

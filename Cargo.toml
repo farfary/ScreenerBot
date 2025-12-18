@@ -177,7 +177,7 @@ raw-window-handle = "0.6"
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSGeometry", "NSArray", "NSObject"] }
-objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSScreen", "NSApplication", "NSRunningApplication", "NSWorkspace"] }
+objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSScreen", "NSApplication", "NSRunningApplication", "NSWorkspace", "NSColor"] }
 machine-uid = "0.5"
 
 # Windows-specific dependencies

@@ -109,6 +109,14 @@ pub async fn run_gui_mode() -> Result<(), String> {
             } else {
               logger::info(LogTag::System, "Window theme set to Dark");
             }
+
+            // Maximize window on startup
+            if let Err(e) = window.maximize() {
+              logger::warning(
+                LogTag::System,
+                &format!("Failed to maximize window: {}", e),
+              );
+            }
           }
 
           // macOS: Set overlay title bar style
@@ -121,6 +129,14 @@ pub async fn run_gui_mode() -> Result<(), String> {
               );
             } else {
               logger::info(LogTag::System, "macOS title bar set to Overlay");
+            }
+
+            // Set native background color to dark
+            if let Err(e) = crate::macos_window::set_window_background_color(&window) {
+               logger::warning(
+                LogTag::System,
+                &format!("Failed to set window background color: {}", e),
+              );
             }
           }
 

@@ -14,9 +14,10 @@
   console.log("[Theme] Running in Tauri:", isTauri);
 
   // Detect platform - check user agent for macOS detection
+  // Also check for specific Tauri platform if available
   const isMacOS =
-    navigator.platform.toUpperCase().indexOf("MAC") >= 0 ||
-    navigator.userAgent.toUpperCase().indexOf("MAC") >= 0;
+    navigator.userAgent.toUpperCase().indexOf("MAC") >= 0 ||
+    navigator.platform.toUpperCase().indexOf("MAC") >= 0;
 
   // Apply macOS styling if running in Tauri on macOS
   if (isTauri && isMacOS) {
@@ -31,10 +32,18 @@
     // Enable native window dragging via Rust command
     // This is a workaround for Tauri bug #9503 where TitleBarStyle::Overlay
     // breaks window dragging on macOS
-    if (window.__TAURI__ && window.__TAURI__.core) {
+    if (window.__TAURI__) {
       try {
-        await window.__TAURI__.core.invoke("enable_window_drag");
-        console.log("[Theme] Enabled native window dragging via Rust command");
+        // Try v2 API first
+        if (window.__TAURI__.core) {
+           await window.__TAURI__.core.invoke("enable_window_drag");
+           console.log("[Theme] Enabled native window dragging via Rust command (v2)");
+        } 
+        // Fallback to v1 API just in case
+        else if (window.__TAURI__.invoke) {
+           await window.__TAURI__.invoke("enable_window_drag");
+           console.log("[Theme] Enabled native window dragging via Rust command (v1)");
+        }
       } catch (error) {
         console.warn("[Theme] Failed to enable native window dragging:", error);
       }
