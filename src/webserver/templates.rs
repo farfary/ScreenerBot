@@ -63,6 +63,7 @@ const EXIT_DIALOG_STYLES: &str = include_str!("templates/styles/ui/exit_dialog.c
 // Assets (logos, icons)
 pub const LOGO_SVG: &str = include_str!("assets/logo.svg");
 pub const LOGO_PNG: &[u8] = include_bytes!("assets/logo.png");
+pub const LIGHTWEIGHT_CHARTS_JS: &[u8] = include_bytes!("assets/lightweight-charts.js");
 
 // Lucide icon font
 const LUCIDE_ICON_CSS: &str = include_str!("assets/lucide-font/lucide.css");

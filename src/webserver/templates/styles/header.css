@@ -91,9 +91,9 @@
 .brand-text {
   font-family: var(--font-brand);
   font-size: 26px;
-  font-weight: 700;
+  font-weight: 900;
   color: var(--brand-navy);
-  letter-spacing: 0.08em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   text-shadow:
     0 2px 4px rgb(13, 59, 102, 0.15),

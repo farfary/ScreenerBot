@@ -31,11 +31,11 @@
 
 /* Orbitron - Futuristic display font for branding */
 @font-face {
-  font-family: Orbitron;
+  font-family: "Orbitron";
   font-style: normal;
   font-weight: 400 900;
   font-display: swap;
-  src: url("/assets/fonts/Orbitron-Variable.woff2") format("woff2-variations");
+  src: url("/assets/fonts/Orbitron-Variable.woff2") format("woff2");
 }
 
 /* =============================================================================
@@ -167,7 +167,7 @@
   --font-data: "JetBrains Mono", "SF Mono", monaco, monospace;
 
   /* Font Families */
-  --font-brand: "Rajdhani", -apple-system, sans-serif;
+  --font-brand: "Orbitron", -apple-system, sans-serif;
   --font-size-xs: 0.75rem; /* 12px */
   --font-size-sm: 0.875rem; /* 14px */
   --font-size-base: 1rem; /* 16px */
@@ -515,8 +515,9 @@ select,
 /* Brand text using Orbitron */
 .font-brand {
   font-family: var(--font-brand);
-  font-weight: 700;
+  font-weight: 900;
   letter-spacing: 0.05em;
+  text-transform: uppercase;
 }
 
 /* Monospace for addresses, hashes, signatures */

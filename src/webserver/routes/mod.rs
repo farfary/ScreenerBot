@@ -365,6 +365,12 @@ async fn get_asset(axum::extract::Path(file): axum::extract::Path<String>) -> Re
             templates::LOGO_PNG,
         )
             .into_response(),
+        "lightweight-charts.js" => (
+            StatusCode::OK,
+            [(http_header::CONTENT_TYPE, "application/javascript")],
+            templates::LIGHTWEIGHT_CHARTS_JS,
+        )
+            .into_response(),
         _ => (StatusCode::NOT_FOUND, "Asset not found").into_response(),
     }
 }

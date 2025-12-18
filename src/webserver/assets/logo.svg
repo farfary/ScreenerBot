@@ -1,16 +1,7 @@
 <svg width="800" height="800" viewBox="0 0 800 800" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
-  <defs>
-    <filter id="softGlow" x="-140%" y="-140%" width="380%" height="380%">
-      <feGaussianBlur in="SourceGraphic" stdDeviation="10" result="blur"/>
-      <feMerge>
-        <feMergeNode in="blur"/>
-        <feMergeNode in="SourceGraphic"/>
-      </feMerge>
-    </filter>
-  </defs>
 
-  <!-- Six bright hexagons (same geometry as logo_hex_only.svg) -->
-  <g fill="#ffffff" filter="url(#softGlow)" transform="translate(400 400) scale(2.02) translate(-400 -400)">
+  <!-- Six bright hexagons (crisp, filter-free for mobile rendering quality) -->
+  <g fill="#ffffff" transform="translate(400 400) scale(2.02) translate(-400 -400)">
     <polygon points="456,280 428,328.5 372,328.5 344,280 372,231.5 428,231.5"/>
     <polygon points="559.923,340 531.923,388.5 475.923,388.5 447.923,340 475.923,291.5 531.923,291.5"/>
     <polygon points="559.923,460 531.923,508.5 475.923,508.5 447.923,460 475.923,411.5 531.923,411.5"/>
