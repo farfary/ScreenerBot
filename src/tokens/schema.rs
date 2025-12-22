@@ -241,7 +241,7 @@ pub const CREATE_INDEXES: &[&str] = &[
 
 /// ALTER TABLE statements for schema migrations (existing databases)
 pub const ALTER_STATEMENTS: &[&str] = &[
-    // Add score_normalised column to security_rugcheck (0-100, higher = safer)
+    // Add score_normalised column to security_rugcheck (0-100, HIGHER = MORE RISKY)
     "ALTER TABLE security_rugcheck ADD COLUMN score_normalised INTEGER",
 ];
 

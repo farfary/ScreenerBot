@@ -2514,10 +2514,12 @@ export class PositionDetailsDialog {
 
   /**
    * Get color for security score
+   * NOTE: score_normalized from Rugcheck is 0-100 where LOWER = SAFER
    */
   _getScoreColor(score) {
-    if (score >= 80) return "var(--success)";
-    if (score >= 50) return "var(--warning)";
+    // Lower score = safer (green), higher score = riskier (red)
+    if (score <= 20) return "var(--success)";
+    if (score <= 50) return "var(--warning)";
     return "var(--error)";
   }
 

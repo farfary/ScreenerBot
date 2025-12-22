@@ -202,7 +202,7 @@ pub struct Token {
     // Security assessment
     /// Raw risk score from Rugcheck (0-150000+, HIGHER = MORE RISKY)
     pub security_score: Option<i32>,
-    /// Normalized safety score from Rugcheck (0-100, HIGHER = SAFER)
+    /// Normalized risk score from Rugcheck (0-100, HIGHER = MORE RISKY, LOWER = SAFER)
     pub security_score_normalised: Option<i32>,
     pub is_rugged: bool,
     pub token_type: Option<String>,
@@ -509,9 +509,9 @@ pub struct TokenPoolsSnapshot {
 pub struct RugcheckData {
     pub token_type: Option<String>,
     pub token_decimals: Option<u8>,
-    /// Raw risk score from Rugcheck (0-150000+, higher = more risky)
+    /// Raw risk score from Rugcheck (0-150000+, HIGHER = MORE RISKY)
     pub score: Option<i32>,
-    /// Normalized score from Rugcheck (0-100, higher = safer)
+    /// Normalized risk score from Rugcheck (0-100, HIGHER = MORE RISKY, LOWER = SAFER)
     pub score_normalised: Option<i32>,
     pub score_description: Option<String>,
     pub mint_authority: Option<String>,
@@ -553,7 +553,7 @@ pub struct SecurityBundle {
     pub combined_score: SecurityScore,
 }
 
-/// Security score (0-100, higher = safer)
+/// Security score (0-100, LOWER = SAFER, HIGHER = MORE RISKY)
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SecurityScore {
     pub score: i32,

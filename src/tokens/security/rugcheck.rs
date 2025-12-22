@@ -195,14 +195,17 @@ pub async fn fetch_rugcheck_data(
     }
 
     // Record security analysis event (sampled - only for high-risk tokens or every 20th)
-    let score = calculate_security_score(&data);
-    let is_high_risk = score < 50 || data.rugged;
+    // calculate_security_score returns a SAFETY score (0-100, higher = safer)
+    let safety_score = calculate_security_score(&data);
+    let is_high_risk = safety_score < 50 || data.rugged;
     let hash = mint.chars().fold(0u32, |acc, c| acc.wrapping_add(c as u32));
     if is_high_risk || hash % 20 == 0 {
         tokio::spawn({
             let mint = mint.to_string();
             let risks = data.risks.clone();
             let rugged = data.rugged;
+            let safety_score = safety_score;
+            let is_high_risk = is_high_risk;
             async move {
                 let risk_level = if rugged {
                     "critical"
@@ -216,7 +219,7 @@ pub async fn fetch_rugcheck_data(
                     "rugcheck_analysis",
                     risk_level,
                     serde_json::json!({
-                        "score": score,
+                        "safety_score": safety_score,
                         "rugged": rugged,
                         "risk_count": risks.len(),
                         "high_risk": is_high_risk,
@@ -230,15 +233,22 @@ pub async fn fetch_rugcheck_data(
     Ok(Some(data))
 }
 
-/// Calculate security score from Rugcheck data
+/// Calculate a SAFETY score from Rugcheck data (for internal use in event logging)
 ///
-/// Returns a 0-100 score where:
-/// - 80-100: Safe (green)
-/// - 50-79: Medium (yellow)
-/// - 20-49: Risky (orange)
-/// - 0-19: Dangerous (red)
+/// Rugcheck scores work as: HIGHER = MORE RISKY, LOWER = SAFER
+/// This function inverts the normalized score to create a safety score:
+/// - 80-100: Safe (green) - original normalized score was 0-20 (low risk)
+/// - 50-79: Medium (yellow) - original was 21-50
+/// - 20-49: Risky (orange) - original was 51-80
+/// - 0-19: Dangerous (red) - original was 81-100 (high risk)
+///
+/// NOTE: For filtering, use the raw score directly with max_risk_score threshold.
 pub fn calculate_security_score(data: &RugcheckData) -> i32 {
-    data.score.unwrap_or(50).clamp(0, 100)
+    // Use normalized score (0-100) and invert it to create safety score
+    // If normalized_score = 10 (low risk), safety = 90 (safe)
+    // If normalized_score = 80 (high risk), safety = 20 (dangerous)
+    let risk_score = data.score_normalised.unwrap_or(50);
+    (100 - risk_score).clamp(0, 100)
 }
 
 /// Get cache metrics for monitoring

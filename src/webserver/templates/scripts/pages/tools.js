@@ -2177,20 +2177,24 @@ function copyAnalysisReport() {
 
 /**
  * Helper: Get CSS class for security score
+ * NOTE: normalized_score from Rugcheck is 0-100 where LOWER = SAFER, HIGHER = RISKIER
  */
 function getTaScoreClass(score) {
-  if (score >= 70) return "success";
-  if (score >= 40) return "warning";
+  // Lower score = safer (green), higher score = riskier (red)
+  if (score <= 30) return "success";
+  if (score <= 60) return "warning";
   return "danger";
 }
 
 /**
  * Helper: Get label for security score
+ * NOTE: normalized_score from Rugcheck is 0-100 where LOWER = SAFER, HIGHER = RISKIER
  */
 function getTaScoreLabel(score) {
-  if (!score) return "Unknown";
-  if (score >= 70) return "Good";
-  if (score >= 40) return "Moderate";
+  if (!score && score !== 0) return "Unknown";
+  // Lower score = safer
+  if (score <= 30) return "Good";
+  if (score <= 60) return "Moderate";
   return "Risky";
 }
 

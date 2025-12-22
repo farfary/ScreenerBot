@@ -201,7 +201,7 @@ pub struct TokenDetailResponse {
   // Security
   /// Raw risk score from Rugcheck (0-150000+, HIGHER = MORE RISKY)
   pub risk_score: Option<i32>,
-  /// Normalized safety score from Rugcheck (0-100, HIGHER = SAFER)
+  /// Computed safety score (0-100, HIGHER = SAFER) - inverted from Rugcheck normalized score
   pub safety_score: Option<i32>,
   pub rugged: Option<bool>,
   pub mint_authority: Option<String>,
@@ -281,7 +281,7 @@ pub struct TokenOverview {
 pub struct SecurityAnalysis {
   /// Raw risk score from Rugcheck (0-150000+, HIGHER = MORE RISKY)
   pub score: Option<i32>,
-  /// Normalized safety score from Rugcheck (0-100, HIGHER = SAFER)
+  /// Rugcheck normalized score (0-100, HIGHER = MORE RISKY) - use for filtering
   pub normalized_score: Option<i32>,
   pub mint_authority: Option<String>,
   pub freeze_authority: Option<String>,
@@ -2016,7 +2016,10 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
   // Get security info from Token struct
   let security_start = std::time::Instant::now();
   let security_score = token.security_score; // Raw risk score (0-150000+, higher = riskier)
-  let security_score_normalised = token.security_score_normalised; // Normalized (0-100, higher = safer)
+  // Normalized score from Rugcheck is 0-100 where HIGHER = MORE RISKY
+  let security_score_normalised = token.security_score_normalised;
+  // Invert it to create a safety_score where HIGHER = SAFER for the UI
+  let safety_score = security_score_normalised.map(|s| (100 - s).clamp(0, 100));
   let rugged = Some(token.is_rugged);
   let mint_authority = token.mint_authority.clone();
   let freeze_authority = token.freeze_authority.clone();
@@ -2269,30 +2272,44 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
   let logo_url = token.image_url.clone();
   let primary_website = websites.first().map(|link| link.url.clone());
 
-  // Security summary based on normalized score (0-100, higher = safer)
+  // Security summary based on normalized score (0-100, LOWER = SAFER in Rugcheck)
+  // We invert it for display: show as "safety score" where higher = safer
   let security_summary = match (rugged, security_score_normalised) {
-    (Some(true), Some(score)) => Some(format!(
+    (Some(true), Some(score)) => {
+      let safety = 100 - score;
+      Some(format!(
  "Token flagged as rugged (safety score {}). Investigate before trading.",
-      score
-    )),
+        safety
+      ))
+    },
     (Some(true), None) => {
  Some("Token flagged as rugged. Investigate before trading.".to_string())
     }
-    (_, Some(score)) if score >= 70 => {
- Some(format!("Strong security posture (safety score {}/100).", score))
+    (_, Some(score)) if score <= 30 => {
+      let safety = 100 - score;
+ Some(format!("Strong security posture (safety score {}/100).", safety))
     }
-    (_, Some(score)) if score >= 50 => Some(format!(
+    (_, Some(score)) if score <= 50 => {
+      let safety = 100 - score;
+      Some(format!(
  "Moderate security (safety score {}/100). Monitor for changes.",
-      score
-    )),
-    (_, Some(score)) if score >= 30 => Some(format!(
+        safety
+      ))
+    }
+    (_, Some(score)) if score <= 70 => {
+      let safety = 100 - score;
+      Some(format!(
  "Safety score {}/100 indicates elevated risk.",
-      score
-    )),
-    (_, Some(score)) => Some(format!(
+        safety
+      ))
+    }
+    (_, Some(score)) => {
+      let safety = 100 - score;
+      Some(format!(
  "Safety score {}/100 indicates critical risk.",
-      score
-    )),
+        safety
+      ))
+    }
     _ => None,
   };
 
@@ -2303,8 +2320,8 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
   // Data source as string
   let data_source = Some(format!("{:?}", token.data_source));
 
-  // Verified = normalized score >= 70 (safer tokens)
-  let verified = security_score_normalised.map(|s| s >= 70).unwrap_or(false);
+  // Verified = normalized score <= 30 (low risk = safer tokens in Rugcheck)
+  let verified = security_score_normalised.map(|s| s <= 30).unwrap_or(false);
 
   Json(TokenDetailResponse {
     mint: token.mint.clone(),
@@ -2349,7 +2366,7 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     net_flow_24h,
     buy_sell_ratio_24h,
     risk_score: security_score,
-    safety_score: security_score_normalised,
+    safety_score,
     rugged,
     mint_authority,
     freeze_authority,

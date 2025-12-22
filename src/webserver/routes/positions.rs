@@ -440,9 +440,10 @@ async fn get_position_details(Path(key): Path<String>) -> Response {
             
             // Build security summary from token database
             let security = token_data.as_ref().map(|token| {
+                // Rugcheck normalized score: 0-100, LOWER = SAFER, HIGHER = RISKIER
                 let risk_level = match token.security_score_normalised {
-                    Some(score) if score >= 80 => "low".to_string(),
-                    Some(score) if score >= 50 => "medium".to_string(),
+                    Some(score) if score <= 20 => "low".to_string(),
+                    Some(score) if score <= 50 => "medium".to_string(),
                     Some(_) => "high".to_string(),
                     None => "unknown".to_string(),
                 };
@@ -1193,8 +1194,9 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
         logo_url: token.image_url.clone(),
         website: token.websites.first().map(|w| w.url.clone()),
         tags: Vec::new(), // Tags not available in unified Token
-        // Use normalized score (0-100, higher = safer) - verified if score >= 70
-        is_verified: token.security_score_normalised.map(|s| s >= 70).unwrap_or(false),
+        // Normalized score is 0-100 where HIGHER = MORE RISKY
+        // Token is "verified" (safe) if score <= 30 (low risk)
+        is_verified: token.security_score_normalised.map(|s| s <= 30).unwrap_or(false),
     });
 
     // 3. Get current price from pool service
