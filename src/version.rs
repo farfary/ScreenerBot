@@ -330,14 +330,11 @@ pub async fn download_update(update: &UpdateInfo) -> Result<String, String> {
         };
     }
 
-    // Determine download path
+    // Determine download directory
     let download_dir = get_download_dir()?;
-    let filename = update
-        .download_url
-        .split('/')
-        .last()
-        .unwrap_or("screenerbot-update");
-    let download_path = download_dir.join(filename);
+    // We'll determine the actual filename after following redirects
+    // Use a placeholder for now, update after we get the final URL
+    let mut actual_filename = String::from("screenerbot-update");
 
     // Construct full download URL (handle relative paths)
     let download_url = if update.download_url.starts_with("http://")
@@ -376,6 +373,27 @@ pub async fn download_update(update: &UpdateInfo) -> Result<String, String> {
         set_download_error_sync(&err);
         return Err(err);
     }
+
+    // Extract actual filename from the final URL (after redirects)
+    let final_url = response.url().to_string();
+    actual_filename = final_url
+        .split('/')
+        .last()
+        .map(|s| s.split('?').next().unwrap_or(s)) // Remove query params
+        .unwrap_or("screenerbot-update")
+        .to_string();
+
+    // Validate filename has an extension
+    if !actual_filename.contains('.') {
+        actual_filename = format!("screenerbot-{}.dmg", update.version); // Fallback with version
+    }
+
+    let download_path = download_dir.join(&actual_filename);
+
+    logger::debug(
+        LogTag::System,
+        &format!("Download target: {} -> {}", final_url, download_path.display()),
+    );
 
     let total_size = response.content_length().unwrap_or(update.file_size);
 
