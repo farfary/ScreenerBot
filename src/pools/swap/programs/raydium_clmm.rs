@@ -69,7 +69,7 @@ impl ProgramSwap for RaydiumClmmSwap {
     .await?;
 
     // Execute transaction
-    SwapExecutor::execute_transaction(transaction, swap_params, request.dry_run).await
+    SwapExecutor::execute_transaction(transaction, swap_params).await
   }
 }
 

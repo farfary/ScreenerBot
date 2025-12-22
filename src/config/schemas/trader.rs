@@ -208,9 +208,6 @@ config_struct! {
         })]
         entry_check_concurrency: usize = 10,
 
-        // Dry run mode
-        dry_run_mode: bool = false,
-
         // Sell concurrency
         sell_concurrency: usize = 5,
 

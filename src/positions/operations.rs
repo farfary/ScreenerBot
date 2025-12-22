@@ -16,7 +16,6 @@ use super::{
   types::Position,
 };
 use crate::{
-  arguments::is_dry_run_enabled,
   config::with_config,
   constants::SOL_MINT,
   logger::{self, LogTag},
@@ -462,18 +461,6 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
     }
   }
 
-  if is_dry_run_enabled() {
-    logger::info(
-      LogTag::Positions,
-      &format!(
- "DRY-RUN: Would open position for {} at {} SOL",
-        api_token.symbol,
-        crate::utils::format_price_adaptive(entry_price)
-      ),
-    );
-    return Err("DRY-RUN: Position would be opened".to_string());
-  }
-
   // Execute swap
   let wallet_address =
     get_wallet_address().map_err(|e| format!("Failed to get wallet address: {}", e))?;
@@ -730,14 +717,6 @@ pub async fn close_position_direct(
         &pending_sig[..8]
       ));
     }
-  }
-
-  if is_dry_run_enabled() {
-    logger::info(
-      LogTag::Positions,
- &format!("DRY-RUN: Would close position for {}", api_token.symbol),
-    );
-    return Err("DRY-RUN: Position would be closed".to_string());
   }
 
   // Get TOTAL token balance across ALL accounts (CRITICAL FOR COMPLETE LIQUIDATION)

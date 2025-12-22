@@ -17,19 +17,7 @@ impl SwapExecutor {
   pub async fn execute_transaction(
     transaction: Transaction,
     swap_params: SwapParams,
-    dry_run: bool,
   ) -> Result<SwapResult, SwapError> {
-    if dry_run {
-      logger::info(LogTag::System, "Dry run mode - transaction not sent");
-      return Ok(SwapResult {
-        signature: None,
-        params: swap_params,
-        transaction: Some(transaction),
-        success: true,
-        error: None,
-      });
-    }
-
     // Serialize transaction to base64 for signing service
     let serialized_tx = bincode::serialize(&transaction).map_err(|e| {
       SwapError::ExecutionError(format!("Failed to serialize transaction: {}", e))

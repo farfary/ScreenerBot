@@ -109,16 +109,6 @@ pub fn is_force_enabled() -> bool {
     has_arg("--force")
 }
 
-/// Dry-run mode - DEPRECATED: Use config setting trader.enabled instead
-/// This function is kept for backward compatibility but always returns false
-/// Dry-run behavior should be controlled via configuration, not command-line
-#[deprecated(note = "Use config setting trader.enabled instead of --dry-run flag")]
-pub fn is_dry_run_enabled() -> bool {
-    // Always return false - dry-run should be controlled via config
-    // If you need to disable trading, set trader.enabled = false in config.toml
-    false
-}
-
 /// Cache-only mode - read from local DB only, never call RPC
 /// Works with: debug tools and binaries
 pub fn is_cache_only_enabled() -> bool {

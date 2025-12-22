@@ -140,7 +140,6 @@ pub struct SwapRequestBuilder {
   amount: Option<f64>,
   direction: Option<SwapDirection>,
   slippage_bps: u16,
-  dry_run: bool,
 }
 
 impl SwapRequestBuilder {
@@ -151,7 +150,6 @@ impl SwapRequestBuilder {
       amount: None,
       direction: None,
       slippage_bps: with_config(|cfg| cfg.swaps.raydium.default_slippage_bps),
-      dry_run: false,
     }
   }
 
@@ -206,11 +204,6 @@ impl SwapRequestBuilder {
     self.slippage_bps((percent * 100.0) as u16)
   }
 
-  pub fn dry_run(mut self, enabled: bool) -> Self {
-    self.dry_run = enabled;
-    self
-  }
-
   pub fn build(self) -> Result<SwapRequest, SwapError> {
     Ok(SwapRequest {
       pool_address: self
@@ -226,7 +219,6 @@ impl SwapRequestBuilder {
         .direction
         .ok_or_else(|| SwapError::InvalidInput("Direction is required".to_string()))?,
       slippage_bps: self.slippage_bps,
-      dry_run: self.dry_run,
     })
   }
 

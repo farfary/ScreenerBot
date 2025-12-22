@@ -907,7 +907,6 @@ function createLifecycle() {
                       entry_sizes: [0.005, 0.01, 0.02, 0.05],
                       close_cooldown_seconds: 600,
                       entry_monitor_concurrency: 10,
-                      dry_run: false,
                     },
                   });
                 }

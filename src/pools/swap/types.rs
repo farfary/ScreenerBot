@@ -27,8 +27,6 @@ pub struct SwapRequest {
     pub direction: SwapDirection,
     /// Slippage tolerance in basis points (100 = 1%)
     pub slippage_bps: u16,
-    /// Whether this is a dry run (no actual transaction)
-    pub dry_run: bool,
 }
 
 /// Calculated swap parameters
