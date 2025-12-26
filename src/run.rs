@@ -29,7 +29,7 @@ pub async fn run_bot() -> Result<(), String> {
 
 /// Run bot with a pre-acquired process lock
 ///
-/// Used by GUI mode which acquires the lock before starting Tauri to ensure
+/// Used by Electron GUI mode which acquires the lock before starting to ensure
 /// the window doesn't open if another instance is running.
 pub async fn run_bot_with_lock(process_lock: ProcessLock) -> Result<(), String> {
   // 0. Initialize profiling if requested (must be done before any tokio tasks)

@@ -2881,9 +2881,9 @@ export class SettingsDialog {
         category: "Application Framework",
         items: [
           {
-            name: "Tauri",
-            license: "MIT / Apache-2.0",
-            url: "https://tauri.app/",
+            name: "Electron",
+            license: "MIT",
+            url: "https://www.electronjs.org/",
             desc: "Desktop application framework",
           },
           {

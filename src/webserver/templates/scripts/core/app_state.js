@@ -1,8 +1,8 @@
 // State Manager - Server-Side Storage Only
 //
 // All state is stored on the backend in data/ui_state.json
-// No localStorage is used - this ensures persistence across Tauri restarts
-// (Tauri uses dynamic ports, making localStorage unreliable)
+// No localStorage is used - this ensures persistence across app restarts
+// (Dynamic ports make localStorage unreliable)
 
 // In-memory cache (populated on init, updated on save)
 let stateCache = null;

@@ -484,9 +484,9 @@
     window.addEventListener(evt, closeDropdownMenus, { passive: true });
   });
 
-  // Global external link handler for Tauri
+  // Global external link handler for Electron
   // Intercepts clicks on external links (http/https) and routes through backend API
-  // This is necessary because Tauri's webview doesn't natively open external links in browser
+  // This is necessary because Electron's webview doesn't natively open external links in browser
   document.addEventListener(
     "click",
     async (e) => {
@@ -1061,7 +1061,7 @@
 
   /**
    * Opens a URL in the default system browser via backend API.
-   * This works in Tauri because the backend uses system commands (open/xdg-open/start).
+   * This works in Electron because the backend uses system commands (open/xdg-open/start).
    * Falls back to window.open if backend request fails.
    * @param {string} url - The URL to open
    */

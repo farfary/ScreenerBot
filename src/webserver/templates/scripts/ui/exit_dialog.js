@@ -7,7 +7,7 @@
  * - Exit App: Fully close the application
  * - Cancel: Close dialog, stay in app
  *
- * Only shows in Tauri context (desktop app).
+ * Only shows in Electron context (desktop app).
  */
 
 class ExitDialog {
@@ -26,51 +26,18 @@ class ExitDialog {
    * Should be called once when the app initializes
    */
   static async init() {
-    // Only initialize in Tauri context
-    if (!window.__TAURI__) {
-      console.log("[ExitDialog] Not in Tauri context, skipping initialization");
+    // Only initialize in Electron context
+    if (!window.electronAPI) {
+      console.log("[ExitDialog] Not in Electron context, skipping initialization");
       return;
     }
 
     console.log("[ExitDialog] Initializing exit confirmation dialog...");
 
     try {
-      // Get the current window
-      let appWindow = null;
-      if (window.__TAURI__.window?.getCurrentWindow) {
-        appWindow = window.__TAURI__.window.getCurrentWindow();
-      } else if (window.__TAURI__.webviewWindow?.getCurrentWebviewWindow) {
-        appWindow = window.__TAURI__.webviewWindow.getCurrentWebviewWindow();
-      }
-
-      if (!appWindow) {
-        console.warn("[ExitDialog] Could not get Tauri window API");
-        return;
-      }
-
-      // Listen for window close requests
-      await appWindow.onCloseRequested(async (event) => {
-        console.log("[ExitDialog] Window close requested, showing confirmation");
-
-        // Prevent the default close behavior
-        event.preventDefault();
-
-        // Show our custom dialog
-        const result = await ExitDialog.show();
-
-        if (result === "exit") {
-          console.log("[ExitDialog] User chose to exit app");
-          // Use destroy() to force close without triggering another close request
-          await appWindow.destroy();
-        } else if (result === "minimize") {
-          console.log("[ExitDialog] User chose to minimize to tray");
-          await appWindow.hide();
-        } else {
-          console.log("[ExitDialog] User cancelled, staying in app");
-        }
-      });
-
-      console.log("[ExitDialog] Successfully hooked into window close event");
+      // In Electron, window close is handled by the main process
+      // The preload script exposes electronAPI for IPC communication
+      console.log("[ExitDialog] Electron exit dialog ready");
     } catch (error) {
       console.error("[ExitDialog] Failed to initialize:", error);
     }
@@ -274,7 +241,7 @@ class ExitDialog {
 // Export for use in other modules
 export { ExitDialog };
 
-// Auto-initialize when loaded in Tauri context
+// Auto-initialize when loaded in Electron context
 if (document.readyState === "loading") {
   document.addEventListener("DOMContentLoaded", () => ExitDialog.init());
 } else {

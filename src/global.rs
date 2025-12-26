@@ -73,13 +73,13 @@ pub fn get_pending_services() -> Vec<&'static str> {
 }
 
 // ================================================================================================
-// GUI MODE SECURITY - PREVENTS EXTERNAL ACCESS TO WEBSERVER WHEN RUNNING IN TAURI
+// GUI MODE SECURITY - PREVENTS EXTERNAL ACCESS TO WEBSERVER WHEN RUNNING IN ELECTRON
 // ================================================================================================
 
 use std::sync::atomic::AtomicU16;
 use std::sync::RwLock;
 
-/// Whether the application is running in GUI (Tauri) mode
+/// Whether the application is running in GUI (Electron) mode
 /// When true, webserver requires security token validation
 pub static IS_GUI_MODE: AtomicBool = AtomicBool::new(false);
 
@@ -90,7 +90,7 @@ pub static WEBSERVER_PORT: AtomicU16 = AtomicU16::new(0);
 /// Generated at startup, must be passed in X-ScreenerBot-Token header
 static SECURITY_TOKEN: RwLock<Option<String>> = RwLock::new(None);
 
-/// Set GUI mode flag (called from gui.rs before starting webserver)
+/// Set GUI mode flag (called from Electron main process)
 pub fn set_gui_mode(enabled: bool) {
   IS_GUI_MODE.store(enabled, std::sync::atomic::Ordering::SeqCst);
 }

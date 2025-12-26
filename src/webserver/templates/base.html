@@ -66,7 +66,7 @@
       })();
     </script>
 
-    <!-- Critical polyfills for WebView/Tauri environments -->
+    <!-- Critical polyfills for WebView environments -->
     <script>
       (function () {
         if (typeof window.queueMicrotask !== "function") {
@@ -112,8 +112,8 @@
     <!-- Lockscreen - Security overlay (hidden by default) -->
     {{LOCKSCREEN}}
 
-    <!-- Tauri: Title bar background area (matches header color behind traffic lights) -->
-    <div class="tauri-titlebar-bg" data-tauri-drag-region></div>
+    <!-- Electron: Title bar background area (matches header color behind traffic lights on macOS) -->
+    <div class="electron-titlebar-bg"></div>
 
     <!-- THREE-ROW HEADER: Main Control + Tabs + Live Ticker -->
     <header class="modern-header">

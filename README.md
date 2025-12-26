@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Built%20with-Rust-000000?style=flat-square&logo=rust&logoColor=white" alt="Built with Rust"></a>
   <a href="https://solana.com/"><img src="https://img.shields.io/badge/Powered%20by-Solana-9945FF?style=flat-square&logo=solana&logoColor=white" alt="Powered by Solana"></a>
-  <a href="https://tauri.app/"><img src="https://img.shields.io/badge/Desktop-Tauri-24C8D8?style=flat-square&logo=tauri&logoColor=white" alt="Tauri Desktop"></a>
+  <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Desktop-Electron-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron Desktop"></a>
   <a href="https://screenerbot.io/docs"><img src="https://img.shields.io/badge/Docs-screenerbot.io-blue?style=flat-square" alt="Documentation"></a>
   <a href="https://t.me/screenerbotio"><img src="https://img.shields.io/badge/Community-Telegram-26A5E4?style=flat-square&logo=telegram&logoColor=white" alt="Telegram"></a>
 </p>
@@ -365,7 +365,7 @@ All data cached locally in SQLite databases.
 
 ## Desktop Application
 
-Native desktop application built with **Tauri 2.1** - the same framework behind apps like 1Password and Notion.
+Native desktop application built with **Electron** - the proven framework behind apps like VS Code, Slack, and Discord.
 
 ### Platform Support
 
@@ -404,8 +404,8 @@ cd ScreenerBot
 # Headless mode (server only)
 cargo build --bin screenerbot
 
-# Desktop application
-cargo tauri build
+# Desktop application (macOS)
+./build-macos.sh
 ```
 
 ### Run
@@ -414,8 +414,8 @@ cargo tauri build
 # Headless mode (terminal)
 cargo run --bin screenerbot
 
-# Desktop application
-cargo tauri dev
+# Desktop application (requires build first)
+cd electron && npm start
 
 # With debug logging
 cargo run --bin screenerbot -- --debug-rpc
@@ -423,11 +423,11 @@ cargo run --bin screenerbot -- --debug-rpc
 
 ### Build Artifacts
 
-After `cargo tauri build`:
+After building with Electron:
 
-- **macOS**: `target/release/bundle/macos/ScreenerBot.app`
-- **Windows**: `target/release/bundle/msi/ScreenerBot_*.msi`
-- **Linux**: `target/release/bundle/deb/screenerbot_*.deb`
+- **macOS**: `builds/electron/macos/ScreenerBot.app`
+- **Windows**: `builds/electron/windows/ScreenerBot Setup.exe`
+- **Linux**: `builds/electron/linux/screenerbot.deb`
 
 ---
 
@@ -481,5 +481,5 @@ Contributions welcome:
 <p align="center">
   <img src="https://img.shields.io/badge/Built%20with-Rust-000000?style=flat-square&logo=rust&logoColor=white" alt="Rust">
   <img src="https://img.shields.io/badge/Powered%20by-Solana-9945FF?style=flat-square&logo=solana&logoColor=white" alt="Solana">
-  <img src="https://img.shields.io/badge/Desktop-Tauri-24C8D8?style=flat-square&logo=tauri&logoColor=white" alt="Tauri">
+  <img src="https://img.shields.io/badge/Desktop-Electron-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron">
 </p>

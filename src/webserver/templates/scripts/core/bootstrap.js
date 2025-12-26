@@ -35,7 +35,7 @@ function markReady(status) {
   }
   state.ready = true;
 
-  // Set global flag for Tauri to detect frontend ready state
+  // Set global flag for Electron to detect frontend ready state
   window.__screenerbot_ready = true;
 
   if (typeof resolveReady === "function") {

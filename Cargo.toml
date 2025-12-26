@@ -165,25 +165,17 @@ tower-http = { version = "0.5", features = ["cors", "trace", "compression-full"]
 hyper = "1.0"
 sysinfo = "0.30"
 
-# GUI - always compiled, use --gui flag at runtime to enable window
-tauri = { version = "2.9", features = ["devtools", "webview-data-url"] }
-tauri-plugin-shell = "2.3"
-tauri-plugin-opener = "2.5"
-tauri-plugin-process = "2.3"
-tauri-plugin-global-shortcut = "2.3"
-tauri-plugin-window-state = "2.4"
-raw-window-handle = "0.6"
-
-# macOS window management (Cocoa APIs for smart maximize)
+# macOS window management (used for window utilities)
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSGeometry", "NSArray", "NSObject"] }
 objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSScreen", "NSApplication", "NSRunningApplication", "NSWorkspace", "NSColor"] }
 machine-uid = "0.5"
 
-# Windows-specific dependencies
+# Windows-specific dependencies - vendored OpenSSL for Windows builds
 [target.'cfg(target_os = "windows")'.dependencies]
 machine-uid = "0.5"
+openssl = { version = "0.10", features = ["vendored"] }
 
 # Linux-specific dependencies
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -194,7 +186,7 @@ machine-uid = "0.5"
 openssl = { version = "0.10", features = ["vendored"] }
 
 [build-dependencies]
-tauri-build = { version = "2.5", features = [] }
+# No build dependencies needed (Tauri removed)
 
 # Features — keep placeholders but no dependencies by default
 [features]
@@ -214,8 +206,7 @@ http-client = []
 crypto-extra = []
 fast = []
 full = []
-# Enable devtools in development (allows right-click, inspect element)
-# Production builds will NOT include this feature, blocking devtools access
+# Enable devtools in development (for debugging)
 devtools = []
 
 [dev-dependencies]

@@ -1,9 +1,9 @@
 /* ============================================================================
-   TAURI TITLE BAR AREA - macOS/Windows/Linux Native Integration
+   ELECTRON TITLE BAR AREA - macOS/Windows/Linux Native Integration
    ============================================================================ */
 
 /* Title bar background area - matches header color, sits behind traffic lights */
-.tauri-titlebar-bg {
+.electron-titlebar-bg {
   display: none; /* Hidden by default (browser mode) */
   position: fixed;
   top: 0;
@@ -18,8 +18,8 @@
   transition: background-color 0.3s ease;
 }
 
-/* Show title bar background on macOS in Tauri */
-.tauri-macos .tauri-titlebar-bg {
+/* Show title bar background on macOS in Electron */
+.electron-macos .electron-titlebar-bg {
   display: block;
 }
 
@@ -46,8 +46,8 @@
   app-region: no-drag;
 }
 
-/* Tauri macOS: Push header down to sit below title bar area */
-.tauri-macos .modern-header {
+/* Electron macOS: Push header down to sit below title bar area */
+.electron-macos .modern-header {
   margin-top: 28px; /* Height of title bar area */
 }
 

@@ -65,7 +65,7 @@ class ContextMenuManager {
     this.favoritesCache = new Map(); // mint -> boolean
     this.favoritesCacheLoaded = false;
 
-    // Check if devtools are enabled (set by Tauri/backend)
+    // Check if devtools are enabled (set by Electron/backend)
     this.devtoolsEnabled = window.__SCREENERBOT_DEVTOOLS__ === true;
 
     // Bound handlers for proper cleanup
@@ -1521,9 +1521,9 @@ class ContextMenuManager {
   }
 
   _inspectElement(element) {
-    // In Tauri, emit event to open devtools
-    if (typeof window.__TAURI__ !== "undefined") {
-      window.__TAURI__.event.emit("open-devtools");
+    // In Electron, use the electronAPI to open devtools
+    if (typeof window.electronAPI !== "undefined" && window.electronAPI.openDevTools) {
+      window.electronAPI.openDevTools();
     } else {
       // Browser fallback
       console.log("Inspect Element:", element);

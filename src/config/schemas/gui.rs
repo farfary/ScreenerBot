@@ -5,7 +5,7 @@ use crate::config_struct;
 config_struct! {
     /// GUI/Desktop application configuration
     pub struct GuiConfig {
-        /// Zoom level for the Tauri webview (0.5 = 50%, 1.0 = 100%, 3.0 = 300%)
+        /// Zoom level for the Electron webview (0.5 = 50%, 1.0 = 100%, 3.0 = 300%)
         zoom_level: f64 = 1.0,
 
         /// Dashboard interface settings
@@ -48,7 +48,7 @@ config_struct! {
         /// Auto-lock timeout in seconds (0 = never)
         auto_lock_timeout_secs: u64 = 300,
 
-        /// Lock on app minimize/blur (Tauri only)
+        /// Lock on app minimize/blur (Electron only)
         lock_on_blur: bool = false,
     }
 }

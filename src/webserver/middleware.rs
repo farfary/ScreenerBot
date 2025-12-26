@@ -174,7 +174,7 @@ pub async fn initialization_gate(request: Request, next: Next) -> Response {
 ///
 /// Adds Cache-Control headers to prevent WebView/browser caching of static resources.
 /// This ensures fresh CSS, JS, and HTML are always fetched, especially important for:
-/// - Tauri WebView (WKWebView on macOS) which caches aggressively
+/// - Electron WebView which caches aggressively
 /// - Development mode where styles/scripts change frequently
 ///
 /// Header values:
