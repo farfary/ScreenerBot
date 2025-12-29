@@ -100,7 +100,17 @@
   </head>
 
   <body>
-    <!-- Splash Screen - Shows on every app start -->
+    <!-- Hide splash immediately if loaded from Electron (detected via query param) -->
+    <script>
+      if (window.location.search.includes('electron=1') || navigator.userAgent.includes('Electron')) {
+        document.documentElement.classList.add('electron-mode');
+      }
+    </script>
+    <style>
+      .electron-mode #splashScreen { display: none !important; }
+    </style>
+
+    <!-- Splash Screen - Shows on every app start (hidden in Electron via above) -->
     {{SPLASH_SCREEN}}
 
     <!-- Onboarding Screen - First-time user introduction -->

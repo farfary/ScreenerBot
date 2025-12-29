@@ -26,6 +26,23 @@ class SplashController {
   }
 
   init() {
+    // Skip splash screen when running in Electron - Electron has its own splash
+    // Check multiple ways to detect Electron environment
+    const isElectron = (
+      (window.electronAPI && window.electronAPI.isElectron) ||
+      (typeof navigator !== 'undefined' && navigator.userAgent.includes('Electron')) ||
+      (typeof window !== 'undefined' && window.process && window.process.type)
+    );
+    
+    if (isElectron) {
+      // Immediately hide splash and proceed to dashboard
+      const splashEl = document.getElementById("splashScreen");
+      if (splashEl) {
+        splashEl.style.display = "none";
+      }
+      return;
+    }
+
     this.splashEl = document.getElementById("splashScreen");
     this.statusEl = document.getElementById("splashStatus");
 

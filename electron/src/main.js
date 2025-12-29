@@ -3,6 +3,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
 const fs = require('fs');
+const os = require('os');
 
 // Configuration
 const CONFIG = {
@@ -158,10 +159,7 @@ function startBackend() {
       
       // If we're not quitting, the backend crashed - show error
       if (!isQuitting && mainWindow) {
-        mainWindow.webContents.executeJavaScript(`
-          document.getElementById('status').textContent = 'Backend process exited unexpectedly (code: ${code})';
-          document.getElementById('spinner').style.display = 'none';
-        `).catch(() => {});
+        updateLoadingStatus(`Backend process exited unexpectedly (code: ${code})`);
       }
     });
 
@@ -195,16 +193,86 @@ function stopBackend() {
 }
 
 /**
+ * Send loading status to the renderer
+ */
+function updateLoadingStatus(status) {
+  if (mainWindow && mainWindow.webContents) {
+    mainWindow.webContents.send('loading:status', status);
+  }
+}
+
+/**
+ * Get the window state file path
+ */
+function getWindowStatePath() {
+  const userDataPath = app.getPath('userData');
+  return path.join(userDataPath, 'window-state.json');
+}
+
+/**
+ * Load saved window state
+ */
+function loadWindowState() {
+  try {
+    const statePath = getWindowStatePath();
+    if (fs.existsSync(statePath)) {
+      const data = fs.readFileSync(statePath, 'utf8');
+      return JSON.parse(data);
+    }
+  } catch (err) {
+    console.error('[Electron] Failed to load window state:', err);
+  }
+  
+  // Return defaults if no saved state
+  return {
+    width: CONFIG.windowWidth,
+    height: CONFIG.windowHeight,
+    x: undefined,
+    y: undefined,
+    isMaximized: false
+  };
+}
+
+/**
+ * Save current window state
+ */
+function saveWindowState() {
+  if (!mainWindow) return;
+  
+  try {
+    const bounds = mainWindow.getBounds();
+    const state = {
+      width: bounds.width,
+      height: bounds.height,
+      x: bounds.x,
+      y: bounds.y,
+      isMaximized: mainWindow.isMaximized()
+    };
+    
+    const statePath = getWindowStatePath();
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+  } catch (err) {
+    console.error('[Electron] Failed to save window state:', err);
+  }
+}
+
+/**
  * Create the main window
  */
 function createWindow() {
+  // Load saved window state
+  const windowState = loadWindowState();
+  
   mainWindow = new BrowserWindow({
-    width: CONFIG.windowWidth,
-    height: CONFIG.windowHeight,
+    width: windowState.width,
+    height: windowState.height,
+    x: windowState.x,
+    y: windowState.y,
     minWidth: CONFIG.minWidth,
     minHeight: CONFIG.minHeight,
     show: false,
     backgroundColor: '#0d1117',
+    icon: path.join(__dirname, '..', 'assets', 'icon.png'),
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 16 },
     webPreferences: {
@@ -215,11 +283,30 @@ function createWindow() {
     }
   });
 
-  // Show window when ready
-  mainWindow.once('ready-to-show', () => {
+  // Show window only after HTML content is fully loaded (prevents flash/double loading screen)
+  mainWindow.webContents.once('did-finish-load', () => {
     mainWindow.show();
-    mainWindow.maximize();
+    // Restore maximized state if it was maximized before
+    if (windowState.isMaximized) {
+      mainWindow.maximize();
+    }
   });
+  
+  // Save window state when it changes
+  mainWindow.on('resize', () => {
+    if (!mainWindow.isMaximized() && !mainWindow.isMinimized() && !mainWindow.isFullScreen()) {
+      saveWindowState();
+    }
+  });
+  
+  mainWindow.on('move', () => {
+    if (!mainWindow.isMaximized() && !mainWindow.isMinimized() && !mainWindow.isFullScreen()) {
+      saveWindowState();
+    }
+  });
+  
+  mainWindow.on('maximize', saveWindowState);
+  mainWindow.on('unmaximize', saveWindowState);
 
   // Handle external links
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -246,7 +333,8 @@ function createWindow() {
  * Load the main application URL
  */
 function loadMainApp() {
-  const appUrl = `http://${CONFIG.host}:${CONFIG.port}`;
+  // Add ?electron=1 to tell the dashboard to skip its splash screen
+  const appUrl = `http://${CONFIG.host}:${CONFIG.port}?electron=1`;
   console.log('[Electron] Loading main app:', appUrl);
   mainWindow.loadURL(appUrl);
 }
@@ -271,33 +359,35 @@ async function initialize() {
   
   // Load loading page
   loadLoadingPage();
+  
+  // Send initial status after page loads
+  mainWindow.webContents.once('did-finish-load', () => {
+    updateLoadingStatus('Initializing...');
+  });
 
   // Start the backend
+  updateLoadingStatus('Starting backend services...');
   const backend = startBackend();
   
   if (!backend) {
     console.error('[Electron] Failed to start backend process');
-    mainWindow.webContents.executeJavaScript(`
-      document.getElementById('status').textContent = 'Failed to start backend process';
-      document.getElementById('spinner').style.display = 'none';
-    `).catch(() => {});
+    updateLoadingStatus('Failed to start backend process');
     return;
   }
 
   // Wait for backend to be ready
+  updateLoadingStatus('Waiting for backend...');
   const isReady = await waitForBackend();
 
   if (isReady) {
+    updateLoadingStatus('Loading dashboard...');
     // Small delay to ensure everything is ready
     await new Promise(resolve => setTimeout(resolve, 500));
     // Load the main application
     loadMainApp();
   } else {
     // Show error in the loading page
-    mainWindow.webContents.executeJavaScript(`
-      document.getElementById('status').textContent = 'Backend failed to start. Please check logs.';
-      document.getElementById('spinner').style.display = 'none';
-    `).catch(() => {});
+    updateLoadingStatus('Backend failed to start. Please check logs.');
   }
 }
 

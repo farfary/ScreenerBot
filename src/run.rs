@@ -115,10 +115,11 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
  "Config.toml found - starting in normal mode",
     );
 
-    // 4. Load configuration
-    crate::config::load_config().map_err(|e| format!("Failed to load config: {}", e))?;
-
-    logger::info(LogTag::System, "Configuration loaded successfully");
+    // 4. Load configuration (if not already loaded by main.rs)
+    if !crate::config::is_config_initialized() {
+      crate::config::load_config().map_err(|e| format!("Failed to load config: {}", e))?;
+      logger::info(LogTag::System, "Configuration loaded successfully");
+    }
 
     // 5. Initialize wallets module (migrates from config.toml if needed)
     crate::wallets::initialize()

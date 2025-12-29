@@ -1,15 +1,14 @@
 [package]
 name = "screenerbot"
-version = "0.1.103"
+version = "0.1.104"
 edition = "2021"
 default-run = "screenerbot"
-# Disable automatic binary discovery - we only want the main binary
-# Debug binaries are in src/debug_bins/ (NOT src/bin/ to avoid Tauri bundling them)
+# Disable automatic binary discovery - only the main binary is bundled
+# Debug binaries are in src/debug_bins/ (kept separate from main binary)
 autobins = false
 
-# Note: We do NOT use a [workspace] here because Tauri bundles ALL workspace binaries.
-# Debug binaries are in src/debug_bins/ - Tauri only oks lofor src/bin/
-# Alternative: use crates/debug-tools/ standalone crate
+# Note: We do NOT use a [workspace] here to keep the build simple.
+# Debug binaries are in src/debug_bins/ or crates/debug-tools/
 
 # Dev profile — fastest possible compile + good debugging
 [profile.dev]
@@ -42,17 +41,14 @@ doctest = false
 # Note: Default crate-type is "rlib" which is sufficient for desktop builds
 # Android builds will specify crate-type via build script when needed
 
-# Main binary - this is the ONLY binary included in Tauri bundle
+# Main binary - this is the only binary included in the app bundle
 [[bin]]
 name = "screenerbot"
 path = "src/main.rs"
 
 # =============================================================================
-# NOTE: Debug/test binaries have been moved to src/debug_bins/
-# Tauri only scans src/bin/ for extra binaries to bundle, so debug_bins/ is ignored.
+# NOTE: Debug/test binaries are in src/debug_bins/ or crates/debug-tools/
 # To run a debug binary:
-#   cargo run --bin <name>  # Won't work because autobins=false
-# Instead, add a [[bin]] entry temporarily or use:
 #   cargo build --release -p screenerbot-debug-tools --bin <name>
 # =============================================================================
 
@@ -186,7 +182,7 @@ machine-uid = "0.5"
 openssl = { version = "0.10", features = ["vendored"] }
 
 [build-dependencies]
-# No build dependencies needed (Tauri removed)
+# No build dependencies needed
 
 # Features — keep placeholders but no dependencies by default
 [features]

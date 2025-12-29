@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // App info
   getVersion: () => ipcRenderer.invoke('app:get-version'),
   
+  // Loading status listener
+  onLoadingStatus: (callback) => ipcRenderer.on('loading:status', (event, status) => callback(status)),
+  
   // Platform info
   platform: process.platform,
   
