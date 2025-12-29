@@ -539,14 +539,16 @@ pub fn open_update(path: &str) -> Result<(), String> {
 
 /// Get platform identifier
 /// 
-/// Platform identifiers must match what publish.sh registers:
-/// - macos-universal (universal binary for all macOS)
+/// Platform identifiers must match what build.sh registers:
+/// - macos-x64, macos-arm64
 /// - linux-x64, linux-arm64
 /// - windows-x64, windows-arm64
 fn get_platform() -> &'static str {
-    // macOS always uses universal builds (Intel + Apple Silicon combined)
-    #[cfg(target_os = "macos")]
-    return "macos-universal";
+    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
+    return "macos-x64";
+
+    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
+    return "macos-arm64";
 
     #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
     return "linux-x64";
