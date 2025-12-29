@@ -101,14 +101,20 @@ module.exports = {
     // Windows Makers
     // =========================================================================
     {
-      name: '@electron-forge/maker-squirrel',
+      name: '@electron-forge/maker-wix',
       platforms: ['win32'],
       config: {
         name: 'ScreenerBot',
-        authors: 'ScreenerBot',
+        manufacturer: 'ScreenerBot',
         description: 'Automated Solana DeFi trading bot with wallet management',
-        iconUrl: 'https://screenerbot.io/icon.ico',
-        setupIcon: path.join(__dirname, 'assets', 'icon.ico'),
+        language: 1033, // English (United States)
+        ui: {
+          chooseDirectory: true, // Allow user to choose install directory
+          images: {
+            background: path.join(__dirname, 'assets', 'icon.png'),
+            banner: path.join(__dirname, 'assets', 'icon.png')
+          }
+        },
         // Optional: Code signing for Windows
         // certificateFile: process.env.WINDOWS_CERT_FILE,
         // certificatePassword: process.env.WINDOWS_CERT_PASSWORD,
