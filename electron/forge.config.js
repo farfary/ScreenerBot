@@ -110,6 +110,10 @@ module.exports = {
         language: 1033, // English (United States)
         ui: {
           chooseDirectory: true, // Allow user to choose install directory
+          images: {
+            background: path.join(__dirname, 'assets', 'wix-dialog.bmp'),
+            banner: path.join(__dirname, 'assets', 'wix-banner.bmp')
+          }
         },
         // Optional: Code signing for Windows
         // certificateFile: process.env.WINDOWS_CERT_FILE,
