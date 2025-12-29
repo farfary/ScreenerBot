@@ -26,14 +26,16 @@ let isQuitting = false;
  * Get the path to the screenerbot binary
  */
 function getBinaryPath() {
+  const binaryName = process.platform === 'win32' ? 'screenerbot.exe' : 'screenerbot';
+  
   if (app.isPackaged) {
     // In production, binary is in resources folder
-    const resourcePath = path.join(process.resourcesPath, 'screenerbot');
+    const resourcePath = path.join(process.resourcesPath, binaryName);
     console.log('[Electron] Production binary path:', resourcePath);
     return resourcePath;
   } else {
     // In development, use the release build
-    const devPath = path.join(__dirname, '..', '..', 'target', 'release', 'screenerbot');
+    const devPath = path.join(__dirname, '..', '..', 'target', 'release', binaryName);
     console.log('[Electron] Development binary path:', devPath);
     return devPath;
   }
@@ -273,6 +275,7 @@ function createWindow() {
     show: false,
     backgroundColor: '#0d1117',
     icon: path.join(__dirname, '..', 'assets', 'icon.png'),
+    autoHideMenuBar: process.platform === 'win32', // Hide menu bar on Windows only
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 16, y: 16 },
     webPreferences: {
