@@ -108,12 +108,9 @@ module.exports = {
         manufacturer: 'ScreenerBot',
         description: 'Automated Solana DeFi trading bot with wallet management',
         language: 1033, // English (United States)
+        icon: path.join(__dirname, 'assets', 'icon.ico'),
         ui: {
           chooseDirectory: true, // Allow user to choose install directory
-          images: {
-            background: path.join(__dirname, 'assets', 'wix-dialog.bmp'),
-            banner: path.join(__dirname, 'assets', 'wix-banner.bmp')
-          }
         },
         // Optional: Code signing for Windows
         // certificateFile: process.env.WINDOWS_CERT_FILE,
