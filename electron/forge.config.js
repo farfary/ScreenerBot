@@ -41,14 +41,20 @@ module.exports = {
         name: 'ScreenerBot',
         icon: path.join(__dirname, 'assets', 'icon.icns'),
         // DMG background is optional - comment out if not present
-        // background: path.join(__dirname, 'assets', 'dmg-background.png'),
-        format: 'ULFO',
-        window: {
-          size: {
-            width: 540,
-            height: 380
+        background: path.join(__dirname, 'assets', 'dmg-background.png'),
+        format: 'UDZO',
+        additionalDMGOptions: {
+          window: {
+            size: {
+              width: 600,
+              height: 400
+            }
           }
-        }
+        },
+        contents: (opts) => [
+          { x: 150, y: 200, type: 'file', path: opts.appPath },
+          { x: 450, y: 200, type: 'link', path: '/Applications' }
+        ]
       }
     },
     // =========================================================================
