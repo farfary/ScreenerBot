@@ -1,6 +1,6 @@
 [package]
 name = "screenerbot"
-version = "0.1.104"
+version = "0.1.105"
 edition = "2021"
 default-run = "screenerbot"
 # Disable automatic binary discovery - only the main binary is bundled
@@ -173,9 +173,10 @@ machine-uid = "0.5"
 machine-uid = "0.5"
 openssl = { version = "0.10", features = ["vendored"] }
 
-# Linux-specific dependencies
+# Linux-specific dependencies - vendored OpenSSL for cross-compilation compatibility
 [target.'cfg(target_os = "linux")'.dependencies]
 machine-uid = "0.5"
+openssl = { version = "0.10", features = ["vendored"] }
 
 # Android target-specific dependencies - vendored OpenSSL for cross-compilation
 [target.'cfg(target_os = "android")'.dependencies]

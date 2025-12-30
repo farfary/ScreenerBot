@@ -52,13 +52,17 @@ impl Service for WebserverService {
     // Brief delay to let server initialize
     tokio::time::sleep(tokio::time::Duration::from_millis(200)).await;
 
+    // Get actual configured host and port (not the defaults)
+    let host = crate::global::get_webserver_host();
+    let port = crate::global::get_webserver_port();
+    
     log_service_notice(
       self.name(),
       "ready",
       Some(&format!(
         "endpoint=http://{}:{}",
-        crate::webserver::DEFAULT_HOST,
-        crate::webserver::DEFAULT_PORT
+        if host.is_empty() { crate::webserver::DEFAULT_HOST } else { &host },
+        if port == 0 { crate::webserver::DEFAULT_PORT } else { port }
       )),
       true,
     );

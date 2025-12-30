@@ -102,6 +102,7 @@ pub async fn start_server() -> Result<(), String> {
     // GUI mode: find available port, always bind to localhost for security
     let dynamic_port = find_available_port().await?;
     global::set_webserver_port(dynamic_port);
+    global::set_webserver_host(DEFAULT_HOST.to_string());
 
     // Generate security token for GUI mode
     let token = global::generate_security_token();
@@ -124,6 +125,7 @@ pub async fn start_server() -> Result<(), String> {
     let host = if config_host.is_empty() { DEFAULT_HOST.to_string() } else { config_host };
     
     global::set_webserver_port(port);
+    global::set_webserver_host(host.clone());
     
     // Log appropriate message based on host binding
     if host == "0.0.0.0" {

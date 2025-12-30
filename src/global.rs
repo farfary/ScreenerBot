@@ -86,6 +86,9 @@ pub static IS_GUI_MODE: AtomicBool = AtomicBool::new(false);
 /// Dynamic port the webserver is bound to (0 = not started yet)
 pub static WEBSERVER_PORT: AtomicU16 = AtomicU16::new(0);
 
+/// Host address the webserver is bound to
+static WEBSERVER_HOST: RwLock<String> = RwLock::new(String::new());
+
 /// Security token required for all API requests in GUI mode
 /// Generated at startup, must be passed in X-ScreenerBot-Token header
 static SECURITY_TOKEN: RwLock<Option<String>> = RwLock::new(None);
@@ -108,6 +111,18 @@ pub fn set_webserver_port(port: u16) {
 /// Get the current webserver port (0 if not started)
 pub fn get_webserver_port() -> u16 {
   WEBSERVER_PORT.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+/// Set the webserver host (called from server.rs after binding)
+pub fn set_webserver_host(host: String) {
+  if let Ok(mut h) = WEBSERVER_HOST.write() {
+    *h = host;
+  }
+}
+
+/// Get the current webserver host (empty string if not started)
+pub fn get_webserver_host() -> String {
+  WEBSERVER_HOST.read().ok().map(|h| h.clone()).unwrap_or_default()
 }
 
 /// Generate and store a new security token (called at webserver startup in GUI mode)

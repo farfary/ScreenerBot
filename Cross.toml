@@ -1,0 +1,36 @@
+# Cross-compilation configuration for ScreenerBot
+# Uses Docker containers with older GLIBC for maximum compatibility
+# 
+# Binary GLIBC requirement: 2.29
+# Compatible with:
+# - Ubuntu 20.04+ (GLIBC 2.31)
+# - Debian 11+ (GLIBC 2.31)
+# - Fedora 34+ (GLIBC 2.34)
+# - Linux Mint 20+
+# - Pop!_OS 20.04+
+
+[build]
+# Pre-build hook to ensure OpenSSL is available
+# pre-build = []
+
+[build.env]
+passthrough = [
+    "RUST_BACKTRACE",
+    "RUST_LOG",
+]
+
+[target.x86_64-unknown-linux-gnu]
+# Default image uses GLIBC 2.31 - compatible with Ubuntu 20.04+
+# Override .cargo/config.toml linker settings for Docker environment
+# The container has gcc available, not clang
+
+[target.x86_64-unknown-linux-gnu.env]
+# Override linker - use default gcc inside container
+CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER = "x86_64-linux-gnu-gcc"
+
+[target.aarch64-unknown-linux-gnu]
+# Default image uses GLIBC 2.31 - compatible with Ubuntu 20.04+
+
+[target.aarch64-unknown-linux-gnu.env]
+# Override linker - use default gcc inside container
+CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER = "aarch64-linux-gnu-gcc"
