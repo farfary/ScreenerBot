@@ -86,7 +86,10 @@ async fn find_available_port() -> Result<u16, String> {
 /// - Uses port from config.webserver.port (default 8080)
 /// - Uses host from config.webserver.host (default 127.0.0.1, use 0.0.0.0 for remote)
 /// - No security token required (accessible via browser)
-pub async fn start_server() -> Result<(), String> {
+pub async fn start_server(
+  port_override: Option<u16>,
+  host_override: Option<String>,
+) -> Result<(), String> {
   let is_gui = global::is_gui_mode();
 
   // Get config values for headless mode (use defaults if config not loaded yet)
@@ -120,28 +123,47 @@ pub async fn start_server() -> Result<(), String> {
 
     (dynamic_port, DEFAULT_HOST.to_string())
   } else {
-    // CLI/Headless mode: use config values
-    let port = if config_port > 0 { config_port } else { DEFAULT_PORT };
-    let host = if config_host.is_empty() { DEFAULT_HOST.to_string() } else { config_host };
+    // CLI/Headless mode: implement precedence logic (CLI > config > default)
+    let (port, port_source) = if let Some(cli_port) = port_override {
+      (cli_port, "CLI")
+    } else if config_port > 0 {
+      (config_port, "config")
+    } else {
+      (DEFAULT_PORT, "default")
+    };
+
+    let (host, host_source) = if let Some(cli_host) = host_override {
+      (cli_host, "CLI")
+    } else if !config_host.is_empty() {
+      (config_host, "config")
+    } else {
+      (DEFAULT_HOST.to_string(), "default")
+    };
     
     global::set_webserver_port(port);
     global::set_webserver_host(host.clone());
     
-    // Log appropriate message based on host binding
+    // Log effective values with source information
+    let source_info = if port_source == host_source {
+      format!("source: {}", port_source)
+    } else {
+      format!("port source: {}, host source: {}", port_source, host_source)
+    };
+
     if host == "0.0.0.0" {
       logger::info(
         LogTag::Webserver,
         &format!(
-          "Headless mode: binding to {}:{} (accessible from any network interface)",
-          host, port
+          "Starting webserver on {}:{} (accessible from any network interface) [{}]",
+          host, port, source_info
         ),
       );
     } else {
       logger::info(
         LogTag::Webserver,
         &format!(
-          "Headless mode: binding to {}:{} (localhost only)",
-          host, port
+          "Starting webserver on {}:{} (localhost only) [{}]",
+          host, port, source_info
         ),
       );
     }
@@ -258,4 +280,148 @@ fn build_app(state: Arc<AppState>) -> Router {
     .layer(CompressionLayer::new());
 
   app
+}
+
+/// Test port binding before spawning background task
+///
+/// This pre-flight check ensures the port is available before the webserver
+/// service spawns the background task. If binding fails here, the error is
+/// propagated to ServiceManager, which stops initialization immediately.
+pub async fn test_port_binding(
+  port_override: Option<u16>,
+  host_override: Option<String>,
+) -> Result<(), String> {
+  logger::debug(
+    LogTag::Webserver,
+    "[TEST-BIND] test_port_binding() entry",
+  );
+  
+  let is_gui = global::is_gui_mode();
+  
+  logger::debug(
+    LogTag::Webserver,
+    &format!("[TEST-BIND] Checking GUI mode: is_gui={}", is_gui),
+  );
+
+  if is_gui {
+    // GUI mode will find its own port dynamically, skip pre-flight check
+    logger::debug(
+      LogTag::Webserver,
+      "[TEST-BIND] SKIPPING pre-flight check (GUI mode uses dynamic port selection)",
+    );
+    return Ok(());
+  }
+  
+  logger::debug(
+    LogTag::Webserver,
+    "[TEST-BIND] Running pre-flight check (CLI/headless mode)",
+  );
+
+  // Get config values (use defaults if config not loaded yet)
+  let init_complete = crate::global::is_initialization_complete();
+  logger::debug(
+    LogTag::Webserver,
+    &format!("[TEST-BIND] Initialization complete: {}", init_complete),
+  );
+  
+  let (config_port, config_host) = if init_complete {
+    with_config(|cfg| (cfg.webserver.port, cfg.webserver.host.clone()))
+  } else {
+    (0, String::new())
+  };
+  
+  logger::debug(
+    LogTag::Webserver,
+    &format!(
+      "[TEST-BIND] Config values: port={}, host={}",
+      config_port,
+      if config_host.is_empty() { "<empty>" } else { &config_host }
+    ),
+  );
+
+  // Use same precedence logic as start_server (CLI > config > default)
+  let effective_port = port_override
+    .or_else(|| if config_port > 0 { Some(config_port) } else { None })
+    .unwrap_or(DEFAULT_PORT);
+
+  let effective_host = host_override
+    .or_else(|| if !config_host.is_empty() { Some(config_host) } else { None })
+    .unwrap_or_else(|| DEFAULT_HOST.to_string());
+
+  let addr = format!("{}:{}", effective_host, effective_port);
+  
+  logger::debug(
+    LogTag::Webserver,
+    &format!(
+      "[TEST-BIND] Resolved address: {} (port={}, host={})",
+      addr, effective_port, effective_host
+    ),
+  );
+
+  // Try to bind and immediately drop the listener
+  logger::debug(
+    LogTag::Webserver,
+    &format!("[TEST-BIND] Attempting TcpListener::bind({})...", addr),
+  );
+  
+  match TcpListener::bind(&addr).await {
+    Ok(listener) => {
+      logger::debug(
+        LogTag::Webserver,
+        &format!("[TEST-BIND] ✅ Bind SUCCESSFUL for {}", addr),
+      );
+      drop(listener);
+      logger::debug(
+        LogTag::Webserver,
+        &format!("[TEST-BIND] Listener dropped, port {} released", effective_port),
+      );
+      logger::debug(
+        LogTag::System,
+        &format!("Pre-flight port check passed for {}", addr),
+      );
+      Ok(())
+    }
+    Err(e) => {
+      logger::error(
+        LogTag::Webserver,
+        &format!(
+          "[TEST-BIND] ❌ Bind FAILED for {}: kind={:?}, error={}",
+          addr,
+          e.kind(),
+          e
+        ),
+      );
+      
+      // Provide helpful error messages for common cases
+      let error_msg = match e.kind() {
+        std::io::ErrorKind::AddrInUse => {
+          format!(
+            "Failed to bind to {}: Address already in use\n\
+             \n\
+             This usually means another instance of ScreenerBot is running.\n\
+             The process lock should have prevented this - please report this issue.\n\
+             \n\
+             To verify and stop other instances:\n\
+              1. Check: ps aux | grep screenerbot | grep -v grep\n\
+              2. Stop: pkill -f screenerbot\n\
+              3. Verify: ps aux | grep screenerbot | grep -v grep",
+            addr
+          )
+        }
+        std::io::ErrorKind::PermissionDenied => {
+          format!(
+            "Failed to bind to {}: Permission denied\n\
+             \n\
+             Port {} requires elevated privileges on this system.\n\
+             Consider using a port above 1024 or running with appropriate permissions.",
+            addr, effective_port
+          )
+        }
+        _ => format!("Failed to bind to {}: {}", addr, e),
+      };
+
+      logger::error(LogTag::System, &error_msg);
+      Err(error_msg)
+    }
+  }
 }

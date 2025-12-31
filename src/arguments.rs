@@ -134,6 +134,77 @@ pub fn is_reset_default_configs_enabled() -> bool {
 }
 
 // =============================================================================
+// WEBSERVER CONFIGURATION
+// =============================================================================
+
+/// Get the port override from CLI (overrides config file)
+/// Returns None if --port is not specified
+/// Validates port is in range 1-65535
+pub fn get_port_override() -> Option<u16> {
+    get_arg_value("--port").and_then(|v| {
+        v.parse::<u16>().ok().filter(|&port| port > 0)
+    })
+}
+
+/// Get the host override from CLI (overrides config file)
+/// Returns None if --host is not specified
+pub fn get_host_override() -> Option<String> {
+    get_arg_value("--host").filter(|h| !h.trim().is_empty())
+}
+
+/// Validates port argument provided via CLI
+/// Returns error if port value is invalid (non-numeric or out of range)
+/// Returns Ok if port is valid or not provided
+pub fn validate_port_argument() -> Result<(), String> {
+    if let Some(port_str) = get_arg_value("--port") {
+        match port_str.parse::<u16>() {
+            Ok(0) => {
+                return Err("Invalid port value '0': Port must be between 1 and 65535".to_string());
+            }
+            Ok(_) => {
+                // Valid port, will be used by get_port_override()
+                Ok(())
+            }
+            Err(_) => {
+                return Err(format!(
+                    "Invalid port value '{}': Port must be a number between 1 and 65535", 
+                    port_str
+                ));
+            }
+        }
+    } else {
+        // Flag not provided, this is fine
+        Ok(())
+    }
+}
+
+/// Validates host argument provided via CLI
+/// Returns error if host value is invalid (empty string)
+/// Returns Ok if host is valid or not provided
+pub fn validate_host_argument() -> Result<(), String> {
+    if let Some(host) = get_arg_value("--host") {
+        if host.trim().is_empty() {
+            return Err("Invalid host value: Host cannot be empty".to_string());
+        }
+        // Additional validation could check for valid IPv4/hostname format
+        Ok(())
+    } else {
+        // Flag not provided, this is fine
+        Ok(())
+    }
+}
+
+/// Validates port value is in acceptable range (1-65535)
+pub fn is_valid_port(port: u16) -> bool {
+    port > 0 // All ports 1-65535 are valid, 0 means "use any available"
+}
+
+/// Checks if port is privileged (<1024) which may require elevated permissions
+pub fn is_privileged_port(port: u16) -> bool {
+    port > 0 && port < 1024
+}
+
+// =============================================================================
 // PROFILING FLAGS
 // =============================================================================
 
@@ -189,6 +260,18 @@ pub fn print_help() {
     );
     println!("    --dashboard-demo            Show hardcoded demo data for screenshots/marketing");
     println!("    --dashboard-onboarding      Force show onboarding screens (resets onboarding state)");
+    println!();
+    println!("WEBSERVER CONFIGURATION:");
+    println!("    --port <PORT>               Override webserver port (1-65535, default: 8080)");
+    println!("                                Invalid values will cause bot to exit with error");
+    println!("                                Note: GUI mode ignores this and uses dynamic port");
+    println!("    --host <HOST>               Override webserver host (default: 127.0.0.1)");
+    println!("                                IPv4 addresses only. Use 0.0.0.0 for remote access");
+    println!();
+    println!("    Examples:");
+    println!("      screenerbot --port 9000");
+    println!("      screenerbot --host 0.0.0.0");
+    println!("      screenerbot --port 3000 --host 0.0.0.0");
     println!();
     println!("MODIFIERS:");
     println!("    --force                     Skip confirmation prompts (with --reset)");

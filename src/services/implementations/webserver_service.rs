@@ -43,9 +43,65 @@ impl Service for WebserverService {
     shutdown: Arc<Notify>,
     monitor: tokio_metrics::TaskMonitor,
   ) -> Result<Vec<JoinHandle<()>>, String> {
+    logger::debug(LogTag::System, "[PRE-FLIGHT] Webserver service start() called");
+    
+    // Get CLI overrides from arguments module
+    let port_override = crate::arguments::get_port_override();
+    let host_override = crate::arguments::get_host_override();
+
+    logger::debug(
+      LogTag::System,
+      &format!(
+        "[PRE-FLIGHT] CLI overrides: port={:?}, host={:?}",
+        port_override, host_override
+      ),
+    );
+
+    // Check GUI mode state before pre-flight
+    let is_gui = crate::global::is_gui_mode();
+    logger::debug(
+      LogTag::System,
+      &format!("[PRE-FLIGHT] GUI mode state: {}", is_gui),
+    );
+
+    // Pre-flight check: test port binding BEFORE spawning background task
+    // This ensures any binding errors are caught and propagated to ServiceManager,
+    // which will stop bot initialization immediately (no silent failures)
+    logger::debug(LogTag::System, "[PRE-FLIGHT] Calling test_port_binding()...");
+    
+    let test_result = crate::webserver::test_port_binding(
+      port_override,
+      host_override.clone(),
+    ).await;
+    
+    logger::debug(
+      LogTag::System,
+      &format!("[PRE-FLIGHT] test_port_binding() returned: {:?}", test_result),
+    );
+    
+    if let Err(e) = test_result {
+      logger::error(
+        LogTag::System,
+        &format!("[PRE-FLIGHT] ❌ FAILED - Webserver pre-flight check failed: {}", e),
+      );
+      return Err(format!("Failed to bind webserver port: {}", e));
+    }
+    
+    logger::debug(LogTag::System, "[PRE-FLIGHT] ✅ PASSED - Pre-flight check succeeded");
+
+    // Pre-flight passed, spawn background task with CLI overrides
+    logger::debug(LogTag::System, "[PRE-FLIGHT] Spawning background webserver task...");
+    
     let handle = tokio::spawn(monitor.instrument(async move {
-      if let Err(e) = crate::webserver::start_server().await {
-        logger::error(LogTag::System, &format!("Webserver failed to start: {}", e));
+      logger::debug(LogTag::System, "[WEBSERVER] Background task started, calling start_server()...");
+      
+      if let Err(e) = crate::webserver::start_server(port_override, host_override).await {
+        logger::error(
+          LogTag::System,
+          &format!("[WEBSERVER] ❌ start_server() FAILED: {}", e),
+        );
+      } else {
+        logger::debug(LogTag::System, "[WEBSERVER] ✅ start_server() completed successfully");
       }
     }));
 

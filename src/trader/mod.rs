@@ -25,7 +25,7 @@
 //! - `types`: Trader types
 
 pub mod actions;
-mod config;
+pub mod config;
 mod constants;
 mod controller;
 pub mod evaluators;

@@ -47,7 +47,59 @@ pub async fn run_bot_with_lock(process_lock: ProcessLock) -> Result<(), String> 
 async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
  logger::info(LogTag::System, "ScreenerBot starting up...");
 
-  // 3. Check if config.toml exists (determines initialization mode)
+  // 2. Validate CLI arguments early (before any processing)
+  if let Err(e) = crate::arguments::validate_port_argument() {
+    logger::error(LogTag::System, &format!("Argument validation failed: {}", e));
+    return Err(e);
+  }
+
+  if let Err(e) = crate::arguments::validate_host_argument() {
+    logger::error(LogTag::System, &format!("Argument validation failed: {}", e));
+    return Err(e);
+  }
+
+  // 3. Log CLI overrides (if provided)
+  if let Some(port) = crate::arguments::get_port_override() {
+    if crate::arguments::is_privileged_port(port) {
+      logger::warning(
+        LogTag::System,
+        &format!(
+          "Port {} requires elevated privileges (root/Administrator)",
+          port
+        ),
+      );
+    }
+
+    logger::info(
+      LogTag::System,
+      &format!("CLI override: Using port {}", port),
+    );
+  }
+
+  if let Some(host) = crate::arguments::get_host_override() {
+    logger::info(
+      LogTag::System,
+      &format!("CLI override: Using host {}", host),
+    );
+
+    if host == "0.0.0.0" {
+      logger::warning(
+        LogTag::System,
+        "Binding to 0.0.0.0 allows remote access - ensure firewall is configured",
+      );
+    }
+  }
+
+  if crate::arguments::get_port_override().is_none()
+    && crate::arguments::get_host_override().is_none()
+  {
+    logger::debug(
+      LogTag::System,
+      "No webserver CLI overrides provided, using config/defaults",
+    );
+  }
+
+  // 4. Check if config.toml exists (determines initialization mode)
   let config_path = crate::paths::get_config_path();
   let config_exists = config_path.exists();
 
