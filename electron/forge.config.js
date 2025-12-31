@@ -88,7 +88,9 @@ module.exports = {
           categories: ['Finance', 'Utility'],
           icon: path.join(__dirname, 'assets', 'icon.png'),
           license: 'Proprietary',
-          homepage: 'https://screenerbot.io'
+          homepage: 'https://screenerbot.io',
+          vendor: 'unknown',
+          platform: 'linux'
         }
       }
     },
