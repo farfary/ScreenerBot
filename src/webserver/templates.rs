@@ -32,6 +32,7 @@ const SPLASH_PAGE_STYLES: &str = include_str!("templates/styles/pages/splash.css
 const ONBOARDING_PAGE_STYLES: &str = include_str!("templates/styles/pages/onboarding.css");
 const SETUP_PAGE_STYLES: &str = include_str!("templates/styles/pages/setup.css");
 const LOCKSCREEN_PAGE_STYLES: &str = include_str!("templates/styles/pages/lockscreen.css");
+const LOGIN_PAGE_STYLES: &str = include_str!("templates/styles/pages/login.css");
 const DATA_TABLE_STYLES: &str = include_str!("templates/styles/ui/data_table.css");
 const TABLE_TOOLBAR_STYLES: &str = include_str!("templates/styles/ui/table_toolbar.css");
 const EVENTS_DIALOG_STYLES: &str = include_str!("templates/styles/ui/events_dialog.css");
@@ -148,6 +149,7 @@ pub const TOOLS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/tools.
 pub const HOME_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/home.js");
 pub const UPDATES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/updates.js");
 pub const ABOUT_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/about.js");
+pub const LOGIN_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/login.js");
 
 const TOKENS_PAGE: &str = include_str!("templates/pages/tokens.html");
 const EVENTS_PAGE: &str = include_str!("templates/pages/events.html");
@@ -167,6 +169,7 @@ const SPLASH_PAGE: &str = include_str!("templates/pages/splash.html");
 const ONBOARDING_PAGE: &str = include_str!("templates/pages/onboarding.html");
 const SETUP_PAGE: &str = include_str!("templates/pages/setup.html");
 const LOCKSCREEN_PAGE: &str = include_str!("templates/pages/lockscreen.html");
+const LOGIN_PAGE: &str = include_str!("templates/pages/login.html");
 
 /// Render the base layout with shared chrome and inject the requested content.
 pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
@@ -413,4 +416,49 @@ pub fn onboarding_content() -> String {
 
 pub fn setup_content() -> String {
     render_page(SETUP_PAGE)
+}
+
+pub fn login_content() -> String {
+    render_page(LOGIN_PAGE)
+}
+
+/// Render the login page template (minimal template without navigation)
+pub fn login_template(title: &str, content: &str) -> String {
+    use crate::version;
+
+    let asset_version = option_env!("ASSET_VERSION_TS")
+        .map(|ts| format!("{}-{}", version::get_version(), ts))
+        .unwrap_or_else(|| version::get_version().to_string());
+
+    // Prepare Lucide icon font CSS with corrected paths
+    let lucide_css = LUCIDE_ICON_CSS
+        .replace("url('lucide.eot", "url('/assets/fonts/lucide.eot")
+        .replace("url('lucide.woff2", "url('/assets/fonts/lucide.woff2")
+        .replace("url('lucide.woff", "url('/assets/fonts/lucide.woff")
+        .replace("url('lucide.ttf", "url('/assets/fonts/lucide.ttf")
+        .replace("url('lucide.svg", "url('/assets/fonts/lucide.svg");
+
+    // Minimal styles for login page
+    let combined_styles = [
+        FOUNDATION_STYLES,
+        &lucide_css,
+        LOGIN_PAGE_STYLES,
+    ].join("\n");
+
+    format!(
+        r#"<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{} - ScreenerBot</title>
+    <style>{}</style>
+</head>
+<body>
+    {}
+    <script type="module" src="/scripts/pages/login.js?v={}"></script>
+</body>
+</html>"#,
+        title, combined_styles, content, asset_version
+    )
 }

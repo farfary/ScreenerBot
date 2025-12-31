@@ -202,3 +202,71 @@ pub async fn cache_control(request: Request, next: Next) -> Response {
   
   response
 }
+
+/// Authentication gate middleware (headless mode only)
+///
+/// In headless/CLI mode with auth enabled, validates that all requests
+/// include a valid session cookie. Redirects to /login if not authenticated.
+///
+/// Allowed without authentication:
+/// - /login - login page
+/// - /api/auth/* - authentication endpoints
+/// - /scripts/* - static JavaScript files
+/// - /styles/* - static CSS files  
+/// - /assets/* - static assets (images, fonts)
+///
+/// In GUI mode, this middleware does nothing (GUI uses security token instead).
+pub async fn auth_gate(request: Request, next: Next) -> Response {
+  use crate::config;
+  use crate::webserver::routes::auth::extract_session_token;
+  use crate::webserver::session;
+
+  // Skip auth check in GUI mode (uses security token instead)
+  if crate::global::is_gui_mode() {
+    return next.run(request).await;
+  }
+
+  // Check if auth is enabled
+  let auth_enabled = config::with_config(|cfg| cfg.webserver.auth_enabled);
+  if !auth_enabled {
+    return next.run(request).await;
+  }
+
+  let path = request.uri().path();
+
+  // Allow login page and auth API endpoints without authentication
+  if path == "/login"
+    || path.starts_with("/api/auth/")
+    || path.starts_with("/scripts/")
+    || path.starts_with("/styles/")
+    || path.starts_with("/assets/")
+  {
+    return next.run(request).await;
+  }
+
+  // Check for valid session cookie
+  if let Some(token) = extract_session_token(&request) {
+    if session::validate_session(&token) {
+      return next.run(request).await;
+    }
+  }
+
+  // Not authenticated - redirect to login for page requests, return 401 for API
+  if path.starts_with("/api/") {
+    return utils::error_response(
+      StatusCode::UNAUTHORIZED,
+      "AUTHENTICATION_REQUIRED",
+      "Authentication required",
+      Some("Please log in to access this endpoint"),
+    );
+  }
+
+  // Redirect to login page for HTML page requests
+  Response::builder()
+    .status(StatusCode::FOUND)
+    .header(header::LOCATION, "/login")
+    .body(Body::empty())
+    .unwrap()
+    .into_response()
+}
+

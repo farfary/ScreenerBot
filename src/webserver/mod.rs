@@ -3,9 +3,11 @@ mod server;
 pub mod demo;
 pub mod middleware;
 pub mod routes;
+pub mod session;
 pub mod snapshot;
 pub mod state;
 pub mod templates;
+pub mod totp;
 pub mod utils;
 
 // Public API for starting/stopping the webserver

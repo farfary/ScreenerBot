@@ -7,6 +7,7 @@ use axum::{
 use std::sync::Arc;
 
 pub mod actions;
+pub mod auth;
 pub mod billboard;
 pub mod blacklist;
 pub mod config;
@@ -38,6 +39,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
         .route("/", axum::routing::get(home_page))
         .route("/home", axum::routing::get(home_page))
+        .route("/login", axum::routing::get(login_page))
         .route("/services", axum::routing::get(services_page))
         .route("/tokens", axum::routing::get(tokens_page))
         .route("/positions", axum::routing::get(positions_page))
@@ -163,6 +165,12 @@ async fn about_page() -> Html<String> {
     Html(templates::base_template("About", "about", &content))
 }
 
+/// Login page handler
+async fn login_page() -> Html<String> {
+    let content = templates::login_content();
+    Html(templates::login_template("Login", &content))
+}
+
 fn api_routes() -> Router<Arc<AppState>> {
     Router::new()
         .merge(status::routes())
@@ -191,6 +199,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .nest("/tools", tools::routes())
         .nest("/wallets", wallets::routes())
         .nest("/lockscreen", lockscreen::routes())
+        .nest("/auth", auth::routes())
         .merge(updates::routes())
         .route("/pages/:page", axum::routing::get(get_page_content))
 }
@@ -288,6 +297,7 @@ async fn get_page_script(axum::extract::Path(file): axum::extract::Path<String>)
         "tools.js" => Some(templates::TOOLS_PAGE_SCRIPT),
         "updates.js" => Some(templates::UPDATES_PAGE_SCRIPT),
         "about.js" => Some(templates::ABOUT_PAGE_SCRIPT),
+        "login.js" => Some(templates::LOGIN_PAGE_SCRIPT),
         _ => None,
     };
 

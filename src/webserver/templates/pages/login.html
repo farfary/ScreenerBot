@@ -1,0 +1,91 @@
+<!-- Login Page - Password authentication for headless mode -->
+<div class="login-page" id="loginPage">
+  <div class="login-container">
+    <!-- Logo and branding -->
+    <div class="login-header" id="loginHeader">
+      <div class="login-logo" id="loginLogo">
+        <img src="/assets/logo.svg" alt="ScreenerBot" class="login-logo-img" />
+      </div>
+      <div class="login-brand" id="loginBrand">ScreenerBot</div>
+      <div class="login-subtitle" id="loginSubtitle">Dashboard Login</div>
+    </div>
+
+    <!-- Login form -->
+    <form class="login-form" id="loginForm" autocomplete="off">
+      <!-- Password step -->
+      <div class="login-step" id="loginPasswordStep">
+        <div class="login-input-group">
+          <label for="loginPassword" class="login-label">Password</label>
+          <div class="login-password-field">
+            <input
+              type="password"
+              id="loginPassword"
+              name="password"
+              class="login-password-input"
+              placeholder="Enter password"
+              autocomplete="current-password"
+              spellcheck="false"
+              required
+            />
+            <button
+              type="button"
+              id="loginPasswordToggle"
+              class="login-password-toggle"
+              aria-label="Toggle password visibility"
+            >
+              <i class="icon-eye" id="loginPasswordIcon"></i>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" id="loginSubmit" class="login-submit">
+          <i class="icon-log-in"></i>
+          <span>Sign In</span>
+        </button>
+      </div>
+
+      <!-- TOTP step (hidden by default) -->
+      <div class="login-step" id="loginTotpStep" style="display: none">
+        <div class="login-input-group">
+          <label for="loginTotpCode" class="login-label">Two-Factor Authentication</label>
+          <p class="login-totp-hint">Enter the 6-digit code from your authenticator app</p>
+          <div class="login-totp-field">
+            <input
+              type="text"
+              id="loginTotpCode"
+              name="totp_code"
+              class="login-totp-input"
+              placeholder="000000"
+              maxlength="6"
+              pattern="[0-9]*"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              spellcheck="false"
+            />
+          </div>
+        </div>
+
+        <button type="submit" id="loginTotpSubmit" class="login-submit">
+          <i class="icon-shield-check"></i>
+          <span>Verify</span>
+        </button>
+
+        <button type="button" id="loginTotpBack" class="login-back-btn">
+          <i class="icon-arrow-left"></i>
+          <span>Back</span>
+        </button>
+      </div>
+
+      <!-- Error message -->
+      <div id="loginError" class="login-error" aria-live="polite" style="display: none">
+        <i class="icon-alert-circle"></i>
+        <span id="loginErrorText">Incorrect password</span>
+      </div>
+    </form>
+  </div>
+
+  <!-- Version footer -->
+  <div class="login-footer">
+    <span class="login-version">ScreenerBot</span>
+  </div>
+</div>
