@@ -44,21 +44,31 @@ pub async fn monitor_positions(
       break;
     }
 
-    // Check if trader is enabled
-    let trader_enabled = config::is_trader_enabled();
-    if !trader_enabled {
+    // Check force stop first (emergency halt)
+    if crate::global::is_force_stopped() {
+      if !was_paused {
+        logger::warning(LogTag::Trader, "Exit monitor paused - FORCE STOPPED");
+        was_paused = true;
+      }
+      sleep(Duration::from_secs(1)).await; // Check more frequently during force stop
+      continue;
+    }
+
+    // Check if exit monitor specifically is enabled (uses combined check)
+    let exit_enabled = config::is_exit_monitor_enabled();
+    if !exit_enabled {
       // Only log when transitioning to paused state
       if !was_paused {
-        logger::info(LogTag::Trader, "Position monitor paused - trader disabled");
+        logger::info(LogTag::Trader, "Exit monitor paused - disabled via config");
         was_paused = true;
       }
       sleep(Duration::from_secs(5)).await;
       continue;
     }
 
-    // Log when resuming from paused state
+    // Reset pause tracking if we're running
     if was_paused {
-      logger::info(LogTag::Trader, "Position monitor resumed - trader enabled");
+      logger::info(LogTag::Trader, "Exit monitor resumed");
       was_paused = false;
     }
 

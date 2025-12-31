@@ -8,7 +8,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use crate::config::with_config;
+use crate::config::{update_config_section, with_config};
 use crate::trader::{is_trader_running, start_trader, stop_trader_gracefully, TraderControlError};
 use crate::webserver::state::AppState;
 use crate::webserver::utils::{error_response, success_response};
@@ -102,6 +102,20 @@ pub struct ExitBreakdown {
     pub exit_type: String,
     pub count: usize,
     pub avg_profit_pct: f64,
+}
+
+// =============================================================================
+// FORCE STOP / MONITOR CONTROL / LOSS LIMIT TYPES
+// =============================================================================
+
+#[derive(Debug, Deserialize)]
+struct ForceStopRequest {
+    reason: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ToggleMonitorRequest {
+    enabled: bool,
 }
 
 // =============================================================================
@@ -745,6 +759,193 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/manual/buy", post(manual_buy_handler))
         .route("/manual/add", post(manual_add_handler))
         .route("/manual/sell", post(manual_sell_handler))
+        // Force stop endpoints
+        .route("/force-stop", post(force_stop_handler))
+        .route("/resume", post(resume_handler))
+        .route("/force-stop/status", get(force_stop_status_handler))
+        // Monitor control endpoints
+        .route("/monitors/status", get(monitors_status_handler))
+        .route("/monitors/entry/toggle", post(toggle_entry_monitor_handler))
+        .route("/monitors/exit/toggle", post(toggle_exit_monitor_handler))
+        // Loss limit endpoints
+        .route("/loss-limit/status", get(loss_limit_status_handler))
+        .route("/loss-limit/resume", post(loss_limit_resume_handler))
+        .route("/loss-limit/reset", post(loss_limit_reset_handler))
+}
+
+// =============================================================================
+// FORCE STOP HANDLERS
+// =============================================================================
+
+/// POST /api/trader/force-stop - Emergency stop all trading
+async fn force_stop_handler(
+    State(_state): State<Arc<AppState>>,
+    Json(payload): Json<ForceStopRequest>,
+) -> Response {
+    let reason = payload
+        .reason
+        .unwrap_or_else(|| "Manual force stop".to_string());
+    crate::global::set_force_stopped(true, Some(&reason));
+
+    // Also disable trader in config to ensure it stays stopped
+    if let Err(e) = update_config_section(
+        |cfg| {
+            cfg.trader.enabled = false;
+        },
+        true,
+    ) {
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ConfigUpdateFailed",
+            &format!("Force stop activated but config update failed: {}", e),
+            None,
+        );
+    }
+
+    logger::warning(LogTag::Trader, &format!("FORCE STOP activated: {}", reason));
+    success_response(crate::global::get_force_stop_status())
+}
+
+/// POST /api/trader/resume - Clear force stop state
+async fn resume_handler(State(_state): State<Arc<AppState>>) -> Response {
+    crate::global::set_force_stopped(false, None);
+
+    // Note: Does NOT automatically enable trader - user must start explicitly
+    logger::info(LogTag::Trader, "Force stop cleared - trading can be resumed");
+    success_response(serde_json::json!({
+        "resumed": true,
+        "message": "Force stop cleared. Use Start Trading to resume."
+    }))
+}
+
+/// GET /api/trader/force-stop/status - Get force stop status
+async fn force_stop_status_handler(State(_state): State<Arc<AppState>>) -> Response {
+    success_response(crate::global::get_force_stop_status())
+}
+
+// =============================================================================
+// MONITOR CONTROL HANDLERS
+// =============================================================================
+
+/// GET /api/trader/monitors/status - Get monitor status
+async fn monitors_status_handler(State(_state): State<Arc<AppState>>) -> Response {
+    use crate::trader::config;
+
+    success_response(serde_json::json!({
+        "entry_monitor": {
+            "enabled": config::is_entry_monitor_enabled_standalone(),
+            "running": config::is_entry_monitor_enabled(),
+        },
+        "exit_monitor": {
+            "enabled": config::is_exit_monitor_enabled_standalone(),
+            "running": config::is_exit_monitor_enabled(),
+        },
+        "master_enabled": config::is_trader_enabled(),
+        "force_stopped": crate::global::is_force_stopped(),
+    }))
+}
+
+/// POST /api/trader/monitors/entry/toggle - Toggle entry monitor
+async fn toggle_entry_monitor_handler(
+    State(_state): State<Arc<AppState>>,
+    Json(payload): Json<ToggleMonitorRequest>,
+) -> Response {
+    if let Err(e) = update_config_section(
+        |cfg| {
+            cfg.trader.entry_monitor_enabled = payload.enabled;
+        },
+        true,
+    ) {
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ConfigUpdateFailed",
+            &format!("Failed to toggle entry monitor: {}", e),
+            None,
+        );
+    }
+
+    let status = if payload.enabled {
+        "enabled"
+    } else {
+        "disabled"
+    };
+    logger::info(LogTag::Trader, &format!("Entry monitor {}", status));
+    success_response(serde_json::json!({ "entry_monitor_enabled": payload.enabled }))
+}
+
+/// POST /api/trader/monitors/exit/toggle - Toggle exit monitor
+async fn toggle_exit_monitor_handler(
+    State(_state): State<Arc<AppState>>,
+    Json(payload): Json<ToggleMonitorRequest>,
+) -> Response {
+    if let Err(e) = update_config_section(
+        |cfg| {
+            cfg.trader.exit_monitor_enabled = payload.enabled;
+        },
+        true,
+    ) {
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "ConfigUpdateFailed",
+            &format!("Failed to toggle exit monitor: {}", e),
+            None,
+        );
+    }
+
+    let status = if payload.enabled {
+        "enabled"
+    } else {
+        "disabled"
+    };
+    logger::info(LogTag::Trader, &format!("Exit monitor {}", status));
+    success_response(serde_json::json!({ "exit_monitor_enabled": payload.enabled }))
+}
+
+// =============================================================================
+// LOSS LIMIT HANDLERS
+// =============================================================================
+
+/// GET /api/trader/loss-limit/status - Get loss limit status
+async fn loss_limit_status_handler(State(_state): State<Arc<AppState>>) -> Response {
+    use crate::trader::config;
+    use crate::trader::safety::loss_limit;
+
+    let status = loss_limit::get_loss_limit_status();
+    let limit = config::get_loss_limit_sol();
+    let enabled = config::is_loss_limit_enabled();
+
+    let progress_percent = if limit > 0.0 {
+        (status.cumulative_loss_sol / limit * 100.0).min(100.0)
+    } else {
+        0.0
+    };
+
+    success_response(serde_json::json!({
+        "enabled": enabled,
+        "limit_sol": limit,
+        "current_loss_sol": status.cumulative_loss_sol,
+        "is_limited": status.is_limited,
+        "limited_at": status.limited_at,
+        "period_start": status.period_start,
+        "period_remaining_secs": status.period_remaining_secs,
+        "progress_percent": progress_percent,
+    }))
+}
+
+/// POST /api/trader/loss-limit/resume - Resume trading after loss limit
+async fn loss_limit_resume_handler(State(_state): State<Arc<AppState>>) -> Response {
+    use crate::trader::safety::loss_limit;
+
+    loss_limit::resume_from_loss_limit();
+    success_response(serde_json::json!({ "resumed": true }))
+}
+
+/// POST /api/trader/loss-limit/reset - Reset loss limit state
+async fn loss_limit_reset_handler(State(_state): State<Arc<AppState>>) -> Response {
+    use crate::trader::safety::loss_limit;
+
+    loss_limit::reset_loss_limit_state();
+    success_response(serde_json::json!({ "reset": true }))
 }
 
 // =============================================================================
@@ -752,6 +953,16 @@ pub fn routes() -> Router<Arc<AppState>> {
 // =============================================================================
 
 async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
+    // Check force stop
+    if crate::global::is_force_stopped() {
+        return error_response(
+            StatusCode::FORBIDDEN,
+            "ForceStopped",
+            "Manual trading disabled - Force stop is active",
+            None,
+        );
+    }
+
     // Check services ready
     if !are_core_services_ready() {
         let pending = get_pending_services().join(", ");
@@ -955,6 +1166,16 @@ async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
 }
 
 async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response {
+    // Check force stop
+    if crate::global::is_force_stopped() {
+        return error_response(
+            StatusCode::FORBIDDEN,
+            "ForceStopped",
+            "Manual trading disabled - Force stop is active",
+            None,
+        );
+    }
+
     // Check services ready
     if !are_core_services_ready() {
         let pending = get_pending_services().join(", ");

@@ -79,21 +79,31 @@ pub async fn monitor_entries(
             break;
         }
 
-        // Check if trader is enabled
-        let trader_enabled = config::is_trader_enabled();
-        if !trader_enabled {
+        // Check force stop first (emergency halt)
+        if crate::global::is_force_stopped() {
+            if !was_paused {
+                logger::warning(LogTag::Trader, "Entry monitor paused - FORCE STOPPED");
+                was_paused = true;
+            }
+            sleep(Duration::from_secs(1)).await; // Check more frequently during force stop
+            continue;
+        }
+
+        // Check if entry monitor specifically is enabled (uses combined check)
+        let entry_enabled = config::is_entry_monitor_enabled();
+        if !entry_enabled {
             // Only log when transitioning to paused state
             if !was_paused {
-                logger::info(LogTag::Trader, "Entry monitor paused - trader disabled");
+                logger::info(LogTag::Trader, "Entry monitor paused - disabled via config");
                 was_paused = true;
             }
             sleep(Duration::from_secs(5)).await;
             continue;
         }
 
-        // Log when resuming from paused state
+        // Reset pause tracking if we're running
         if was_paused {
-            logger::info(LogTag::Trader, "Entry monitor resumed - trader enabled");
+            logger::info(LogTag::Trader, "Entry monitor resumed");
             was_paused = false;
         }
 

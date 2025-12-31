@@ -30,6 +30,16 @@ pub async fn evaluate_entry_for_token(
     token_mint: &str,
     price_info: &PriceResult,
 ) -> Result<Option<TradeDecision>, String> {
+    // Early exit: Force stop is active
+    if crate::global::is_force_stopped() {
+        return Ok(None);
+    }
+
+    // Early exit: Loss limit reached
+    if crate::trader::safety::loss_limit::is_entry_blocked_by_loss_limit() {
+        return Ok(None);
+    }
+
     // 1. Connectivity check - critical endpoints must be healthy
     if let Some(unhealthy) =
         crate::connectivity::check_endpoints_healthy(&["rpc", "dexscreener", "rugcheck"]).await

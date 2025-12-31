@@ -263,5 +263,82 @@ config_struct! {
             category: "DCA",
         })]
         dca_cooldown_minutes: i64 = 30,
+
+        // ==================== ENTRY/EXIT MONITOR CONTROL ====================
+        /// Enable entry monitor (scans for new entry opportunities)
+        /// When false, entry monitor pauses but exit monitor continues
+        /// Default: true
+        #[metadata(field_metadata! {
+            label: "Entry Monitor Enabled",
+            hint: "Enable scanning for new entry opportunities",
+            impact: "critical",
+            category: "Monitor Control",
+        })]
+        entry_monitor_enabled: bool = true,
+
+        /// Enable exit monitor (manages open positions, stop losses, exits)
+        /// When false, exit monitor pauses - USE WITH CAUTION
+        /// Default: true
+        #[metadata(field_metadata! {
+            label: "Exit Monitor Enabled",
+            hint: "Enable exit monitoring for open positions (disable with caution)",
+            impact: "critical",
+            category: "Monitor Control",
+        })]
+        exit_monitor_enabled: bool = true,
+
+        // ==================== PERIOD LOSS LIMIT PROTECTION ====================
+        /// Enable period-based loss limit protection
+        /// When cumulative realized losses exceed the limit, entry monitor pauses
+        /// Default: false
+        #[metadata(field_metadata! {
+            label: "Loss Limit Enabled",
+            hint: "Enable period-based loss limit protection",
+            impact: "high",
+            category: "Loss Limit",
+        })]
+        loss_limit_enabled: bool = false,
+
+        /// Maximum realized loss allowed in the period (in SOL)
+        /// When cumulative losses reach this amount, new entries are blocked
+        /// Default: 0.1 SOL
+        #[metadata(field_metadata! {
+            label: "Loss Limit (SOL)",
+            hint: "Maximum realized loss allowed in the period",
+            min: 0.001,
+            max: 100.0,
+            step: 0.01,
+            unit: "SOL",
+            impact: "critical",
+            category: "Loss Limit",
+        })]
+        loss_limit_sol: f64 = 0.1,
+
+        /// Loss limit period in hours (1, 6, 12, 24, etc.)
+        /// After this period, cumulative loss tracking resets
+        /// Default: 24 (daily limit)
+        #[metadata(field_metadata! {
+            label: "Loss Limit Period",
+            hint: "Loss limit period in hours (24 = daily)",
+            min: 1,
+            max: 168,
+            step: 1,
+            unit: "hours",
+            impact: "high",
+            category: "Loss Limit",
+        })]
+        loss_limit_period_hours: u64 = 24,
+
+        /// Auto-resume when period resets
+        /// If true, entry monitor automatically resumes after period reset
+        /// If false, manual resume required via dashboard
+        /// Default: true
+        #[metadata(field_metadata! {
+            label: "Auto Resume",
+            hint: "Auto-resume entry monitor when loss limit period resets",
+            impact: "medium",
+            category: "Loss Limit",
+        })]
+        loss_limit_auto_resume: bool = true,
     }
 }

@@ -120,3 +120,49 @@ pub fn get_position_close_cooldown_minutes() -> u64 {
 pub fn get_sell_concurrency() -> usize {
     with_config(|cfg| cfg.trader.sell_concurrency)
 }
+
+// ==================== ENTRY/EXIT MONITOR CONTROL ====================
+
+/// Check if entry monitor is enabled
+/// Combines master switch (trader.enabled) AND entry-specific flag
+pub fn is_entry_monitor_enabled() -> bool {
+    with_config(|cfg| cfg.trader.enabled && cfg.trader.entry_monitor_enabled)
+}
+
+/// Check if exit monitor is enabled
+/// Combines master switch (trader.enabled) AND exit-specific flag
+pub fn is_exit_monitor_enabled() -> bool {
+    with_config(|cfg| cfg.trader.enabled && cfg.trader.exit_monitor_enabled)
+}
+
+/// Check if only entry monitor is enabled (for UI display)
+pub fn is_entry_monitor_enabled_standalone() -> bool {
+    with_config(|cfg| cfg.trader.entry_monitor_enabled)
+}
+
+/// Check if only exit monitor is enabled (for UI display)
+pub fn is_exit_monitor_enabled_standalone() -> bool {
+    with_config(|cfg| cfg.trader.exit_monitor_enabled)
+}
+
+// ==================== LOSS LIMIT CONFIGURATION ====================
+
+/// Check if loss limit protection is enabled
+pub fn is_loss_limit_enabled() -> bool {
+    with_config(|cfg| cfg.trader.loss_limit_enabled)
+}
+
+/// Get loss limit threshold in SOL
+pub fn get_loss_limit_sol() -> f64 {
+    with_config(|cfg| cfg.trader.loss_limit_sol)
+}
+
+/// Get loss limit period in hours
+pub fn get_loss_limit_period_hours() -> u64 {
+    with_config(|cfg| cfg.trader.loss_limit_period_hours)
+}
+
+/// Check if loss limit should auto-resume after period reset
+pub fn is_loss_limit_auto_resume() -> bool {
+    with_config(|cfg| cfg.trader.loss_limit_auto_resume)
+}

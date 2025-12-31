@@ -113,6 +113,13 @@ pub async fn execute_swap_with_fallback(
   token: &Token,
   quote: Quote,
 ) -> Result<SwapResult, ScreenerBotError> {
+  // Block swap execution during force stop
+  if crate::global::is_force_stopped() {
+    return Err(ScreenerBotError::internal_error(
+      "Trading halted - Force stop is active",
+    ));
+  }
+
   let registry = get_registry();
 
   // Get primary router

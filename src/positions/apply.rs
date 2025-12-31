@@ -172,6 +172,12 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
               );
             }
 
+            // Record realized loss for loss limit tracking (full exit only)
+            // pnl_sol was calculated above via calculate_position_pnl
+            if pnl_sol < 0.0 {
+              crate::trader::safety::loss_limit::record_realized_loss(pnl_sol.abs());
+            }
+
             match update_position(&position).await {
               Ok(_) => {
                 effects.db_updated = true;

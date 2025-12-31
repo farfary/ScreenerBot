@@ -34,6 +34,11 @@ use crate::trader::{evaluators, safety};
 pub async fn evaluate_exit_for_position(
   position: Position,
 ) -> Result<Option<TradeDecision>, String> {
+  // Early exit: Force stop is active (even exits are halted during force stop)
+  if crate::global::is_force_stopped() {
+      return Ok(None);
+  }
+
   // Get current price
   let current_price = match pools::get_pool_price(&position.mint) {
     Some(price_info) => {

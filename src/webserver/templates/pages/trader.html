@@ -23,6 +23,86 @@
         </div>
       </div>
 
+      <!-- Trading Controls Section -->
+      <div class="stats-section stats-section-controls">
+        <div class="section-header">
+          <h3><i class="icon-sliders"></i> Trading Controls</h3>
+        </div>
+
+        <!-- Force Stop Banner (shown only when active) -->
+        <div class="force-stop-banner" id="force-stop-banner" style="display: none">
+          <div class="force-stop-icon"><i class="icon-alert-octagon"></i></div>
+          <div class="force-stop-info">
+            <span class="force-stop-title">TRADING HALTED</span>
+            <span class="force-stop-reason" id="force-stop-reason"
+              >Manual force stop</span
+            >
+          </div>
+          <button type="button" class="btn btn-sm btn-success" id="resume-trading-btn">
+            <i class="icon-play"></i> Resume
+          </button>
+        </div>
+
+        <!-- Monitor Controls Grid -->
+        <div class="controls-grid">
+          <!-- Entry Monitor Card -->
+          <div class="control-card">
+            <div class="control-header">
+              <i class="icon-log-in"></i>
+              <span>Entry Monitor</span>
+            </div>
+            <div class="control-status" id="entry-monitor-status">—</div>
+            <label class="control-toggle">
+              <input type="checkbox" id="entry-monitor-toggle" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+
+          <!-- Exit Monitor Card -->
+          <div class="control-card">
+            <div class="control-header">
+              <i class="icon-log-out"></i>
+              <span>Exit Monitor</span>
+            </div>
+            <div class="control-status" id="exit-monitor-status">—</div>
+            <label class="control-toggle">
+              <input type="checkbox" id="exit-monitor-toggle" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Loss Limit Panel -->
+        <div class="loss-limit-panel" id="loss-limit-panel" style="display: none">
+          <div class="loss-limit-header">
+            <span class="loss-limit-label">
+              <i class="icon-shield"></i> Period Loss Limit
+            </span>
+            <span class="loss-limit-value" id="loss-limit-value"
+              >0.00 / 0.10 SOL</span
+            >
+          </div>
+          <div class="loss-limit-bar">
+            <div
+              class="loss-limit-progress"
+              id="loss-limit-progress"
+              style="width: 0%"
+            ></div>
+          </div>
+          <div class="loss-limit-footer">
+            <span class="loss-limit-period" id="loss-limit-period"
+              >Resets in —</span
+            >
+            <span class="loss-limit-status" id="loss-limit-status"></span>
+          </div>
+        </div>
+
+        <!-- Force Stop Button -->
+        <button type="button" class="btn btn-danger btn-force-stop" id="force-stop-btn">
+          <i class="icon-octagon"></i> Force Stop Everything
+        </button>
+      </div>
+
       <div class="stats-grid">
         <!-- Key Performance Indicators -->
         <div class="stats-section stats-section-primary">
