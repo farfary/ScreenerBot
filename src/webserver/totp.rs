@@ -20,7 +20,7 @@ const SECRET_LENGTH: usize = 20; // 160 bits for SHA1
 /// Returns a base32-encoded secret suitable for storage and use with authenticator apps.
 pub fn generate_secret() -> String {
     let mut rng = rand::thread_rng();
-    let bytes: Vec<u8> = (0..SECRET_LENGTH).map(|_| rng.gen()).collect();
+    let bytes: Vec<u8> = (0..SECRET_LENGTH).map(|_| rng.gen::<u8>()).collect();
 
     // Use the Secret type to properly encode as base32
     let secret = Secret::Raw(bytes);

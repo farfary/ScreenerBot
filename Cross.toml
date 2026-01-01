@@ -13,11 +13,18 @@
 # Pre-build hook to ensure OpenSSL is available
 # pre-build = []
 
+# Docker resource limits: max 8 CPUs and 8GB RAM
+# This prevents Docker from consuming all host resources during compilation
 [build.env]
 passthrough = [
     "RUST_BACKTRACE",
     "RUST_LOG",
 ]
+
+# Docker container configuration
+[build.docker]
+# Limit Docker resources to 8 CPUs and 8GB RAM
+args = ["--cpus=8", "--memory=8g"]
 
 [target.x86_64-unknown-linux-gnu]
 # Default image uses GLIBC 2.31 - compatible with Ubuntu 20.04+

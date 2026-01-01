@@ -2,7 +2,19 @@ const path = require('path');
 
 // Platform-specific binary name
 const isWindows = process.platform === 'win32';
+const isMacOS = process.platform === 'darwin';
 const binaryName = isWindows ? 'screenerbot.exe' : 'screenerbot';
+
+// Detect target architecture for conditional makers
+// ELECTRON_FORGE_ARCH is set by electron-forge during make, fallback to process.arch
+const targetArch = process.env.ELECTRON_FORGE_ARCH || process.arch;
+const isArm64 = targetArch === 'arm64';
+
+// RPM maker has issues on macOS:
+// - rpmbuild on macOS doesn't support aarch64 cross-compilation
+// - rpmbuild on macOS has path issues with BSD cp command
+// Skip RPM maker entirely when building on macOS host
+const skipRpm = isMacOS;
 
 module.exports = {
   packagerConfig: {
@@ -76,7 +88,9 @@ module.exports = {
         }
       }
     },
-    {
+    // RPM maker - skip on macOS (rpmbuild has path issues and doesn't support aarch64 cross-compilation)
+    // RPM packages will only be built when running on a native Linux host
+    ...(skipRpm ? [] : [{
       name: '@electron-forge/maker-rpm',
       platforms: ['linux'],
       config: {
@@ -93,7 +107,7 @@ module.exports = {
           platform: 'linux'
         }
       }
-    },
+    }]),
     {
       name: '@electron-forge/maker-zip',
       platforms: ['linux'],
