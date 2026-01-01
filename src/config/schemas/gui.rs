@@ -37,7 +37,7 @@ config_struct! {
         enabled: bool = false,
 
         /// Password type: "pin4", "pin6", "text"
-        password_type: String = "pin4".to_string(),
+        password_type: String = "pin6".to_string(),
 
         /// Hashed password (BLAKE3 hash, base64-encoded)
         password_hash: String = String::new(),

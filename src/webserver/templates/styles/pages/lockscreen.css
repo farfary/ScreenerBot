@@ -57,20 +57,19 @@
   inset: 0;
   background: linear-gradient(
     135deg,
-    rgb(13, 17, 23, 0.97) 0%,
-    rgb(22, 27, 34, 0.98) 50%,
-    rgb(28, 33, 40, 0.97) 100%
+    rgb(13, 17, 23) 0%,
+    rgb(22, 27, 34) 50%,
+    rgb(28, 33, 40) 100%
   );
-  backdrop-filter: blur(20px);
 }
 
 /* Light theme support */
 [data-theme="light"] .lockscreen-backdrop {
   background: linear-gradient(
     135deg,
-    rgb(248, 249, 251, 0.97) 0%,
-    rgb(255, 255, 255, 0.98) 50%,
-    rgb(240, 242, 246, 0.97) 100%
+    rgb(248, 249, 251) 0%,
+    rgb(255, 255, 255) 50%,
+    rgb(240, 242, 246) 100%
   );
 }
 

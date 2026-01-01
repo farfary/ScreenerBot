@@ -2084,7 +2084,7 @@ export class SettingsDialog {
   async _updateSecuritySetting(key, value) {
     try {
       const response = await fetch("/api/lockscreen/settings", {
-        method: "PATCH",
+        method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ [key]: value }),
       });
@@ -2162,10 +2162,23 @@ export class SettingsDialog {
     modal.style.display = "flex";
     enhanceAllSelects(body);
 
-    // Close handlers
+    // Close modal function with keyboard listener cleanup
+    let handleKeydown;
     const closeModal = () => {
+      if (handleKeydown) {
+        document.removeEventListener("keydown", handleKeydown);
+      }
       modal.style.display = "none";
     };
+
+    // Keyboard handler for Escape
+    handleKeydown = (e) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        closeModal();
+      }
+    };
+    document.addEventListener("keydown", handleKeydown);
 
     closeBtn.onclick = closeModal;
     backdrop.onclick = closeModal;
@@ -2232,7 +2245,7 @@ export class SettingsDialog {
           payload.current_password = currentPassword;
         }
 
-        const response = await fetch("/api/lockscreen/password", {
+        const response = await fetch("/api/lockscreen/set-password", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -2258,33 +2271,105 @@ export class SettingsDialog {
   }
 
   /**
-   * Remove password
+   * Remove password - shows modal to confirm with current password
    */
-  async _removePassword(content) {
-    if (!window.confirm("Remove lockscreen password? This will disable the lockscreen.")) {
-      return;
-    }
+  _removePassword(content) {
+    const modal = content.querySelector("#securityPasswordModal");
+    const title = content.querySelector("#securityModalTitle");
+    const body = content.querySelector("#securityModalBody");
+    const closeBtn = content.querySelector("#securityModalClose");
+    const backdrop = modal.querySelector(".security-modal-backdrop");
 
-    try {
-      const response = await fetch("/api/lockscreen/password", {
-        method: "DELETE",
-      });
+    if (!modal || !body) return;
 
-      if (response.ok) {
-        Utils.showToast("Password removed", "success");
-        // Reload security tab
-        this._loadSecurityTab(content);
-        // Update lockscreen controller
-        if (window.Lockscreen) {
-          window.Lockscreen.loadStatus();
-        }
-      } else {
-        const data = await response.json();
-        Utils.showToast(data.message || "Failed to remove password", "error");
+    title.textContent = "Remove Password";
+
+    body.innerHTML = `
+      <div class="security-form">
+        <p style="color: var(--text-secondary); margin-bottom: 16px;">
+          Enter your current password to remove lockscreen protection.
+        </p>
+        
+        <div class="security-form-group">
+          <label>Current Password</label>
+          <input type="password" id="securityCurrentPasswordRemove" class="settings-input" placeholder="Enter current password" autofocus />
+        </div>
+
+        <div class="security-form-actions">
+          <button class="btn btn-secondary" id="securityCancelRemoveBtn">Cancel</button>
+          <button class="btn btn-warning" id="securityConfirmRemoveBtn">
+            <i class="icon-trash-2"></i> Remove Password
+          </button>
+        </div>
+      </div>
+    `;
+
+    modal.style.display = "flex";
+
+    // Focus the password input
+    setTimeout(() => {
+      const input = body.querySelector("#securityCurrentPasswordRemove");
+      if (input) input.focus();
+    }, 100);
+
+    // Store reference for cleanup
+    const passwordInput = body.querySelector("#securityCurrentPasswordRemove");
+
+    // Keyboard handler for Enter and Escape
+    const handleKeydown = (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        body.querySelector("#securityConfirmRemoveBtn").click();
+      } else if (e.key === "Escape") {
+        e.preventDefault();
+        closeModal();
       }
-    } catch (error) {
-      Utils.showToast("Failed to remove password: " + error.message, "error");
-    }
+    };
+    passwordInput.addEventListener("keydown", handleKeydown);
+
+    // Close handlers with cleanup
+    const closeModal = () => {
+      passwordInput.removeEventListener("keydown", handleKeydown);
+      modal.style.display = "none";
+    };
+
+    closeBtn.onclick = closeModal;
+    backdrop.onclick = closeModal;
+    body.querySelector("#securityCancelRemoveBtn").onclick = closeModal;
+
+    // Confirm handler
+    body.querySelector("#securityConfirmRemoveBtn").onclick = async () => {
+      const currentPassword = body.querySelector("#securityCurrentPasswordRemove").value;
+
+      if (!currentPassword) {
+        Utils.showToast("Please enter your current password", "error");
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/lockscreen/clear-password", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ current_password: currentPassword }),
+        });
+
+        if (response.ok) {
+          Utils.showToast("Password removed", "success");
+          closeModal();
+          // Reload security tab
+          this._loadSecurityTab(content);
+          // Update lockscreen controller
+          if (window.Lockscreen) {
+            window.Lockscreen.loadStatus();
+          }
+        } else {
+          const data = await response.json();
+          Utils.showToast(data.message || "Failed to remove password", "error");
+        }
+      } catch (error) {
+        Utils.showToast("Failed to remove password: " + error.message, "error");
+      }
+    };
   }
 
   /**
