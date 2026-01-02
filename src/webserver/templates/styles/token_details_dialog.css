@@ -873,6 +873,35 @@
   text-decoration: underline;
 }
 
+/* Full-width info cells */
+.info-cell.full-width {
+  grid-column: 1 / -1;
+}
+
+/* Status badges for filtering */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.status-badge.rejected {
+  background: rgb(248 81 73 / 15%);
+  color: var(--error-color);
+  border: 1px solid rgb(248 81 73 / 30%);
+}
+
+.status-badge.passed {
+  background: rgb(63 185 80 / 15%);
+  color: var(--success-color);
+  border: 1px solid rgb(63 185 80 / 30%);
+}
+
 /* Token Tags */
 .token-tags-wrapper {
   min-height: 28px; /* Reserve space for tags to prevent layout jump */

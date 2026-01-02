@@ -1342,6 +1342,92 @@ impl TokenDatabase {
         Ok(())
     }
 
+    /// Update rejection status for a token (called by filtering engine)
+    pub fn update_rejection_status(
+        &self,
+        mint: &str,
+        reason: &str,
+        source: &str,
+        rejected_at: i64,
+    ) -> TokenResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        conn.execute(
+            "UPDATE update_tracking SET 
+                last_rejection_reason = ?1, 
+                last_rejection_source = ?2, 
+                last_rejection_at = ?3 
+             WHERE mint = ?4",
+            params![reason, source, rejected_at, mint],
+        )
+        .map_err(|e| TokenError::Database(format!("Failed to update rejection status: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Clear rejection status for a token that passed filtering
+    pub fn clear_rejection_status(&self, mint: &str) -> TokenResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        conn.execute(
+            "UPDATE update_tracking SET 
+                last_rejection_reason = NULL, 
+                last_rejection_source = NULL, 
+                last_rejection_at = NULL 
+             WHERE mint = ?1",
+            params![mint],
+        )
+        .map_err(|e| TokenError::Database(format!("Failed to clear rejection status: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Get rejection statistics grouped by reason
+    pub fn get_rejection_stats(&self) -> TokenResult<Vec<(String, String, i64)>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT 
+                    last_rejection_reason, 
+                    last_rejection_source, 
+                    COUNT(*) as count 
+                 FROM update_tracking 
+                 WHERE last_rejection_reason IS NOT NULL 
+                 GROUP BY last_rejection_reason, last_rejection_source 
+                 ORDER BY count DESC",
+            )
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1).unwrap_or_default(),
+                    row.get::<_, i64>(2)?,
+                ))
+            })
+            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            if let Ok(entry) = row {
+                results.push(entry);
+            }
+        }
+
+        Ok(results)
+    }
+
     /// Check if token has stale market data (>2 minutes old or missing)
     pub fn is_market_data_stale(&self, mint: &str, threshold_seconds: i64) -> TokenResult<bool> {
         let conn = self
@@ -2719,6 +2805,11 @@ impl TokenDatabase {
                 // Bot-Specific State
                 is_blacklisted,
                 priority,
+
+                // Filtering State
+                last_rejection_reason: None,
+                last_rejection_source: None,
+                last_rejection_at: None,
             };
 
             tokens.push(token);
@@ -3032,6 +3123,11 @@ fn assemble_token(
         // Bot-specific state
         is_blacklisted,
         priority,
+
+        // Filtering State
+        last_rejection_reason: None,
+        last_rejection_source: None,
+        last_rejection_at: None,
     }
 }
 
@@ -3183,6 +3279,11 @@ fn assemble_token_without_market_data(
         // Bot-Specific State
         is_blacklisted,
         priority,
+
+        // Filtering State
+        last_rejection_reason: None,
+        last_rejection_source: None,
+        last_rejection_at: None,
     }
 }
 
@@ -3384,6 +3485,44 @@ pub async fn is_market_data_stale_async(mint: &str, threshold_seconds: i64) -> T
         .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
     let mint_owned = mint.to_string();
     tokio::task::spawn_blocking(move || db.is_market_data_stale(&mint_owned, threshold_seconds))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async: update token rejection status
+pub async fn update_rejection_status_async(
+    mint: &str,
+    reason: &str,
+    source: &str,
+    rejected_at: i64,
+) -> TokenResult<()> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+    let mint_owned = mint.to_string();
+    let reason_owned = reason.to_string();
+    let source_owned = source.to_string();
+    tokio::task::spawn_blocking(move || {
+        db.update_rejection_status(&mint_owned, &reason_owned, &source_owned, rejected_at)
+    })
+    .await
+    .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async: clear token rejection status (when token passes)
+pub async fn clear_rejection_status_async(mint: &str) -> TokenResult<()> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+    let mint_owned = mint.to_string();
+    tokio::task::spawn_blocking(move || db.clear_rejection_status(&mint_owned))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async: get rejection statistics grouped by reason
+pub async fn get_rejection_stats_async() -> TokenResult<Vec<(String, String, i64)>> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+    tokio::task::spawn_blocking(move || db.get_rejection_stats())
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
 }

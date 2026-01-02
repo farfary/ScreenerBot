@@ -23,6 +23,7 @@ const state = {
   config: null,
   draft: null,
   stats: null,
+  rejectionStats: null,
   hasChanges: false,
   isSaving: false,
   isRefreshing: false,
@@ -810,6 +811,12 @@ async function fetchStats() {
   });
 }
 
+async function fetchRejectionStats() {
+  return await requestManager.fetch("/api/filtering/rejection-stats", {
+    priority: "normal",
+  });
+}
+
 // ============================================================================
 // RENDERING
 // ============================================================================
@@ -878,6 +885,50 @@ function renderStatusView() {
   const priceRate = total_tokens > 0 ? ((with_pool_price / total_tokens) * 100).toFixed(1) : 0;
   const passedRate = total_tokens > 0 ? ((passed_filtering / total_tokens) * 100).toFixed(1) : 0;
 
+  // Render rejection breakdown if available
+  let rejectionBreakdown = "";
+  if (state.rejectionStats && state.rejectionStats.stats && state.rejectionStats.stats.length > 0) {
+    const topReasons = state.rejectionStats.stats.slice(0, 15); // Show top 15 reasons
+    const bySource = state.rejectionStats.by_source || {};
+
+    rejectionBreakdown = `
+      <div class="rejection-breakdown">
+        <h4>Rejection Breakdown</h4>
+        <div class="rejection-sources">
+          ${Object.entries(bySource)
+            .sort((a, b) => b[1] - a[1])
+            .map(
+              ([source, count]) => `
+            <div class="source-badge ${source}">
+              <span class="source-name">${Utils.escapeHtml(source)}</span>
+              <span class="source-count">${Utils.formatNumber(count, 0)}</span>
+            </div>
+          `
+            )
+            .join("")}
+        </div>
+        <div class="rejection-list">
+          ${topReasons
+            .map(
+              ({ reason, display_label, source, count }) => `
+            <div class="rejection-item">
+              <span class="rejection-reason">${Utils.escapeHtml(display_label || reason)}</span>
+              <span class="rejection-source ${source}">${Utils.escapeHtml(source)}</span>
+              <span class="rejection-count">${Utils.formatNumber(count, 0)}</span>
+            </div>
+          `
+            )
+            .join("")}
+          ${
+            state.rejectionStats.stats.length > 15
+              ? `<div class="rejection-more">+ ${state.rejectionStats.stats.length - 15} more reasons</div>`
+              : ""
+          }
+        </div>
+      </div>
+    `;
+  }
+
   return `
     <div class="status-view">
       <div class="status-card dominant">
@@ -916,6 +967,7 @@ function renderStatusView() {
         <span class="metric-meta">${updated_at ? Utils.escapeHtml(new Date(updated_at).toLocaleString()) : "No refresh yet"}</span>
       </div>
     </div>
+    ${rejectionBreakdown}
   `;
 }
 
@@ -1468,8 +1520,12 @@ async function loadConfig() {
 
 async function loadStats() {
   try {
-    const response = await fetchStats();
-    state.stats = response.data || response;
+    const [statsResponse, rejectionStatsResponse] = await Promise.all([
+      fetchStats(),
+      fetchRejectionStats(),
+    ]);
+    state.stats = statsResponse.data || statsResponse;
+    state.rejectionStats = rejectionStatsResponse.data || rejectionStatsResponse;
   } catch (error) {
     console.error("Failed to load stats:", error);
     // Don't show toast for stats errors (non-critical)

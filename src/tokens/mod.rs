@@ -34,6 +34,7 @@ pub mod updates;
 // Re-export main types for convenience
 pub use database::{
     // Async wrappers for external code
+    clear_rejection_status_async,
     count_tokens_async,
     count_tokens_no_market_async,
     get_all_tokens_for_filtering_async,
@@ -41,12 +42,14 @@ pub use database::{
     get_full_token_async,
     get_full_token_for_source_async,
     get_global_database,
+    get_rejection_stats_async,
     get_token_async,
     get_tokens_no_market_async,
     init_global_database,
     is_market_data_stale_async,
     list_blacklisted_tokens_async,
     list_tokens_async,
+    update_rejection_status_async,
     update_token_priority_async,
     TokenBlacklistRecord,
     TokenDatabase,

@@ -174,6 +174,9 @@ pub const CREATE_TABLES: &[&str] = &[
         last_security_error TEXT,
         last_security_error_at INTEGER,
         security_error_type TEXT,
+        last_rejection_reason TEXT,
+        last_rejection_source TEXT,
+        last_rejection_at INTEGER,
         FOREIGN KEY (mint) REFERENCES tokens(mint) ON DELETE RESTRICT
     )
     "#,
@@ -243,6 +246,10 @@ pub const CREATE_INDEXES: &[&str] = &[
 pub const ALTER_STATEMENTS: &[&str] = &[
     // Add score_normalised column to security_rugcheck (0-100, HIGHER = MORE RISKY)
     "ALTER TABLE security_rugcheck ADD COLUMN score_normalised INTEGER",
+    // Add rejection tracking columns to update_tracking
+    "ALTER TABLE update_tracking ADD COLUMN last_rejection_reason TEXT",
+    "ALTER TABLE update_tracking ADD COLUMN last_rejection_source TEXT",
+    "ALTER TABLE update_tracking ADD COLUMN last_rejection_at INTEGER",
 ];
 
 /// Performance PRAGMAs

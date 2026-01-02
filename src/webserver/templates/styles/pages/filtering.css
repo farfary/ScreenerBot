@@ -669,3 +669,138 @@
     justify-content: center;
   }
 }
+
+/* Rejection Breakdown Section */
+.rejection-breakdown {
+  margin-top: var(--spacing-lg);
+  padding: var(--spacing-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+}
+
+.rejection-breakdown h4 {
+  margin: 0 0 var(--spacing-md) 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.rejection-sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+}
+
+.source-badge {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--bg-card-hover);
+  border-radius: var(--radius-md);
+  font-size: 0.75rem;
+}
+
+.source-badge.core {
+  border-left: 3px solid var(--text-secondary);
+}
+
+.source-badge.dexscreener {
+  border-left: 3px solid #58a6ff;
+}
+
+.source-badge.geckoterminal {
+  border-left: 3px solid #a371f7;
+}
+
+.source-badge.rugcheck {
+  border-left: 3px solid #f85149;
+}
+
+.source-badge .source-name {
+  color: var(--text-secondary);
+  text-transform: capitalize;
+}
+
+.source-badge .source-count {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+}
+
+.rejection-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rejection-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+}
+
+.rejection-item:hover {
+  background: var(--bg-card-hover);
+}
+
+.rejection-reason {
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rejection-source {
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.rejection-source.core {
+  background: rgb(139 148 158 / 20%);
+  color: var(--text-secondary);
+}
+
+.rejection-source.dexscreener {
+  background: rgb(88 166 255 / 20%);
+  color: #58a6ff;
+}
+
+.rejection-source.geckoterminal {
+  background: rgb(163 113 247 / 20%);
+  color: #a371f7;
+}
+
+.rejection-source.rugcheck {
+  background: rgb(248 81 73 / 20%);
+  color: #f85149;
+}
+
+.rejection-count {
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  min-width: 50px;
+  text-align: right;
+}
+
+.rejection-more {
+  padding: var(--spacing-sm);
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-style: italic;
+}

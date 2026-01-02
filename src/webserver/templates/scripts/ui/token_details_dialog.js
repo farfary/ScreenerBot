@@ -1162,6 +1162,22 @@ export class TokenDetailsDialog {
         : '<div class="token-tags-placeholder">No tags</div>';
     const tagsHtml = `<div class="token-tags-wrapper">${tagsContent}</div>`;
 
+    // Build filtering status display
+    let filteringStatusHtml = "";
+    if (token.last_rejection_reason) {
+      const displayLabel = this._getRejectionDisplayLabel(token.last_rejection_reason);
+      filteringStatusHtml = `
+        <div class="info-cell full-width">
+          <span class="cell-label">Filter Status</span>
+          <span class="cell-value">
+            <span class="status-badge rejected" title="${this._escapeHtml(token.last_rejection_reason)}">
+              Rejected: ${this._escapeHtml(displayLabel)}
+            </span>
+          </span>
+        </div>
+      `;
+    }
+
     return `
       <div class="info-card compact">
         <div class="card-header">
@@ -1209,6 +1225,7 @@ export class TokenDetailsDialog {
             `
                 : ""
             }
+            ${filteringStatusHtml}
           </div>
           ${tagsHtml}
           ${token.description ? `<div class="info-description">${this._escapeHtml(token.description)}</div>` : ""}
@@ -3265,6 +3282,98 @@ export class TokenDetailsDialog {
     const div = document.createElement("div");
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  // Rejection reason label mapping (machine code -> human-readable)
+  _getRejectionDisplayLabel(reasonCode) {
+    const labels = {
+      no_decimals: "No decimals in database",
+      token_too_new: "Token too new",
+      cooldown_filtered: "Cooldown filtered",
+      dex_data_missing: "DexScreener data missing",
+      gecko_data_missing: "GeckoTerminal data missing",
+      rug_data_missing: "Rugcheck data missing",
+      dex_empty_name: "Empty name",
+      dex_empty_symbol: "Empty symbol",
+      dex_empty_logo: "Empty logo URL",
+      dex_empty_website: "Empty website URL",
+      dex_txn_5m: "Low 5m transactions",
+      dex_txn_1h: "Low 1h transactions",
+      dex_zero_liq: "Zero liquidity",
+      dex_liq_low: "Liquidity too low",
+      dex_liq_high: "Liquidity too high",
+      dex_mcap_low: "Market cap too low",
+      dex_mcap_high: "Market cap too high",
+      dex_vol_low: "Volume too low",
+      dex_vol_missing: "Volume missing",
+      dex_fdv_low: "FDV too low",
+      dex_fdv_high: "FDV too high",
+      dex_fdv_missing: "FDV missing",
+      dex_vol5m_low: "5m volume too low",
+      dex_vol5m_missing: "5m volume missing",
+      dex_vol1h_low: "1h volume too low",
+      dex_vol1h_missing: "1h volume missing",
+      dex_vol6h_low: "6h volume too low",
+      dex_vol6h_missing: "6h volume missing",
+      dex_price_change_5m_low: "5m price change too low",
+      dex_price_change_5m_high: "5m price change too high",
+      dex_price_change_5m_missing: "5m price change missing",
+      dex_price_change_low: "Price change too low",
+      dex_price_change_high: "Price change too high",
+      dex_price_change_missing: "Price change missing",
+      dex_price_change_6h_low: "6h price change too low",
+      dex_price_change_6h_high: "6h price change too high",
+      dex_price_change_6h_missing: "6h price change missing",
+      dex_price_change_24h_low: "24h price change too low",
+      dex_price_change_24h_high: "24h price change too high",
+      dex_price_change_24h_missing: "24h price change missing",
+      gecko_liq_missing: "Liquidity missing",
+      gecko_liq_low: "Liquidity too low",
+      gecko_liq_high: "Liquidity too high",
+      gecko_mcap_missing: "Market cap missing",
+      gecko_mcap_low: "Market cap too low",
+      gecko_mcap_high: "Market cap too high",
+      gecko_vol5m_low: "5m volume too low",
+      gecko_vol5m_missing: "5m volume missing",
+      gecko_vol1h_low: "1h volume too low",
+      gecko_vol1h_missing: "1h volume missing",
+      gecko_vol24h_low: "24h volume too low",
+      gecko_vol24h_missing: "24h volume missing",
+      gecko_price_change_5m_low: "5m price change too low",
+      gecko_price_change_5m_high: "5m price change too high",
+      gecko_price_change_5m_missing: "5m price change missing",
+      gecko_price_change_1h_low: "1h price change too low",
+      gecko_price_change_1h_high: "1h price change too high",
+      gecko_price_change_1h_missing: "1h price change missing",
+      gecko_price_change_24h_low: "24h price change too low",
+      gecko_price_change_24h_high: "24h price change too high",
+      gecko_price_change_24h_missing: "24h price change missing",
+      gecko_pool_count_low: "Pool count too low",
+      gecko_pool_count_high: "Pool count too high",
+      gecko_pool_count_missing: "Pool count missing",
+      gecko_reserve_low: "Reserve too low",
+      gecko_reserve_missing: "Reserve missing",
+      rug_rugged: "Rugged token",
+      rug_score: "Risk score too high",
+      rug_level_danger: "Danger risk level",
+      rug_mint_authority: "Mint authority present",
+      rug_freeze_authority: "Freeze authority present",
+      rug_top_holder: "Top holder % too high",
+      rug_top3_holders: "Top 3 holders % too high",
+      rug_min_holders: "Not enough holders",
+      rug_insider_count: "Too many insider holders",
+      rug_insider_pct: "Insider % too high",
+      rug_creator_pct: "Creator balance too high",
+      rug_transfer_fee_present: "Transfer fee present",
+      rug_transfer_fee_high: "Transfer fee too high",
+      rug_transfer_fee_missing: "Transfer fee data missing",
+      rug_graph_insiders: "Graph insiders too high",
+      rug_lp_providers_low: "LP providers too low",
+      rug_lp_providers_missing: "LP providers missing",
+      rug_lp_lock_low: "LP lock too low",
+      rug_lp_lock_missing: "LP lock missing",
+    };
+    return labels[reasonCode] || reasonCode;
   }
 
   destroy() {

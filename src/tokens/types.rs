@@ -227,6 +227,21 @@ pub struct Token {
     // ========================================================================
     pub is_blacklisted: bool,
     pub priority: Priority,
+
+    // ========================================================================
+    // Filtering State (from last filtering snapshot)
+    // ========================================================================
+    /// Last rejection reason code (e.g., "dex_mcap_low")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_rejection_reason: Option<String>,
+
+    /// Source of last rejection (e.g., "dexscreener", "rugcheck")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_rejection_source: Option<String>,
+
+    /// When the token was last rejected
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_rejection_at: Option<DateTime<Utc>>,
 }
 
 impl Token {

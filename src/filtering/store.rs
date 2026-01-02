@@ -257,14 +257,21 @@ impl FilteringStore {
         let mut rejection_reasons = HashMap::new();
         let mut available_rejection_reasons = Vec::new();
         if matches!(query.view, FilteringView::Rejected) {
-            let reason_lookup: HashMap<&str, &str> = snapshot
-                .rejected_tokens
-                .iter()
-                .map(|entry| (entry.mint.as_str(), entry.reason.as_str()))
-                .collect();
+            // Build rejection reasons from token's persisted last_rejection_reason (database)
+            // This replaces the truncated snapshot.rejected_tokens lookup
+            for token in &items {
+                if let Some(ref reason) = token.last_rejection_reason {
+                    let trimmed = reason.trim();
+                    if !trimmed.is_empty() {
+                        rejection_reasons.insert(token.mint.clone(), trimmed.to_string());
+                    }
+                }
+            }
 
+            // Collect unique reasons from all rejected tokens for filter dropdown
             let mut unique_reasons: std::collections::HashSet<String> =
                 std::collections::HashSet::new();
+            // Get unique reasons from snapshot for the dropdown
             for entry in &snapshot.rejected_tokens {
                 let trimmed = entry.reason.trim();
                 if !trimmed.is_empty() {
@@ -275,12 +282,6 @@ impl FilteringStore {
             let mut sorted_reasons: Vec<String> = unique_reasons.into_iter().collect();
             sorted_reasons.sort_unstable_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
             available_rejection_reasons = sorted_reasons;
-
-            for token in &items {
-                if let Some(reason) = reason_lookup.get(token.mint.as_str()) {
-                    rejection_reasons.insert(token.mint.clone(), (*reason).to_string());
-                }
-            }
         }
 
         let mut blacklist_reasons: HashMap<String, Vec<BlacklistReasonInfo>> = HashMap::new();
@@ -415,6 +416,17 @@ impl FilteringStore {
             }
         }
 
+        // Build rejection reasons from token's persisted last_rejection_reason (database)
+        let mut rejection_reasons = HashMap::new();
+        for token in &items {
+            if let Some(ref reason) = token.last_rejection_reason {
+                let trimmed = reason.trim();
+                if !trimmed.is_empty() {
+                    rejection_reasons.insert(token.mint.clone(), trimmed.to_string());
+                }
+            }
+        }
+
         Ok(FilteringQueryResult {
             items,
             page: normalized_page,
@@ -428,8 +440,8 @@ impl FilteringStore {
             priced_mints,
             open_position_mints,
             ohlcv_mints,
-            rejection_reasons: HashMap::new(), // Not applicable for "All" view
-            available_rejection_reasons: Vec::new(), // Not applicable for "All" view
+            rejection_reasons,
+            available_rejection_reasons: Vec::new(), // All view doesn't need filter dropdown
             blacklist_reasons,
         })
     }
@@ -506,6 +518,17 @@ impl FilteringStore {
             }
         }
 
+        // Build rejection reasons from token's persisted last_rejection_reason (database)
+        let mut rejection_reasons = HashMap::new();
+        for token in &items {
+            if let Some(ref reason) = token.last_rejection_reason {
+                let trimmed = reason.trim();
+                if !trimmed.is_empty() {
+                    rejection_reasons.insert(token.mint.clone(), trimmed.to_string());
+                }
+            }
+        }
+
         Ok(FilteringQueryResult {
             items,
             page: normalized_page,
@@ -519,7 +542,7 @@ impl FilteringStore {
             priced_mints: Vec::new(),
             open_position_mints: Vec::new(),
             ohlcv_mints: Vec::new(),
-            rejection_reasons: HashMap::new(),
+            rejection_reasons,
             available_rejection_reasons: Vec::new(),
             blacklist_reasons,
         })
@@ -649,12 +672,6 @@ fn apply_filters(items: &mut Vec<Token>, query: &FilteringQuery, snapshot: &Filt
         })
         .collect();
 
-    let rejection_reasons: std::collections::HashMap<&str, &str> = snapshot
-        .rejected_tokens
-        .iter()
-        .map(|entry| (entry.mint.as_str(), entry.reason.as_str()))
-        .collect();
-
     if let Some(search) = query.search.as_ref().map(|s| s.trim().to_lowercase()) {
         if !search.is_empty() {
             items.retain(|token| {
@@ -720,10 +737,11 @@ fn apply_filters(items: &mut Vec<Token>, query: &FilteringQuery, snapshot: &Filt
         });
     }
 
+    // Filter by rejection reason using token's persisted last_rejection_reason
     if let Some(target_reason) = query.rejection_reason.as_ref() {
         items.retain(|t| {
-            rejection_reasons
-                .get(t.mint.as_str())
+            t.last_rejection_reason
+                .as_ref()
                 .map(|reason| reason.eq_ignore_ascii_case(target_reason))
                 .unwrap_or(false)
         });

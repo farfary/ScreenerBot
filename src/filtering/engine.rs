@@ -9,7 +9,10 @@ use crate::events::{record_filtering_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::tokens::types::{DataSource, Token};
-use crate::tokens::{get_all_tokens_for_filtering_async, list_blacklisted_tokens_async};
+use crate::tokens::{
+    clear_rejection_status_async, get_all_tokens_for_filtering_async, list_blacklisted_tokens_async,
+    update_rejection_status_async,
+};
 
 use super::sources::{self, FilterRejectionReason};
 use super::types::{
@@ -299,6 +302,20 @@ pub async fn compute_snapshot(
                     passed_time,
                 });
 
+                // Clear any previous rejection status when token passes
+                let mint_for_clear = token.mint.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = clear_rejection_status_async(&mint_for_clear).await {
+                        logger::debug(
+                            LogTag::Filtering,
+                            &format!(
+                                "Failed to clear rejection status for {}: {}",
+                                mint_for_clear, e
+                            ),
+                        );
+                    }
+                });
+
                 // Set priority for passed tokens: FilterPassed (60)
                 // This is separate from PoolTracked priority (75) to avoid conflicts
                 let mint_for_priority = token.mint.clone();
@@ -343,19 +360,45 @@ pub async fn compute_snapshot(
                     .copied()
                     .unwrap_or_else(|| Utc::now().timestamp());
 
+                let reason_label = reason.label().to_string();
+                let reason_source = reason.source().as_str().to_string();
+
                 rejected_tokens.push(RejectedToken {
                     mint: token.mint.clone(),
                     symbol: token.symbol.clone(),
                     name: Some(token.name.clone()),
-                    reason: reason.label().to_string(),
+                    reason: reason_label.clone(),
                     rejection_time,
+                });
+
+                // Persist rejection status to database for later lookup
+                let mint_for_rejection = token.mint.clone();
+                let reason_for_db = reason_label.clone();
+                let source_for_db = reason_source.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = update_rejection_status_async(
+                        &mint_for_rejection,
+                        &reason_for_db,
+                        &source_for_db,
+                        rejection_time,
+                    )
+                    .await
+                    {
+                        logger::debug(
+                            LogTag::Filtering,
+                            &format!(
+                                "Failed to persist rejection status for {}: {}",
+                                mint_for_rejection, e
+                            ),
+                        );
+                    }
                 });
 
                 // DEBUG: Record token rejection (sample to avoid spam)
                 if stats.rejected % 10 == 1 {
                     let mint = token.mint.clone();
                     let symbol = token.symbol.clone();
-                    let reason_str = reason.label().to_string();
+                    let reason_str = reason_label;
                     tokio::spawn(async move {
                         record_filtering_event(
                             "token_rejected",
