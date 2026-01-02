@@ -1340,7 +1340,7 @@ body.dt-column-resizing * {
 .dt-client-pagination-size__select:focus {
   outline: none;
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px rgb(88 166 255 / 20%);
+  box-shadow: 0 0 0 2px rgb(88 166 255 / 0.2);
 }
 
 /* Responsive adjustments for pagination bar */
@@ -1585,7 +1585,7 @@ body.dt-column-resizing * {
 .dt-server-pagination-size__select:focus {
   outline: none;
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px rgb(88 166 255 / 20%);
+  box-shadow: 0 0 0 2px rgb(88 166 255 / 0.2);
 }
 
 /* Responsive adjustments for server pagination bar */

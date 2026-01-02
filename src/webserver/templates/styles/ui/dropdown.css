@@ -7,8 +7,8 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   box-shadow:
-    0 12px 48px -12px rgba(0, 0, 0, 0.5),
-    0 8px 24px -4px rgba(0, 0, 0, 0.3);
+    0 12px 48px -12px rgb(0, 0, 0, 0.5),
+    0 8px 24px -4px rgb(0, 0, 0, 0.3);
   min-width: 200px;
   max-width: 300px;
   z-index: var(--z-dropdown);
@@ -21,15 +21,15 @@
     transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
     visibility 0.2s;
   backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
 }
 
 [data-theme="dark"] .dropdown-menu {
-  background: rgba(22, 27, 34, 0.92);
+  background: rgb(22, 27, 34, 0.92);
 }
 
 [data-theme="light"] .dropdown-menu {
-  background: rgba(255, 255, 255, 0.95);
+  background: rgb(255, 255, 255, 0.95);
 }
 
 .dropdown-menu.open {
