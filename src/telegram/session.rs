@@ -3,6 +3,7 @@
 //! Provides session tracking, authentication, and chat discovery for Telegram bot users.
 
 use crate::config::with_config;
+use crate::logger::{self, LogTag};
 use crate::telegram::types::{DiscoveredChat, SessionState, TelegramSession};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
@@ -128,8 +129,20 @@ impl TelegramSessionManager {
             return session.clone();
         }
 
-        let session = TelegramSession::new(user_id, chat_id, username, first_name);
+        // Create new session
+        let session = TelegramSession::new(user_id, chat_id, username.clone(), first_name.clone());
         sessions.insert(user_id, session.clone());
+
+        logger::debug(
+            LogTag::Telegram,
+            &format!(
+                "Created new session for user {} ({}) in chat {}",
+                username.as_deref().unwrap_or("unknown"),
+                user_id,
+                chat_id
+            ),
+        );
+
         session
     }
 

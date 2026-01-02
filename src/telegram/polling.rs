@@ -9,12 +9,15 @@ use crate::telegram::commands::{handle_auth_attempt, handle_callback_query, hand
 use crate::telegram::discovery;
 use crate::telegram::session::get_session_manager;
 use crate::telegram::types::SessionState;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::Arc;
 use teloxide::prelude::*;
 use teloxide::types::ParseMode;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
+
+/// Track last processed update ID for proper offset handling
+static LAST_UPDATE_ID: AtomicI32 = AtomicI32::new(0);
 
 /// Start the main polling loop
 ///
@@ -67,10 +70,23 @@ pub async fn start_polling(
 
 /// Poll and process Telegram updates
 async fn poll_updates(bot: &Bot) {
-    // Use getUpdates with a timeout for manual polling
-    match bot.get_updates().timeout(10).await {
+    // Get offset - start from last processed + 1 to get new updates only
+    let offset = LAST_UPDATE_ID.load(Ordering::SeqCst);
+    let offset_param = if offset > 0 { Some(offset) } else { None };
+
+    // Use getUpdates with offset and timeout for proper long polling
+    let mut request = bot.get_updates().timeout(30);
+    if let Some(off) = offset_param {
+        request = request.offset(off);
+    }
+
+    match request.await {
         Ok(updates) => {
             for update in updates {
+                // Track the update ID for offset
+                let update_id = update.id.0 as i32;
+                LAST_UPDATE_ID.store(update_id + 1, Ordering::SeqCst);
+
                 match update.kind {
                     teloxide::types::UpdateKind::Message(message) => {
                         // Extract user info from message.from (the sender)
