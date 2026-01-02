@@ -117,6 +117,9 @@ export class CustomSelect {
     // Store reference to original select
     customSelect._originalSelect = selectElement;
 
+    // Store reference to CustomSelect instance on original select for later access
+    selectElement._customSelectInstance = customSelect;
+
     return customSelect;
   }
 

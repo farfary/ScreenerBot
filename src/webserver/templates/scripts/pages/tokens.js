@@ -581,16 +581,34 @@ function createLifecycle() {
     reasons.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
 
     const currentValue = state.filters.rejection_reason || "all";
-    const optionMarkup = [
-      '<option value="all">All</option>',
-      ...reasons.map((reason) => {
-        const escaped = Utils.escapeHtml(reason);
-        return `<option value="${escaped}">${escaped}</option>`;
-      }),
-    ].join("");
 
-    if (select.innerHTML !== optionMarkup) {
-      select.innerHTML = optionMarkup;
+    // Build options array for CustomSelect
+    const newOptions = [
+      { value: "all", label: "All" },
+      ...reasons.map((reason) => ({
+        value: reason,
+        label: reason,
+      })),
+    ];
+
+    // Check if the select has a CustomSelect instance attached
+    if (select._customSelectInstance && typeof select._customSelectInstance.setOptions === "function") {
+      select._customSelectInstance.setOptions(newOptions);
+      select._customSelectInstance.setValue(currentValue);
+    } else {
+      // Fallback: update native select options
+      const optionMarkup = [
+        '<option value="all">All</option>',
+        ...reasons.map((reason) => {
+          const escaped = Utils.escapeHtml(reason);
+          return `<option value="${escaped}">${escaped}</option>`;
+        }),
+      ].join("");
+
+      if (select.innerHTML !== optionMarkup) {
+        select.innerHTML = optionMarkup;
+      }
+      select.value = currentValue;
     }
 
     const normalizedCurrent = reasons.some((reason) => reason === currentValue)
@@ -600,8 +618,6 @@ function createLifecycle() {
     if (normalizedCurrent !== currentValue) {
       state.filters.rejection_reason = normalizedCurrent;
     }
-
-    select.value = normalizedCurrent;
   };
 
   const applyViewPreferences = () => {

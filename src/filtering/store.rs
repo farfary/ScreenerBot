@@ -268,20 +268,39 @@ impl FilteringStore {
                 }
             }
 
-            // Collect unique reasons from all rejected tokens for filter dropdown
-            let mut unique_reasons: std::collections::HashSet<String> =
-                std::collections::HashSet::new();
-            // Get unique reasons from snapshot for the dropdown
-            for entry in &snapshot.rejected_tokens {
-                let trimmed = entry.reason.trim();
-                if !trimmed.is_empty() {
-                    unique_reasons.insert(trimmed.to_string());
+            // Collect unique reasons from database (not limited snapshot) for filter dropdown
+            // Use get_rejection_stats_async() which queries all rejection reasons from update_tracking table
+            match crate::tokens::get_rejection_stats_async().await {
+                Ok(stats) => {
+                    let mut unique_reasons: HashSet<String> = HashSet::new();
+                    for (reason, _source, _count) in stats {
+                        let trimmed = reason.trim();
+                        if !trimmed.is_empty() {
+                            unique_reasons.insert(trimmed.to_string());
+                        }
+                    }
+                    let mut sorted_reasons: Vec<String> = unique_reasons.into_iter().collect();
+                    sorted_reasons.sort_unstable_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+                    available_rejection_reasons = sorted_reasons;
+                }
+                Err(e) => {
+                    logger::warning(
+                        LogTag::Filtering,
+                        &format!("Failed to get rejection stats from DB: {}", e),
+                    );
+                    // Fallback to snapshot if DB query fails
+                    let mut unique_reasons: HashSet<String> = HashSet::new();
+                    for entry in &snapshot.rejected_tokens {
+                        let trimmed = entry.reason.trim();
+                        if !trimmed.is_empty() {
+                            unique_reasons.insert(trimmed.to_string());
+                        }
+                    }
+                    let mut sorted_reasons: Vec<String> = unique_reasons.into_iter().collect();
+                    sorted_reasons.sort_unstable_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
+                    available_rejection_reasons = sorted_reasons;
                 }
             }
-
-            let mut sorted_reasons: Vec<String> = unique_reasons.into_iter().collect();
-            sorted_reasons.sort_unstable_by(|a, b| a.to_lowercase().cmp(&b.to_lowercase()));
-            available_rejection_reasons = sorted_reasons;
         }
 
         let mut blacklist_reasons: HashMap<String, Vec<BlacklistReasonInfo>> = HashMap::new();
