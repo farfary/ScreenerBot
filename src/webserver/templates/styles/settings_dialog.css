@@ -1,23 +1,21 @@
-/* Settings Dialog Styles - Full Screen Desktop App Style */
+/* Settings Dialog Styles - Modal Dialog Style */
 
 /* =============================================================================
-   BASE DIALOG STRUCTURE - Full Screen Desktop App Style
-   Dialog covers full screen with consistent background including traffic lights
-   Content area respects macOS title bar (28px) for traffic lights and window drag
-   Status bar (24px) at bottom for version info
+   BASE DIALOG STRUCTURE - Modal Dialog Style
+   Centered modal with backdrop
    ============================================================================= */
 
 .settings-dialog {
   position: fixed;
-
-  /* Cover full screen including traffic light area */
   inset: 0;
   z-index: 10000;
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   opacity: 0;
-  transition: opacity 0.25s ease;
+  transition: opacity 0.2s ease;
   pointer-events: none;
+  padding: 20px;
 }
 
 .settings-dialog.active {
@@ -25,57 +23,66 @@
   pointer-events: auto;
 }
 
-/* Title bar area - same background as dialog content for seamless look */
-.settings-dialog::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  height: 28px;
-  background: var(--bg-secondary);
-  z-index: 1;
-}
-
-/* Backdrop - covers area below title bar */
+/* Backdrop */
 .settings-backdrop {
   position: absolute;
-  inset: 28px 0 24px;
-  background: transparent;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
   cursor: default;
+  z-index: 1;
 }
 
 .settings-container {
   position: relative;
-
-  /* Content starts below traffic light area */
-  margin-top: 28px;
-
-  /* Leave space for status bar at bottom */
-  margin-bottom: 24px;
   background: var(--bg-primary);
-  border: none;
-  border-radius: 0;
-  box-shadow: none;
-  width: 100%;
-  flex: 1;
-  max-width: none;
-  max-height: none;
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), 0 0 0 1px var(--border-color);
+  width: 90vw;
+  max-width: 1100px;
+  height: 85vh;
+  max-height: 800px;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: settings-dialog-fade-in 0.25s ease-out;
+  animation: settings-dialog-scale-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   z-index: 2;
 }
 
-@keyframes settings-dialog-fade-in {
+@keyframes settings-dialog-scale-in {
   0% {
     opacity: 0;
+    transform: scale(0.96);
   }
 
   100% {
     opacity: 1;
+    transform: scale(1);
   }
+}
+
+/* Custom Scrollbar for Settings */
+.settings-nav::-webkit-scrollbar,
+.settings-content::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.settings-nav::-webkit-scrollbar-track,
+.settings-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.settings-nav::-webkit-scrollbar-thumb,
+.settings-content::-webkit-scrollbar-thumb {
+  background: var(--border-color);
+  border-radius: 3px;
+}
+
+.settings-nav::-webkit-scrollbar-thumb:hover,
+.settings-content::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
 }
 
 /* =============================================================================
@@ -86,43 +93,44 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 10px 16px;
+  padding: 0 24px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
-  min-height: 56px;
+  height: 64px;
+  backdrop-filter: blur(10px);
 }
 
 .settings-header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
 .settings-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 36px;
-  height: 36px;
+  width: 40px;
+  height: 40px;
   background: var(--primary-alpha-10);
-  border-radius: 10px;
-  font-size: 1.1rem;
+  border-radius: 12px;
+  font-size: 1.25rem;
   color: var(--primary-color);
 }
 
 .settings-title h2 {
   margin: 0;
-  font-size: 1rem;
+  font-size: 1.25rem;
   font-weight: 700;
   color: var(--text-primary);
-  letter-spacing: -0.01em;
+  letter-spacing: -0.02em;
 }
 
 .settings-subtitle {
-  font-size: 0.75rem;
+  font-size: 0.8rem;
   color: var(--text-secondary);
-  margin-top: 1px;
+  margin-top: 2px;
 }
 
 .settings-header-actions {
@@ -134,18 +142,17 @@
 .settings-save-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
+  gap: 8px;
+  padding: 8px 16px;
   background: var(--primary-color);
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   color: white;
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+  transition: all 0.2s ease;
+  letter-spacing: 0.01em;
 }
 
 .settings-save-btn:hover:not(:disabled) {
@@ -167,15 +174,15 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--text-secondary);
-  font-size: 1rem;
+  font-size: 1.2rem;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
 }
 
 .settings-close-btn:hover {
@@ -199,13 +206,13 @@
    ============================================================================= */
 
 .settings-nav {
-  width: 220px;
+  width: 240px;
   background: var(--bg-secondary);
   border-right: 1px solid var(--border-color);
-  padding: 12px 8px;
+  padding: 16px 12px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   flex-shrink: 0;
   overflow-y: auto;
 }
@@ -213,17 +220,17 @@
 .settings-nav-item {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   width: 100%;
-  padding: 8px 12px;
+  padding: 10px 16px;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--text-secondary);
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
   text-align: left;
   position: relative;
 }
@@ -255,17 +262,9 @@
   opacity: 1;
 }
 
-/* Active indicator line - matches token details style */
+/* Active indicator - subtle background glow instead of border */
 .settings-nav-item.active::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 3px;
-  height: 20px;
-  background: var(--primary-color);
-  border-radius: 0 3px 3px 0;
+  display: none;
 }
 
 .settings-nav-divider {
@@ -296,8 +295,11 @@
 .settings-content {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 24px;
+  padding: 32px 40px;
   background: var(--bg-primary);
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
 }
 
 .settings-tab {
@@ -344,26 +346,25 @@
 }
 
 .settings-section-title {
-  margin: 0 0 10px;
-  font-size: 0.65rem;
-  font-weight: 700;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
+  margin: 0 0 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
 }
 
 .settings-section-title i {
-  font-size: 0.85rem;
-  opacity: 0.7;
+  font-size: 1rem;
+  color: var(--primary-color);
+  opacity: 0.9;
 }
 
 .settings-section-description {
-  margin: -6px 0 12px;
-  font-size: 0.8rem;
-  color: var(--text-muted);
+  margin: -8px 0 16px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
   line-height: 1.5;
 }
 
@@ -372,7 +373,7 @@
   flex-direction: column;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: 12px;
   overflow: hidden;
 }
 
@@ -380,10 +381,10 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
-  padding: 12px 14px;
+  gap: 20px;
+  padding: 16px 20px;
   background: var(--bg-secondary);
-  transition: background 0.15s ease;
+  transition: background 0.2s ease;
 }
 
 .settings-field:not(:last-child) {
@@ -2264,14 +2265,15 @@
 
 /* Settings Input */
 .settings-input {
-  padding: 7px 10px;
+  padding: 10px 14px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--text-primary);
-  font-size: 0.8rem;
+  font-size: 0.9rem;
   font-weight: 500;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
+  font-family: var(--font-mono);
 }
 
 .settings-input:hover {
@@ -2282,7 +2284,7 @@
 .settings-input:focus {
   outline: none;
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px var(--primary-alpha-10);
+  box-shadow: 0 0 0 3px var(--primary-alpha-10);
 }
 
 .settings-input::placeholder {
