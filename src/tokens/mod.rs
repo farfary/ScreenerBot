@@ -45,6 +45,7 @@ pub use database::{
     get_rejection_stats_async,
     get_rejected_tokens_async,
     get_token_async,
+    get_token_info_batch_async,
     get_tokens_no_market_async,
     init_global_database,
     is_market_data_stale_async,

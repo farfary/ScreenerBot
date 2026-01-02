@@ -2144,11 +2144,23 @@ window.filteringPage = {
           <tbody>
       `;
       
-      html += tokens.map(t => `
+      html += tokens.map(t => {
+        const src = t.image_url;
+        const logo = src
+          ? `<img class="token-logo" alt="" src="${Utils.escapeHtml(src)}" style="width: 24px; height: 24px; border-radius: 50%;" />`
+          : '<span class="token-logo" style="width: 24px; height: 24px; display: inline-block; text-align: center; line-height: 24px; font-size: 10px; background: var(--bg-secondary); border-radius: 50%;">N/A</span>';
+        const sym = Utils.escapeHtml(t.symbol || "—");
+        const name = t.name ? `<div class="token-name" style="font-size: 0.75rem; color: var(--text-secondary)">${Utils.escapeHtml(t.name)}</div>` : "";
+        
+        return `
         <tr>
           <td>
             <div style="display: flex; align-items: center; gap: 8px">
-              <span style="font-family: var(--font-data); font-weight: 500">${t.mint.substring(0, 4)}...${t.mint.substring(t.mint.length - 4)}</span>
+              ${logo}
+              <div>
+                <div style="font-family: var(--font-data); font-weight: 500">${sym}</div>
+                ${name}
+              </div>
               <button class="btn-icon small" onclick="Utils.copyToClipboard('${t.mint}')" title="Copy Mint">
                 <i class="icon-copy"></i>
               </button>
@@ -2164,10 +2176,10 @@ window.filteringPage = {
             ${Utils.formatTimeAgo(new Date(t.rejected_at))}
           </td>
         </tr>
-      `).join('');
-      
+      `;}).join("");
+
       html += `</tbody></table>`;
-      
+
       // Pagination
       html += `
         <div class="pagination-controls">

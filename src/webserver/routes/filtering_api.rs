@@ -12,7 +12,7 @@ use std::{collections::HashMap, sync::Arc};
 use crate::{
     filtering,
     logger::{self, LogTag},
-    tokens::{get_rejected_tokens_async, get_rejection_stats_async},
+    tokens::{get_rejected_tokens_async, get_rejection_stats_async, get_token_info_batch_async},
     webserver::state::AppState,
     webserver::utils::{error_response, success_response},
 };
@@ -649,6 +649,9 @@ struct RejectedTokensQuery {
 #[derive(Debug, Serialize)]
 struct RejectedTokenEntry {
     mint: String,
+    symbol: Option<String>,
+    name: Option<String>,
+    image_url: Option<String>,
     reason: String,
     display_label: String,
     source: String,
@@ -663,9 +666,23 @@ async fn get_rejected_tokens_handler(Query(params): Query<RejectedTokensQuery>) 
     
     match get_rejected_tokens_async(params.reason, params.source, limit, offset).await {
         Ok(tokens) => {
+            // Collect mints for batch token info lookup
+            let mints: Vec<String> = tokens.iter().map(|(mint, _, _, _)| mint.clone()).collect();
+            
+            // Fetch token info (symbol, name, image) in a single batch query
+            let token_info = get_token_info_batch_async(mints).await.unwrap_or_default();
+            
             let entries: Vec<RejectedTokenEntry> = tokens.into_iter().map(|(mint, reason, source, ts)| {
+                let (symbol, name, image_url) = token_info
+                    .get(&mint)
+                    .cloned()
+                    .unwrap_or((None, None, None));
+                
                 RejectedTokenEntry {
                     mint,
+                    symbol,
+                    name,
+                    image_url,
                     display_label: get_rejection_display_label(&reason),
                     reason,
                     source,

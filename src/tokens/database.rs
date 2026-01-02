@@ -936,6 +936,66 @@ impl TokenDatabase {
         Ok(result)
     }
 
+    /// Get basic token info (symbol, name, image_url) for multiple tokens in a single query
+    /// Returns HashMap<mint, (symbol, name, image_url)> - optimized for display purposes
+    pub fn get_token_info_batch(
+        &self,
+        mints: &[String],
+    ) -> TokenResult<HashMap<String, (Option<String>, Option<String>, Option<String>)>> {
+        if mints.is_empty() {
+            return Ok(HashMap::new());
+        }
+
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let placeholders: String = mints.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+
+        // Join tokens table with market data to get symbol, name, and image
+        // Priority: DexScreener image > GeckoTerminal image
+        let query = format!(
+            r#"
+            SELECT 
+                t.mint,
+                t.symbol,
+                t.name,
+                COALESCE(d.image_url, g.image_url) as image_url
+            FROM tokens t
+            LEFT JOIN market_dexscreener d ON t.mint = d.mint
+            LEFT JOIN market_geckoterminal g ON t.mint = g.mint
+            WHERE t.mint IN ({})
+            "#,
+            placeholders
+        );
+
+        let mut stmt = conn.prepare(&query).map_err(|e| {
+            TokenError::Database(format!("Failed to prepare batch token info query: {}", e))
+        })?;
+
+        let mint_refs: Vec<&str> = mints.iter().map(|s| s.as_str()).collect();
+
+        let rows = stmt
+            .query_map(params_from_iter(mint_refs), |row| {
+                let mint: String = row.get(0)?;
+                let symbol: Option<String> = row.get(1)?;
+                let name: Option<String> = row.get(2)?;
+                let image_url: Option<String> = row.get(3)?;
+                Ok((mint, symbol, name, image_url))
+            })
+            .map_err(|e| TokenError::Database(format!("Batch token info query failed: {}", e)))?;
+
+        let mut result = HashMap::with_capacity(mints.len());
+        for row in rows {
+            let (mint, symbol, name, image_url) =
+                row.map_err(|e| TokenError::Database(format!("Row parse failed: {}", e)))?;
+            result.insert(mint, (symbol, name, image_url));
+        }
+
+        Ok(result)
+    }
+
     // ========================================================================
     // POOL DATA OPERATIONS
     // ========================================================================
@@ -3414,6 +3474,19 @@ pub async fn get_token_images_batch_async(
         .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
 
     tokio::task::spawn_blocking(move || db.get_token_images_batch(&mints))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async wrapper for get_token_info_batch (returns HashMap<mint, (symbol, name, image_url)>)
+/// Fetches basic token info for multiple tokens in a single query - use for display purposes
+pub async fn get_token_info_batch_async(
+    mints: Vec<String>,
+) -> TokenResult<HashMap<String, (Option<String>, Option<String>, Option<String>)>> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+
+    tokio::task::spawn_blocking(move || db.get_token_info_batch(&mints))
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
 }
