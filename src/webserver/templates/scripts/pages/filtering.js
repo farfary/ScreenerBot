@@ -37,6 +37,7 @@ const state = {
 const FILTER_TABS = [
   { id: "status", label: '<i class="icon-chart-bar"></i> Status' },
   { id: "analytics", label: '<i class="icon-pie-chart"></i> Analytics' },
+  { id: "explorer", label: '<i class="icon-folder"></i> Explorer' },
   { id: "meta", label: '<i class="icon-settings"></i> Core' },
   { id: "dexscreener", label: '<i class="icon-trending-up"></i> DexScreener' },
   { id: "geckoterminal", label: '<i class="icon-trending-up"></i> GeckoTerminal' },
@@ -995,147 +996,192 @@ function renderAnalyticsView() {
 
   const data = state.analytics;
   
-  // Overview section
-  const overviewHtml = `
-    <div class="analytics-section">
-      <h3 class="analytics-section-title">
-        <i class="icon-bar-chart"></i> Overview
-      </h3>
-      <div class="analytics-overview-grid">
-        <div class="analytics-metric primary">
-          <div class="metric-icon"><i class="icon-database"></i></div>
-          <div class="metric-content">
-            <span class="metric-value">${Utils.formatNumber(data.total_tokens, 0)}</span>
-            <span class="metric-label">Total Tokens</span>
-          </div>
+  // Header
+  const headerHtml = `
+    <div class="analytics-header">
+      <div class="analytics-title-group">
+        <div class="analytics-title">
+          <i class="icon-pie-chart"></i> Filtering Analysis
         </div>
-        <div class="analytics-metric success">
-          <div class="metric-icon"><i class="icon-check-circle"></i></div>
-          <div class="metric-content">
-            <span class="metric-value">${Utils.formatNumber(data.total_passed, 0)}</span>
-            <span class="metric-label">Passed (${data.pass_rate}%)</span>
-          </div>
+        <div class="analytics-subtitle">
+          Performance metrics and rejection analysis
         </div>
-        <div class="analytics-metric warning">
-          <div class="metric-icon"><i class="icon-x-circle"></i></div>
-          <div class="metric-content">
-            <span class="metric-value">${Utils.formatNumber(data.total_rejected, 0)}</span>
-            <span class="metric-label">Rejected (${data.rejection_rate}%)</span>
-          </div>
-        </div>
-        <div class="analytics-metric">
-          <div class="metric-icon"><i class="icon-clock"></i></div>
-          <div class="metric-content">
-            <span class="metric-value">${Utils.formatTimeAgo(new Date(data.last_updated))}</span>
-            <span class="metric-label">Last Updated</span>
-          </div>
-        </div>
+      </div>
+      <div class="analytics-actions">
+        <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.refreshAnalytics()">
+          <i class="icon-refresh-cw"></i> Refresh
+        </button>
       </div>
     </div>
   `;
 
-  // Pass rate visual bar
-  const passRateHtml = `
-    <div class="analytics-section">
-      <h3 class="analytics-section-title">
-        <i class="icon-percent"></i> Pass Rate
-      </h3>
-      <div class="pass-rate-bar-container">
-        <div class="pass-rate-bar">
-          <div class="pass-rate-fill passed" style="width: ${data.pass_rate}%"></div>
-          <div class="pass-rate-fill rejected" style="width: ${data.rejection_rate}%"></div>
+  // KPI Cards
+  const kpiHtml = `
+    <div class="kpi-grid">
+      <!-- Total Tokens -->
+      <div class="kpi-card">
+        <div class="kpi-content">
+          <span class="kpi-label">Total Scanned</span>
+          <span class="kpi-value">${Utils.formatNumber(data.total_tokens, 0)}</span>
+          <span class="kpi-subtext">
+            <i class="icon-clock"></i> Updated ${Utils.formatTimeAgo(new Date(data.last_updated))}
+          </span>
         </div>
-        <div class="pass-rate-labels">
-          <span class="passed-label"><i class="icon-check"></i> ${data.pass_rate}% Passed</span>
-          <span class="rejected-label"><i class="icon-x"></i> ${data.rejection_rate}% Rejected</span>
+        <i class="icon-database kpi-icon"></i>
+      </div>
+
+      <!-- Passed -->
+      <div class="kpi-card">
+        <div class="kpi-content">
+          <span class="kpi-label">Passed Tokens</span>
+          <span class="kpi-value" style="color: var(--success-color)">${Utils.formatNumber(data.total_passed, 0)}</span>
+          <span class="kpi-subtext">
+            <span style="color: var(--success-color)">${data.pass_rate}%</span> pass rate
+          </span>
         </div>
+        <i class="icon-check-circle kpi-icon" style="color: var(--success-color); opacity: 0.2"></i>
+        <div class="pass-rate-visual" style="position: absolute; bottom: 0; left: 0; right: 0; height: 4px; border-radius: 0;">
+          <div class="pass-rate-segment passed" style="width: ${data.pass_rate}%"></div>
+        </div>
+      </div>
+
+      <!-- Rejected -->
+      <div class="kpi-card">
+        <div class="kpi-content">
+          <span class="kpi-label">Rejected Tokens</span>
+          <span class="kpi-value" style="color: var(--error-color)">${Utils.formatNumber(data.total_rejected, 0)}</span>
+          <span class="kpi-subtext">
+            <span style="color: var(--error-color)">${data.rejection_rate}%</span> rejection rate
+          </span>
+        </div>
+        <i class="icon-x-circle kpi-icon" style="color: var(--error-color); opacity: 0.2"></i>
       </div>
     </div>
   `;
 
-  // Category breakdown
-  const categoryHtml = data.by_category && data.by_category.length > 0 ? `
-    <div class="analytics-section">
-      <h3 class="analytics-section-title">
-        <i class="icon-layers"></i> Rejection by Category
-      </h3>
-      <div class="category-grid">
-        ${data.by_category.map(cat => `
-          <div class="category-card" data-category="${Utils.escapeHtml(cat.category)}">
-            <div class="category-header">
-              <div class="category-icon"><i class="icon-${Utils.escapeHtml(cat.icon)}"></i></div>
-              <div class="category-info">
-                <span class="category-label">${Utils.escapeHtml(cat.label)}</span>
-                <span class="category-count">${Utils.formatNumber(cat.count, 0)} tokens</span>
+  // Charts Section
+  const chartsHtml = `
+    <div class="charts-grid">
+      <!-- Rejection by Category -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title"><i class="icon-layers"></i> Rejection by Category</div>
+        </div>
+        <div class="chart-body">
+          ${data.by_category && data.by_category.length > 0 ? data.by_category.map(cat => `
+            <div class="bar-chart-row">
+              <div class="bar-label-col">
+                <div class="bar-icon"><i class="icon-${Utils.escapeHtml(cat.icon)}"></i></div>
+                <div class="bar-label" title="${Utils.escapeHtml(cat.label)}">${Utils.escapeHtml(cat.label)}</div>
               </div>
-              <div class="category-percentage">${cat.percentage}%</div>
-            </div>
-            <div class="category-bar">
-              <div class="category-bar-fill" style="width: ${Math.min(cat.percentage, 100)}%"></div>
-            </div>
-            <div class="category-reasons">
-              ${cat.reasons.slice(0, 3).map(r => `
-                <div class="reason-row">
-                  <span class="reason-name">${Utils.escapeHtml(r.display_label)}</span>
-                  <span class="reason-count">${Utils.formatNumber(r.count, 0)}</span>
+              <div class="bar-track-col">
+                <div class="bar-track">
+                  <div class="bar-fill" style="width: ${Math.min(cat.percentage, 100)}%; background-color: var(--error-color)"></div>
                 </div>
-              `).join('')}
-              ${cat.reasons.length > 3 ? `<div class="reason-more">+${cat.reasons.length - 3} more</div>` : ''}
+                <div class="bar-meta">
+                  <span>${Utils.formatNumber(cat.count, 0)} tokens</span>
+                  <span>${cat.percentage}%</span>
+                </div>
+              </div>
             </div>
-          </div>
-        `).join('')}
+          `).join('') : '<div class="analytics-empty">No category data</div>'}
+        </div>
+      </div>
+
+      <!-- Rejection by Source -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <div class="chart-title"><i class="icon-git-branch"></i> Rejection by Source</div>
+        </div>
+        <div class="chart-body">
+          ${data.by_source && data.by_source.length > 0 ? data.by_source.map(src => `
+            <div class="bar-chart-row">
+              <div class="bar-label-col">
+                <div class="bar-label" style="font-weight: 600; width: auto">${Utils.escapeHtml(src.source)}</div>
+              </div>
+              <div class="bar-track-col">
+                <div class="bar-track">
+                  <div class="bar-fill" style="width: ${Math.min(src.percentage, 100)}%; background-color: var(--warning-color)"></div>
+                </div>
+                <div class="bar-meta">
+                  <span>${Utils.formatNumber(src.count, 0)} tokens</span>
+                  <span>${src.percentage}%</span>
+                </div>
+              </div>
+            </div>
+          `).join('') : '<div class="analytics-empty">No source data</div>'}
+        </div>
       </div>
     </div>
-  ` : '';
+  `;
 
-  // Source breakdown
-  const sourceHtml = data.by_source && data.by_source.length > 0 ? `
-    <div class="analytics-section">
-      <h3 class="analytics-section-title">
-        <i class="icon-git-branch"></i> Rejection by Source
-      </h3>
-      <div class="source-breakdown-grid">
-        ${data.by_source.map(src => `
-          <div class="source-card ${Utils.escapeHtml(src.source.toLowerCase())}">
-            <div class="source-header">
-              <span class="source-name">${Utils.escapeHtml(src.source)}</span>
-              <span class="source-count">${Utils.formatNumber(src.count, 0)}</span>
-              <span class="source-percentage">${src.percentage}%</span>
-            </div>
-            <div class="source-bar">
-              <div class="source-bar-fill" style="width: ${Math.min(src.percentage, 100)}%"></div>
-            </div>
-            <div class="source-top-reasons">
-              <div class="top-reasons-title">Top Rejection Reasons:</div>
-              ${src.top_reasons.map(r => `
-                <div class="source-reason-row">
-                  <span class="reason-label">${Utils.escapeHtml(r.display_label)}</span>
-                  <span class="reason-badge">${Utils.formatNumber(r.count, 0)}</span>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        `).join('')}
+  // Bottom Section: Top Reasons & Data Quality
+  const bottomHtml = `
+    <div class="charts-grid">
+      <!-- Top Rejection Reasons -->
+      <div class="chart-card" style="grid-column: span 2">
+        <div class="chart-header">
+          <div class="chart-title"><i class="icon-list"></i> Top Rejection Reasons</div>
+        </div>
+        <div class="reasons-table-container">
+          <table class="reasons-table">
+            <thead>
+              <tr>
+                <th>Reason</th>
+                <th>Category</th>
+                <th style="text-align: right">Count</th>
+                <th style="text-align: right">%</th>
+                <th style="text-align: right">Impact</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.top_reasons && data.top_reasons.length > 0 ? data.top_reasons.slice(0, 10).map(r => {
+                const maxCount = data.top_reasons[0].count;
+                const relativePercent = (r.count / maxCount) * 100;
+                return `
+                  <tr>
+                    <td>
+                      <span style="font-weight: 500">${Utils.escapeHtml(r.display_label)}</span>
+                    </td>
+                    <td>
+                      <span class="reason-badge">${Utils.escapeHtml(r.category)}</span>
+                    </td>
+                    <td style="text-align: right; font-family: var(--font-data)">
+                      ${Utils.formatNumber(r.count, 0)}
+                    </td>
+                    <td style="text-align: right; font-family: var(--font-data); color: var(--text-secondary)">
+                      ${r.percentage}%
+                    </td>
+                    <td class="reason-bar-cell">
+                      <div class="mini-bar">
+                        <div class="mini-bar-fill" style="width: ${relativePercent}%"></div>
+                      </div>
+                    </td>
+                  </tr>
+                `;
+              }).join('') : '<tr><td colspan="5" style="text-align: center; padding: 20px">No data available</td></tr>'}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
-  ` : '';
+  `;
 
-  // Data quality section
-  const dataQualityHtml = data.data_quality && data.data_quality.length > 0 ? `
-    <div class="analytics-section">
+  // Data Quality Section (if exists)
+  const dqHtml = data.data_quality && data.data_quality.length > 0 ? `
+    <div class="analytics-section" style="margin-top: var(--spacing-lg)">
       <h3 class="analytics-section-title">
         <i class="icon-alert-triangle"></i> Data Quality Issues
       </h3>
-      <div class="data-quality-grid">
+      <div class="dq-grid">
         ${data.data_quality.map(dq => `
-          <div class="data-quality-item ${Utils.escapeHtml(dq.severity)}">
-            <div class="dq-info">
+          <div class="dq-card ${Utils.escapeHtml(dq.severity)}">
+            <i class="icon-alert-circle dq-icon"></i>
+            <div class="dq-content">
               <span class="dq-label">${Utils.escapeHtml(dq.label)}</span>
-              <span class="dq-severity ${Utils.escapeHtml(dq.severity)}">${Utils.escapeHtml(dq.severity)}</span>
-            </div>
-            <div class="dq-stats">
-              <span class="dq-count">${Utils.formatNumber(dq.count, 0)}</span>
-              <span class="dq-percentage">${dq.percentage}%</span>
+              <div class="dq-stats">
+                ${Utils.formatNumber(dq.count, 0)} tokens (${dq.percentage}%)
+              </div>
             </div>
           </div>
         `).join('')}
@@ -1143,55 +1189,132 @@ function renderAnalyticsView() {
     </div>
   ` : '';
 
-  // Top rejection reasons table
-  const topReasonsHtml = data.top_reasons && data.top_reasons.length > 0 ? `
-    <div class="analytics-section">
-      <h3 class="analytics-section-title">
-        <i class="icon-list"></i> Top Rejection Reasons
-      </h3>
-      <div class="top-reasons-table-container">
-        <table class="top-reasons-table">
-          <thead>
-            <tr>
-              <th class="rank-col">#</th>
-              <th class="reason-col">Reason</th>
-              <th class="source-col">Source</th>
-              <th class="count-col">Count</th>
-              <th class="bar-col">Impact</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${data.top_reasons.map((r, i) => {
-              const maxCount = data.top_reasons[0]?.count || 1;
-              const barWidth = (r.count / maxCount) * 100;
-              return `
-                <tr>
-                  <td class="rank-col">${i + 1}</td>
-                  <td class="reason-col">${Utils.escapeHtml(r.display_label)}</td>
-                  <td class="source-col"><span class="source-badge ${Utils.escapeHtml(r.source.toLowerCase())}">${Utils.escapeHtml(r.source)}</span></td>
-                  <td class="count-col">${Utils.formatNumber(r.count, 0)}</td>
-                  <td class="bar-col">
-                    <div class="impact-bar">
-                      <div class="impact-bar-fill" style="width: ${barWidth}%"></div>
-                    </div>
-                  </td>
-                </tr>
-              `;
-            }).join('')}
-          </tbody>
-        </table>
+  // Rejected Tokens Explorer Section
+  const explorerHtml = `
+    <div class="analytics-section" style="margin-top: var(--spacing-lg)">
+      <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md)">
+        <h3 class="analytics-section-title" style="margin: 0">
+          <i class="icon-search"></i> Rejected Tokens Explorer
+        </h3>
+        <div class="explorer-controls" style="display: flex; gap: var(--spacing-sm)">
+          <select id="explorer-reason-filter" class="form-select" onchange="window.filteringPage.filterExplorer()">
+            <option value="">All Reasons</option>
+            ${data.top_reasons ? data.top_reasons.map(r => `<option value="${r.reason}">${Utils.escapeHtml(r.display_label)}</option>`).join('') : ''}
+          </select>
+          <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.loadExplorer(0)">
+            <i class="icon-refresh-cw"></i>
+          </button>
+          <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.exportCsv()" title="Export to CSV">
+            <i class="icon-download"></i>
+          </button>
+        </div>
+      </div>
+      
+      <div class="explorer-table-container" id="rejected-tokens-table">
+        <div class="loading-spinner small"></div> Loading tokens...
+      </div>
+      
+      <div class="pagination-controls" style="display: flex; justify-content: center; gap: var(--spacing-md); margin-top: var(--spacing-md)">
+        <button class="btn btn-sm btn-secondary" id="explorer-prev" onclick="window.filteringPage.prevPage()" disabled>Previous</button>
+        <span id="explorer-page-info" style="align-self: center; font-family: var(--font-data)">Page 1</span>
+        <button class="btn btn-sm btn-secondary" id="explorer-next" onclick="window.filteringPage.nextPage()">Next</button>
       </div>
     </div>
-  ` : '';
+  `;
+
+  // Trigger initial load of explorer data if not already loaded
+  // setTimeout(() => {
+  //   if (!state.explorerLoaded) {
+  //     window.filteringPage.loadExplorer(0);
+  //     state.explorerLoaded = true;
+  //   }
+  // }, 100);
 
   return `
     <div class="analytics-view">
-      ${overviewHtml}
-      ${passRateHtml}
-      ${categoryHtml}
-      ${sourceHtml}
-      ${dataQualityHtml}
-      ${topReasonsHtml}
+      ${headerHtml}
+      ${kpiHtml}
+      ${chartsHtml}
+      ${bottomHtml}
+    </div>
+  `;
+}
+
+// ============================================================================
+// EXPLORER VIEW - Tree-based rejection explorer
+// ============================================================================
+
+function renderExplorerView() {
+  if (!state.analytics) {
+    return `
+      <div class="analytics-loading">
+        <div class="loading-spinner"></div>
+        <p>Loading explorer data...</p>
+      </div>
+    `;
+  }
+
+  const data = state.analytics;
+  
+  // Header
+  const headerHtml = `
+    <div class="analytics-header">
+      <div class="analytics-title-group">
+        <div class="analytics-title">
+          <i class="icon-folder"></i> Rejection Explorer
+        </div>
+        <div class="analytics-subtitle">
+          Browse all rejection reasons and affected tokens
+        </div>
+      </div>
+      <div class="analytics-actions">
+        <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.refreshAnalytics()">
+          <i class="icon-refresh-cw"></i> Refresh
+        </button>
+      </div>
+    </div>
+  `;
+
+  // Tree View
+  const treeHtml = `
+    <div class="explorer-layout">
+      <div class="explorer-sidebar">
+        <div class="explorer-tree">
+          ${data.by_category.map(cat => `
+            <div class="tree-category">
+              <div class="tree-category-header" onclick="window.filteringPage.toggleCategory('${cat.category}')">
+                <i class="icon-${Utils.escapeHtml(cat.icon)} tree-icon"></i>
+                <span class="tree-label">${Utils.escapeHtml(cat.label)}</span>
+                <span class="tree-count">${Utils.formatNumber(cat.count, 0)}</span>
+                <i class="icon-chevron-down tree-toggle" id="toggle-${cat.category}"></i>
+              </div>
+              <div class="tree-reasons" id="reasons-${cat.category}" style="display: none">
+                ${cat.reasons.map(r => `
+                  <div class="tree-reason" onclick="window.filteringPage.selectReason('${r.reason}', '${Utils.escapeHtml(r.display_label.replace(/'/g, "\\'"))}')" id="reason-${r.reason}">
+                    <span class="tree-reason-label">${Utils.escapeHtml(r.display_label)}</span>
+                    <span class="tree-reason-count">${Utils.formatNumber(r.count, 0)}</span>
+                  </div>
+                `).join('')}
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="explorer-content">
+        <div id="explorer-detail-view">
+          <div class="explorer-placeholder">
+            <i class="icon-arrow-left"></i>
+            <p>Select a rejection reason to view tokens</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  return `
+    <div class="analytics-view">
+      ${headerHtml}
+      ${treeHtml}
     </div>
   `;
 }
@@ -1320,6 +1443,11 @@ function renderConfigPanels() {
   // Analytics tab shows advanced analysis
   if (state.activeTab === "analytics") {
     return renderAnalyticsView();
+  }
+
+  // Explorer tab shows tree view
+  if (state.activeTab === "explorer") {
+    return renderExplorerView();
   }
 
   const targetSource = state.activeTab || "meta";
@@ -1813,8 +1941,8 @@ export function createLifecycle() {
             AppState.save("filtering_activeTab", tabId);
             updateSearchBar();
             
-            // Load analytics data if switching to analytics tab
-            if (tabId === "analytics" && !state.analytics) {
+            // Load analytics data if switching to analytics or explorer tab
+            if ((tabId === "analytics" || tabId === "explorer") && !state.analytics) {
               await loadAnalytics();
             }
             
@@ -1878,6 +2006,166 @@ export function createLifecycle() {
     },
   };
 }
+
+// Expose for inline handlers
+window.filteringPage = {
+  explorerPage: 0,
+  explorerLimit: 50,
+  currentReason: null,
+  currentReasonLabel: null,
+  
+  refreshAnalytics: async () => {
+    const btn = document.querySelector('.analytics-actions button');
+    if (btn) {
+      const originalContent = btn.innerHTML;
+      btn.innerHTML = '<div class="loading-spinner small"></div> Refreshing...';
+      btn.disabled = true;
+      try {
+        await loadAnalytics();
+        if (window.filteringPage.currentReason) {
+          window.filteringPage.loadExplorer(window.filteringPage.explorerPage);
+        }
+      } finally {
+        btn.innerHTML = originalContent;
+        btn.disabled = false;
+      }
+    } else {
+      await loadAnalytics();
+    }
+  },
+  
+  toggleCategory: (category) => {
+    const el = document.getElementById(`reasons-${category}`);
+    const toggle = document.getElementById(`toggle-${category}`);
+    if (el) {
+      const isHidden = el.style.display === 'none';
+      el.style.display = isHidden ? 'block' : 'none';
+      if (toggle) {
+        toggle.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+      }
+    }
+  },
+  
+  selectReason: (reason, label) => {
+    // Update active state
+    document.querySelectorAll('.tree-reason').forEach(el => el.classList.remove('active'));
+    const activeEl = document.getElementById(`reason-${reason}`);
+    if (activeEl) activeEl.classList.add('active');
+    
+    window.filteringPage.currentReason = reason;
+    window.filteringPage.currentReasonLabel = label;
+    window.filteringPage.loadExplorer(0);
+  },
+  
+  prevPage: () => {
+    if (window.filteringPage.explorerPage > 0) {
+      window.filteringPage.loadExplorer(window.filteringPage.explorerPage - 1);
+    }
+  },
+  
+  nextPage: () => {
+    window.filteringPage.loadExplorer(window.filteringPage.explorerPage + 1);
+  },
+  
+  exportCsv: () => {
+    const reason = window.filteringPage.currentReason;
+    if (!reason) return;
+    
+    let url = `/api/filtering/export-rejected-tokens?reason=${encodeURIComponent(reason)}`;
+    window.open(url, '_blank');
+  },
+  
+  loadExplorer: async (page) => {
+    window.filteringPage.explorerPage = page;
+    const container = document.getElementById('explorer-detail-view');
+    const reason = window.filteringPage.currentReason;
+    const label = window.filteringPage.currentReasonLabel;
+    
+    if (!container || !reason) return;
+    
+    container.innerHTML = `
+      <div class="explorer-detail-header">
+        <div class="detail-title">
+          <span class="reason-badge large">${Utils.escapeHtml(label)}</span>
+        </div>
+        <div class="detail-actions">
+          <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.exportCsv()" title="Export to CSV">
+            <i class="icon-download"></i> Export CSV
+          </button>
+        </div>
+      </div>
+      <div class="explorer-table-wrapper">
+        <div class="loading-spinner small"></div> Loading tokens...
+      </div>
+    `;
+    
+    try {
+      let url = `/api/filtering/rejected-tokens?limit=${window.filteringPage.explorerLimit}&offset=${page * window.filteringPage.explorerLimit}&reason=${encodeURIComponent(reason)}`;
+      
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Failed to fetch tokens');
+      
+      const tokens = await response.json();
+      const wrapper = container.querySelector('.explorer-table-wrapper');
+      
+      if (tokens.length === 0) {
+        wrapper.innerHTML = '<div class="analytics-empty">No tokens found for this reason</div>';
+        return;
+      }
+      
+      let html = `
+        <table class="reasons-table">
+          <thead>
+            <tr>
+              <th>Token</th>
+              <th>Source</th>
+              <th style="text-align: right">Rejected At</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      
+      html += tokens.map(t => `
+        <tr>
+          <td>
+            <div style="display: flex; align-items: center; gap: 8px">
+              <span style="font-family: var(--font-data); font-weight: 500">${t.mint.substring(0, 4)}...${t.mint.substring(t.mint.length - 4)}</span>
+              <button class="btn-icon small" onclick="Utils.copyToClipboard('${t.mint}')" title="Copy Mint">
+                <i class="icon-copy"></i>
+              </button>
+              <a href="https://dexscreener.com/solana/${t.mint}" target="_blank" class="btn-icon small" title="View on DexScreener">
+                <i class="icon-external-link"></i>
+              </a>
+            </div>
+          </td>
+          <td>
+            <span class="source-badge ${t.source.toLowerCase()}">${Utils.escapeHtml(t.source)}</span>
+          </td>
+          <td style="text-align: right; font-family: var(--font-data); color: var(--text-secondary)">
+            ${Utils.formatTimeAgo(new Date(t.rejected_at))}
+          </td>
+        </tr>
+      `).join('');
+      
+      html += `</tbody></table>`;
+      
+      // Pagination
+      html += `
+        <div class="pagination-controls">
+          <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.prevPage()" ${page === 0 ? 'disabled' : ''}>Previous</button>
+          <span style="align-self: center; font-family: var(--font-data)">Page ${page + 1}</span>
+          <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.nextPage()" ${tokens.length < window.filteringPage.explorerLimit ? 'disabled' : ''}>Next</button>
+        </div>
+      `;
+      
+      wrapper.innerHTML = html;
+      
+    } catch (err) {
+      console.error("Failed to load explorer:", err);
+      container.innerHTML = `<div class="error-message">Failed to load tokens: ${err.message}</div>`;
+    }
+  }
+};
 
 // Register the page with the lifecycle system
 registerPage("filtering", createLifecycle());

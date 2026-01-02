@@ -1447,6 +1447,64 @@ impl TokenDatabase {
         Ok(results)
     }
 
+    /// Get list of rejected tokens with pagination and optional filtering
+    pub fn get_rejected_tokens(
+        &self,
+        reason_filter: Option<String>,
+        source_filter: Option<String>,
+        limit: usize,
+        offset: usize,
+    ) -> TokenResult<Vec<(String, String, String, i64)>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let mut query = "SELECT mint, last_rejection_reason, last_rejection_source, last_rejection_at FROM update_tracking WHERE last_rejection_reason IS NOT NULL".to_string();
+        
+        if reason_filter.is_some() {
+            query.push_str(" AND last_rejection_reason = :reason");
+        }
+        
+        if source_filter.is_some() {
+            query.push_str(" AND last_rejection_source = :source");
+        }
+        
+        query.push_str(" ORDER BY last_rejection_at DESC LIMIT :limit OFFSET :offset");
+
+        let mut stmt = conn
+            .prepare(&query)
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+
+        let rows = stmt
+            .query_map(
+                rusqlite::named_params! {
+                    ":reason": reason_filter,
+                    ":source": source_filter,
+                    ":limit": limit as i64,
+                    ":offset": offset as i64,
+                },
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, String>(2).unwrap_or_default(),
+                        row.get::<_, Option<i64>>(3)?.unwrap_or(0),
+                    ))
+                },
+            )
+            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            if let Ok(entry) = row {
+                results.push(entry);
+            }
+        }
+
+        Ok(results)
+    }
+
     /// Check if token has stale market data (>2 minutes old or missing)
     pub fn is_market_data_stale(&self, mint: &str, threshold_seconds: i64) -> TokenResult<bool> {
         let conn = self
@@ -3565,6 +3623,23 @@ pub async fn get_rejection_stats_async() -> TokenResult<Vec<(String, String, i64
     tokio::task::spawn_blocking(move || db.get_rejection_stats())
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async: get rejected tokens list
+pub async fn get_rejected_tokens_async(
+    reason_filter: Option<String>,
+    source_filter: Option<String>,
+    limit: usize,
+    offset: usize,
+) -> TokenResult<Vec<(String, String, String, i64)>> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+    
+    tokio::task::spawn_blocking(move || {
+        db.get_rejected_tokens(reason_filter, source_filter, limit, offset)
+    })
+    .await
+    .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
 }
 
 fn map_tracking_row(row: &rusqlite::Row) -> rusqlite::Result<UpdateTrackingInfo> {

@@ -43,6 +43,7 @@ pub use database::{
     get_full_token_for_source_async,
     get_global_database,
     get_rejection_stats_async,
+    get_rejected_tokens_async,
     get_token_async,
     get_tokens_no_market_async,
     init_global_database,

@@ -1,17 +1,18 @@
 use axum::{
+    extract::Query,
     http::StatusCode,
     response::Response,
     routing::{get, post},
     Router,
 };
-use chrono::Utc;
-use serde::Serialize;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     filtering,
     logger::{self, LogTag},
-    tokens::get_rejection_stats_async,
+    tokens::{get_rejected_tokens_async, get_rejection_stats_async},
     webserver::state::AppState,
     webserver::utils::{error_response, success_response},
 };
@@ -23,6 +24,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/filtering/stats", get(get_stats))
         .route("/filtering/rejection-stats", get(get_rejection_stats))
         .route("/filtering/analytics", get(get_analytics))
+        .route("/filtering/rejected-tokens", get(get_rejected_tokens_handler))
+        .route("/filtering/export-rejected-tokens", get(export_rejected_tokens))
 }
 
 #[derive(Debug, Serialize)]
@@ -204,6 +207,10 @@ struct RejectionStatEntry {
     display_label: String,
     source: String,
     count: i64,
+    #[serde(default)]
+    category: String,
+    #[serde(default)]
+    percentage: f64,
 }
 
 #[derive(Debug, Serialize)]
@@ -229,9 +236,11 @@ async fn get_rejection_stats() -> Response {
                     *by_source.entry(source.clone()).or_insert(0) += count;
                     RejectionStatEntry {
                         display_label: get_rejection_display_label(&reason).to_string(),
+                        category: get_rejection_category(&reason).to_string(),
                         reason,
                         source,
                         count,
+                        percentage: 0.0, // Calculated on frontend for this view
                     }
                 })
                 .collect();
@@ -499,11 +508,20 @@ async fn get_analytics() -> Response {
                     
                     let mut top_reasons: Vec<RejectionStatEntry> = reasons
                         .into_iter()
-                        .map(|(reason, display_label, count)| RejectionStatEntry {
-                            reason,
-                            display_label,
-                            source: source.clone(),
-                            count,
+                        .map(|(reason, display_label, count)| {
+                            let pct = if src_count > 0 {
+                                (count as f64 / src_count as f64) * 100.0
+                            } else {
+                                0.0
+                            };
+                            RejectionStatEntry {
+                                category: get_rejection_category(&reason).to_string(),
+                                reason,
+                                display_label,
+                                source: source.clone(),
+                                count,
+                                percentage: (pct * 10.0).round() / 10.0,
+                            }
                         })
                         .collect();
                     
@@ -531,11 +549,11 @@ async fn get_analytics() -> Response {
                         0.0
                     };
                     let severity = if pct > 20.0 {
-                        "high"
-                    } else if pct > 10.0 {
-                        "medium"
+                        "critical"
+                    } else if pct > 5.0 {
+                        "warning"
                     } else {
-                        "low"
+                        "info"
                     };
                     DataQualityMetric {
                         label: get_rejection_display_label(&metric),
@@ -550,16 +568,25 @@ async fn get_analytics() -> Response {
             // Build top reasons list
             let mut top_reasons: Vec<RejectionStatEntry> = raw_stats
                 .into_iter()
-                .map(|(reason, source, count)| RejectionStatEntry {
-                    display_label: get_rejection_display_label(&reason),
-                    reason,
-                    source,
-                    count,
+                .map(|(reason, source, count)| {
+                    let pct = if total_rejected > 0 {
+                        (count as f64 / total_rejected as f64) * 100.0
+                    } else {
+                        0.0
+                    };
+                    RejectionStatEntry {
+                        display_label: get_rejection_display_label(&reason),
+                        category: get_rejection_category(&reason).to_string(),
+                        reason,
+                        source,
+                        count,
+                        percentage: (pct * 10.0).round() / 10.0,
+                    }
                 })
                 .collect();
             
             top_reasons.sort_by(|a, b| b.count.cmp(&a.count));
-            top_reasons.truncate(25); // Top 25 reasons
+            // top_reasons.truncate(25); // Removed truncation to show all reasons as requested
             
             // Calculate rates
             let pass_rate = if total_tokens > 0 {
@@ -605,6 +632,131 @@ async fn get_analytics() -> Response {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "ANALYTICS_FAILED",
                 &format!("Failed to fetch analytics: {:?}", err),
+                None,
+            )
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+struct RejectedTokensQuery {
+    reason: Option<String>,
+    source: Option<String>,
+    limit: Option<usize>,
+    offset: Option<usize>,
+}
+
+#[derive(Debug, Serialize)]
+struct RejectedTokenEntry {
+    mint: String,
+    reason: String,
+    display_label: String,
+    source: String,
+    rejected_at: String,
+}
+
+/// GET /api/filtering/rejected-tokens
+/// Get list of rejected tokens with pagination and filtering
+async fn get_rejected_tokens_handler(Query(params): Query<RejectedTokensQuery>) -> Response {
+    let limit = params.limit.unwrap_or(50).min(100); // Max 100 per page
+    let offset = params.offset.unwrap_or(0);
+    
+    match get_rejected_tokens_async(params.reason, params.source, limit, offset).await {
+        Ok(tokens) => {
+            let entries: Vec<RejectedTokenEntry> = tokens.into_iter().map(|(mint, reason, source, ts)| {
+                RejectedTokenEntry {
+                    mint,
+                    display_label: get_rejection_display_label(&reason),
+                    reason,
+                    source,
+                    rejected_at: DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc::now()).to_rfc3339(),
+                }
+            }).collect();
+            
+            success_response(entries)
+        }
+        Err(err) => {
+            logger::warning(
+                LogTag::Filtering,
+                &format!("Failed to fetch rejected tokens: {:?}", err),
+            );
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "FETCH_FAILED",
+                &format!("Failed to fetch rejected tokens: {:?}", err),
+                None,
+            )
+        }
+    }
+}
+
+/// GET /api/filtering/export-rejected-tokens
+/// Export rejected tokens to CSV
+async fn export_rejected_tokens(Query(params): Query<RejectedTokensQuery>) -> Response {
+    // Fetch up to 100,000 tokens for export
+    let limit = 100000;
+    let offset = 0;
+    
+    match get_rejected_tokens_async(params.reason, params.source, limit, offset).await {
+        Ok(tokens) => {
+            let mut wtr = csv::Writer::from_writer(vec![]);
+            // Write header
+            if let Err(e) = wtr.write_record(&["Mint", "Reason", "Display Label", "Source", "Rejected At"]) {
+                return error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "CSV_ERROR",
+                    &format!("Failed to write CSV header: {}", e),
+                    None,
+                );
+            }
+            
+            // Write records
+            for (mint, reason, source, ts) in tokens {
+                let dt = DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc::now()).to_rfc3339();
+                let display_label = get_rejection_display_label(&reason);
+                
+                if let Err(e) = wtr.write_record(&[mint, reason, display_label, source, dt]) {
+                    return error_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "CSV_ERROR",
+                        &format!("Failed to write CSV record: {}", e),
+                        None,
+                    );
+                }
+            }
+            
+            match wtr.into_inner() {
+                Ok(data) => {
+                    let filename = format!("rejected_tokens_{}.csv", Utc::now().format("%Y%m%d_%H%M%S"));
+                    
+                    Response::builder()
+                        .header("Content-Type", "text/csv")
+                        .header("Content-Disposition", format!("attachment; filename=\"{}\"", filename))
+                        .body(axum::body::Body::from(data))
+                        .unwrap_or_else(|_| error_response(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "RESPONSE_ERROR",
+                            "Failed to build response",
+                            None,
+                        ))
+                }
+                Err(e) => error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "CSV_ERROR",
+                    &format!("Failed to finalize CSV: {}", e),
+                    None,
+                )
+            }
+        }
+        Err(err) => {
+            logger::warning(
+                LogTag::Filtering,
+                &format!("Failed to fetch rejected tokens for export: {:?}", err),
+            );
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "FETCH_FAILED",
+                &format!("Failed to fetch rejected tokens: {:?}", err),
                 None,
             )
         }
