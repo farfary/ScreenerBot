@@ -10,6 +10,7 @@ use crate::field_metadata;
 config_struct! {
     /// Telegram bot configuration for notifications and commands
     pub struct TelegramConfig {
+        // === Connection Section ===
         /// Enable Telegram notifications and commands
         #[metadata(field_metadata! {
             label: "Enable Telegram",
@@ -27,15 +28,33 @@ config_struct! {
         })]
         bot_token: String = String::new(),
 
-        /// Your chat ID to receive notifications
+        /// Chat ID for sending notifications (get from @userinfobot or discovery flow)
         #[metadata(field_metadata! {
             label: "Chat ID",
-            hint: "Get this by messaging @userinfobot or @getidsbot on Telegram - they will reply with your chat ID",
+            hint: "Your Telegram chat ID for receiving notifications. Get it by messaging @userinfobot or use the discovery flow.",
             placeholder: "123456789",
             category: "Connection",
         })]
         chat_id: String = String::new(),
 
+        // === Features Section ===
+        /// Bot commands enabled (/status, /positions, /balance, /stop, /start)
+        #[metadata(field_metadata! {
+            label: "Enable Commands",
+            hint: "Allow controlling the bot via Telegram commands: /status, /positions, /balance, /stop, /start",
+            category: "Features",
+        })]
+        commands_enabled: bool = true,
+
+        /// Enable inline action buttons on notifications
+        #[metadata(field_metadata! {
+            label: "Inline Actions",
+            hint: "Show action buttons (sell, close, blacklist) on position notifications",
+            category: "Features",
+        })]
+        inline_actions_enabled: bool = true,
+
+        // === Notifications Section ===
         /// Notification preferences
         #[metadata(field_metadata! {
             label: "Trade Alerts",
@@ -72,14 +91,39 @@ config_struct! {
         })]
         notify_daily_summary: bool = false,
 
-        /// Bot commands enabled (/status, /positions, /balance, /stop, /start)
+        /// Notify on partial exits
         #[metadata(field_metadata! {
-            label: "Enable Commands",
-            hint: "Allow controlling the bot via Telegram commands: /status, /positions, /balance, /stop, /start",
-            category: "Commands",
+            label: "Partial Exits",
+            hint: "Notify when a partial exit (sell percentage) is executed",
+            category: "Notifications",
         })]
-        commands_enabled: bool = true,
+        notify_partial_exit: bool = true,
 
+        /// Notify on DCA executions
+        #[metadata(field_metadata! {
+            label: "DCA Executed",
+            hint: "Notify when a DCA (dollar-cost averaging) buy is executed",
+            category: "Notifications",
+        })]
+        notify_dca_executed: bool = true,
+
+        /// Notify on startup
+        #[metadata(field_metadata! {
+            label: "Bot Startup",
+            hint: "Send notification when ScreenerBot starts",
+            category: "Notifications",
+        })]
+        notify_on_startup: bool = true,
+
+        /// Notify on shutdown
+        #[metadata(field_metadata! {
+            label: "Bot Shutdown",
+            hint: "Send notification when ScreenerBot stops",
+            category: "Notifications",
+        })]
+        notify_on_shutdown: bool = true,
+
+        // === Thresholds Section ===
         /// Minimum trade amount (SOL) to trigger notification
         #[metadata(field_metadata! {
             label: "Min Trade Alert",
@@ -87,8 +131,19 @@ config_struct! {
             unit: "SOL",
             min: 0.001,
             step: 0.01,
-            category: "Notifications",
+            category: "Thresholds",
         })]
         trade_alert_min_sol: f64 = 0.1,
+
+        /// Significant P&L threshold for special alerts
+        #[metadata(field_metadata! {
+            label: "Significant P&L",
+            hint: "SOL amount threshold for highlighting significant P&L in notifications",
+            unit: "SOL",
+            min: 0.01,
+            step: 0.1,
+            category: "Thresholds",
+        })]
+        significant_pnl_threshold: f64 = 0.5,
     }
 }
