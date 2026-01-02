@@ -50,16 +50,21 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  width: calc(100% - 8px);
   padding: 10px 16px;
   font-size: 0.875rem;
   font-weight: 500;
   color: var(--text-primary);
+  background: transparent;
+  border: none;
   cursor: pointer;
   transition: all 0.15s ease;
   user-select: none;
   position: relative;
   margin: 2px 4px;
   border-radius: var(--radius-md);
+  text-align: left;
+  font-family: inherit;
 }
 
 .dropdown-item:hover:not(.disabled) {

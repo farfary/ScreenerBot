@@ -105,7 +105,12 @@ export class Dropdown {
       if (item.icon) {
         const icon = document.createElement("span");
         icon.className = "icon";
-        icon.textContent = item.icon;
+        // Support both HTML icons and plain text
+        if (item.icon.includes("<")) {
+          icon.innerHTML = item.icon;
+        } else {
+          icon.textContent = item.icon;
+        }
         itemEl.appendChild(icon);
       }
 
