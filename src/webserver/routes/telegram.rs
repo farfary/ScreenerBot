@@ -55,29 +55,6 @@ pub struct SessionsListResponse {
 // === REQUEST TYPES ===
 
 #[derive(Deserialize)]
-pub struct SetPasswordRequest {
-    pub password: String,
-    pub current_password: Option<String>, // Required if password already set
-}
-
-#[derive(Deserialize)]
-pub struct TotpSetupRequest {
-    pub password: String, // Require password to setup TOTP
-}
-
-#[derive(Serialize)]
-pub struct TotpSetupResponse {
-    pub secret: String,
-    pub uri: String,
-    pub qr_code: String, // Base64 SVG data URL
-}
-
-#[derive(Deserialize)]
-pub struct TotpVerifyRequest {
-    pub code: String,
-}
-
-#[derive(Deserialize)]
 pub struct TestMessageRequest {
     pub message: Option<String>,
 }
@@ -141,15 +118,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         // Sessions
         .route("/sessions", get(list_sessions))
         .route("/sessions/:user_id/revoke", post(revoke_session))
-        // Password management
-        .route("/password", post(set_password))
-        .route("/password/verify", post(verify_password))
-        // TOTP 2FA
+        // TOTP 2FA (status only - setup is in Security settings)
         .route("/totp/status", get(get_totp_status))
-        .route("/totp/setup", post(setup_totp))
-        .route("/totp/verify", post(verify_totp))
-        .route("/totp/disable", post(disable_totp))
-        .route("/totp/cancel", post(cancel_totp_setup))
         // Chat Discovery
         .route("/discovery/start", post(start_discovery))
         .route("/discovery/stop", post(stop_discovery))
@@ -369,32 +339,6 @@ async fn revoke_session(
     }))
 }
 
-/// Set or update password - DEPRECATED (passwordless flow)
-async fn set_password(
-    State(_state): State<Arc<AppState>>,
-    Json(_req): Json<SetPasswordRequest>,
-) -> Response {
-    error_response(
-        StatusCode::GONE,
-        "DEPRECATED",
-        "Password authentication is no longer used. Telegram now uses passwordless authentication with optional 2FA (configured in Security settings).",
-        None,
-    )
-}
-
-/// Verify a password - DEPRECATED (passwordless flow)
-async fn verify_password(
-    State(_state): State<Arc<AppState>>,
-    Json(_req): Json<SetPasswordRequest>,
-) -> Response {
-    error_response(
-        StatusCode::GONE,
-        "DEPRECATED",
-        "Password authentication is no longer used. Telegram now uses passwordless authentication with optional 2FA.",
-        None,
-    )
-}
-
 /// Send a test message
 async fn send_test_message(
     State(_state): State<Arc<AppState>>,
@@ -437,10 +381,6 @@ async fn send_test_message(
     }
 }
 
-// === TOTP HANDLERS ===
-// NOTE: Telegram TOTP is now managed through Security settings (lockscreen 2FA)
-// These routes are kept for backwards compatibility but redirect to the shared 2FA system
-
 /// GET /totp/status - Check if TOTP is enabled (uses shared lockscreen 2FA)
 async fn get_totp_status(State(_state): State<Arc<AppState>>) -> Response {
     let totp_configured = with_config(|c| !c.webserver.auth_totp_secret.is_empty());
@@ -448,54 +388,8 @@ async fn get_totp_status(State(_state): State<Arc<AppState>>) -> Response {
     success_response(serde_json::json!({
         "enabled": totp_configured && commands_require_2fa,
         "configured": totp_configured,
-        "commands_require_2fa": commands_require_2fa,
-        "note": "2FA is now managed in Security settings. Enable lockscreen 2FA to protect Telegram commands."
+        "commands_require_2fa": commands_require_2fa
     }))
-}
-
-/// POST /totp/setup - DEPRECATED (use Security settings instead)
-async fn setup_totp(
-    State(_state): State<Arc<AppState>>,
-    Json(_req): Json<TotpSetupRequest>,
-) -> Response {
-    error_response(
-        StatusCode::GONE,
-        "DEPRECATED",
-        "Telegram 2FA is now managed through Security settings. Enable lockscreen 2FA in the Security tab to protect Telegram commands.",
-        None,
-    )
-}
-
-/// POST /totp/verify - DEPRECATED (use Security settings instead)
-async fn verify_totp(
-    State(_state): State<Arc<AppState>>,
-    Json(_req): Json<TotpVerifyRequest>,
-) -> Response {
-    error_response(
-        StatusCode::GONE,
-        "DEPRECATED",
-        "Telegram 2FA is now managed through Security settings.",
-        None,
-    )
-}
-
-/// POST /totp/cancel - Cancel pending TOTP setup (kept for cleanup)
-async fn cancel_totp_setup(State(_state): State<Arc<AppState>>) -> Response {
-    TelegramSessionManager::cancel_pending_totp("dashboard");
-    success_response(serde_json::json!({ "message": "TOTP setup cancelled" }))
-}
-
-/// POST /totp/disable - DEPRECATED (use Security settings instead)
-async fn disable_totp(
-    State(_state): State<Arc<AppState>>,
-    Json(_req): Json<TotpSetupRequest>,
-) -> Response {
-    error_response(
-        StatusCode::GONE,
-        "DEPRECATED",
-        "Telegram 2FA is now managed through Security settings. Disable lockscreen 2FA to remove protection from Telegram commands.",
-        None,
-    )
 }
 
 // === DISCOVERY HANDLERS ===

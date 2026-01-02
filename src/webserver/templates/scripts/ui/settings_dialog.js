@@ -3446,10 +3446,10 @@ export class SettingsDialog {
           <div class="settings-field">
             <div class="settings-field-info">
               <label>Bot Token</label>
-              <span class="settings-field-hint">Get this from @BotFather on Telegram</span>
+              <span class="settings-field-hint">${settings.bot_token && settings.bot_token.endsWith("...") ? '<i class="icon-check-circle" style="color: var(--success);"></i> Token saved' : 'Get this from @BotFather on Telegram'}</span>
             </div>
             <div class="settings-field-control telegram-token-field">
-              <input type="password" id="tgBotToken" class="settings-input" placeholder="Enter bot token" value="${settings.bot_token || ""}" autocomplete="off">
+              <input type="password" id="tgBotToken" class="settings-input" placeholder="${settings.bot_token && settings.bot_token.endsWith("...") ? 'Token saved (enter new to change)' : 'Enter bot token'}" value="" autocomplete="off">
               <button class="btn btn-secondary btn-sm btn-icon" id="tgToggleToken" title="Show/Hide">
                 <i class="icon-eye"></i>
               </button>

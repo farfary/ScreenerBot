@@ -21,7 +21,6 @@
 //! ├── discovery.rs     # Chat ID discovery
 //! ├── polling.rs       # Update polling
 //! │
-//! ├── totp.rs          # 2FA utilities
 //! ├── keyboards.rs     # Inline keyboards
 //! ├── formatters.rs    # HTML message formatters
 //! │
@@ -32,6 +31,8 @@
 //!     ├── menu.rs      # Interactive menus
 //!     └── callbacks.rs # Button click handlers
 //! ```
+//!
+//! Note: 2FA/TOTP functionality uses webserver::totp module (shared lockscreen 2FA)
 //!
 //! # Usage
 //!
@@ -83,7 +84,6 @@ pub mod notifier;
 pub mod polling;
 pub mod service;
 pub mod session;
-pub mod totp;
 pub mod types;
 
 // ============================================================================
@@ -113,9 +113,6 @@ pub use discovery::{
 
 // Service
 pub use service::{get_bot_state, get_service, is_ready, start_discovery_mode, stop_discovery_mode, TelegramService};
-
-// TOTP utilities
-pub use totp::{generate_qr_data_url, generate_secret, generate_uri, verify_code};
 
 // Formatters (commonly used)
 pub use formatters::{format_duration, format_pnl, format_price, format_sol, html_escape};

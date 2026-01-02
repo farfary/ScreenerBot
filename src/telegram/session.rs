@@ -7,19 +7,12 @@ use crate::telegram::types::{DiscoveredChat, SessionState, TelegramSession};
 use once_cell::sync::Lazy;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::RwLock;
 
 // ============================================================================
-// PENDING TOTP STORAGE
-// ============================================================================
-
-/// Pending TOTP storage for setup flow (key -> secret)
-static PENDING_TOTP: Lazy<Mutex<HashMap<String, String>>> = Lazy::new(|| Mutex::new(HashMap::new()));
-
-// ============================================================================
-// SESSION MANAGER
+// GLOBAL SESSION MANAGER
 // ============================================================================
 
 /// Thread-safe session manager for Telegram users
@@ -95,7 +88,7 @@ impl TelegramSessionManager {
         }
 
         // Verify TOTP code
-        if crate::telegram::totp::verify_code(&totp_secret, code)? {
+        if crate::webserver::totp::verify_totp(&totp_secret, code)? {
             // Success - activate session
             session.state = SessionState::Active;
             session.failed_attempts = 0;
@@ -113,33 +106,6 @@ impl TelegramSessionManager {
             }
             session.touch();
             Ok(false)
-        }
-    }
-
-    // ========================================================================
-    // PENDING TOTP STORAGE
-    // ========================================================================
-
-    /// Store a pending TOTP secret during setup
-    pub fn store_pending_totp(key: &str, secret: String) {
-        if let Ok(mut map) = PENDING_TOTP.lock() {
-            map.insert(key.to_string(), secret);
-        }
-    }
-
-    /// Take (remove and return) a pending TOTP secret
-    pub fn take_pending_totp(key: &str) -> Option<String> {
-        if let Ok(mut map) = PENDING_TOTP.lock() {
-            map.remove(key)
-        } else {
-            None
-        }
-    }
-
-    /// Cancel a pending TOTP setup
-    pub fn cancel_pending_totp(key: &str) {
-        if let Ok(mut map) = PENDING_TOTP.lock() {
-            map.remove(key);
         }
     }
 

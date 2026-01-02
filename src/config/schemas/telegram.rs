@@ -28,13 +28,12 @@ config_struct! {
         })]
         bot_token: String = String::new(),
 
-        /// Default chat ID for sending notifications (deprecated - uses authenticated sessions)
+        /// Chat ID for sending notifications (discovered via Discovery Mode or set manually)
         #[metadata(field_metadata! {
-            label: "Notification Chat ID",
-            hint: "Legacy field - notifications are now sent to all authenticated Telegram sessions.",
+            label: "Chat ID",
+            hint: "Telegram chat ID for notifications. Use Discovery Mode to find it automatically.",
             placeholder: "123456789",
             category: "Connection",
-            hidden: true,
         })]
         chat_id: String = String::new(),
 
