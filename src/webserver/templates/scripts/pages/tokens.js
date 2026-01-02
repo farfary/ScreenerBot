@@ -578,16 +578,21 @@ function createLifecycle() {
       ? Array.from(new Set(state.availableRejectionReasons.filter((item) => item && item.trim())))
       : [];
 
-    reasons.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+    // Sort by display label for user-friendly ordering
+    reasons.sort((a, b) => {
+      const labelA = getRejectionDisplayLabel(a) || a;
+      const labelB = getRejectionDisplayLabel(b) || b;
+      return labelA.toLowerCase().localeCompare(labelB.toLowerCase());
+    });
 
     const currentValue = state.filters.rejection_reason || "all";
 
-    // Build options array for CustomSelect
+    // Build options array for CustomSelect with human-readable labels
     const newOptions = [
       { value: "all", label: "All" },
       ...reasons.map((reason) => ({
         value: reason,
-        label: reason,
+        label: getRejectionDisplayLabel(reason) || reason,
       })),
     ];
 
@@ -601,7 +606,8 @@ function createLifecycle() {
         '<option value="all">All</option>',
         ...reasons.map((reason) => {
           const escaped = Utils.escapeHtml(reason);
-          return `<option value="${escaped}">${escaped}</option>`;
+          const label = Utils.escapeHtml(getRejectionDisplayLabel(reason) || reason);
+          return `<option value="${escaped}">${label}</option>`;
         }),
       ].join("");
 
