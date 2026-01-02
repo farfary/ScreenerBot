@@ -1303,8 +1303,9 @@ function renderExplorerView() {
       <div class="explorer-content">
         <div id="explorer-detail-view">
           <div class="explorer-placeholder">
-            <i class="icon-arrow-left"></i>
-            <p>Select a rejection reason to view tokens</p>
+            <i class="icon-search"></i>
+            <h3>Select a Rejection Reason</h3>
+            <p>Choose a category and reason from the sidebar to view detailed token information and rejection history.</p>
           </div>
         </div>
       </div>

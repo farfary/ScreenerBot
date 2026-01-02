@@ -34,6 +34,12 @@ function getBinaryPath() {
     console.log('[Electron] Production binary path:', resourcePath);
     return resourcePath;
   } else {
+    // In development, check for debug override
+    if (process.env.USE_DEBUG_BINARY === 'true') {
+      const debugPath = path.join(__dirname, '..', '..', 'target', 'debug', binaryName);
+      console.log('[Electron] Development binary path (DEBUG):', debugPath);
+      return debugPath;
+    }
     // In development, use the release build
     const devPath = path.join(__dirname, '..', '..', 'target', 'release', binaryName);
     console.log('[Electron] Development binary path:', devPath);
