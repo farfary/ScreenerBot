@@ -24,6 +24,7 @@ const state = {
   draft: null,
   stats: null,
   rejectionStats: null,
+  analytics: null,
   hasChanges: false,
   isSaving: false,
   isRefreshing: false,
@@ -35,6 +36,7 @@ const state = {
 
 const FILTER_TABS = [
   { id: "status", label: '<i class="icon-chart-bar"></i> Status' },
+  { id: "analytics", label: '<i class="icon-pie-chart"></i> Analytics' },
   { id: "meta", label: '<i class="icon-settings"></i> Core' },
   { id: "dexscreener", label: '<i class="icon-trending-up"></i> DexScreener' },
   { id: "geckoterminal", label: '<i class="icon-trending-up"></i> GeckoTerminal' },
@@ -817,6 +819,12 @@ async function fetchRejectionStats() {
   });
 }
 
+async function fetchAnalytics() {
+  return await requestManager.fetch("/api/filtering/analytics", {
+    priority: "normal",
+  });
+}
+
 // ============================================================================
 // RENDERING
 // ============================================================================
@@ -971,6 +979,223 @@ function renderStatusView() {
   `;
 }
 
+// ============================================================================
+// ANALYTICS VIEW - Advanced filtering analysis
+// ============================================================================
+
+function renderAnalyticsView() {
+  if (!state.analytics) {
+    return `
+      <div class="analytics-loading">
+        <div class="loading-spinner"></div>
+        <p>Loading analytics data...</p>
+      </div>
+    `;
+  }
+
+  const data = state.analytics;
+  
+  // Overview section
+  const overviewHtml = `
+    <div class="analytics-section">
+      <h3 class="analytics-section-title">
+        <i class="icon-bar-chart"></i> Overview
+      </h3>
+      <div class="analytics-overview-grid">
+        <div class="analytics-metric primary">
+          <div class="metric-icon"><i class="icon-database"></i></div>
+          <div class="metric-content">
+            <span class="metric-value">${Utils.formatNumber(data.total_tokens, 0)}</span>
+            <span class="metric-label">Total Tokens</span>
+          </div>
+        </div>
+        <div class="analytics-metric success">
+          <div class="metric-icon"><i class="icon-check-circle"></i></div>
+          <div class="metric-content">
+            <span class="metric-value">${Utils.formatNumber(data.total_passed, 0)}</span>
+            <span class="metric-label">Passed (${data.pass_rate}%)</span>
+          </div>
+        </div>
+        <div class="analytics-metric warning">
+          <div class="metric-icon"><i class="icon-x-circle"></i></div>
+          <div class="metric-content">
+            <span class="metric-value">${Utils.formatNumber(data.total_rejected, 0)}</span>
+            <span class="metric-label">Rejected (${data.rejection_rate}%)</span>
+          </div>
+        </div>
+        <div class="analytics-metric">
+          <div class="metric-icon"><i class="icon-clock"></i></div>
+          <div class="metric-content">
+            <span class="metric-value">${Utils.formatTimeAgo(new Date(data.last_updated))}</span>
+            <span class="metric-label">Last Updated</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Pass rate visual bar
+  const passRateHtml = `
+    <div class="analytics-section">
+      <h3 class="analytics-section-title">
+        <i class="icon-percent"></i> Pass Rate
+      </h3>
+      <div class="pass-rate-bar-container">
+        <div class="pass-rate-bar">
+          <div class="pass-rate-fill passed" style="width: ${data.pass_rate}%"></div>
+          <div class="pass-rate-fill rejected" style="width: ${data.rejection_rate}%"></div>
+        </div>
+        <div class="pass-rate-labels">
+          <span class="passed-label"><i class="icon-check"></i> ${data.pass_rate}% Passed</span>
+          <span class="rejected-label"><i class="icon-x"></i> ${data.rejection_rate}% Rejected</span>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // Category breakdown
+  const categoryHtml = data.by_category && data.by_category.length > 0 ? `
+    <div class="analytics-section">
+      <h3 class="analytics-section-title">
+        <i class="icon-layers"></i> Rejection by Category
+      </h3>
+      <div class="category-grid">
+        ${data.by_category.map(cat => `
+          <div class="category-card" data-category="${Utils.escapeHtml(cat.category)}">
+            <div class="category-header">
+              <div class="category-icon"><i class="icon-${Utils.escapeHtml(cat.icon)}"></i></div>
+              <div class="category-info">
+                <span class="category-label">${Utils.escapeHtml(cat.label)}</span>
+                <span class="category-count">${Utils.formatNumber(cat.count, 0)} tokens</span>
+              </div>
+              <div class="category-percentage">${cat.percentage}%</div>
+            </div>
+            <div class="category-bar">
+              <div class="category-bar-fill" style="width: ${Math.min(cat.percentage, 100)}%"></div>
+            </div>
+            <div class="category-reasons">
+              ${cat.reasons.slice(0, 3).map(r => `
+                <div class="reason-row">
+                  <span class="reason-name">${Utils.escapeHtml(r.display_label)}</span>
+                  <span class="reason-count">${Utils.formatNumber(r.count, 0)}</span>
+                </div>
+              `).join('')}
+              ${cat.reasons.length > 3 ? `<div class="reason-more">+${cat.reasons.length - 3} more</div>` : ''}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  ` : '';
+
+  // Source breakdown
+  const sourceHtml = data.by_source && data.by_source.length > 0 ? `
+    <div class="analytics-section">
+      <h3 class="analytics-section-title">
+        <i class="icon-git-branch"></i> Rejection by Source
+      </h3>
+      <div class="source-breakdown-grid">
+        ${data.by_source.map(src => `
+          <div class="source-card ${Utils.escapeHtml(src.source.toLowerCase())}">
+            <div class="source-header">
+              <span class="source-name">${Utils.escapeHtml(src.source)}</span>
+              <span class="source-count">${Utils.formatNumber(src.count, 0)}</span>
+              <span class="source-percentage">${src.percentage}%</span>
+            </div>
+            <div class="source-bar">
+              <div class="source-bar-fill" style="width: ${Math.min(src.percentage, 100)}%"></div>
+            </div>
+            <div class="source-top-reasons">
+              <div class="top-reasons-title">Top Rejection Reasons:</div>
+              ${src.top_reasons.map(r => `
+                <div class="source-reason-row">
+                  <span class="reason-label">${Utils.escapeHtml(r.display_label)}</span>
+                  <span class="reason-badge">${Utils.formatNumber(r.count, 0)}</span>
+                </div>
+              `).join('')}
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  ` : '';
+
+  // Data quality section
+  const dataQualityHtml = data.data_quality && data.data_quality.length > 0 ? `
+    <div class="analytics-section">
+      <h3 class="analytics-section-title">
+        <i class="icon-alert-triangle"></i> Data Quality Issues
+      </h3>
+      <div class="data-quality-grid">
+        ${data.data_quality.map(dq => `
+          <div class="data-quality-item ${Utils.escapeHtml(dq.severity)}">
+            <div class="dq-info">
+              <span class="dq-label">${Utils.escapeHtml(dq.label)}</span>
+              <span class="dq-severity ${Utils.escapeHtml(dq.severity)}">${Utils.escapeHtml(dq.severity)}</span>
+            </div>
+            <div class="dq-stats">
+              <span class="dq-count">${Utils.formatNumber(dq.count, 0)}</span>
+              <span class="dq-percentage">${dq.percentage}%</span>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+  ` : '';
+
+  // Top rejection reasons table
+  const topReasonsHtml = data.top_reasons && data.top_reasons.length > 0 ? `
+    <div class="analytics-section">
+      <h3 class="analytics-section-title">
+        <i class="icon-list"></i> Top Rejection Reasons
+      </h3>
+      <div class="top-reasons-table-container">
+        <table class="top-reasons-table">
+          <thead>
+            <tr>
+              <th class="rank-col">#</th>
+              <th class="reason-col">Reason</th>
+              <th class="source-col">Source</th>
+              <th class="count-col">Count</th>
+              <th class="bar-col">Impact</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${data.top_reasons.map((r, i) => {
+              const maxCount = data.top_reasons[0]?.count || 1;
+              const barWidth = (r.count / maxCount) * 100;
+              return `
+                <tr>
+                  <td class="rank-col">${i + 1}</td>
+                  <td class="reason-col">${Utils.escapeHtml(r.display_label)}</td>
+                  <td class="source-col"><span class="source-badge ${Utils.escapeHtml(r.source.toLowerCase())}">${Utils.escapeHtml(r.source)}</span></td>
+                  <td class="count-col">${Utils.formatNumber(r.count, 0)}</td>
+                  <td class="bar-col">
+                    <div class="impact-bar">
+                      <div class="impact-bar-fill" style="width: ${barWidth}%"></div>
+                    </div>
+                  </td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  ` : '';
+
+  return `
+    <div class="analytics-view">
+      ${overviewHtml}
+      ${passRateHtml}
+      ${categoryHtml}
+      ${sourceHtml}
+      ${dataQualityHtml}
+      ${topReasonsHtml}
+    </div>
+  `;
+}
+
 function renderConfigField(field, source) {
   const value = getConfigValue(state.draft, source, field.key);
   const originalValue = getConfigValue(state.config, source, field.key);
@@ -1090,6 +1315,11 @@ function renderConfigPanels() {
   // Status tab shows overview
   if (state.activeTab === "status") {
     return renderStatusView();
+  }
+
+  // Analytics tab shows advanced analysis
+  if (state.activeTab === "analytics") {
+    return renderAnalyticsView();
   }
 
   const targetSource = state.activeTab || "meta";
@@ -1526,9 +1756,26 @@ async function loadStats() {
     ]);
     state.stats = statsResponse.data || statsResponse;
     state.rejectionStats = rejectionStatsResponse.data || rejectionStatsResponse;
+    
+    // Also load analytics if on analytics tab
+    if (state.activeTab === "analytics") {
+      await loadAnalytics();
+    }
   } catch (error) {
     console.error("Failed to load stats:", error);
     // Don't show toast for stats errors (non-critical)
+  }
+}
+
+async function loadAnalytics() {
+  try {
+    const response = await fetchAnalytics();
+    state.analytics = response.data || response;
+    // Re-render to show analytics data
+    updateConfigPanels({ preserveScroll: false });
+  } catch (error) {
+    console.error("Failed to load analytics:", error);
+    state.analytics = null;
   }
 }
 
@@ -1561,10 +1808,16 @@ export function createLifecycle() {
           defaultTab: state.activeTab,
           stateKey: TABBAR_STATE_KEY,
           pageName: "filtering",
-          onChange: (tabId) => {
+          onChange: async (tabId) => {
             state.activeTab = tabId;
             AppState.save("filtering_activeTab", tabId);
             updateSearchBar();
+            
+            // Load analytics data if switching to analytics tab
+            if (tabId === "analytics" && !state.analytics) {
+              await loadAnalytics();
+            }
+            
             updateConfigPanels({ scrollTop: 0 });
           },
         });

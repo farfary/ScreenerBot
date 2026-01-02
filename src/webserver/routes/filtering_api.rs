@@ -22,6 +22,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/filtering/refresh", post(trigger_refresh))
         .route("/filtering/stats", get(get_stats))
         .route("/filtering/rejection-stats", get(get_rejection_stats))
+        .route("/filtering/analytics", get(get_analytics))
 }
 
 #[derive(Debug, Serialize)]
@@ -252,6 +253,358 @@ async fn get_rejection_stats() -> Response {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "REJECTION_STATS_FAILED",
                 &format!("Failed to fetch rejection statistics: {:?}", err),
+                None,
+            )
+        }
+    }
+}
+
+// ============================================================================
+// ANALYTICS ENDPOINT - Advanced filtering analysis
+// ============================================================================
+
+/// Categorize rejection reason into high-level category
+fn get_rejection_category(reason: &str) -> &'static str {
+    if reason.starts_with("rug_") {
+        if reason.contains("authority") || reason.contains("rugged") || reason.contains("level_danger") {
+            "security"
+        } else if reason.contains("holder") || reason.contains("insider") || reason.contains("creator") {
+            "distribution"
+        } else if reason.contains("lp_") {
+            "liquidity_lock"
+        } else if reason.contains("transfer_fee") {
+            "fees"
+        } else {
+            "security"
+        }
+    } else if reason.starts_with("dex_") || reason.starts_with("gecko_") {
+        if reason.contains("liq") || reason.contains("reserve") {
+            "liquidity"
+        } else if reason.contains("vol") {
+            "volume"
+        } else if reason.contains("mcap") || reason.contains("fdv") {
+            "market_cap"
+        } else if reason.contains("price_change") {
+            "price_action"
+        } else if reason.contains("txn") {
+            "activity"
+        } else if reason.contains("empty") || reason.contains("missing") {
+            "data_quality"
+        } else {
+            "market"
+        }
+    } else if reason.contains("decimals") || reason.contains("data_missing") {
+        "data_quality"
+    } else if reason.contains("cooldown") || reason.contains("new") {
+        "timing"
+    } else {
+        "other"
+    }
+}
+
+/// Get human-readable category label
+fn get_category_label(category: &str) -> &'static str {
+    match category {
+        "security" => "Security Issues",
+        "distribution" => "Holder Distribution",
+        "liquidity_lock" => "LP Lock Issues",
+        "fees" => "Transfer Fees",
+        "liquidity" => "Liquidity",
+        "volume" => "Trading Volume",
+        "market_cap" => "Market Cap/FDV",
+        "price_action" => "Price Movement",
+        "activity" => "Trading Activity",
+        "data_quality" => "Missing Data",
+        "timing" => "Timing Filters",
+        "market" => "Market Data",
+        _ => "Other",
+    }
+}
+
+/// Get icon for category
+fn get_category_icon(category: &str) -> &'static str {
+    match category {
+        "security" => "shield",
+        "distribution" => "users",
+        "liquidity_lock" => "lock",
+        "fees" => "percent",
+        "liquidity" => "droplet",
+        "volume" => "bar-chart",
+        "market_cap" => "dollar-sign",
+        "price_action" => "trending-up",
+        "activity" => "activity",
+        "data_quality" => "alert-circle",
+        "timing" => "clock",
+        "market" => "trending-up",
+        _ => "help-circle",
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct CategoryBreakdown {
+    category: String,
+    label: String,
+    icon: String,
+    count: i64,
+    percentage: f64,
+    reasons: Vec<CategoryReasonEntry>,
+}
+
+#[derive(Debug, Serialize)]
+struct CategoryReasonEntry {
+    reason: String,
+    display_label: String,
+    count: i64,
+    percentage: f64,
+}
+
+#[derive(Debug, Serialize)]
+struct SourceBreakdown {
+    source: String,
+    count: i64,
+    percentage: f64,
+    top_reasons: Vec<RejectionStatEntry>,
+}
+
+#[derive(Debug, Serialize)]
+struct DataQualityMetric {
+    metric: String,
+    label: String,
+    count: i64,
+    percentage: f64,
+    severity: String,
+}
+
+#[derive(Debug, Serialize)]
+struct AnalyticsResponse {
+    // Overview
+    total_tokens: usize,
+    total_rejected: i64,
+    total_passed: usize,
+    pass_rate: f64,
+    rejection_rate: f64,
+    
+    // Category breakdown
+    by_category: Vec<CategoryBreakdown>,
+    
+    // Source breakdown
+    by_source: Vec<SourceBreakdown>,
+    
+    // Data quality
+    data_quality: Vec<DataQualityMetric>,
+    
+    // Top rejection reasons (detailed)
+    top_reasons: Vec<RejectionStatEntry>,
+    
+    // Metadata
+    last_updated: String,
+    timestamp: String,
+}
+
+/// GET /api/filtering/analytics
+/// Comprehensive filtering analytics with detailed breakdowns
+async fn get_analytics() -> Response {
+    // Fetch stats and rejection data
+    let stats_result = filtering::fetch_stats().await;
+    let rejection_result = get_rejection_stats_async().await;
+    
+    match (stats_result, rejection_result) {
+        (Ok(stats), Ok(raw_stats)) => {
+            let total_tokens = stats.total_tokens;
+            let total_passed = stats.passed_filtering;
+            
+            // Calculate totals and build category/source maps
+            let mut by_category_map: HashMap<String, Vec<(String, String, i64)>> = HashMap::new();
+            let mut by_source_map: HashMap<String, Vec<(String, String, i64)>> = HashMap::new();
+            let mut total_rejected: i64 = 0;
+            
+            // Data quality specific counts
+            let mut data_quality_counts: HashMap<String, i64> = HashMap::new();
+            
+            for (reason, source, count) in &raw_stats {
+                total_rejected += count;
+                
+                let category = get_rejection_category(reason).to_string();
+                by_category_map.entry(category.clone()).or_default().push((
+                    reason.clone(),
+                    get_rejection_display_label(reason),
+                    *count,
+                ));
+                
+                by_source_map.entry(source.clone()).or_default().push((
+                    reason.clone(),
+                    get_rejection_display_label(reason),
+                    *count,
+                ));
+                
+                // Track data quality issues specifically
+                if reason.contains("missing") || reason.contains("no_decimals") || reason == "dex_data_missing" || reason == "gecko_data_missing" || reason == "rug_data_missing" {
+                    *data_quality_counts.entry(reason.clone()).or_insert(0) += count;
+                }
+            }
+            
+            // Build category breakdown
+            let mut by_category: Vec<CategoryBreakdown> = by_category_map
+                .into_iter()
+                .map(|(category, reasons)| {
+                    let cat_count: i64 = reasons.iter().map(|(_, _, c)| c).sum();
+                    let cat_pct = if total_rejected > 0 {
+                        (cat_count as f64 / total_rejected as f64) * 100.0
+                    } else {
+                        0.0
+                    };
+                    
+                    let mut reason_entries: Vec<CategoryReasonEntry> = reasons
+                        .into_iter()
+                        .map(|(reason, display_label, count)| {
+                            let pct = if cat_count > 0 {
+                                (count as f64 / cat_count as f64) * 100.0
+                            } else {
+                                0.0
+                            };
+                            CategoryReasonEntry {
+                                reason,
+                                display_label,
+                                count,
+                                percentage: (pct * 10.0).round() / 10.0,
+                            }
+                        })
+                        .collect();
+                    
+                    reason_entries.sort_by(|a, b| b.count.cmp(&a.count));
+                    
+                    CategoryBreakdown {
+                        label: get_category_label(&category).to_string(),
+                        icon: get_category_icon(&category).to_string(),
+                        category,
+                        count: cat_count,
+                        percentage: (cat_pct * 10.0).round() / 10.0,
+                        reasons: reason_entries,
+                    }
+                })
+                .collect();
+            
+            by_category.sort_by(|a, b| b.count.cmp(&a.count));
+            
+            // Build source breakdown
+            let mut by_source: Vec<SourceBreakdown> = by_source_map
+                .into_iter()
+                .map(|(source, reasons)| {
+                    let src_count: i64 = reasons.iter().map(|(_, _, c)| c).sum();
+                    let src_pct = if total_rejected > 0 {
+                        (src_count as f64 / total_rejected as f64) * 100.0
+                    } else {
+                        0.0
+                    };
+                    
+                    let mut top_reasons: Vec<RejectionStatEntry> = reasons
+                        .into_iter()
+                        .map(|(reason, display_label, count)| RejectionStatEntry {
+                            reason,
+                            display_label,
+                            source: source.clone(),
+                            count,
+                        })
+                        .collect();
+                    
+                    top_reasons.sort_by(|a, b| b.count.cmp(&a.count));
+                    top_reasons.truncate(5); // Top 5 per source
+                    
+                    SourceBreakdown {
+                        source,
+                        count: src_count,
+                        percentage: (src_pct * 10.0).round() / 10.0,
+                        top_reasons,
+                    }
+                })
+                .collect();
+            
+            by_source.sort_by(|a, b| b.count.cmp(&a.count));
+            
+            // Build data quality metrics
+            let data_quality: Vec<DataQualityMetric> = data_quality_counts
+                .into_iter()
+                .map(|(metric, count)| {
+                    let pct = if total_rejected > 0 {
+                        (count as f64 / total_rejected as f64) * 100.0
+                    } else {
+                        0.0
+                    };
+                    let severity = if pct > 20.0 {
+                        "high"
+                    } else if pct > 10.0 {
+                        "medium"
+                    } else {
+                        "low"
+                    };
+                    DataQualityMetric {
+                        label: get_rejection_display_label(&metric),
+                        metric,
+                        count,
+                        percentage: (pct * 10.0).round() / 10.0,
+                        severity: severity.to_string(),
+                    }
+                })
+                .collect();
+            
+            // Build top reasons list
+            let mut top_reasons: Vec<RejectionStatEntry> = raw_stats
+                .into_iter()
+                .map(|(reason, source, count)| RejectionStatEntry {
+                    display_label: get_rejection_display_label(&reason),
+                    reason,
+                    source,
+                    count,
+                })
+                .collect();
+            
+            top_reasons.sort_by(|a, b| b.count.cmp(&a.count));
+            top_reasons.truncate(25); // Top 25 reasons
+            
+            // Calculate rates
+            let pass_rate = if total_tokens > 0 {
+                (total_passed as f64 / total_tokens as f64) * 100.0
+            } else {
+                0.0
+            };
+            
+            let rejection_rate = 100.0 - pass_rate;
+            
+            success_response(AnalyticsResponse {
+                total_tokens,
+                total_rejected,
+                total_passed,
+                pass_rate: (pass_rate * 10.0).round() / 10.0,
+                rejection_rate: (rejection_rate * 10.0).round() / 10.0,
+                by_category,
+                by_source,
+                data_quality,
+                top_reasons,
+                last_updated: stats.updated_at.to_rfc3339(),
+                timestamp: Utc::now().to_rfc3339(),
+            })
+        }
+        (Err(err), _) => {
+            logger::warning(
+                LogTag::Filtering,
+                &format!("Failed to fetch filtering stats for analytics: {}", err),
+            );
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "ANALYTICS_FAILED",
+                &format!("Failed to fetch analytics: {}", err),
+                None,
+            )
+        }
+        (_, Err(err)) => {
+            logger::warning(
+                LogTag::Filtering,
+                &format!("Failed to fetch rejection stats for analytics: {:?}", err),
+            );
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "ANALYTICS_FAILED",
+                &format!("Failed to fetch analytics: {:?}", err),
                 None,
             )
         }
