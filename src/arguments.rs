@@ -141,9 +141,7 @@ pub fn is_reset_default_configs_enabled() -> bool {
 /// Returns None if --port is not specified
 /// Validates port is in range 1-65535
 pub fn get_port_override() -> Option<u16> {
-    get_arg_value("--port").and_then(|v| {
-        v.parse::<u16>().ok().filter(|&port| port > 0)
-    })
+    get_arg_value("--port").and_then(|v| v.parse::<u16>().ok().filter(|&port| port > 0))
 }
 
 /// Get the host override from CLI (overrides config file)
@@ -167,7 +165,7 @@ pub fn validate_port_argument() -> Result<(), String> {
             }
             Err(_) => {
                 return Err(format!(
-                    "Invalid port value '{}': Port must be a number between 1 and 65535", 
+                    "Invalid port value '{}': Port must be a number between 1 and 65535",
                     port_str
                 ));
             }
@@ -259,7 +257,9 @@ pub fn print_help() {
         "                                Without --gui, runs headless with webserver on port 8080"
     );
     println!("    --dashboard-demo            Show hardcoded demo data for screenshots/marketing");
-    println!("    --dashboard-onboarding      Force show onboarding screens (resets onboarding state)");
+    println!(
+        "    --dashboard-onboarding      Force show onboarding screens (resets onboarding state)"
+    );
     println!();
     println!("WEBSERVER CONFIGURATION:");
     println!("    --port <PORT>               Override webserver port (1-65535, default: 8080)");

@@ -41,7 +41,11 @@ function isSetupActive() {
 
   // Check for onboarding screen
   const onboarding = document.getElementById("onboarding-screen");
-  if (onboarding && onboarding.style.display !== "none" && !onboarding.classList.contains("hidden")) {
+  if (
+    onboarding &&
+    onboarding.style.display !== "none" &&
+    !onboarding.classList.contains("hidden")
+  ) {
     return true;
   }
 

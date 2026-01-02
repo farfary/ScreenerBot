@@ -309,7 +309,7 @@
   font-size: 1.5rem;
 }
 
-/* Dropdown Menu Styles */
+/* Dropdown Menu Styles - Moved to ui/dropdown.css */
 .dropdown-container {
   position: relative;
   display: inline-block;
@@ -330,48 +330,6 @@
 .dropdown-btn:hover {
   background: var(--bg-card-hover);
   border-color: var(--link-color);
-}
-
-.dropdown-menu {
-  display: none;
-  position: absolute;
-  right: 0;
-  top: 100%;
-  margin-top: var(--spacing-xs);
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
-  box-shadow: 0 4px 12px var(--shadow-lg);
-  min-width: 200px;
-  z-index: 1000;
-  overflow: hidden;
-}
-
-.dropdown-menu.show {
-  display: block;
-}
-
-.dropdown-item {
-  display: block;
-  width: 100%;
-  padding: var(--spacing-sm) var(--spacing-md);
-  text-align: left;
-  background: var(--bg-card);
-  border: none;
-  border-bottom: 1px solid var(--border-color);
-  color: var(--text-primary);
-  cursor: pointer;
-  font-size: 0.9em;
-  transition: background 0.2s ease;
-}
-
-.dropdown-item:last-child {
-  border-bottom: none;
-}
-
-.dropdown-item:hover {
-  background: var(--bg-card-hover);
-  color: var(--link-color);
 }
 
 /* Modal Styles */

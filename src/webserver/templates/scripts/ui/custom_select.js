@@ -44,6 +44,10 @@ export class CustomSelect {
     this.triggerEl = null;
     this.valueEl = null;
     this.dropdownEl = null;
+    this.optionsContainerEl = null;
+    this.searchContainerEl = null;
+    this.searchInputEl = null;
+    this.noResultsEl = null;
     this.hiddenInput = null;
 
     // Bound handlers for cleanup
@@ -52,6 +56,7 @@ export class CustomSelect {
     this._handleDocumentClick = this._handleDocumentClick.bind(this);
     this._handleOptionClick = this._handleOptionClick.bind(this);
     this._handleScrollResize = this._handleScrollResize.bind(this);
+    this._handleSearchInput = this._handleSearchInput.bind(this);
 
     // Find initially selected option
     const selectedOpt = this.options.find((o) => o.selected);
@@ -139,10 +144,10 @@ export class CustomSelect {
     this.valueEl.className = "cs-value";
     this._updateDisplayValue();
 
-    // Create arrow
+    // Create arrow with SVG chevron
     const arrowEl = document.createElement("span");
     arrowEl.className = "cs-arrow";
-    arrowEl.innerHTML = "&#9660;"; // ▼
+    arrowEl.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
 
     this.triggerEl.appendChild(this.valueEl);
     this.triggerEl.appendChild(arrowEl);
@@ -151,6 +156,31 @@ export class CustomSelect {
     this.dropdownEl = document.createElement("div");
     this.dropdownEl.className = "cs-dropdown";
     this.dropdownEl.setAttribute("role", "listbox");
+
+    // Create search container (only shown if many options)
+    this.searchContainerEl = document.createElement("div");
+    this.searchContainerEl.className = "cs-search-container";
+    this.searchInputEl = document.createElement("input");
+    this.searchInputEl.type = "text";
+    this.searchInputEl.className = "cs-search-input";
+    this.searchInputEl.placeholder = "Search...";
+    this.searchInputEl.autocomplete = "off";
+    this.searchContainerEl.appendChild(this.searchInputEl);
+
+    // Create options container
+    this.optionsContainerEl = document.createElement("div");
+    this.optionsContainerEl.className = "cs-options-container";
+
+    // Create no results message
+    this.noResultsEl = document.createElement("div");
+    this.noResultsEl.className = "cs-no-results";
+    this.noResultsEl.textContent = "No results found";
+    this.noResultsEl.style.display = "none";
+
+    this.dropdownEl.appendChild(this.searchContainerEl);
+    this.dropdownEl.appendChild(this.optionsContainerEl);
+    this.dropdownEl.appendChild(this.noResultsEl);
+
     this._renderOptions();
 
     // Create hidden input for form submission
@@ -177,7 +207,14 @@ export class CustomSelect {
   }
 
   _renderOptions() {
-    this.dropdownEl.innerHTML = "";
+    this.optionsContainerEl.innerHTML = "";
+
+    // Show/hide search based on option count
+    if (this.options.length > 10) {
+      this.searchContainerEl.style.display = "block";
+    } else {
+      this.searchContainerEl.style.display = "none";
+    }
 
     this.options.forEach((opt, index) => {
       const optionEl = document.createElement("div");
@@ -197,7 +234,7 @@ export class CustomSelect {
         optionEl.setAttribute("aria-disabled", "true");
       }
 
-      this.dropdownEl.appendChild(optionEl);
+      this.optionsContainerEl.appendChild(optionEl);
     });
   }
 
@@ -215,15 +252,51 @@ export class CustomSelect {
   _attachEvents() {
     this.triggerEl.addEventListener("click", this._handleTriggerClick);
     this.el.addEventListener("keydown", this._handleKeyDown);
-    this.dropdownEl.addEventListener("click", this._handleOptionClick);
+    this.optionsContainerEl.addEventListener("click", this._handleOptionClick);
+    this.searchInputEl.addEventListener("input", this._handleSearchInput);
+    this.searchInputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Escape") {
+        // Let the main keydown handler handle these
+        return;
+      }
+      e.stopPropagation();
+    });
     document.addEventListener("click", this._handleDocumentClick);
   }
 
   _detachEvents() {
     this.triggerEl.removeEventListener("click", this._handleTriggerClick);
     this.el.removeEventListener("keydown", this._handleKeyDown);
-    this.dropdownEl.removeEventListener("click", this._handleOptionClick);
+    this.optionsContainerEl.removeEventListener("click", this._handleOptionClick);
+    this.searchInputEl.removeEventListener("input", this._handleSearchInput);
     document.removeEventListener("click", this._handleDocumentClick);
+  }
+
+  _handleSearchInput(e) {
+    const query = e.target.value.toLowerCase();
+    let hasResults = false;
+    let firstVisibleIndex = -1;
+
+    this.options.forEach((opt, index) => {
+      const optionEl = this.optionsContainerEl.querySelector(`.cs-option[data-index="${index}"]`);
+      if (!optionEl) return;
+
+      const matches = opt.label.toLowerCase().includes(query);
+      optionEl.style.display = matches ? "flex" : "none";
+
+      if (matches) {
+        hasResults = true;
+        if (firstVisibleIndex === -1) firstVisibleIndex = index;
+      }
+    });
+
+    this.noResultsEl.style.display = hasResults ? "none" : "block";
+
+    if (hasResults && firstVisibleIndex !== -1) {
+      this._setFocusIndex(firstVisibleIndex);
+    } else {
+      this._setFocusIndex(-1);
+    }
   }
 
   _handleTriggerClick(e) {
@@ -361,7 +434,11 @@ export class CustomSelect {
   _findNextEnabledIndex(startIndex, direction) {
     let index = startIndex + direction;
     while (index >= 0 && index < this.options.length) {
-      if (!this.options[index].disabled) {
+      const opt = this.options[index];
+      const optionEl = this.optionsContainerEl.querySelector(`.cs-option[data-index="${index}"]`);
+      const isVisible = optionEl && optionEl.style.display !== "none";
+
+      if (!opt.disabled && isVisible) {
         return index;
       }
       index += direction;
@@ -371,7 +448,7 @@ export class CustomSelect {
 
   _setFocusIndex(index) {
     // Remove previous focus
-    const prevFocused = this.dropdownEl.querySelector(".cs-option.focused");
+    const prevFocused = this.optionsContainerEl.querySelector(".cs-option.focused");
     if (prevFocused) {
       prevFocused.classList.remove("focused");
     }
@@ -379,7 +456,7 @@ export class CustomSelect {
     this.focusedIndex = index;
 
     if (index >= 0 && index < this.options.length) {
-      const optionEl = this.dropdownEl.querySelector(`.cs-option[data-index="${index}"]`);
+      const optionEl = this.optionsContainerEl.querySelector(`.cs-option[data-index="${index}"]`);
       if (optionEl) {
         optionEl.classList.add("focused");
         // Scroll into view
@@ -402,7 +479,7 @@ export class CustomSelect {
     this._updateDisplayValue();
 
     // Update option states
-    this.dropdownEl.querySelectorAll(".cs-option").forEach((optEl) => {
+    this.optionsContainerEl.querySelectorAll(".cs-option").forEach((optEl) => {
       const isSelected = optEl.dataset.value === value;
       optEl.classList.toggle("selected", isSelected);
       optEl.setAttribute("aria-selected", isSelected ? "true" : "false");
@@ -437,6 +514,11 @@ export class CustomSelect {
 
     // Add scroll/resize listeners to reposition dropdown
     this._addScrollResizeListeners();
+
+    // Focus search input if visible
+    if (this.options.length > 10) {
+      setTimeout(() => this.searchInputEl.focus(), 50);
+    }
   }
 
   close() {
@@ -460,6 +542,8 @@ export class CustomSelect {
     this._removeDropdownFromBody();
 
     // Clear search
+    this.searchInputEl.value = "";
+    this._handleSearchInput({ target: this.searchInputEl });
     this.searchString = "";
     if (this.searchTimeout) {
       clearTimeout(this.searchTimeout);

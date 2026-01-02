@@ -7,9 +7,7 @@
 //! - Confirmation dialogs
 //! - Settings quick toggles
 
-use teloxide::types::{
-    InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, KeyboardMarkup,
-};
+use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, KeyboardMarkup};
 
 // === REPLY KEYBOARD (Bottom persistent keyboard) ===
 
@@ -221,7 +219,10 @@ pub fn confirm_blacklist(mint: &str, symbol: &str) -> InlineKeyboardMarkup {
     let m = mint_short(mint);
 
     InlineKeyboardMarkup::new(vec![vec![
-        btn(&format!("🚫 Blacklist {}", symbol), &format!("exec:bl:{}", m)),
+        btn(
+            &format!("🚫 Blacklist {}", symbol),
+            &format!("exec:bl:{}", m),
+        ),
         btn("❌ Cancel", &format!("pos:{}", m)),
     ]])
 }

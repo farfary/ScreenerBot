@@ -1,47 +1,51 @@
 /* =============================================================================
-   Custom Select Component
-   Drop-in replacement for native <select> with dashboard styling
+   Custom Select Component - Modern Design
+   Beautiful, sleek dropdown with smooth animations
    ============================================================================= */
 
 /* Wrapper */
 .custom-select {
   position: relative;
-  display: inline-block;
+  display: inline-flex;
   min-width: 140px;
   font-family: var(--font-mono);
   font-size: var(--font-size-sm);
   cursor: pointer;
   user-select: none;
   outline: none;
+
+  /* Reset styles that might be inherited from native select classes (like .settings-select) */
+  background-image: none !important;
+  padding: 0 !important;
+  border: none !important;
+  background-color: transparent !important;
 }
 
-/* Trigger area */
+/* Trigger area - sleek minimal design */
 .cs-trigger {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--spacing-sm);
-  padding: 7px 10px;
-  background: var(--bg-primary);
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   color: var(--text-primary);
-  transition: all 0.15s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .custom-select:hover .cs-trigger {
-  border-color: var(--text-secondary);
-  background-color: var(--bg-card-hover);
+  background: var(--bg-card-hover);
+  border-color: var(--text-muted);
 }
 
-.custom-select:focus .cs-trigger {
-  border-color: var(--primary-color);
-  box-shadow: 0 0 0 2px var(--primary-alpha-10);
-}
-
+.custom-select:focus .cs-trigger,
 .custom-select.open .cs-trigger {
+  background: var(--bg-card-hover);
   border-color: var(--primary-color);
-  background-color: var(--bg-card-hover);
+  box-shadow: 0 0 0 3px var(--primary-alpha-10);
 }
 
 /* Value display */
@@ -51,6 +55,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 500;
+  font-size: 0.8125rem;
+  letter-spacing: -0.01em;
 }
 
 .cs-value.placeholder {
@@ -58,48 +64,115 @@
   font-weight: 400;
 }
 
-/* Arrow indicator */
+/* Arrow indicator - SVG chevron */
 .cs-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
-  font-size: 0.6em;
+  width: 20px;
+  height: 20px;
   color: var(--text-secondary);
-  transition: transform 0.2s ease;
-  line-height: 1;
+  transition:
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    color 0.2s ease;
+}
+
+.cs-arrow svg {
+  width: 14px;
+  height: 14px;
+}
+
+.custom-select:hover .cs-arrow {
+  color: var(--text-primary);
 }
 
 .custom-select.open .cs-arrow {
   transform: rotate(180deg);
+  color: var(--primary-color);
 }
 
-/* Dropdown container */
+/* Dropdown container - Portal mode */
 .cs-dropdown {
   position: absolute;
   top: 100%;
   left: 0;
   right: 0;
   z-index: 1000;
-  margin-top: 4px;
-  max-height: 240px;
+  margin-top: 6px;
+  max-height: 320px;
   overflow-y: auto;
+  overflow-x: hidden;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   box-shadow:
-    0 4px 12px var(--shadow-md),
-    0 0 1px var(--shadow-sm);
+    0 12px 48px -12px rgba(0, 0, 0, 0.5),
+    0 8px 24px -4px rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   opacity: 0;
   visibility: hidden;
-  transform: translateY(-4px);
+  transform: translateY(-8px) scale(0.98);
+  transform-origin: top center;
   transition:
-    opacity 0.15s ease,
-    transform 0.15s ease,
-    visibility 0.15s;
+    opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
+    visibility 0.2s;
+}
+
+[data-theme="dark"] .cs-dropdown {
+  background: rgba(22, 27, 34, 0.92);
+}
+
+[data-theme="light"] .cs-dropdown {
+  background: rgba(255, 255, 255, 0.95);
 }
 
 .custom-select.open .cs-dropdown {
   opacity: 1;
   visibility: visible;
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
+}
+
+/* Search container */
+.cs-search-container {
+  padding: 8px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.cs-search-input {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+
+.cs-search-input:focus {
+  border-color: var(--primary-color);
+}
+
+/* Options container */
+.cs-options-container {
+  padding: 4px 0;
+}
+
+/* No results message */
+.cs-no-results {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.8125rem;
 }
 
 /* Dropdown opens above */
@@ -107,60 +180,97 @@
   top: auto;
   bottom: 100%;
   margin-top: 0;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
+  transform-origin: bottom center;
+}
+
+.custom-select.dropdown-above .cs-dropdown {
+  transform: translateY(8px) scale(0.98);
 }
 
 .custom-select.dropdown-above.open .cs-dropdown {
-  transform: translateY(0);
+  transform: translateY(0) scale(1);
 }
 
 /* Portal mode - dropdown appended to body with fixed positioning */
 .cs-dropdown.cs-portal {
   position: fixed;
-  z-index: 100000; /* Must be higher than dialogs (10000) */
+  z-index: 100000;
   margin-top: 0;
   opacity: 1;
   visibility: visible;
-  transform: none;
+  transform: translateY(0) scale(1);
 }
 
 /* Option items */
 .cs-option {
-  padding: 8px 12px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  padding: 10px 14px;
+  padding-right: 36px;
   color: var(--text-primary);
+  font-size: 0.8125rem;
+  font-weight: 450;
   cursor: pointer;
-  transition:
-    background-color 0.1s ease,
-    color 0.1s ease;
+  transition: all 0.15s ease;
+  margin: 2px 4px;
+  border-radius: var(--radius-md);
 }
 
 .cs-option:first-child {
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  margin-top: 4px;
 }
 
 .cs-option:last-child {
-  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  margin-bottom: 4px;
 }
 
 .cs-option:hover {
-  background-color: var(--bg-card-hover);
+  background: var(--bg-card-hover);
+  color: var(--primary-color);
 }
 
 /* Keyboard focused option */
 .cs-option.focused {
-  background-color: var(--primary-alpha-10);
+  background: var(--primary-alpha-10);
   color: var(--primary-color);
 }
 
-/* Selected option */
+/* Selected option - with checkmark */
 .cs-option.selected {
-  background-color: var(--primary-alpha-20);
   color: var(--primary-color);
-  font-weight: 500;
+  font-weight: 600;
+  background: var(--primary-alpha-5);
+}
+
+.cs-option.selected::after {
+  content: "";
+  position: absolute;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2358a6ff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+  background-size: contain;
+  background-repeat: no-repeat;
+  animation: cs-check-in 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes cs-check-in {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) scale(0.5);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
 }
 
 .cs-option.selected.focused {
-  background-color: var(--primary-alpha-30);
+  background: var(--primary-alpha-15);
 }
 
 /* Disabled option */
@@ -168,41 +278,40 @@
   color: var(--text-muted);
   cursor: not-allowed;
   pointer-events: none;
-  opacity: 0.6;
+  opacity: 0.5;
 }
 
-/* Disabled state */
+/* Disabled state for entire select */
 .custom-select.disabled {
   cursor: not-allowed;
   pointer-events: none;
-}
-
-.custom-select.disabled .cs-trigger {
-  background-color: var(--bg-card-hover);
-  color: var(--text-muted);
   opacity: 0.6;
 }
 
-.custom-select.disabled .cs-arrow {
-  color: var(--text-muted);
+.custom-select.disabled .cs-trigger {
+  background: var(--bg-primary);
 }
 
 /* Scrollbar styling for dropdown */
 .cs-dropdown::-webkit-scrollbar {
-  width: 6px;
+  width: 8px;
 }
 
 .cs-dropdown::-webkit-scrollbar-track {
   background: transparent;
+  margin: 4px 0;
 }
 
 .cs-dropdown::-webkit-scrollbar-thumb {
-  background-color: var(--border-color);
-  border-radius: 3px;
+  background: var(--border-color);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 
 .cs-dropdown::-webkit-scrollbar-thumb:hover {
-  background-color: var(--text-muted);
+  background: var(--text-muted);
+  background-clip: padding-box;
 }
 
 /* Size variants */
@@ -212,11 +321,17 @@
 }
 
 .custom-select.cs-sm .cs-trigger {
-  padding: 5px 8px;
+  padding: 6px 10px;
 }
 
 .custom-select.cs-sm .cs-option {
-  padding: 6px 10px;
+  padding: 8px 12px;
+  padding-right: 30px;
+}
+
+.custom-select.cs-sm .cs-arrow svg {
+  width: 12px;
+  height: 12px;
 }
 
 .custom-select.cs-lg {
@@ -225,15 +340,43 @@
 }
 
 .custom-select.cs-lg .cs-trigger {
-  padding: 10px 14px;
+  padding: 12px 16px;
 }
 
 .custom-select.cs-lg .cs-option {
-  padding: 10px 14px;
+  padding: 12px 16px;
+  padding-right: 40px;
 }
 
 /* Full width variant */
 .custom-select.cs-full {
-  display: block;
+  display: flex;
   width: 100%;
+}
+
+/* Touch-friendly: ensure minimum touch target */
+@media (pointer: coarse) {
+  .cs-trigger {
+    min-height: 44px;
+  }
+
+  .cs-option {
+    min-height: 44px;
+  }
+}
+
+/* Focus visible for keyboard users */
+.custom-select:focus-visible .cs-trigger {
+  outline: 2px solid var(--primary-color);
+  outline-offset: 2px;
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .cs-trigger,
+  .cs-arrow,
+  .cs-dropdown,
+  .cs-option {
+    transition: none;
+  }
 }

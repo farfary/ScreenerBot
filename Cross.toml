@@ -16,10 +16,7 @@
 # Docker resource limits: max 8 CPUs and 8GB RAM
 # This prevents Docker from consuming all host resources during compilation
 [build.env]
-passthrough = [
-    "RUST_BACKTRACE",
-    "RUST_LOG",
-]
+passthrough = ["RUST_BACKTRACE", "RUST_LOG"]
 
 # Docker container configuration
 [build.docker]

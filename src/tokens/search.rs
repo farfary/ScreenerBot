@@ -67,12 +67,7 @@ async fn persist_token_to_database(result: &TokenSearchResult) -> bool {
 
     // Wrap blocking DB call in spawn_blocking
     let persist_result = tokio::task::spawn_blocking(move || {
-        db.upsert_token(
-            &mint,
-            symbol.as_deref(),
-            name.as_deref(),
-            None,
-        )
+        db.upsert_token(&mint, symbol.as_deref(), name.as_deref(), None)
     })
     .await;
 
@@ -83,8 +78,16 @@ async fn persist_token_to_database(result: &TokenSearchResult) -> bool {
                 &format!(
                     "[SEARCH] Token persisted to DB: mint={} symbol={:?} name={:?}",
                     result.mint,
-                    if !result.symbol.is_empty() { Some(&result.symbol) } else { None },
-                    if !result.name.is_empty() { Some(&result.name) } else { None }
+                    if !result.symbol.is_empty() {
+                        Some(&result.symbol)
+                    } else {
+                        None
+                    },
+                    if !result.name.is_empty() {
+                        Some(&result.name)
+                    } else {
+                        None
+                    }
                 ),
             );
             true
@@ -124,9 +127,9 @@ fn is_mint_address(query: &str) -> bool {
         return false;
     }
     // Base58 alphabet: 123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz
-    trimmed.chars().all(|c| {
-        matches!(c, '1'..='9' | 'A'..='H' | 'J'..='N' | 'P'..='Z' | 'a'..='k' | 'm'..='z')
-    })
+    trimmed
+        .chars()
+        .all(|c| matches!(c, '1'..='9' | 'A'..='H' | 'J'..='N' | 'P'..='Z' | 'a'..='k' | 'm'..='z'))
 }
 
 /// Search for tokens across available data sources
@@ -157,7 +160,10 @@ pub async fn search_tokens(query: &str, limit: Option<usize>) -> Result<SearchRe
     if is_mint_address(query) {
         logger::debug(
             LogTag::Api,
-            &format!("Query '{}' looks like mint address, fetching directly", query),
+            &format!(
+                "Query '{}' looks like mint address, fetching directly",
+                query
+            ),
         );
 
         // Try DexScreener first
@@ -302,17 +308,25 @@ mod tests {
     #[test]
     fn test_is_mint_address() {
         // Valid Solana addresses
-        assert!(is_mint_address("So11111111111111111111111111111111111111112"));
-        assert!(is_mint_address("EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"));
+        assert!(is_mint_address(
+            "So11111111111111111111111111111111111111112"
+        ));
+        assert!(is_mint_address(
+            "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+        ));
 
         // Invalid - too short
         assert!(!is_mint_address("So11111111"));
 
         // Invalid - contains invalid characters
-        assert!(!is_mint_address("0xabcdef1234567890abcdef1234567890abcdef12"));
+        assert!(!is_mint_address(
+            "0xabcdef1234567890abcdef1234567890abcdef12"
+        ));
 
         // Invalid - has spaces
-        assert!(!is_mint_address("So11 1111111111111111111111111111111111112"));
+        assert!(!is_mint_address(
+            "So11 1111111111111111111111111111111111112"
+        ));
 
         // Name/symbol queries
         assert!(!is_mint_address("BONK"));

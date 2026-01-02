@@ -95,7 +95,10 @@ async fn has_active_multi_wallet_session() -> bool {
     sessions.values().any(|s| {
         matches!(
             s.status,
-            SessionStatus::Pending | SessionStatus::Funding | SessionStatus::Executing | SessionStatus::Consolidating
+            SessionStatus::Pending
+                | SessionStatus::Funding
+                | SessionStatus::Executing
+                | SessionStatus::Consolidating
         )
     })
 }
@@ -104,7 +107,7 @@ async fn has_active_multi_wallet_session() -> bool {
 async fn cleanup_old_sessions() {
     let now = chrono::Utc::now();
     let mut sessions = MULTI_WALLET_SESSIONS.write().await;
-    
+
     let old_session_ids: Vec<String> = sessions
         .iter()
         .filter(|(_, s)| {
@@ -118,7 +121,7 @@ async fn cleanup_old_sessions() {
         })
         .map(|(id, _)| id.clone())
         .collect();
-    
+
     for id in old_session_ids {
         sessions.remove(&id);
         logger::debug(
@@ -791,9 +794,15 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/generate-keypairs", post(generate_keypairs))
         // Volume Aggregator
         .route("/volume-aggregator/start", post(start_volume_aggregator))
-        .route("/volume-aggregator/status", get(get_volume_aggregator_status))
+        .route(
+            "/volume-aggregator/status",
+            get(get_volume_aggregator_status),
+        )
         .route("/volume-aggregator/stop", post(stop_volume_aggregator))
-        .route("/volume-aggregator/sessions", get(get_volume_aggregator_sessions))
+        .route(
+            "/volume-aggregator/sessions",
+            get(get_volume_aggregator_sessions),
+        )
         // Tool Favorites
         .route("/favorites", get(get_favorites_list))
         .route("/favorites", post(add_favorite))
@@ -807,7 +816,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/watched-tokens/:id", delete(delete_watched_token_handler))
         .route("/trade-watcher/start", post(start_trade_watcher_handler))
         .route("/trade-watcher/stop", post(stop_trade_watcher_handler))
-        .route("/trade-watcher/status", get(get_trade_watcher_status_handler))
+        .route(
+            "/trade-watcher/status",
+            get(get_trade_watcher_status_handler),
+        )
         // Merge multi-wallet routes
         .merge(multi_wallet_routes())
 }
@@ -822,7 +834,10 @@ async fn scan_atas() -> Response {
     let wallet_address = match get_wallet_address() {
         Ok(addr) => addr,
         Err(e) => {
-            logger::error(LogTag::Wallet, &format!("Failed to get wallet address: {}", e));
+            logger::error(
+                LogTag::Wallet,
+                &format!("Failed to get wallet address: {}", e),
+            );
             return error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 "WALLET_ERROR",
@@ -836,7 +851,10 @@ async fn scan_atas() -> Response {
     let all_accounts = match get_all_token_accounts(&wallet_address).await {
         Ok(accounts) => accounts,
         Err(e) => {
-            logger::error(LogTag::Wallet, &format!("Failed to get token accounts: {}", e));
+            logger::error(
+                LogTag::Wallet,
+                &format!("Failed to get token accounts: {}", e),
+            );
             return error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 "SCAN_ERROR",
@@ -853,7 +871,8 @@ async fn scan_atas() -> Response {
 
     // Estimate rent reclaimable (approximately 0.00203928 SOL per ATA)
     const ATA_RENT_LAMPORTS: u64 = 2_039_280;
-    let reclaimable_sol = (empty_accounts.len() as f64 * ATA_RENT_LAMPORTS as f64) / 1_000_000_000.0;
+    let reclaimable_sol =
+        (empty_accounts.len() as f64 * ATA_RENT_LAMPORTS as f64) / 1_000_000_000.0;
 
     // Build empty ATA info list
     let empty_atas: Vec<EmptyAtaInfo> = empty_accounts
@@ -1027,25 +1046,25 @@ async fn start_volume_aggregator(Json(request): Json<StartVolumeAggregatorReques
     }
 
     // Build config using new builder pattern
-    use crate::tools::{DelayConfig, SizingConfig, DistributionStrategy};
-    
+    use crate::tools::{DelayConfig, DistributionStrategy, SizingConfig};
+
     // Determine sizing config based on min/max
     let sizing_config = if request.min_amount_sol == request.max_amount_sol {
         SizingConfig::fixed(request.min_amount_sol)
     } else {
         SizingConfig::random(request.min_amount_sol, request.max_amount_sol)
     };
-    
+
     // Determine delay config
     let delay_config = if let Some(max_ms) = request.delay_max_ms {
         DelayConfig::random(request.delay_between_ms, max_ms)
     } else {
         DelayConfig::fixed(request.delay_between_ms)
     };
-    
+
     // Parse strategy
     let strategy = DistributionStrategy::from_db_value(&request.strategy);
-    
+
     let config = VolumeConfig::new(token_mint, request.total_volume_sol)
         .with_num_wallets(request.num_wallets)
         .with_sizing(sizing_config)
@@ -1064,7 +1083,7 @@ async fn start_volume_aggregator(Json(request): Json<StartVolumeAggregatorReques
 
     // Create aggregator and prepare
     let mut aggregator = VolumeAggregator::new(config);
-    
+
     if let Err(e) = aggregator.prepare().await {
         return error_response(
             axum::http::StatusCode::BAD_REQUEST,
@@ -1076,7 +1095,7 @@ async fn start_volume_aggregator(Json(request): Json<StartVolumeAggregatorReques
 
     // Store abort flag
     let abort_flag = aggregator.get_abort_flag();
-    
+
     // Update state to running
     {
         let mut state = VOLUME_AGGREGATOR_STATE.write().await;
@@ -1099,7 +1118,7 @@ async fn start_volume_aggregator(Json(request): Json<StartVolumeAggregatorReques
     // Spawn execution task
     tokio::spawn(async move {
         let result = aggregator.execute().await;
-        
+
         // Update state with result
         let mut state = VOLUME_AGGREGATOR_STATE.write().await;
         match result {
@@ -1133,9 +1152,9 @@ async fn start_volume_aggregator(Json(request): Json<StartVolumeAggregatorReques
 /// Get volume aggregator status
 async fn get_volume_aggregator_status() -> Response {
     let state = VOLUME_AGGREGATOR_STATE.read().await;
-    
+
     let session = state.session.as_ref().map(VolumeSessionResponse::from);
-    
+
     success_response(VolumeAggregatorStatusResponse {
         status: state.status.to_string(),
         session,
@@ -1145,7 +1164,7 @@ async fn get_volume_aggregator_status() -> Response {
 /// Stop a running volume aggregator session
 async fn stop_volume_aggregator() -> Response {
     let mut state = VOLUME_AGGREGATOR_STATE.write().await;
-    
+
     if state.status != ToolStatus::Running {
         return error_response(
             axum::http::StatusCode::BAD_REQUEST,
@@ -1159,7 +1178,7 @@ async fn stop_volume_aggregator() -> Response {
     if let Some(abort_flag) = &state.abort_flag {
         abort_flag.store(true, Ordering::SeqCst);
         logger::info(LogTag::Tools, "Volume aggregator stop requested via API");
-        
+
         success_response(serde_json::json!({
             "message": "Stop request sent",
             "status": "stopping"
@@ -1206,10 +1225,7 @@ async fn get_volume_aggregator_sessions() -> Response {
             aborted_sessions: summary.aborted_sessions,
         },
         Err(e) => {
-            logger::warning(
-                LogTag::Tools,
-                &format!("Failed to get VA analytics: {}", e),
-            );
+            logger::warning(LogTag::Tools, &format!("Failed to get VA analytics: {}", e));
             VaAnalyticsSummaryResponse {
                 total_sessions: 0,
                 total_volume_sol: 0.0,
@@ -1235,8 +1251,8 @@ async fn get_volume_aggregator_sessions() -> Response {
 // =============================================================================
 
 use crate::tools::database::{
-    get_tool_favorites, upsert_tool_favorite, remove_tool_favorite,
-    update_tool_favorite as db_update_tool_favorite, increment_tool_favorite_use,
+    get_tool_favorites, increment_tool_favorite_use, remove_tool_favorite,
+    update_tool_favorite as db_update_tool_favorite, upsert_tool_favorite,
 };
 
 /// Get all tool favorites (optionally filtered by tool_type query param)
@@ -1244,7 +1260,7 @@ async fn get_favorites_list(
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> Response {
     let tool_type = params.get("tool_type").map(|s| s.as_str());
-    
+
     match get_tool_favorites(tool_type) {
         Ok(favorites) => {
             let total = favorites.len();
@@ -1262,7 +1278,12 @@ async fn get_favorites_list(
 /// Add a new tool favorite
 async fn add_favorite(Json(request): Json<AddToolFavoriteRequest>) -> Response {
     // Validate tool_type
-    let valid_types = ["volume_aggregator", "buy_multi", "sell_multi", "token_watch"];
+    let valid_types = [
+        "volume_aggregator",
+        "buy_multi",
+        "sell_multi",
+        "token_watch",
+    ];
     if !valid_types.contains(&request.tool_type.as_str()) {
         return error_response(
             axum::http::StatusCode::BAD_REQUEST,
@@ -1285,7 +1306,10 @@ async fn add_favorite(Json(request): Json<AddToolFavoriteRequest>) -> Response {
         Ok(id) => {
             logger::info(
                 LogTag::Tools,
-                &format!("Added tool favorite: {} for {}", request.mint, request.tool_type),
+                &format!(
+                    "Added tool favorite: {} for {}",
+                    request.mint, request.tool_type
+                ),
             );
             success_response(serde_json::json!({ "id": id, "success": true }))
         }
@@ -2142,7 +2166,10 @@ async fn get_session_status(id: &str, expected_type: &str) -> Response {
                 return error_response(
                     axum::http::StatusCode::BAD_REQUEST,
                     "TYPE_MISMATCH",
-                    &format!("Session is {} not {}", session.operation_type, expected_type),
+                    &format!(
+                        "Session is {} not {}",
+                        session.operation_type, expected_type
+                    ),
                     None,
                 );
             }
@@ -2247,14 +2274,21 @@ async fn search_pools_handler(Path(mint): Path<String>) -> Response {
         Ok(pools) => {
             logger::debug(
                 LogTag::Tools,
-                &format!("[TRADE_WATCHER] Found {} pools for mint={}", pools.len(), mint),
+                &format!(
+                    "[TRADE_WATCHER] Found {} pools for mint={}",
+                    pools.len(),
+                    mint
+                ),
             );
             success_response(serde_json::json!({ "pools": pools }))
         }
         Err(e) => {
             logger::warning(
                 LogTag::Tools,
-                &format!("[TRADE_WATCHER] Pool search failed for mint={}: {}", mint, e),
+                &format!(
+                    "[TRADE_WATCHER] Pool search failed for mint={}: {}",
+                    mint, e
+                ),
             );
             error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -2311,7 +2345,10 @@ async fn add_watched_token_handler(Json(req): Json<AddWatchedTokenRequest>) -> R
         Ok(id) => {
             logger::info(
                 LogTag::Tools,
-                &format!("[TRADE_WATCHER] Added watched token: id={}, mint={}", id, req.mint),
+                &format!(
+                    "[TRADE_WATCHER] Added watched token: id={}, mint={}",
+                    id, req.mint
+                ),
             );
             success_response(serde_json::json!({ "id": id, "success": true }))
         }
@@ -2350,7 +2387,10 @@ async fn delete_watched_token_handler(Path(id): Path<i64>) -> Response {
         Err(e) => {
             logger::error(
                 LogTag::Tools,
-                &format!("[TRADE_WATCHER] Failed to delete watched token id={}: {}", id, e),
+                &format!(
+                    "[TRADE_WATCHER] Failed to delete watched token id={}: {}",
+                    id, e
+                ),
             );
             error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -2366,7 +2406,10 @@ async fn delete_watched_token_handler(Path(id): Path<i64>) -> Response {
 async fn start_trade_watcher_handler() -> Response {
     use crate::tools::trade_watcher::start_trade_monitor;
 
-    logger::info(LogTag::Tools, "[TRADE_WATCHER] Starting trade monitor via API");
+    logger::info(
+        LogTag::Tools,
+        "[TRADE_WATCHER] Starting trade monitor via API",
+    );
     start_trade_monitor().await;
 
     success_response(serde_json::json!({
@@ -2379,7 +2422,10 @@ async fn start_trade_watcher_handler() -> Response {
 async fn stop_trade_watcher_handler() -> Response {
     use crate::tools::trade_watcher::stop_trade_monitor;
 
-    logger::info(LogTag::Tools, "[TRADE_WATCHER] Stopping trade monitor via API");
+    logger::info(
+        LogTag::Tools,
+        "[TRADE_WATCHER] Stopping trade monitor via API",
+    );
     stop_trade_monitor().await;
 
     success_response(serde_json::json!({
@@ -2485,10 +2531,10 @@ pub struct BurnTokensResponse {
 
 /// Scan wallet for tokens that can be burned, with categorization
 async fn scan_burnable_tokens() -> Response {
-    use crate::positions;
-    use crate::pools;
     use crate::constants::SOL_MINT;
-    
+    use crate::pools;
+    use crate::positions;
+
     // ATA rent is approximately 0.00203928 SOL
     const ATA_RENT_SOL: f64 = 0.00203928;
 
@@ -2496,7 +2542,10 @@ async fn scan_burnable_tokens() -> Response {
     let wallet_address = match get_wallet_address() {
         Ok(addr) => addr,
         Err(e) => {
-            logger::error(LogTag::Tools, &format!("Failed to get wallet address: {}", e));
+            logger::error(
+                LogTag::Tools,
+                &format!("Failed to get wallet address: {}", e),
+            );
             return error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 "WALLET_ERROR",
@@ -2510,7 +2559,10 @@ async fn scan_burnable_tokens() -> Response {
     let all_accounts = match get_all_token_accounts(&wallet_address).await {
         Ok(accounts) => accounts,
         Err(e) => {
-            logger::error(LogTag::Tools, &format!("Failed to get token accounts: {}", e));
+            logger::error(
+                LogTag::Tools,
+                &format!("Failed to get token accounts: {}", e),
+            );
             return error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 "SCAN_ERROR",
@@ -2523,16 +2575,16 @@ async fn scan_burnable_tokens() -> Response {
     // Get open and closed positions for categorization
     let open_positions = positions::get_open_positions().await;
     let closed_positions = positions::get_closed_positions().await;
-    
-    let open_position_mints: std::collections::HashSet<String> = 
+
+    let open_position_mints: std::collections::HashSet<String> =
         open_positions.iter().map(|p| p.mint.clone()).collect();
-    let closed_position_mints: std::collections::HashSet<String> = 
+    let closed_position_mints: std::collections::HashSet<String> =
         closed_positions.iter().map(|p| p.mint.clone()).collect();
 
     // Get token metadata in batch
     let mints: Vec<String> = all_accounts.iter().map(|acc| acc.mint.clone()).collect();
     let mut metadata_map: HashMap<String, (Option<String>, Option<String>)> = HashMap::new();
-    
+
     if let Some(db) = crate::tokens::database::get_global_database() {
         for mint in &mints {
             if let Ok(Some(meta)) = db.get_token(mint) {
@@ -2570,46 +2622,50 @@ async fn scan_burnable_tokens() -> Response {
         // Get price from pools module
         let price_result = pools::get_pool_price(&account.mint);
         let price_sol = price_result.as_ref().map(|p| p.price_sol);
-        let has_liquidity = price_result.as_ref().map(|p| p.sol_reserves > 0.0).unwrap_or(false);
-        
+        let has_liquidity = price_result
+            .as_ref()
+            .map(|p| p.sol_reserves > 0.0)
+            .unwrap_or(false);
+
         // Calculate UI amount and value
         let ui_amount = account.balance as f64 / 10f64.powi(account.decimals as i32);
         let value_sol = price_sol.map(|p| p * ui_amount);
 
         // Determine category
-        let (category, category_label, can_burn, burn_warning) = if open_position_mints.contains(&account.mint) {
-            categories.open_positions += 1;
-            (
-                TokenCategory::OpenPosition,
-                "Open Position".to_string(),
-                false,
-                Some("Cannot burn tokens from open positions".to_string()),
-            )
-        } else if closed_position_mints.contains(&account.mint) {
-            categories.closed_positions += 1;
-            (
-                TokenCategory::ClosedPosition,
-                "Closed Position".to_string(),
-                true,
-                Some("Leftover from closed position".to_string()),
-            )
-        } else if has_liquidity && value_sol.map(|v| v > 0.0001).unwrap_or(false) {
-            categories.has_value += 1;
-            (
-                TokenCategory::HasValue,
-                "Has Value".to_string(),
-                true,
-                Some(format!("Worth ~{:.6} SOL", value_sol.unwrap_or(0.0))),
-            )
-        } else {
-            categories.zero_liquidity += 1;
-            (
-                TokenCategory::ZeroLiquidity,
-                "Zero Liquidity".to_string(),
-                true,
-                None,
-            )
-        };
+        let (category, category_label, can_burn, burn_warning) =
+            if open_position_mints.contains(&account.mint) {
+                categories.open_positions += 1;
+                (
+                    TokenCategory::OpenPosition,
+                    "Open Position".to_string(),
+                    false,
+                    Some("Cannot burn tokens from open positions".to_string()),
+                )
+            } else if closed_position_mints.contains(&account.mint) {
+                categories.closed_positions += 1;
+                (
+                    TokenCategory::ClosedPosition,
+                    "Closed Position".to_string(),
+                    true,
+                    Some("Leftover from closed position".to_string()),
+                )
+            } else if has_liquidity && value_sol.map(|v| v > 0.0001).unwrap_or(false) {
+                categories.has_value += 1;
+                (
+                    TokenCategory::HasValue,
+                    "Has Value".to_string(),
+                    true,
+                    Some(format!("Worth ~{:.6} SOL", value_sol.unwrap_or(0.0))),
+                )
+            } else {
+                categories.zero_liquidity += 1;
+                (
+                    TokenCategory::ZeroLiquidity,
+                    "Zero Liquidity".to_string(),
+                    true,
+                    None,
+                )
+            };
 
         // Only count rent reclaimable for tokens we can burn
         if can_burn {
@@ -2644,16 +2700,19 @@ async fn scan_burnable_tokens() -> Response {
             TokenCategory::ClosedPosition => 2,
             TokenCategory::ZeroLiquidity => 3,
         };
-        
+
         let p1 = priority(a);
         let p2 = priority(b);
-        
+
         if p1 != p2 {
             return p1.cmp(&p2);
         }
-        
+
         // Within same category, sort by value (highest first)
-        b.value_sol.unwrap_or(0.0).partial_cmp(&a.value_sol.unwrap_or(0.0)).unwrap_or(std::cmp::Ordering::Equal)
+        b.value_sol
+            .unwrap_or(0.0)
+            .partial_cmp(&a.value_sol.unwrap_or(0.0))
+            .unwrap_or(std::cmp::Ordering::Equal)
     });
 
     logger::info(
@@ -2677,11 +2736,11 @@ async fn scan_burnable_tokens() -> Response {
 
 /// Burn selected tokens
 async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Response {
-    use solana_sdk::transaction::Transaction;
-    use spl_token::instruction as spl_instruction;
     use crate::constants::SOL_MINT;
     use crate::positions;
-    
+    use solana_sdk::transaction::Transaction;
+    use spl_token::instruction as spl_instruction;
+
     const ATA_RENT_SOL: f64 = 0.00203928;
 
     if request.mints.is_empty() {
@@ -2720,7 +2779,7 @@ async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Respons
 
     // Check for open positions - prevent burning these
     let open_positions = positions::get_open_positions().await;
-    let open_position_mints: std::collections::HashSet<String> = 
+    let open_position_mints: std::collections::HashSet<String> =
         open_positions.iter().map(|p| p.mint.clone()).collect();
 
     // Get all token accounts
@@ -2896,11 +2955,17 @@ async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Respons
         );
 
         // Send and confirm transaction
-        match rpc_client.send_and_confirm_signed_transaction(&transaction).await {
+        match rpc_client
+            .send_and_confirm_signed_transaction(&transaction)
+            .await
+        {
             Ok(signature) => {
                 logger::info(
                     LogTag::Tools,
-                    &format!("Burned {} tokens of {}. TX: {}", account.balance, mint, signature),
+                    &format!(
+                        "Burned {} tokens of {}. TX: {}",
+                        account.balance, mint, signature
+                    ),
                 );
                 results.push(BurnResult {
                     mint: mint.clone(),

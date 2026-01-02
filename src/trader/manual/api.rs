@@ -101,7 +101,8 @@ pub async fn manual_buy(mint: &str, size_sol: f64) -> Result<TradeResult, String
         // Determine which step failed based on error message
         if error.contains("Unhealthy") || error.contains("connectivity") {
             action.fail_validation(error).await;
-        } else if error.contains("Quote") || error.contains("quote") || error.contains("No routes") {
+        } else if error.contains("Quote") || error.contains("quote") || error.contains("No routes")
+        {
             action.fail_quote(error).await;
         } else {
             action.fail_swap(error).await;
@@ -112,7 +113,7 @@ pub async fn manual_buy(mint: &str, size_sol: f64) -> Result<TradeResult, String
     // Mark quote and swap as complete
     action.complete_quote(None).await;
     action.start_swap().await;
-    
+
     if let Some(ref sig) = result.tx_signature {
         action.complete_swap(sig).await;
         // Verification is async, mark as complete with pending verification
@@ -124,7 +125,10 @@ pub async fn manual_buy(mint: &str, size_sol: f64) -> Result<TradeResult, String
 
     // Record manual trade
     if let Err(e) = super::tracking::record_manual_trade(&result).await {
-        logger::warning(LogTag::Trader, &format!("Failed to record manual trade: {}", e));
+        logger::warning(
+            LogTag::Trader,
+            &format!("Failed to record manual trade: {}", e),
+        );
     }
 
     Ok(result)
@@ -151,13 +155,14 @@ pub async fn manual_sell(mint: &str, percentage: Option<f64>) -> Result<TradeRes
         .ok()
         .flatten()
         .map(|t| t.symbol);
-    
+
     // Validate position exists first (needed for action metadata)
     let position = positions::get_position_by_mint(mint).await;
     let position_id = position.as_ref().and_then(|p| p.id);
 
     // Create action tracker
-    let action = ManualSellAction::new(mint, symbol.as_deref(), exit_percentage, position_id).await?;
+    let action =
+        ManualSellAction::new(mint, symbol.as_deref(), exit_percentage, position_id).await?;
 
     // Step 1: Validation
     action.start_validation().await;
@@ -225,7 +230,8 @@ pub async fn manual_sell(mint: &str, percentage: Option<f64>) -> Result<TradeRes
         let error = result.error.as_deref().unwrap_or("Trade failed");
         if error.contains("Unhealthy") || error.contains("connectivity") {
             action.fail_validation(error).await;
-        } else if error.contains("Quote") || error.contains("quote") || error.contains("No routes") {
+        } else if error.contains("Quote") || error.contains("quote") || error.contains("No routes")
+        {
             action.fail_quote(error).await;
         } else {
             action.fail_swap(error).await;
@@ -247,7 +253,10 @@ pub async fn manual_sell(mint: &str, percentage: Option<f64>) -> Result<TradeRes
 
     // Record manual trade
     if let Err(e) = super::tracking::record_manual_trade(&result).await {
-        logger::warning(LogTag::Trader, &format!("Failed to record manual trade: {}", e));
+        logger::warning(
+            LogTag::Trader,
+            &format!("Failed to record manual trade: {}", e),
+        );
     }
 
     Ok(result)
@@ -360,7 +369,8 @@ pub async fn manual_add(mint: &str, size_sol: f64) -> Result<TradeResult, String
         let error = result.error.as_deref().unwrap_or("Trade failed");
         if error.contains("Unhealthy") || error.contains("connectivity") {
             action.fail_validation(error).await;
-        } else if error.contains("Quote") || error.contains("quote") || error.contains("No routes") {
+        } else if error.contains("Quote") || error.contains("quote") || error.contains("No routes")
+        {
             action.fail_quote(error).await;
         } else {
             action.fail_swap(error).await;
@@ -382,7 +392,10 @@ pub async fn manual_add(mint: &str, size_sol: f64) -> Result<TradeResult, String
 
     // Record manual trade
     if let Err(e) = super::tracking::record_manual_trade(&result).await {
-        logger::warning(LogTag::Trader, &format!("Failed to record manual trade: {}", e));
+        logger::warning(
+            LogTag::Trader,
+            &format!("Failed to record manual trade: {}", e),
+        );
     }
 
     Ok(result)

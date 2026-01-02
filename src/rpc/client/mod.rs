@@ -6,13 +6,14 @@
 pub mod methods;
 
 pub use methods::{
-    ProviderHealthInfo, RpcClientMethods,
-    // Transaction history types
-    SignatureInfo,
+    ProviderHealthInfo,
+    RpcClientMethods,
     // Program account types
     RpcFilterType,
     // Token supply types
     RpcTokenAccountBalance,
+    // Transaction history types
+    SignatureInfo,
     TokenSupply,
 };
 
@@ -125,7 +126,11 @@ impl RpcClient {
 
     /// Force circuit breaker reset for a specific provider
     pub async fn reset_circuit_breaker(&self, provider_id: &str) -> Result<(), String> {
-        let breaker = self.manager.circuit_breakers().get_breaker(provider_id).await;
+        let breaker = self
+            .manager
+            .circuit_breakers()
+            .get_breaker(provider_id)
+            .await;
         breaker.force_close().await;
         Ok(())
     }

@@ -298,6 +298,9 @@ mod tests {
 
     #[test]
     fn test_holder_watch_aliases() {
-        assert_eq!(get_tool_status("token-watch"), get_tool_status("holder-watch"));
+        assert_eq!(
+            get_tool_status("token-watch"),
+            get_tool_status("holder-watch")
+        );
     }
 }

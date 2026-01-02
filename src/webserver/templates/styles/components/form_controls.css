@@ -62,7 +62,9 @@ input[type="datetime-local"] {
   padding: var(--input-padding-y) var(--input-padding-x);
   font-family: var(--font-data);
   font-size: var(--input-font-size);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   line-height: 1.5;
   color: var(--text-primary);
   background: var(--input-bg);
@@ -192,7 +194,9 @@ textarea {
   padding: var(--input-padding-y) var(--input-padding-x);
   font-family: var(--font-data);
   font-size: var(--input-font-size);
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   line-height: 1.5;
   color: var(--text-primary);
   background: var(--input-bg);
@@ -493,7 +497,9 @@ input[type="radio"]:disabled {
 }
 
 .toggle input:checked + .toggle-track::after {
-  transform: translateX(calc(var(--toggle-width) - var(--toggle-knob-size) - var(--toggle-knob-offset) * 2));
+  transform: translateX(
+    calc(var(--toggle-width) - var(--toggle-knob-size) - var(--toggle-knob-offset) * 2)
+  );
 }
 
 /* Focus-visible for keyboard navigation */

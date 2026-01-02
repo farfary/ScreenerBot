@@ -331,12 +331,7 @@ pub fn msg_system_error(severity: &str, message: &str) -> String {
         _ => ("ℹ️", "Info"),
     };
 
-    format!(
-        "{} <b>{}</b>\n\n{}",
-        emoji,
-        label,
-        html_escape(message),
-    )
+    format!("{} <b>{}</b>\n\n{}", emoji, label, html_escape(message),)
 }
 
 /// Format bot started notification
@@ -349,9 +344,12 @@ pub fn msg_bot_started(
     let wallet_line = if wallet_address.is_empty() {
         String::new()
     } else {
-        format!("\n<b>Wallet:</b> <code>{}</code>", format_mint_display(wallet_address))
+        format!(
+            "\n<b>Wallet:</b> <code>{}</code>",
+            format_mint_display(wallet_address)
+        )
     };
-    
+
     let balance_line = if balance_sol > 0.0 {
         format!("\n<b>Balance:</b> {} SOL", format_sol(balance_sol))
     } else {
@@ -457,7 +455,11 @@ pub fn msg_status(
     balance_sol: f64,
     today_pnl: f64,
 ) -> String {
-    let trading_status = if trading_active { "🟢 Active" } else { "🔴 Stopped" };
+    let trading_status = if trading_active {
+        "🟢 Active"
+    } else {
+        "🔴 Stopped"
+    };
     let entry_status = if entry_enabled { "✅" } else { "❌" };
     let exit_status = if exit_enabled { "✅" } else { "❌" };
     let pnl_emoji = if today_pnl >= 0.0 { "🟢" } else { "🔴" };
@@ -631,12 +633,18 @@ pub fn msg_pin_success(timeout_mins: u32) -> String {
 
 /// Format PIN failure
 pub fn msg_pin_failure(attempts_remaining: u32) -> String {
-    format!("❌ <b>Invalid Code</b>\n\n{} attempts remaining.", attempts_remaining)
+    format!(
+        "❌ <b>Invalid Code</b>\n\n{} attempts remaining.",
+        attempts_remaining
+    )
 }
 
 /// Format lockout message
 pub fn msg_locked_out(minutes: u32) -> String {
-    format!("🔒 <b>Locked Out</b>\n\nToo many failed attempts.\nTry again in {} minutes.", minutes)
+    format!(
+        "🔒 <b>Locked Out</b>\n\nToo many failed attempts.\nTry again in {} minutes.",
+        minutes
+    )
 }
 
 #[cfg(test)]

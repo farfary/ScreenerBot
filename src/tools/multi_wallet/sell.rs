@@ -74,10 +74,16 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
 
             for plan in topup_needed {
                 let topup_amount = config.min_sol_for_fee - plan.sol_balance + 0.001;
-                if let Err(e) = transfer_sol(&main_keypair, &plan.wallet_address, topup_amount).await {
+                if let Err(e) =
+                    transfer_sol(&main_keypair, &plan.wallet_address, topup_amount).await
+                {
                     logger::warning(
                         LogTag::Tools,
-                        &format!("Failed to top-up wallet {}: {}", &plan.wallet_address[..8], e),
+                        &format!(
+                            "Failed to top-up wallet {}: {}",
+                            &plan.wallet_address[..8],
+                            e
+                        ),
                     );
                 }
             }
@@ -189,12 +195,8 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
             .filter(|w| w.wallet.role == WalletRole::Secondary)
             .collect();
 
-        let collect_results = collect_sol(
-            wallets_to_consolidate,
-            &main_wallet.address,
-            false,
-        )
-        .await;
+        let collect_results =
+            collect_sol(wallets_to_consolidate, &main_wallet.address, false).await;
 
         result.total_sol_recovered = collect_results
             .iter()

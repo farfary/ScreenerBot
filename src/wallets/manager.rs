@@ -73,9 +73,7 @@ pub async fn is_initialized() -> bool {
 /// Migrate existing wallet from config.toml to wallets database
 async fn migrate_from_config() -> Result<(), String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     // Check if we already have wallets
     let (total, _) = db.get_wallet_counts()?;
@@ -88,9 +86,8 @@ async fn migrate_from_config() -> Result<(), String> {
     }
 
     // Check if config has encrypted wallet
-    let (encrypted, nonce) = crate::config::with_config(|cfg| {
-        (cfg.wallet_encrypted.clone(), cfg.wallet_nonce.clone())
-    });
+    let (encrypted, nonce) =
+        crate::config::with_config(|cfg| (cfg.wallet_encrypted.clone(), cfg.wallet_nonce.clone()));
 
     if encrypted.is_empty() || nonce.is_empty() {
         logger::debug(LogTag::Wallet, "No wallet in config.toml to migrate");
@@ -124,9 +121,7 @@ async fn migrate_from_config() -> Result<(), String> {
 /// Refresh the cached main wallet
 async fn refresh_main_wallet_cache() -> Result<(), String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     let main_wallet = match db.get_main_wallet()? {
         Some(w) => w,
@@ -175,8 +170,7 @@ pub async fn get_main_keypair() -> Result<Keypair, String> {
     let cache = MAIN_WALLET_CACHE.read().await;
     if let Some(cached) = cache.as_ref() {
         let bytes = cached.keypair.to_bytes();
-        return Keypair::from_bytes(&bytes)
-            .map_err(|e| format!("Failed to clone keypair: {}", e));
+        return Keypair::from_bytes(&bytes).map_err(|e| format!("Failed to clone keypair: {}", e));
     }
 
     Err("No main wallet configured".to_string())
@@ -220,9 +214,7 @@ pub async fn has_main_wallet() -> bool {
 /// Create a new wallet
 pub async fn create_wallet(request: CreateWalletRequest) -> Result<Wallet, String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     // Generate new keypair
     let (keypair, encrypted) = generate_and_encrypt_keypair()?;
@@ -268,11 +260,7 @@ pub async fn create_wallet(request: CreateWalletRequest) -> Result<Wallet, Strin
 
     logger::info(
         LogTag::Wallet,
-        &format!(
-            "Created new wallet: {} ({})",
-            request.name,
-            address
-        ),
+        &format!("Created new wallet: {} ({})", request.name, address),
     );
 
     // Return the wallet - re-acquire lock
@@ -287,9 +275,7 @@ pub async fn create_wallet(request: CreateWalletRequest) -> Result<Wallet, Strin
 /// Import an existing wallet
 pub async fn import_wallet(request: ImportWalletRequest) -> Result<Wallet, String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     // Parse and encrypt the private key
     let (keypair, encrypted) = import_and_encrypt(&request.private_key)?;
@@ -352,13 +338,9 @@ pub async fn import_wallet(request: ImportWalletRequest) -> Result<Wallet, Strin
 /// Export a wallet's private key
 pub async fn export_wallet(wallet_id: i64) -> Result<ExportWalletResponse, String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
-    let wallet = db
-        .get_wallet(wallet_id)?
-        .ok_or("Wallet not found")?;
+    let wallet = db.get_wallet(wallet_id)?.ok_or("Wallet not found")?;
 
     let (encrypted, nonce) = db
         .get_wallet_encrypted_key(wallet_id)?
@@ -374,16 +356,15 @@ pub async fn export_wallet(wallet_id: i64) -> Result<ExportWalletResponse, Strin
     Ok(ExportWalletResponse {
         address: wallet.address,
         private_key,
-        warning: "NEVER share this private key. Anyone with access can steal your funds.".to_string(),
+        warning: "NEVER share this private key. Anyone with access can steal your funds."
+            .to_string(),
     })
 }
 
 /// Get a wallet by ID
 pub async fn get_wallet(wallet_id: i64) -> Result<Option<Wallet>, String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     db.get_wallet(wallet_id)
 }
@@ -391,9 +372,7 @@ pub async fn get_wallet(wallet_id: i64) -> Result<Option<Wallet>, String> {
 /// Get a wallet by address
 pub async fn get_wallet_by_address(address: &str) -> Result<Option<Wallet>, String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     db.get_wallet_by_address(address)
 }
@@ -401,9 +380,7 @@ pub async fn get_wallet_by_address(address: &str) -> Result<Option<Wallet>, Stri
 /// Get a wallet's keypair by ID
 pub async fn get_wallet_keypair(wallet_id: i64) -> Result<Keypair, String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     let (encrypted, nonce) = db
         .get_wallet_encrypted_key(wallet_id)?
@@ -415,9 +392,7 @@ pub async fn get_wallet_keypair(wallet_id: i64) -> Result<Keypair, String> {
 /// List all wallets
 pub async fn list_wallets(include_inactive: bool) -> Result<Vec<Wallet>, String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     db.list_wallets(include_inactive)
 }
@@ -425,9 +400,7 @@ pub async fn list_wallets(include_inactive: bool) -> Result<Vec<Wallet>, String>
 /// List active wallets (usable for operations)
 pub async fn list_active_wallets() -> Result<Vec<Wallet>, String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     db.list_active_wallets()
 }
@@ -435,9 +408,7 @@ pub async fn list_active_wallets() -> Result<Vec<Wallet>, String> {
 /// Update wallet metadata
 pub async fn update_wallet(wallet_id: i64, request: UpdateWalletRequest) -> Result<Wallet, String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     db.update_wallet(
         wallet_id,
@@ -464,15 +435,11 @@ pub async fn update_wallet(wallet_id: i64, request: UpdateWalletRequest) -> Resu
 /// Set a wallet as the main wallet
 pub async fn set_main_wallet(wallet_id: i64) -> Result<Wallet, String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     db.set_main_wallet(wallet_id)?;
 
-    let wallet = db
-        .get_wallet(wallet_id)?
-        .ok_or("Wallet not found")?;
+    let wallet = db.get_wallet(wallet_id)?.ok_or("Wallet not found")?;
 
     drop(db_guard);
     refresh_main_wallet_cache().await?;
@@ -488,13 +455,9 @@ pub async fn set_main_wallet(wallet_id: i64) -> Result<Wallet, String> {
 /// Archive a wallet (soft delete)
 pub async fn archive_wallet(wallet_id: i64) -> Result<(), String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
-    let wallet = db
-        .get_wallet(wallet_id)?
-        .ok_or("Wallet not found")?;
+    let wallet = db.get_wallet(wallet_id)?.ok_or("Wallet not found")?;
 
     db.archive_wallet(wallet_id)?;
 
@@ -509,13 +472,9 @@ pub async fn archive_wallet(wallet_id: i64) -> Result<(), String> {
 /// Restore an archived wallet
 pub async fn restore_wallet(wallet_id: i64) -> Result<(), String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
-    let wallet = db
-        .get_wallet(wallet_id)?
-        .ok_or("Wallet not found")?;
+    let wallet = db.get_wallet(wallet_id)?.ok_or("Wallet not found")?;
 
     db.restore_wallet(wallet_id)?;
 
@@ -530,13 +489,9 @@ pub async fn restore_wallet(wallet_id: i64) -> Result<(), String> {
 /// Permanently delete a wallet
 pub async fn delete_wallet(wallet_id: i64) -> Result<(), String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
-    let wallet = db
-        .get_wallet(wallet_id)?
-        .ok_or("Wallet not found")?;
+    let wallet = db.get_wallet(wallet_id)?.ok_or("Wallet not found")?;
 
     db.delete_wallet(wallet_id)?;
 
@@ -555,9 +510,7 @@ pub async fn delete_wallet(wallet_id: i64) -> Result<(), String> {
 /// Get all wallets with their keypairs for volume aggregator/tools
 pub async fn get_wallets_with_keys() -> Result<Vec<WalletWithKey>, String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     let wallets = db.list_active_wallets()?;
     let mut result = Vec::with_capacity(wallets.len());
@@ -600,9 +553,7 @@ pub async fn get_wallets_with_keys() -> Result<Vec<WalletWithKey>, String> {
 /// Update last used timestamp for a wallet
 pub async fn update_last_used(wallet_id: i64) -> Result<(), String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     db.update_last_used(wallet_id)
 }
@@ -614,9 +565,7 @@ pub async fn update_last_used(wallet_id: i64) -> Result<(), String> {
 /// Get wallets summary for dashboard
 pub async fn get_wallets_summary() -> Result<WalletsSummary, String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     let (total, active) = db.get_wallet_counts()?;
 
@@ -791,9 +740,7 @@ pub async fn bulk_import_wallets(
 /// WARNING: This exports sensitive data - handle with care!
 pub async fn export_wallets(include_inactive: bool) -> Result<Vec<WalletExportRow>, String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     let wallets = db.list_wallets(include_inactive)?;
     let mut result = Vec::with_capacity(wallets.len());
@@ -824,10 +771,7 @@ pub async fn export_wallets(include_inactive: bool) -> Result<Vec<WalletExportRo
 
     logger::warning(
         LogTag::Wallet,
-        &format!(
-            "Exported {} wallets - SENSITIVE DATA",
-            result.len()
-        ),
+        &format!("Exported {} wallets - SENSITIVE DATA", result.len()),
     );
 
     Ok(result)
@@ -836,9 +780,7 @@ pub async fn export_wallets(include_inactive: bool) -> Result<Vec<WalletExportRo
 /// Get all existing wallet addresses for duplicate checking
 async fn get_existing_addresses() -> Result<HashSet<String>, String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     let wallets = db.list_wallets(true)?; // Include inactive
     Ok(wallets.into_iter().map(|w| w.address).collect())
@@ -859,9 +801,7 @@ pub async fn get_existing_wallet_addresses() -> Result<HashSet<String>, String> 
 /// Returns the number of tokens updated.
 pub async fn update_wallet_balances(wallet_id: i64) -> Result<usize, String> {
     // Get wallet address
-    let wallet = get_wallet(wallet_id)
-        .await?
-        .ok_or("Wallet not found")?;
+    let wallet = get_wallet(wallet_id).await?.ok_or("Wallet not found")?;
 
     let wallet_pubkey = solana_sdk::pubkey::Pubkey::from_str(&wallet.address)
         .map_err(|e| format!("Invalid wallet address: {}", e))?;
@@ -897,9 +837,7 @@ pub async fn update_wallet_balances(wallet_id: i64) -> Result<usize, String> {
 
     // Bulk update in database
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     db.update_balances_bulk(wallet_id, &balances)?;
 
@@ -944,9 +882,7 @@ pub async fn update_all_wallet_balances() -> Result<HashMap<i64, usize>, String>
 /// Get cached token balances for a wallet
 pub async fn get_token_balances(wallet_id: i64) -> Result<Vec<TokenBalance>, String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     db.get_token_balances(wallet_id)
 }
@@ -954,9 +890,7 @@ pub async fn get_token_balances(wallet_id: i64) -> Result<Vec<TokenBalance>, Str
 /// Get cached token balances for all wallets
 pub async fn get_all_token_balances() -> Result<HashMap<i64, Vec<TokenBalance>>, String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     db.get_all_token_balances()
 }
@@ -964,9 +898,7 @@ pub async fn get_all_token_balances() -> Result<HashMap<i64, Vec<TokenBalance>>,
 /// Clear cached token balances for a wallet
 pub async fn clear_token_balances(wallet_id: i64) -> Result<u64, String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     db.clear_token_balances(wallet_id)
 }
@@ -983,9 +915,7 @@ pub async fn upsert_token_balance(
     is_token_2022: bool,
 ) -> Result<(), String> {
     let db_guard = WALLETS_DB.read().await;
-    let db = db_guard
-        .as_ref()
-        .ok_or("Wallet database not initialized")?;
+    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
 
     db.upsert_token_balance(
         wallet_id,
@@ -1259,7 +1189,10 @@ pub async fn get_all_wallet_balances() -> Result<Vec<WalletBalanceSummary>, Stri
 
     logger::debug(
         LogTag::Wallet,
-        &format!("Retrieved balance summaries for {} sub-wallets", results.len()),
+        &format!(
+            "Retrieved balance summaries for {} sub-wallets",
+            results.len()
+        ),
     );
 
     Ok(results)

@@ -120,7 +120,10 @@ impl ConnectivityService {
             }
         };
 
-        let previous_kind = previous_health.as_ref().map(get_state_kind).unwrap_or("unknown");
+        let previous_kind = previous_health
+            .as_ref()
+            .map(get_state_kind)
+            .unwrap_or("unknown");
         let new_kind = get_state_kind(&new_health);
 
         // Only log and record events on state transitions
@@ -134,7 +137,11 @@ impl ConnectivityService {
                 );
 
                 // Only record recovery event on transition TO healthy
-                if state_changed && (previous_kind == "unhealthy" || previous_kind == "degraded" || previous_kind == "unknown") {
+                if state_changed
+                    && (previous_kind == "unhealthy"
+                        || previous_kind == "degraded"
+                        || previous_kind == "unknown")
+                {
                     tokio::spawn({
                         let name = name.to_string();
                         let latency = *latency_ms;
@@ -219,9 +226,7 @@ impl ConnectivityService {
                         crate::connectivity::types::EndpointCriticality::Important => {
                             Severity::Warn
                         }
-                        crate::connectivity::types::EndpointCriticality::Optional => {
-                            Severity::Info
-                        }
+                        crate::connectivity::types::EndpointCriticality::Optional => Severity::Info,
                     };
 
                     tokio::spawn({

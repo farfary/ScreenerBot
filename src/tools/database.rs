@@ -484,7 +484,9 @@ pub fn insert_va_session(
     let (sizing_type, amount_sol, amount_max_sol) = sizing_config.to_db_values();
     let strategy_str = strategy.to_db_value();
     let wallet_mode_str = wallet_mode.to_db_value();
-    let wallet_addresses_json = wallet_addresses.map(|addrs| serde_json::to_string(addrs).ok()).flatten();
+    let wallet_addresses_json = wallet_addresses
+        .map(|addrs| serde_json::to_string(addrs).ok())
+        .flatten();
 
     conn.execute(
         r#"
@@ -532,7 +534,10 @@ pub fn update_va_session_status(
         None
     };
 
-    let ended_at = if matches!(status, ToolStatus::Completed | ToolStatus::Failed | ToolStatus::Aborted) {
+    let ended_at = if matches!(
+        status,
+        ToolStatus::Completed | ToolStatus::Failed | ToolStatus::Aborted
+    ) {
         Some(now.clone())
     } else {
         None
@@ -711,7 +716,13 @@ pub fn insert_va_swap(
         INSERT INTO va_swaps (session_id, tx_index, wallet_address, is_buy, amount_sol, status)
         VALUES (?1, ?2, ?3, ?4, ?5, 'pending')
         "#,
-        params![session_id, tx_index, wallet_address, is_buy as i32, amount_sol],
+        params![
+            session_id,
+            tx_index,
+            wallet_address,
+            is_buy as i32,
+            amount_sol
+        ],
     )
     .map_err(|e| format!("Failed to insert VA swap: {}", e))?;
 
@@ -844,7 +855,9 @@ pub fn get_failed_atas_for_wallet(wallet_address: &str) -> Result<Vec<FailedAtaR
         .map_err(|e| format!("Failed to prepare statement: {}", e))?;
 
     let rows = stmt
-        .query_map(params![wallet_address], |row| Ok(FailedAtaRow::from_row(row)))
+        .query_map(params![wallet_address], |row| {
+            Ok(FailedAtaRow::from_row(row))
+        })
         .map_err(|e| format!("Failed to query failed ATAs: {}", e))?;
 
     let mut atas = Vec::new();
@@ -1438,7 +1451,14 @@ pub fn get_mw_session(session_id: &str) -> Result<MwSessionRow, String> {
         FROM mw_sessions WHERE session_id = ?1
         "#,
         params![session_id],
-        |row| MwSessionRow::from_row(row).map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)))),
+        |row| {
+            MwSessionRow::from_row(row).map_err(|e| {
+                rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e,
+                )))
+            })
+        },
     )
     .map_err(|e| format!("Failed to get MW session: {}", e))
 }
@@ -1474,14 +1494,7 @@ pub fn update_mw_session_status(
             updated_at = ?5
         WHERE session_id = ?6
         "#,
-        params![
-            status,
-            error_message,
-            started_at,
-            ended_at,
-            now,
-            session_id,
-        ],
+        params![status, error_message, started_at, ended_at, now, session_id,],
     )
     .map_err(|e| format!("Failed to update MW session status: {}", e))?;
 
@@ -1605,8 +1618,12 @@ pub fn get_session_ops(session_id: &str) -> Result<Vec<MwWalletOpRow>, String> {
 
     let rows = stmt
         .query_map(params![session_id], |row| {
-            MwWalletOpRow::from_row(row)
-                .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e))))
+            MwWalletOpRow::from_row(row).map_err(|e| {
+                rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e,
+                )))
+            })
         })
         .map_err(|e| format!("Failed to query session ops: {}", e))?;
 
@@ -1644,8 +1661,12 @@ pub fn get_recent_mw_sessions(limit: i32) -> Result<Vec<MwSessionRow>, String> {
 
     let rows = stmt
         .query_map(params![limit], |row| {
-            MwSessionRow::from_row(row)
-                .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(std::io::ErrorKind::Other, e))))
+            MwSessionRow::from_row(row).map_err(|e| {
+                rusqlite::Error::ToSqlConversionFailure(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    e,
+                )))
+            })
         })
         .map_err(|e| format!("Failed to query sessions: {}", e))?;
 
@@ -1873,7 +1894,14 @@ pub fn update_watched_token_tracking(
             updated_at = ?5
         WHERE id = ?6
         "#,
-        params![last_checked_at, last_trade_signature, trades_detected, actions_triggered, now, id],
+        params![
+            last_checked_at,
+            last_trade_signature,
+            trades_detected,
+            actions_triggered,
+            now,
+            id
+        ],
     )
     .map_err(|e| format!("Failed to update watched token tracking: {}", e))?;
 

@@ -11,8 +11,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::logger::{self, LogTag};
-use crate::positions;
 use crate::pools;
+use crate::positions;
 use crate::sol_price;
 use crate::tokens;
 use crate::transactions::{
@@ -389,20 +389,20 @@ async fn get_position_details(Path(key): Path<String>) -> Response {
     match resolve_position_by_key(&key).await {
         Ok(Some(position)) => {
             let mint = &position.mint;
-            
+
             // Fetch all data concurrently for better performance
             let detail = map_position_to_detail(&position).await;
             let executions = build_execution_rows(&position);
             let transactions = build_transaction_summaries(&position).await;
             let state_history = load_state_history_entries(&position).await;
             let (entries, exits) = load_entry_exit_history(&position).await;
-            
+
             // Fetch token data from database
             let token_data = tokens::database::get_full_token_async(mint)
                 .await
                 .ok()
                 .flatten();
-            
+
             // Build token info from token database
             let token_info = token_data.as_ref().map(|token| {
                 let website = token.websites.first().map(|w| w.url.clone());
@@ -416,7 +416,7 @@ async fn get_position_details(Path(key): Path<String>) -> Response {
                     .iter()
                     .find(|s| s.link_type.to_lowercase().contains("telegram"))
                     .map(|s| s.url.clone());
-                
+
                 PositionTokenInfo {
                     decimals: Some(token.decimals),
                     description: token.description.clone(),
@@ -426,7 +426,7 @@ async fn get_position_details(Path(key): Path<String>) -> Response {
                     telegram,
                 }
             });
-            
+
             // Build market data from token database
             let market_data = token_data.as_ref().map(|token| PositionMarketData {
                 market_cap: token.market_cap,
@@ -437,7 +437,7 @@ async fn get_position_details(Path(key): Path<String>) -> Response {
                 price_change_h24: token.price_change_h24,
                 holder_count: token.total_holders,
             });
-            
+
             // Build security summary from token database
             let security = token_data.as_ref().map(|token| {
                 // Rugcheck normalized score: 0-100, LOWER = SAFER, HIGHER = RISKIER
@@ -447,14 +447,14 @@ async fn get_position_details(Path(key): Path<String>) -> Response {
                     Some(_) => "high".to_string(),
                     None => "unknown".to_string(),
                 };
-                
+
                 let top_risks: Vec<String> = token
                     .security_risks
                     .iter()
                     .take(3)
                     .map(|r| r.name.clone())
                     .collect();
-                
+
                 PositionSecuritySummary {
                     score_normalized: token.security_score_normalised,
                     risk_level,
@@ -463,26 +463,32 @@ async fn get_position_details(Path(key): Path<String>) -> Response {
                     top_risks,
                 }
             });
-            
+
             // Get pool info from pool service
-            let pool_info = pools::get_pool_price(mint).map(|price_result| {
-                PositionPoolInfo {
-                    pool_address: Some(price_result.pool_address.clone()),
-                    dex_name: price_result.source_pool.clone(),
-                    liquidity_sol: Some(price_result.sol_reserves),
-                }
+            let pool_info = pools::get_pool_price(mint).map(|price_result| PositionPoolInfo {
+                pool_address: Some(price_result.pool_address.clone()),
+                dex_name: price_result.source_pool.clone(),
+                liquidity_sol: Some(price_result.sol_reserves),
             });
-            
+
             // Build external links
             let external_links = ExternalLinks::for_mint(mint);
-            
+
             // Calculate position age in seconds
-            let position_age_seconds = Some(Utc::now().signed_duration_since(position.entry_time).num_seconds());
-            
+            let position_age_seconds = Some(
+                Utc::now()
+                    .signed_duration_since(position.entry_time)
+                    .num_seconds(),
+            );
+
             // Get SOL price in USD
             let sol_price_usd = {
                 let price = sol_price::get_sol_price();
-                if price > 0.0 { Some(price) } else { None }
+                if price > 0.0 {
+                    Some(price)
+                } else {
+                    None
+                }
             };
 
             success_response(PositionDetailResponse {
@@ -1196,7 +1202,10 @@ async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionDebug
         tags: Vec::new(), // Tags not available in unified Token
         // Normalized score is 0-100 where HIGHER = MORE RISKY
         // Token is "verified" (safe) if score <= 30 (low risk)
-        is_verified: token.security_score_normalised.map(|s| s <= 30).unwrap_or(false),
+        is_verified: token
+            .security_score_normalised
+            .map(|s| s <= 30)
+            .unwrap_or(false),
     });
 
     // 3. Get current price from pool service

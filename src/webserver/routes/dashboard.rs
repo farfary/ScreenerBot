@@ -6,10 +6,10 @@ use crate::global::{
     POOL_SERVICE_READY, POSITIONS_SYSTEM_READY, TOKENS_SYSTEM_READY, TRANSACTIONS_SYSTEM_READY,
 };
 use crate::positions;
-use crate::trader::is_trader_running;
 use crate::rpc::get_global_rpc_stats;
 use crate::tokens::cleanup::get_blacklist_summary;
 use crate::tokens::database::get_global_database;
+use crate::trader::is_trader_running;
 use crate::wallet::get_current_wallet_status;
 use crate::webserver::demo;
 use crate::webserver::snapshot::get_cached_system_metrics;
@@ -532,15 +532,16 @@ async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<HomeDash
 
     // Process wallet analytics from parallel results
     let current_wallet = current_wallet_result.ok().flatten();
-    let start_of_day_balance_sol = start_of_day_balance_result
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| {
-            current_wallet
-                .as_ref()
-                .map(|w| w.sol_balance)
-                .unwrap_or(0.0)
-        });
+    let start_of_day_balance_sol =
+        start_of_day_balance_result
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| {
+                current_wallet
+                    .as_ref()
+                    .map(|w| w.sol_balance)
+                    .unwrap_or(0.0)
+            });
 
     let current_balance_sol = current_wallet
         .as_ref()

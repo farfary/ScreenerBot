@@ -2,10 +2,10 @@
 //!
 //! Handles button clicks from inline keyboards.
 
+use super::check_auth;
 use super::menu::{send_main_menu, send_positions_menu, send_settings_menu};
 use super::status::{handle_balance_command, handle_stats_command, handle_status_command};
 use super::trading::{execute_force_stop, handle_pause_entries_command, handle_stop_command};
-use super::check_auth;
 use crate::config::{update_config_section, with_config};
 use crate::logger::{self, LogTag};
 use crate::positions;
@@ -161,8 +161,9 @@ async fn send_position_details(bot: &Bot, chat_id: ChatId, mint_short: &str) -> 
     match position {
         Some(pos) => {
             let duration = (chrono::Utc::now() - pos.entry_time).num_seconds() as u64;
-            let tokens =
-                pos.remaining_token_amount.unwrap_or(pos.token_amount.unwrap_or(0)) as f64;
+            let tokens = pos
+                .remaining_token_amount
+                .unwrap_or(pos.token_amount.unwrap_or(0)) as f64;
             let current_price = pos.current_price.unwrap_or(pos.average_entry_price);
             let current_value = tokens * current_price;
 
@@ -250,8 +251,9 @@ async fn send_confirm_sell(
 
     match position {
         Some(pos) => {
-            let tokens =
-                pos.remaining_token_amount.unwrap_or(pos.token_amount.unwrap_or(0)) as f64;
+            let tokens = pos
+                .remaining_token_amount
+                .unwrap_or(pos.token_amount.unwrap_or(0)) as f64;
             let msg = format!(
                 "⚠️ <b>Confirm Sell {}%</b>\n\n\
                  Token: {}\n\
@@ -298,7 +300,13 @@ async fn send_confirm_dca(
                  ⏰ <i>Confirm within 30 seconds</i>",
                 pos.symbol, amount
             );
-            send_with_keyboard(bot, chat_id, &msg, keyboards::confirm_dca(&pos.mint, amount)).await
+            send_with_keyboard(
+                bot,
+                chat_id,
+                &msg,
+                keyboards::confirm_dca(&pos.mint, amount),
+            )
+            .await
         }
         None => {
             let msg = "❌ Position not found";
@@ -307,11 +315,7 @@ async fn send_confirm_dca(
     }
 }
 
-async fn send_confirm_close(
-    bot: &Bot,
-    chat_id: ChatId,
-    mint_short: &str,
-) -> Result<(), String> {
+async fn send_confirm_close(bot: &Bot, chat_id: ChatId, mint_short: &str) -> Result<(), String> {
     let positions_list = positions::get_open_positions().await;
     let position = positions_list
         .iter()
@@ -319,8 +323,9 @@ async fn send_confirm_close(
 
     match position {
         Some(pos) => {
-            let tokens =
-                pos.remaining_token_amount.unwrap_or(pos.token_amount.unwrap_or(0)) as f64;
+            let tokens = pos
+                .remaining_token_amount
+                .unwrap_or(pos.token_amount.unwrap_or(0)) as f64;
             let est_receive = tokens * pos.current_price.unwrap_or(pos.average_entry_price);
             let msg = formatters::msg_confirm_close(
                 &pos.symbol,
@@ -430,7 +435,9 @@ async fn execute_sell(
                          Token: {}\n\
                          Sold: {}%\n\
                          Received: {:.4} SOL",
-                        pos.symbol, percent, result.executed_size_sol.unwrap_or(0.0)
+                        pos.symbol,
+                        percent,
+                        result.executed_size_sol.unwrap_or(0.0)
                     );
                     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await
                 }
@@ -545,11 +552,18 @@ async fn execute_blacklist(bot: &Bot, chat_id: ChatId, mint_short: &str) -> Resu
             let mint_clone = pos.mint.clone();
             let blacklist_result = tokio::task::spawn_blocking(move || {
                 if let Some(db) = crate::tokens::get_global_database() {
-                    crate::tokens::cleanup::blacklist_token(&mint_clone, "Blacklisted via Telegram", &db)
+                    crate::tokens::cleanup::blacklist_token(
+                        &mint_clone,
+                        "Blacklisted via Telegram",
+                        &db,
+                    )
                 } else {
-                    Err(crate::tokens::TokenError::Database("Database not available".to_string()))
+                    Err(crate::tokens::TokenError::Database(
+                        "Database not available".to_string(),
+                    ))
                 }
-            }).await;
+            })
+            .await;
 
             if let Err(e) = blacklist_result {
                 logger::warning(LogTag::Telegram, &format!("Failed to blacklist: {}", e));
@@ -624,18 +638,17 @@ async fn handle_toggle(bot: &Bot, chat_id: ChatId, setting: &str) -> Result<(), 
     };
 
     if let Err(e) = result {
-        logger::warning(LogTag::Telegram, &format!("Failed to toggle {}: {}", setting, e));
+        logger::warning(
+            LogTag::Telegram,
+            &format!("Failed to toggle {}: {}", setting, e),
+        );
     }
 
     // Refresh the settings menu
     send_settings_menu(bot, chat_id).await
 }
 
-async fn handle_settings_section(
-    bot: &Bot,
-    chat_id: ChatId,
-    section: &str,
-) -> Result<(), String> {
+async fn handle_settings_section(bot: &Bot, chat_id: ChatId, section: &str) -> Result<(), String> {
     match section {
         "notifications" => {
             let config = with_config(|c| c.telegram.clone());

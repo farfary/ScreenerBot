@@ -166,7 +166,9 @@ pub async fn run_discovery_once(
 ) -> Result<DiscoveryStats, String> {
     // Check if tools are running - skip discovery to reduce RPC contention
     if crate::global::are_tools_active() {
-        return Ok(DiscoveryStats::skipped("tools active (reducing RPC contention)"));
+        return Ok(DiscoveryStats::skipped(
+            "tools active (reducing RPC contention)",
+        ));
     }
 
     let start = Instant::now();

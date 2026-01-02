@@ -160,9 +160,7 @@ pub struct AccountFetcher {
 
 impl AccountFetcher {
     /// Create new account fetcher
-    pub fn new(
-        pool_directory: Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>,
-    ) -> Self {
+    pub fn new(pool_directory: Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>) -> Self {
         let (fetcher_tx, fetcher_rx) = mpsc::unbounded_channel();
 
         Self {
@@ -669,7 +667,8 @@ impl AccountFetcher {
             account_state.failures = account_state.failures.saturating_add(1);
             account_state.last_failure = Instant::now();
 
-            if account_state.failures >= account_blacklist_threshold() && !account_state.blacklisted {
+            if account_state.failures >= account_blacklist_threshold() && !account_state.blacklisted
+            {
                 let (pool_id_str, token_mint_str) = directory_snapshot
                     .get(0)
                     .map(|(pool_id, descriptor)| {
@@ -986,7 +985,10 @@ impl AccountFetcher {
                     );
 
                     // Check if bundle is now complete
-                    if entry.0.is_complete_and_needs_calculation(&pool_descriptor.reserve_accounts) {
+                    if entry
+                        .0
+                        .is_complete_and_needs_calculation(&pool_descriptor.reserve_accounts)
+                    {
                         entry.0.mark_calculation_requested();
                         entry.2 = true; // Mark needs calculation
                     }
@@ -1012,8 +1014,7 @@ impl AccountFetcher {
                         pool_descriptor.base_mint
                     };
 
-                    if let Err(e) =
-                        calculator.request_calculation(pool_id, pool_descriptor, bundle)
+                    if let Err(e) = calculator.request_calculation(pool_id, pool_descriptor, bundle)
                     {
                         logger::warning(
                             LogTag::PoolFetcher,

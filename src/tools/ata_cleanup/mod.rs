@@ -27,7 +27,7 @@ mod service;
 mod types;
 
 // Re-export types
-pub use types::{AtaClosure, AtaCleanupResult, AtaCleanupStats, AtaInfo, AtaSession, FailedAta};
+pub use types::{AtaCleanupResult, AtaCleanupStats, AtaClosure, AtaInfo, AtaSession, FailedAta};
 
 // Re-export operations
 pub use operations::{
@@ -40,6 +40,6 @@ pub use operations::{
 pub use service::{start_ata_cleanup_service, trigger_immediate_cleanup};
 
 // Backward compatibility aliases
+pub use get_ata_status as get_ata_cleanup_stats;
 pub use get_cleanup_stats as get_ata_cleanup_statistics;
 pub use trigger_immediate_cleanup as trigger_immediate_ata_cleanup;
-pub use get_ata_status as get_ata_cleanup_stats;

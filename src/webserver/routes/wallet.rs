@@ -145,10 +145,7 @@ async fn get_wallet_tokens() -> Json<WalletTokensResponse> {
         .token_balances
         .iter()
         .map(|tb| {
-            let (symbol, name) = metadata_map
-                .get(&tb.mint)
-                .cloned()
-                .unwrap_or((None, None));
+            let (symbol, name) = metadata_map.get(&tb.mint).cloned().unwrap_or((None, None));
 
             WalletTokenHolding {
                 mint: tb.mint.clone(),

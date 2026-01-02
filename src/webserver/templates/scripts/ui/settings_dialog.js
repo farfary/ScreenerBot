@@ -3404,8 +3404,11 @@ export class SettingsDialog {
    */
   _buildTelegramTab(settings) {
     // Build sessions list HTML
-    const sessionsHtml = (settings.sessions || []).length > 0
-      ? (settings.sessions || []).map(s => `
+    const sessionsHtml =
+      (settings.sessions || []).length > 0
+        ? (settings.sessions || [])
+            .map(
+              (s) => `
         <div class="session-item" data-session-id="${s.user_id}">
           <div class="session-info">
             <span class="session-user">${s.username || "Unknown"}</span>
@@ -3415,8 +3418,10 @@ export class SettingsDialog {
             <i class="icon-x"></i> Revoke
           </button>
         </div>
-      `).join("")
-      : '<div class="sessions-empty">No active sessions</div>';
+      `
+            )
+            .join("")
+        : '<div class="sessions-empty">No active sessions</div>';
 
     return `
       <!-- Connection Section -->
@@ -3446,10 +3451,10 @@ export class SettingsDialog {
           <div class="settings-field">
             <div class="settings-field-info">
               <label>Bot Token</label>
-              <span class="settings-field-hint">${settings.bot_token && settings.bot_token.endsWith("...") ? '<i class="icon-check-circle" style="color: var(--success);"></i> Token saved' : 'Get this from @BotFather on Telegram'}</span>
+              <span class="settings-field-hint">${settings.bot_token && settings.bot_token.endsWith("...") ? '<i class="icon-check-circle" style="color: var(--success);"></i> Token saved' : "Get this from @BotFather on Telegram"}</span>
             </div>
             <div class="settings-field-control telegram-token-field">
-              <input type="password" id="tgBotToken" class="settings-input" placeholder="${settings.bot_token && settings.bot_token.endsWith("...") ? 'Token saved (enter new to change)' : 'Enter bot token'}" value="" autocomplete="off">
+              <input type="password" id="tgBotToken" class="settings-input" placeholder="${settings.bot_token && settings.bot_token.endsWith("...") ? "Token saved (enter new to change)" : "Enter bot token"}" value="" autocomplete="off">
               <button class="btn btn-secondary btn-sm btn-icon" id="tgToggleToken" title="Show/Hide">
                 <i class="icon-eye"></i>
               </button>
@@ -3464,18 +3469,22 @@ export class SettingsDialog {
               </span>
             </div>
             <div class="settings-field-control" id="tgChatIdControl">
-              ${settings.chat_id ? `
+              ${
+                settings.chat_id
+                  ? `
                 <span class="chat-id-display">
                   <code>${settings.chat_id}</code>
                   <button class="btn btn-secondary btn-sm" id="tgChangeChatBtn" title="Change">
                     <i class="icon-edit-2"></i>
                   </button>
                 </span>
-              ` : `
+              `
+                  : `
                 <button class="btn btn-primary btn-sm" id="tgDiscoverBtn">
                   <i class="icon-search"></i> Discover Chat ID
                 </button>
-              `}
+              `
+              }
             </div>
           </div>
 
@@ -3824,7 +3833,9 @@ export class SettingsDialog {
         return;
       }
 
-      discoveredChatsEl.innerHTML = chats.map(chat => `
+      discoveredChatsEl.innerHTML = chats
+        .map(
+          (chat) => `
         <div class="discovered-chat-item" data-chat-id="${chat.chat_id}">
           <div class="chat-info">
             <span class="chat-name">${chat.first_name || chat.username || "Unknown"}</span>
@@ -3835,10 +3846,12 @@ export class SettingsDialog {
             <i class="icon-check"></i> Select
           </button>
         </div>
-      `).join("");
+      `
+        )
+        .join("");
 
       // Attach click handlers
-      discoveredChatsEl.querySelectorAll(".select-chat-btn").forEach(btn => {
+      discoveredChatsEl.querySelectorAll(".select-chat-btn").forEach((btn) => {
         btn.addEventListener("click", async (e) => {
           const chatItem = e.target.closest(".discovered-chat-item");
           const chatId = chatItem.dataset.chatId;
@@ -3849,7 +3862,9 @@ export class SettingsDialog {
 
     const selectChat = async (chatId) => {
       try {
-        const response = await fetch(`/api/telegram/discovery/select/${chatId}`, { method: "POST" });
+        const response = await fetch(`/api/telegram/discovery/select/${chatId}`, {
+          method: "POST",
+        });
         if (response.ok) {
           Utils.showToast("Chat selected successfully!", "success");
           stopDiscovery();
@@ -3893,7 +3908,7 @@ export class SettingsDialog {
           const response = await fetch("/api/telegram/test", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({})
+            body: JSON.stringify({}),
           });
           const data = await response.json();
           if (response.ok) {
@@ -3925,7 +3940,9 @@ export class SettingsDialog {
       btn.addEventListener("click", async () => {
         const sessionId = btn.dataset.sessionId;
         try {
-          const response = await fetch(`/api/telegram/sessions/${sessionId}/revoke`, { method: "POST" });
+          const response = await fetch(`/api/telegram/sessions/${sessionId}/revoke`, {
+            method: "POST",
+          });
           if (response.ok) {
             Utils.showToast("Session revoked", "success");
             this._loadTelegramTab(content);
@@ -3961,12 +3978,16 @@ export class SettingsDialog {
     // Features toggles
     const commandsToggle = content.querySelector("#tgCommandsEnabled");
     if (commandsToggle) {
-      commandsToggle.addEventListener("change", (e) => updateSetting("commands_enabled", e.target.checked));
+      commandsToggle.addEventListener("change", (e) =>
+        updateSetting("commands_enabled", e.target.checked)
+      );
     }
 
     const inlineToggle = content.querySelector("#tgInlineActions");
     if (inlineToggle) {
-      inlineToggle.addEventListener("change", (e) => updateSetting("inline_actions", e.target.checked));
+      inlineToggle.addEventListener("change", (e) =>
+        updateSetting("inline_actions", e.target.checked)
+      );
     }
 
     const require2faToggle = content.querySelector("#tgRequire2fa");
@@ -4003,15 +4024,16 @@ export class SettingsDialog {
       }
 
       const totpEnabled = lockscreenData.totp_enabled || false;
-      
+
       // Also check the commands_require_2fa setting
       const require2faToggle = content.querySelector("#tgRequire2fa");
       const require2fa = require2faToggle ? require2faToggle.checked : true;
-      
+
       this._renderAuthSection(statusEl, contentEl, totpEnabled, require2fa);
     } catch (error) {
       if (statusEl) {
-        statusEl.innerHTML = '<span class="status-error"><i class="icon-alert-circle"></i> Error</span>';
+        statusEl.innerHTML =
+          '<span class="status-error"><i class="icon-alert-circle"></i> Error</span>';
       }
       if (contentEl) {
         contentEl.innerHTML = `<div class="telegram-auth-error">${this._escapeHtml(error.message)}</div>`;
@@ -4024,7 +4046,8 @@ export class SettingsDialog {
    */
   _renderAuthSection(statusEl, contentEl, totpEnabled, require2fa = true) {
     if (totpEnabled && require2fa) {
-      statusEl.innerHTML = '<span class="status-success"><i class="icon-check-circle"></i> Protected</span>';
+      statusEl.innerHTML =
+        '<span class="status-success"><i class="icon-check-circle"></i> Protected</span>';
       contentEl.innerHTML = `
         <div class="telegram-auth-row">
           <div class="telegram-auth-info">
@@ -4038,7 +4061,8 @@ export class SettingsDialog {
         </div>
       `;
     } else if (totpEnabled && !require2fa) {
-      statusEl.innerHTML = '<span class="status-warning"><i class="icon-alert-circle"></i> Disabled</span>';
+      statusEl.innerHTML =
+        '<span class="status-warning"><i class="icon-alert-circle"></i> Disabled</span>';
       contentEl.innerHTML = `
         <div class="telegram-auth-row">
           <div class="telegram-auth-info">
@@ -4052,7 +4076,8 @@ export class SettingsDialog {
         </div>
       `;
     } else {
-      statusEl.innerHTML = '<span class="status-warning"><i class="icon-alert-circle"></i> Not Configured</span>';
+      statusEl.innerHTML =
+        '<span class="status-warning"><i class="icon-alert-circle"></i> Not Configured</span>';
       contentEl.innerHTML = `
         <div class="telegram-auth-row">
           <div class="telegram-auth-info">

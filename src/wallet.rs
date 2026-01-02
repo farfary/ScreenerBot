@@ -1003,53 +1003,62 @@ async fn enrich_token_overview(
     for balance in balances {
         let token_meta = metadata_map.get(&balance.mint);
 
-        let (symbol, name, image_url, price_sol, price_usd, liquidity_usd, volume_24h, last_updated, dex_id) =
-            if let Some(meta) = token_meta {
-                let price_sol = if meta.price_sol > 0.0 {
-                    Some(meta.price_sol)
-                } else {
-                    None
-                };
-                let price_usd = if meta.price_usd > 0.0 {
-                    Some(meta.price_usd)
-                } else {
-                    None
-                };
-                let liquidity_usd = meta.liquidity_usd;
-                let volume_24h = meta.volume_h24;
-                let last_updated = Some(meta.market_data_last_fetched_at.to_rfc3339());
-                let dex_id = Some(meta.data_source.as_str().to_string());
-
-                let symbol = if meta.symbol.trim().is_empty() {
-                    short_mint_label(&balance.mint)
-                } else {
-                    meta.symbol.clone()
-                };
-
-                (
-                    symbol,
-                    Some(meta.name.clone()),
-                    meta.image_url.clone(),
-                    price_sol,
-                    price_usd,
-                    liquidity_usd,
-                    volume_24h,
-                    last_updated,
-                    dex_id,
-                )
+        let (
+            symbol,
+            name,
+            image_url,
+            price_sol,
+            price_usd,
+            liquidity_usd,
+            volume_24h,
+            last_updated,
+            dex_id,
+        ) = if let Some(meta) = token_meta {
+            let price_sol = if meta.price_sol > 0.0 {
+                Some(meta.price_sol)
             } else {
-                (
-                    short_mint_label(&balance.mint),
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                    None,
-                )
+                None
             };
+            let price_usd = if meta.price_usd > 0.0 {
+                Some(meta.price_usd)
+            } else {
+                None
+            };
+            let liquidity_usd = meta.liquidity_usd;
+            let volume_24h = meta.volume_h24;
+            let last_updated = Some(meta.market_data_last_fetched_at.to_rfc3339());
+            let dex_id = Some(meta.data_source.as_str().to_string());
+
+            let symbol = if meta.symbol.trim().is_empty() {
+                short_mint_label(&balance.mint)
+            } else {
+                meta.symbol.clone()
+            };
+
+            (
+                symbol,
+                Some(meta.name.clone()),
+                meta.image_url.clone(),
+                price_sol,
+                price_usd,
+                liquidity_usd,
+                volume_24h,
+                last_updated,
+                dex_id,
+            )
+        } else {
+            (
+                short_mint_label(&balance.mint),
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+            )
+        };
 
         let value_sol = price_sol.map(|price| price * balance.balance_ui);
 
@@ -1195,7 +1204,9 @@ async fn compute_dashboard_payload_realtime(
         tokens = enrich_token_overview(balances, max_tokens).await;
 
         // Get NFT balances
-        let nft_balances = get_snapshot_nft_balances(snapshot_id).await.unwrap_or_default();
+        let nft_balances = get_snapshot_nft_balances(snapshot_id)
+            .await
+            .unwrap_or_default();
         nfts = nft_balances
             .into_iter()
             .map(|nft| WalletNftOverview {

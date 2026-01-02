@@ -102,7 +102,7 @@ async fn initialization_status() -> Response {
     let config_exists = config_path.exists();
     let initialization_complete = global::is_initialization_complete();
     let force_onboarding = arguments::is_dashboard_onboarding_forced();
-    
+
     let onboarding_complete = if force_onboarding {
         false
     } else if !config_exists {
@@ -372,7 +372,10 @@ async fn complete_initialization(Json(request): Json<CompleteInitializationReque
         }
     };
 
-    logger::info(LogTag::Webserver, "Creating configuration with encrypted wallet...");
+    logger::info(
+        LogTag::Webserver,
+        "Creating configuration with encrypted wallet...",
+    );
 
     let config = Config {
         wallet_encrypted: encrypted.ciphertext,

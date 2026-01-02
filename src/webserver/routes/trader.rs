@@ -811,7 +811,10 @@ async fn resume_handler(State(_state): State<Arc<AppState>>) -> Response {
     crate::global::set_force_stopped(false, None);
 
     // Note: Does NOT automatically enable trader - user must start explicitly
-    logger::info(LogTag::Trader, "Force stop cleared - trading can be resumed");
+    logger::info(
+        LogTag::Trader,
+        "Force stop cleared - trading can be resumed",
+    );
     success_response(serde_json::json!({
         "resumed": true,
         "message": "Force stop cleared. Use Start Trading to resume."
@@ -1074,12 +1077,7 @@ async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
         {
             let error_msg = "Token is blacklisted; cannot add to position";
             crate::trader::actions::create_failed_add_action(&req.mint, error_msg).await;
-            return error_response(
-                StatusCode::FORBIDDEN,
-                "Blacklisted",
-                error_msg,
-                None,
-            );
+            return error_response(StatusCode::FORBIDDEN, "Blacklisted", error_msg, None);
         }
     }
 
@@ -1113,12 +1111,7 @@ async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
     if !has_open {
         let error_msg = "Cannot add to position: no open position for this token";
         crate::trader::actions::create_failed_add_action(&req.mint, error_msg).await;
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "NoOpenPosition",
-            error_msg,
-            None,
-        );
+        return error_response(StatusCode::BAD_REQUEST, "NoOpenPosition", error_msg, None);
     }
 
     let size = match req.size_sol {
@@ -1205,12 +1198,7 @@ async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response {
     if !is_open {
         let error_msg = "Cannot sell: no open position for this token";
         crate::trader::actions::create_failed_sell_action(&req.mint, error_msg).await;
-        return error_response(
-            StatusCode::BAD_REQUEST,
-            "NoOpenPosition",
-            error_msg,
-            None,
-        );
+        return error_response(StatusCode::BAD_REQUEST, "NoOpenPosition", error_msg, None);
     }
 
     // Determine percentage

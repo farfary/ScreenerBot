@@ -204,16 +204,17 @@ async fn get_status(headers: HeaderMap) -> Response {
 /// POST /api/auth/login - Authenticate with password (and optional TOTP)
 async fn login(Json(req): Json<LoginRequest>) -> Response {
     // Get auth config
-    let (auth_enabled, salt, hash, timeout, totp_enabled, totp_secret) = config::with_config(|cfg| {
-        (
-            cfg.webserver.auth_enabled,
-            cfg.webserver.auth_password_salt.clone(),
-            cfg.webserver.auth_password_hash.clone(),
-            cfg.webserver.auth_session_timeout_secs,
-            cfg.webserver.auth_totp_enabled && !cfg.webserver.auth_totp_secret.is_empty(),
-            cfg.webserver.auth_totp_secret.clone(),
-        )
-    });
+    let (auth_enabled, salt, hash, timeout, totp_enabled, totp_secret) =
+        config::with_config(|cfg| {
+            (
+                cfg.webserver.auth_enabled,
+                cfg.webserver.auth_password_salt.clone(),
+                cfg.webserver.auth_password_hash.clone(),
+                cfg.webserver.auth_session_timeout_secs,
+                cfg.webserver.auth_totp_enabled && !cfg.webserver.auth_totp_secret.is_empty(),
+                cfg.webserver.auth_totp_secret.clone(),
+            )
+        });
 
     // Check if auth is enabled
     if !auth_enabled {
@@ -333,10 +334,9 @@ async fn logout(headers: HeaderMap) -> Response {
     };
 
     let mut response = success_response(response_body);
-    response.headers_mut().insert(
-        header::SET_COOKIE,
-        clear_cookie.parse().unwrap(),
-    );
+    response
+        .headers_mut()
+        .insert(header::SET_COOKIE, clear_cookie.parse().unwrap());
 
     response
 }
@@ -592,22 +592,18 @@ async fn totp_verify_setup(Json(req): Json<TotpVerifySetupRequest>) -> Response 
                 timestamp: chrono::Utc::now().to_rfc3339(),
             })
         }
-        Ok(false) => {
-            error_response(
-                StatusCode::BAD_REQUEST,
-                "INVALID_CODE",
-                "Invalid verification code. Please check the code and try again.",
-                None,
-            )
-        }
-        Err(e) => {
-            error_response(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "TOTP_ERROR",
-                "Failed to verify code",
-                Some(&e),
-            )
-        }
+        Ok(false) => error_response(
+            StatusCode::BAD_REQUEST,
+            "INVALID_CODE",
+            "Invalid verification code. Please check the code and try again.",
+            None,
+        ),
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "TOTP_ERROR",
+            "Failed to verify code",
+            Some(&e),
+        ),
     }
 }
 

@@ -887,9 +887,9 @@ impl TokenDatabase {
             placeholders, placeholders, placeholders
         );
 
-        let mut stmt = conn
-            .prepare(&query)
-            .map_err(|e| TokenError::Database(format!("Failed to prepare batch image query: {}", e)))?;
+        let mut stmt = conn.prepare(&query).map_err(|e| {
+            TokenError::Database(format!("Failed to prepare batch image query: {}", e))
+        })?;
 
         // Build params: mints repeated 3 times for the 3 IN clauses
         let all_mints: Vec<&str> = mints
@@ -3203,7 +3203,9 @@ pub async fn get_token_async(mint: &str) -> TokenResult<Option<TokenMetadata>> {
 
 /// Async wrapper for get_token_images_batch (returns HashMap<mint, image_url>)
 /// Fetches image URLs for multiple tokens in a single query - use for batch operations
-pub async fn get_token_images_batch_async(mints: Vec<String>) -> TokenResult<HashMap<String, String>> {
+pub async fn get_token_images_batch_async(
+    mints: Vec<String>,
+) -> TokenResult<HashMap<String, String>> {
     let db = get_global_database()
         .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
 

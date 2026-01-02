@@ -304,8 +304,10 @@ impl WalletsDatabase {
             .map_err(|e| format!("Failed to begin transaction: {}", e))?;
 
         // Unset current main wallet
-        if let Err(e) = conn.execute("UPDATE wallets SET role = 'secondary' WHERE role = 'main'", [])
-        {
+        if let Err(e) = conn.execute(
+            "UPDATE wallets SET role = 'secondary' WHERE role = 'main'",
+            [],
+        ) {
             let _ = conn.execute("ROLLBACK", []);
             return Err(format!("Failed to unset main wallet: {}", e));
         }
@@ -366,10 +368,7 @@ impl WalletsDatabase {
         }
 
         values.push(Box::new(id));
-        let sql = format!(
-            "UPDATE wallets SET {} WHERE id = ?",
-            updates.join(", ")
-        );
+        let sql = format!("UPDATE wallets SET {} WHERE id = ?", updates.join(", "));
 
         // If changing role to main, wrap in transaction like set_main_wallet does
         if changing_to_main {
@@ -377,7 +376,10 @@ impl WalletsDatabase {
                 .map_err(|e| format!("Failed to begin transaction: {}", e))?;
 
             // Unset current main wallet
-            if let Err(e) = conn.execute("UPDATE wallets SET role = 'secondary' WHERE role = 'main'", []) {
+            if let Err(e) = conn.execute(
+                "UPDATE wallets SET role = 'secondary' WHERE role = 'main'",
+                [],
+            ) {
                 let _ = conn.execute("ROLLBACK", []);
                 return Err(format!("Failed to unset main: {}", e));
             }
@@ -416,7 +418,9 @@ impl WalletsDatabase {
             .unwrap_or(false);
 
         if is_main {
-            return Err("Cannot archive the main wallet. Set another wallet as main first.".to_string());
+            return Err(
+                "Cannot archive the main wallet. Set another wallet as main first.".to_string(),
+            );
         }
 
         conn.execute(
@@ -476,7 +480,9 @@ impl WalletsDatabase {
             .unwrap_or(false);
 
         if is_main {
-            return Err("Cannot delete the main wallet. Set another wallet as main first.".to_string());
+            return Err(
+                "Cannot delete the main wallet. Set another wallet as main first.".to_string(),
+            );
         }
 
         conn.execute("DELETE FROM wallets WHERE id = ?1", params![id])

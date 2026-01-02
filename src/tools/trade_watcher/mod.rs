@@ -62,7 +62,9 @@ mod types;
 pub use types::{DetectedTrade, PoolInfo, PoolSource, TradeMonitorStatus, WatchType};
 
 // Re-export pool selector functions
-pub use pool_selector::{get_best_pool, search_pools, search_pools_by_source, search_pools_with_min_liquidity};
+pub use pool_selector::{
+    get_best_pool, search_pools, search_pools_by_source, search_pools_with_min_liquidity,
+};
 
 // Re-export monitor functions
 pub use monitor::{

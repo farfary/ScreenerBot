@@ -295,7 +295,10 @@ async fn fetch_dexscreener_trending() -> Result<Vec<ExternalToken>, String> {
 
             ExternalToken {
                 mint: t.token_address,
-                name: t.description.clone().unwrap_or_else(|| "Unknown".to_string()),
+                name: t
+                    .description
+                    .clone()
+                    .unwrap_or_else(|| "Unknown".to_string()),
                 symbol: t
                     .description
                     .as_ref()
@@ -434,24 +437,22 @@ async fn enrich_billboard_token(token: BillboardToken) -> EnrichedBillboardToken
 
     // Try to get full token data from our database
     match tokens::get_full_token_async(&mint).await {
-        Ok(Some(db_token)) => {
-            EnrichedBillboardToken {
-                base: token,
-                price_sol: Some(db_token.price_sol),
-                price_usd: Some(db_token.price_usd),
-                market_cap_usd: db_token.market_cap,
-                fdv_usd: db_token.fdv,
-                liquidity_usd: db_token.liquidity_usd,
-                volume_24h: db_token.volume_h24,
-                price_change_1h: db_token.price_change_h1,
-                price_change_24h: db_token.price_change_h24,
-                holder_count: db_token.total_holders,
-                security_score: db_token.security_score,
-                security_score_normalised: db_token.security_score_normalised,
-                is_in_database: true,
-                data_source: Some(db_token.data_source.as_str().to_string()),
-            }
-        }
+        Ok(Some(db_token)) => EnrichedBillboardToken {
+            base: token,
+            price_sol: Some(db_token.price_sol),
+            price_usd: Some(db_token.price_usd),
+            market_cap_usd: db_token.market_cap,
+            fdv_usd: db_token.fdv,
+            liquidity_usd: db_token.liquidity_usd,
+            volume_24h: db_token.volume_h24,
+            price_change_1h: db_token.price_change_h1,
+            price_change_24h: db_token.price_change_h24,
+            holder_count: db_token.total_holders,
+            security_score: db_token.security_score,
+            security_score_normalised: db_token.security_score_normalised,
+            is_in_database: true,
+            data_source: Some(db_token.data_source.as_str().to_string()),
+        },
         Ok(None) | Err(_) => {
             // Token not in database - return base with no enrichment
             EnrichedBillboardToken {
@@ -599,7 +600,10 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/billboard", get(get_billboard_handler))
         .route("/billboard/all", get(get_billboard_all_handler))
-        .route("/billboard/jupiter/organic", get(get_jupiter_organic_handler))
+        .route(
+            "/billboard/jupiter/organic",
+            get(get_jupiter_organic_handler),
+        )
         .route("/billboard/jupiter/traded", get(get_jupiter_traded_handler))
         .route(
             "/billboard/dexscreener/trending",

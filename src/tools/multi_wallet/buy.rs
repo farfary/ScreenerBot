@@ -78,10 +78,7 @@ pub async fn execute_multi_buy(config: MultiBuyConfig) -> Result<SessionResult, 
         );
 
         let funding_results = fund_wallets(&main_keypair, funding_needed, 3).await;
-        let failed_funding: Vec<_> = funding_results
-            .iter()
-            .filter(|r| !r.success)
-            .collect();
+        let failed_funding: Vec<_> = funding_results.iter().filter(|r| !r.success).collect();
 
         if !failed_funding.is_empty() {
             logger::warning(
@@ -253,15 +250,13 @@ async fn execute_single_buy(
     let slippage_pct = slippage_bps as f64 / 100.0;
 
     match tool_buy(wallet, token_mint, amount_sol, Some(slippage_pct)).await {
-        Ok(swap_result) => {
-            WalletOpResult::success(
-                wallet_id,
-                wallet_address,
-                swap_result.signature,
-                amount_sol,
-                Some(swap_result.output_amount as f64),
-            )
-        }
+        Ok(swap_result) => WalletOpResult::success(
+            wallet_id,
+            wallet_address,
+            swap_result.signature,
+            amount_sol,
+            Some(swap_result.output_amount as f64),
+        ),
         Err(e) => WalletOpResult::failure(wallet_id, wallet_address, e),
     }
 }

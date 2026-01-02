@@ -21,10 +21,7 @@ pub async fn search_pools(token_mint: &str) -> Result<Vec<PoolInfo>, String> {
 
     logger::debug(
         LogTag::Tools,
-        &format!(
-            "[TRADE_WATCHER] Searching pools for token: {}",
-            token_mint
-        ),
+        &format!("[TRADE_WATCHER] Searching pools for token: {}", token_mint),
     );
 
     // Search GeckoTerminal
@@ -44,9 +41,19 @@ pub async fn search_pools(token_mint: &str) -> Result<Vec<PoolInfo>, String> {
                     source: PoolSource::GeckoTerminal,
                     dex: pool.dex_id.clone(),
                     base_token: pool.base_token_id.clone(),
-                    base_symbol: pool.pool_name.split('/').next().unwrap_or("???").to_string(),
+                    base_symbol: pool
+                        .pool_name
+                        .split('/')
+                        .next()
+                        .unwrap_or("???")
+                        .to_string(),
                     quote_token: pool.quote_token_id.clone(),
-                    quote_symbol: pool.pool_name.split('/').last().unwrap_or("SOL").to_string(),
+                    quote_symbol: pool
+                        .pool_name
+                        .split('/')
+                        .last()
+                        .unwrap_or("SOL")
+                        .to_string(),
                     liquidity_usd: pool.reserve_usd.unwrap_or(0.0),
                     volume_24h: pool.volume_h24.unwrap_or(0.0),
                     price_usd: pool.base_token_price_usd.parse().unwrap_or(0.0),

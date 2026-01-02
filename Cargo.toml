@@ -23,16 +23,15 @@ overflow-checks = false  # skip integer overflow checks
 
 # Release profile — FAST compilation, good runtime performance, no debug info
 [profile.release]
-opt-level = 2           # Good performance, much faster compile than opt-level 3
-lto = false             # NO LTO = saves 5-10 minutes per build
-codegen-units = 256     # Maximum parallelism for fastest compilation
-incremental = true      # Faster rebuilds when code changes
-debug = false           # No debug info in binary
-panic = "abort"         # Security: no stack unwinding, smaller binary
-strip = "symbols"       # Strip ALL symbols (no function names leak)
-debug-assertions = false  # No debug assertions in release
-overflow-checks = false   # No overflow checks (performance)
-
+opt-level = 2            # Good performance, much faster compile than opt-level 3
+lto = false              # NO LTO = saves 5-10 minutes per build
+codegen-units = 256      # Maximum parallelism for fastest compilation
+incremental = true       # Faster rebuilds when code changes
+debug = false            # No debug info in binary
+panic = "abort"          # Security: no stack unwinding, smaller binary
+strip = "symbols"        # Strip ALL symbols (no function names leak)
+debug-assertions = false # No debug assertions in release
+overflow-checks = false  # No overflow checks (performance)
 
 [lib]
 name = "screenerbot"
@@ -78,7 +77,12 @@ sha2 = "0.10"
 flate2 = { version = "1.0", default-features = false, features = ["rust_backend"] }
 
 # HTTP client and websockets - using rustls for Android compatibility
-reqwest = { version = "0.11", default-features = false, features = ["json", "rustls-tls", "blocking", "stream"] }
+reqwest = { version = "0.11", default-features = false, features = [
+  "json",
+  "rustls-tls",
+  "blocking",
+  "stream",
+] }
 tokio-tungstenite = { version = "0.21", features = ["connect", "rustls-tls-native-roots"] }
 
 # OpenSSL - vendored build for Android cross-compilation
@@ -170,7 +174,14 @@ sysinfo = "0.30"
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSGeometry", "NSArray", "NSObject"] }
-objc2-app-kit = { version = "0.3", features = ["NSWindow", "NSScreen", "NSApplication", "NSRunningApplication", "NSWorkspace", "NSColor"] }
+objc2-app-kit = { version = "0.3", features = [
+  "NSWindow",
+  "NSScreen",
+  "NSApplication",
+  "NSRunningApplication",
+  "NSWorkspace",
+  "NSColor",
+] }
 machine-uid = "0.5"
 
 # Windows-specific dependencies - vendored OpenSSL for Windows builds

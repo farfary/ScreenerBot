@@ -5,10 +5,12 @@ This directory contains assets for the Electron build:
 ## Required Files
 
 ### Icons
+
 - `icon.icns` - macOS app icon (required for packaging)
 - `icon.png` - PNG version for other uses
 
 ### DMG Background (optional)
+
 - `dmg-background.png` - Custom background for DMG installer (540x380 recommended)
 
 ## Generating Icons

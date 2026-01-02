@@ -37,145 +37,145 @@ const MAX_PRICE_GAP_SECONDS: i64 = 60;
 /// Database representation of a price result for storage
 #[derive(Debug, Clone)]
 pub struct DbPriceResult {
-  pub id: Option<i64>,
-  pub mint: String,
-  pub pool_address: String,
-  pub price_usd: f64,
-  pub price_sol: f64,
-  pub confidence: f32,
-  pub slot: u64,
-  pub timestamp_unix: i64,
-  pub sol_reserves: f64,
-  pub token_reserves: f64,
-  pub source_pool: Option<String>,
-  pub created_at: DateTime<Utc>,
+    pub id: Option<i64>,
+    pub mint: String,
+    pub pool_address: String,
+    pub price_usd: f64,
+    pub price_sol: f64,
+    pub confidence: f32,
+    pub slot: u64,
+    pub timestamp_unix: i64,
+    pub sol_reserves: f64,
+    pub token_reserves: f64,
+    pub source_pool: Option<String>,
+    pub created_at: DateTime<Utc>,
 }
 
 impl DbPriceResult {
-  /// Create from PriceResult
-  pub fn from_price_result(price: &PriceResult) -> Self {
-    let timestamp_unix = Self::approximate_unix_timestamp(price.timestamp);
+    /// Create from PriceResult
+    pub fn from_price_result(price: &PriceResult) -> Self {
+        let timestamp_unix = Self::approximate_unix_timestamp(price.timestamp);
 
-    Self {
-      id: None,
-      mint: price.mint.clone(),
-      pool_address: price.pool_address.clone(),
-      price_usd: price.price_usd,
-      price_sol: price.price_sol,
-      confidence: price.confidence,
-      slot: price.slot,
-      timestamp_unix,
-      sol_reserves: price.sol_reserves,
-      token_reserves: price.token_reserves,
-      source_pool: price.source_pool.clone(),
-      created_at: Utc::now(),
-    }
-  }
-
-  /// Convert to PriceResult
-  pub fn to_price_result(&self) -> PriceResult {
-    PriceResult {
-      mint: self.mint.clone(),
-      price_usd: self.price_usd,
-      price_sol: self.price_sol,
-      confidence: self.confidence,
-      source_pool: self.source_pool.clone(),
-      pool_address: self.pool_address.clone(),
-      slot: self.slot,
-      timestamp: Self::instant_from_unix_timestamp(self.timestamp_unix),
-      sol_reserves: self.sol_reserves,
-      token_reserves: self.token_reserves,
-    }
-  }
-
-  /// Create from database row
-  pub fn from_row(row: &Row) -> Result<Self, rusqlite::Error> {
-    let created_at_str: String = row.get("created_at")?;
-    let created_at = DateTime::parse_from_rfc3339(&created_at_str)
-      .map_err(|_| {
-        rusqlite::Error::InvalidColumnType(
-          0,
-          "created_at".to_string(),
-          rusqlite::types::Type::Text,
-        )
-      })?
-      .with_timezone(&Utc);
-
-    Ok(Self {
-      id: Some(row.get("id")?),
-      mint: row.get("mint")?,
-      pool_address: row.get("pool_address")?,
-      price_usd: row.get("price_usd")?,
-      price_sol: row.get("price_sol")?,
-      confidence: row.get("confidence")?,
-      slot: row.get("slot")?,
-      timestamp_unix: row.get("timestamp_unix")?,
-      sol_reserves: row.get("sol_reserves")?,
-      token_reserves: row.get("token_reserves")?,
-      source_pool: row.get("source_pool")?,
-      created_at,
-    })
-  }
-
-  /// Convert an Instant to an approximate unix timestamp (seconds precision)
-  fn approximate_unix_timestamp(instant: std::time::Instant) -> i64 {
-    let now_system = SystemTime::now()
-      .duration_since(UNIX_EPOCH)
-      .unwrap_or_default();
-
-    match now_system.checked_sub(instant.elapsed()) {
-      Some(ts) => ts.as_secs() as i64,
-      None => 0,
-    }
-  }
-
-  /// Recreate an Instant from a unix timestamp (seconds precision)
-  fn instant_from_unix_timestamp(timestamp_unix: i64) -> std::time::Instant {
-    if timestamp_unix <= 0 {
-      return std::time::Instant::now();
+        Self {
+            id: None,
+            mint: price.mint.clone(),
+            pool_address: price.pool_address.clone(),
+            price_usd: price.price_usd,
+            price_sol: price.price_sol,
+            confidence: price.confidence,
+            slot: price.slot,
+            timestamp_unix,
+            sol_reserves: price.sol_reserves,
+            token_reserves: price.token_reserves,
+            source_pool: price.source_pool.clone(),
+            created_at: Utc::now(),
+        }
     }
 
-    let now = SystemTime::now()
-      .duration_since(UNIX_EPOCH)
-      .unwrap_or_default()
-      .as_secs() as i64;
+    /// Convert to PriceResult
+    pub fn to_price_result(&self) -> PriceResult {
+        PriceResult {
+            mint: self.mint.clone(),
+            price_usd: self.price_usd,
+            price_sol: self.price_sol,
+            confidence: self.confidence,
+            source_pool: self.source_pool.clone(),
+            pool_address: self.pool_address.clone(),
+            slot: self.slot,
+            timestamp: Self::instant_from_unix_timestamp(self.timestamp_unix),
+            sol_reserves: self.sol_reserves,
+            token_reserves: self.token_reserves,
+        }
+    }
 
-    let diff = if timestamp_unix >= now {
-      0
-    } else {
-      (now - timestamp_unix) as u64
-    };
-    let duration = Duration::from_secs(diff);
+    /// Create from database row
+    pub fn from_row(row: &Row) -> Result<Self, rusqlite::Error> {
+        let created_at_str: String = row.get("created_at")?;
+        let created_at = DateTime::parse_from_rfc3339(&created_at_str)
+            .map_err(|_| {
+                rusqlite::Error::InvalidColumnType(
+                    0,
+                    "created_at".to_string(),
+                    rusqlite::types::Type::Text,
+                )
+            })?
+            .with_timezone(&Utc);
 
-    std::time::Instant::now()
-      .checked_sub(duration)
-      .unwrap_or_else(std::time::Instant::now)
-  }
+        Ok(Self {
+            id: Some(row.get("id")?),
+            mint: row.get("mint")?,
+            pool_address: row.get("pool_address")?,
+            price_usd: row.get("price_usd")?,
+            price_sol: row.get("price_sol")?,
+            confidence: row.get("confidence")?,
+            slot: row.get("slot")?,
+            timestamp_unix: row.get("timestamp_unix")?,
+            sol_reserves: row.get("sol_reserves")?,
+            token_reserves: row.get("token_reserves")?,
+            source_pool: row.get("source_pool")?,
+            created_at,
+        })
+    }
+
+    /// Convert an Instant to an approximate unix timestamp (seconds precision)
+    fn approximate_unix_timestamp(instant: std::time::Instant) -> i64 {
+        let now_system = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default();
+
+        match now_system.checked_sub(instant.elapsed()) {
+            Some(ts) => ts.as_secs() as i64,
+            None => 0,
+        }
+    }
+
+    /// Recreate an Instant from a unix timestamp (seconds precision)
+    fn instant_from_unix_timestamp(timestamp_unix: i64) -> std::time::Instant {
+        if timestamp_unix <= 0 {
+            return std::time::Instant::now();
+        }
+
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+
+        let diff = if timestamp_unix >= now {
+            0
+        } else {
+            (now - timestamp_unix) as u64
+        };
+        let duration = Duration::from_secs(diff);
+
+        std::time::Instant::now()
+            .checked_sub(duration)
+            .unwrap_or_else(std::time::Instant::now)
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct BlacklistedAccountRecord {
-  pub account_pubkey: String,
-  pub reason: String,
-  pub source: Option<String>,
-  pub pool_id: Option<String>,
-  pub token_mint: Option<String>,
-  pub error_count: i64,
-  pub first_failed_at: i64,
-  pub last_failed_at: i64,
-  pub added_at: i64,
+    pub account_pubkey: String,
+    pub reason: String,
+    pub source: Option<String>,
+    pub pool_id: Option<String>,
+    pub token_mint: Option<String>,
+    pub error_count: i64,
+    pub first_failed_at: i64,
+    pub last_failed_at: i64,
+    pub added_at: i64,
 }
 
 #[derive(Debug, Clone)]
 pub struct BlacklistedPoolRecord {
-  pub pool_id: String,
-  pub reason: String,
-  pub token_mint: Option<String>,
-  pub program_id: Option<String>,
-  pub error_count: i64,
-  pub first_failed_at: i64,
-  pub last_failed_at: i64,
-  pub added_at: i64,
+    pub pool_id: String,
+    pub reason: String,
+    pub token_mint: Option<String>,
+    pub program_id: Option<String>,
+    pub error_count: i64,
+    pub first_failed_at: i64,
+    pub last_failed_at: i64,
+    pub added_at: i64,
 }
 
 // =============================================================================
@@ -185,61 +185,61 @@ pub struct BlacklistedPoolRecord {
 /// SQLite-based price history storage
 #[derive(Debug)]
 pub struct PoolsDatabase {
-  db_path: String,
-  connection: Arc<Mutex<Option<Connection>>>,
-  write_queue: Option<mpsc::UnboundedSender<PriceResult>>,
-  // In-memory blacklists (source of truth for runtime checks)
-  blacklisted_accounts: Arc<RwLock<HashSet<String>>>,
-  blacklisted_pools: Arc<RwLock<HashSet<String>>>,
+    db_path: String,
+    connection: Arc<Mutex<Option<Connection>>>,
+    write_queue: Option<mpsc::UnboundedSender<PriceResult>>,
+    // In-memory blacklists (source of truth for runtime checks)
+    blacklisted_accounts: Arc<RwLock<HashSet<String>>>,
+    blacklisted_pools: Arc<RwLock<HashSet<String>>>,
 }
 
 impl Default for PoolsDatabase {
-  fn default() -> Self {
-    Self::new()
-  }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Clone for PoolsDatabase {
-  fn clone(&self) -> Self {
-    Self {
-      db_path: self.db_path.clone(),
-      connection: Arc::clone(&self.connection),
-      write_queue: self.write_queue.clone(),
-      blacklisted_accounts: Arc::clone(&self.blacklisted_accounts),
-      blacklisted_pools: Arc::clone(&self.blacklisted_pools),
+    fn clone(&self) -> Self {
+        Self {
+            db_path: self.db_path.clone(),
+            connection: Arc::clone(&self.connection),
+            write_queue: self.write_queue.clone(),
+            blacklisted_accounts: Arc::clone(&self.blacklisted_accounts),
+            blacklisted_pools: Arc::clone(&self.blacklisted_pools),
+        }
     }
-  }
 }
 
 impl PoolsDatabase {
-  /// Create new pools database instance
-  pub fn new() -> Self {
-    Self {
-      db_path: crate::paths::get_pools_db_path()
-        .to_string_lossy()
-        .to_string(),
-      connection: Arc::new(Mutex::new(None)),
-      write_queue: None,
-      blacklisted_accounts: Arc::new(RwLock::new(HashSet::new())),
-      blacklisted_pools: Arc::new(RwLock::new(HashSet::new())),
+    /// Create new pools database instance
+    pub fn new() -> Self {
+        Self {
+            db_path: crate::paths::get_pools_db_path()
+                .to_string_lossy()
+                .to_string(),
+            connection: Arc::new(Mutex::new(None)),
+            write_queue: None,
+            blacklisted_accounts: Arc::new(RwLock::new(HashSet::new())),
+            blacklisted_pools: Arc::new(RwLock::new(HashSet::new())),
+        }
     }
-  }
 
-  /// Create a clone suitable for async operations
-  /// This is the same as clone() but with a more explicit name
-  pub fn clone_for_async(&self) -> Self {
-    self.clone()
-  }
+    /// Create a clone suitable for async operations
+    /// This is the same as clone() but with a more explicit name
+    pub fn clone_for_async(&self) -> Self {
+        self.clone()
+    }
 
-  /// Initialize database and create tables
-  pub async fn initialize(&mut self) -> Result<(), String> {
-    // Create database connection
-    let conn = Connection::open(&self.db_path)
-      .map_err(|e| format!("Failed to open pools database: {}", e))?;
+    /// Initialize database and create tables
+    pub async fn initialize(&mut self) -> Result<(), String> {
+        // Create database connection
+        let conn = Connection::open(&self.db_path)
+            .map_err(|e| format!("Failed to open pools database: {}", e))?;
 
-    // Create price history table
-    conn.execute(
-      "CREATE TABLE IF NOT EXISTS price_history (
+        // Create price history table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS price_history (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         mint TEXT NOT NULL,
         pool_address TEXT NOT NULL,
@@ -254,35 +254,35 @@ impl PoolsDatabase {
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         UNIQUE(mint, pool_address, timestamp_unix)
       )",
-      [],
-    )
-    .map_err(|e| format!("Failed to create price_history table: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create price_history table: {}", e))?;
 
-    // Create indices for faster queries
-    conn.execute(
-      "CREATE INDEX IF NOT EXISTS idx_price_history_mint_timestamp 
+        // Create indices for faster queries
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_price_history_mint_timestamp 
        ON price_history(mint, timestamp_unix DESC)",
-      [],
-    )
-    .map_err(|e| format!("Failed to create mint timestamp index: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create mint timestamp index: {}", e))?;
 
-    conn.execute(
-      "CREATE INDEX IF NOT EXISTS idx_price_history_pool_timestamp 
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_price_history_pool_timestamp 
        ON price_history(pool_address, timestamp_unix DESC)",
-      [],
-    )
-    .map_err(|e| format!("Failed to create pool timestamp index: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create pool timestamp index: {}", e))?;
 
-    conn.execute(
-      "CREATE INDEX IF NOT EXISTS idx_price_history_created_at 
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_price_history_created_at 
        ON price_history(created_at)",
-      [],
-    )
-    .map_err(|e| format!("Failed to create created_at index: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create created_at index: {}", e))?;
 
-    // Create blacklist_accounts table
-    conn.execute(
-      "CREATE TABLE IF NOT EXISTS blacklist_accounts (
+        // Create blacklist_accounts table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS blacklist_accounts (
         account_pubkey TEXT PRIMARY KEY,
         reason TEXT NOT NULL,
         source TEXT,
@@ -293,13 +293,13 @@ impl PoolsDatabase {
         last_failed_at INTEGER NOT NULL,
         added_at INTEGER NOT NULL
       )",
-      [],
-    )
-    .map_err(|e| format!("Failed to create blacklist_accounts table: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create blacklist_accounts table: {}", e))?;
 
-    // Create blacklist_pools table
-    conn.execute(
-      "CREATE TABLE IF NOT EXISTS blacklist_pools (
+        // Create blacklist_pools table
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS blacklist_pools (
         pool_id TEXT PRIMARY KEY,
         reason TEXT NOT NULL,
         token_mint TEXT,
@@ -309,472 +309,472 @@ impl PoolsDatabase {
         last_failed_at INTEGER NOT NULL,
         added_at INTEGER NOT NULL
       )",
-      [],
-    )
-    .map_err(|e| format!("Failed to create blacklist_pools table: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create blacklist_pools table: {}", e))?;
 
-    // Create indices for blacklist tables
-    conn.execute(
-      "CREATE INDEX IF NOT EXISTS idx_blacklist_accounts_pool 
+        // Create indices for blacklist tables
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_blacklist_accounts_pool 
        ON blacklist_accounts(pool_id)",
-      [],
-    )
-    .map_err(|e| format!("Failed to create blacklist_accounts pool index: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create blacklist_accounts pool index: {}", e))?;
 
-    conn.execute(
-      "CREATE INDEX IF NOT EXISTS idx_blacklist_accounts_token 
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_blacklist_accounts_token 
        ON blacklist_accounts(token_mint)",
-      [],
-    )
-    .map_err(|e| format!("Failed to create blacklist_accounts token index: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create blacklist_accounts token index: {}", e))?;
 
-    conn.execute(
-      "CREATE INDEX IF NOT EXISTS idx_blacklist_pools_token 
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_blacklist_pools_token 
        ON blacklist_pools(token_mint)",
-      [],
-    )
-    .map_err(|e| format!("Failed to create blacklist_pools token index: {}", e))?;
+            [],
+        )
+        .map_err(|e| format!("Failed to create blacklist_pools token index: {}", e))?;
 
-    // Store connection
-    {
-      let mut connection_guard = self.connection.lock().unwrap();
-      *connection_guard = Some(conn);
-    }
+        // Store connection
+        {
+            let mut connection_guard = self.connection.lock().unwrap();
+            *connection_guard = Some(conn);
+        }
 
-    // Setup write queue for batched operations
-    let (tx, rx) = mpsc::unbounded_channel();
-    self.write_queue = Some(tx);
+        // Setup write queue for batched operations
+        let (tx, rx) = mpsc::unbounded_channel();
+        self.write_queue = Some(tx);
 
-    // Start background writer task
-    let db_connection = self.connection.clone();
-    tokio::spawn(async move {
-      run_database_writer(rx, db_connection).await;
-    });
+        // Start background writer task
+        let db_connection = self.connection.clone();
+        tokio::spawn(async move {
+            run_database_writer(rx, db_connection).await;
+        });
 
-    logger::info(
-      LogTag::PoolService,
- &format!("Pools database initialized: {}", self.db_path),
-    );
+        logger::info(
+            LogTag::PoolService,
+            &format!("Pools database initialized: {}", self.db_path),
+        );
 
-    // Load blacklists into memory (priority for runtime checks)
+        // Load blacklists into memory (priority for runtime checks)
 
-    let (account_keys, pool_keys) = {
-      let connection_guard = self.connection.lock().unwrap();
-      if let Some(ref conn) = *connection_guard {
-        // Accounts
-        let account_keys =
-          match conn.prepare("SELECT account_pubkey FROM blacklist_accounts") {
-            Ok(mut stmt) => {
-              let rows = stmt.query_map([], |row| row.get::<_, String>(0));
-              match rows {
-                Ok(iter) => iter.filter_map(|r| r.ok()).collect::<Vec<_>>(),
-                Err(e) => {
-                  logger::warning(
-                    LogTag::PoolService,
-                    &format!(
-                      "Failed to load blacklist_accounts into memory: {}",
-                      e
-                    ),
-                  );
-                  Vec::new()
-                }
-              }
+        let (account_keys, pool_keys) = {
+            let connection_guard = self.connection.lock().unwrap();
+            if let Some(ref conn) = *connection_guard {
+                // Accounts
+                let account_keys =
+                    match conn.prepare("SELECT account_pubkey FROM blacklist_accounts") {
+                        Ok(mut stmt) => {
+                            let rows = stmt.query_map([], |row| row.get::<_, String>(0));
+                            match rows {
+                                Ok(iter) => iter.filter_map(|r| r.ok()).collect::<Vec<_>>(),
+                                Err(e) => {
+                                    logger::warning(
+                                        LogTag::PoolService,
+                                        &format!(
+                                            "Failed to load blacklist_accounts into memory: {}",
+                                            e
+                                        ),
+                                    );
+                                    Vec::new()
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            logger::warning(
+                                LogTag::PoolService,
+                                &format!("Failed to prepare load for blacklist_accounts: {}", e),
+                            );
+                            Vec::new()
+                        }
+                    };
+
+                // Pools
+                let pool_keys = match conn.prepare("SELECT pool_id FROM blacklist_pools") {
+                    Ok(mut stmt) => {
+                        let rows = stmt.query_map([], |row| row.get::<_, String>(0));
+                        match rows {
+                            Ok(iter) => iter.filter_map(|r| r.ok()).collect::<Vec<_>>(),
+                            Err(e) => {
+                                logger::warning(
+                                    LogTag::PoolService,
+                                    &format!("Failed to load blacklist_pools into memory: {}", e),
+                                );
+                                Vec::new()
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        logger::warning(
+                            LogTag::PoolService,
+                            &format!("Failed to prepare load for blacklist_pools: {}", e),
+                        );
+                        Vec::new()
+                    }
+                };
+
+                (account_keys, pool_keys)
+            } else {
+                (Vec::new(), Vec::new())
             }
-            Err(e) => {
-              logger::warning(
-                LogTag::PoolService,
-                &format!("Failed to prepare load for blacklist_accounts: {}", e),
-              );
-              Vec::new()
-            }
-          };
-
-        // Pools
-        let pool_keys = match conn.prepare("SELECT pool_id FROM blacklist_pools") {
-          Ok(mut stmt) => {
-            let rows = stmt.query_map([], |row| row.get::<_, String>(0));
-            match rows {
-              Ok(iter) => iter.filter_map(|r| r.ok()).collect::<Vec<_>>(),
-              Err(e) => {
-                logger::warning(
-                  LogTag::PoolService,
-                  &format!("Failed to load blacklist_pools into memory: {}", e),
-                );
-                Vec::new()
-              }
-            }
-          }
-          Err(e) => {
-            logger::warning(
-              LogTag::PoolService,
-              &format!("Failed to prepare load for blacklist_pools: {}", e),
-            );
-            Vec::new()
-          }
         };
 
-        (account_keys, pool_keys)
-      } else {
-        (Vec::new(), Vec::new())
-      }
-    };
+        {
+            let mut set = self.blacklisted_accounts.write().unwrap();
+            set.clear();
+            set.extend(account_keys);
+        }
 
-    {
-      let mut set = self.blacklisted_accounts.write().unwrap();
-      set.clear();
-      set.extend(account_keys);
+        {
+            let mut set = self.blacklisted_pools.write().unwrap();
+            set.clear();
+            set.extend(pool_keys);
+        }
+
+        let acct_count = self.blacklisted_accounts.read().unwrap().len();
+        let pool_count = self.blacklisted_pools.read().unwrap().len();
+        logger::info(
+            LogTag::PoolService,
+            &format!(
+                "In-memory blacklists loaded: accounts={}, pools={}",
+                acct_count, pool_count
+            ),
+        );
+
+        Ok(())
     }
 
-    {
-      let mut set = self.blacklisted_pools.write().unwrap();
-      set.clear();
-      set.extend(pool_keys);
+    /// Queue a price for batched database storage
+    pub async fn queue_price_for_storage(&self, price: PriceResult) -> Result<(), String> {
+        if let Some(ref sender) = self.write_queue {
+            sender
+                .send(price)
+                .map_err(|e| format!("Failed to queue price for storage: {}", e))?;
+        }
+        Ok(())
     }
 
-    let acct_count = self.blacklisted_accounts.read().unwrap().len();
-    let pool_count = self.blacklisted_pools.read().unwrap().len();
-    logger::info(
-      LogTag::PoolService,
-      &format!(
-        "In-memory blacklists loaded: accounts={}, pools={}",
-        acct_count, pool_count
-      ),
-    );
+    /// Load recent price history for a token (for cache initialization)
+    pub async fn load_recent_price_history(
+        &self,
+        mint: &str,
+        limit: usize,
+    ) -> Result<Vec<PriceResult>, String> {
+        let mint_owned = mint.to_string();
+        let mint_for_task = mint_owned.clone();
+        let conn_arc = self.connection.clone();
+        let limit_value = limit as i64;
 
-    Ok(())
-  }
+        let mut results = tokio::task::spawn_blocking(move || {
+            let connection_guard = conn_arc
+                .lock()
+                .map_err(|e| format!("Failed to lock connection: {}", e))?;
 
-  /// Queue a price for batched database storage
-  pub async fn queue_price_for_storage(&self, price: PriceResult) -> Result<(), String> {
-    if let Some(ref sender) = self.write_queue {
-      sender
-        .send(price)
-        .map_err(|e| format!("Failed to queue price for storage: {}", e))?;
-    }
-    Ok(())
-  }
+            let conn = connection_guard
+                .as_ref()
+                .ok_or_else(|| "Database not initialized".to_string())?;
 
-  /// Load recent price history for a token (for cache initialization)
-  pub async fn load_recent_price_history(
-    &self,
-    mint: &str,
-    limit: usize,
-  ) -> Result<Vec<PriceResult>, String> {
-    let mint_owned = mint.to_string();
-    let mint_for_task = mint_owned.clone();
-    let conn_arc = self.connection.clone();
-    let limit_value = limit as i64;
-
-    let mut results = tokio::task::spawn_blocking(move || {
-      let connection_guard = conn_arc
-        .lock()
-        .map_err(|e| format!("Failed to lock connection: {}", e))?;
-
-      let conn = connection_guard
-        .as_ref()
-        .ok_or_else(|| "Database not initialized".to_string())?;
-
-      let mut stmt = conn
-        .prepare(
-          "SELECT * FROM price_history 
+            let mut stmt = conn
+                .prepare(
+                    "SELECT * FROM price_history 
          WHERE mint = ? 
          ORDER BY timestamp_unix DESC 
          LIMIT ?",
-        )
-        .map_err(|e| format!("Failed to prepare select statement: {}", e))?;
+                )
+                .map_err(|e| format!("Failed to prepare select statement: {}", e))?;
 
-      let rows = stmt
-        .query_map(params![mint_for_task, limit_value], |row| {
-          DbPriceResult::from_row(row)
+            let rows = stmt
+                .query_map(params![mint_for_task, limit_value], |row| {
+                    DbPriceResult::from_row(row)
+                })
+                .map_err(|e| format!("Failed to query price history: {}", e))?;
+
+            let mut collected = Vec::new();
+            for row in rows {
+                let db_price = row.map_err(|e| format!("Failed to parse price row: {}", e))?;
+                collected.push(db_price.to_price_result());
+            }
+
+            collected.reverse();
+            Ok::<_, String>(collected)
         })
-        .map_err(|e| format!("Failed to query price history: {}", e))?;
+        .await
+        .map_err(|e| format!("Blocking task failed: {}", e))??;
 
-      let mut collected = Vec::new();
-      for row in rows {
-        let db_price = row.map_err(|e| format!("Failed to parse price row: {}", e))?;
-        collected.push(db_price.to_price_result());
-      }
+        logger::debug(
+            LogTag::PoolCache,
+            &format!(
+                "Loaded {} price history entries for token: {}",
+                results.len(),
+                mint_owned
+            ),
+        );
 
-      collected.reverse();
-      Ok::<_, String>(collected)
-    })
-    .await
-    .map_err(|e| format!("Blocking task failed: {}", e))??;
+        Ok(results)
+    }
 
-    logger::debug(
-      LogTag::PoolCache,
-      &format!(
-        "Loaded {} price history entries for token: {}",
-        results.len(),
-        mint_owned
-      ),
-    );
+    /// Get price history for a token with optional time range
+    pub async fn get_price_history(
+        &self,
+        mint: &str,
+        limit: Option<usize>,
+        since_timestamp: Option<i64>,
+    ) -> Result<Vec<PriceResult>, String> {
+        let mint_owned = mint.to_string();
+        let conn_arc = self.connection.clone();
+        let limit_value = limit.unwrap_or(1000) as i64;
 
-    Ok(results)
-  }
+        tokio::task::spawn_blocking(move || {
+            let connection_guard = conn_arc
+                .lock()
+                .map_err(|e| format!("Failed to lock connection: {}", e))?;
 
-  /// Get price history for a token with optional time range
-  pub async fn get_price_history(
-    &self,
-    mint: &str,
-    limit: Option<usize>,
-    since_timestamp: Option<i64>,
-  ) -> Result<Vec<PriceResult>, String> {
-    let mint_owned = mint.to_string();
-    let conn_arc = self.connection.clone();
-    let limit_value = limit.unwrap_or(1000) as i64;
+            let conn = connection_guard
+                .as_ref()
+                .ok_or_else(|| "Database not initialized".to_string())?;
 
-    tokio::task::spawn_blocking(move || {
-      let connection_guard = conn_arc
-        .lock()
-        .map_err(|e| format!("Failed to lock connection: {}", e))?;
+            let mut results = Vec::new();
 
-      let conn = connection_guard
-        .as_ref()
-        .ok_or_else(|| "Database not initialized".to_string())?;
-
-      let mut results = Vec::new();
-
-      if let Some(since) = since_timestamp {
-        let mut stmt = conn
-          .prepare(
-            "SELECT * FROM price_history 
+            if let Some(since) = since_timestamp {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT * FROM price_history 
            WHERE mint = ? AND timestamp_unix >= ? 
            ORDER BY timestamp_unix DESC 
            LIMIT ?",
-          )
-          .map_err(|e| format!("Failed to prepare history query: {}", e))?;
+                    )
+                    .map_err(|e| format!("Failed to prepare history query: {}", e))?;
 
-        let rows = stmt
-          .query_map(params![mint_owned.as_str(), since, limit_value], |row| {
-            DbPriceResult::from_row(row)
-          })
-          .map_err(|e| format!("Failed to query price history: {}", e))?;
+                let rows = stmt
+                    .query_map(params![mint_owned.as_str(), since, limit_value], |row| {
+                        DbPriceResult::from_row(row)
+                    })
+                    .map_err(|e| format!("Failed to query price history: {}", e))?;
 
-        for row in rows {
-          let db_price = row.map_err(|e| format!("Failed to parse price row: {}", e))?;
-          results.push(db_price.to_price_result());
-        }
-      } else {
-        let mut stmt = conn
-          .prepare(
-            "SELECT * FROM price_history 
+                for row in rows {
+                    let db_price = row.map_err(|e| format!("Failed to parse price row: {}", e))?;
+                    results.push(db_price.to_price_result());
+                }
+            } else {
+                let mut stmt = conn
+                    .prepare(
+                        "SELECT * FROM price_history 
            WHERE mint = ? 
            ORDER BY timestamp_unix DESC 
            LIMIT ?",
-          )
-          .map_err(|e| format!("Failed to prepare history query: {}", e))?;
+                    )
+                    .map_err(|e| format!("Failed to prepare history query: {}", e))?;
 
-        let rows = stmt
-          .query_map(params![mint_owned.as_str(), limit_value], |row| {
-            DbPriceResult::from_row(row)
-          })
-          .map_err(|e| format!("Failed to query price history: {}", e))?;
+                let rows = stmt
+                    .query_map(params![mint_owned.as_str(), limit_value], |row| {
+                        DbPriceResult::from_row(row)
+                    })
+                    .map_err(|e| format!("Failed to query price history: {}", e))?;
 
-        for row in rows {
-          let db_price = row.map_err(|e| format!("Failed to parse price row: {}", e))?;
-          results.push(db_price.to_price_result());
-        }
-      }
+                for row in rows {
+                    let db_price = row.map_err(|e| format!("Failed to parse price row: {}", e))?;
+                    results.push(db_price.to_price_result());
+                }
+            }
 
-      results.reverse();
-      Ok::<_, String>(results)
-    })
-    .await
-    .map_err(|e| format!("Blocking task failed: {}", e))?
-  }
-
-  /// Cleanup old price history entries
-  pub async fn cleanup_old_entries(&self) -> Result<usize, String> {
-    let conn_arc = self.connection.clone();
-    let deleted = tokio::task::spawn_blocking(move || {
-      let connection_guard = conn_arc
-        .lock()
-        .map_err(|e| format!("Failed to lock connection: {}", e))?;
-
-      let conn = connection_guard
-        .as_ref()
-        .ok_or_else(|| "Database not initialized".to_string())?;
-
-      let cutoff_timestamp = Utc::now() - chrono::Duration::days(MAX_PRICE_HISTORY_AGE_DAYS);
-      let cutoff_unix = cutoff_timestamp.timestamp();
-
-      conn.execute(
-        "DELETE FROM price_history WHERE timestamp_unix < ?",
-        params![cutoff_unix],
-      )
-      .map_err(|e| format!("Failed to cleanup old entries: {}", e))
-    })
-    .await
-    .map_err(|e| format!("Blocking task failed: {}", e))??;
-
-    if deleted > 0 {
-      logger::debug(
-        LogTag::PoolService,
-        &format!("Cleaned up {} old price history entries", deleted),
-      );
+            results.reverse();
+            Ok::<_, String>(results)
+        })
+        .await
+        .map_err(|e| format!("Blocking task failed: {}", e))?
     }
 
-    Ok(deleted)
-  }
+    /// Cleanup old price history entries
+    pub async fn cleanup_old_entries(&self) -> Result<usize, String> {
+        let conn_arc = self.connection.clone();
+        let deleted = tokio::task::spawn_blocking(move || {
+            let connection_guard = conn_arc
+                .lock()
+                .map_err(|e| format!("Failed to lock connection: {}", e))?;
 
-  /// Remove price history entries older than the most recent gap for a specific token
-  pub async fn cleanup_gapped_data_for_token(&self, mint: &str) -> Result<usize, String> {
-    let mint_string = mint.to_string();
-    let mint_for_task = mint_string.clone();
-    let conn_arc = self.connection.clone();
+            let conn = connection_guard
+                .as_ref()
+                .ok_or_else(|| "Database not initialized".to_string())?;
 
-    let deleted = tokio::task::spawn_blocking(move || {
-      let connection_guard = conn_arc
-        .lock()
-        .map_err(|e| format!("Failed to lock connection: {}", e))?;
+            let cutoff_timestamp = Utc::now() - chrono::Duration::days(MAX_PRICE_HISTORY_AGE_DAYS);
+            let cutoff_unix = cutoff_timestamp.timestamp();
 
-      let conn = connection_guard
-        .as_ref()
-        .ok_or_else(|| "Database not initialized".to_string())?;
-
-      let cutoff = Self::find_continuous_data_start_timestamp(conn, mint_for_task.as_str())?;
-
-      if let Some(cutoff_timestamp) = cutoff {
-        let deleted = conn
-          .execute(
-            "DELETE FROM price_history WHERE mint = ? AND timestamp_unix < ?",
-            params![mint_for_task.as_str(), cutoff_timestamp],
-          )
-          .map_err(|e| {
-            format!(
-              "Failed to cleanup gapped data for token {}: {}",
-              mint_for_task, e
+            conn.execute(
+                "DELETE FROM price_history WHERE timestamp_unix < ?",
+                params![cutoff_unix],
             )
-          })?;
+            .map_err(|e| format!("Failed to cleanup old entries: {}", e))
+        })
+        .await
+        .map_err(|e| format!("Blocking task failed: {}", e))??;
 
-        Ok::<_, String>(deleted)
-      } else {
-        Ok::<_, String>(0)
-      }
-    })
-    .await
-    .map_err(|e| format!("Blocking task failed: {}", e))??;
+        if deleted > 0 {
+            logger::debug(
+                LogTag::PoolService,
+                &format!("Cleaned up {} old price history entries", deleted),
+            );
+        }
 
-    if deleted > 0 {
-      logger::debug(
-        LogTag::PoolCache,
-        &format!(
-          "Removed {} gapped price entries for token: {}",
-          deleted, mint_string
-        ),
-      );
+        Ok(deleted)
     }
 
-    Ok(deleted)
-  }
+    /// Remove price history entries older than the most recent gap for a specific token
+    pub async fn cleanup_gapped_data_for_token(&self, mint: &str) -> Result<usize, String> {
+        let mint_string = mint.to_string();
+        let mint_for_task = mint_string.clone();
+        let conn_arc = self.connection.clone();
 
-  /// Find the timestamp where continuous data starts (no gaps > 1 minute) for a token
-  fn find_continuous_data_start_timestamp(
-    conn: &Connection,
-    mint: &str,
-  ) -> Result<Option<i64>, String> {
-    // Get all timestamps for the token, ordered by newest first
-    let mut stmt = conn
-      .prepare(
-        "SELECT timestamp_unix FROM price_history 
+        let deleted = tokio::task::spawn_blocking(move || {
+            let connection_guard = conn_arc
+                .lock()
+                .map_err(|e| format!("Failed to lock connection: {}", e))?;
+
+            let conn = connection_guard
+                .as_ref()
+                .ok_or_else(|| "Database not initialized".to_string())?;
+
+            let cutoff = Self::find_continuous_data_start_timestamp(conn, mint_for_task.as_str())?;
+
+            if let Some(cutoff_timestamp) = cutoff {
+                let deleted = conn
+                    .execute(
+                        "DELETE FROM price_history WHERE mint = ? AND timestamp_unix < ?",
+                        params![mint_for_task.as_str(), cutoff_timestamp],
+                    )
+                    .map_err(|e| {
+                        format!(
+                            "Failed to cleanup gapped data for token {}: {}",
+                            mint_for_task, e
+                        )
+                    })?;
+
+                Ok::<_, String>(deleted)
+            } else {
+                Ok::<_, String>(0)
+            }
+        })
+        .await
+        .map_err(|e| format!("Blocking task failed: {}", e))??;
+
+        if deleted > 0 {
+            logger::debug(
+                LogTag::PoolCache,
+                &format!(
+                    "Removed {} gapped price entries for token: {}",
+                    deleted, mint_string
+                ),
+            );
+        }
+
+        Ok(deleted)
+    }
+
+    /// Find the timestamp where continuous data starts (no gaps > 1 minute) for a token
+    fn find_continuous_data_start_timestamp(
+        conn: &Connection,
+        mint: &str,
+    ) -> Result<Option<i64>, String> {
+        // Get all timestamps for the token, ordered by newest first
+        let mut stmt = conn
+            .prepare(
+                "SELECT timestamp_unix FROM price_history 
          WHERE mint = ? 
          ORDER BY timestamp_unix DESC",
-      )
-      .map_err(|e| format!("Failed to prepare gap detection query: {}", e))?;
+            )
+            .map_err(|e| format!("Failed to prepare gap detection query: {}", e))?;
 
-    let rows = stmt
-      .query_map(
-        params![mint],
-        |row| Ok(row.get::<_, i64>("timestamp_unix")?),
-      )
-      .map_err(|e| format!("Failed to execute gap detection query: {}", e))?;
+        let rows = stmt
+            .query_map(
+                params![mint],
+                |row| Ok(row.get::<_, i64>("timestamp_unix")?),
+            )
+            .map_err(|e| format!("Failed to execute gap detection query: {}", e))?;
 
-    let mut timestamps = Vec::new();
-    for row in rows {
-      timestamps.push(row.map_err(|e| format!("Failed to parse timestamp: {}", e))?);
-    }
-
-    if timestamps.len() <= 1 {
-      return Ok(None); // Not enough data to detect gaps
-    }
-
-    // Work backwards to find the first gap > 1 minute
-    for i in 1..timestamps.len() {
-      let current_time = timestamps[i - 1]; // Newer timestamp
-      let prev_time = timestamps[i]; // Older timestamp
-
-      let gap = current_time - prev_time;
-
-      if gap > (MAX_PRICE_GAP_SECONDS as i64) {
-        // Found a gap - return the older timestamp as cutoff point
-        return Ok(Some(prev_time));
-      }
-    }
-
-    Ok(None) // No significant gaps found
-  }
-
-  /// Cleanup gapped data for all tokens
-  pub async fn cleanup_all_gapped_data(&self) -> Result<usize, String> {
-    let conn_arc = self.connection.clone();
-
-    // Get all unique tokens in the database
-    let tokens = tokio::task::spawn_blocking(move || {
-      let connection_guard = conn_arc
-        .lock()
-        .map_err(|e| format!("Failed to lock connection: {}", e))?;
-
-      let conn = connection_guard
-        .as_ref()
-        .ok_or_else(|| "Database not initialized".to_string())?;
-
-      let mut stmt = conn
-        .prepare("SELECT DISTINCT mint FROM price_history")
-        .map_err(|e| format!("Failed to prepare token list query: {}", e))?;
-
-      let rows = stmt
-        .query_map([], |row| Ok(row.get::<_, String>("mint")?))
-        .map_err(|e| format!("Failed to execute token list query: {}", e))?;
-
-      let mut tokens = Vec::new();
-      for row in rows {
-        tokens.push(row.map_err(|e| format!("Failed to parse token mint: {}", e))?);
-      }
-
-      Ok::<_, String>(tokens)
-    })
-    .await
-    .map_err(|e| format!("Blocking task failed: {}", e))??;
-
-    // Clean up gapped data for each token
-    let mut total_deleted = 0;
-    for token in tokens {
-      match self.cleanup_gapped_data_for_token(&token).await {
-        Ok(deleted) => {
-          total_deleted += deleted;
+        let mut timestamps = Vec::new();
+        for row in rows {
+            timestamps.push(row.map_err(|e| format!("Failed to parse timestamp: {}", e))?);
         }
-        Err(e) => {
-          logger::error(
-            LogTag::PoolCache,
-            &format!("Failed to cleanup gapped data for token {}: {}", token, e),
-          );
+
+        if timestamps.len() <= 1 {
+            return Ok(None); // Not enough data to detect gaps
         }
-      }
+
+        // Work backwards to find the first gap > 1 minute
+        for i in 1..timestamps.len() {
+            let current_time = timestamps[i - 1]; // Newer timestamp
+            let prev_time = timestamps[i]; // Older timestamp
+
+            let gap = current_time - prev_time;
+
+            if gap > (MAX_PRICE_GAP_SECONDS as i64) {
+                // Found a gap - return the older timestamp as cutoff point
+                return Ok(Some(prev_time));
+            }
+        }
+
+        Ok(None) // No significant gaps found
     }
 
-    if total_deleted > 0 {
-      logger::debug(
-        LogTag::PoolService,
-        &format!(
-          "Removed {} total gapped price entries across all tokens",
-          total_deleted
-        ),
-      );
-    }
+    /// Cleanup gapped data for all tokens
+    pub async fn cleanup_all_gapped_data(&self) -> Result<usize, String> {
+        let conn_arc = self.connection.clone();
 
-    Ok(total_deleted)
-  }
+        // Get all unique tokens in the database
+        let tokens = tokio::task::spawn_blocking(move || {
+            let connection_guard = conn_arc
+                .lock()
+                .map_err(|e| format!("Failed to lock connection: {}", e))?;
+
+            let conn = connection_guard
+                .as_ref()
+                .ok_or_else(|| "Database not initialized".to_string())?;
+
+            let mut stmt = conn
+                .prepare("SELECT DISTINCT mint FROM price_history")
+                .map_err(|e| format!("Failed to prepare token list query: {}", e))?;
+
+            let rows = stmt
+                .query_map([], |row| Ok(row.get::<_, String>("mint")?))
+                .map_err(|e| format!("Failed to execute token list query: {}", e))?;
+
+            let mut tokens = Vec::new();
+            for row in rows {
+                tokens.push(row.map_err(|e| format!("Failed to parse token mint: {}", e))?);
+            }
+
+            Ok::<_, String>(tokens)
+        })
+        .await
+        .map_err(|e| format!("Blocking task failed: {}", e))??;
+
+        // Clean up gapped data for each token
+        let mut total_deleted = 0;
+        for token in tokens {
+            match self.cleanup_gapped_data_for_token(&token).await {
+                Ok(deleted) => {
+                    total_deleted += deleted;
+                }
+                Err(e) => {
+                    logger::error(
+                        LogTag::PoolCache,
+                        &format!("Failed to cleanup gapped data for token {}: {}", token, e),
+                    );
+                }
+            }
+        }
+
+        if total_deleted > 0 {
+            logger::debug(
+                LogTag::PoolService,
+                &format!(
+                    "Removed {} total gapped price entries across all tokens",
+                    total_deleted
+                ),
+            );
+        }
+
+        Ok(total_deleted)
+    }
 }
 
 // =============================================================================
@@ -783,135 +783,135 @@ impl PoolsDatabase {
 
 /// Background task for batched database writes
 async fn run_database_writer(
-  mut rx: mpsc::UnboundedReceiver<PriceResult>,
-  db_connection: Arc<Mutex<Option<Connection>>>,
+    mut rx: mpsc::UnboundedReceiver<PriceResult>,
+    db_connection: Arc<Mutex<Option<Connection>>>,
 ) {
-  let mut write_buffer = Vec::with_capacity(DB_BATCH_SIZE);
-  let mut interval =
-    tokio::time::interval(tokio::time::Duration::from_secs(DB_WRITE_INTERVAL_SECONDS));
+    let mut write_buffer = Vec::with_capacity(DB_BATCH_SIZE);
+    let mut interval =
+        tokio::time::interval(tokio::time::Duration::from_secs(DB_WRITE_INTERVAL_SECONDS));
 
-  loop {
-    tokio::select! {
-      // Collect prices from queue
-      price = rx.recv() => {
-        match price {
-          Some(price) => {
-            write_buffer.push(price);
+    loop {
+        tokio::select! {
+          // Collect prices from queue
+          price = rx.recv() => {
+            match price {
+              Some(price) => {
+                write_buffer.push(price);
 
-            // Flush if buffer is full
-            if write_buffer.len() >= DB_BATCH_SIZE {
+                // Flush if buffer is full
+                if write_buffer.len() >= DB_BATCH_SIZE {
+                  flush_write_buffer(&mut write_buffer, &db_connection).await;
+                }
+              }
+              None => {
+                // Channel closed, flush remaining and exit
+                flush_write_buffer(&mut write_buffer, &db_connection).await;
+                break;
+              }
+            }
+          }
+
+          // Periodic flush
+          _ = interval.tick() => {
+            if !write_buffer.is_empty() {
               flush_write_buffer(&mut write_buffer, &db_connection).await;
             }
           }
-          None => {
-            // Channel closed, flush remaining and exit
-            flush_write_buffer(&mut write_buffer, &db_connection).await;
-            break;
-          }
         }
-      }
-
-      // Periodic flush
-      _ = interval.tick() => {
-        if !write_buffer.is_empty() {
-          flush_write_buffer(&mut write_buffer, &db_connection).await;
-        }
-      }
     }
-  }
 }
 
 /// Flush the write buffer to database
 async fn flush_write_buffer(
-  buffer: &mut Vec<PriceResult>,
-  db_connection: &Arc<Mutex<Option<Connection>>>,
+    buffer: &mut Vec<PriceResult>,
+    db_connection: &Arc<Mutex<Option<Connection>>>,
 ) {
-  if buffer.is_empty() {
-    return;
-  }
+    if buffer.is_empty() {
+        return;
+    }
 
-  let entries: Vec<PriceResult> = buffer.drain(..).collect();
-  let entries_for_task = entries.clone();
-  let conn_arc = db_connection.clone();
+    let entries: Vec<PriceResult> = buffer.drain(..).collect();
+    let entries_for_task = entries.clone();
+    let conn_arc = db_connection.clone();
 
-  match tokio::task::spawn_blocking(move || {
-    let connection_guard = conn_arc
-      .lock()
-      .map_err(|e| format!("Failed to lock connection: {}", e))?;
+    match tokio::task::spawn_blocking(move || {
+        let connection_guard = conn_arc
+            .lock()
+            .map_err(|e| format!("Failed to lock connection: {}", e))?;
 
-    let conn = match connection_guard.as_ref() {
-      Some(conn) => conn,
-      None => return Ok::<usize, String>(0),
-    };
+        let conn = match connection_guard.as_ref() {
+            Some(conn) => conn,
+            None => return Ok::<usize, String>(0),
+        };
 
-    let tx = conn
-      .unchecked_transaction()
-      .map_err(|e| format!("Failed to start price history transaction: {}", e))?;
+        let tx = conn
+            .unchecked_transaction()
+            .map_err(|e| format!("Failed to start price history transaction: {}", e))?;
 
-    let mut inserted = 0usize;
+        let mut inserted = 0usize;
 
-    {
-      let mut stmt = tx
-        .prepare(
-          "INSERT OR REPLACE INTO price_history 
+        {
+            let mut stmt = tx
+                .prepare(
+                    "INSERT OR REPLACE INTO price_history 
            (mint, pool_address, price_usd, price_sol, confidence, slot, 
            timestamp_unix, sol_reserves, token_reserves, source_pool, created_at) 
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        )
-        .map_err(|e| format!("Failed to prepare price history insert: {}", e))?;
+                )
+                .map_err(|e| format!("Failed to prepare price history insert: {}", e))?;
 
-      for price in &entries_for_task {
-        let db_price = DbPriceResult::from_price_result(price);
+            for price in &entries_for_task {
+                let db_price = DbPriceResult::from_price_result(price);
 
-        inserted += stmt
-          .execute(params![
-            db_price.mint,
-            db_price.pool_address,
-            db_price.price_usd,
-            db_price.price_sol,
-            db_price.confidence,
-            db_price.slot,
-            db_price.timestamp_unix,
-            db_price.sol_reserves,
-            db_price.token_reserves,
-            db_price.source_pool,
-            db_price.created_at.to_rfc3339()
-          ])
-          .map_err(|e| format!("Failed to insert price history entry: {}", e))?;
-      }
-    }
+                inserted += stmt
+                    .execute(params![
+                        db_price.mint,
+                        db_price.pool_address,
+                        db_price.price_usd,
+                        db_price.price_sol,
+                        db_price.confidence,
+                        db_price.slot,
+                        db_price.timestamp_unix,
+                        db_price.sol_reserves,
+                        db_price.token_reserves,
+                        db_price.source_pool,
+                        db_price.created_at.to_rfc3339()
+                    ])
+                    .map_err(|e| format!("Failed to insert price history entry: {}", e))?;
+            }
+        }
 
-    tx.commit()
-      .map_err(|e| format!("Failed to commit price history transaction: {}", e))?;
+        tx.commit()
+            .map_err(|e| format!("Failed to commit price history transaction: {}", e))?;
 
-    Ok::<usize, String>(inserted)
-  })
-  .await
-  .map_err(|e| format!("Blocking task failed: {}", e))
-  {
-    Ok(Ok(inserted)) => {
-      if inserted > 0 {
-        logger::debug(
-          LogTag::PoolCache,
-          &format!("Stored {} price history entries to database", inserted),
-        );
-      }
+        Ok::<usize, String>(inserted)
+    })
+    .await
+    .map_err(|e| format!("Blocking task failed: {}", e))
+    {
+        Ok(Ok(inserted)) => {
+            if inserted > 0 {
+                logger::debug(
+                    LogTag::PoolCache,
+                    &format!("Stored {} price history entries to database", inserted),
+                );
+            }
+        }
+        Ok(Err(err)) => {
+            buffer.extend(entries.into_iter());
+            logger::error(
+                LogTag::PoolCache,
+                &format!("Failed to persist price history batch: {}", err),
+            );
+        }
+        Err(join_err) => {
+            buffer.extend(entries.into_iter());
+            logger::error(
+                LogTag::PoolCache,
+                &format!("Price history writer task panicked: {}", join_err),
+            );
+        }
     }
-    Ok(Err(err)) => {
-      buffer.extend(entries.into_iter());
-      logger::error(
-        LogTag::PoolCache,
-        &format!("Failed to persist price history batch: {}", err),
-      );
-    }
-    Err(join_err) => {
-      buffer.extend(entries.into_iter());
-      logger::error(
-        LogTag::PoolCache,
-        &format!("Price history writer task panicked: {}", join_err),
-      );
-    }
-  }
 }
 
 // =============================================================================
@@ -919,28 +919,28 @@ async fn flush_write_buffer(
 // =============================================================================
 
 impl PoolsDatabase {
-  /// Add account to blacklist
-  pub async fn add_account_to_blacklist(
-    &self,
-    account_pubkey: &str,
-    reason: &str,
-    source: Option<&str>,
-    pool_id: Option<&str>,
-    token_mint: Option<&str>,
-  ) -> Result<(), String> {
-    let account_key = account_pubkey.to_string();
-    let reason_str = reason.to_string();
-    let source_str = source.map(|s| s.to_string());
-    let pool_id_str = pool_id.map(|s| s.to_string());
-    let token_mint_str = token_mint.map(|s| s.to_string());
-    // Update memory immediately
-    {
-      let mut set = self.blacklisted_accounts.write().unwrap();
-      set.insert(account_key.clone());
-    }
+    /// Add account to blacklist
+    pub async fn add_account_to_blacklist(
+        &self,
+        account_pubkey: &str,
+        reason: &str,
+        source: Option<&str>,
+        pool_id: Option<&str>,
+        token_mint: Option<&str>,
+    ) -> Result<(), String> {
+        let account_key = account_pubkey.to_string();
+        let reason_str = reason.to_string();
+        let source_str = source.map(|s| s.to_string());
+        let pool_id_str = pool_id.map(|s| s.to_string());
+        let token_mint_str = token_mint.map(|s| s.to_string());
+        // Update memory immediately
+        {
+            let mut set = self.blacklisted_accounts.write().unwrap();
+            set.insert(account_key.clone());
+        }
 
-    let conn_arc = self.connection.clone();
-    tokio::task::spawn_blocking(move || {
+        let conn_arc = self.connection.clone();
+        tokio::task::spawn_blocking(move || {
       let conn_guard = conn_arc
         .lock()
         .map_err(|e| format!("Failed to lock connection: {}", e))?;
@@ -987,35 +987,35 @@ impl PoolsDatabase {
     })
     .await
     .map_err(|e| format!("Blocking task failed: {}", e))?
-  }
-
-  /// Check if account is blacklisted
-  pub async fn is_account_blacklisted(&self, account_pubkey: &str) -> Result<bool, String> {
-    // Hot path: memory only
-    let set = self.blacklisted_accounts.read().unwrap();
-    Ok(set.contains(account_pubkey))
-  }
-
-  /// Add pool to blacklist
-  pub async fn add_pool_to_blacklist(
-    &self,
-    pool_id: &str,
-    reason: &str,
-    token_mint: Option<&str>,
-    program_id: Option<&str>,
-  ) -> Result<(), String> {
-    let pool_id_str = pool_id.to_string();
-    let reason_str = reason.to_string();
-    let token_mint_str = token_mint.map(|s| s.to_string());
-    let program_id_str = program_id.map(|s| s.to_string());
-    // Update memory immediately
-    {
-      let mut set = self.blacklisted_pools.write().unwrap();
-      set.insert(pool_id_str.clone());
     }
 
-    let conn_arc = self.connection.clone();
-    tokio::task::spawn_blocking(move || {
+    /// Check if account is blacklisted
+    pub async fn is_account_blacklisted(&self, account_pubkey: &str) -> Result<bool, String> {
+        // Hot path: memory only
+        let set = self.blacklisted_accounts.read().unwrap();
+        Ok(set.contains(account_pubkey))
+    }
+
+    /// Add pool to blacklist
+    pub async fn add_pool_to_blacklist(
+        &self,
+        pool_id: &str,
+        reason: &str,
+        token_mint: Option<&str>,
+        program_id: Option<&str>,
+    ) -> Result<(), String> {
+        let pool_id_str = pool_id.to_string();
+        let reason_str = reason.to_string();
+        let token_mint_str = token_mint.map(|s| s.to_string());
+        let program_id_str = program_id.map(|s| s.to_string());
+        // Update memory immediately
+        {
+            let mut set = self.blacklisted_pools.write().unwrap();
+            set.insert(pool_id_str.clone());
+        }
+
+        let conn_arc = self.connection.clone();
+        tokio::task::spawn_blocking(move || {
       let conn_guard = conn_arc
         .lock()
         .map_err(|e| format!("Failed to lock connection: {}", e))?;
@@ -1062,86 +1062,86 @@ impl PoolsDatabase {
     })
     .await
     .map_err(|e| format!("Blocking task failed: {}", e))?
-  }
-
-  /// Check if pool is blacklisted
-  pub async fn is_pool_blacklisted(&self, pool_id: &str) -> Result<bool, String> {
-    // Hot path: memory only
-    let set = self.blacklisted_pools.read().unwrap();
-    Ok(set.contains(pool_id))
-  }
-
-  /// Remove account from blacklist
-  pub async fn remove_account_from_blacklist(&self, account_pubkey: &str) -> Result<(), String> {
-    // Update memory immediately
-    {
-      let mut set = self.blacklisted_accounts.write().unwrap();
-      set.remove(account_pubkey);
     }
-    // Persist
-    let account_key = account_pubkey.to_string();
-    let conn_arc = self.connection.clone();
-    tokio::task::spawn_blocking(move || {
-      let conn_guard = conn_arc
-        .lock()
-        .map_err(|e| format!("Failed to lock connection: {}", e))?;
-      if let Some(ref conn) = *conn_guard {
-        conn.execute(
-          "DELETE FROM blacklist_accounts WHERE account_pubkey = ?1",
-          params![&account_key],
-        )
-        .map_err(|e| format!("Failed to remove from blacklist_accounts: {}", e))?;
-        Ok(())
-      } else {
-        Err("Database connection not available".to_string())
-      }
-    })
-    .await
-    .map_err(|e| format!("Blocking task failed: {}", e))?
-  }
 
-  /// Remove pool from blacklist
-  pub async fn remove_pool_from_blacklist(&self, pool_id: &str) -> Result<(), String> {
-    // Update memory immediately
-    {
-      let mut set = self.blacklisted_pools.write().unwrap();
-      set.remove(pool_id);
+    /// Check if pool is blacklisted
+    pub async fn is_pool_blacklisted(&self, pool_id: &str) -> Result<bool, String> {
+        // Hot path: memory only
+        let set = self.blacklisted_pools.read().unwrap();
+        Ok(set.contains(pool_id))
     }
-    // Persist
-    let pool_key = pool_id.to_string();
-    let conn_arc = self.connection.clone();
-    tokio::task::spawn_blocking(move || {
-      let conn_guard = conn_arc
-        .lock()
-        .map_err(|e| format!("Failed to lock connection: {}", e))?;
-      if let Some(ref conn) = *conn_guard {
-        conn.execute(
-          "DELETE FROM blacklist_pools WHERE pool_id = ?1",
-          params![&pool_key],
-        )
-        .map_err(|e| format!("Failed to remove from blacklist_pools: {}", e))?;
-        Ok(())
-      } else {
-        Err("Database connection not available".to_string())
-      }
-    })
-    .await
-    .map_err(|e| format!("Blocking task failed: {}", e))?
-  }
 
-  /// Get blacklist statistics
-  pub async fn get_blacklist_stats(&self) -> Result<(usize, usize), String> {
-    let accounts = self.blacklisted_accounts.read().unwrap().len();
-    let pools = self.blacklisted_pools.read().unwrap().len();
-    Ok((accounts, pools))
-  }
+    /// Remove account from blacklist
+    pub async fn remove_account_from_blacklist(&self, account_pubkey: &str) -> Result<(), String> {
+        // Update memory immediately
+        {
+            let mut set = self.blacklisted_accounts.write().unwrap();
+            set.remove(account_pubkey);
+        }
+        // Persist
+        let account_key = account_pubkey.to_string();
+        let conn_arc = self.connection.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn_guard = conn_arc
+                .lock()
+                .map_err(|e| format!("Failed to lock connection: {}", e))?;
+            if let Some(ref conn) = *conn_guard {
+                conn.execute(
+                    "DELETE FROM blacklist_accounts WHERE account_pubkey = ?1",
+                    params![&account_key],
+                )
+                .map_err(|e| format!("Failed to remove from blacklist_accounts: {}", e))?;
+                Ok(())
+            } else {
+                Err("Database connection not available".to_string())
+            }
+        })
+        .await
+        .map_err(|e| format!("Blocking task failed: {}", e))?
+    }
 
-  pub async fn list_blacklisted_accounts(
-    &self,
-    limit: Option<usize>,
-  ) -> Result<Vec<BlacklistedAccountRecord>, String> {
-    let conn_arc = self.connection.clone();
-    tokio::task::spawn_blocking(move || {
+    /// Remove pool from blacklist
+    pub async fn remove_pool_from_blacklist(&self, pool_id: &str) -> Result<(), String> {
+        // Update memory immediately
+        {
+            let mut set = self.blacklisted_pools.write().unwrap();
+            set.remove(pool_id);
+        }
+        // Persist
+        let pool_key = pool_id.to_string();
+        let conn_arc = self.connection.clone();
+        tokio::task::spawn_blocking(move || {
+            let conn_guard = conn_arc
+                .lock()
+                .map_err(|e| format!("Failed to lock connection: {}", e))?;
+            if let Some(ref conn) = *conn_guard {
+                conn.execute(
+                    "DELETE FROM blacklist_pools WHERE pool_id = ?1",
+                    params![&pool_key],
+                )
+                .map_err(|e| format!("Failed to remove from blacklist_pools: {}", e))?;
+                Ok(())
+            } else {
+                Err("Database connection not available".to_string())
+            }
+        })
+        .await
+        .map_err(|e| format!("Blocking task failed: {}", e))?
+    }
+
+    /// Get blacklist statistics
+    pub async fn get_blacklist_stats(&self) -> Result<(usize, usize), String> {
+        let accounts = self.blacklisted_accounts.read().unwrap().len();
+        let pools = self.blacklisted_pools.read().unwrap().len();
+        Ok((accounts, pools))
+    }
+
+    pub async fn list_blacklisted_accounts(
+        &self,
+        limit: Option<usize>,
+    ) -> Result<Vec<BlacklistedAccountRecord>, String> {
+        let conn_arc = self.connection.clone();
+        tokio::task::spawn_blocking(move || {
       let connection_guard = conn_arc
         .lock()
         .map_err(|e| format!("Failed to lock connection: {}", e))?;
@@ -1215,14 +1215,14 @@ impl PoolsDatabase {
     })
     .await
     .map_err(|e| format!("Blocking task failed: {}", e))?
-  }
+    }
 
-  pub async fn list_blacklisted_pools(
-    &self,
-    limit: Option<usize>,
-  ) -> Result<Vec<BlacklistedPoolRecord>, String> {
-    let conn_arc = self.connection.clone();
-    tokio::task::spawn_blocking(move || {
+    pub async fn list_blacklisted_pools(
+        &self,
+        limit: Option<usize>,
+    ) -> Result<Vec<BlacklistedPoolRecord>, String> {
+        let conn_arc = self.connection.clone();
+        tokio::task::spawn_blocking(move || {
       let connection_guard = conn_arc
         .lock()
         .map_err(|e| format!("Failed to lock connection: {}", e))?;
@@ -1294,7 +1294,7 @@ impl PoolsDatabase {
     })
     .await
     .map_err(|e| format!("Blocking task failed: {}", e))?
-  }
+    }
 }
 
 // =============================================================================
@@ -1308,193 +1308,193 @@ static GLOBAL_POOLS_DB: Lazy<RwLock<Option<PoolsDatabase>>> = Lazy::new(|| RwLoc
 
 /// Initialize the global pools database
 pub async fn initialize_database() -> Result<(), String> {
-  let mut db = PoolsDatabase::new();
-  db.initialize().await?;
+    let mut db = PoolsDatabase::new();
+    db.initialize().await?;
 
-  match GLOBAL_POOLS_DB.write() {
-    Ok(mut guard) => {
-      *guard = Some(db);
-      Ok(())
+    match GLOBAL_POOLS_DB.write() {
+        Ok(mut guard) => {
+            *guard = Some(db);
+            Ok(())
+        }
+        Err(e) => Err(format!("Failed to acquire write lock: {}", e)),
     }
-    Err(e) => Err(format!("Failed to acquire write lock: {}", e)),
-  }
 }
 
 /// Queue a price for storage in the global database
 pub async fn queue_price_for_storage(price: PriceResult) -> Result<(), String> {
-  let db_ref = match GLOBAL_POOLS_DB.read() {
-    Ok(guard) => match guard.as_ref() {
-      Some(db) => db.clone_for_async(),
-      None => return Err("Database not initialized".to_string()),
-    },
-    Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
-  };
-  db_ref.queue_price_for_storage(price).await
+    let db_ref = match GLOBAL_POOLS_DB.read() {
+        Ok(guard) => match guard.as_ref() {
+            Some(db) => db.clone_for_async(),
+            None => return Err("Database not initialized".to_string()),
+        },
+        Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
+    };
+    db_ref.queue_price_for_storage(price).await
 }
 
 /// Load recent price history for cache initialization
 pub async fn load_historical_data_for_token(mint: &str) -> Result<Vec<PriceResult>, String> {
-  let db_ref = match GLOBAL_POOLS_DB.read() {
-    Ok(guard) => match guard.as_ref() {
-      Some(db) => db.clone_for_async(),
-      None => return Ok(Vec::new()),
-    },
-    Err(_) => return Ok(Vec::new()),
-  };
-  db_ref
-    .load_recent_price_history(mint, PRICE_HISTORY_MAX_ENTRIES)
-    .await
+    let db_ref = match GLOBAL_POOLS_DB.read() {
+        Ok(guard) => match guard.as_ref() {
+            Some(db) => db.clone_for_async(),
+            None => return Ok(Vec::new()),
+        },
+        Err(_) => return Ok(Vec::new()),
+    };
+    db_ref
+        .load_recent_price_history(mint, PRICE_HISTORY_MAX_ENTRIES)
+        .await
 }
 
 /// Get extended price history from database
 pub async fn get_extended_price_history(
-  mint: &str,
-  limit: Option<usize>,
-  since_timestamp: Option<i64>,
+    mint: &str,
+    limit: Option<usize>,
+    since_timestamp: Option<i64>,
 ) -> Result<Vec<PriceResult>, String> {
-  let db_ref = match GLOBAL_POOLS_DB.read() {
-    Ok(guard) => match guard.as_ref() {
-      Some(db) => db.clone_for_async(),
-      None => return Err("Database not initialized".to_string()),
-    },
-    Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
-  };
-  db_ref.get_price_history(mint, limit, since_timestamp).await
+    let db_ref = match GLOBAL_POOLS_DB.read() {
+        Ok(guard) => match guard.as_ref() {
+            Some(db) => db.clone_for_async(),
+            None => return Err("Database not initialized".to_string()),
+        },
+        Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
+    };
+    db_ref.get_price_history(mint, limit, since_timestamp).await
 }
 
 /// Cleanup old database entries
 pub async fn cleanup_old_entries() -> Result<usize, String> {
-  let db_ref = match GLOBAL_POOLS_DB.read() {
-    Ok(guard) => match guard.as_ref() {
-      Some(db) => db.clone_for_async(),
-      None => return Ok(0),
-    },
-    Err(_) => return Ok(0),
-  };
-  db_ref.cleanup_old_entries().await
+    let db_ref = match GLOBAL_POOLS_DB.read() {
+        Ok(guard) => match guard.as_ref() {
+            Some(db) => db.clone_for_async(),
+            None => return Ok(0),
+        },
+        Err(_) => return Ok(0),
+    };
+    db_ref.cleanup_old_entries().await
 }
 
 /// Cleanup gapped data for a specific token
 pub async fn cleanup_gapped_data_for_token(mint: &str) -> Result<usize, String> {
-  let db_ref = match GLOBAL_POOLS_DB.read() {
-    Ok(guard) => match guard.as_ref() {
-      Some(db) => db.clone_for_async(),
-      None => return Ok(0),
-    },
-    Err(_) => return Ok(0),
-  };
-  db_ref.cleanup_gapped_data_for_token(mint).await
+    let db_ref = match GLOBAL_POOLS_DB.read() {
+        Ok(guard) => match guard.as_ref() {
+            Some(db) => db.clone_for_async(),
+            None => return Ok(0),
+        },
+        Err(_) => return Ok(0),
+    };
+    db_ref.cleanup_gapped_data_for_token(mint).await
 }
 
 /// Cleanup gapped data for all tokens
 pub async fn cleanup_all_gapped_data() -> Result<usize, String> {
-  let db_ref = match GLOBAL_POOLS_DB.read() {
-    Ok(guard) => match guard.as_ref() {
-      Some(db) => db.clone_for_async(),
-      None => return Ok(0),
-    },
-    Err(_) => return Ok(0),
-  };
-  db_ref.cleanup_all_gapped_data().await
+    let db_ref = match GLOBAL_POOLS_DB.read() {
+        Ok(guard) => match guard.as_ref() {
+            Some(db) => db.clone_for_async(),
+            None => return Ok(0),
+        },
+        Err(_) => return Ok(0),
+    };
+    db_ref.cleanup_all_gapped_data().await
 }
 
 /// Add account to blacklist (global helper)
 pub async fn add_account_to_blacklist(
-  account_pubkey: &str,
-  reason: &str,
-  source: Option<&str>,
-  pool_id: Option<&str>,
-  token_mint: Option<&str>,
+    account_pubkey: &str,
+    reason: &str,
+    source: Option<&str>,
+    pool_id: Option<&str>,
+    token_mint: Option<&str>,
 ) -> Result<(), String> {
-  let db_ref = match GLOBAL_POOLS_DB.read() {
-    Ok(guard) => match guard.as_ref() {
-      Some(db) => db.clone_for_async(),
-      None => return Err("Database not initialized".to_string()),
-    },
-    Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
-  };
-  db_ref
-    .add_account_to_blacklist(account_pubkey, reason, source, pool_id, token_mint)
-    .await
+    let db_ref = match GLOBAL_POOLS_DB.read() {
+        Ok(guard) => match guard.as_ref() {
+            Some(db) => db.clone_for_async(),
+            None => return Err("Database not initialized".to_string()),
+        },
+        Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
+    };
+    db_ref
+        .add_account_to_blacklist(account_pubkey, reason, source, pool_id, token_mint)
+        .await
 }
 
 /// Check if account is blacklisted (global helper)
 pub async fn is_account_blacklisted(account_pubkey: &str) -> Result<bool, String> {
-  let db_ref = match GLOBAL_POOLS_DB.read() {
-    Ok(guard) => match guard.as_ref() {
-      Some(db) => db.clone_for_async(),
-      None => return Err("Database not initialized".to_string()),
-    },
-    Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
-  };
-  db_ref.is_account_blacklisted(account_pubkey).await
+    let db_ref = match GLOBAL_POOLS_DB.read() {
+        Ok(guard) => match guard.as_ref() {
+            Some(db) => db.clone_for_async(),
+            None => return Err("Database not initialized".to_string()),
+        },
+        Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
+    };
+    db_ref.is_account_blacklisted(account_pubkey).await
 }
 
 /// Add pool to blacklist (global helper)
 pub async fn add_pool_to_blacklist(
-  pool_id: &str,
-  reason: &str,
-  token_mint: Option<&str>,
-  program_id: Option<&str>,
+    pool_id: &str,
+    reason: &str,
+    token_mint: Option<&str>,
+    program_id: Option<&str>,
 ) -> Result<(), String> {
-  let db_ref = match GLOBAL_POOLS_DB.read() {
-    Ok(guard) => match guard.as_ref() {
-      Some(db) => db.clone_for_async(),
-      None => return Err("Database not initialized".to_string()),
-    },
-    Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
-  };
-  db_ref
-    .add_pool_to_blacklist(pool_id, reason, token_mint, program_id)
-    .await
+    let db_ref = match GLOBAL_POOLS_DB.read() {
+        Ok(guard) => match guard.as_ref() {
+            Some(db) => db.clone_for_async(),
+            None => return Err("Database not initialized".to_string()),
+        },
+        Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
+    };
+    db_ref
+        .add_pool_to_blacklist(pool_id, reason, token_mint, program_id)
+        .await
 }
 
 /// Check if pool is blacklisted (global helper)
 pub async fn is_pool_blacklisted(pool_id: &str) -> Result<bool, String> {
-  let db_ref = match GLOBAL_POOLS_DB.read() {
-    Ok(guard) => match guard.as_ref() {
-      Some(db) => db.clone_for_async(),
-      None => return Err("Database not initialized".to_string()),
-    },
-    Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
-  };
-  db_ref.is_pool_blacklisted(pool_id).await
+    let db_ref = match GLOBAL_POOLS_DB.read() {
+        Ok(guard) => match guard.as_ref() {
+            Some(db) => db.clone_for_async(),
+            None => return Err("Database not initialized".to_string()),
+        },
+        Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
+    };
+    db_ref.is_pool_blacklisted(pool_id).await
 }
 
 /// Get blacklist statistics (global helper)
 pub async fn get_blacklist_stats() -> Result<(usize, usize), String> {
-  let db_ref = match GLOBAL_POOLS_DB.read() {
-    Ok(guard) => match guard.as_ref() {
-      Some(db) => db.clone_for_async(),
-      None => return Ok((0, 0)),
-    },
-    Err(_) => return Ok((0, 0)),
-  };
-  db_ref.get_blacklist_stats().await
+    let db_ref = match GLOBAL_POOLS_DB.read() {
+        Ok(guard) => match guard.as_ref() {
+            Some(db) => db.clone_for_async(),
+            None => return Ok((0, 0)),
+        },
+        Err(_) => return Ok((0, 0)),
+    };
+    db_ref.get_blacklist_stats().await
 }
 
 pub async fn list_blacklisted_accounts(
-  limit: Option<usize>,
+    limit: Option<usize>,
 ) -> Result<Vec<BlacklistedAccountRecord>, String> {
-  let db_ref = match GLOBAL_POOLS_DB.read() {
-    Ok(guard) => match guard.as_ref() {
-      Some(db) => db.clone_for_async(),
-      None => return Ok(Vec::new()),
-    },
-    Err(_) => return Ok(Vec::new()),
-  };
-  db_ref.list_blacklisted_accounts(limit).await
+    let db_ref = match GLOBAL_POOLS_DB.read() {
+        Ok(guard) => match guard.as_ref() {
+            Some(db) => db.clone_for_async(),
+            None => return Ok(Vec::new()),
+        },
+        Err(_) => return Ok(Vec::new()),
+    };
+    db_ref.list_blacklisted_accounts(limit).await
 }
 
 pub async fn list_blacklisted_pools(
-  limit: Option<usize>,
+    limit: Option<usize>,
 ) -> Result<Vec<BlacklistedPoolRecord>, String> {
-  let db_ref = match GLOBAL_POOLS_DB.read() {
-    Ok(guard) => match guard.as_ref() {
-      Some(db) => db.clone_for_async(),
-      None => return Ok(Vec::new()),
-    },
-    Err(_) => return Ok(Vec::new()),
-  };
-  db_ref.list_blacklisted_pools(limit).await
+    let db_ref = match GLOBAL_POOLS_DB.read() {
+        Ok(guard) => match guard.as_ref() {
+            Some(db) => db.clone_for_async(),
+            None => return Ok(Vec::new()),
+        },
+        Err(_) => return Ok(Vec::new()),
+    };
+    db_ref.list_blacklisted_pools(limit).await
 }

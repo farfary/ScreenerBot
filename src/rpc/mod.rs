@@ -61,13 +61,14 @@ pub use circuit_breaker::{
 // The RpcClient is available as `rpc::client::RpcClient` (not re-exported at top level)
 // Access via get_rpc_client() helper which returns the global RpcClient instance
 pub use client::{
-    ProviderHealthInfo, RpcClientMethods,
-    // Transaction history types
-    SignatureInfo,
+    ProviderHealthInfo,
+    RpcClientMethods,
     // Program account types
     RpcFilterType,
     // Token supply types
     RpcTokenAccountBalance,
+    // Transaction history types
+    SignatureInfo,
     TokenSupply,
 };
 
@@ -113,9 +114,9 @@ pub use selector::{create_selector, ProviderSelector};
 
 pub use stats::{
     get_global_rpc_stats, get_rpc_stats_db_path, parse_pubkey, spl_token_program_id,
-    start_rpc_stats_auto_save_service, MethodStats, ProviderStats, RpcCallRecord,
-    RpcMinuteBucket, RpcSessionSnapshot, RpcStats, RpcStatsDatabase, RpcStatsResponse,
-    SessionStats, StatsCollector, StatsManager, StatsMessage, StatsSnapshot, TimeBucketStats,
+    start_rpc_stats_auto_save_service, MethodStats, ProviderStats, RpcCallRecord, RpcMinuteBucket,
+    RpcSessionSnapshot, RpcStats, RpcStatsDatabase, RpcStatsResponse, SessionStats, StatsCollector,
+    StatsManager, StatsMessage, StatsSnapshot, TimeBucketStats,
 };
 
 // ============================================================================
@@ -141,8 +142,7 @@ pub use websocket::{
 // ============================================================================
 
 pub use testing::{
-    get_rpc_version, test_rpc_endpoint, test_rpc_endpoints, validate_mainnet,
-    RpcEndpointTestResult,
+    get_rpc_version, test_rpc_endpoint, test_rpc_endpoints, validate_mainnet, RpcEndpointTestResult,
 };
 
 // ============================================================================
@@ -172,8 +172,15 @@ pub use client::RpcClient;
 
 pub use types::{
     // Transaction types used throughout the codebase
-    PaginatedAccountsResponse, SignatureStatusData, SignatureStatusResponse, SignatureStatusResult,
-    TokenAccountInfo, TokenBalance, TransactionData, TransactionDetails, TransactionMeta,
+    PaginatedAccountsResponse,
+    SignatureStatusData,
+    SignatureStatusResponse,
+    SignatureStatusResult,
+    TokenAccountInfo,
+    TokenBalance,
+    TransactionData,
+    TransactionDetails,
+    TransactionMeta,
     UiTokenAmount,
 };
 

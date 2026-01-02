@@ -70,11 +70,7 @@
 
 .trader-status-bar[data-status="running"] {
   border-color: var(--success-alpha-40);
-  background: linear-gradient(
-    135deg,
-    var(--bg-secondary) 0%,
-    var(--success-alpha-5) 100%
-  );
+  background: linear-gradient(135deg, var(--bg-secondary) 0%, var(--success-alpha-5) 100%);
 }
 
 .trader-status-bar[data-status="stopped"] {
@@ -463,8 +459,13 @@
 }
 
 @keyframes force-stop-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.6; }
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
 }
 
 .force-stop-info {
@@ -647,7 +648,9 @@
   height: 100%;
   background: var(--success-color);
   border-radius: 3px;
-  transition: width 0.3s ease, background 0.3s ease;
+  transition:
+    width 0.3s ease,
+    background 0.3s ease;
 }
 
 .loss-limit-progress.limit-warning {

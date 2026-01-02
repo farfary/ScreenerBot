@@ -7,7 +7,7 @@ use std::collections::HashSet;
 use super::types::{
     ColumnMapping, ColumnMappingInfo, ImportPreview, ParsedWalletRow, RowValidationResult,
 };
-use crate::wallets::crypto::{parse_private_key, keypair_to_address, validate_address};
+use crate::wallets::crypto::{keypair_to_address, parse_private_key, validate_address};
 
 // =============================================================================
 // ROW VALIDATION

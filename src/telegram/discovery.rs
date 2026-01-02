@@ -43,7 +43,7 @@ impl DiscoveryService {
     }
 
     /// Start the discovery polling service
-    /// 
+    ///
     /// This starts a background task that polls for Telegram updates
     /// and captures any incoming messages as discovered chats.
     pub async fn start(&mut self) -> Result<(), String> {
@@ -154,9 +154,12 @@ impl DiscoveryService {
 
         // Update config with the selected chat_id
         let chat_id_str = chat_id.to_string();
-        update_config_section(|cfg| {
-            cfg.telegram.chat_id = chat_id_str;
-        }, true)?;
+        update_config_section(
+            |cfg| {
+                cfg.telegram.chat_id = chat_id_str;
+            },
+            true,
+        )?;
 
         logger::info(
             LogTag::Telegram,

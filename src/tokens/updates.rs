@@ -1082,7 +1082,8 @@ async fn update_pool_tracked_tokens(db: &TokenDatabase, coordinator: &RateLimitC
                         // Success: Demote from PoolTracked (75) to Stale (40) priority
                         // After fresh update, token returns to normal priority rotation
                         // Using Stale (40) instead of non-existent "High" (50)
-                        if let Err(e) = db.update_priority(&result.mint, Priority::Stale.to_value()) {
+                        if let Err(e) = db.update_priority(&result.mint, Priority::Stale.to_value())
+                        {
                             logger::warning(
                                 LogTag::Tokens,
                                 &format!(
@@ -1347,7 +1348,9 @@ pub async fn force_update_token(
     }
 
     // Update tracking timestamp if any market data source succeeded
-    let market_data_updated = successes.iter().any(|s| s == "DexScreener" || s == "GeckoTerminal");
+    let market_data_updated = successes
+        .iter()
+        .any(|s| s == "DexScreener" || s == "GeckoTerminal");
     if market_data_updated {
         let _ = db.mark_market_data_updated(mint);
     }

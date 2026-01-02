@@ -227,7 +227,7 @@ pub fn default_tabs() -> Vec<TabConfig> {
 /// Returns the merged list with missing tabs added and old IDs migrated.
 pub fn ensure_all_tabs_present(mut tabs: Vec<TabConfig>) -> Vec<TabConfig> {
     let defaults = default_tabs();
-    
+
     // Migration: rename "wallet" to "wallets" if present
     for tab in &mut tabs {
         if tab.id == "wallet" {
@@ -235,11 +235,11 @@ pub fn ensure_all_tabs_present(mut tabs: Vec<TabConfig>) -> Vec<TabConfig> {
             tab.label = "Wallets".into();
         }
     }
-    
+
     // Find max order to add new tabs after existing ones
     let max_order = tabs.iter().map(|t| t.order).max().unwrap_or(0);
     let mut next_order = max_order + 1;
-    
+
     // Add any missing tabs from defaults
     for default_tab in defaults {
         let exists = tabs.iter().any(|t| t.id == default_tab.id);
@@ -250,9 +250,9 @@ pub fn ensure_all_tabs_present(mut tabs: Vec<TabConfig>) -> Vec<TabConfig> {
             tabs.push(new_tab);
         }
     }
-    
+
     // Sort by order
     tabs.sort_by_key(|t| t.order);
-    
+
     tabs
 }

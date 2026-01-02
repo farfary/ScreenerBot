@@ -210,7 +210,7 @@ pub async fn monitor_entries(
                         .ok()
                         .flatten()
                         .map(|t| t.symbol);
-                    
+
                     let action = actions::AutoOpenAction::new(
                         &decision.mint,
                         symbol.as_deref(),
@@ -235,12 +235,13 @@ pub async fn monitor_entries(
 
                             if result.success {
                                 let tx_sig = result.tx_signature.clone();
-                                
+
                                 // Complete action
                                 if let Some(ref a) = action {
                                     a.complete_quote().await;
                                     a.start_swap().await;
-                                    a.complete_swap(tx_sig.as_deref().unwrap_or("unknown")).await;
+                                    a.complete_swap(tx_sig.as_deref().unwrap_or("unknown"))
+                                        .await;
                                     a.complete(tx_sig.as_deref()).await;
                                 }
 
@@ -268,7 +269,7 @@ pub async fn monitor_entries(
                                 .await;
                             } else {
                                 let error_msg = result.error.clone().unwrap_or_default();
-                                
+
                                 // Fail action
                                 if let Some(ref a) = action {
                                     a.fail(&error_msg).await;

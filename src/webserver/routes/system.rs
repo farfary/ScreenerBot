@@ -398,7 +398,7 @@ pub struct OpenUrlResponse {
 /// POST /api/system/open-url - Open a URL in the system's default browser
 async fn open_url(axum::Json(request): axum::Json<OpenUrlRequest>) -> Response {
     let url = request.url.trim();
-    
+
     if url.is_empty() {
         return error_response(
             StatusCode::BAD_REQUEST,
@@ -460,10 +460,7 @@ async fn exit_app(axum::Json(request): axum::Json<ExitAppRequest>) -> Response {
 
     success_response(ExitAppResponse {
         success: true,
-        message: format!(
-            "Application will exit in {}ms",
-            request.delay_ms
-        ),
+        message: format!("Application will exit in {}ms", request.delay_ms),
     })
 }
 

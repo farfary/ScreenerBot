@@ -14,48 +14,48 @@ use tokio::time::{sleep, Duration};
 pub struct OhlcvService;
 
 impl Default for OhlcvService {
-  fn default() -> Self {
-    Self
-  }
+    fn default() -> Self {
+        Self
+    }
 }
 
 #[async_trait]
 impl Service for OhlcvService {
-  fn name(&self) -> &'static str {
-    "ohlcv"
-  }
+    fn name(&self) -> &'static str {
+        "ohlcv"
+    }
 
-  fn priority(&self) -> i32 {
-    45
-  }
+    fn priority(&self) -> i32 {
+        45
+    }
 
-  fn dependencies(&self) -> Vec<&'static str> {
-    vec!["tokens", "positions"]
-  }
+    fn dependencies(&self) -> Vec<&'static str> {
+        vec!["tokens", "positions"]
+    }
 
-  fn is_enabled(&self) -> bool {
-    crate::global::is_initialization_complete()
-  }
+    fn is_enabled(&self) -> bool {
+        crate::global::is_initialization_complete()
+    }
 
-  async fn initialize(&mut self) -> Result<(), String> {
-    crate::ohlcvs::OhlcvService::initialize()
-      .await
-      .map_err(|e| format!("Failed to initialize OHLCV service: {}", e))?;
-    Ok(())
-  }
+    async fn initialize(&mut self) -> Result<(), String> {
+        crate::ohlcvs::OhlcvService::initialize()
+            .await
+            .map_err(|e| format!("Failed to initialize OHLCV service: {}", e))?;
+        Ok(())
+    }
 
-  async fn start(
-    &mut self,
-    shutdown: Arc<Notify>,
-    monitor: tokio_metrics::TaskMonitor,
-  ) -> Result<Vec<JoinHandle<()>>, String> {
-    let mut handles = crate::ohlcvs::OhlcvService::start(shutdown.clone(), monitor.clone())
-      .await
-      .map_err(|e| format!("Failed to start OHLCV runtime: {}", e))?;
+    async fn start(
+        &mut self,
+        shutdown: Arc<Notify>,
+        monitor: tokio_metrics::TaskMonitor,
+    ) -> Result<Vec<JoinHandle<()>>, String> {
+        let mut handles = crate::ohlcvs::OhlcvService::start(shutdown.clone(), monitor.clone())
+            .await
+            .map_err(|e| format!("Failed to start OHLCV runtime: {}", e))?;
 
-    let autop_monitor = monitor.clone();
-    let autop_shutdown = shutdown.clone();
-    let autop_handle = tokio::spawn(
+        let autop_monitor = monitor.clone();
+        let autop_shutdown = shutdown.clone();
+        let autop_handle = tokio::spawn(
       autop_monitor.instrument(async move {
         use tokio::time::{ Duration, sleep };
 
@@ -87,65 +87,65 @@ impl Service for OhlcvService {
       })
     );
 
-    handles.push(autop_handle);
+        handles.push(autop_handle);
 
-    Ok(handles)
-  }
-
-  async fn health(&self) -> ServiceHealth {
-    // Check if OHLCV service is operational
-    let metrics = crate::ohlcvs::get_metrics().await;
-    if metrics.tokens_monitored > 0 || metrics.data_points_stored > 0 {
-      ServiceHealth::Healthy
-    } else {
-      ServiceHealth::Starting
+        Ok(handles)
     }
-  }
 
-  async fn metrics(&self) -> ServiceMetrics {
-    let ohlcv_metrics = crate::ohlcvs::get_metrics().await;
+    async fn health(&self) -> ServiceHealth {
+        // Check if OHLCV service is operational
+        let metrics = crate::ohlcvs::get_metrics().await;
+        if metrics.tokens_monitored > 0 || metrics.data_points_stored > 0 {
+            ServiceHealth::Healthy
+        } else {
+            ServiceHealth::Starting
+        }
+    }
 
-    // OHLCV doesn't track operations/errors in the traditional sense,
-    // but we can use data points stored and gaps filled as proxies
-    let mut service_metrics = ServiceMetrics::default();
-    service_metrics.operations_total = ohlcv_metrics.data_points_stored as u64;
+    async fn metrics(&self) -> ServiceMetrics {
+        let ohlcv_metrics = crate::ohlcvs::get_metrics().await;
 
-    // Map OHLCV metrics to custom metrics
-    service_metrics.custom_metrics.insert(
-      "tokens_monitored".to_string(),
-      ohlcv_metrics.tokens_monitored as f64,
-    );
-    service_metrics.custom_metrics.insert(
-      "pools_tracked".to_string(),
-      ohlcv_metrics.pools_tracked as f64,
-    );
-    service_metrics.custom_metrics.insert(
-      "api_calls_per_minute".to_string(),
-      ohlcv_metrics.api_calls_per_minute,
-    );
-    service_metrics
-      .custom_metrics
-      .insert("cache_hit_rate".to_string(), ohlcv_metrics.cache_hit_rate);
-    service_metrics.custom_metrics.insert(
-      "average_fetch_latency_ms".to_string(),
-      ohlcv_metrics.average_fetch_latency_ms,
-    );
-    service_metrics.custom_metrics.insert(
-      "gaps_detected".to_string(),
-      ohlcv_metrics.gaps_detected as f64,
-    );
-    service_metrics
-      .custom_metrics
-      .insert("gaps_filled".to_string(), ohlcv_metrics.gaps_filled as f64);
-    service_metrics.custom_metrics.insert(
-      "data_points_stored".to_string(),
-      ohlcv_metrics.data_points_stored as f64,
-    );
-    service_metrics.custom_metrics.insert(
-      "database_size_mb".to_string(),
-      ohlcv_metrics.database_size_mb,
-    );
+        // OHLCV doesn't track operations/errors in the traditional sense,
+        // but we can use data points stored and gaps filled as proxies
+        let mut service_metrics = ServiceMetrics::default();
+        service_metrics.operations_total = ohlcv_metrics.data_points_stored as u64;
 
-    service_metrics
-  }
+        // Map OHLCV metrics to custom metrics
+        service_metrics.custom_metrics.insert(
+            "tokens_monitored".to_string(),
+            ohlcv_metrics.tokens_monitored as f64,
+        );
+        service_metrics.custom_metrics.insert(
+            "pools_tracked".to_string(),
+            ohlcv_metrics.pools_tracked as f64,
+        );
+        service_metrics.custom_metrics.insert(
+            "api_calls_per_minute".to_string(),
+            ohlcv_metrics.api_calls_per_minute,
+        );
+        service_metrics
+            .custom_metrics
+            .insert("cache_hit_rate".to_string(), ohlcv_metrics.cache_hit_rate);
+        service_metrics.custom_metrics.insert(
+            "average_fetch_latency_ms".to_string(),
+            ohlcv_metrics.average_fetch_latency_ms,
+        );
+        service_metrics.custom_metrics.insert(
+            "gaps_detected".to_string(),
+            ohlcv_metrics.gaps_detected as f64,
+        );
+        service_metrics
+            .custom_metrics
+            .insert("gaps_filled".to_string(), ohlcv_metrics.gaps_filled as f64);
+        service_metrics.custom_metrics.insert(
+            "data_points_stored".to_string(),
+            ohlcv_metrics.data_points_stored as f64,
+        );
+        service_metrics.custom_metrics.insert(
+            "database_size_mb".to_string(),
+            ohlcv_metrics.database_size_mb,
+        );
+
+        service_metrics
+    }
 }

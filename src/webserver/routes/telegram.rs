@@ -321,10 +321,7 @@ async fn list_sessions(State(_state): State<Arc<AppState>>) -> Response {
 }
 
 /// Revoke a session
-async fn revoke_session(
-    State(_state): State<Arc<AppState>>,
-    Path(user_id): Path<i64>,
-) -> Response {
+async fn revoke_session(State(_state): State<Arc<AppState>>, Path(user_id): Path<i64>) -> Response {
     let manager = get_session_manager();
     manager.revoke_session(user_id).await;
 
@@ -353,11 +350,21 @@ async fn send_test_message(
     });
 
     if !enabled {
-        return error_response(StatusCode::BAD_REQUEST, "TELEGRAM_DISABLED", "Telegram is not enabled", None);
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "TELEGRAM_DISABLED",
+            "Telegram is not enabled",
+            None,
+        );
     }
 
     if bot_token.is_empty() || chat_id.is_empty() {
-        return error_response(StatusCode::BAD_REQUEST, "NOT_CONFIGURED", "Bot token or chat ID not configured", None);
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "NOT_CONFIGURED",
+            "Bot token or chat ID not configured",
+            None,
+        );
     }
 
     // Create notifier and send
@@ -374,10 +381,20 @@ async fn send_test_message(
                         "message": "Test message sent successfully"
                     }))
                 }
-                Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, "SEND_FAILED", &format!("Failed to send message: {}", e), None),
+                Err(e) => error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "SEND_FAILED",
+                    &format!("Failed to send message: {}", e),
+                    None,
+                ),
             }
         }
-        Err(e) => error_response(StatusCode::INTERNAL_SERVER_ERROR, "NOTIFIER_ERROR", &format!("Failed to create notifier: {}", e), None),
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "NOTIFIER_ERROR",
+            &format!("Failed to create notifier: {}", e),
+            None,
+        ),
     }
 }
 
@@ -409,7 +426,7 @@ pub struct DiscoveredChatResponse {
 /// POST /discovery/start - Start discovery mode to capture incoming chat IDs
 async fn start_discovery(State(_state): State<Arc<AppState>>) -> Response {
     let bot_token = with_config(|c| c.telegram.bot_token.clone());
-    
+
     if bot_token.is_empty() {
         return error_response(
             StatusCode::BAD_REQUEST,
@@ -428,9 +445,9 @@ async fn start_discovery(State(_state): State<Arc<AppState>>) -> Response {
             None,
         );
     }
-    
+
     logger::info(LogTag::Telegram, "Telegram chat discovery mode started");
-    
+
     success_response(serde_json::json!({
         "message": "Discovery mode started. Send a message to your bot in Telegram.",
         "active": true
@@ -441,9 +458,9 @@ async fn start_discovery(State(_state): State<Arc<AppState>>) -> Response {
 async fn stop_discovery(State(_state): State<Arc<AppState>>) -> Response {
     // Stop the discovery polling service
     crate::telegram::discovery::stop_discovery().await;
-    
+
     logger::info(LogTag::Telegram, "Telegram chat discovery mode stopped");
-    
+
     success_response(serde_json::json!({
         "message": "Discovery mode stopped",
         "active": false
@@ -454,7 +471,7 @@ async fn stop_discovery(State(_state): State<Arc<AppState>>) -> Response {
 async fn get_discovered_chats(State(_state): State<Arc<AppState>>) -> Response {
     let is_active = crate::telegram::discovery::is_discovery_running().await;
     let chats = crate::telegram::discovery::get_discovered_chats().await;
-    
+
     let chats_response: Vec<DiscoveredChatResponse> = chats
         .into_iter()
         .map(|c| DiscoveredChatResponse {
@@ -467,7 +484,7 @@ async fn get_discovered_chats(State(_state): State<Arc<AppState>>) -> Response {
             discovered_at_secs: c.discovered_at.elapsed().as_secs(),
         })
         .collect();
-    
+
     success_response(serde_json::json!({
         "active": is_active,
         "chats": chats_response
@@ -484,12 +501,12 @@ async fn select_discovered_chat(
         Ok(()) => {
             // Stop discovery mode after successful selection
             crate::telegram::discovery::stop_discovery().await;
-            
+
             logger::info(
                 LogTag::Telegram,
                 &format!("Selected Telegram chat ID: {}", chat_id),
             );
-            
+
             success_response(serde_json::json!({
                 "message": "Chat selected successfully",
                 "chat_id": chat_id
@@ -507,9 +524,8 @@ async fn select_discovered_chat(
 /// POST /discovery/clear - Clear discovered chats list
 async fn clear_discovered_chats(State(_state): State<Arc<AppState>>) -> Response {
     crate::telegram::discovery::clear_discovered_chats().await;
-    
+
     success_response(serde_json::json!({
         "message": "Discovered chats cleared"
     }))
 }
-

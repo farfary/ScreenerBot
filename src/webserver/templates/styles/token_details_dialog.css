@@ -4035,7 +4035,9 @@
   background: var(--bg-primary);
   border-bottom: 1px solid var(--border-color);
   font-size: 0.65rem;
-  transition: opacity 0.3s ease, max-height 0.3s ease;
+  transition:
+    opacity 0.3s ease,
+    max-height 0.3s ease;
   max-height: 32px;
   overflow: hidden;
 }

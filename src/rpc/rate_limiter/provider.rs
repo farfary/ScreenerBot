@@ -123,8 +123,7 @@ impl ProviderRateLimiter {
 
         // Calculate new rate with exponential backoff
         let reduction = self.backoff_multiplier.powi(count as i32);
-        let new_rate =
-            ((self.base_rate as f64) * reduction).max(self.min_rate as f64) as u32;
+        let new_rate = ((self.base_rate as f64) * reduction).max(self.min_rate as f64) as u32;
 
         self.current_rate.store(new_rate, Ordering::SeqCst);
 

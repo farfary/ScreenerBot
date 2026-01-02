@@ -184,13 +184,10 @@ export class TokenDetailsDialog {
    */
   async _focusToken() {
     try {
-      const response = await requestManager.fetch(
-        `/api/tokens/${this.tokenData.mint}/focus`,
-        {
-          method: "POST",
-          priority: "high",
-        }
-      );
+      const response = await requestManager.fetch(`/api/tokens/${this.tokenData.mint}/focus`, {
+        method: "POST",
+        priority: "high",
+      });
       if (response.success) {
         console.log("Token focused for priority updates:", response);
       }
@@ -207,13 +204,10 @@ export class TokenDetailsDialog {
    */
   async _unfocusToken() {
     try {
-      const response = await requestManager.fetch(
-        `/api/tokens/${this.tokenData.mint}/unfocus`,
-        {
-          method: "POST",
-          priority: "low",
-        }
-      );
+      const response = await requestManager.fetch(`/api/tokens/${this.tokenData.mint}/unfocus`, {
+        method: "POST",
+        priority: "low",
+      });
       if (response.success) {
         console.log("Token unfocused:", response);
       }
@@ -334,7 +328,10 @@ export class TokenDetailsDialog {
 
     // Check if all sources are done loading
     const allDone = Object.values(this._dataSourceStatus).every(
-      (s) => s === DATA_SOURCE_STATUS.SUCCESS || s === DATA_SOURCE_STATUS.ERROR || s === DATA_SOURCE_STATUS.CACHED
+      (s) =>
+        s === DATA_SOURCE_STATUS.SUCCESS ||
+        s === DATA_SOURCE_STATUS.ERROR ||
+        s === DATA_SOURCE_STATUS.CACHED
     );
 
     // Hide status bar when all sources are loaded successfully
@@ -1422,7 +1419,8 @@ export class TokenDetailsDialog {
     }
 
     // Check if we have security data
-    const hasSecurityData = tokenToUse.safety_score !== undefined && tokenToUse.safety_score !== null;
+    const hasSecurityData =
+      tokenToUse.safety_score !== undefined && tokenToUse.safety_score !== null;
 
     if (!hasSecurityData) {
       // Show partial content with loading indicator for security section

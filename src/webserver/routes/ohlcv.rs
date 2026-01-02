@@ -3,8 +3,8 @@
 use crate::ohlcvs::{
     add_token_monitoring, delete_inactive_tokens, delete_token_data, get_all_tokens_with_status,
     get_available_pools, get_data_gaps, get_database_stats, get_metrics, get_ohlcv_data,
-    record_activity, remove_token_monitoring, request_refresh, ActivityType, Candle,
-    DatabaseStats, DeleteResult, OhlcvTokenStatus, PoolMetadata, Priority, Timeframe,
+    record_activity, remove_token_monitoring, request_refresh, ActivityType, Candle, DatabaseStats,
+    DeleteResult, OhlcvTokenStatus, PoolMetadata, Priority, Timeframe,
 };
 use crate::webserver::{
     state::AppState,
@@ -589,9 +589,7 @@ async fn delete_token_handler(Path(mint): Path<String>) -> Result<Response, Resp
 }
 
 // Handler for cleaning up inactive tokens
-async fn cleanup_inactive_handler(
-    Json(body): Json<CleanupRequest>,
-) -> Result<Response, Response> {
+async fn cleanup_inactive_handler(Json(body): Json<CleanupRequest>) -> Result<Response, Response> {
     let inactive_hours = body.inactive_hours.unwrap_or(24); // Default: 24 hours
 
     match delete_inactive_tokens(inactive_hours).await {
@@ -629,10 +627,7 @@ pub fn ohlcv_routes() -> Router<Arc<AppState>> {
         // Control endpoints
         .route("/ohlcv/:mint/refresh", post(refresh_handler))
         .route("/ohlcv/:mint/monitor", post(add_monitoring_handler))
-        .route(
-            "/ohlcv/:mint/monitor",
-            delete(remove_monitoring_handler),
-        )
+        .route("/ohlcv/:mint/monitor", delete(remove_monitoring_handler))
         .route("/ohlcv/:mint/view", post(record_view_handler))
         // System endpoints
         .route("/ohlcv/metrics", get(get_metrics_handler))

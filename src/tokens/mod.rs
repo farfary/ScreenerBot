@@ -87,8 +87,7 @@ pub use store::{
 pub use pools::{
     cache_metrics as pool_cache_metrics, calculate_pool_metric, choose_canonical_pool,
     clear_cache as clear_pool_cache, extract_dex_label, extract_pool_liquidity,
-    fetch_immediate as fetch_token_pools_immediate,
-    get_snapshot as get_token_pools_snapshot,
+    fetch_immediate as fetch_token_pools_immediate, get_snapshot as get_token_pools_snapshot,
     get_snapshot_allow_stale as get_token_pools_snapshot_allow_stale, merge_pool_info,
     prefetch as prefetch_token_pools,
 };

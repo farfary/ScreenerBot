@@ -194,7 +194,10 @@ pub fn start_update_check_service(
 
         // Perform initial check
         if let Err(e) = check_for_update().await {
-            logger::warning(LogTag::System, &format!("Initial update check failed: {}", e));
+            logger::warning(
+                LogTag::System,
+                &format!("Initial update check failed: {}", e),
+            );
         }
 
         // Periodic check loop
@@ -392,7 +395,11 @@ pub async fn download_update(update: &UpdateInfo) -> Result<String, String> {
 
     logger::debug(
         LogTag::System,
-        &format!("Download target: {} -> {}", final_url, download_path.display()),
+        &format!(
+            "Download target: {} -> {}",
+            final_url,
+            download_path.display()
+        ),
     );
 
     let total_size = response.content_length().unwrap_or(update.file_size);
@@ -538,7 +545,7 @@ pub fn open_update(path: &str) -> Result<(), String> {
 // =============================================================================
 
 /// Get platform identifier
-/// 
+///
 /// Platform identifiers must match what build.sh registers:
 /// - macos-x64, macos-arm64
 /// - linux-x64, linux-arm64

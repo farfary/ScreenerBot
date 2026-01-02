@@ -653,7 +653,8 @@ pub async fn fetch_immediate(mint: &str) -> TokenResult<Option<TokenPoolsSnapsho
     if !should_refresh {
         // Another request is already fetching - wait for it
         notifier.notified().await;
-        return Ok(get_cached_pool_snapshot(trimmed).or_else(|| get_cached_pool_snapshot_allow_stale(trimmed)));
+        return Ok(get_cached_pool_snapshot(trimmed)
+            .or_else(|| get_cached_pool_snapshot_allow_stale(trimmed)));
     }
 
     // Do the actual fetch

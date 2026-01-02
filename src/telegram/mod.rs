@@ -112,7 +112,10 @@ pub use discovery::{
 };
 
 // Service
-pub use service::{get_bot_state, get_service, is_ready, start_discovery_mode, stop_discovery_mode, TelegramService};
+pub use service::{
+    get_bot_state, get_service, is_ready, start_discovery_mode, stop_discovery_mode,
+    TelegramService,
+};
 
 // Formatters (commonly used)
 pub use formatters::{format_duration, format_pnl, format_price, format_sol, html_escape};

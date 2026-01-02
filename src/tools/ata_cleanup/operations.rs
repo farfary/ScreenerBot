@@ -126,9 +126,13 @@ pub async fn close_ata(wallet_address: &str, ata: &AtaInfo) -> Result<String, St
             let error_msg = e.to_string();
 
             // Add to failed cache
-            if let Err(cache_err) =
-                upsert_failed_ata(&ata.ata_address, Some(&ata.mint), wallet_address, &error_msg, false)
-            {
+            if let Err(cache_err) = upsert_failed_ata(
+                &ata.ata_address,
+                Some(&ata.mint),
+                wallet_address,
+                &error_msg,
+                false,
+            ) {
                 logger::error(
                     LogTag::Wallet,
                     &format!("Failed to cache failed ATA: {}", cache_err),
@@ -235,8 +239,10 @@ pub async fn clear_failed_ata_cache() -> Result<(), Box<dyn std::error::Error + 
     let wallet_address = get_wallet_address()
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
-    let failed_atas = get_failed_atas_for_wallet(&wallet_address)
-        .map_err(|e| Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)) as Box<dyn std::error::Error + Send + Sync>)?;
+    let failed_atas = get_failed_atas_for_wallet(&wallet_address).map_err(|e| {
+        Box::new(std::io::Error::new(std::io::ErrorKind::Other, e))
+            as Box<dyn std::error::Error + Send + Sync>
+    })?;
 
     let count = failed_atas.len();
 
@@ -251,7 +257,10 @@ pub async fn clear_failed_ata_cache() -> Result<(), Box<dyn std::error::Error + 
 
     logger::info(
         LogTag::Wallet,
-        &format!("Cleared {} failed ATAs from cache - will retry all ATAs", count),
+        &format!(
+            "Cleared {} failed ATAs from cache - will retry all ATAs",
+            count
+        ),
     );
 
     Ok(())
@@ -277,10 +286,7 @@ pub fn update_stats(result: &AtaCleanupResult) {
 
 /// Get current cleanup statistics
 pub fn get_cleanup_stats() -> AtaCleanupStats {
-    STATS
-        .lock()
-        .map(|stats| stats.clone())
-        .unwrap_or_default()
+    STATS.lock().map(|stats| stats.clone()).unwrap_or_default()
 }
 
 /// Get comprehensive ATA status for the wallet

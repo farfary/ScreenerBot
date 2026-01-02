@@ -18,9 +18,9 @@ use chrono::{Duration, Utc};
 
 use crate::webserver::routes::dashboard::{
     BlacklistInfo, DashboardOverview, HomeDashboardResponse, MonitoringInfo, OpenPositionDetail,
-    PositionPerformer, PositionsSummary, PositionsSnapshot, RpcInfo, ServiceStatus, SystemInfo,
-    SystemMetrics, TokenStatistics, TraderAnalytics, TraderStatusInfo, TradingPeriodStats, WalletAnalytics,
-    WalletInfo,
+    PositionPerformer, PositionsSnapshot, PositionsSummary, RpcInfo, ServiceStatus, SystemInfo,
+    SystemMetrics, TokenStatistics, TraderAnalytics, TraderStatusInfo, TradingPeriodStats,
+    WalletAnalytics, WalletInfo,
 };
 use crate::webserver::routes::header::{
     FilteringHeaderInfo, HeaderMetricsResponse, PositionsHeaderInfo, RpcHeaderInfo,
@@ -28,7 +28,9 @@ use crate::webserver::routes::header::{
 };
 use crate::webserver::routes::positions::{PositionResponse, PositionsStatsResponse};
 use crate::webserver::routes::trader::{ExitBreakdown, TraderStatsResponse};
-use crate::webserver::routes::wallet::{TokenBalanceInfo, WalletCurrentResponse, WalletTokensResponse, WalletTokenHolding};
+use crate::webserver::routes::wallet::{
+    TokenBalanceInfo, WalletCurrentResponse, WalletTokenHolding, WalletTokensResponse,
+};
 
 /// Global flag for demo mode - set at startup based on --dashboard-demo argument
 pub static DEMO_MODE_ENABLED: AtomicBool = AtomicBool::new(false);
@@ -402,7 +404,7 @@ const DEMO_CLOSED_TOKENS: &[(&str, &str, &str, &str, f64, f64, f64, &str)] = &[
 /// Generate demo home dashboard response
 pub fn get_demo_home_dashboard() -> HomeDashboardResponse {
     let now = Utc::now();
-    
+
     // Trading analytics with realistic profitable trading history
     let trader = TraderAnalytics {
         today: TradingPeriodStats {
@@ -520,7 +522,7 @@ pub fn get_demo_home_dashboard() -> HomeDashboardResponse {
 /// Generate demo dashboard overview response
 pub fn get_demo_dashboard_overview() -> DashboardOverview {
     let now = Utc::now();
-    
+
     let wallet = WalletInfo {
         sol_balance: DEMO_SOL_BALANCE,
         sol_balance_lamports: DEMO_SOL_LAMPORTS,
@@ -530,17 +532,19 @@ pub fn get_demo_dashboard_overview() -> DashboardOverview {
 
     let open_position_details: Vec<OpenPositionDetail> = DEMO_OPEN_TOKENS
         .iter()
-        .map(|(symbol, _name, mint, _logo, entry, current, _size, hold_min)| {
-            let pnl_pct = ((current - entry) / entry) * 100.0;
-            OpenPositionDetail {
-                mint: mint.to_string(),
-                symbol: symbol.to_string(),
-                entry_price: *entry,
-                current_price: Some(*current),
-                pnl_percent: Some(pnl_pct),
-                hold_duration_minutes: *hold_min,
-            }
-        })
+        .map(
+            |(symbol, _name, mint, _logo, entry, current, _size, hold_min)| {
+                let pnl_pct = ((current - entry) / entry) * 100.0;
+                OpenPositionDetail {
+                    mint: mint.to_string(),
+                    symbol: symbol.to_string(),
+                    entry_price: *entry,
+                    current_price: Some(*current),
+                    pnl_percent: Some(pnl_pct),
+                    hold_duration_minutes: *hold_min,
+                }
+            },
+        )
         .collect();
 
     let positions = PositionsSummary {
@@ -618,7 +622,7 @@ pub fn get_demo_positions(status: Option<&str>) -> Vec<PositionResponse> {
             let entry_time = now - Duration::minutes(*hold_min);
             let pnl_pct = ((current - entry) / entry) * 100.0;
             let unrealized_pnl = (current - entry) * size / entry;
-            
+
             positions.push(PositionResponse {
                 id: Some(id_counter),
                 mint: mint.to_string(),
@@ -669,12 +673,14 @@ pub fn get_demo_positions(status: Option<&str>) -> Vec<PositionResponse> {
 
     // Add closed positions
     if include_closed {
-        for (i, (symbol, name, mint, logo, entry, exit, size, reason)) in DEMO_CLOSED_TOKENS.iter().enumerate() {
+        for (i, (symbol, name, mint, logo, entry, exit, size, reason)) in
+            DEMO_CLOSED_TOKENS.iter().enumerate()
+        {
             let exit_time = now - Duration::hours((i as i64 + 1) * 6);
             let entry_time = exit_time - Duration::hours(2);
             let pnl = (exit - entry) * size / entry;
             let pnl_pct = ((exit - entry) / entry) * 100.0;
-            
+
             positions.push(PositionResponse {
                 id: Some(id_counter),
                 mint: mint.to_string(),
@@ -740,7 +746,7 @@ pub fn get_demo_positions_stats() -> PositionsStatsResponse {
 /// Generate demo wallet current response
 pub fn get_demo_wallet_current() -> WalletCurrentResponse {
     let now = Utc::now();
-    
+
     // Include demo token balances with real token data
     let token_balances = vec![
         TokenBalanceInfo {
@@ -826,7 +832,7 @@ pub fn get_demo_trader_stats() -> TraderStatsResponse {
 /// Generate demo header metrics response
 pub fn get_demo_header_metrics() -> HeaderMetricsResponse {
     let now = Utc::now();
-    
+
     let trader = TraderHeaderInfo {
         running: true,
         enabled: true,

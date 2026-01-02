@@ -981,6 +981,18 @@ body.dt-column-resizing * {
   box-shadow: 0 8px 24px rgb(0, 0, 0, 0.15);
   z-index: 1000;
   animation: slideDown 0.15s ease;
+  display: none;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
+}
+
+.dt-actions-dropdown-menu.open {
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
 }
 
 .dt-actions-dropdown-menu.menu-left {
@@ -1188,7 +1200,9 @@ body.dt-column-resizing * {
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
   font-size: 0.8125rem;
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   flex-shrink: 0;
 }
 
@@ -1431,7 +1445,9 @@ body.dt-column-resizing * {
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
   font-size: 0.8125rem;
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
   flex-shrink: 0;
 }
 

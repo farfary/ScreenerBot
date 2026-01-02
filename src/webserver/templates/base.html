@@ -91,7 +91,8 @@
     <script src="/assets/lightweight-charts.js"></script>
     <style>
       /* Critical styles to prevent white flash on startup */
-      html, body {
+      html,
+      body {
         background-color: #0d1117;
         color: #e6edf3;
       }
@@ -102,12 +103,17 @@
   <body>
     <!-- Hide splash immediately if loaded from Electron (detected via query param) -->
     <script>
-      if (window.location.search.includes('electron=1') || navigator.userAgent.includes('Electron')) {
-        document.documentElement.classList.add('electron-mode');
+      if (
+        window.location.search.includes("electron=1") ||
+        navigator.userAgent.includes("Electron")
+      ) {
+        document.documentElement.classList.add("electron-mode");
       }
     </script>
     <style>
-      .electron-mode #splashScreen { display: none !important; }
+      .electron-mode #splashScreen {
+        display: none !important;
+      }
     </style>
 
     <!-- Splash Screen - Shows on every app start (hidden in Electron via above) -->
@@ -207,6 +213,16 @@
           <button class="header-action-btn" id="notificationBtn" aria-label="Notifications">
             <i class="action-icon icon-bell"></i>
             <span class="action-badge" id="notificationBadge" style="display: none">0</span>
+          </button>
+
+          <!-- Power Menu -->
+          <button
+            class="header-action-btn"
+            id="powerMenuBtn"
+            aria-label="Power Menu"
+            title="Power Menu"
+          >
+            <i class="action-icon icon-power"></i>
           </button>
 
           <!-- Theme Toggle -->

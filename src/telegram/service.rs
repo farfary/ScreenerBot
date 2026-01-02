@@ -156,11 +156,8 @@ impl Service for TelegramService {
 
             // Start command handler if enabled
             if config.commands_enabled {
-                match polling::start_polling(
-                    shutdown.clone(),
-                    self.command_handler_running.clone(),
-                )
-                .await
+                match polling::start_polling(shutdown.clone(), self.command_handler_running.clone())
+                    .await
                 {
                     Ok(handle) => handles.push(handle),
                     Err(e) => {
@@ -190,8 +187,7 @@ impl Service for TelegramService {
 
         // Send shutdown notification if possible
         if notifier::is_enabled() {
-            let shutdown_notification =
-                Notification::bot_stopped("Graceful shutdown".to_string());
+            let shutdown_notification = Notification::bot_stopped("Graceful shutdown".to_string());
             send_notification(shutdown_notification).await;
         }
 

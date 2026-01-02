@@ -5,6 +5,4 @@
 
 mod metadata;
 
-pub use metadata::{
-    fetch_nft_metadata, fetch_nft_metadata_batch, NftMetadata, NftMetadataError,
-};
+pub use metadata::{fetch_nft_metadata, fetch_nft_metadata_batch, NftMetadata, NftMetadataError};

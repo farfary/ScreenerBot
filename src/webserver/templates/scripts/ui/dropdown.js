@@ -46,13 +46,43 @@ export class Dropdown {
     };
     document.addEventListener("click", this._documentClickListener);
 
-    // Close on escape
+    // Close on escape and handle arrows
     this._documentKeydownListener = (e) => {
-      if (e.key === "Escape" && this.isOpen) {
+      if (!this.isOpen) return;
+
+      if (e.key === "Escape") {
         this.close();
+        this.trigger.focus();
+      } else if (e.key === "ArrowDown") {
+        e.preventDefault();
+        this._moveFocus(1);
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        this._moveFocus(-1);
+      } else if (e.key === "Enter") {
+        const focused = this.dropdownEl.querySelector(".dropdown-item:focus");
+        if (focused) {
+          focused.click();
+        }
       }
     };
     document.addEventListener("keydown", this._documentKeydownListener);
+  }
+
+  _moveFocus(direction) {
+    const items = Array.from(this.dropdownEl.querySelectorAll(".dropdown-item:not(.disabled)"));
+    const current = document.activeElement;
+    let index = items.indexOf(current);
+
+    if (index === -1) {
+      index = direction > 0 ? 0 : items.length - 1;
+    } else {
+      index = (index + direction + items.length) % items.length;
+    }
+
+    if (items[index]) {
+      items[index].focus();
+    }
   }
 
   _createDropdown() {
@@ -141,6 +171,12 @@ export class Dropdown {
     this.dropdownEl.classList.add("open");
     this.trigger.setAttribute("aria-expanded", "true");
     this.trigger.classList.add("active");
+
+    // Focus first item after animation
+    setTimeout(() => {
+      const firstItem = this.dropdownEl.querySelector(".dropdown-item:not(.disabled)");
+      if (firstItem) firstItem.focus();
+    }, 50);
   }
 
   close() {

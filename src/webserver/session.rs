@@ -20,8 +20,7 @@ pub struct Session {
 }
 
 /// Global session storage
-static SESSIONS: Lazy<RwLock<HashMap<String, Session>>> =
-    Lazy::new(|| RwLock::new(HashMap::new()));
+static SESSIONS: Lazy<RwLock<HashMap<String, Session>>> = Lazy::new(|| RwLock::new(HashMap::new()));
 
 /// Generate a cryptographically random 64-character alphanumeric session token
 pub fn generate_session_token() -> String {

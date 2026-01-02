@@ -45,7 +45,10 @@ async fn main() {
 
     // Load configuration
     if let Err(e) = load_config() {
-        error(LogTag::System, &format!("Failed to load configuration: {e}"));
+        error(
+            LogTag::System,
+            &format!("Failed to load configuration: {e}"),
+        );
         return;
     }
 

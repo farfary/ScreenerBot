@@ -23,7 +23,10 @@ pub enum RpcError {
     },
 
     /// Request timed out
-    Timeout { provider_id: String, after: Duration },
+    Timeout {
+        provider_id: String,
+        after: Duration,
+    },
 
     /// Circuit breaker is open
     CircuitOpen {
@@ -149,7 +152,10 @@ impl fmt::Display for RpcError {
                 }
                 Ok(())
             }
-            Self::Network { message, is_timeout } => {
+            Self::Network {
+                message,
+                is_timeout,
+            } => {
                 if *is_timeout {
                     write!(f, "Network timeout: {}", message)
                 } else {

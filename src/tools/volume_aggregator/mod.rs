@@ -27,5 +27,7 @@ mod types;
 
 // Re-export types
 pub use executor::VolumeAggregator;
-pub use strategies::{calculate_amount, calculate_amount_clamped, calculate_delay, StrategyExecutor};
+pub use strategies::{
+    calculate_amount, calculate_amount_clamped, calculate_delay, StrategyExecutor,
+};
 pub use types::{SessionStatus, TransactionStatus, VolumeConfig, VolumeSession, VolumeTransaction};

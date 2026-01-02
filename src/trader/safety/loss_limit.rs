@@ -134,7 +134,10 @@ pub fn resume_from_loss_limit() {
         if state.is_limited {
             state.is_limited = false;
             state.limited_at = None;
-            logger::info(LogTag::Trader, "Loss limit manually resumed - entries enabled");
+            logger::info(
+                LogTag::Trader,
+                "Loss limit manually resumed - entries enabled",
+            );
         }
     }
 }
@@ -146,7 +149,10 @@ pub fn reset_loss_limit_state() {
         state.cumulative_loss_sol = 0.0;
         state.is_limited = false;
         state.limited_at = None;
-        logger::info(LogTag::Trader, "Loss limit state reset - new period started");
+        logger::info(
+            LogTag::Trader,
+            "Loss limit state reset - new period started",
+        );
     }
 }
 

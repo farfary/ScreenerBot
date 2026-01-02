@@ -31,6 +31,7 @@ npm start
 ```
 
 This will:
+
 1. Start Electron
 2. Spawn the screenerbot binary from `target/release/`
 3. Wait for the webserver to be ready
@@ -53,6 +54,7 @@ npm run make
 ```
 
 This creates:
+
 - `out/make/ScreenerBot-x.x.x-arm64.dmg` - DMG installer
 - `out/make/zip/darwin/arm64/ScreenerBot-darwin-arm64-x.x.x.zip` - ZIP archive
 

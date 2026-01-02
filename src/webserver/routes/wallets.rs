@@ -332,7 +332,10 @@ async fn get_wallet(Path(id): Path<i64>) -> Response {
             None,
         ),
         Err(e) => {
-            logger::error(LogTag::Wallet, &format!("Failed to get wallet {}: {}", id, e));
+            logger::error(
+                LogTag::Wallet,
+                &format!("Failed to get wallet {}: {}", id, e),
+            );
             error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 "GET_ERROR",
@@ -377,7 +380,10 @@ async fn delete_wallet(Path(id): Path<i64>) -> Response {
             let (status, code) = if e.contains("main wallet") {
                 (axum::http::StatusCode::BAD_REQUEST, "MAIN_WALLET")
             } else {
-                (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "DELETE_ERROR")
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    "DELETE_ERROR",
+                )
             };
 
             error_response(status, code, "Failed to delete wallet", Some(&e))
@@ -441,7 +447,10 @@ async fn archive_wallet(Path(id): Path<i64>) -> Response {
             let (status, code) = if e.contains("main wallet") {
                 (axum::http::StatusCode::BAD_REQUEST, "MAIN_WALLET")
             } else {
-                (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "ARCHIVE_ERROR")
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    "ARCHIVE_ERROR",
+                )
             };
 
             error_response(status, code, "Failed to archive wallet", Some(&e))
@@ -464,7 +473,10 @@ async fn restore_wallet(Path(id): Path<i64>) -> Response {
             let (status, code) = if e.contains("not archived") {
                 (axum::http::StatusCode::BAD_REQUEST, "NOT_ARCHIVED")
             } else {
-                (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "RESTORE_ERROR")
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    "RESTORE_ERROR",
+                )
             };
 
             error_response(status, code, "Failed to restore wallet", Some(&e))
@@ -828,7 +840,10 @@ async fn export_wallets_csv(Query(query): Query<ExportQuery>) -> impl IntoRespon
 
     logger::info(
         LogTag::Wallet,
-        &format!("Exported {} wallets to CSV (no private keys)", wallets.len()),
+        &format!(
+            "Exported {} wallets to CSV (no private keys)",
+            wallets.len()
+        ),
     );
 
     (
@@ -945,8 +960,7 @@ async fn export_wallets_full(Json(request): Json<FullExportRequest>) -> impl Int
     }
 
     // Build CSV with private keys
-    let mut csv_content =
-        String::from("name,address,private_key,role,is_main,notes,created_at\n");
+    let mut csv_content = String::from("name,address,private_key,role,is_main,notes,created_at\n");
 
     for export in &filtered_exports {
         let escaped_name = escape_csv_field(&export.name);

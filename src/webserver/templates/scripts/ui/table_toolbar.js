@@ -276,7 +276,7 @@ function renderFilter(filter, stateFilters = {}) {
       ${label}
       <select class="dt-filter table-toolbar-select" id="tt-filter-${escapeHtml(
         filter.id
-      )}" ${dataAttrs.join(" ")}>
+      )}" data-custom-select ${dataAttrs.join(" ")}>
         ${optionsMarkup}
       </select>
     </div>

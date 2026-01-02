@@ -339,14 +339,17 @@ export class TableSettingsDialog {
       return;
     }
 
-    const filteredColumns = columns.map((col, idx) => ({ ...col, originalIndex: idx })).filter(col => {
+    const filteredColumns = columns
+      .map((col, idx) => ({ ...col, originalIndex: idx }))
+      .filter((col) => {
         if (!this._searchTerm) return true;
         return (col.label || "").toLowerCase().includes(this._searchTerm);
-    });
+      });
 
     if (filteredColumns.length === 0) {
-        this.columnListEl.innerHTML = '<div class="table-settings-empty">No columns match your search.</div>';
-        return;
+      this.columnListEl.innerHTML =
+        '<div class="table-settings-empty">No columns match your search.</div>';
+      return;
     }
 
     this.columnListEl.innerHTML = filteredColumns
@@ -451,7 +454,9 @@ export class TableSettingsDialog {
       this._columnListeners.push({ element: button, event: "click", handler });
     });
 
-    const items = this.columnListEl.querySelectorAll('.table-settings-column-item[draggable="true"]');
+    const items = this.columnListEl.querySelectorAll(
+      '.table-settings-column-item[draggable="true"]'
+    );
     items.forEach((item) => {
       const dragStartHandler = (e) => {
         e.dataTransfer.effectAllowed = "move";

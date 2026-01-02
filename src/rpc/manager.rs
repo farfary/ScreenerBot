@@ -262,8 +262,14 @@ impl RpcManager {
                 available
                     .iter()
                     .min_by(|a, b| {
-                        let lat_a = states.get(&a.id).map(|s| s.avg_latency_ms).unwrap_or(f64::MAX);
-                        let lat_b = states.get(&b.id).map(|s| s.avg_latency_ms).unwrap_or(f64::MAX);
+                        let lat_a = states
+                            .get(&a.id)
+                            .map(|s| s.avg_latency_ms)
+                            .unwrap_or(f64::MAX);
+                        let lat_b = states
+                            .get(&b.id)
+                            .map(|s| s.avg_latency_ms)
+                            .unwrap_or(f64::MAX);
                         lat_a
                             .partial_cmp(&lat_b)
                             .unwrap_or(std::cmp::Ordering::Equal)
@@ -396,11 +402,18 @@ impl RpcManager {
                     if is_rate_limited {
                         limiter.record_429(e.retry_after()).await;
                     } else {
-                        breaker.record_failure(&e.to_string(), is_rate_limited).await;
+                        breaker
+                            .record_failure(&e.to_string(), is_rate_limited)
+                            .await;
                     }
 
-                    self.update_provider_state(&provider_id, false, latency_ms, Some(&e.to_string()))
-                        .await;
+                    self.update_provider_state(
+                        &provider_id,
+                        false,
+                        latency_ms,
+                        Some(&e.to_string()),
+                    )
+                    .await;
 
                     // Record stats
                     self.record_call_result(RpcCallResult {

@@ -1398,7 +1398,10 @@ async function renderTelegramActions(container) {
     statusEl.textContent = "";
 
     try {
-      const response = await fetch("/api/telegram/test", { method: "POST", headers: { "Content-Type": "application/json" } });
+      const response = await fetch("/api/telegram/test", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      });
       const data = await response.json();
 
       if (response.ok && data.success) {
@@ -1436,7 +1439,9 @@ async function renderTelegramAuthSection(container) {
     : "";
 
   const totpHint = Hints.getHint("configTelegram.totp");
-  const totpHintHtml = totpHint ? HintTrigger.render(totpHint, "configTelegram.totp", { size: "sm" }) : "";
+  const totpHintHtml = totpHint
+    ? HintTrigger.render(totpHint, "configTelegram.totp", { size: "sm" })
+    : "";
 
   const authPanel = create("div", { className: "config-section-actions telegram-auth-section" });
   authPanel.innerHTML = `

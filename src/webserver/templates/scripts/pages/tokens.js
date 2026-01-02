@@ -974,8 +974,7 @@ function createLifecycle() {
       }
 
       state.lastUpdate = data?.timestamp ?? null;
-      const pricedTotal =
-        typeof data?.priced_total === "number" ? data.priced_total : null;
+      const pricedTotal = typeof data?.priced_total === "number" ? data.priced_total : null;
       const positionsTotal =
         typeof data?.positions_total === "number" ? data.positions_total : null;
       const blacklistedTotal =

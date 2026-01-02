@@ -91,10 +91,7 @@ pub enum RowValidationResult {
         address: String,
     },
     /// Row has validation errors
-    Invalid {
-        row_num: usize,
-        errors: Vec<String>,
-    },
+    Invalid { row_num: usize, errors: Vec<String> },
 }
 
 impl RowValidationResult {

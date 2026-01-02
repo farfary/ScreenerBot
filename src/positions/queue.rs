@@ -146,13 +146,16 @@ impl VerificationItem {
     pub fn with_retry(&self) -> Self {
         // Compute exponential backoff (bounded) based on attempts (after increment)
         let next_attempts = self.attempts.saturating_add(1);
-        
+
         // Use tiered backoff from constants table, fallback to max for high attempt counts
         let backoff_secs = if next_attempts == 0 {
             0
         } else {
             let idx = (next_attempts as usize).saturating_sub(1);
-            BACKOFF_INTERVALS_SECS.get(idx).copied().unwrap_or(BACKOFF_MAX_SECS)
+            BACKOFF_INTERVALS_SECS
+                .get(idx)
+                .copied()
+                .unwrap_or(BACKOFF_MAX_SECS)
         };
 
         // Add small jitter to avoid thundering herd

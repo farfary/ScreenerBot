@@ -183,8 +183,9 @@ pub trait RpcClientMethods {
     fn get_transaction(
         &self,
         signature: &Signature,
-    ) -> impl std::future::Future<Output = Result<Option<EncodedConfirmedTransactionWithStatusMeta>, String>>
-           + Send;
+    ) -> impl std::future::Future<
+        Output = Result<Option<EncodedConfirmedTransactionWithStatusMeta>, String>,
+    > + Send;
 
     fn get_signature_statuses(
         &self,
@@ -345,7 +346,9 @@ pub trait RpcClientMethods {
     fn get_transactions(
         &self,
         signatures: &[Signature],
-    ) -> impl std::future::Future<Output = Result<Vec<Option<EncodedConfirmedTransactionWithStatusMeta>>, String>> + Send;
+    ) -> impl std::future::Future<
+        Output = Result<Vec<Option<EncodedConfirmedTransactionWithStatusMeta>>, String>,
+    > + Send;
 
     // =========================================================================
     // Program Account Methods
@@ -403,7 +406,9 @@ pub trait RpcClientMethods {
     /// Get health information for all providers
     ///
     /// Returns detailed health info for each configured RPC provider.
-    fn get_provider_health(&self) -> impl std::future::Future<Output = Vec<ProviderHealthInfo>> + Send;
+    fn get_provider_health(
+        &self,
+    ) -> impl std::future::Future<Output = Vec<ProviderHealthInfo>> + Send;
 
     // =========================================================================
     // Convenience Methods
@@ -449,8 +454,7 @@ pub trait RpcClientMethods {
     fn get_transaction_details(
         &self,
         signature: &str,
-    ) -> impl std::future::Future<Output = Result<crate::rpc::types::TransactionDetails, String>>
-           + Send;
+    ) -> impl std::future::Future<Output = Result<crate::rpc::types::TransactionDetails, String>> + Send;
 
     /// Sign, send and confirm transaction with main wallet (simple API)
     ///
@@ -504,7 +508,10 @@ impl RpcClientMethods for RpcClient {
         parse_account_from_json(value)
     }
 
-    async fn get_multiple_accounts(&self, pubkeys: &[Pubkey]) -> Result<Vec<Option<Account>>, String> {
+    async fn get_multiple_accounts(
+        &self,
+        pubkeys: &[Pubkey],
+    ) -> Result<Vec<Option<Account>>, String> {
         if pubkeys.is_empty() {
             return Ok(Vec::new());
         }
@@ -596,7 +603,7 @@ impl RpcClientMethods for RpcClient {
 
         // Parse the response - look for token accounts and sum their balances
         let value = result.get("value").and_then(|v| v.as_array());
-        
+
         if let Some(accounts) = value {
             if let Some(account) = accounts.first() {
                 if let Some(amount_str) = account
@@ -650,8 +657,7 @@ impl RpcClientMethods for RpcClient {
             .and_then(|v| v.as_u64())
             .ok_or("Missing lastValidBlockHeight")?;
 
-        let hash =
-            Hash::from_str(blockhash).map_err(|e| format!("Invalid blockhash: {}", e))?;
+        let hash = Hash::from_str(blockhash).map_err(|e| format!("Invalid blockhash: {}", e))?;
 
         Ok((hash, last_valid_block_height))
     }
@@ -670,7 +676,10 @@ impl RpcClientMethods for RpcClient {
             .ok_or_else(|| "Invalid block height response".to_string())
     }
 
-    async fn send_transaction(&self, transaction: &VersionedTransaction) -> Result<Signature, String> {
+    async fn send_transaction(
+        &self,
+        transaction: &VersionedTransaction,
+    ) -> Result<Signature, String> {
         // Serialize transaction
         let tx_bytes = bincode::serialize(transaction)
             .map_err(|e| format!("Failed to serialize transaction: {}", e))?;
@@ -942,7 +951,11 @@ impl RpcClientMethods for RpcClient {
                 { "searchTransactionHistory": false }
             ]);
 
-            match self.manager.execute_raw("getSignatureStatuses", params).await {
+            match self
+                .manager
+                .execute_raw("getSignatureStatuses", params)
+                .await
+            {
                 Ok(result) => {
                     if let Some(values) = result.get("value").and_then(|v| v.as_array()) {
                         if let Some(status) = values.first() {
@@ -968,8 +981,7 @@ impl RpcClientMethods for RpcClient {
                                                 || conf_status == "finalized"
                                         }
                                         "confirmed" => {
-                                            conf_status == "confirmed"
-                                                || conf_status == "finalized"
+                                            conf_status == "confirmed" || conf_status == "finalized"
                                         }
                                         "finalized" => conf_status == "finalized",
                                         _ => false,
@@ -1089,14 +1101,9 @@ impl RpcClientMethods for RpcClient {
                 .expect("Invalid Associated Token program ID");
 
         // PDA derivation: [wallet, token_program, mint]
-        let seeds = &[
-            wallet.as_ref(),
-            token_program_id.as_ref(),
-            mint.as_ref(),
-        ];
+        let seeds = &[wallet.as_ref(), token_program_id.as_ref(), mint.as_ref()];
 
-        let (address, _bump) =
-            Pubkey::find_program_address(seeds, &associated_token_program_id);
+        let (address, _bump) = Pubkey::find_program_address(seeds, &associated_token_program_id);
         address
     }
 
@@ -1240,21 +1247,27 @@ impl RpcClientMethods for RpcClient {
         before: Option<&Signature>,
     ) -> Result<Vec<SignatureInfo>, String> {
         let mut config = serde_json::Map::new();
-        
+
         if let Some(limit_val) = limit {
-            config.insert("limit".to_string(), serde_json::Value::Number(limit_val.into()));
+            config.insert(
+                "limit".to_string(),
+                serde_json::Value::Number(limit_val.into()),
+            );
         }
-        
+
         if let Some(before_sig) = before {
-            config.insert("before".to_string(), serde_json::Value::String(before_sig.to_string()));
+            config.insert(
+                "before".to_string(),
+                serde_json::Value::String(before_sig.to_string()),
+            );
         }
-        
-        config.insert("commitment".to_string(), serde_json::Value::String("confirmed".to_string()));
-        
-        let params = serde_json::json!([
-            address.to_string(),
-            serde_json::Value::Object(config)
-        ]);
+
+        config.insert(
+            "commitment".to_string(),
+            serde_json::Value::String("confirmed".to_string()),
+        );
+
+        let params = serde_json::json!([address.to_string(), serde_json::Value::Object(config)]);
 
         let result = self
             .manager
@@ -1267,40 +1280,33 @@ impl RpcClientMethods for RpcClient {
             .ok_or("Invalid response: expected array")?;
 
         let mut signatures = Vec::with_capacity(signatures_array.len());
-        
+
         for item in signatures_array {
             let sig_str = item
                 .get("signature")
                 .and_then(|v| v.as_str())
                 .ok_or("Missing signature field")?;
-            
-            let signature = Signature::from_str(sig_str)
-                .map_err(|e| format!("Invalid signature: {}", e))?;
-            
+
+            let signature =
+                Signature::from_str(sig_str).map_err(|e| format!("Invalid signature: {}", e))?;
+
             let slot = item
                 .get("slot")
                 .and_then(|v| v.as_u64())
                 .ok_or("Missing slot field")?;
-            
-            let err = item
-                .get("err")
-                .and_then(|v| {
-                    if v.is_null() {
-                        None
-                    } else {
-                        Some(serde_json::to_string(v).unwrap_or_default())
-                    }
-                });
-            
-            let memo = item
-                .get("memo")
-                .and_then(|v| v.as_str())
-                .map(String::from);
-            
-            let block_time = item
-                .get("blockTime")
-                .and_then(|v| v.as_i64());
-            
+
+            let err = item.get("err").and_then(|v| {
+                if v.is_null() {
+                    None
+                } else {
+                    Some(serde_json::to_string(v).unwrap_or_default())
+                }
+            });
+
+            let memo = item.get("memo").and_then(|v| v.as_str()).map(String::from);
+
+            let block_time = item.get("blockTime").and_then(|v| v.as_i64());
+
             let confirmation_status = item
                 .get("confirmationStatus")
                 .and_then(|v| v.as_str())
@@ -1329,18 +1335,18 @@ impl RpcClientMethods for RpcClient {
 
         // Process in chunks to avoid overwhelming RPC
         let mut all_transactions = Vec::with_capacity(signatures.len());
-        
+
         for chunk in signatures.chunks(20) {
             // Fetch in parallel within chunk
             let mut futures = Vec::with_capacity(chunk.len());
-            
+
             for sig in chunk {
                 futures.push(self.get_transaction(sig));
             }
-            
+
             // Execute all futures in the chunk concurrently
             let results = futures::future::join_all(futures).await;
-            
+
             for result in results {
                 match result {
                     Ok(tx) => all_transactions.push(tx),
@@ -1367,7 +1373,8 @@ impl RpcClientMethods for RpcClient {
             Some("base64"),
             None,
             Some(CommitmentLevel::Confirmed),
-        ).await
+        )
+        .await
     }
 
     async fn get_program_accounts_with_config(
@@ -1379,19 +1386,19 @@ impl RpcClientMethods for RpcClient {
         commitment: Option<CommitmentLevel>,
     ) -> Result<Vec<(Pubkey, Account)>, String> {
         let mut config = serde_json::Map::new();
-        
+
         config.insert(
             "encoding".to_string(),
             serde_json::Value::String(encoding.unwrap_or("base64").to_string()),
         );
-        
+
         if let Some(commitment_level) = commitment {
             config.insert(
                 "commitment".to_string(),
                 serde_json::Value::String(commitment_to_string(commitment_level).to_string()),
             );
         }
-        
+
         if let Some((offset, length)) = data_slice {
             config.insert(
                 "dataSlice".to_string(),
@@ -1401,7 +1408,7 @@ impl RpcClientMethods for RpcClient {
                 }),
             );
         }
-        
+
         if let Some(filter_list) = filters {
             let filters_json: Vec<serde_json::Value> = filter_list
                 .into_iter()
@@ -1415,14 +1422,14 @@ impl RpcClientMethods for RpcClient {
                     }),
                 })
                 .collect();
-            
-            config.insert("filters".to_string(), serde_json::Value::Array(filters_json));
+
+            config.insert(
+                "filters".to_string(),
+                serde_json::Value::Array(filters_json),
+            );
         }
-        
-        let params = serde_json::json!([
-            program_id.to_string(),
-            serde_json::Value::Object(config)
-        ]);
+
+        let params = serde_json::json!([program_id.to_string(), serde_json::Value::Object(config)]);
 
         let result = self
             .manager
@@ -1435,20 +1442,18 @@ impl RpcClientMethods for RpcClient {
             .ok_or("Invalid response: expected array")?;
 
         let mut accounts = Vec::with_capacity(accounts_array.len());
-        
+
         for item in accounts_array {
             let pubkey_str = item
                 .get("pubkey")
                 .and_then(|v| v.as_str())
                 .ok_or("Missing pubkey field")?;
-            
-            let pubkey = Pubkey::from_str(pubkey_str)
-                .map_err(|e| format!("Invalid pubkey: {}", e))?;
-            
-            let account_data = item
-                .get("account")
-                .ok_or("Missing account field")?;
-            
+
+            let pubkey =
+                Pubkey::from_str(pubkey_str).map_err(|e| format!("Invalid pubkey: {}", e))?;
+
+            let account_data = item.get("account").ok_or("Missing account field")?;
+
             if let Some(account) = parse_account_from_json(account_data)? {
                 accounts.push((pubkey, account));
             }
@@ -1473,9 +1478,7 @@ impl RpcClientMethods for RpcClient {
             .await
             .map_err(|e| e.to_string())?;
 
-        let value = result
-            .get("value")
-            .ok_or("Missing value field")?;
+        let value = result.get("value").ok_or("Missing value field")?;
 
         let amount = value
             .get("amount")
@@ -1488,9 +1491,7 @@ impl RpcClientMethods for RpcClient {
             .and_then(|v| v.as_u64())
             .ok_or("Missing decimals field")? as u8;
 
-        let ui_amount = value
-            .get("uiAmount")
-            .and_then(|v| v.as_f64());
+        let ui_amount = value.get("uiAmount").and_then(|v| v.as_f64());
 
         let ui_amount_string = value
             .get("uiAmountString")
@@ -1527,15 +1528,15 @@ impl RpcClientMethods for RpcClient {
             .ok_or("Missing value array")?;
 
         let mut accounts = Vec::with_capacity(values.len());
-        
+
         for item in values {
             let address_str = item
                 .get("address")
                 .and_then(|v| v.as_str())
                 .ok_or("Missing address field")?;
-            
-            let address = Pubkey::from_str(address_str)
-                .map_err(|e| format!("Invalid address: {}", e))?;
+
+            let address =
+                Pubkey::from_str(address_str).map_err(|e| format!("Invalid address: {}", e))?;
 
             let amount = item
                 .get("amount")
@@ -1548,9 +1549,7 @@ impl RpcClientMethods for RpcClient {
                 .and_then(|v| v.as_u64())
                 .ok_or("Missing decimals field")? as u8;
 
-            let ui_amount = item
-                .get("uiAmount")
-                .and_then(|v| v.as_f64());
+            let ui_amount = item.get("uiAmount").and_then(|v| v.as_f64());
 
             let ui_amount_string = item
                 .get("uiAmountString")
@@ -1711,10 +1710,7 @@ fn parse_account_from_json(value: &serde_json::Value) -> Result<Option<Account>,
 
     let data_bytes = if let Some(arr) = data.as_array() {
         // [data_base64, encoding]
-        let encoded = arr
-            .first()
-            .and_then(|v| v.as_str())
-            .ok_or("Invalid data")?;
+        let encoded = arr.first().and_then(|v| v.as_str()).ok_or("Invalid data")?;
         let encoding = arr.get(1).and_then(|v| v.as_str()).unwrap_or("base64");
 
         if encoding == "base64" {
@@ -1742,18 +1738,14 @@ fn parse_account_from_json(value: &serde_json::Value) -> Result<Option<Account>,
         .get("owner")
         .and_then(|v| v.as_str())
         .ok_or("Missing owner")?;
-    let owner =
-        Pubkey::from_str(owner_str).map_err(|e| format!("Invalid owner pubkey: {}", e))?;
+    let owner = Pubkey::from_str(owner_str).map_err(|e| format!("Invalid owner pubkey: {}", e))?;
 
     let executable = value
         .get("executable")
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
 
-    let rent_epoch = value
-        .get("rentEpoch")
-        .and_then(|v| v.as_u64())
-        .unwrap_or(0);
+    let rent_epoch = value.get("rentEpoch").and_then(|v| v.as_u64()).unwrap_or(0);
 
     Ok(Some(Account {
         lamports,
@@ -1765,7 +1757,10 @@ fn parse_account_from_json(value: &serde_json::Value) -> Result<Option<Account>,
 }
 
 /// Parse token account info from jsonParsed response
-fn parse_token_account_info(item: &serde_json::Value, is_token_2022: bool) -> Option<TokenAccountInfo> {
+fn parse_token_account_info(
+    item: &serde_json::Value,
+    is_token_2022: bool,
+) -> Option<TokenAccountInfo> {
     let pubkey_str = item.get("pubkey")?.as_str()?;
     let account = item.get("account")?;
     let data = account.get("data")?;

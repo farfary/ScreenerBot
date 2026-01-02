@@ -56,12 +56,26 @@ impl ManualBuyAction {
 
     /// Start validation step
     pub async fn start_validation(&self) {
-        update_step(&self.action_id, STEP_VALIDATE, StepStatus::InProgress, None, None).await;
+        update_step(
+            &self.action_id,
+            STEP_VALIDATE,
+            StepStatus::InProgress,
+            None,
+            None,
+        )
+        .await;
     }
 
     /// Complete validation step
     pub async fn complete_validation(&self) {
-        update_step(&self.action_id, STEP_VALIDATE, StepStatus::Completed, None, None).await;
+        update_step(
+            &self.action_id,
+            STEP_VALIDATE,
+            StepStatus::Completed,
+            None,
+            None,
+        )
+        .await;
     }
 
     /// Fail validation step
@@ -79,13 +93,27 @@ impl ManualBuyAction {
 
     /// Start quote step
     pub async fn start_quote(&self) {
-        update_step(&self.action_id, STEP_QUOTE, StepStatus::InProgress, None, None).await;
+        update_step(
+            &self.action_id,
+            STEP_QUOTE,
+            StepStatus::InProgress,
+            None,
+            None,
+        )
+        .await;
     }
 
     /// Complete quote step
     pub async fn complete_quote(&self, router: Option<&str>) {
         let metadata = router.map(|r| json!({"router": r}));
-        update_step(&self.action_id, STEP_QUOTE, StepStatus::Completed, None, metadata).await;
+        update_step(
+            &self.action_id,
+            STEP_QUOTE,
+            StepStatus::Completed,
+            None,
+            metadata,
+        )
+        .await;
     }
 
     /// Fail quote step
@@ -103,7 +131,14 @@ impl ManualBuyAction {
 
     /// Start swap step
     pub async fn start_swap(&self) {
-        update_step(&self.action_id, STEP_SWAP, StepStatus::InProgress, None, None).await;
+        update_step(
+            &self.action_id,
+            STEP_SWAP,
+            StepStatus::InProgress,
+            None,
+            None,
+        )
+        .await;
     }
 
     /// Complete swap step
@@ -134,13 +169,27 @@ impl ManualBuyAction {
 
     /// Start verification step
     pub async fn start_verify(&self) {
-        update_step(&self.action_id, STEP_VERIFY, StepStatus::InProgress, None, None).await;
+        update_step(
+            &self.action_id,
+            STEP_VERIFY,
+            StepStatus::InProgress,
+            None,
+            None,
+        )
+        .await;
     }
 
     /// Complete verification step and mark action as successful
     pub async fn complete_verify(&self, position_id: Option<i64>) {
         let metadata: Option<Value> = position_id.map(|id| json!({"position_id": id}));
-        update_step(&self.action_id, STEP_VERIFY, StepStatus::Completed, None, metadata).await;
+        update_step(
+            &self.action_id,
+            STEP_VERIFY,
+            StepStatus::Completed,
+            None,
+            metadata,
+        )
+        .await;
         complete_action_success(&self.action_id).await;
     }
 
@@ -150,7 +199,14 @@ impl ManualBuyAction {
             "verification": "async",
             "signature": signature
         });
-        update_step(&self.action_id, STEP_VERIFY, StepStatus::Completed, None, Some(metadata)).await;
+        update_step(
+            &self.action_id,
+            STEP_VERIFY,
+            StepStatus::Completed,
+            None,
+            Some(metadata),
+        )
+        .await;
         complete_action_success(&self.action_id).await;
     }
 
@@ -197,12 +253,26 @@ impl ManualSellAction {
 
     /// Start validation step
     pub async fn start_validation(&self) {
-        update_step(&self.action_id, STEP_VALIDATE, StepStatus::InProgress, None, None).await;
+        update_step(
+            &self.action_id,
+            STEP_VALIDATE,
+            StepStatus::InProgress,
+            None,
+            None,
+        )
+        .await;
     }
 
     /// Complete validation step
     pub async fn complete_validation(&self) {
-        update_step(&self.action_id, STEP_VALIDATE, StepStatus::Completed, None, None).await;
+        update_step(
+            &self.action_id,
+            STEP_VALIDATE,
+            StepStatus::Completed,
+            None,
+            None,
+        )
+        .await;
     }
 
     /// Fail validation step
@@ -220,13 +290,27 @@ impl ManualSellAction {
 
     /// Start quote step
     pub async fn start_quote(&self) {
-        update_step(&self.action_id, STEP_QUOTE, StepStatus::InProgress, None, None).await;
+        update_step(
+            &self.action_id,
+            STEP_QUOTE,
+            StepStatus::InProgress,
+            None,
+            None,
+        )
+        .await;
     }
 
     /// Complete quote step
     pub async fn complete_quote(&self, router: Option<&str>) {
         let metadata = router.map(|r| json!({"router": r}));
-        update_step(&self.action_id, STEP_QUOTE, StepStatus::Completed, None, metadata).await;
+        update_step(
+            &self.action_id,
+            STEP_QUOTE,
+            StepStatus::Completed,
+            None,
+            metadata,
+        )
+        .await;
     }
 
     /// Fail quote step
@@ -244,7 +328,14 @@ impl ManualSellAction {
 
     /// Start swap step
     pub async fn start_swap(&self) {
-        update_step(&self.action_id, STEP_SWAP, StepStatus::InProgress, None, None).await;
+        update_step(
+            &self.action_id,
+            STEP_SWAP,
+            StepStatus::InProgress,
+            None,
+            None,
+        )
+        .await;
     }
 
     /// Complete swap step
@@ -278,12 +369,26 @@ impl ManualSellAction {
 
     /// Start verification step
     pub async fn start_verify(&self) {
-        update_step(&self.action_id, STEP_VERIFY, StepStatus::InProgress, None, None).await;
+        update_step(
+            &self.action_id,
+            STEP_VERIFY,
+            StepStatus::InProgress,
+            None,
+            None,
+        )
+        .await;
     }
 
     /// Complete verification step and mark action as successful
     pub async fn complete_verify(&self) {
-        update_step(&self.action_id, STEP_VERIFY, StepStatus::Completed, None, None).await;
+        update_step(
+            &self.action_id,
+            STEP_VERIFY,
+            StepStatus::Completed,
+            None,
+            None,
+        )
+        .await;
         complete_action_success(&self.action_id).await;
     }
 
@@ -293,7 +398,14 @@ impl ManualSellAction {
             "verification": "async",
             "signature": signature
         });
-        update_step(&self.action_id, STEP_VERIFY, StepStatus::Completed, None, Some(metadata)).await;
+        update_step(
+            &self.action_id,
+            STEP_VERIFY,
+            StepStatus::Completed,
+            None,
+            Some(metadata),
+        )
+        .await;
         complete_action_success(&self.action_id).await;
     }
 
@@ -340,12 +452,26 @@ impl ManualAddAction {
 
     /// Start validation step
     pub async fn start_validation(&self) {
-        update_step(&self.action_id, STEP_VALIDATE, StepStatus::InProgress, None, None).await;
+        update_step(
+            &self.action_id,
+            STEP_VALIDATE,
+            StepStatus::InProgress,
+            None,
+            None,
+        )
+        .await;
     }
 
     /// Complete validation step
     pub async fn complete_validation(&self) {
-        update_step(&self.action_id, STEP_VALIDATE, StepStatus::Completed, None, None).await;
+        update_step(
+            &self.action_id,
+            STEP_VALIDATE,
+            StepStatus::Completed,
+            None,
+            None,
+        )
+        .await;
     }
 
     /// Fail validation step
@@ -363,13 +489,27 @@ impl ManualAddAction {
 
     /// Start quote step
     pub async fn start_quote(&self) {
-        update_step(&self.action_id, STEP_QUOTE, StepStatus::InProgress, None, None).await;
+        update_step(
+            &self.action_id,
+            STEP_QUOTE,
+            StepStatus::InProgress,
+            None,
+            None,
+        )
+        .await;
     }
 
     /// Complete quote step
     pub async fn complete_quote(&self, router: Option<&str>) {
         let metadata = router.map(|r| json!({"router": r}));
-        update_step(&self.action_id, STEP_QUOTE, StepStatus::Completed, None, metadata).await;
+        update_step(
+            &self.action_id,
+            STEP_QUOTE,
+            StepStatus::Completed,
+            None,
+            metadata,
+        )
+        .await;
     }
 
     /// Fail quote step
@@ -387,7 +527,14 @@ impl ManualAddAction {
 
     /// Start swap step
     pub async fn start_swap(&self) {
-        update_step(&self.action_id, STEP_SWAP, StepStatus::InProgress, None, None).await;
+        update_step(
+            &self.action_id,
+            STEP_SWAP,
+            StepStatus::InProgress,
+            None,
+            None,
+        )
+        .await;
     }
 
     /// Complete swap step
@@ -418,13 +565,27 @@ impl ManualAddAction {
 
     /// Start verification step
     pub async fn start_verify(&self) {
-        update_step(&self.action_id, STEP_VERIFY, StepStatus::InProgress, None, None).await;
+        update_step(
+            &self.action_id,
+            STEP_VERIFY,
+            StepStatus::InProgress,
+            None,
+            None,
+        )
+        .await;
     }
 
     /// Complete verification step and mark action as successful
     pub async fn complete_verify(&self, new_entry_count: Option<u32>) {
         let metadata: Option<Value> = new_entry_count.map(|c| json!({"dca_count": c}));
-        update_step(&self.action_id, STEP_VERIFY, StepStatus::Completed, None, metadata).await;
+        update_step(
+            &self.action_id,
+            STEP_VERIFY,
+            StepStatus::Completed,
+            None,
+            metadata,
+        )
+        .await;
         complete_action_success(&self.action_id).await;
     }
 
@@ -434,7 +595,14 @@ impl ManualAddAction {
             "verification": "async",
             "signature": signature
         });
-        update_step(&self.action_id, STEP_VERIFY, StepStatus::Completed, None, Some(metadata)).await;
+        update_step(
+            &self.action_id,
+            STEP_VERIFY,
+            StepStatus::Completed,
+            None,
+            Some(metadata),
+        )
+        .await;
         complete_action_success(&self.action_id).await;
     }
 
@@ -560,7 +728,14 @@ impl AutoOpenAction {
     /// Complete swap step
     pub async fn complete_swap(&self, signature: &str) {
         let metadata = json!({"signature": signature});
-        update_step(&self.action_id, 2, StepStatus::Completed, None, Some(metadata)).await;
+        update_step(
+            &self.action_id,
+            2,
+            StepStatus::Completed,
+            None,
+            Some(metadata),
+        )
+        .await;
     }
 
     /// Complete action successfully
@@ -634,7 +809,14 @@ impl AutoCloseAction {
     /// Complete swap step
     pub async fn complete_swap(&self, signature: &str, sol_received: Option<f64>) {
         let metadata = json!({"signature": signature, "sol_received": sol_received});
-        update_step(&self.action_id, 2, StepStatus::Completed, None, Some(metadata)).await;
+        update_step(
+            &self.action_id,
+            2,
+            StepStatus::Completed,
+            None,
+            Some(metadata),
+        )
+        .await;
     }
 
     /// Complete action successfully
@@ -715,7 +897,14 @@ impl AutoDcaAction {
     /// Complete swap step
     pub async fn complete_swap(&self, signature: &str) {
         let metadata = json!({"signature": signature});
-        update_step(&self.action_id, 2, StepStatus::Completed, None, Some(metadata)).await;
+        update_step(
+            &self.action_id,
+            2,
+            StepStatus::Completed,
+            None,
+            Some(metadata),
+        )
+        .await;
     }
 
     /// Complete action successfully
@@ -725,7 +914,14 @@ impl AutoDcaAction {
             "new_dca_count": new_dca_count,
             "verification": "async"
         });
-        update_step(&self.action_id, 3, StepStatus::Completed, None, Some(metadata)).await;
+        update_step(
+            &self.action_id,
+            3,
+            StepStatus::Completed,
+            None,
+            Some(metadata),
+        )
+        .await;
         complete_action_success(&self.action_id).await;
     }
 

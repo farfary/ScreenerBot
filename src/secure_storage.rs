@@ -29,36 +29,35 @@ pub struct EncryptedData {
 fn get_machine_id() -> Result<String, String> {
     #[cfg(not(target_os = "android"))]
     {
-        machine_uid::get()
-            .map_err(|e| format!("Failed to get machine ID: {}", e))
+        machine_uid::get().map_err(|e| format!("Failed to get machine ID: {}", e))
     }
-    
+
     #[cfg(target_os = "android")]
     {
         // On Android, we use a hash of the app's unique installation ID
         // This is stored in the app's private data directory and is unique per installation
         use crate::paths::get_data_directory;
-        
+
         let data_dir = get_data_directory();
-        
+
         // Create a unique ID based on the data directory path and a stored UUID
         let id_file = data_dir.join(".device_id");
-        
+
         if id_file.exists() {
             std::fs::read_to_string(&id_file)
                 .map_err(|e| format!("Failed to read device ID: {}", e))
         } else {
             // Generate a new UUID for this installation
             let new_id = uuid::Uuid::new_v4().to_string();
-            
+
             // Ensure directory exists
             if let Some(parent) = id_file.parent() {
                 std::fs::create_dir_all(parent).ok();
             }
-            
+
             std::fs::write(&id_file, &new_id)
                 .map_err(|e| format!("Failed to write device ID: {}", e))?;
-            
+
             Ok(new_id)
         }
     }
@@ -75,10 +74,10 @@ fn derive_encryption_key() -> Result<[u8; 32], String> {
     let mut hasher = blake3::Hasher::new();
     hasher.update(machine_id.as_bytes());
     hasher.update(APP_SALT);
-    
+
     let hash = hasher.finalize();
     let key: [u8; 32] = *hash.as_bytes();
-    
+
     Ok(key)
 }
 
@@ -91,20 +90,20 @@ fn derive_encryption_key() -> Result<[u8; 32], String> {
 /// * `EncryptedData` containing base64-encoded ciphertext and nonce
 pub fn encrypt_private_key(plaintext: &str) -> Result<EncryptedData, String> {
     let key = derive_encryption_key()?;
-    
+
     // Create cipher
-    let cipher = Aes256Gcm::new_from_slice(&key)
-        .map_err(|e| format!("Failed to create cipher: {}", e))?;
-    
+    let cipher =
+        Aes256Gcm::new_from_slice(&key).map_err(|e| format!("Failed to create cipher: {}", e))?;
+
     // Generate random 12-byte nonce
     let nonce_bytes: [u8; 12] = rand::random();
     let nonce = Nonce::from_slice(&nonce_bytes);
-    
+
     // Encrypt
     let ciphertext = cipher
         .encrypt(nonce, plaintext.as_bytes())
         .map_err(|e| format!("Encryption failed: {}", e))?;
-    
+
     Ok(EncryptedData {
         ciphertext: BASE64.encode(&ciphertext),
         nonce: BASE64.encode(nonce_bytes),
@@ -120,34 +119,34 @@ pub fn encrypt_private_key(plaintext: &str) -> Result<EncryptedData, String> {
 /// * The decrypted private key string
 pub fn decrypt_private_key(encrypted: &EncryptedData) -> Result<String, String> {
     let key = derive_encryption_key()?;
-    
+
     // Decode base64
     let ciphertext = BASE64
         .decode(&encrypted.ciphertext)
         .map_err(|e| format!("Failed to decode ciphertext: {}", e))?;
-    
+
     let nonce_bytes = BASE64
         .decode(&encrypted.nonce)
         .map_err(|e| format!("Failed to decode nonce: {}", e))?;
-    
+
     if nonce_bytes.len() != 12 {
         return Err(format!(
             "Invalid nonce length: expected 12 bytes, got {}",
             nonce_bytes.len()
         ));
     }
-    
+
     let nonce = Nonce::from_slice(&nonce_bytes);
-    
+
     // Create cipher
-    let cipher = Aes256Gcm::new_from_slice(&key)
-        .map_err(|e| format!("Failed to create cipher: {}", e))?;
-    
+    let cipher =
+        Aes256Gcm::new_from_slice(&key).map_err(|e| format!("Failed to create cipher: {}", e))?;
+
     // Decrypt
     let plaintext_bytes = cipher
         .decrypt(nonce, ciphertext.as_ref())
         .map_err(|_| "Decryption failed - wrong machine or corrupted data".to_string())?;
-    
+
     String::from_utf8(plaintext_bytes)
         .map_err(|e| format!("Decrypted data is not valid UTF-8: {}", e))
 }
@@ -233,7 +232,10 @@ fn constant_time_compare(a: &[u8], b: &[u8]) -> bool {
     }
 
     // XOR all bytes and accumulate - result is 0 only if all bytes match
-    let result = a.iter().zip(b.iter()).fold(0u8, |acc, (x, y)| acc | (x ^ y));
+    let result = a
+        .iter()
+        .zip(b.iter())
+        .fold(0u8, |acc, (x, y)| acc | (x ^ y));
 
     result == 0
 }
@@ -245,15 +247,15 @@ mod tests {
     #[test]
     fn test_encrypt_decrypt_roundtrip() {
         let original = "test_private_key_base58_encoded_string";
-        
+
         let encrypted = encrypt_private_key(original).expect("Encryption should succeed");
-        
+
         assert!(!encrypted.ciphertext.is_empty());
         assert!(!encrypted.nonce.is_empty());
         assert_ne!(encrypted.ciphertext, original); // Should be different
-        
+
         let decrypted = decrypt_private_key(&encrypted).expect("Decryption should succeed");
-        
+
         assert_eq!(decrypted, original);
     }
 }

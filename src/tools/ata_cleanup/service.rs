@@ -111,14 +111,17 @@ async fn perform_scheduled_cleanup() -> Result<(u32, Vec<String>), String> {
 }
 
 /// Trigger an immediate ATA cleanup (manual trigger)
-pub async fn trigger_immediate_cleanup() -> Result<(u32, Vec<String>), Box<dyn std::error::Error + Send + Sync>> {
+pub async fn trigger_immediate_cleanup(
+) -> Result<(u32, Vec<String>), Box<dyn std::error::Error + Send + Sync>> {
     logger::info(LogTag::Wallet, "Manual ATA cleanup triggered...");
 
     let wallet_address = get_wallet_address()
         .map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
 
-    let result = cleanup_empty_atas(&wallet_address).await
-        .map_err(|e| Box::new(std::io::Error::new(std::io::ErrorKind::Other, e)) as Box<dyn std::error::Error + Send + Sync>)?;
+    let result = cleanup_empty_atas(&wallet_address).await.map_err(|e| {
+        Box::new(std::io::Error::new(std::io::ErrorKind::Other, e))
+            as Box<dyn std::error::Error + Send + Sync>
+    })?;
 
     // Update global stats
     update_stats(&result);

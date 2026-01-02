@@ -91,11 +91,7 @@ pub fn parse_excel(
     // Convert to rows
     let mut all_rows: Vec<Vec<String>> = range
         .rows()
-        .map(|row| {
-            row.iter()
-                .map(|cell| cell_to_string(cell))
-                .collect()
-        })
+        .map(|row| row.iter().map(|cell| cell_to_string(cell)).collect())
         .collect();
 
     if all_rows.is_empty() {
@@ -149,7 +145,14 @@ const PRIVATE_KEY_PATTERNS: &[&str] = &[
     "secret_key",
     "secretkey",
 ];
-const NOTES_PATTERNS: &[&str] = &["notes", "note", "description", "desc", "comment", "comments"];
+const NOTES_PATTERNS: &[&str] = &[
+    "notes",
+    "note",
+    "description",
+    "desc",
+    "comment",
+    "comments",
+];
 const ADDRESS_PATTERNS: &[&str] = &["address", "public_key", "publickey", "pubkey", "wallet"];
 
 /// Auto-detect column mapping from headers

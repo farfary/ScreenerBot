@@ -128,7 +128,10 @@ async fn get_status() -> Response {
 async fn verify_password_handler(Json(req): Json<VerifyPasswordRequest>) -> Response {
     let (salt, hash) = config::with_config(|cfg| {
         let lockscreen = &cfg.gui.dashboard.lockscreen;
-        (lockscreen.password_salt.clone(), lockscreen.password_hash.clone())
+        (
+            lockscreen.password_salt.clone(),
+            lockscreen.password_hash.clone(),
+        )
     });
 
     // Check if password is set
@@ -169,7 +172,10 @@ async fn set_password(Json(req): Json<SetPasswordRequest>) -> Response {
     // Check if password already exists
     let (existing_salt, existing_hash) = config::with_config(|cfg| {
         let lockscreen = &cfg.gui.dashboard.lockscreen;
-        (lockscreen.password_salt.clone(), lockscreen.password_hash.clone())
+        (
+            lockscreen.password_salt.clone(),
+            lockscreen.password_hash.clone(),
+        )
     });
 
     let has_existing = !existing_hash.is_empty() && !existing_salt.is_empty();
@@ -243,7 +249,10 @@ async fn clear_password(Json(req): Json<ClearPasswordRequest>) -> Response {
     // Get current password info
     let (salt, hash) = config::with_config(|cfg| {
         let lockscreen = &cfg.gui.dashboard.lockscreen;
-        (lockscreen.password_salt.clone(), lockscreen.password_hash.clone())
+        (
+            lockscreen.password_salt.clone(),
+            lockscreen.password_hash.clone(),
+        )
     });
 
     // Check if password exists
@@ -294,9 +303,8 @@ async fn clear_password(Json(req): Json<ClearPasswordRequest>) -> Response {
 async fn update_settings(Json(req): Json<UpdateSettingsRequest>) -> Response {
     // Check if password is set before allowing enable
     if let Some(true) = req.enabled {
-        let has_password = config::with_config(|cfg| {
-            !cfg.gui.dashboard.lockscreen.password_hash.is_empty()
-        });
+        let has_password =
+            config::with_config(|cfg| !cfg.gui.dashboard.lockscreen.password_hash.is_empty());
 
         if !has_password {
             return error_response(

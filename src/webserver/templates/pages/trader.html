@@ -34,9 +34,7 @@
           <div class="force-stop-icon"><i class="icon-alert-octagon"></i></div>
           <div class="force-stop-info">
             <span class="force-stop-title">TRADING HALTED</span>
-            <span class="force-stop-reason" id="force-stop-reason"
-              >Manual force stop</span
-            >
+            <span class="force-stop-reason" id="force-stop-reason">Manual force stop</span>
           </div>
           <button type="button" class="btn btn-sm btn-success" id="resume-trading-btn">
             <i class="icon-play"></i> Resume
@@ -75,24 +73,14 @@
         <!-- Loss Limit Panel -->
         <div class="loss-limit-panel" id="loss-limit-panel" style="display: none">
           <div class="loss-limit-header">
-            <span class="loss-limit-label">
-              <i class="icon-shield"></i> Period Loss Limit
-            </span>
-            <span class="loss-limit-value" id="loss-limit-value"
-              >0.00 / 0.10 SOL</span
-            >
+            <span class="loss-limit-label"> <i class="icon-shield"></i> Period Loss Limit </span>
+            <span class="loss-limit-value" id="loss-limit-value">0.00 / 0.10 SOL</span>
           </div>
           <div class="loss-limit-bar">
-            <div
-              class="loss-limit-progress"
-              id="loss-limit-progress"
-              style="width: 0%"
-            ></div>
+            <div class="loss-limit-progress" id="loss-limit-progress" style="width: 0%"></div>
           </div>
           <div class="loss-limit-footer">
-            <span class="loss-limit-period" id="loss-limit-period"
-              >Resets in —</span
-            >
+            <span class="loss-limit-period" id="loss-limit-period">Resets in —</span>
             <span class="loss-limit-status" id="loss-limit-status"></span>
           </div>
         </div>
@@ -831,7 +819,7 @@
                 value="168"
                 class="input-large"
               />
-              <select id="time-unit" class="unit-select">
+              <select id="time-unit" class="unit-select" data-custom-select>
                 <option value="seconds">seconds</option>
                 <option value="minutes">minutes</option>
                 <option value="hours" selected>hours</option>

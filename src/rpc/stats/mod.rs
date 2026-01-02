@@ -165,13 +165,7 @@ impl StatsManager {
     }
 
     /// Register a provider
-    pub fn register_provider(
-        &self,
-        id: &str,
-        url_masked: &str,
-        kind: ProviderKind,
-        priority: u8,
-    ) {
+    pub fn register_provider(&self, id: &str, url_masked: &str, kind: ProviderKind, priority: u8) {
         let _ = self.db.upsert_provider(id, url_masked, kind, priority);
     }
 

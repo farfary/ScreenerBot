@@ -44,9 +44,8 @@ pub async fn execute_tool_swap(
     slippage_pct: Option<f64>,
 ) -> Result<ToolSwapResult, String> {
     let wallet_address = wallet.wallet.address.clone();
-    let slippage = slippage_pct.unwrap_or_else(|| {
-        with_config(|cfg| cfg.swaps.slippage.quote_default_pct)
-    });
+    let slippage =
+        slippage_pct.unwrap_or_else(|| with_config(|cfg| cfg.swaps.slippage.quote_default_pct));
 
     // Create quote request
     let quote_request = QuoteRequest {
@@ -108,8 +107,7 @@ pub async fn tool_buy(
     slippage_pct: Option<f64>,
 ) -> Result<ToolSwapResult, String> {
     // Validate token mint
-    Pubkey::from_str(token_mint)
-        .map_err(|e| format!("Invalid token mint: {}", e))?;
+    Pubkey::from_str(token_mint).map_err(|e| format!("Invalid token mint: {}", e))?;
 
     // Convert SOL to lamports
     let lamports = (amount_sol * 1_000_000_000.0) as u64;
@@ -128,14 +126,7 @@ pub async fn tool_buy(
         ),
     );
 
-    execute_tool_swap(
-        wallet,
-        SOL_MINT,
-        token_mint,
-        lamports,
-        slippage_pct,
-    )
-    .await
+    execute_tool_swap(wallet, SOL_MINT, token_mint, lamports, slippage_pct).await
 }
 
 /// Sell token for SOL
@@ -149,8 +140,7 @@ pub async fn tool_sell(
     slippage_pct: Option<f64>,
 ) -> Result<ToolSwapResult, String> {
     // Validate token mint
-    Pubkey::from_str(token_mint)
-        .map_err(|e| format!("Invalid token mint: {}", e))?;
+    Pubkey::from_str(token_mint).map_err(|e| format!("Invalid token mint: {}", e))?;
 
     if token_amount == 0 {
         return Err("Token amount cannot be zero".to_string());
@@ -166,21 +156,11 @@ pub async fn tool_sell(
         ),
     );
 
-    execute_tool_swap(
-        wallet,
-        token_mint,
-        SOL_MINT,
-        token_amount,
-        slippage_pct,
-    )
-    .await
+    execute_tool_swap(wallet, token_mint, SOL_MINT, token_amount, slippage_pct).await
 }
 
 /// Execute a swap transaction signed with a specific keypair
-async fn execute_swap_with_keypair(
-    quote: &Quote,
-    keypair: &Keypair,
-) -> Result<String, String> {
+async fn execute_swap_with_keypair(quote: &Quote, keypair: &Keypair) -> Result<String, String> {
     // Deserialize quote response from execution_data
     let quote_response: serde_json::Value = serde_json::from_slice(&quote.execution_data)
         .map_err(|e| format!("Quote deserialization failed: {}", e))?;
@@ -206,7 +186,10 @@ async fn execute_swap_with_keypair(
 
     if !response.status().is_success() {
         let status = response.status();
-        let error_text = response.text().await.unwrap_or_else(|_| "Unknown".to_string());
+        let error_text = response
+            .text()
+            .await
+            .unwrap_or_else(|_| "Unknown".to_string());
         return Err(format!("Jupiter swap failed ({}): {}", status, error_text));
     }
 

@@ -10,7 +10,7 @@ const FOUNDATION_STYLES: &str = include_str!("templates/styles/foundation.css");
 const LAYOUT_STYLES: &str = include_str!("templates/styles/layout.css");
 const COMPONENT_STYLES: &str = include_str!("templates/styles/components.css");
 const HEADER_STYLES: &str = include_str!("templates/styles/header.css");
-const DROPDOWN_STYLES: &str = include_str!("templates/styles/dropdown.css");
+const DROPDOWN_STYLES: &str = include_str!("templates/styles/ui/dropdown.css");
 const COMMON_STYLES: &str = include_str!("templates/styles/common.css");
 const FORM_CONTROLS_STYLES: &str = include_str!("templates/styles/components/form_controls.css");
 const NOTIFICATION_STYLES: &str = include_str!("templates/styles/components/notifications.css");
@@ -77,8 +77,7 @@ pub const LUCIDE_FONT_SVG: &str = include_str!("assets/lucide-font/lucide.svg");
 // Trading terminal fonts - JetBrains Mono (tabular numbers) and Orbitron (branding)
 pub const JETBRAINS_MONO_REGULAR: &[u8] =
     include_bytes!("assets/fonts/JetBrainsMono-Regular.woff2");
-pub const JETBRAINS_MONO_MEDIUM: &[u8] =
-    include_bytes!("assets/fonts/JetBrainsMono-Medium.woff2");
+pub const JETBRAINS_MONO_MEDIUM: &[u8] = include_bytes!("assets/fonts/JetBrainsMono-Medium.woff2");
 pub const JETBRAINS_MONO_BOLD: &[u8] = include_bytes!("assets/fonts/JetBrainsMono-Bold.woff2");
 pub const ORBITRON_VARIABLE: &[u8] = include_bytes!("assets/fonts/Orbitron-Variable.woff2");
 
@@ -439,11 +438,7 @@ pub fn login_template(title: &str, content: &str) -> String {
         .replace("url('lucide.svg", "url('/assets/fonts/lucide.svg");
 
     // Minimal styles for login page
-    let combined_styles = [
-        FOUNDATION_STYLES,
-        &lucide_css,
-        LOGIN_PAGE_STYLES,
-    ].join("\n");
+    let combined_styles = [FOUNDATION_STYLES, &lucide_css, LOGIN_PAGE_STYLES].join("\n");
 
     format!(
         r#"<!DOCTYPE html>

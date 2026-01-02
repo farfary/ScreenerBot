@@ -9,7 +9,9 @@ mod trading;
 
 pub use callbacks::handle_callback_query;
 pub use menu::{handle_menu_command, send_main_menu};
-pub use status::{handle_balance_command, handle_positions_command, handle_stats_command, handle_status_command};
+pub use status::{
+    handle_balance_command, handle_positions_command, handle_stats_command, handle_status_command,
+};
 pub use trading::{
     handle_force_stop_command, handle_help_command, handle_login_command,
     handle_pause_entries_command, handle_resume_command, handle_resume_entries_command,
@@ -93,7 +95,10 @@ pub async fn handle_command(
                 .await
                 .map_err(|e| format!("Failed to send start response: {}", e))?;
 
-            logger::info(LogTag::Telegram, "Handled /start command with reply keyboard");
+            logger::info(
+                LogTag::Telegram,
+                "Handled /start command with reply keyboard",
+            );
             return Ok(());
         }
         "/menu" => {

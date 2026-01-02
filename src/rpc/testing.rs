@@ -153,8 +153,7 @@ pub async fn test_rpc_endpoints(urls: &[String]) -> Vec<RpcEndpointTestResult> {
 /// Compares the genesis hash against the known mainnet hash.
 pub async fn validate_mainnet(url: &str) -> Result<bool, String> {
     // Known Solana mainnet genesis hash
-    const MAINNET_GENESIS_HASH: &str =
-        "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
+    const MAINNET_GENESIS_HASH: &str = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d";
 
     let payload = serde_json::json!({
         "jsonrpc": "2.0",

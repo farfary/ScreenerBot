@@ -97,12 +97,8 @@ pub async fn execute_consolidation(config: ConsolidateConfig) -> Result<SessionR
 
     // Transfer SOL last (if configured)
     if config.transfer_sol {
-        let sol_results = collect_sol(
-            wallets,
-            &main_wallet.address,
-            config.leave_rent_exempt,
-        )
-        .await;
+        let sol_results =
+            collect_sol(wallets, &main_wallet.address, config.leave_rent_exempt).await;
 
         result.total_sol_recovered = sol_results
             .iter()
@@ -179,29 +175,26 @@ async fn transfer_token_to_main(
     // Check if Token-2022
     let mint_pubkey = match Pubkey::from_str(mint) {
         Ok(p) => p,
-        Err(_) => return Some(WalletOpResult::failure(
-            wallet_id,
-            wallet_address,
-            "Invalid mint address".to_string(),
-        )),
+        Err(_) => {
+            return Some(WalletOpResult::failure(
+                wallet_id,
+                wallet_address,
+                "Invalid mint address".to_string(),
+            ))
+        }
     };
 
     let is_token_2022 = if include_token_2022 {
-        rpc_client.is_token_2022_mint(&mint_pubkey).await.unwrap_or(false)
+        rpc_client
+            .is_token_2022_mint(&mint_pubkey)
+            .await
+            .unwrap_or(false)
     } else {
         false
     };
 
     // transfer_token now fetches decimals directly from the mint account
-    match transfer_token(
-        &wallet.keypair,
-        main_address,
-        mint,
-        balance,
-        is_token_2022,
-    )
-    .await
-    {
+    match transfer_token(&wallet.keypair, main_address, mint, balance, is_token_2022).await {
         Ok(sig) => Some(WalletOpResult::success(
             wallet_id,
             wallet_address,
@@ -230,7 +223,11 @@ async fn close_wallet_atas(
         Err(e) => {
             logger::debug(
                 LogTag::Tools,
-                &format!("Failed to get token accounts for {}: {}", &wallet_address[..8], e),
+                &format!(
+                    "Failed to get token accounts for {}: {}",
+                    &wallet_address[..8],
+                    e
+                ),
             );
             return results;
         }
@@ -247,7 +244,13 @@ async fn close_wallet_atas(
             continue;
         }
 
-        match close_ata(&wallet.keypair, &account_info.mint, account_info.is_token_2022).await {
+        match close_ata(
+            &wallet.keypair,
+            &account_info.mint,
+            account_info.is_token_2022,
+        )
+        .await
+        {
             Ok(sig) => {
                 // Rent reclaimed is approximately 0.00203 SOL
                 results.push(WalletOpResult::success(

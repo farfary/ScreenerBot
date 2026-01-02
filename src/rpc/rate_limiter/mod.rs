@@ -132,9 +132,8 @@ impl RateLimiterManager {
         }
 
         // Determine rate limit
-        let rate = rate_override.unwrap_or_else(|| {
-            self.default_rates.get(&kind).copied().unwrap_or(10)
-        });
+        let rate =
+            rate_override.unwrap_or_else(|| self.default_rates.get(&kind).copied().unwrap_or(10));
 
         let limiter = Arc::new(ProviderRateLimiter::with_backoff(
             provider_id,

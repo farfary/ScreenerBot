@@ -103,7 +103,8 @@ pub async fn force_buy(mint: &str, size_sol: f64) -> Result<TradeResult, String>
         let error = result.error.as_deref().unwrap_or("Trade failed");
         if error.contains("Unhealthy") || error.contains("connectivity") {
             action.fail_validation(error).await;
-        } else if error.contains("Quote") || error.contains("quote") || error.contains("No routes") {
+        } else if error.contains("Quote") || error.contains("quote") || error.contains("No routes")
+        {
             action.fail_quote(error).await;
         } else {
             action.fail_swap(error).await;
@@ -125,7 +126,10 @@ pub async fn force_buy(mint: &str, size_sol: f64) -> Result<TradeResult, String>
 
     // Record manual trade
     if let Err(e) = super::tracking::record_manual_trade(&result).await {
-        logger::warning(LogTag::Trader, &format!("Failed to record manual trade: {}", e));
+        logger::warning(
+            LogTag::Trader,
+            &format!("Failed to record manual trade: {}", e),
+        );
     }
 
     Ok(result)
@@ -159,7 +163,8 @@ pub async fn force_sell(mint: &str, percentage: Option<f64>) -> Result<TradeResu
     let position_id = position.as_ref().and_then(|p| p.id);
 
     // Create action tracker
-    let action = ManualSellAction::new(mint, symbol.as_deref(), exit_percentage, position_id).await?;
+    let action =
+        ManualSellAction::new(mint, symbol.as_deref(), exit_percentage, position_id).await?;
 
     // Step 1: Validation
     action.start_validation().await;
@@ -227,7 +232,8 @@ pub async fn force_sell(mint: &str, percentage: Option<f64>) -> Result<TradeResu
         let error = result.error.as_deref().unwrap_or("Trade failed");
         if error.contains("Unhealthy") || error.contains("connectivity") {
             action.fail_validation(error).await;
-        } else if error.contains("Quote") || error.contains("quote") || error.contains("No routes") {
+        } else if error.contains("Quote") || error.contains("quote") || error.contains("No routes")
+        {
             action.fail_quote(error).await;
         } else {
             action.fail_swap(error).await;
@@ -249,7 +255,10 @@ pub async fn force_sell(mint: &str, percentage: Option<f64>) -> Result<TradeResu
 
     // Record manual trade
     if let Err(e) = super::tracking::record_manual_trade(&result).await {
-        logger::warning(LogTag::Trader, &format!("Failed to record manual trade: {}", e));
+        logger::warning(
+            LogTag::Trader,
+            &format!("Failed to record manual trade: {}", e),
+        );
     }
 
     Ok(result)

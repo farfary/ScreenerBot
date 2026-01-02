@@ -327,7 +327,12 @@ impl DistributionStrategy {
     }
 
     /// Select next wallet index based on strategy
-    pub fn select_wallet_index(&self, current_index: usize, operation_count: usize, wallet_count: usize) -> usize {
+    pub fn select_wallet_index(
+        &self,
+        current_index: usize,
+        operation_count: usize,
+        wallet_count: usize,
+    ) -> usize {
         if wallet_count == 0 {
             return 0;
         }

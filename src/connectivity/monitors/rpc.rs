@@ -34,10 +34,10 @@ impl EndpointMonitor for RpcMonitor {
 
     async fn check_health(&self) -> HealthCheckResult {
         let rpc_client = get_rpc_client();
-        
+
         // Get provider health info from new RPC architecture
         let provider_health = rpc_client.get_provider_health().await;
-        
+
         if provider_health.is_empty() {
             return HealthCheckResult::failure("No RPC providers configured".to_string());
         }
@@ -45,7 +45,7 @@ impl EndpointMonitor for RpcMonitor {
         let total_providers = provider_health.len();
         let healthy_providers: Vec<_> = provider_health.iter().filter(|p| p.is_healthy).collect();
         let healthy_count = healthy_providers.len();
-        
+
         // Calculate average latency from healthy providers
         let avg_latency = if !healthy_providers.is_empty() {
             let total_latency: f64 = healthy_providers.iter().map(|p| p.avg_latency_ms).sum();

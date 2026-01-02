@@ -8,7 +8,7 @@
 
   // Check if running in Electron
   const isElectron = window.electronAPI !== undefined;
-  
+
   console.log("[Theme] Initializing theme system...");
   console.log("[Theme] Running in Electron:", isElectron);
 

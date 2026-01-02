@@ -126,6 +126,7 @@
 
 import * as AppState from "../core/app_state.js";
 import { $ } from "../core/dom.js";
+import { enhanceAllSelects } from "./custom_select.js";
 import { TableToolbarView } from "./table_toolbar.js";
 import { TableSettingsDialog } from "./table_settings_dialog.js";
 
@@ -523,6 +524,9 @@ export class DataTable {
     }
 
     this._syncBlockingState();
+
+    // Enhance all selects in the table (toolbar filters, pagination size)
+    enhanceAllSelects(container);
   }
 
   _normalizeBlockingState(config = {}) {
@@ -640,10 +644,7 @@ export class DataTable {
     if (this._hasHybridPaginationModes()) {
       const modeToggleHtml = this._renderPaginationModeToggle();
       // Insert before the settings button (.dt-column-toggle) or at end of .table-toolbar-actions
-      toolbarHtml = toolbarHtml.replace(
-        /(<div class="dt-column-toggle)/,
-        `${modeToggleHtml}$1`
-      );
+      toolbarHtml = toolbarHtml.replace(/(<div class="dt-column-toggle)/, `${modeToggleHtml}$1`);
       // Fallback if no settings button: insert before closing of .table-toolbar-actions
       if (!toolbarHtml.includes("dt-pagination-mode-toggle")) {
         toolbarHtml = toolbarHtml.replace(
@@ -1033,10 +1034,10 @@ export class DataTable {
       return `
         <div class="dt-actions-container">
           <div class="dt-actions-dropdown" data-row-id="${row[this.options.rowIdField] || ""}">
-            <button class="dt-actions-dropdown-trigger" data-action="dropdown-toggle">
+            <button class="dt-actions-dropdown-trigger" data-action="dropdown-toggle" aria-haspopup="menu" aria-expanded="false">
               ${icon}
             </button>
-            <div class="dt-actions-dropdown-menu ${menuClass}" style="display: none;">
+            <div class="dt-actions-dropdown-menu ${menuClass}" role="menu" tabindex="-1" aria-hidden="true" style="display: none;">
               ${config.items
                 .map((item) => {
                   if (item.type === "divider") {
@@ -1048,7 +1049,7 @@ export class DataTable {
 
                   return `
                   <div class="dt-actions-dropdown-item ${itemVariant} ${disabled}" 
-                       data-action-id="${item.id}">
+                       data-action-id="${item.id}" role="menuitem" tabindex="-1" data-item-index>
                     ${
                       item.icon
                         ? `<span class="dt-actions-dropdown-item-icon">${item.icon}</span>`
@@ -1516,17 +1517,73 @@ export class DataTable {
         allMenus.forEach((m) => {
           if (m !== menu) {
             m.style.display = "none";
+            m.classList.remove("open");
+            m.setAttribute("aria-hidden", "true");
+            const t = m
+              .closest(".dt-actions-dropdown")
+              ?.querySelector(".dt-actions-dropdown-trigger");
+            if (t) t.setAttribute("aria-expanded", "false");
           }
         });
 
         // Toggle current menu
         if (menu) {
-          const isOpen = menu.style.display === "block";
-          menu.style.display = isOpen ? "none" : "block";
-          trigger.classList.toggle("active", !isOpen);
+          const isOpen = menu.classList.contains("open") || menu.style.display === "block";
+          if (isOpen) {
+            menu.style.display = "none";
+            menu.classList.remove("open");
+            menu.setAttribute("aria-hidden", "true");
+            trigger.classList.remove("active");
+            trigger.setAttribute("aria-expanded", "false");
+          } else {
+            menu.style.display = "block";
+            menu.classList.add("open");
+            menu.setAttribute("aria-hidden", "false");
+            trigger.classList.add("active");
+            trigger.setAttribute("aria-expanded", "true");
+
+            // Focus first interactive item for keyboard users
+            const items = Array.from(
+              menu.querySelectorAll(".dt-actions-dropdown-item:not(.disabled)")
+            );
+            if (items.length) {
+              items.forEach((it) => it.setAttribute("tabindex", "-1"));
+              const first = items[0];
+              first.setAttribute("tabindex", "0");
+              first.focus();
+            }
+          }
         }
       };
       this._addEventListener(trigger, "click", handler);
+
+      // Keyboard toggle and navigation from trigger
+      const keyHandler = (e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          trigger.click();
+          return;
+        }
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          // open and focus first
+          trigger.click();
+          return;
+        }
+        if (e.key === "Escape") {
+          const dropdown = trigger.closest(".dt-actions-dropdown");
+          const menu = dropdown.querySelector(".dt-actions-dropdown-menu");
+          if (menu && menu.classList.contains("open")) {
+            menu.style.display = "none";
+            menu.classList.remove("open");
+            menu.setAttribute("aria-hidden", "true");
+            trigger.classList.remove("active");
+            trigger.setAttribute("aria-expanded", "false");
+            trigger.focus();
+          }
+        }
+      };
+      this._addEventListener(trigger, "keydown", keyHandler);
     });
 
     // Dropdown item click handlers
@@ -1557,8 +1614,16 @@ export class DataTable {
                   // Close dropdown after action
                   const menu = dropdown.querySelector(".dt-actions-dropdown-menu");
                   const trigger = dropdown.querySelector(".dt-actions-dropdown-trigger");
-                  if (menu) menu.style.display = "none";
-                  if (trigger) trigger.classList.remove("active");
+                  if (menu) {
+                    menu.style.display = "none";
+                    menu.classList.remove("open");
+                    menu.setAttribute("aria-hidden", "true");
+                  }
+                  if (trigger) {
+                    trigger.classList.remove("active");
+                    trigger.setAttribute("aria-expanded", "false");
+                    trigger.focus();
+                  }
                 } catch (error) {
                   this._log(
                     "error",
@@ -1572,6 +1637,75 @@ export class DataTable {
         }
       };
       this._addEventListener(item, "click", handler);
+
+      // Keyboard support for menu items
+      const itemKeyHandler = (e) => {
+        const menu = item.closest(".dt-actions-dropdown-menu");
+        const items = Array.from(menu.querySelectorAll(".dt-actions-dropdown-item:not(.disabled)"));
+        const idx = items.indexOf(item);
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          item.click();
+          return;
+        }
+        if (e.key === "ArrowDown") {
+          e.preventDefault();
+          const next = items[(idx + 1) % items.length];
+          if (next) {
+            items.forEach((it) => it.setAttribute("tabindex", "-1"));
+            next.setAttribute("tabindex", "0");
+            next.focus();
+          }
+          return;
+        }
+        if (e.key === "ArrowUp") {
+          e.preventDefault();
+          const prev = items[(idx - 1 + items.length) % items.length];
+          if (prev) {
+            items.forEach((it) => it.setAttribute("tabindex", "-1"));
+            prev.setAttribute("tabindex", "0");
+            prev.focus();
+          }
+          return;
+        }
+        if (e.key === "Home") {
+          e.preventDefault();
+          const first = items[0];
+          if (first) {
+            items.forEach((it) => it.setAttribute("tabindex", "-1"));
+            first.setAttribute("tabindex", "0");
+            first.focus();
+          }
+          return;
+        }
+        if (e.key === "End") {
+          e.preventDefault();
+          const last = items[items.length - 1];
+          if (last) {
+            items.forEach((it) => it.setAttribute("tabindex", "-1"));
+            last.setAttribute("tabindex", "0");
+            last.focus();
+          }
+          return;
+        }
+        if (e.key === "Escape") {
+          e.preventDefault();
+          const dropdown = item.closest(".dt-actions-dropdown");
+          const trigger = dropdown.querySelector(".dt-actions-dropdown-trigger");
+          const menu = dropdown.querySelector(".dt-actions-dropdown-menu");
+          if (menu) {
+            menu.style.display = "none";
+            menu.classList.remove("open");
+            menu.setAttribute("aria-hidden", "true");
+          }
+          if (trigger) {
+            trigger.classList.remove("active");
+            trigger.setAttribute("aria-expanded", "false");
+            trigger.focus();
+          }
+        }
+      };
+      this._addEventListener(item, "keydown", itemKeyHandler);
     });
 
     // Close dropdowns when clicking outside
@@ -1579,8 +1713,15 @@ export class DataTable {
       if (!e.target.closest(".dt-actions-dropdown")) {
         const allMenus = this.elements.tbody.querySelectorAll(".dt-actions-dropdown-menu");
         const allTriggers = this.elements.tbody.querySelectorAll(".dt-actions-dropdown-trigger");
-        allMenus.forEach((menu) => (menu.style.display = "none"));
-        allTriggers.forEach((trigger) => trigger.classList.remove("active"));
+        allMenus.forEach((menu) => {
+          menu.style.display = "none";
+          menu.classList.remove("open");
+          menu.setAttribute("aria-hidden", "true");
+        });
+        allTriggers.forEach((trigger) => {
+          trigger.classList.remove("active");
+          trigger.setAttribute("aria-expanded", "false");
+        });
       }
     };
     this._addEventListener(document, "click", closeDropdownsHandler);
@@ -2183,7 +2324,9 @@ export class DataTable {
     this.state.clientPaginationState.totalPages = Math.max(1, totalPages);
 
     // Ensure current page is within bounds
-    if (this.state.clientPaginationState.currentPage > this.state.clientPaginationState.totalPages) {
+    if (
+      this.state.clientPaginationState.currentPage > this.state.clientPaginationState.totalPages
+    ) {
       this.state.clientPaginationState.currentPage = this.state.clientPaginationState.totalPages;
     }
     if (this.state.clientPaginationState.currentPage < 1) {
@@ -2367,24 +2510,24 @@ export class DataTable {
     const allPageSizes = [...pageSizes];
     const isAll = pageSize === "all";
     const numericSize = isAll ? null : parseInt(pageSize, 10);
-    
-    const hasSize = allPageSizes.some(s => {
-        if (s === "all") return isAll;
-        return parseInt(s, 10) === numericSize;
+
+    const hasSize = allPageSizes.some((s) => {
+      if (s === "all") return isAll;
+      return parseInt(s, 10) === numericSize;
     });
 
     if (!hasSize) {
-        if (isAll) {
-            allPageSizes.push("all");
-        } else if (Number.isFinite(numericSize)) {
-            allPageSizes.push(numericSize);
-            // Sort numbers, keep "all" at end
-            allPageSizes.sort((a, b) => {
-                if (a === "all") return 1;
-                if (b === "all") return -1;
-                return a - b;
-            });
-        }
+      if (isAll) {
+        allPageSizes.push("all");
+      } else if (Number.isFinite(numericSize)) {
+        allPageSizes.push(numericSize);
+        // Sort numbers, keep "all" at end
+        allPageSizes.sort((a, b) => {
+          if (a === "all") return 1;
+          if (b === "all") return -1;
+          return a - b;
+        });
+      }
     }
 
     // Calculate range display
@@ -2449,7 +2592,7 @@ export class DataTable {
         
         <div class="dt-client-pagination-size">
           <label class="dt-client-pagination-size__label">Per page:</label>
-          <select class="dt-client-pagination-size__select" data-pagination-size>
+          <select class="dt-client-pagination-size__select" data-pagination-size data-custom-select>
             ${pageSizeOptions}
           </select>
         </div>
@@ -2849,7 +2992,7 @@ export class DataTable {
 
     this.state.serverPaginationState.pageSize = newSize;
     this.state.serverPaginationState.currentPage = 1;
-    
+
     // Save state immediately
     this._saveState();
 
@@ -2905,8 +3048,8 @@ export class DataTable {
     // Ensure current pageSize is in the list to avoid UI mismatch
     const allPageSizes = [...pageSizes];
     const numericSize = parseInt(pageSize, 10);
-    
-    const hasSize = allPageSizes.some(s => parseInt(s, 10) === numericSize);
+
+    const hasSize = allPageSizes.some((s) => parseInt(s, 10) === numericSize);
 
     if (!hasSize && Number.isFinite(numericSize)) {
       allPageSizes.push(numericSize);
@@ -2967,7 +3110,7 @@ export class DataTable {
         
         <div class="dt-server-pagination-size">
           <label class="dt-server-pagination-size__label">Per page:</label>
-          <select class="dt-server-pagination-size__select" data-server-pagination-size>
+          <select class="dt-server-pagination-size__select" data-server-pagination-size data-custom-select>
             ${pageSizeOptions}
           </select>
         </div>
@@ -3099,8 +3242,7 @@ export class DataTable {
       }
     } else if (newBarHtml) {
       // Insert after scroll container (or after client pagination bar if it exists)
-      const insertAfter =
-        this.elements.clientPaginationBar || this.elements.scrollContainer;
+      const insertAfter = this.elements.clientPaginationBar || this.elements.scrollContainer;
       if (insertAfter) {
         insertAfter.insertAdjacentHTML("afterend", newBarHtml);
       }
@@ -4148,7 +4290,7 @@ export class DataTable {
       } else {
         this.state.userResizedColumns = {};
       }
-      
+
       // Restore server page size if saved
       if (saved.serverPageSize && Number.isFinite(saved.serverPageSize)) {
         this.state.serverPaginationState.pageSize = saved.serverPageSize;

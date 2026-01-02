@@ -267,7 +267,10 @@ pub fn init_notifier() -> Result<(), String> {
     let config = with_config(|c| c.telegram.clone());
 
     if !config.enabled {
-        logger::info(LogTag::Telegram, "Telegram notifications disabled in config");
+        logger::info(
+            LogTag::Telegram,
+            "Telegram notifications disabled in config",
+        );
         return Ok(());
     }
 
@@ -308,9 +311,8 @@ pub async fn send_notification(notification: Notification) {
     }
 
     // Get bot token and chat_id from config - this avoids holding lock across await
-    let (bot_token, chat_id) = with_config(|c| {
-        (c.telegram.bot_token.clone(), c.telegram.chat_id.clone())
-    });
+    let (bot_token, chat_id) =
+        with_config(|c| (c.telegram.bot_token.clone(), c.telegram.chat_id.clone()));
 
     if bot_token.is_empty() || chat_id.is_empty() {
         return;
@@ -334,7 +336,10 @@ pub async fn send_notification(notification: Notification) {
     };
 
     if let Err(e) = notifier.send(&notification).await {
-        logger::error(LogTag::Telegram, &format!("Failed to send notification: {}", e));
+        logger::error(
+            LogTag::Telegram,
+            &format!("Failed to send notification: {}", e),
+        );
     }
 }
 
@@ -343,7 +348,10 @@ pub fn queue_notification(notification: Notification) {
     if let Ok(guard) = NOTIFICATION_QUEUE.read() {
         if let Some(ref sender) = *guard {
             if sender.try_send(notification).is_err() {
-                logger::warning(LogTag::Telegram, "Notification queue full, dropping message");
+                logger::warning(
+                    LogTag::Telegram,
+                    "Notification queue full, dropping message",
+                );
             }
         }
     }

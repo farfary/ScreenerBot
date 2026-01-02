@@ -420,11 +420,15 @@
 
 /* Bot Card Glow on Running State */
 .bot-card[data-status="running"] {
-  box-shadow: 0 0 0 1px rgb(16, 185, 129, 0.2), 0 0 20px rgb(16, 185, 129, 0.1);
+  box-shadow:
+    0 0 0 1px rgb(16, 185, 129, 0.2),
+    0 0 20px rgb(16, 185, 129, 0.1);
 }
 
 .bot-card[data-status="running"]:hover {
-  box-shadow: 0 0 0 1px rgb(16, 185, 129, 0.3), 0 0 25px rgb(16, 185, 129, 0.15);
+  box-shadow:
+    0 0 0 1px rgb(16, 185, 129, 0.3),
+    0 0 25px rgb(16, 185, 129, 0.15);
 }
 
 .bot-card[data-status="stopped"] {
@@ -432,7 +436,9 @@
 }
 
 .bot-card[data-status="stopped"]:hover {
-  box-shadow: 0 0 0 1px rgb(239, 68, 68, 0.3), 0 0 15px rgb(239, 68, 68, 0.1);
+  box-shadow:
+    0 0 0 1px rgb(239, 68, 68, 0.3),
+    0 0 15px rgb(239, 68, 68, 0.1);
 }
 
 /* Quick Actions */

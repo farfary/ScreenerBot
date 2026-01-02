@@ -172,8 +172,14 @@ impl ProviderSelector for LatencySelector {
                     && states.get(&p.id).map(|s| s.is_healthy()).unwrap_or(true)
             })
             .min_by(|a, b| {
-                let lat_a = states.get(&a.id).map(|s| s.avg_latency_ms).unwrap_or(f64::MAX);
-                let lat_b = states.get(&b.id).map(|s| s.avg_latency_ms).unwrap_or(f64::MAX);
+                let lat_a = states
+                    .get(&a.id)
+                    .map(|s| s.avg_latency_ms)
+                    .unwrap_or(f64::MAX);
+                let lat_b = states
+                    .get(&b.id)
+                    .map(|s| s.avg_latency_ms)
+                    .unwrap_or(f64::MAX);
                 lat_a
                     .partial_cmp(&lat_b)
                     .unwrap_or(std::cmp::Ordering::Equal)

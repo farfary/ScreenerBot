@@ -23,7 +23,9 @@ use crate::tools::ToolStatus;
 use crate::wallets::{self, WalletRole, WalletWithKey};
 
 use super::strategies::{calculate_amount_clamped, calculate_delay, StrategyExecutor};
-use super::types::{SessionStatus, TransactionStatus, VolumeConfig, VolumeSession, VolumeTransaction};
+use super::types::{
+    SessionStatus, TransactionStatus, VolumeConfig, VolumeSession, VolumeTransaction,
+};
 
 /// Minimum SOL balance required per wallet for gas fees
 const MIN_WALLET_BALANCE_SOL: f64 = 0.01;
@@ -91,10 +93,7 @@ impl VolumeAggregator {
         let wallets = self.load_wallets().await?;
 
         // Create strategy executor with loaded wallets
-        self.strategy_executor = Some(StrategyExecutor::new(
-            wallets,
-            self.config.strategy.clone(),
-        ));
+        self.strategy_executor = Some(StrategyExecutor::new(wallets, self.config.strategy.clone()));
 
         self.status = ToolStatus::Ready;
         Ok(())
@@ -381,7 +380,8 @@ impl VolumeAggregator {
             }
 
             // Calculate amount for this transaction
-            let amount = calculate_amount_clamped(&self.config.sizing_config, session.remaining_volume());
+            let amount =
+                calculate_amount_clamped(&self.config.sizing_config, session.remaining_volume());
 
             // Skip if amount is too small
             if amount < 0.001 {
@@ -399,7 +399,10 @@ impl VolumeAggregator {
             let wallet_address = wallet.wallet.address.clone();
 
             // Determine if buy or sell based on wallet token balance
-            let token_balance = wallet_token_balances.get(&wallet_address).copied().unwrap_or(0);
+            let token_balance = wallet_token_balances
+                .get(&wallet_address)
+                .copied()
+                .unwrap_or(0);
             let is_buy = token_balance == 0 || tx_id % 2 == 0;
 
             // Create transaction record
@@ -443,7 +446,9 @@ impl VolumeAggregator {
 
                     // Update token balance tracking
                     if is_buy {
-                        let current = wallet_token_balances.entry(wallet_address.clone()).or_insert(0);
+                        let current = wallet_token_balances
+                            .entry(wallet_address.clone())
+                            .or_insert(0);
                         *current += result.output_amount;
                     } else {
                         wallet_token_balances.insert(wallet_address.clone(), 0);
@@ -467,10 +472,7 @@ impl VolumeAggregator {
                     // Update database
                     update_va_swap_result(swap_db_id, None, None, "failed", Some(&e))?;
 
-                    logger::warning(
-                        LogTag::Tools,
-                        &format!("Volume tx {} failed: {}", tx_id, e),
-                    );
+                    logger::warning(LogTag::Tools, &format!("Volume tx {} failed: {}", tx_id, e));
                 }
             }
 

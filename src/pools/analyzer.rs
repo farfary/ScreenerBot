@@ -60,9 +60,7 @@ pub struct PoolAnalyzer {
 
 impl PoolAnalyzer {
     /// Create new pool analyzer
-    pub fn new(
-        pool_directory: Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>,
-    ) -> Self {
+    pub fn new(pool_directory: Arc<RwLock<HashMap<Pubkey, PoolDescriptor>>>) -> Self {
         let (analyzer_tx, analyzer_rx) = mpsc::unbounded_channel();
 
         Self {
@@ -114,7 +112,7 @@ impl PoolAnalyzer {
 
         tokio::spawn(async move {
             logger::info(LogTag::PoolAnalyzer, "Pool analyzer task started");
-            
+
             // Get RPC client inside the task
             let rpc_client = get_rpc_client();
 
@@ -277,10 +275,7 @@ impl PoolAnalyzer {
 
                     logger::warning(
                         LogTag::PoolAnalyzer,
-                        &format!(
-                            "Pool account {} not found for token analysis",
-                            pool_id
-                        ),
+                        &format!("Pool account {} not found for token analysis", pool_id),
                     );
                     return None;
                 }

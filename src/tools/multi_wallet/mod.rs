@@ -30,8 +30,8 @@ mod types;
 
 // Re-export types
 pub use types::{
-    ConsolidateConfig, MultiBuyConfig, MultiSellConfig, SessionResult, SessionStatus, WalletOpResult,
-    WalletPlan,
+    ConsolidateConfig, MultiBuyConfig, MultiSellConfig, SessionResult, SessionStatus,
+    WalletOpResult, WalletPlan,
 };
 
 // Re-export transfer functions

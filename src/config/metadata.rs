@@ -326,22 +326,19 @@ pub fn collect_config_metadata() -> ConfigMetadata {
 fn derive_visibility(category: &str) -> &'static str {
     match category {
         // Primary - Essential user settings (expand by default)
-        "Core Trading" | "ROI Exit" | "DCA" | "Trailing Stop"
-        | "Liquidity" | "Market Cap" | "Security" | "Age"
-        | "Source Control" | "Global Control"
-        | "Connection" | "Notifications"
-        | "Endpoints" | "Router" | "Slippage"
-        | "Profit" | "Loss Detection" | "Partial Exit"
-        | "General" | "Commands" | "Features" => "primary",
+        "Core Trading" | "ROI Exit" | "DCA" | "Trailing Stop" | "Liquidity" | "Market Cap"
+        | "Security" | "Age" | "Source Control" | "Global Control" | "Connection"
+        | "Notifications" | "Endpoints" | "Router" | "Slippage" | "Profit" | "Loss Detection"
+        | "Partial Exit" | "General" | "Commands" | "Features" => "primary",
 
         // Secondary - Authentication, thresholds, etc.
         "Authentication" | "Thresholds" => "secondary",
 
         // Technical - Power-user settings (collapsed, grouped at bottom)
-        "Timeouts" | "Retries" | "Rate Limiting"
-        | "Circuit Breaker" | "Connection Pooling"
-        | "Statistics" | "Cache" | "Retention"
-        | "Debug" | "Validation" | "Provider Selection" => "technical",
+        "Timeouts" | "Retries" | "Rate Limiting" | "Circuit Breaker" | "Connection Pooling"
+        | "Statistics" | "Cache" | "Retention" | "Debug" | "Validation" | "Provider Selection" => {
+            "technical"
+        }
 
         // Secondary - Everything else (collapsed)
         _ => "secondary",

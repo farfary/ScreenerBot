@@ -56,8 +56,8 @@ pub async fn transfer_sol(
     let rpc_client = get_rpc_client();
 
     let from_pubkey = from_keypair.pubkey();
-    let to_pubkey = Pubkey::from_str(to_address)
-        .map_err(|e| format!("Invalid recipient address: {}", e))?;
+    let to_pubkey =
+        Pubkey::from_str(to_address).map_err(|e| format!("Invalid recipient address: {}", e))?;
 
     let lamports = sol_to_lamports(amount_sol);
 
@@ -125,10 +125,9 @@ pub async fn transfer_token(
     let rpc_client = get_rpc_client();
 
     let from_pubkey = from_keypair.pubkey();
-    let to_pubkey = Pubkey::from_str(to_address)
-        .map_err(|e| format!("Invalid recipient address: {}", e))?;
-    let mint_pubkey = Pubkey::from_str(mint)
-        .map_err(|e| format!("Invalid mint address: {}", e))?;
+    let to_pubkey =
+        Pubkey::from_str(to_address).map_err(|e| format!("Invalid recipient address: {}", e))?;
+    let mint_pubkey = Pubkey::from_str(mint).map_err(|e| format!("Invalid mint address: {}", e))?;
 
     // Fetch mint account to get decimals
     let mint_account = rpc_client
@@ -441,8 +440,7 @@ pub async fn close_ata(
     let rpc_client = get_rpc_client();
 
     let owner_pubkey = owner_keypair.pubkey();
-    let mint_pubkey = Pubkey::from_str(mint)
-        .map_err(|e| format!("Invalid mint address: {}", e))?;
+    let mint_pubkey = Pubkey::from_str(mint).map_err(|e| format!("Invalid mint address: {}", e))?;
 
     let token_program_id = if is_token_2022 {
         Pubkey::from_str(TOKEN_2022_PROGRAM_ID).unwrap()
