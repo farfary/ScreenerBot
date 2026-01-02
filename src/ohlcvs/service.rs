@@ -153,6 +153,44 @@ impl OhlcvServiceImpl {
             .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))??;
         }
 
+        // Fallback: if still empty and requested timeframe is not 1m, try aggregating from 1m data
+        if candles.is_empty() && timeframe != Timeframe::Minute1 {
+            let db = Arc::clone(&self.db);
+            let mint_owned = mint.to_string();
+            // Fetch enough 1m candles to aggregate into requested limit
+            // For 5m we need 5x more 1m candles, etc.
+            let multiplier = timeframe.to_seconds() / Timeframe::Minute1.to_seconds();
+            let raw_limit = limit * multiplier as usize;
+
+            let raw_candles = tokio::task::spawn_blocking(move || {
+                db.get_candles(
+                    &mint_owned,
+                    None,
+                    Timeframe::Minute1,
+                    from_timestamp,
+                    to_timestamp,
+                    Some(raw_limit),
+                )
+            })
+            .await
+            .map_err(|e| OhlcvError::DatabaseError(format!("Task join error: {}", e)))??;
+
+            if !raw_candles.is_empty() {
+                // Aggregate 1m data to requested timeframe
+                candles = OhlcvAggregator::aggregate(&raw_candles, Timeframe::Minute1, timeframe)?;
+                logger::debug(
+                    LogTag::Ohlcv,
+                    &format!(
+                        "Aggregated {} 1m candles to {} {} candles for {}",
+                        raw_candles.len(),
+                        candles.len(),
+                        timeframe,
+                        mint
+                    ),
+                );
+            }
+        }
+
         if candles.is_empty() {
             return Ok(Vec::new());
         }
