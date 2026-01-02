@@ -5,40 +5,52 @@
 use crate::config::with_config;
 use crate::positions;
 use crate::sol_price;
-use crate::telegram::formatters::{format_duration, format_mint_display};
+use crate::telegram::formatters::{format_duration, format_mint_display, format_sol};
 use crate::utils::get_sol_balance;
 use crate::version::VERSION;
 
 /// Handle /status command
 pub async fn handle_status_command() -> String {
     let trading_enabled = with_config(|cfg| cfg.trader.enabled);
+    let entry_enabled = with_config(|cfg| cfg.trader.entry_monitor_enabled);
+    let exit_enabled = with_config(|cfg| cfg.trader.exit_monitor_enabled);
     let open_positions = positions::get_open_positions_count().await;
     let uptime = (chrono::Utc::now() - *crate::global::STARTUP_TIME).num_seconds() as u64;
-    let services_ready = crate::global::are_core_services_ready();
+    let force_stopped = crate::global::is_force_stopped();
 
-    let uptime_str = format_duration(uptime);
-    let status_emoji = if trading_enabled && services_ready {
+    let status_emoji = if force_stopped {
+        "🚨"
+    } else if trading_enabled {
         "🟢"
-    } else if services_ready {
-        "🟡"
     } else {
-        "🔴"
+        "🟡"
     };
-    let trading_status = if trading_enabled { "Enabled" } else { "Disabled" };
+
+    let trading_status = if force_stopped {
+        "Force Stopped"
+    } else if trading_enabled {
+        "Active"
+    } else {
+        "Paused"
+    };
+
+    let entry_icon = if entry_enabled { "✅" } else { "⏸️" };
+    let exit_icon = if exit_enabled { "✅" } else { "⏸️" };
 
     format!(
-        "{} <b>ScreenerBot Status</b>\n\n\
-         Version: {}\n\
-         Uptime: {}\n\
-         Trading: {}\n\
-         Open Positions: {}\n\
-         Services Ready: {}",
+        "{} <b>Status</b>  ·  v{}\n\n\
+         <b>Trading:</b> {}\n\
+         ├ Entry: {}\n\
+         └ Exit: {}\n\n\
+         📦 Positions: {}\n\
+         ⏱️ Uptime: {}",
         status_emoji,
         VERSION,
-        uptime_str,
         trading_status,
+        entry_icon,
+        exit_icon,
         open_positions,
-        if services_ready { "Yes ✅" } else { "No ❌" }
+        format_duration(uptime),
     )
 }
 
@@ -47,34 +59,45 @@ pub async fn handle_positions_command() -> String {
     let positions = positions::get_open_positions().await;
 
     if positions.is_empty() {
-        return "📊 <b>No Open Positions</b>\n\nYou have no active positions.".to_string();
+        return "📦 <b>No Open Positions</b>".to_string();
     }
 
-    let mut response = format!("📊 <b>Open Positions ({})</b>\n\n", positions.len());
+    let mut response = format!("📦 <b>Positions ({})</b>\n\n", positions.len());
+
+    let mut total_invested = 0.0;
+    let mut total_pnl = 0.0;
 
     for (i, pos) in positions.iter().take(10).enumerate() {
-        let pnl_emoji = if pos.unrealized_pnl.unwrap_or(0.0) >= 0.0 {
-            "🟢"
-        } else {
-            "🔴"
-        };
         let pnl_pct = pos.unrealized_pnl_percent.unwrap_or(0.0);
-        let pnl_sign = if pnl_pct >= 0.0 { "+" } else { "" };
+        let pnl_sol = pos.unrealized_pnl.unwrap_or(0.0);
+        let pnl_emoji = if pnl_pct >= 0.0 { "🟢" } else { "🔴" };
+        let sign = if pnl_pct >= 0.0 { "+" } else { "" };
 
         response.push_str(&format!(
-            "{}. <code>${}</code> {}\n   Size: {:.4} SOL | P&L: {}{:.2}%\n\n",
+            "{}. <code>${}</code> {} {}{:.1}%  ·  {} SOL\n",
             i + 1,
             pos.symbol,
             pnl_emoji,
-            pos.total_size_sol,
-            pnl_sign,
-            pnl_pct
+            sign,
+            pnl_pct,
+            format_sol(pos.total_size_sol),
         ));
+
+        total_invested += pos.total_size_sol;
+        total_pnl += pnl_sol;
     }
 
     if positions.len() > 10 {
-        response.push_str(&format!("... and {} more", positions.len() - 10));
+        response.push_str(&format!("\n<i>+{} more...</i>\n", positions.len() - 10));
     }
+
+    let pnl_emoji = if total_pnl >= 0.0 { "🟢" } else { "🔴" };
+    response.push_str(&format!(
+        "\n<b>Total:</b> {} SOL  ·  {} SOL {}",
+        format_sol(total_invested),
+        format_sol(total_pnl),
+        pnl_emoji,
+    ));
 
     response
 }
@@ -83,62 +106,52 @@ pub async fn handle_positions_command() -> String {
 pub async fn handle_balance_command() -> String {
     let wallet_address = match crate::utils::get_wallet_address() {
         Ok(addr) => addr,
-        Err(e) => return format!("❌ <b>Error</b>\n\nFailed to get wallet address: {}", e),
+        Err(e) => return format!("❌ {}", e),
     };
 
     let sol_balance = match get_sol_balance(&wallet_address).await {
         Ok(balance) => balance,
-        Err(e) => return format!("❌ <b>Error</b>\n\nFailed to get SOL balance: {}", e),
+        Err(e) => return format!("❌ {}", e),
     };
 
-    // Get SOL price for USD value
     let sol_price_usd = sol_price::get_sol_price();
     let usd_value = sol_balance * sol_price_usd;
 
     format!(
-        "💰 <b>Wallet Balance</b>\n\n\
-         Address: <code>{}</code>\n\
-         SOL: {:.4}\n\
-         USD: ${:.2}",
+        "💰 <b>Balance</b>\n\n\
+         <code>{}</code>\n\n\
+         🪨 <b>{} SOL</b>\n\
+         💵 ${:.2}",
         format_mint_display(&wallet_address),
-        sol_balance,
-        usd_value
+        format_sol(sol_balance),
+        usd_value,
     )
 }
 
 /// Handle /stats command
 pub async fn handle_stats_command() -> String {
     let positions = positions::get_open_positions().await;
-    let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
 
-    // Calculate totals from open positions
     let mut total_invested = 0.0;
-    let mut total_unrealized_pnl = 0.0;
+    let mut total_pnl = 0.0;
 
     for pos in &positions {
         total_invested += pos.total_size_sol;
-        total_unrealized_pnl += pos.unrealized_pnl.unwrap_or(0.0);
+        total_pnl += pos.unrealized_pnl.unwrap_or(0.0);
     }
 
-    let pnl_emoji = if total_unrealized_pnl >= 0.0 {
-        "🟢"
-    } else {
-        "🔴"
-    };
-    let pnl_sign = if total_unrealized_pnl >= 0.0 { "+" } else { "" };
+    let pnl_emoji = if total_pnl >= 0.0 { "🟢" } else { "🔴" };
+    let sign = if total_pnl >= 0.0 { "+" } else { "" };
 
     format!(
-        "📈 <b>Trading Statistics</b>\n\n\
-         Date: {}\n\n\
-         <b>Open Positions:</b> {}\n\
-         <b>Total Invested:</b> {:.4} SOL\n\
-         <b>Unrealized P&L:</b> {}{:.4} SOL {}\n\n\
-         <i>Use /positions to see individual positions</i>",
-        today,
+        "📈 <b>Stats</b>\n\n\
+         📦 Positions: {}\n\
+         💵 Invested: {} SOL\n\
+         📊 P&L: {}{} SOL {}",
         positions.len(),
-        total_invested,
-        pnl_sign,
-        total_unrealized_pnl,
-        pnl_emoji
+        format_sol(total_invested),
+        sign,
+        format_sol(total_pnl),
+        pnl_emoji,
     )
 }
