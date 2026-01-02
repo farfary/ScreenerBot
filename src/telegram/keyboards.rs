@@ -1,12 +1,44 @@
-//! Telegram inline keyboard builders for ScreenerBot
+//! Telegram keyboard builders for ScreenerBot
 //!
 //! Provides pre-built keyboard layouts for:
-//! - Main menu navigation
+//! - Reply keyboard (persistent bottom keyboard)
+//! - Main menu navigation (inline)
 //! - Position management actions
 //! - Confirmation dialogs
 //! - Settings quick toggles
 
-use teloxide::types::{InlineKeyboardButton, InlineKeyboardMarkup};
+use teloxide::types::{
+    InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, KeyboardMarkup,
+};
+
+// === REPLY KEYBOARD (Bottom persistent keyboard) ===
+
+/// Create the main reply keyboard that appears at the bottom of Telegram
+/// This replaces the default keyboard and persists until removed
+pub fn main_reply_keyboard() -> KeyboardMarkup {
+    KeyboardMarkup::new(vec![
+        // Row 1: Primary actions
+        vec![
+            KeyboardButton::new("📊 Status"),
+            KeyboardButton::new("💰 Balance"),
+            KeyboardButton::new("📈 Positions"),
+        ],
+        // Row 2: Trading controls
+        vec![
+            KeyboardButton::new("⏸️ Pause"),
+            KeyboardButton::new("▶️ Resume"),
+            KeyboardButton::new("🛑 Stop"),
+        ],
+        // Row 3: Info
+        vec![
+            KeyboardButton::new("📉 Stats"),
+            KeyboardButton::new("⚙️ Menu"),
+            KeyboardButton::new("❓ Help"),
+        ],
+    ])
+    .resize_keyboard() // Make keyboard smaller/fit content
+    .persistent() // Keep keyboard visible
+}
 
 // === HELPER FUNCTIONS ===
 

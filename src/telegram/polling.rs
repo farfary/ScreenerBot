@@ -82,6 +82,12 @@ async fn poll_updates(bot: &Bot) {
 
     match request.await {
         Ok(updates) => {
+            if !updates.is_empty() {
+                logger::debug(
+                    LogTag::Telegram,
+                    &format!("Received {} updates from Telegram", updates.len()),
+                );
+            }
             for update in updates {
                 // Track the update ID for offset
                 let update_id = update.id.0 as i32;
@@ -100,6 +106,18 @@ async fn poll_updates(bot: &Bot) {
                         };
 
                         let chat_id = message.chat.id;
+
+                        // Log received message
+                        logger::debug(
+                            LogTag::Telegram,
+                            &format!(
+                                "Message from user {} in chat {}: {:?}",
+                                username.as_deref().unwrap_or("unknown"),
+                                chat_id.0,
+                                message.text().unwrap_or("<no text>")
+                            ),
+                        );
+
                         let manager = get_session_manager();
 
                         // Check if in discovery mode - capture chats before normal processing

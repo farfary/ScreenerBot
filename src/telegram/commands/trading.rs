@@ -13,29 +13,22 @@ fn is_trader_enabled() -> bool {
     crate::config::with_config(|cfg| cfg.trader.enabled)
 }
 
-/// Handle /start command - Enable trading
+/// Handle /start command - Welcome message and enable trading
 pub async fn handle_start_command() -> String {
     let currently_enabled = is_trader_enabled();
 
     if currently_enabled {
-        return "✅ <b>Trading is already enabled</b>".to_string();
-    }
-
-    // Enable trading via config
-    match update_config_section(
-        |cfg| {
-            cfg.trader.enabled = true;
-        },
-        true,
-    ) {
-        Ok(()) => {
-            logger::info(LogTag::Telegram, "Trading enabled via Telegram command");
-            "✅ <b>Trading Enabled</b>\n\nThe bot will now monitor for entry signals and execute trades."
-                .to_string()
-        }
-        Err(e) => {
-            format!("❌ <b>Failed to enable trading</b>\n\nError: {}", e)
-        }
+        "🚀 <b>ScreenerBot is Ready!</b>\n\n\
+        Trading is <b>enabled</b>.\n\n\
+        Use the keyboard below to control the bot.\n\
+        Type /help for available commands."
+            .to_string()
+    } else {
+        "🚀 <b>Welcome to ScreenerBot!</b>\n\n\
+        Trading is currently <b>disabled</b>.\n\n\
+        Use the keyboard below to control the bot.\n\
+        Press ▶️ Resume to start trading."
+            .to_string()
     }
 }
 

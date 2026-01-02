@@ -18,11 +18,28 @@ pub use trading::{
 
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
+use crate::telegram::keyboards;
 use crate::telegram::session::get_session_manager;
 use crate::telegram::types::SessionState;
 use std::time::Duration;
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, ParseMode};
+
+/// Map keyboard button text to commands
+fn button_to_command(text: &str) -> Option<&'static str> {
+    match text {
+        "📊 Status" => Some("/status"),
+        "💰 Balance" => Some("/balance"),
+        "📈 Positions" => Some("/positions"),
+        "⏸️ Pause" => Some("/pause"),
+        "▶️ Resume" => Some("/resume"),
+        "🛑 Stop" => Some("/force_stop"),
+        "📉 Stats" => Some("/stats"),
+        "⚙️ Menu" => Some("/menu"),
+        "❓ Help" => Some("/help"),
+        _ => None,
+    }
+}
 
 /// Handle a single command from text message
 pub async fn handle_command(
@@ -33,12 +50,15 @@ pub async fn handle_command(
 ) -> Result<(), String> {
     let text = text.trim();
 
-    // Check if it's a command
-    if !text.starts_with('/') {
+    // Map keyboard button text to command, or use text directly if it's a command
+    let command = if text.starts_with('/') {
+        text.split_whitespace().next().unwrap_or("")
+    } else if let Some(cmd) = button_to_command(text) {
+        cmd
+    } else {
+        // Not a command or known button text
         return Ok(());
-    }
-
-    let command = text.split_whitespace().next().unwrap_or("");
+    };
 
     // Check authentication for sensitive commands
     let is_sensitive = matches!(
@@ -64,6 +84,18 @@ pub async fn handle_command(
 
     // Commands that require special handling (with keyboard)
     match command {
+        "/start" => {
+            // Send welcome message with reply keyboard
+            let response = handle_start_command().await;
+            bot.send_message(chat_id, &response)
+                .parse_mode(ParseMode::Html)
+                .reply_markup(keyboards::main_reply_keyboard())
+                .await
+                .map_err(|e| format!("Failed to send start response: {}", e))?;
+
+            logger::info(LogTag::Telegram, "Handled /start command with reply keyboard");
+            return Ok(());
+        }
         "/menu" => {
             return handle_menu_command(bot, chat_id).await;
         }
@@ -77,7 +109,6 @@ pub async fn handle_command(
     }
 
     let response = match command {
-        "/start" => handle_start_command().await,
         "/stop" => handle_stop_command().await,
         "/status" => handle_status_command().await,
         "/positions" => handle_positions_command().await,
