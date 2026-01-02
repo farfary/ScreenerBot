@@ -334,8 +334,8 @@ fn register_all_services(manager: &mut ServiceManager) {
   manager.register(Box::new(crate::trader::TraderService::new()));
   manager.register(Box::new(WebserverService));
 
-  // Notification service (Telegram integration)
-  manager.register(Box::new(NotificationService));
+  // Telegram service (notifications + commands + discovery)
+  manager.register(Box::new(crate::telegram::TelegramService::new()));
 
   // Background utility services
   manager.register(Box::new(UpdateCheckService));

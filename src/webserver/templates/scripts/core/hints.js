@@ -824,6 +824,54 @@ Get notified about trades, positions, and important events directly in Telegram.
 Messages are sent directly from ScreenerBot to your Telegram bot — no third-party servers involved.`,
       learnMoreUrl: "https://screenerbot.io/docs/config/telegram",
     },
+    password: {
+      id: "config.telegram.password",
+      title: "Bot Authentication Password",
+      content: `**Secure your Telegram bot with password authentication**
+
+When you interact with your ScreenerBot Telegram bot, you'll need to authenticate with this password before executing sensitive commands.
+
+**Why set a password?**
+• Prevents unauthorized users from controlling your bot
+• Required for executing trading commands via Telegram
+• Must be at least 8 characters long
+
+**How it works:**
+1. Set a password here in the dashboard
+2. When you message your bot with a trading command, it will ask for authentication
+3. Enter your password to verify your identity
+4. Optionally enable 2FA for additional security
+
+**Note:** The password is stored as a secure SHA256 hash — we never store the plain text.`,
+      learnMoreUrl: "https://screenerbot.io/docs/config/telegram",
+    },
+    totp: {
+      id: "config.telegram.totp",
+      title: "Two-Factor Authentication (2FA)",
+      content: `**Add an extra layer of security with TOTP 2FA**
+
+Two-factor authentication uses time-based one-time passwords (TOTP) from apps like Google Authenticator, Authy, or 1Password.
+
+**Why enable 2FA?**
+• Even if someone knows your password, they can't access your bot without the code
+• 6-digit codes change every 30 seconds
+• Works offline once set up
+
+**Setup process:**
+1. Click "Enable 2FA" and enter your password
+2. Scan the QR code with your authenticator app
+3. Enter the 6-digit code to verify setup
+
+**Compatible apps:**
+• Google Authenticator
+• Authy
+• 1Password
+• Microsoft Authenticator
+• Any TOTP-compatible app
+
+**Important:** Save your secret key in a safe place. If you lose access to your authenticator app, you'll need to disable 2FA from this dashboard.`,
+      learnMoreUrl: "https://screenerbot.io/docs/config/telegram",
+    },
   },
 
   // ═══════════════════════════════════════════════════════════════════════════

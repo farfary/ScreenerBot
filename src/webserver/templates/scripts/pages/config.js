@@ -1333,18 +1333,20 @@ function renderSectionActions(sectionId, container) {
 }
 
 /**
- * Render Telegram-specific actions (Test Connection button)
+ * Render Telegram-specific actions (Test Connection, Authentication)
  */
-function renderTelegramActions(container) {
-  const hint = Hints.getHint("configTelegram.overview");
-  const hintHtml = hint ? HintTrigger.render(hint, "configTelegram.overview", { size: "sm" }) : "";
+async function renderTelegramActions(container) {
+  const overviewHint = Hints.getHint("configTelegram.overview");
+  const overviewHintHtml = overviewHint
+    ? HintTrigger.render(overviewHint, "configTelegram.overview", { size: "sm" })
+    : "";
 
   const actionsPanel = create("div", { className: "config-section-actions" });
   actionsPanel.innerHTML = `
     <div class="config-actions-header">
       <i class="icon-send"></i>
       <span>Actions</span>
-      ${hintHtml}
+      ${overviewHintHtml}
     </div>
     <div class="config-actions-body">
       <div class="config-action-item">
@@ -1352,22 +1354,42 @@ function renderTelegramActions(container) {
           <div class="config-action-title">Test Connection</div>
           <div class="config-action-desc">Send a test message to verify your Telegram configuration is working</div>
         </div>
-        <button type="button" class="btn primary" id="telegram-test-btn">
-          <i class="icon-send"></i> Send Test Message
+        <button type="button" class="btn primary" id="telegram-test-btn" disabled title="Loading...">
+          <i class="icon-loader spin"></i> Loading...
         </button>
       </div>
-      <div class="config-action-status" id="telegram-status"></div>
+      <div class="config-action-status" id="telegram-status" role="status" aria-live="polite"></div>
     </div>
   `;
 
   container.appendChild(actionsPanel);
 
-  // Initialize hint triggers
-  HintTrigger.initAll();
-
   // Wire up test button
   const testBtn = actionsPanel.querySelector("#telegram-test-btn");
   const statusEl = actionsPanel.querySelector("#telegram-status");
+
+  // Check if Telegram is configured before enabling test button
+  try {
+    const response = await fetch("/api/telegram/status");
+    const data = await response.json();
+    const isConfigured = data.data?.bot_configured;
+
+    if (isConfigured) {
+      testBtn.disabled = false;
+      testBtn.title = "";
+      testBtn.innerHTML = '<i class="icon-send"></i> Send Test Message';
+    } else {
+      testBtn.disabled = true;
+      testBtn.title = "Configure bot token first";
+      testBtn.innerHTML = '<i class="icon-send"></i> Send Test Message';
+      statusEl.className = "config-action-status info";
+      statusEl.innerHTML = '<i class="icon-info"></i> Configure bot token above to enable testing';
+    }
+  } catch {
+    testBtn.disabled = false;
+    testBtn.title = "";
+    testBtn.innerHTML = '<i class="icon-send"></i> Send Test Message';
+  }
 
   on(testBtn, "click", async () => {
     testBtn.disabled = true;
@@ -1376,7 +1398,7 @@ function renderTelegramActions(container) {
     statusEl.textContent = "";
 
     try {
-      const response = await fetch("/api/tools/telegram/test", { method: "POST" });
+      const response = await fetch("/api/telegram/test", { method: "POST", headers: { "Content-Type": "application/json" } });
       const data = await response.json();
 
       if (response.ok && data.success) {
@@ -1394,6 +1416,612 @@ function renderTelegramActions(container) {
     } finally {
       testBtn.disabled = false;
       testBtn.innerHTML = '<i class="icon-send"></i> Send Test Message';
+    }
+  });
+
+  // Render authentication section
+  renderTelegramAuthSection(container);
+
+  // Initialize hint triggers after all sections are added
+  HintTrigger.initAll();
+}
+
+/**
+ * Render Telegram Authentication Section (Password + TOTP 2FA)
+ */
+async function renderTelegramAuthSection(container) {
+  const passwordHint = Hints.getHint("configTelegram.password");
+  const passwordHintHtml = passwordHint
+    ? HintTrigger.render(passwordHint, "configTelegram.password", { size: "sm" })
+    : "";
+
+  const totpHint = Hints.getHint("configTelegram.totp");
+  const totpHintHtml = totpHint ? HintTrigger.render(totpHint, "configTelegram.totp", { size: "sm" }) : "";
+
+  const authPanel = create("div", { className: "config-section-actions telegram-auth-section" });
+  authPanel.innerHTML = `
+    <div class="config-actions-header">
+      <i class="icon-shield"></i>
+      <span>Bot Authentication</span>
+    </div>
+    <div class="config-actions-body">
+      <!-- Password Section -->
+      <div class="telegram-auth-subsection">
+        <div class="telegram-auth-header">
+          <div class="telegram-auth-title">
+            <i class="icon-lock"></i>
+            <span>Password</span>
+            ${passwordHintHtml}
+          </div>
+          <div class="telegram-auth-status" id="telegram-password-status" role="status" aria-live="polite">
+            <i class="icon-loader spin"></i> Loading...
+          </div>
+        </div>
+        <div class="telegram-auth-content" id="telegram-password-content"></div>
+      </div>
+
+      <!-- TOTP 2FA Section -->
+      <div class="telegram-auth-subsection" id="telegram-totp-section" style="display: none;">
+        <div class="telegram-auth-header">
+          <div class="telegram-auth-title">
+            <i class="icon-key"></i>
+            <span>Two-Factor Authentication</span>
+            ${totpHintHtml}
+          </div>
+          <div class="telegram-auth-status" id="telegram-totp-status" role="status" aria-live="polite">
+            <i class="icon-loader spin"></i> Loading...
+          </div>
+        </div>
+        <div class="telegram-auth-content" id="telegram-totp-content"></div>
+      </div>
+    </div>
+  `;
+
+  container.appendChild(authPanel);
+
+  // Load initial auth state
+  await loadTelegramAuthState(authPanel);
+}
+
+/**
+ * Load Telegram authentication state and render UI
+ */
+async function loadTelegramAuthState(authPanel) {
+  const passwordStatusEl = authPanel.querySelector("#telegram-password-status");
+  const passwordContentEl = authPanel.querySelector("#telegram-password-content");
+  const totpSection = authPanel.querySelector("#telegram-totp-section");
+  const totpStatusEl = authPanel.querySelector("#telegram-totp-status");
+  const totpContentEl = authPanel.querySelector("#telegram-totp-content");
+
+  try {
+    // Fetch current settings to check password_configured
+    const settingsResponse = await fetch("/api/telegram/settings");
+    const settingsData = await settingsResponse.json();
+
+    if (!settingsResponse.ok) {
+      throw new Error(settingsData.error || "Failed to load settings");
+    }
+
+    const passwordConfigured = settingsData.data?.password_configured || false;
+    const totpEnabled = settingsData.data?.totp_enabled || false;
+
+    // Render password section
+    renderPasswordSection(passwordStatusEl, passwordContentEl, passwordConfigured);
+
+    // Show TOTP section only if password is configured
+    if (passwordConfigured) {
+      totpSection.style.display = "";
+      renderTotpSection(totpStatusEl, totpContentEl, totpEnabled);
+    } else {
+      totpSection.style.display = "none";
+    }
+  } catch (error) {
+    passwordStatusEl.innerHTML = `<span class="status-error"><i class="icon-alert-circle"></i> Error</span>`;
+    passwordContentEl.innerHTML = `<div class="telegram-auth-error">${Utils.escapeHtml(error.message)}</div>`;
+  }
+}
+
+/**
+ * Render password configuration section
+ */
+function renderPasswordSection(statusEl, contentEl, isConfigured) {
+  if (isConfigured) {
+    statusEl.innerHTML = `<span class="status-success"><i class="icon-check-circle"></i> Configured</span>`;
+    contentEl.innerHTML = `
+      <div class="telegram-auth-row">
+        <div class="telegram-auth-info">
+          <span>Password is set and active for Telegram bot authentication.</span>
+        </div>
+        <button type="button" class="btn secondary" id="telegram-change-password-btn">
+          <i class="icon-edit-2"></i> Change Password
+        </button>
+      </div>
+      <div class="telegram-auth-form-container" id="telegram-password-form-container" style="display: none;"></div>
+    `;
+
+    const changeBtn = contentEl.querySelector("#telegram-change-password-btn");
+    const formContainer = contentEl.querySelector("#telegram-password-form-container");
+
+    on(changeBtn, "click", () => {
+      const isVisible = formContainer.style.display !== "none";
+      if (isVisible) {
+        formContainer.style.display = "none";
+        changeBtn.innerHTML = '<i class="icon-edit-2"></i> Change Password';
+      } else {
+        formContainer.style.display = "";
+        changeBtn.innerHTML = '<i class="icon-x"></i> Cancel';
+        renderPasswordForm(formContainer, true);
+      }
+    });
+  } else {
+    statusEl.innerHTML = `<span class="status-warning"><i class="icon-alert-circle"></i> Not Set</span>`;
+    contentEl.innerHTML = `
+      <div class="telegram-auth-row">
+        <div class="telegram-auth-info">
+          <span>Set a password to enable Telegram bot authentication.</span>
+        </div>
+        <button type="button" class="btn primary" id="telegram-set-password-btn">
+          <i class="icon-lock"></i> Set Password
+        </button>
+      </div>
+      <div class="telegram-auth-form-container" id="telegram-password-form-container" style="display: none;"></div>
+    `;
+
+    const setBtn = contentEl.querySelector("#telegram-set-password-btn");
+    const formContainer = contentEl.querySelector("#telegram-password-form-container");
+
+    on(setBtn, "click", () => {
+      const isVisible = formContainer.style.display !== "none";
+      if (isVisible) {
+        formContainer.style.display = "none";
+        setBtn.innerHTML = '<i class="icon-lock"></i> Set Password';
+      } else {
+        formContainer.style.display = "";
+        setBtn.innerHTML = '<i class="icon-x"></i> Cancel';
+        renderPasswordForm(formContainer, false);
+      }
+    });
+  }
+}
+
+/**
+ * Render password form
+ */
+function renderPasswordForm(formContainer, hasExistingPassword) {
+  formContainer.innerHTML = `
+    <form class="telegram-auth-form" id="telegram-password-form">
+      ${
+        hasExistingPassword
+          ? `
+        <div class="form-group">
+          <label for="telegram-current-password">Current Password <span class="required">*</span></label>
+          <input type="password" id="telegram-current-password" placeholder="Enter current password" required autocomplete="current-password" />
+        </div>
+      `
+          : ""
+      }
+      <div class="form-group">
+        <label for="telegram-new-password">New Password <span class="required">*</span></label>
+        <input type="password" id="telegram-new-password" placeholder="Minimum 8 characters" minlength="8" required autocomplete="new-password" />
+      </div>
+      <div class="form-group">
+        <label for="telegram-confirm-password">Confirm Password <span class="required">*</span></label>
+        <input type="password" id="telegram-confirm-password" placeholder="Confirm your password" required autocomplete="new-password" />
+      </div>
+      <div class="telegram-auth-form-error" id="telegram-password-error" role="alert" aria-live="polite"></div>
+      <div class="telegram-auth-form-actions">
+        <button type="submit" class="btn primary" id="telegram-password-submit">
+          <i class="icon-check"></i> ${hasExistingPassword ? "Update Password" : "Set Password"}
+        </button>
+      </div>
+    </form>
+  `;
+
+  const form = formContainer.querySelector("#telegram-password-form");
+  const errorEl = formContainer.querySelector("#telegram-password-error");
+  const submitBtn = formContainer.querySelector("#telegram-password-submit");
+
+  // Clear errors on input
+  on(form, "input", () => {
+    errorEl.textContent = "";
+  });
+
+  on(form, "submit", async (e) => {
+    e.preventDefault();
+    // Race condition guard
+    if (form.dataset.submitting === "true") return;
+    form.dataset.submitting = "true";
+    errorEl.textContent = "";
+
+    const newPassword = form.querySelector("#telegram-new-password").value;
+    const confirmPassword = form.querySelector("#telegram-confirm-password").value;
+    const currentPasswordEl = form.querySelector("#telegram-current-password");
+    const currentPassword = currentPasswordEl ? currentPasswordEl.value : undefined;
+
+    // Validation
+    if (newPassword.length < 8) {
+      errorEl.textContent = "Password must be at least 8 characters long.";
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      errorEl.textContent = "Passwords do not match.";
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="icon-loader spin"></i> Saving...';
+
+    try {
+      const body = { password: newPassword };
+      if (currentPassword) {
+        body.current_password = currentPassword;
+      }
+
+      const response = await fetch("/api/telegram/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        Utils.showToast("Password updated successfully", "success");
+        // Refresh the entire auth section
+        const authPanel = formContainer.closest(".telegram-auth-section");
+        if (authPanel) {
+          await loadTelegramAuthState(authPanel);
+        }
+      } else {
+        throw new Error(data.error || data.message || "Failed to set password");
+      }
+    } catch (error) {
+      errorEl.textContent = error.message;
+    } finally {
+      form.dataset.submitting = "false";
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = `<i class="icon-check"></i> ${hasExistingPassword ? "Update Password" : "Set Password"}`;
+    }
+  });
+}
+
+/**
+ * Render TOTP 2FA section
+ */
+function renderTotpSection(statusEl, contentEl, isEnabled) {
+  if (isEnabled) {
+    statusEl.innerHTML = `<span class="status-success"><i class="icon-check-circle"></i> Enabled</span>`;
+    contentEl.innerHTML = `
+      <div class="telegram-auth-row">
+        <div class="telegram-auth-info">
+          <span>Two-factor authentication is active. You'll need your authenticator app to use Telegram commands.</span>
+        </div>
+        <button type="button" class="btn danger" id="telegram-disable-totp-btn">
+          <i class="icon-x"></i> Disable 2FA
+        </button>
+      </div>
+      <div class="telegram-auth-form-container" id="telegram-totp-form-container" style="display: none;"></div>
+    `;
+
+    const disableBtn = contentEl.querySelector("#telegram-disable-totp-btn");
+    const formContainer = contentEl.querySelector("#telegram-totp-form-container");
+
+    on(disableBtn, "click", () => {
+      const isVisible = formContainer.style.display !== "none";
+      if (isVisible) {
+        formContainer.style.display = "none";
+        disableBtn.innerHTML = '<i class="icon-x"></i> Disable 2FA';
+      } else {
+        formContainer.style.display = "";
+        disableBtn.innerHTML = '<i class="icon-x"></i> Cancel';
+        renderTotpDisableForm(formContainer);
+      }
+    });
+  } else {
+    statusEl.innerHTML = `<span class="status-warning"><i class="icon-alert-circle"></i> Not Configured</span>`;
+    contentEl.innerHTML = `
+      <div class="telegram-auth-row">
+        <div class="telegram-auth-info">
+          <span>Add an extra layer of security by enabling two-factor authentication with Google Authenticator or similar apps.</span>
+        </div>
+        <button type="button" class="btn primary" id="telegram-enable-totp-btn">
+          <i class="icon-shield"></i> Enable 2FA
+        </button>
+      </div>
+      <div class="telegram-auth-form-container" id="telegram-totp-form-container" style="display: none;"></div>
+    `;
+
+    const enableBtn = contentEl.querySelector("#telegram-enable-totp-btn");
+    const formContainer = contentEl.querySelector("#telegram-totp-form-container");
+
+    on(enableBtn, "click", () => {
+      const isVisible = formContainer.style.display !== "none";
+      if (isVisible) {
+        formContainer.style.display = "none";
+        enableBtn.innerHTML = '<i class="icon-shield"></i> Enable 2FA';
+      } else {
+        formContainer.style.display = "";
+        enableBtn.innerHTML = '<i class="icon-x"></i> Cancel';
+        renderTotpSetupForm(formContainer);
+      }
+    });
+  }
+}
+
+/**
+ * Render TOTP setup form (Step 1: Enter password to generate secret)
+ */
+function renderTotpSetupForm(formContainer) {
+  formContainer.innerHTML = `
+    <form class="telegram-auth-form" id="telegram-totp-setup-form">
+      <div class="telegram-totp-step" role="group" aria-labelledby="totp-step-1-title">
+        <div class="telegram-totp-step-header">
+          <span class="telegram-totp-step-number" aria-hidden="true">1</span>
+          <span id="totp-step-1-title" class="telegram-totp-step-title">Verify your password</span>
+        </div>
+        <div class="form-group">
+          <label for="telegram-totp-password">Password <span class="required">*</span></label>
+          <input type="password" id="telegram-totp-password" placeholder="Enter your password" required autocomplete="current-password" />
+        </div>
+      </div>
+      <div class="telegram-auth-form-error" id="telegram-totp-setup-error"></div>
+      <div class="telegram-auth-form-actions">
+        <button type="submit" class="btn primary" id="telegram-totp-setup-submit">
+          <i class="icon-arrow-right"></i> Continue
+        </button>
+      </div>
+    </form>
+  `;
+
+  const form = formContainer.querySelector("#telegram-totp-setup-form");
+  const errorEl = formContainer.querySelector("#telegram-totp-setup-error");
+  const submitBtn = formContainer.querySelector("#telegram-totp-setup-submit");
+
+  // Clear errors on input
+  on(form, "input", () => {
+    errorEl.textContent = "";
+  });
+
+  on(form, "submit", async (e) => {
+    e.preventDefault();
+    // Race condition guard
+    if (form.dataset.submitting === "true") return;
+    form.dataset.submitting = "true";
+    errorEl.textContent = "";
+
+    const password = form.querySelector("#telegram-totp-password").value;
+
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="icon-loader spin"></i> Generating...';
+
+    try {
+      const response = await fetch("/api/telegram/totp/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Show QR code and verification step
+        renderTotpVerifyForm(formContainer, data.data);
+      } else {
+        throw new Error(data.error || data.message || "Failed to generate 2FA secret");
+      }
+    } catch (error) {
+      errorEl.textContent = error.message;
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i class="icon-arrow-right"></i> Continue';
+    } finally {
+      form.dataset.submitting = "false";
+    }
+  });
+}
+
+/**
+ * Render TOTP verification form (Step 2: Scan QR and verify code)
+ */
+function renderTotpVerifyForm(formContainer, totpData) {
+  const { secret, qr_code } = totpData;
+
+  // Validate QR code is a safe data URL (XSS prevention)
+  const safeQrCode = qr_code && qr_code.startsWith("data:image/") ? qr_code : "";
+
+  formContainer.innerHTML = `
+    <div class="telegram-totp-setup-complete">
+      <div class="telegram-totp-step" role="group" aria-labelledby="totp-step-2-title">
+        <div class="telegram-totp-step-header">
+          <span class="telegram-totp-step-number" aria-hidden="true">2</span>
+          <span id="totp-step-2-title" class="telegram-totp-step-title">Scan QR code with your authenticator app</span>
+        </div>
+        <div class="telegram-totp-qr-container">
+          ${safeQrCode ? `<img src="${safeQrCode}" alt="TOTP QR Code" class="telegram-totp-qr-code" />` : '<div class="telegram-totp-qr-error">QR code unavailable</div>'}
+        </div>
+        <div class="telegram-totp-secret-container">
+          <label>Or enter this code manually:</label>
+          <div class="telegram-totp-secret">
+            <code id="telegram-totp-secret-code">${Utils.escapeHtml(secret)}</code>
+            <button type="button" class="btn icon-btn" id="telegram-copy-secret-btn" title="Copy to clipboard">
+              <i class="icon-copy"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <form class="telegram-auth-form" id="telegram-totp-verify-form">
+        <div class="telegram-totp-step" role="group" aria-labelledby="totp-step-3-title">
+          <div class="telegram-totp-step-header">
+            <span class="telegram-totp-step-number" aria-hidden="true">3</span>
+            <span id="totp-step-3-title" class="telegram-totp-step-title">Enter verification code</span>
+          </div>
+          <div class="form-group">
+            <label for="telegram-totp-code">6-Digit Code <span class="required">*</span></label>
+            <input type="text" id="telegram-totp-code" inputmode="numeric" placeholder="000000" maxlength="6" pattern="[0-9]{6}" required autocomplete="one-time-code" />
+          </div>
+        </div>
+        <div class="telegram-auth-form-error" id="telegram-totp-verify-error"></div>
+        <div class="telegram-auth-form-actions">
+          <button type="submit" class="btn primary" id="telegram-totp-verify-submit">
+            <i class="icon-check"></i> Verify & Enable 2FA
+          </button>
+        </div>
+      </form>
+    </div>
+  `;
+
+  // Copy secret button
+  const copyBtn = formContainer.querySelector("#telegram-copy-secret-btn");
+  on(copyBtn, "click", async () => {
+    try {
+      await navigator.clipboard.writeText(secret);
+      Utils.showToast("Secret copied to clipboard", "success");
+    } catch {
+      Utils.showToast("Failed to copy secret", "error");
+    }
+  });
+
+  // Verify form
+  const form = formContainer.querySelector("#telegram-totp-verify-form");
+  const errorEl = formContainer.querySelector("#telegram-totp-verify-error");
+  const submitBtn = formContainer.querySelector("#telegram-totp-verify-submit");
+  const codeInput = formContainer.querySelector("#telegram-totp-code");
+
+  // Auto-focus and format code input
+  codeInput.focus();
+  on(codeInput, "input", () => {
+    codeInput.value = codeInput.value.replace(/\D/g, "").slice(0, 6);
+    errorEl.textContent = ""; // Clear errors on input
+  });
+
+  on(form, "submit", async (e) => {
+    e.preventDefault();
+    // Race condition guard
+    if (form.dataset.submitting === "true") return;
+    form.dataset.submitting = "true";
+    errorEl.textContent = "";
+
+    const code = codeInput.value;
+
+    if (!/^\d{6}$/.test(code)) {
+      errorEl.textContent = "Please enter a valid 6-digit code.";
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="icon-loader spin"></i> Verifying...';
+
+    try {
+      const response = await fetch("/api/telegram/totp/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        Utils.showToast("Two-factor authentication enabled!", "success");
+        // Refresh the entire auth section
+        const authPanel = formContainer.closest(".telegram-auth-section");
+        if (authPanel) {
+          await loadTelegramAuthState(authPanel);
+        }
+      } else {
+        throw new Error(data.error || data.message || "Invalid verification code");
+      }
+    } catch (error) {
+      errorEl.textContent = error.message;
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i class="icon-check"></i> Verify & Enable 2FA';
+    } finally {
+      form.dataset.submitting = "false";
+    }
+  });
+}
+
+/**
+ * Render TOTP disable form
+ */
+function renderTotpDisableForm(formContainer) {
+  formContainer.innerHTML = `
+    <form class="telegram-auth-form" id="telegram-totp-disable-form">
+      <div class="telegram-totp-warning" role="alert">
+        <i class="icon-alert-triangle"></i>
+        <span>Disabling 2FA will make your Telegram bot less secure. You can always re-enable it later.</span>
+      </div>
+      <div class="form-group">
+        <label for="telegram-disable-password">Password <span class="required">*</span></label>
+        <input type="password" id="telegram-disable-password" placeholder="Enter your password to confirm" required autocomplete="current-password" />
+      </div>
+      <div class="form-group form-group-checkbox">
+        <label class="checkbox-label">
+          <input type="checkbox" id="telegram-disable-confirm" required />
+          <span>I understand this will reduce the security of my Telegram bot</span>
+        </label>
+      </div>
+      <div class="telegram-auth-form-error" id="telegram-totp-disable-error" role="alert" aria-live="polite"></div>
+      <div class="telegram-auth-form-actions">
+        <button type="submit" class="btn danger" id="telegram-totp-disable-submit" disabled>
+          <i class="icon-x"></i> Disable 2FA
+        </button>
+      </div>
+    </form>
+  `;
+
+  const form = formContainer.querySelector("#telegram-totp-disable-form");
+  const errorEl = formContainer.querySelector("#telegram-totp-disable-error");
+  const submitBtn = formContainer.querySelector("#telegram-totp-disable-submit");
+  const confirmCheckbox = formContainer.querySelector("#telegram-disable-confirm");
+
+  // Enable/disable submit based on checkbox
+  on(confirmCheckbox, "change", () => {
+    submitBtn.disabled = !confirmCheckbox.checked;
+  });
+
+  // Clear errors on input
+  on(form, "input", () => {
+    errorEl.textContent = "";
+  });
+
+  on(form, "submit", async (e) => {
+    e.preventDefault();
+    // Race condition guard
+    if (form.dataset.submitting === "true") return;
+    form.dataset.submitting = "true";
+    errorEl.textContent = "";
+
+    const password = form.querySelector("#telegram-disable-password").value;
+
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<i class="icon-loader spin"></i> Disabling...';
+
+    try {
+      const response = await fetch("/api/telegram/totp/disable", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        Utils.showToast("Two-factor authentication disabled", "success");
+        // Refresh the entire auth section
+        const authPanel = formContainer.closest(".telegram-auth-section");
+        if (authPanel) {
+          await loadTelegramAuthState(authPanel);
+        }
+      } else {
+        throw new Error(data.error || data.message || "Failed to disable 2FA");
+      }
+    } catch (error) {
+      errorEl.textContent = error.message;
+      submitBtn.disabled = false;
+      submitBtn.innerHTML = '<i class="icon-x"></i> Disable 2FA';
+    } finally {
+      form.dataset.submitting = "false";
     }
   });
 }

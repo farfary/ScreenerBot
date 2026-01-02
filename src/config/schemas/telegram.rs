@@ -28,14 +28,60 @@ config_struct! {
         })]
         bot_token: String = String::new(),
 
-        /// Chat ID for sending notifications (get from @userinfobot or discovery flow)
+        /// Default chat ID for sending notifications (deprecated - uses authenticated sessions)
         #[metadata(field_metadata! {
-            label: "Chat ID",
-            hint: "Your Telegram chat ID for receiving notifications. Get it by messaging @userinfobot or use the discovery flow.",
+            label: "Notification Chat ID",
+            hint: "Legacy field - notifications are now sent to all authenticated Telegram sessions.",
             placeholder: "123456789",
             category: "Connection",
+            hidden: true,
         })]
         chat_id: String = String::new(),
+
+        // === Authentication Section ===
+        /// Session timeout in minutes (auto-logout after inactivity)
+        #[metadata(field_metadata! {
+            label: "Session Timeout",
+            hint: "Minutes of inactivity before requiring re-authentication",
+            unit: "minutes",
+            min: 5,
+            max: 1440,
+            step: 5,
+            category: "Authentication",
+        })]
+        session_timeout_minutes: i64 = 30,
+
+        /// Maximum failed authentication attempts before lockout
+        #[metadata(field_metadata! {
+            label: "Max Failed Attempts",
+            hint: "Number of wrong TOTP attempts before temporary lockout",
+            min: 1,
+            max: 10,
+            step: 1,
+            category: "Authentication",
+        })]
+        max_failed_attempts: i64 = 3,
+
+        /// Lockout duration in minutes after max failed attempts
+        #[metadata(field_metadata! {
+            label: "Lockout Duration",
+            hint: "Minutes to lock access after too many failed authentication attempts",
+            unit: "minutes",
+            min: 1,
+            max: 60,
+            step: 1,
+            category: "Authentication",
+        })]
+        lockout_minutes: i64 = 5,
+
+        /// Whether Telegram commands require 2FA when session expires
+        /// Uses the same TOTP as dashboard lockscreen (Security settings)
+        #[metadata(field_metadata! {
+            label: "Commands Require 2FA",
+            hint: "When enabled, expired sessions require TOTP code to reactivate. Uses the same 2FA as dashboard lockscreen.",
+            category: "Authentication",
+        })]
+        commands_require_2fa: bool = true,
 
         // === Features Section ===
         /// Bot commands enabled (/status, /positions, /balance, /stop, /start)

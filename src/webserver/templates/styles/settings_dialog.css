@@ -2224,3 +2224,654 @@
   padding-top: var(--spacing-md);
   border-top: 1px solid var(--border-color);
 }
+
+/* =============================================================================
+   TELEGRAM TAB - Connection, Authentication, Sessions, Notifications
+   ============================================================================= */
+
+/* Section Subtitle */
+.settings-section-subtitle {
+  margin: var(--spacing-lg) 0 var(--spacing-sm);
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* Telegram Token Field with Toggle */
+.telegram-token-field {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.telegram-token-field .settings-input {
+  flex: 1;
+  min-width: 200px;
+}
+
+/* Telegram PIN Field with Button */
+.telegram-pin-field {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.telegram-pin-field .settings-input {
+  width: 120px;
+}
+
+/* Settings Input */
+.settings-input {
+  padding: 7px 10px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  font-weight: 500;
+  transition: all 0.15s ease;
+}
+
+.settings-input:hover {
+  border-color: var(--text-secondary);
+  background-color: var(--bg-card-hover);
+}
+
+.settings-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px var(--primary-alpha-10);
+}
+
+.settings-input::placeholder {
+  color: var(--text-muted);
+}
+
+.settings-input-sm {
+  padding: 5px 8px;
+  font-size: 0.75rem;
+}
+
+/* Sessions List */
+.sessions-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: var(--spacing-sm);
+  min-height: 60px;
+}
+
+.sessions-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-md);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-style: italic;
+}
+
+/* Session Item */
+.session-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.session-item:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--text-secondary);
+}
+
+.session-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.session-user {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.session-time {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.session-revoke-btn {
+  flex-shrink: 0;
+}
+
+/* Pending Approval Item */
+.pending-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-primary);
+  border: 1px solid var(--warning-alpha-30, rgb(234, 179, 8, 0.3));
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.pending-item:hover {
+  background: var(--bg-card-hover);
+}
+
+.pending-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.pending-user {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pending-time {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.pending-actions {
+  display: flex;
+  gap: var(--spacing-xs);
+  flex-shrink: 0;
+}
+
+/* Button Icon (for toggle visibility) */
+.btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.btn-icon:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--text-secondary);
+  color: var(--text-primary);
+}
+
+/* =============================================================================
+   TELEGRAM AUTHENTICATION (Password + TOTP 2FA)
+   ============================================================================= */
+
+/* Authentication Section Container */
+.telegram-auth-section {
+  overflow: hidden;
+}
+
+/* Authentication Subsection */
+.telegram-auth-subsection {
+  padding: var(--spacing-md, 14px);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.telegram-auth-subsection:last-child {
+  border-bottom: none;
+}
+
+/* Auth Header with Title and Status */
+.telegram-auth-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md, 16px);
+  margin-bottom: var(--spacing-sm, 8px);
+}
+
+.telegram-auth-title {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm, 8px);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.telegram-auth-title i {
+  font-size: 0.95rem;
+  color: var(--link-color);
+}
+
+/* Status Indicators */
+.telegram-auth-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.telegram-auth-status .status-success {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--success-color);
+}
+
+.telegram-auth-status .status-warning {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--warning-color);
+}
+
+.telegram-auth-status .status-error {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--error-color);
+}
+
+/* Auth Content Area */
+.telegram-auth-content {
+  margin-top: var(--spacing-sm, 8px);
+}
+
+/* Auth Row Layout */
+.telegram-auth-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md, 16px);
+}
+
+/* Auth Info Text */
+.telegram-auth-info {
+  flex: 1;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+}
+
+/* Auth Note */
+.telegram-auth-note {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs, 4px);
+  margin-top: var(--spacing-sm, 8px);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.telegram-auth-note i {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+/* Link Button (inline text button) */
+button.link-button {
+  background: none;
+  border: none;
+  color: var(--link-color);
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+  font: inherit;
+}
+
+button.link-button:hover {
+  color: var(--primary-color);
+}
+
+/* Error Message */
+.telegram-auth-error {
+  padding: var(--spacing-sm, 8px) var(--spacing-md, 12px);
+  border-radius: 6px;
+  background: var(--danger-alpha-10);
+  color: var(--error-color);
+  font-size: 0.8rem;
+}
+
+/* Form Container */
+.telegram-auth-form-container {
+  margin-top: var(--spacing-md, 14px);
+  padding-top: var(--spacing-md, 14px);
+  border-top: 1px dashed var(--border-color);
+}
+
+/* Auth Form */
+.telegram-auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md, 14px);
+  max-width: 400px;
+}
+
+.telegram-auth-form .form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-xs, 4px);
+}
+
+.telegram-auth-form .form-group label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.telegram-auth-form .form-group label .required {
+  color: var(--error-color);
+  margin-left: 2px;
+}
+
+/* Form Error */
+.telegram-auth-form-error {
+  font-size: 0.8rem;
+  color: var(--error-color);
+  min-height: 1.25em;
+}
+
+.telegram-auth-form-error:empty {
+  display: none;
+}
+
+/* Form Actions */
+.telegram-auth-form-actions {
+  display: flex;
+  gap: var(--spacing-sm, 8px);
+  padding-top: var(--spacing-xs, 4px);
+}
+
+/* TOTP Setup Steps */
+.telegram-totp-step {
+  margin-bottom: var(--spacing-md, 14px);
+}
+
+.telegram-totp-step:last-child {
+  margin-bottom: 0;
+}
+
+.telegram-totp-step-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm, 8px);
+  margin-bottom: var(--spacing-sm, 8px);
+}
+
+.telegram-totp-step-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--primary-color);
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.telegram-totp-step-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* QR Code Display */
+.telegram-totp-qr-container {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacing-md, 14px);
+  background: #fff;
+  border-radius: 8px;
+  margin-bottom: var(--spacing-md, 14px);
+}
+
+.telegram-totp-qr-code {
+  width: 180px;
+  height: 180px;
+  image-rendering: pixelated;
+}
+
+.telegram-totp-qr-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 180px;
+  height: 180px;
+  background: var(--bg-tertiary);
+  border: 1px dashed var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+/* Secret Code Display */
+.telegram-totp-secret-container {
+  margin-bottom: var(--spacing-md, 14px);
+}
+
+.telegram-totp-secret-container label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-xs, 4px);
+}
+
+.telegram-totp-secret {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm, 8px);
+  padding: var(--spacing-sm, 8px) var(--spacing-md, 12px);
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+}
+
+.telegram-totp-secret code {
+  flex: 1;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  letter-spacing: 0.05em;
+  word-break: break-all;
+}
+
+/* TOTP Warning */
+.telegram-totp-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm, 8px);
+  padding: var(--spacing-sm, 8px) var(--spacing-md, 12px);
+  background: var(--warning-alpha-10);
+  border: 1px solid var(--warning-alpha-20);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: var(--warning-color);
+  margin-bottom: var(--spacing-md, 14px);
+}
+
+.telegram-totp-warning i {
+  font-size: 0.95rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+/* Checkbox Form Group */
+.form-group-checkbox {
+  margin-top: var(--spacing-xs, 4px);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm, 8px);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  line-height: 1.4;
+}
+
+.checkbox-label input[type="checkbox"] {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  margin-top: 1px;
+  accent-color: var(--primary-color);
+  cursor: pointer;
+}
+
+.checkbox-label span {
+  flex: 1;
+}
+
+/* =============================================================================
+   TELEGRAM CHAT DISCOVERY
+   ============================================================================= */
+
+/* Chat ID Display */
+.chat-id-display {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm, 8px);
+}
+
+.chat-id-display code {
+  padding: 6px 10px;
+  background: var(--bg-card-hover);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-family: "JetBrains Mono", monospace;
+  font-size: 0.8rem;
+  color: var(--text-primary);
+}
+
+/* Discovery Section */
+.discovery-section {
+  margin-top: var(--spacing-md, 14px);
+  padding: var(--spacing-md, 14px);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+}
+
+.discovery-status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm, 8px);
+  margin-bottom: var(--spacing-md, 14px);
+}
+
+.discovery-instructions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm, 8px);
+  padding: var(--spacing-sm, 8px) var(--spacing-md, 12px);
+  background: var(--primary-alpha-10);
+  border: 1px solid var(--primary-alpha-20);
+  border-radius: 6px;
+  color: var(--link-color);
+  font-size: 0.85rem;
+}
+
+.discovery-instructions i {
+  font-size: 1.1rem;
+}
+
+.discovery-spinner {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm, 8px);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.discovery-spinner i {
+  font-size: 0.9rem;
+}
+
+/* Discovered Chats List */
+.discovered-chats-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm, 8px);
+  margin-bottom: var(--spacing-md, 14px);
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.discovered-chat-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md, 16px);
+  padding: var(--spacing-sm, 8px) var(--spacing-md, 12px);
+  background: var(--bg-primary);
+  border: 1px solid var(--success-alpha-30, rgba(59, 185, 80, 0.3));
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.discovered-chat-item:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--success-color);
+}
+
+.chat-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-name {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.chat-meta {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.chat-preview {
+  font-size: 0.75rem;
+  font-style: italic;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.discovery-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacing-sm, 8px);
+}

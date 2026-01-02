@@ -808,9 +808,6 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/trade-watcher/start", post(start_trade_watcher_handler))
         .route("/trade-watcher/stop", post(stop_trade_watcher_handler))
         .route("/trade-watcher/status", get(get_trade_watcher_status_handler))
-        // Telegram
-        .route("/telegram/test", post(test_telegram_handler))
-        .route("/telegram/status", get(get_telegram_status_handler))
         // Merge multi-wallet routes
         .merge(multi_wallet_routes())
 }
@@ -2403,97 +2400,6 @@ async fn get_trade_watcher_status_handler() -> Response {
         "total_trades_detected": status.total_trades_detected,
         "total_actions_triggered": status.total_actions_triggered
     }))
-}
-
-// =============================================================================
-// Telegram Handlers
-// =============================================================================
-
-/// Telegram status response
-#[derive(Debug, Serialize)]
-struct TelegramStatusResponse {
-    enabled: bool,
-    configured: bool,
-    commands_enabled: bool,
-}
-
-/// Test Telegram connection by sending a test message
-async fn test_telegram_handler() -> Response {
-    use crate::config::with_config;
-    use crate::notifications::TelegramNotifier;
-
-    let config = with_config(|cfg| cfg.telegram.clone());
-
-    if !config.enabled {
-        return error_response(
-            axum::http::StatusCode::BAD_REQUEST,
-            "TELEGRAM_DISABLED",
-            "Telegram notifications are disabled in config",
-            None,
-        );
-    }
-
-    if config.bot_token.is_empty() || config.chat_id.is_empty() {
-        return error_response(
-            axum::http::StatusCode::BAD_REQUEST,
-            "TELEGRAM_NOT_CONFIGURED",
-            "Telegram bot_token or chat_id is not configured",
-            None,
-        );
-    }
-
-    match TelegramNotifier::new(&config.bot_token, &config.chat_id) {
-        Ok(notifier) => {
-            match notifier.send_message("🤖 ScreenerBot test message - connection successful!").await {
-                Ok(()) => {
-                    logger::info(LogTag::Notifications, "Telegram test message sent successfully");
-                    success_response(serde_json::json!({
-                        "success": true,
-                        "message": "Test message sent successfully"
-                    }))
-                }
-                Err(e) => {
-                    logger::error(
-                        LogTag::Notifications,
-                        &format!("Failed to send Telegram test message: {}", e),
-                    );
-                    error_response(
-                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                        "TELEGRAM_SEND_ERROR",
-                        &e,
-                        None,
-                    )
-                }
-            }
-        }
-        Err(e) => {
-            logger::error(
-                LogTag::Notifications,
-                &format!("Failed to create Telegram notifier: {}", e),
-            );
-            error_response(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "TELEGRAM_INIT_ERROR",
-                &e,
-                None,
-            )
-        }
-    }
-}
-
-/// Get Telegram configuration status
-async fn get_telegram_status_handler() -> Response {
-    use crate::config::with_config;
-
-    let config = with_config(|cfg| cfg.telegram.clone());
-
-    let configured = !config.bot_token.is_empty() && !config.chat_id.is_empty();
-
-    success_response(TelegramStatusResponse {
-        enabled: config.enabled,
-        configured,
-        commands_enabled: config.commands_enabled,
-    })
 }
 
 // =============================================================================

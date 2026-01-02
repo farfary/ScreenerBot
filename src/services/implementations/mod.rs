@@ -1,7 +1,6 @@
 pub mod ata_cleanup_service;
 pub mod events_service;
 pub mod filtering_service;
-pub mod notification_service;
 pub mod ohlcv_service;
 pub mod pools_service;
 pub mod positions_service;
@@ -24,7 +23,6 @@ pub mod tokens_service;
 pub use ata_cleanup_service::AtaCleanupService;
 pub use events_service::EventsService;
 pub use filtering_service::FilteringService;
-pub use notification_service::NotificationService;
 pub use ohlcv_service::OhlcvService;
 pub use pools_service::PoolsService;
 pub use positions_service::PositionsService;

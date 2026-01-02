@@ -1,9 +1,14 @@
-//! Notification types for Telegram integration
+//! Core types for the Telegram module
 //!
-//! Defines the notification types that can be sent via Telegram.
+//! Contains notification types, session types, and discovery types.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use std::time::Instant;
+
+// ============================================================================
+// NOTIFICATION TYPES
+// ============================================================================
 
 /// Types of notifications that can be sent
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -69,10 +74,7 @@ pub enum NotificationType {
     },
 
     /// Response to a bot command
-    BotCommand {
-        command: String,
-        response: String,
-    },
+    BotCommand { command: String, response: String },
 
     /// Bot startup notification
     BotStarted { version: String, mode: String },
@@ -237,5 +239,108 @@ impl Notification {
     /// Create a bot stopped notification
     pub fn bot_stopped(reason: String) -> Self {
         Self::new(NotificationType::BotStopped { reason })
+    }
+}
+
+// ============================================================================
+// SESSION TYPES
+// ============================================================================
+
+/// Session authentication state for Telegram commands
+#[derive(Debug, Clone, PartialEq)]
+pub enum SessionState {
+    /// Session is active - commands work
+    Active,
+    /// Session expired - requires /login with TOTP to reactivate (if 2FA enabled)
+    Expired,
+    /// Awaiting TOTP code after /login command
+    AwaitingTotp,
+    /// Locked due to too many failed TOTP attempts
+    Locked { until: Instant },
+}
+
+impl Default for SessionState {
+    fn default() -> Self {
+        Self::Active // New sessions start as Active (no password required)
+    }
+}
+
+/// Active Telegram session
+#[derive(Debug, Clone)]
+pub struct TelegramSession {
+    pub user_id: i64,
+    pub chat_id: i64,
+    pub username: Option<String>,
+    pub first_name: Option<String>,
+    pub last_activity: Instant,
+    pub created_at: Instant,
+    pub state: SessionState,
+    pub failed_attempts: u32,
+}
+
+impl TelegramSession {
+    pub fn new(
+        user_id: i64,
+        chat_id: i64,
+        username: Option<String>,
+        first_name: Option<String>,
+    ) -> Self {
+        Self {
+            user_id,
+            chat_id,
+            username,
+            first_name,
+            last_activity: Instant::now(),
+            created_at: Instant::now(),
+            state: SessionState::default(),
+            failed_attempts: 0,
+        }
+    }
+
+    /// Update last activity timestamp
+    pub fn touch(&mut self) {
+        self.last_activity = Instant::now();
+    }
+
+    /// Check if session is active (authenticated)
+    pub fn is_authenticated(&self) -> bool {
+        matches!(self.state, SessionState::Active)
+    }
+}
+
+// ============================================================================
+// DISCOVERY TYPES
+// ============================================================================
+
+/// Discovered chat during chat discovery mode
+#[derive(Debug, Clone)]
+pub struct DiscoveredChat {
+    pub chat_id: i64,
+    pub user_id: i64,
+    pub username: Option<String>,
+    pub first_name: Option<String>,
+    pub chat_type: String,
+    pub message_preview: Option<String>,
+    pub discovered_at: Instant,
+}
+
+// ============================================================================
+// BOT TYPES
+// ============================================================================
+
+/// Telegram bot state
+#[derive(Debug, Clone, PartialEq)]
+pub enum BotState {
+    /// No token or not started
+    Disconnected,
+    /// Has token, polling for chat discovery (no chat_id yet)
+    Discovery,
+    /// Fully operational with a configured chat
+    Connected,
+}
+
+impl Default for BotState {
+    fn default() -> Self {
+        Self::Disconnected
     }
 }

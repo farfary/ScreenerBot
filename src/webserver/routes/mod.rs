@@ -25,6 +25,7 @@ pub mod services;
 pub mod status;
 pub mod strategies;
 pub mod system;
+pub mod telegram;
 pub mod tokens;
 pub mod tools;
 pub mod trader;
@@ -200,6 +201,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .nest("/wallets", wallets::routes())
         .nest("/lockscreen", lockscreen::routes())
         .nest("/auth", auth::routes())
+        .nest("/telegram", telegram::routes())
         .merge(updates::routes())
         .route("/pages/:page", axum::routing::get(get_page_content))
 }

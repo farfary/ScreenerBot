@@ -11,7 +11,9 @@ use super::{
   },
   transitions::PositionTransition,
 };
+use crate::config::with_config;
 use crate::logger::{self, LogTag};
+use crate::telegram::{queue_notification, Notification};
 use chrono::Utc;
 
 #[derive(Debug)]
@@ -94,6 +96,16 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     ),
                   );
                 }
+              }
+
+              // Queue Telegram notification for position opened
+              if with_config(|c| c.telegram.enabled && c.telegram.notify_position_opened) {
+                queue_notification(Notification::position_opened(
+                  position.symbol.clone(),
+                  position.mint.clone(),
+                  sol_size,
+                  effective_entry_price,
+                ));
               }
             }
             Err(e) => {
@@ -220,6 +232,21 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     position_id
                   ),
                 );
+
+                // Queue Telegram notification for position closed
+                if with_config(|c| c.telegram.enabled && c.telegram.notify_position_closed) {
+                  let exit_reason = position.closed_reason.clone().unwrap_or_else(|| "exit".to_string());
+                  // Use position.pnl and position.pnl_percent which were set in the state update above
+                  let final_pnl_sol = position.pnl.unwrap_or(0.0);
+                  let final_pnl_pct = position.pnl_percent.unwrap_or(0.0);
+                  queue_notification(Notification::position_closed(
+                    position.symbol.clone(),
+                    position.mint.clone(),
+                    final_pnl_sol,
+                    final_pnl_pct,
+                    exit_reason,
+                  ));
+                }
               }
               Err(e) => {
                 return Err(format!("Failed to update database: {}", e));
@@ -527,6 +554,25 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
               // Clear pending mark
               super::state::clear_partial_exit_pending(&position.mint).await;
 
+              // Queue Telegram notification for partial exit
+              if with_config(|c| c.telegram.enabled && c.telegram.notify_partial_exit) {
+                // Calculate remaining percentage
+                let remaining_pct = if let (Some(remaining), Some(total)) = (position.remaining_token_amount, position.token_amount) {
+                  if total > 0 { (remaining as f64 / total as f64) * 100.0 } else { 0.0 }
+                } else {
+                  100.0 - exit_percentage
+                };
+                // Calculate realized PnL for this partial exit
+                let partial_pnl = sol_received - (exit_amount as f64 / 10_f64.powi(9) * position.average_entry_price);
+                queue_notification(Notification::partial_exit(
+                  position.symbol.clone(),
+                  position.mint.clone(),
+                  exit_percentage,
+                  partial_pnl,
+                  remaining_pct,
+                ));
+              }
+
               // IMPORTANT: Do NOT release semaphore permit - position still open!
             }
             Err(e) => {
@@ -734,6 +780,17 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                   position.average_entry_price
                 ),
               );
+
+              // Queue Telegram notification for DCA executed
+              if with_config(|c| c.telegram.enabled && c.telegram.notify_dca_executed) {
+                queue_notification(Notification::dca_executed(
+                  position.symbol.clone(),
+                  position.mint.clone(),
+                  sol_spent,
+                  position.total_size_sol,
+                  position.dca_count,
+                ));
+              }
 
               // IMPORTANT: Do NOT consume another semaphore permit - same position!
             }

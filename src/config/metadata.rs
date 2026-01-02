@@ -332,7 +332,10 @@ fn derive_visibility(category: &str) -> &'static str {
         | "Connection" | "Notifications"
         | "Endpoints" | "Router" | "Slippage"
         | "Profit" | "Loss Detection" | "Partial Exit"
-        | "General" => "primary",
+        | "General" | "Commands" | "Features" => "primary",
+
+        // Secondary - Authentication, thresholds, etc.
+        "Authentication" | "Thresholds" => "secondary",
 
         // Technical - Power-user settings (collapsed, grouped at bottom)
         "Timeouts" | "Retries" | "Rate Limiting"

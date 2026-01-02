@@ -10,7 +10,7 @@ use tokio::sync::RwLock;
 use super::types::{DetectedTrade, PoolSource, TradeMonitorStatus, WatchType};
 use crate::apis::manager::get_api_manager;
 use crate::logger::{self, LogTag};
-use crate::notifications::{queue_notification, Notification};
+use crate::telegram::{queue_notification, Notification};
 use crate::tools::database::{
     get_active_watched_tokens, get_watched_tokens, update_watched_token_tracking, WatchedToken,
 };
