@@ -114,6 +114,16 @@
   transform: translateY(0);
 }
 
+/* Portal mode - dropdown appended to body with fixed positioning */
+.cs-dropdown.cs-portal {
+  position: fixed;
+  z-index: 100000; /* Must be higher than dialogs (10000) */
+  margin-top: 0;
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+}
+
 /* Option items */
 .cs-option {
   padding: 8px 12px;

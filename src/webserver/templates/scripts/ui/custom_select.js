@@ -51,6 +51,7 @@ export class CustomSelect {
     this._handleKeyDown = this._handleKeyDown.bind(this);
     this._handleDocumentClick = this._handleDocumentClick.bind(this);
     this._handleOptionClick = this._handleOptionClick.bind(this);
+    this._handleScrollResize = this._handleScrollResize.bind(this);
 
     // Find initially selected option
     const selectedOpt = this.options.find((o) => o.selected);
@@ -146,7 +147,7 @@ export class CustomSelect {
     this.triggerEl.appendChild(this.valueEl);
     this.triggerEl.appendChild(arrowEl);
 
-    // Create dropdown
+    // Create dropdown (will be appended to body when opened - portal pattern)
     this.dropdownEl = document.createElement("div");
     this.dropdownEl.className = "cs-dropdown";
     this.dropdownEl.setAttribute("role", "listbox");
@@ -160,9 +161,8 @@ export class CustomSelect {
     }
     this.hiddenInput.value = this.selectedValue || "";
 
-    // Assemble
+    // Assemble (dropdown is NOT appended here - it uses portal pattern)
     this.el.appendChild(this.triggerEl);
-    this.el.appendChild(this.dropdownEl);
     this.el.appendChild(this.hiddenInput);
 
     // Mount to container
@@ -233,7 +233,8 @@ export class CustomSelect {
   }
 
   _handleDocumentClick(e) {
-    if (this.isOpen && !this.el.contains(e.target)) {
+    // Check both the main element and the portal dropdown (which is in body)
+    if (this.isOpen && !this.el.contains(e.target) && !this.dropdownEl.contains(e.target)) {
       this.close();
     }
   }
@@ -420,6 +421,9 @@ export class CustomSelect {
     this.el.classList.add("open");
     this.el.setAttribute("aria-expanded", "true");
 
+    // Portal pattern: append dropdown to body
+    this._appendDropdownToBody();
+
     // Set initial focus to selected option or first enabled option
     const selectedIndex = this.options.findIndex((o) => o.value === this.selectedValue);
     if (selectedIndex >= 0) {
@@ -428,8 +432,11 @@ export class CustomSelect {
       this._setFocusIndex(this._findNextEnabledIndex(-1, 1));
     }
 
-    // Position dropdown (check if it goes off screen)
+    // Position dropdown with fixed positioning
     this._positionDropdown();
+
+    // Add scroll/resize listeners to reposition dropdown
+    this._addScrollResizeListeners();
   }
 
   close() {
@@ -445,6 +452,12 @@ export class CustomSelect {
     if (focused) {
       focused.classList.remove("focused");
     }
+
+    // Remove scroll/resize listeners
+    this._removeScrollResizeListeners();
+
+    // Portal pattern: remove dropdown from body
+    this._removeDropdownFromBody();
 
     // Clear search
     this.searchString = "";
@@ -462,25 +475,59 @@ export class CustomSelect {
   }
 
   _positionDropdown() {
-    // Reset positioning
-    this.dropdownEl.style.bottom = "";
-    this.dropdownEl.style.top = "";
-
-    const rect = this.el.getBoundingClientRect();
-    const dropdownHeight = this.dropdownEl.offsetHeight;
+    const triggerRect = this.triggerEl.getBoundingClientRect();
+    const dropdownHeight = this.dropdownEl.offsetHeight || 240; // max-height fallback
     const viewportHeight = window.innerHeight;
-    const spaceBelow = viewportHeight - rect.bottom;
-    const spaceAbove = rect.top;
+    const spaceBelow = viewportHeight - triggerRect.bottom - 8;
+    const spaceAbove = triggerRect.top - 8;
 
-    // If not enough space below and more space above, flip to top
+    // Set fixed positioning for portal
+    this.dropdownEl.style.position = "fixed";
+    this.dropdownEl.style.left = `${triggerRect.left}px`;
+    this.dropdownEl.style.width = `${triggerRect.width}px`;
+    this.dropdownEl.style.maxHeight = `${Math.min(240, Math.max(spaceBelow, spaceAbove))}px`;
+
+    // Decide above or below based on available space
     if (spaceBelow < dropdownHeight && spaceAbove > spaceBelow) {
-      this.dropdownEl.style.bottom = "100%";
+      // Position above the trigger
       this.dropdownEl.style.top = "auto";
+      this.dropdownEl.style.bottom = `${viewportHeight - triggerRect.top + 4}px`;
       this.el.classList.add("dropdown-above");
     } else {
-      this.dropdownEl.style.top = "100%";
+      // Position below the trigger
+      this.dropdownEl.style.top = `${triggerRect.bottom + 4}px`;
       this.dropdownEl.style.bottom = "auto";
       this.el.classList.remove("dropdown-above");
+    }
+  }
+
+  _appendDropdownToBody() {
+    if (!this.dropdownEl.parentNode) {
+      this.dropdownEl.classList.add("cs-portal");
+      document.body.appendChild(this.dropdownEl);
+    }
+  }
+
+  _removeDropdownFromBody() {
+    if (this.dropdownEl && this.dropdownEl.parentNode === document.body) {
+      this.dropdownEl.classList.remove("cs-portal");
+      document.body.removeChild(this.dropdownEl);
+    }
+  }
+
+  _addScrollResizeListeners() {
+    window.addEventListener("scroll", this._handleScrollResize, true);
+    window.addEventListener("resize", this._handleScrollResize);
+  }
+
+  _removeScrollResizeListeners() {
+    window.removeEventListener("scroll", this._handleScrollResize, true);
+    window.removeEventListener("resize", this._handleScrollResize);
+  }
+
+  _handleScrollResize() {
+    if (this.isOpen) {
+      this._positionDropdown();
     }
   }
 
@@ -556,8 +603,12 @@ export class CustomSelect {
    * Destroy the component and clean up
    */
   destroy() {
+    // Close first (removes scroll/resize listeners and dropdown from body)
     this.close();
     this._detachEvents();
+
+    // Ensure dropdown is removed from body if still attached
+    this._removeDropdownFromBody();
 
     // Restore original select if enhanced
     if (this._originalSelect) {
