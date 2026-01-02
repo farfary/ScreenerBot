@@ -260,7 +260,8 @@ impl TokenDatabase {
                         bl.reason as blacklist_reason, \
                         ut.priority, \
                         t.blockchain_created_at, \
-                        sr.security_data_last_fetched_at \
+                        sr.security_data_last_fetched_at, \
+                        ut.last_rejection_reason, ut.last_rejection_source, ut.last_rejection_at \
                     FROM tokens t \
                     LEFT JOIN security_rugcheck sr ON t.mint = sr.mint \
                     LEFT JOIN blacklist bl ON t.mint = bl.mint \
@@ -303,6 +304,11 @@ impl TokenDatabase {
                 let blockchain_created_at: Option<i64> = row.get(11)?;
                 let security_data_last_fetched_at: Option<i64> = row.get(12)?;
 
+                // Rejection tracking fields
+                let last_rejection_reason: Option<String> = row.get(13)?;
+                let last_rejection_source: Option<String> = row.get(14)?;
+                let last_rejection_at: Option<i64> = row.get(15)?;
+
                 Ok((
                     metadata,
                     last_market_update,
@@ -312,6 +318,9 @@ impl TokenDatabase {
                     priority_value,
                     blockchain_created_at,
                     security_data_last_fetched_at,
+                    last_rejection_reason,
+                    last_rejection_source,
+                    last_rejection_at,
                 ))
             })
             .map_err(|e| TokenError::Database(format!("Query no-market failed: {}", e)))?;
@@ -327,7 +336,14 @@ impl TokenDatabase {
                 priority_value,
                 blockchain_created_at,
                 security_data_last_fetched_at,
+                last_rejection_reason,
+                last_rejection_source,
+                last_rejection_at,
             ) = row.map_err(|e| TokenError::Database(format!("Row parse failed: {}", e)))?;
+
+            // Parse rejection timestamp
+            let last_rejection_at_dt =
+                last_rejection_at.and_then(|ts| DateTime::from_timestamp(ts, 0));
 
             // Build a RugcheckData-lite only for values we expose directly
             let security = if security_score.is_some() || is_rugged {
@@ -380,6 +396,9 @@ impl TokenDatabase {
                 None,
                 last_market_update.and_then(|ts| DateTime::from_timestamp(ts, 0)),
                 blockchain_created_dt,
+                last_rejection_reason,
+                last_rejection_source,
+                last_rejection_at_dt,
             );
             tokens.push(token);
         }
@@ -2216,7 +2235,8 @@ impl TokenDatabase {
                 g.volume_5m, g.volume_1h, g.volume_6h, g.volume_24h,
                 g.pool_count, g.reserve_in_usd,
                 g.market_data_last_fetched_at as g_market_data_last_fetched_at,
-                g.image_url as g_image_url
+                g.image_url as g_image_url,
+                ut.last_rejection_reason, ut.last_rejection_source, ut.last_rejection_at
             FROM tokens t
             LEFT JOIN security_rugcheck sr ON t.mint = sr.mint
             LEFT JOIN blacklist bl ON t.mint = bl.mint
@@ -2316,6 +2336,11 @@ impl TokenDatabase {
                 let g_market_data_last_fetched_at: Option<i64> = row.get(59)?;
                 let g_image_url: Option<String> = row.get(60)?;
 
+                // Rejection tracking fields 61..=63
+                let last_rejection_reason: Option<String> = row.get(61)?;
+                let last_rejection_source: Option<String> = row.get(62)?;
+                let last_rejection_at: Option<i64> = row.get(63)?;
+
                 Ok((
                     mint,
                     symbol,
@@ -2380,6 +2405,10 @@ impl TokenDatabase {
                     g_reserve_in_usd,
                     g_market_data_last_fetched_at,
                     g_image_url,
+                    // Rejection tracking
+                    last_rejection_reason,
+                    last_rejection_source,
+                    last_rejection_at,
                 ))
             })
             .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
@@ -2450,6 +2479,10 @@ impl TokenDatabase {
                 g_reserve_in_usd,
                 g_market_data_last_fetched_at,
                 g_image_url,
+                // Rejection tracking
+                last_rejection_reason,
+                last_rejection_source,
+                last_rejection_at,
             ) = row_result.map_err(|e| TokenError::Database(format!("Row parse failed: {}", e)))?;
 
             // Parse all timestamps
@@ -2466,6 +2499,10 @@ impl TokenDatabase {
             let pool_price_last_calculated_dt = pool_price_last_calculated_at
                 .and_then(|ts| DateTime::from_timestamp(ts, 0))
                 .unwrap_or(metadata_last_fetched_dt); // Fallback
+
+            // Parse rejection timestamp
+            let last_rejection_at_dt =
+                last_rejection_at.and_then(|ts| DateTime::from_timestamp(ts, 0));
 
             let priority = priority_value
                 .map(Priority::from_value)
@@ -2807,9 +2844,9 @@ impl TokenDatabase {
                 priority,
 
                 // Filtering State
-                last_rejection_reason: None,
-                last_rejection_source: None,
-                last_rejection_at: None,
+                last_rejection_reason,
+                last_rejection_source,
+                last_rejection_at: last_rejection_at_dt,
             };
 
             tokens.push(token);
@@ -3145,6 +3182,9 @@ fn assemble_token_without_market_data(
     metadata_updated_at_override: Option<DateTime<Utc>>,
     last_market_update: Option<DateTime<Utc>>,
     blockchain_created_at_override: Option<DateTime<Utc>>,
+    last_rejection_reason: Option<String>,
+    last_rejection_source: Option<String>,
+    last_rejection_at: Option<DateTime<Utc>>,
 ) -> Token {
     // Extract security data
     let security_ref = security.as_ref();
@@ -3281,9 +3321,9 @@ fn assemble_token_without_market_data(
         priority,
 
         // Filtering State
-        last_rejection_reason: None,
-        last_rejection_source: None,
-        last_rejection_at: None,
+        last_rejection_reason,
+        last_rejection_source,
+        last_rejection_at,
     }
 }
 
