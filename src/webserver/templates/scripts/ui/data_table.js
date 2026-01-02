@@ -254,6 +254,10 @@ export class DataTable {
     // Hybrid pagination mode: 'scroll' (infinite scroll) or 'pages' (server-side page navigation)
     this._serverPaginationMode = "scroll";
     this._scrollLoadingDisabled = false;
+    
+    // Interaction tracking: skip re-renders while user is hovering/interacting
+    this._isHovering = false;
+    this._hoverTimeout = null;
 
     this._loadState();
     this._restoreServerState(); // NEW: Restore server-side state after loading
@@ -1742,6 +1746,28 @@ export class DataTable {
       };
       this._addEventListener(this.elements.tbody, "click", handler);
     }
+    
+    // Hover tracking for render skipping during user interaction
+    // This prevents table re-renders while user is hovering rows
+    const mouseEnterHandler = () => {
+      this._isHovering = true;
+      if (this._hoverTimeout) {
+        clearTimeout(this._hoverTimeout);
+        this._hoverTimeout = null;
+      }
+    };
+    const mouseLeaveHandler = () => {
+      // Small delay before allowing re-renders to prevent flicker on quick mouse movements
+      if (this._hoverTimeout) {
+        clearTimeout(this._hoverTimeout);
+      }
+      this._hoverTimeout = setTimeout(() => {
+        this._isHovering = false;
+        this._hoverTimeout = null;
+      }, 150);
+    };
+    this._addEventListener(this.elements.scrollContainer, "mouseenter", mouseEnterHandler);
+    this._addEventListener(this.elements.scrollContainer, "mouseleave", mouseLeaveHandler);
 
     // Scroll position tracking (throttled to avoid excessive saves)
     const scrollHandler = () => {
@@ -2964,6 +2990,25 @@ export class DataTable {
         // Re-render table
         this._renderTable({ resetScroll: true });
         this._updateServerPaginationBar();
+
+        // Call onPageLoaded callback if defined
+        if (typeof this._pagination?.onPageLoaded === "function") {
+          try {
+            this._pagination.onPageLoaded({
+              direction: "page",
+              rows: normalized.rows,
+              raw: result,
+              meta: normalized.meta,
+              total: normalized.total ?? this.state.serverPaginationState.totalItems,
+              reason: "page-navigation",
+              page: pageNumber,
+              pageSize: pageSize,
+              table: this,
+            });
+          } catch (error) {
+            this._log("error", "pagination.onPageLoaded failed in server page mode", error);
+          }
+        }
       }
     } catch (err) {
       if (err?.name !== "AbortError") {
@@ -3354,9 +3399,48 @@ export class DataTable {
   }
 
   /**
+   * Check if user is currently interacting with table controls
+   * Skip render during interaction to preserve UI state (dropdowns, focus, hover)
+   */
+  _isUserInteracting() {
+    // Check explicit hover tracking (set by mouseenter/mouseleave events)
+    if (this._isHovering) {
+      return true;
+    }
+    
+    const container = this.elements?.container;
+    if (!container) return false;
+
+    // Check if any select element inside table is focused or open
+    const activeEl = document.activeElement;
+    if (activeEl && container.contains(activeEl)) {
+      const tag = activeEl.tagName?.toLowerCase();
+      if (tag === "select" || tag === "input" || tag === "button") {
+        return true;
+      }
+    }
+
+    // Check for open dropdown menus (may be outside container, in document body)
+    const openDropdown = document.querySelector(
+      ".links-dropdown-menu, .dropdown-menu.open, [data-dropdown-open]"
+    );
+    if (openDropdown) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
    * Re-render table content only (not full structure)
    */
   _renderTable(renderOptions = {}) {
+    // Skip render during user interaction (unless forced)
+    if (!renderOptions.force && this._isUserInteracting()) {
+      this._log("debug", "Skipping render during user interaction");
+      return;
+    }
+
     const scrollContainer = this.elements.scrollContainer;
     const prevScrollTop =
       typeof renderOptions.prevScrollTop === "number"
@@ -3436,7 +3520,11 @@ export class DataTable {
       this.state.hasAutoFitted = true;
     }
 
-    this._attachEvents();
+    // NOTE: Do NOT call _attachEvents() here - event handlers are attached once 
+    // during _init() and persist since we only replace innerHTML of elements,
+    // not the elements themselves. Re-attaching on every render causes issues
+    // with hover tracking (mouseenter fires spuriously when handlers are re-added
+    // while mouse is already over the element).
 
     if (scrollContainer) {
       const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
@@ -3793,10 +3881,71 @@ export class DataTable {
     };
   }
 
+  /**
+   * Check if new data is effectively the same as current data
+   * Uses fast JSON comparison for row equality
+   * @param {Array} newRows - New data rows
+   * @returns {boolean} - True if data is unchanged
+   */
+  _isDataUnchanged(newRows) {
+    const currentData = this.state.data;
+    
+    // Different lengths means definitely changed
+    if (currentData.length !== newRows.length) {
+      return false;
+    }
+    
+    // Empty arrays are equal
+    if (currentData.length === 0) {
+      return true;
+    }
+    
+    // Use rowKey if available for faster comparison
+    const rowKey = this.options.rowKey;
+    if (rowKey) {
+      // Compare by row keys and a subset of values for performance
+      for (let i = 0; i < newRows.length; i++) {
+        const oldRow = currentData[i];
+        const newRow = newRows[i];
+        
+        // Check if key changed
+        if (oldRow?.[rowKey] !== newRow?.[rowKey]) {
+          return false;
+        }
+        
+        // Quick shallow comparison of visible columns
+        for (const col of this.options.columns) {
+          if (oldRow?.[col.id] !== newRow?.[col.id]) {
+            return false;
+          }
+        }
+      }
+      return true;
+    }
+    
+    // Fallback: JSON stringify comparison (slower but thorough)
+    try {
+      return JSON.stringify(currentData) === JSON.stringify(newRows);
+    } catch {
+      // If JSON stringify fails, assume data changed
+      return false;
+    }
+  }
+
   _replaceData(rows, meta = {}) {
     const sanitized = Array.isArray(rows)
       ? rows.filter((row) => row !== null && row !== undefined)
       : [];
+    
+    // Check if data has actually changed to avoid unnecessary re-renders
+    // This prevents DOM churn during polling when data is the same
+    if (!meta.forceRender && this._isDataUnchanged(sanitized)) {
+      this._log("debug", "Data unchanged, skipping re-render", { rows: sanitized.length });
+      this._updatePaginationMeta(meta, { replace: true });
+      this._setLoadingState(false);
+      return;
+    }
+    
     const isInitialLoad = this.state.data.length === 0;
     this.state.data = [...sanitized];
     // Only reset hasAutoFitted on initial load, not on data refreshes
@@ -4846,6 +4995,12 @@ export class DataTable {
     if (this._pendingRAF) {
       cancelAnimationFrame(this._pendingRAF);
       this._pendingRAF = null;
+    }
+    
+    // Cancel hover timeout
+    if (this._hoverTimeout) {
+      clearTimeout(this._hoverTimeout);
+      this._hoverTimeout = null;
     }
 
     // Clean up settings dialog

@@ -512,12 +512,10 @@
       /*__PAGE_STYLES__*/
     </script>
 
-    <!-- Core ES Modules - Loaded as external files for proper import resolution -->
-    <script type="module" src="/scripts/core/lifecycle.js?v={{ASSET_VERSION}}"></script>
-    <script type="module" src="/scripts/core/app_state.js?v={{ASSET_VERSION}}"></script>
-    <script type="module" src="/scripts/core/poller.js?v={{ASSET_VERSION}}"></script>
-    <script type="module" src="/scripts/core/dom.js?v={{ASSET_VERSION}}"></script>
-    <script type="module" src="/scripts/core/utils.js?v={{ASSET_VERSION}}"></script>
+    <!-- Core ES Modules - Only router.js needs to be loaded explicitly; it imports the others -->
+    <!-- NOTE: Do NOT add separate script tags for lifecycle.js, app_state.js, poller.js, dom.js, utils.js
+         They are imported by router.js. Adding them with ?v= query params would cause duplicate
+         module instances because ES modules treat different URLs as different modules. -->
     <script type="module" src="/scripts/core/router.js?v={{ASSET_VERSION}}"></script>
     <script type="module" src="/scripts/core/header.js?v={{ASSET_VERSION}}"></script>
 

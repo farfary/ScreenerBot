@@ -276,6 +276,14 @@ export async function loadPage(pageName) {
 }
 
 export function initRouter() {
+  // Guard against double initialization using a global flag
+  // ES module URL mismatch (with/without ?v=xxx) can cause router.js to load twice
+  if (window.__ROUTER_INITIALIZED__) {
+    console.log("[Router] Already initialized, skipping duplicate initialization");
+    return;
+  }
+  window.__ROUTER_INITIALIZED__ = true;
+
   // Handle navigation links (main nav tabs)
   document.addEventListener("click", (e) => {
     const link = e.target.closest("a[data-page]");
@@ -338,6 +346,16 @@ export function initRouter() {
     console.log("[Router] Found existing page container (cached), reusing:", initialPage);
     _state.pageCache[initialPage] = existingContainer;
     ensurePageStyles(initialPage);
+
+    // Load and activate page module for cached container (needed for event handlers)
+    (async () => {
+      try {
+        await import(`../pages/${initialPage}.js${assetQuery}`);
+        await PageLifecycleRegistry.activate(initialPage);
+      } catch (err) {
+        console.warn(`[Router] No module for cached page ${initialPage}:`, err.message);
+      }
+    })();
   } else if (
     mainContent &&
     mainContent.children.length > 0 &&
@@ -363,7 +381,7 @@ export function initRouter() {
     // Try to load and activate page module
     (async () => {
       try {
-        await import(`../pages/${initialPage}.js`);
+        await import(`../pages/${initialPage}.js${assetQuery}`);
         await PageLifecycleRegistry.activate(initialPage);
       } catch (err) {
         console.warn(`[Router] No module for initial page ${initialPage}:`, err.message);

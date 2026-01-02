@@ -744,7 +744,7 @@ function renderNotification(notification) {
     const errorMsg = state?.error || failedStep?.error || notification.error || "Unknown error";
     errorHtml = `<div class="notification-error">${escapeText(errorMsg)}</div>`;
   } else if (isCancelled) {
-    errorHtml = `<div class="notification-error">Cancelled</div>`;
+    errorHtml = "<div class=\"notification-error\">Cancelled</div>";
   }
 
   const safeId = escapeText(id);

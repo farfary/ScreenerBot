@@ -1521,7 +1521,7 @@ async function loadTelegramAuthState(authPanel) {
       totpSection.style.display = "none";
     }
   } catch (error) {
-    passwordStatusEl.innerHTML = `<span class="status-error"><i class="icon-alert-circle"></i> Error</span>`;
+    passwordStatusEl.innerHTML = "<span class=\"status-error\"><i class=\"icon-alert-circle\"></i> Error</span>";
     passwordContentEl.innerHTML = `<div class="telegram-auth-error">${Utils.escapeHtml(error.message)}</div>`;
   }
 }
@@ -1531,7 +1531,7 @@ async function loadTelegramAuthState(authPanel) {
  */
 function renderPasswordSection(statusEl, contentEl, isConfigured) {
   if (isConfigured) {
-    statusEl.innerHTML = `<span class="status-success"><i class="icon-check-circle"></i> Configured</span>`;
+    statusEl.innerHTML = "<span class=\"status-success\"><i class=\"icon-check-circle\"></i> Configured</span>";
     contentEl.innerHTML = `
       <div class="telegram-auth-row">
         <div class="telegram-auth-info">
@@ -1559,7 +1559,7 @@ function renderPasswordSection(statusEl, contentEl, isConfigured) {
       }
     });
   } else {
-    statusEl.innerHTML = `<span class="status-warning"><i class="icon-alert-circle"></i> Not Set</span>`;
+    statusEl.innerHTML = "<span class=\"status-warning\"><i class=\"icon-alert-circle\"></i> Not Set</span>";
     contentEl.innerHTML = `
       <div class="telegram-auth-row">
         <div class="telegram-auth-info">
@@ -1696,7 +1696,7 @@ function renderPasswordForm(formContainer, hasExistingPassword) {
  */
 function renderTotpSection(statusEl, contentEl, isEnabled) {
   if (isEnabled) {
-    statusEl.innerHTML = `<span class="status-success"><i class="icon-check-circle"></i> Enabled</span>`;
+    statusEl.innerHTML = "<span class=\"status-success\"><i class=\"icon-check-circle\"></i> Enabled</span>";
     contentEl.innerHTML = `
       <div class="telegram-auth-row">
         <div class="telegram-auth-info">
@@ -1724,7 +1724,7 @@ function renderTotpSection(statusEl, contentEl, isEnabled) {
       }
     });
   } else {
-    statusEl.innerHTML = `<span class="status-warning"><i class="icon-alert-circle"></i> Not Configured</span>`;
+    statusEl.innerHTML = "<span class=\"status-warning\"><i class=\"icon-alert-circle\"></i> Not Configured</span>";
     contentEl.innerHTML = `
       <div class="telegram-auth-row">
         <div class="telegram-auth-info">

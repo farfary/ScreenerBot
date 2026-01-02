@@ -666,17 +666,47 @@ function createLifecycle() {
       return true;
     }
 
-    const container = table?.elements?.scrollContainer;
-    if (!container) {
+    // Skip if links dropdown menu is open
+    const linksDropdown = document.querySelector(".links-dropdown-menu");
+    if (linksDropdown) {
+      return true;
+    }
+
+    // Skip if page size select is focused or dropdown is open
+    const container = table?.elements?.container;
+    if (container) {
+      const pageSizeSelect = container.querySelector("[data-pagination-size]");
+      if (pageSizeSelect && document.activeElement === pageSizeSelect) {
+        return true;
+      }
+      
+      // Skip if any row is currently being hovered (prevents hover state loss)
+      const hoveredRow = container.querySelector("tr.dt-row:hover");
+      if (hoveredRow) {
+        return true;
+      }
+      
+      // Skip if any input, select, or button in table is focused
+      const focusedElement = document.activeElement;
+      if (focusedElement && container.contains(focusedElement)) {
+        const tagName = focusedElement.tagName?.toLowerCase();
+        if (tagName === "input" || tagName === "select" || tagName === "button") {
+          return true;
+        }
+      }
+    }
+
+    const scrollContainer = table?.elements?.scrollContainer;
+    if (!scrollContainer) {
       return false;
     }
 
-    const hasScrollableContent = container.scrollHeight > container.clientHeight + 16;
+    const hasScrollableContent = scrollContainer.scrollHeight > scrollContainer.clientHeight + 16;
     if (!hasScrollableContent) {
       return false;
     }
 
-    const nearTop = container.scrollTop <= 120;
+    const nearTop = scrollContainer.scrollTop <= 120;
     return !nearTop;
   };
 
@@ -2361,7 +2391,9 @@ function createLifecycle() {
 
   const initializeRowClickHandler = () => {
     // Use event delegation for row clicks
-    if (!table?.elements?.scrollContainer) return;
+    if (!table?.elements?.scrollContainer) {
+      return;
+    }
 
     const container = table.elements.scrollContainer;
     if (container._rowClickHandler) {
