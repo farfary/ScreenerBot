@@ -1476,23 +1476,28 @@ impl TokenDatabase {
             .prepare(&query)
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
 
+        // Build params dynamically - only include params that are in the query
+        let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = Vec::new();
+        if let Some(ref reason) = reason_filter {
+            params.push((":reason", reason));
+        }
+        if let Some(ref source) = source_filter {
+            params.push((":source", source));
+        }
+        let limit_i64 = limit as i64;
+        let offset_i64 = offset as i64;
+        params.push((":limit", &limit_i64));
+        params.push((":offset", &offset_i64));
+
         let rows = stmt
-            .query_map(
-                rusqlite::named_params! {
-                    ":reason": reason_filter,
-                    ":source": source_filter,
-                    ":limit": limit as i64,
-                    ":offset": offset as i64,
-                },
-                |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, String>(2).unwrap_or_default(),
-                        row.get::<_, Option<i64>>(3)?.unwrap_or(0),
-                    ))
-                },
-            )
+            .query_map(params.as_slice(), |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2).unwrap_or_default(),
+                    row.get::<_, Option<i64>>(3)?.unwrap_or(0),
+                ))
+            })
             .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
 
         let mut results = Vec::new();

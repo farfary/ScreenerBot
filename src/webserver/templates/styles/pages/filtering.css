@@ -1447,9 +1447,27 @@
 }
 
 /* Explorer Tree View */
+.explorer-view-container {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg-primary);
+  overflow: hidden;
+}
+
+.explorer-view-container .analytics-header {
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  margin-bottom: 0;
+  flex-shrink: 0;
+}
+
 .explorer-layout {
   display: flex;
-  height: 100%;
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
   background: var(--bg-primary);
 }

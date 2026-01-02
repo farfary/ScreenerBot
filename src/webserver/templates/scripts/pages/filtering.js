@@ -1312,7 +1312,7 @@ function renderExplorerView() {
   `;
 
   return `
-    <div class="analytics-view">
+    <div class="explorer-view-container">
       ${headerHtml}
       ${treeHtml}
     </div>
@@ -1497,6 +1497,12 @@ function renderSourceToggle(source) {
 }
 
 function renderSearchBar() {
+  // Only show search bar on settings tabs (not status/analytics/explorer)
+  const isSettingsTab = ["meta", "dexscreener", "geckoterminal", "rugcheck"].includes(state.activeTab);
+  if (!isSettingsTab) {
+    return '';
+  }
+
   const showSourceToggle =
     state.activeTab === "dexscreener" ||
     state.activeTab === "geckoterminal" ||
@@ -1601,9 +1607,16 @@ function updateSearchBar() {
   const container = $("#filtering-search-bar");
   if (!container) return;
 
-  container.innerHTML = renderSearchBar();
-  bindSearchHandler();
-  bindSourceToggleHandlers();
+  const html = renderSearchBar();
+  container.innerHTML = html;
+  
+  // Hide the container if no content
+  container.style.display = html ? '' : 'none';
+  
+  if (html) {
+    bindSearchHandler();
+    bindSourceToggleHandlers();
+  }
 }
 
 function bindSearchHandler() {
@@ -1909,6 +1922,12 @@ async function loadAnalytics() {
 
 async function loadData() {
   await Promise.all([loadConfig(), loadStats()]);
+  
+  // If active tab is analytics or explorer, load analytics data
+  if (state.activeTab === "analytics" || state.activeTab === "explorer") {
+    await loadAnalytics();
+  }
+  
   render();
 }
 
