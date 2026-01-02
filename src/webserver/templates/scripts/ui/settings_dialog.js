@@ -3385,7 +3385,7 @@ export class SettingsDialog {
 
       if (response.ok) {
         const data = await response.json();
-        settings = { ...settings, ...data.data };
+        settings = { ...settings, ...data };
       }
 
       content.innerHTML = this._buildTelegramTab(settings);
