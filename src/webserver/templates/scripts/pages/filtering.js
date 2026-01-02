@@ -1244,6 +1244,51 @@ function renderAnalyticsView() {
 // EXPLORER VIEW - Tree-based rejection explorer
 // ============================================================================
 
+function renderExplorerDashboard(data) {
+  const topReasons = data.top_reasons || [];
+  const recentRejections = data.recent_rejections || [];
+
+  return `
+    <div class="explorer-empty-dashboard">
+      <div class="dashboard-welcome">
+        <h2>Rejection Explorer</h2>
+        <p>Analyze why tokens are being filtered out by your current configuration.</p>
+      </div>
+
+      <div class="dashboard-grid">
+        <div class="dashboard-card">
+          <h3><i class="icon-trending-down"></i> Top Rejection Reasons</h3>
+          <div class="top-reasons-list">
+            ${topReasons.slice(0, 8).map(r => `
+              <div class="top-reason-item" onclick="window.filteringPage.selectReason('${r.reason}', '${Utils.escapeHtml(r.display_label.replace(/'/g, "\\'"))}')">
+                <span class="top-reason-label">${Utils.escapeHtml(r.display_label)}</span>
+                <span class="top-reason-count">${Utils.formatNumber(r.count, 0)} tokens</span>
+              </div>
+            `).join('')}
+            ${topReasons.length === 0 ? '<div class="analytics-empty">No data available</div>' : ''}
+          </div>
+        </div>
+
+        <div class="dashboard-card">
+          <h3><i class="icon-clock"></i> Recent Rejections</h3>
+          <div class="top-reasons-list">
+            ${recentRejections.slice(0, 8).map(t => `
+              <div class="top-reason-item" onclick="window.filteringPage.selectReason('${t.reason}', '${Utils.escapeHtml(t.display_label.replace(/'/g, "\\'"))}')">
+                <div style="display: flex; flex-direction: column">
+                  <span class="top-reason-label">${Utils.escapeHtml(t.symbol || 'Unknown')}</span>
+                  <span style="font-size: 0.7rem; color: var(--text-secondary)">${Utils.escapeHtml(t.display_label)}</span>
+                </div>
+                <span class="top-reason-count">${Utils.formatTimeAgo(new Date(t.rejected_at))}</span>
+              </div>
+            `).join('')}
+            ${recentRejections.length === 0 ? '<div class="analytics-empty">No recent rejections</div>' : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
 function renderExplorerView() {
   if (!state.analytics) {
     return `
@@ -1279,9 +1324,24 @@ function renderExplorerView() {
   const treeHtml = `
     <div class="explorer-layout">
       <div class="explorer-sidebar">
+        <div class="explorer-sidebar-search">
+          <div class="explorer-search-input-wrapper">
+            <i class="icon-search"></i>
+            <input type="text" placeholder="Search reasons..." oninput="window.filteringPage.filterExplorerTree(this.value)">
+          </div>
+        </div>
+
+        <div class="explorer-summary-item ${!window.filteringPage.currentReason ? 'active' : ''}" onclick="window.filteringPage.selectSummary()">
+          <i class="icon-layout"></i>
+          <div class="explorer-summary-info">
+            <span class="explorer-summary-label">Overview</span>
+            <span class="explorer-summary-desc">Top reasons & recent activity</span>
+          </div>
+        </div>
+
         <div class="explorer-tree">
           ${data.by_category.map(cat => `
-            <div class="tree-category">
+            <div class="tree-category" data-category="${cat.category}">
               <div class="tree-category-header" onclick="window.filteringPage.toggleCategory('${cat.category}')">
                 <i class="icon-${Utils.escapeHtml(cat.icon)} tree-icon"></i>
                 <span class="tree-label">${Utils.escapeHtml(cat.label)}</span>
@@ -1290,7 +1350,10 @@ function renderExplorerView() {
               </div>
               <div class="tree-reasons" id="reasons-${cat.category}" style="display: none">
                 ${cat.reasons.map(r => `
-                  <div class="tree-reason" onclick="window.filteringPage.selectReason('${r.reason}', '${Utils.escapeHtml(r.display_label.replace(/'/g, "\\'"))}')" id="reason-${r.reason}">
+                  <div class="tree-reason ${window.filteringPage.currentReason === r.reason ? 'active' : ''}" 
+                       onclick="window.filteringPage.selectReason('${r.reason}', '${Utils.escapeHtml(r.display_label.replace(/'/g, "\\'"))}')" 
+                       id="reason-${r.reason}"
+                       data-label="${Utils.escapeHtml(r.display_label.toLowerCase())}">
                     <span class="tree-reason-label">${Utils.escapeHtml(r.display_label)}</span>
                     <span class="tree-reason-count">${Utils.formatNumber(r.count, 0)}</span>
                   </div>
@@ -1302,15 +1365,16 @@ function renderExplorerView() {
       </div>
       <div class="explorer-content">
         <div id="explorer-detail-view">
-          <div class="explorer-placeholder">
-            <i class="icon-search"></i>
-            <h3>Select a Rejection Reason</h3>
-            <p>Choose a category and reason from the sidebar to view detailed token information and rejection history.</p>
-          </div>
+          ${window.filteringPage.currentReason ? '' : renderExplorerDashboard(data)}
         </div>
       </div>
     </div>
   `;
+
+  // Trigger initial load if reason is selected
+  if (window.filteringPage.currentReason) {
+    setTimeout(() => window.filteringPage.loadExplorer(window.filteringPage.explorerPage), 0);
+  }
 
   return `
     <div class="explorer-view-container">
@@ -2033,7 +2097,10 @@ window.filteringPage = {
   explorerLimit: 50,
   currentReason: null,
   currentReasonLabel: null,
+  tokenSearchQuery: '',
   
+  debouncedFilterTokens: null,
+
   refreshAnalytics: async () => {
     const btn = document.querySelector('.analytics-actions button');
     if (btn) {
@@ -2044,6 +2111,11 @@ window.filteringPage = {
         await loadAnalytics();
         if (window.filteringPage.currentReason) {
           window.filteringPage.loadExplorer(window.filteringPage.explorerPage);
+        } else {
+          const container = document.getElementById('explorer-detail-view');
+          if (container && state.analytics) {
+            container.innerHTML = renderExplorerDashboard(state.analytics);
+          }
         }
       } finally {
         btn.innerHTML = originalContent;
@@ -2051,6 +2123,51 @@ window.filteringPage = {
       }
     } else {
       await loadAnalytics();
+    }
+  },
+  
+  debouncedFilterExplorerTree: null,
+
+  filterExplorerTree: (query) => {
+    if (!window.filteringPage.debouncedFilterExplorerTree) {
+      window.filteringPage.debouncedFilterExplorerTree = Utils.debounce((q) => {
+        const lowerQ = q.toLowerCase();
+        document.querySelectorAll('.tree-category').forEach(cat => {
+          let hasVisibleReason = false;
+          const reasons = cat.querySelectorAll('.tree-reason');
+          reasons.forEach(r => {
+            const label = r.getAttribute('data-label') || '';
+            const visible = label.includes(lowerQ);
+            r.style.display = visible ? 'flex' : 'none';
+            if (visible) hasVisibleReason = true;
+          });
+          
+          cat.style.display = (hasVisibleReason || lowerQ === '') ? 'block' : 'none';
+          
+          // Auto-expand if searching
+          const reasonsList = cat.querySelector('.tree-reasons');
+          const toggle = cat.querySelector('.tree-toggle');
+          if (lowerQ !== '' && hasVisibleReason) {
+            if (reasonsList) reasonsList.style.display = 'block';
+            if (toggle) toggle.style.transform = 'rotate(180deg)';
+          }
+        });
+      }, 150);
+    }
+    window.filteringPage.debouncedFilterExplorerTree(query);
+  },
+
+  selectSummary: () => {
+    window.filteringPage.currentReason = null;
+    window.filteringPage.currentReasonLabel = null;
+    
+    document.querySelectorAll('.tree-reason').forEach(el => el.classList.remove('active'));
+    const summaryItem = document.querySelector('.explorer-summary-item');
+    if (summaryItem) summaryItem.classList.add('active');
+    
+    const container = document.getElementById('explorer-detail-view');
+    if (container && state.analytics) {
+      container.innerHTML = renderExplorerDashboard(state.analytics);
     }
   },
   
@@ -2069,14 +2186,38 @@ window.filteringPage = {
   selectReason: (reason, label) => {
     // Update active state
     document.querySelectorAll('.tree-reason').forEach(el => el.classList.remove('active'));
+    const summaryItem = document.querySelector('.explorer-summary-item');
+    if (summaryItem) summaryItem.classList.remove('active');
+    
     const activeEl = document.getElementById(`reason-${reason}`);
-    if (activeEl) activeEl.classList.add('active');
+    if (activeEl) {
+      activeEl.classList.add('active');
+      // Ensure category is expanded
+      const category = activeEl.closest('.tree-reasons');
+      if (category && category.style.display === 'none') {
+        category.style.display = 'block';
+        const catId = category.id.replace('reasons-', '');
+        const toggle = document.getElementById(`toggle-${catId}`);
+        if (toggle) toggle.style.transform = 'rotate(180deg)';
+      }
+    }
     
     window.filteringPage.currentReason = reason;
     window.filteringPage.currentReasonLabel = label;
+    window.filteringPage.tokenSearchQuery = '';
     window.filteringPage.loadExplorer(0);
   },
   
+  filterTokens: (query) => {
+    if (!window.filteringPage.debouncedFilterTokens) {
+      window.filteringPage.debouncedFilterTokens = Utils.debounce((q) => {
+        window.filteringPage.tokenSearchQuery = q;
+        window.filteringPage.loadExplorer(0);
+      }, 300);
+    }
+    window.filteringPage.debouncedFilterTokens(query);
+  },
+
   prevPage: () => {
     if (window.filteringPage.explorerPage > 0) {
       window.filteringPage.loadExplorer(window.filteringPage.explorerPage - 1);
@@ -2100,27 +2241,42 @@ window.filteringPage = {
     const container = document.getElementById('explorer-detail-view');
     const reason = window.filteringPage.currentReason;
     const label = window.filteringPage.currentReasonLabel;
+    const searchQuery = window.filteringPage.tokenSearchQuery;
     
     if (!container || !reason) return;
     
-    container.innerHTML = `
-      <div class="explorer-detail-header">
-        <div class="detail-title">
-          <span class="reason-badge large">${Utils.escapeHtml(label)}</span>
+    // Initial render with header and search
+    if (page === 0 && !container.querySelector('.explorer-detail-header')) {
+      container.innerHTML = `
+        <div class="explorer-detail-header">
+          <div class="detail-title-group">
+            <span class="reason-badge large">${Utils.escapeHtml(label)}</span>
+            <div class="explorer-search-input-wrapper" style="width: 250px">
+              <i class="icon-search"></i>
+              <input type="text" placeholder="Search tokens..." value="${Utils.escapeHtml(searchQuery)}" 
+                     oninput="window.filteringPage.filterTokens(this.value)">
+            </div>
+          </div>
+          <div class="detail-actions">
+            <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.exportCsv()" title="Export to CSV">
+              <i class="icon-download"></i> Export CSV
+            </button>
+          </div>
         </div>
-        <div class="detail-actions">
-          <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.exportCsv()" title="Export to CSV">
-            <i class="icon-download"></i> Export CSV
-          </button>
+        <div class="explorer-table-wrapper">
+          <div class="loading-spinner small" style="margin: 40px auto; display: block;"></div>
         </div>
-      </div>
-      <div class="explorer-table-wrapper">
-        <div class="loading-spinner small"></div> Loading tokens...
-      </div>
-    `;
+      `;
+    } else {
+      const wrapper = container.querySelector('.explorer-table-wrapper');
+      if (wrapper) wrapper.innerHTML = '<div class="loading-spinner small" style="margin: 40px auto; display: block;"></div>';
+    }
     
     try {
       let url = `/api/filtering/rejected-tokens?limit=${window.filteringPage.explorerLimit}&offset=${page * window.filteringPage.explorerLimit}&reason=${encodeURIComponent(reason)}`;
+      if (searchQuery) {
+        url += `&search=${encodeURIComponent(searchQuery)}`;
+      }
       
       const response = await fetch(url);
       if (!response.ok) throw new Error('Failed to fetch tokens');
@@ -2128,8 +2284,14 @@ window.filteringPage = {
       const tokens = await response.json();
       const wrapper = container.querySelector('.explorer-table-wrapper');
       
+      if (!wrapper) return;
+
       if (tokens.length === 0) {
-        wrapper.innerHTML = '<div class="analytics-empty">No tokens found for this reason</div>';
+        wrapper.innerHTML = `
+          <div class="analytics-empty" style="padding: 60px 0">
+            <i class="icon-search" style="font-size: 2rem; opacity: 0.2; margin-bottom: 1rem; display: block;"></i>
+            No tokens found ${searchQuery ? 'matching your search' : 'for this reason'}
+          </div>`;
         return;
       }
       
@@ -2148,32 +2310,36 @@ window.filteringPage = {
       html += tokens.map(t => {
         const src = t.image_url;
         const logo = src
-          ? `<img class="token-logo" alt="" src="${Utils.escapeHtml(src)}" style="width: 24px; height: 24px; border-radius: 50%;" />`
-          : '<span class="token-logo" style="width: 24px; height: 24px; display: inline-block; text-align: center; line-height: 24px; font-size: 10px; background: var(--bg-secondary); border-radius: 50%;">N/A</span>';
+          ? `<img class="token-logo" alt="" src="${Utils.escapeHtml(src)}" />`
+          : '<div class="token-logo" style="display: flex; align-items: center; justify-content: center; font-size: 10px; background: var(--bg-tertiary);">N/A</div>';
         const sym = Utils.escapeHtml(t.symbol || "—");
-        const name = t.name ? `<div class="token-name" style="font-size: 0.75rem; color: var(--text-secondary)">${Utils.escapeHtml(t.name)}</div>` : "";
+        const name = Utils.escapeHtml(t.name || "Unknown Token");
         
         return `
         <tr>
           <td>
-            <div style="display: flex; align-items: center; gap: 8px">
-              ${logo}
-              <div>
-                <div style="font-family: var(--font-data); font-weight: 500">${sym}</div>
-                ${name}
+            <div class="token-info-cell">
+              <div class="token-logo-wrapper">
+                ${logo}
               </div>
-              <button class="btn-icon small" onclick="Utils.copyToClipboard('${t.mint}')" title="Copy Mint">
-                <i class="icon-copy"></i>
-              </button>
-              <a href="https://dexscreener.com/solana/${t.mint}" target="_blank" class="btn-icon small" title="View on DexScreener">
-                <i class="icon-external-link"></i>
-              </a>
+              <div class="token-details">
+                <div class="token-symbol">${sym}</div>
+                <div class="token-name">${name}</div>
+              </div>
+              <div class="token-actions">
+                <button class="btn-icon small" onclick="Utils.copyToClipboard('${t.mint}')" title="Copy Mint">
+                  <i class="icon-copy"></i>
+                </button>
+                <a href="https://dexscreener.com/solana/${t.mint}" target="_blank" class="btn-icon small" title="View on DexScreener">
+                  <i class="icon-external-link"></i>
+                </a>
+              </div>
             </div>
           </td>
           <td>
             <span class="source-badge ${t.source.toLowerCase()}">${Utils.escapeHtml(t.source)}</span>
           </td>
-          <td style="text-align: right; font-family: var(--font-data); color: var(--text-secondary)">
+          <td style="text-align: right; font-family: var(--font-data); color: var(--text-secondary); font-size: 0.85rem">
             ${Utils.formatTimeAgo(new Date(t.rejected_at))}
           </td>
         </tr>
@@ -2184,9 +2350,13 @@ window.filteringPage = {
       // Pagination
       html += `
         <div class="pagination-controls">
-          <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.prevPage()" ${page === 0 ? 'disabled' : ''}>Previous</button>
-          <span style="align-self: center; font-family: var(--font-data)">Page ${page + 1}</span>
-          <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.nextPage()" ${tokens.length < window.filteringPage.explorerLimit ? 'disabled' : ''}>Next</button>
+          <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.prevPage()" ${page === 0 ? 'disabled' : ''}>
+            <i class="icon-chevron-left"></i> Previous
+          </button>
+          <span class="page-info">Page ${page + 1}</span>
+          <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.nextPage()" ${tokens.length < window.filteringPage.explorerLimit ? 'disabled' : ''}>
+            Next <i class="icon-chevron-right"></i>
+          </button>
         </div>
       `;
       
@@ -2194,7 +2364,10 @@ window.filteringPage = {
       
     } catch (err) {
       console.error("Failed to load explorer:", err);
-      container.innerHTML = `<div class="error-message">Failed to load tokens: ${err.message}</div>`;
+      const wrapper = container.querySelector('.explorer-table-wrapper');
+      if (wrapper) {
+        wrapper.innerHTML = `<div class="error-message" style="padding: 40px">Failed to load tokens: ${err.message}</div>`;
+      }
     }
   }
 };

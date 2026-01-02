@@ -1508,10 +1508,51 @@ impl TokenDatabase {
     }
 
     /// Get list of rejected tokens with pagination and optional filtering
+    pub fn get_recent_rejections(
+        &self,
+        limit: usize,
+    ) -> TokenResult<Vec<(String, String, String, i64, Option<String>)>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let query = "SELECT ut.mint, ut.last_rejection_reason, ut.last_rejection_source, ut.last_rejection_at, t.symbol 
+                     FROM update_tracking ut 
+                     LEFT JOIN tokens t ON ut.mint = t.mint 
+                     WHERE ut.last_rejection_reason IS NOT NULL 
+                     ORDER BY ut.last_rejection_at DESC LIMIT :limit";
+
+        let mut stmt = conn
+            .prepare(query)
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+
+        let limit_i64 = limit as i64;
+        let rows = stmt
+            .query_map(&[(":limit", &limit_i64)], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2).unwrap_or_default(),
+                    row.get::<_, Option<i64>>(3)?.unwrap_or(0),
+                    row.get::<_, Option<String>>(4)?,
+                ))
+            })
+            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            results.push(row.map_err(|e| TokenError::Database(format!("Row failed: {}", e)))?);
+        }
+
+        Ok(results)
+    }
+
     pub fn get_rejected_tokens(
         &self,
         reason_filter: Option<String>,
         source_filter: Option<String>,
+        search_filter: Option<String>,
         limit: usize,
         offset: usize,
     ) -> TokenResult<Vec<(String, String, String, i64)>> {
@@ -1520,17 +1561,30 @@ impl TokenDatabase {
             .lock()
             .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
 
-        let mut query = "SELECT mint, last_rejection_reason, last_rejection_source, last_rejection_at FROM update_tracking WHERE last_rejection_reason IS NOT NULL".to_string();
+        let mut query = if search_filter.is_some() {
+            "SELECT ut.mint, ut.last_rejection_reason, ut.last_rejection_source, ut.last_rejection_at 
+             FROM update_tracking ut 
+             LEFT JOIN tokens t ON ut.mint = t.mint 
+             WHERE ut.last_rejection_reason IS NOT NULL".to_string()
+        } else {
+            "SELECT mint, last_rejection_reason, last_rejection_source, last_rejection_at 
+             FROM update_tracking 
+             WHERE last_rejection_reason IS NOT NULL".to_string()
+        };
         
         if reason_filter.is_some() {
-            query.push_str(" AND last_rejection_reason = :reason");
+            query.push_str(if search_filter.is_some() { " AND ut.last_rejection_reason = :reason" } else { " AND last_rejection_reason = :reason" });
         }
         
         if source_filter.is_some() {
-            query.push_str(" AND last_rejection_source = :source");
+            query.push_str(if search_filter.is_some() { " AND ut.last_rejection_source = :source" } else { " AND last_rejection_source = :source" });
+        }
+
+        if search_filter.is_some() {
+            query.push_str(" AND (ut.mint LIKE :search OR t.symbol LIKE :search OR t.name LIKE :search)");
         }
         
-        query.push_str(" ORDER BY last_rejection_at DESC LIMIT :limit OFFSET :offset");
+        query.push_str(if search_filter.is_some() { " ORDER BY ut.last_rejection_at DESC LIMIT :limit OFFSET :offset" } else { " ORDER BY last_rejection_at DESC LIMIT :limit OFFSET :offset" });
 
         let mut stmt = conn
             .prepare(&query)
@@ -1544,6 +1598,13 @@ impl TokenDatabase {
         if let Some(ref source) = source_filter {
             params.push((":source", source));
         }
+        
+        let search_pattern;
+        if let Some(ref search) = search_filter {
+            search_pattern = format!("%{}%", search);
+            params.push((":search", &search_pattern));
+        }
+
         let limit_i64 = limit as i64;
         let offset_i64 = offset as i64;
         params.push((":limit", &limit_i64));
@@ -3704,9 +3765,23 @@ pub async fn get_rejection_stats_async() -> TokenResult<Vec<(String, String, i64
 }
 
 /// Async: get rejected tokens list
+pub async fn get_recent_rejections_async(
+    limit: usize,
+) -> TokenResult<Vec<(String, String, String, i64, Option<String>)>> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+    
+    tokio::task::spawn_blocking(move || {
+        db.get_recent_rejections(limit)
+    })
+    .await
+    .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
 pub async fn get_rejected_tokens_async(
     reason_filter: Option<String>,
     source_filter: Option<String>,
+    search_filter: Option<String>,
     limit: usize,
     offset: usize,
 ) -> TokenResult<Vec<(String, String, String, i64)>> {
@@ -3714,7 +3789,7 @@ pub async fn get_rejected_tokens_async(
         .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
     
     tokio::task::spawn_blocking(move || {
-        db.get_rejected_tokens(reason_filter, source_filter, limit, offset)
+        db.get_rejected_tokens(reason_filter, source_filter, search_filter, limit, offset)
     })
     .await
     .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?

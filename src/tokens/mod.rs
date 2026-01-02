@@ -7,8 +7,8 @@
 /// - security/: Security data fetchers (Rugcheck)
 /// - updates.rs: Priority-based background updates with rate limiting
 /// - cleanup.rs: Automatic blacklist management
-/// - filtered_store.rs: Centralized storage for filtered token lists
-/// - service_new.rs: ServiceManager integration
+/// - store.rs: Centralized storage for filtered token lists
+/// - service.rs: ServiceManager integration
 /// - decimals.rs: Decimals lookup with caching
 /// - types.rs: Core domain types
 ///
@@ -42,6 +42,7 @@ pub use database::{
     get_full_token_async,
     get_full_token_for_source_async,
     get_global_database,
+    get_recent_rejections_async,
     get_rejection_stats_async,
     get_rejected_tokens_async,
     get_token_async,

@@ -12,7 +12,10 @@ use std::{collections::HashMap, sync::Arc};
 use crate::{
     filtering,
     logger::{self, LogTag},
-    tokens::{get_rejected_tokens_async, get_rejection_stats_async, get_token_info_batch_async},
+    tokens::{
+        get_recent_rejections_async, get_rejected_tokens_async, get_rejection_stats_async,
+        get_token_info_batch_async,
+    },
     webserver::state::AppState,
     webserver::utils::{error_response, success_response},
 };
@@ -404,10 +407,23 @@ struct AnalyticsResponse {
     
     // Top rejection reasons (detailed)
     top_reasons: Vec<RejectionStatEntry>,
+
+    // Recent rejections
+    recent_rejections: Vec<RecentRejectionEntry>,
     
     // Metadata
     last_updated: String,
     timestamp: String,
+}
+
+#[derive(Debug, Serialize)]
+struct RecentRejectionEntry {
+    mint: String,
+    symbol: Option<String>,
+    reason: String,
+    display_label: String,
+    source: String,
+    rejected_at: String,
 }
 
 /// GET /api/filtering/analytics
@@ -416,9 +432,10 @@ async fn get_analytics() -> Response {
     // Fetch stats and rejection data
     let stats_result = filtering::fetch_stats().await;
     let rejection_result = get_rejection_stats_async().await;
+    let recent_result = get_recent_rejections_async(20).await;
     
-    match (stats_result, rejection_result) {
-        (Ok(stats), Ok(raw_stats)) => {
+    match (stats_result, rejection_result, recent_result) {
+        (Ok(stats), Ok(raw_stats), Ok(recent_raw)) => {
             let total_tokens = stats.total_tokens;
             let total_passed = stats.passed_filtering;
             
@@ -586,7 +603,21 @@ async fn get_analytics() -> Response {
                 .collect();
             
             top_reasons.sort_by(|a, b| b.count.cmp(&a.count));
-            // top_reasons.truncate(25); // Removed truncation to show all reasons as requested
+            
+            // Build recent rejections list
+            let recent_rejections: Vec<RecentRejectionEntry> = recent_raw
+                .into_iter()
+                .map(|(mint, reason, source, ts, symbol)| {
+                    RecentRejectionEntry {
+                        mint,
+                        symbol,
+                        display_label: get_rejection_display_label(&reason),
+                        reason,
+                        source,
+                        rejected_at: DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc::now()).to_rfc3339(),
+                    }
+                })
+                .collect();
             
             // Calculate rates
             let pass_rate = if total_tokens > 0 {
@@ -607,11 +638,12 @@ async fn get_analytics() -> Response {
                 by_source,
                 data_quality,
                 top_reasons,
+                recent_rejections,
                 last_updated: stats.updated_at.to_rfc3339(),
                 timestamp: Utc::now().to_rfc3339(),
             })
         }
-        (Err(err), _) => {
+        (Err(err), _, _) => {
             logger::warning(
                 LogTag::Filtering,
                 &format!("Failed to fetch filtering stats for analytics: {}", err),
@@ -623,10 +655,22 @@ async fn get_analytics() -> Response {
                 None,
             )
         }
-        (_, Err(err)) => {
+        (_, Err(err), _) => {
             logger::warning(
                 LogTag::Filtering,
                 &format!("Failed to fetch rejection stats for analytics: {:?}", err),
+            );
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "ANALYTICS_FAILED",
+                &format!("Failed to fetch analytics: {:?}", err),
+                None,
+            )
+        }
+        (_, _, Err(err)) => {
+            logger::warning(
+                LogTag::Filtering,
+                &format!("Failed to fetch recent rejections for analytics: {:?}", err),
             );
             error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -642,6 +686,7 @@ async fn get_analytics() -> Response {
 struct RejectedTokensQuery {
     reason: Option<String>,
     source: Option<String>,
+    search: Option<String>,
     limit: Option<usize>,
     offset: Option<usize>,
 }
@@ -664,7 +709,7 @@ async fn get_rejected_tokens_handler(Query(params): Query<RejectedTokensQuery>) 
     let limit = params.limit.unwrap_or(50).min(100); // Max 100 per page
     let offset = params.offset.unwrap_or(0);
     
-    match get_rejected_tokens_async(params.reason, params.source, limit, offset).await {
+    match get_rejected_tokens_async(params.reason, params.source, params.search, limit, offset).await {
         Ok(tokens) => {
             // Collect mints for batch token info lookup
             let mints: Vec<String> = tokens.iter().map(|(mint, _, _, _)| mint.clone()).collect();
@@ -714,7 +759,7 @@ async fn export_rejected_tokens(Query(params): Query<RejectedTokensQuery>) -> Re
     let limit = 100000;
     let offset = 0;
     
-    match get_rejected_tokens_async(params.reason, params.source, limit, offset).await {
+    match get_rejected_tokens_async(params.reason, params.source, params.search, limit, offset).await {
         Ok(tokens) => {
             let mut wtr = csv::Writer::from_writer(vec![]);
             // Write header
