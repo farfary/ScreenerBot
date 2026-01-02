@@ -8,8 +8,9 @@
 
 /* =============================================================================
    BASE DIALOG STRUCTURE - Full Screen Desktop App Style
-   Dialog covers full screen with consistent background including traffic lights
-   Content area respects macOS title bar (28px) for traffic lights and window drag
+   Platform-aware layout:
+   - Browser/Windows/Linux: No title bar offset, full height
+   - macOS Electron: 28px title bar for traffic lights + window drag
    Status bar (24px) at bottom
    ============================================================================= */
 
@@ -29,24 +30,35 @@
   pointer-events: auto;
 }
 
-/* Title bar area - same background as dialog content for seamless look */
+/* Title bar area - hidden by default (browser/Windows/Linux) */
 .billboard-dialog::before {
   content: "";
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 28px;
+  height: 0;
   background: var(--bg-secondary, #161b22);
   z-index: 1;
+  transition: height 0.15s ease;
 }
 
-/* Backdrop - covers area below title bar */
+/* macOS Electron: Show title bar background */
+.electron-macos .billboard-dialog::before {
+  height: 28px;
+}
+
+/* Backdrop - full coverage by default */
 .billboard-backdrop {
   position: absolute;
-  inset: 28px 0 24px;
+  inset: 0 0 24px;
   background: transparent;
   cursor: default;
+}
+
+/* macOS Electron: Backdrop starts below title bar */
+.electron-macos .billboard-backdrop {
+  top: 28px;
 }
 
 /* =============================================================================
@@ -55,7 +67,7 @@
 
 .billboard-container {
   position: relative;
-  margin-top: 28px;
+  margin-top: 0;
   margin-bottom: 24px;
   background: var(--bg-primary, #0d1117);
   border: none;
@@ -70,6 +82,11 @@
   overflow: hidden;
   animation: billboard-fade-in 0.25s ease-out;
   z-index: 2;
+}
+
+/* macOS Electron: Content starts below title bar */
+.electron-macos .billboard-container {
+  margin-top: 28px;
 }
 
 @keyframes billboard-fade-in {

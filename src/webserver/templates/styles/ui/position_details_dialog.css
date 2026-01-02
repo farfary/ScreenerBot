@@ -2,8 +2,10 @@
 
 /* =============================================================================
    BASE DIALOG STRUCTURE - Full Screen Desktop App Style
-   Dialog covers full screen with consistent background including traffic lights
-   Content area respects macOS title bar (28px) and status bar (24px)
+   Platform-aware layout:
+   - Browser/Windows/Linux: No title bar offset, full height
+   - macOS Electron: 28px title bar for traffic lights + window drag
+   Status bar (24px) at bottom
    ============================================================================= */
 
 .position-details-dialog {
@@ -22,16 +24,22 @@
   pointer-events: auto;
 }
 
-/* Title bar area - same background as dialog content for seamless look */
+/* Title bar area - hidden by default (browser/Windows/Linux) */
 .position-details-dialog::before {
   content: "";
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 28px;
+  height: 0;
   background: var(--bg-secondary);
   z-index: 1;
+  transition: height 0.15s ease;
+}
+
+/* macOS Electron: Show title bar background */
+.electron-macos .position-details-dialog::before {
+  height: 28px;
 }
 
 /* =============================================================================
@@ -45,13 +53,18 @@
   z-index: 0;
 }
 
+/* macOS Electron: Backdrop starts below title bar */
+.electron-macos .position-details-dialog .dialog-backdrop {
+  top: 28px;
+}
+
 /* =============================================================================
    CONTENT CONTAINER
    ============================================================================= */
 
 .position-details-dialog .dialog-container {
   position: relative;
-  margin-top: 28px;
+  margin-top: 0;
   margin-bottom: 24px;
   background: var(--bg-primary);
   border: none;
@@ -66,6 +79,11 @@
   overflow: hidden;
   animation: pdd-fade-in 0.25s ease-out;
   z-index: 2;
+}
+
+/* macOS Electron: Content starts below title bar */
+.electron-macos .position-details-dialog .dialog-container {
+  margin-top: 28px;
 }
 
 @keyframes pdd-fade-in {
