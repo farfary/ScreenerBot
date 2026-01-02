@@ -3409,7 +3409,7 @@ export class SettingsDialog {
         <div class="session-item" data-session-id="${s.user_id}">
           <div class="session-info">
             <span class="session-user">${s.username || "Unknown"}</span>
-            <span class="session-time">Active: ${Utils.formatDuration(Date.now() - new Date(s.created_at).getTime())}</span>
+            <span class="session-time">Active: ${Utils.formatDuration(s.created_at_secs * 1000)}</span>
           </div>
           <button class="btn btn-danger btn-sm session-revoke-btn" data-session-id="${s.user_id}">
             <i class="icon-x"></i> Revoke
@@ -3971,7 +3971,11 @@ export class SettingsDialog {
 
     const require2faToggle = content.querySelector("#tgRequire2fa");
     if (require2faToggle) {
-      require2faToggle.addEventListener("change", (e) => updateSetting("commands_require_2fa", e.target.checked));
+      require2faToggle.addEventListener("change", (e) => {
+        updateSetting("commands_require_2fa", e.target.checked);
+        // Refresh auth section to update status display
+        this._loadTelegramAuthState(content);
+      });
     }
   }
 
@@ -3999,7 +4003,12 @@ export class SettingsDialog {
       }
 
       const totpEnabled = lockscreenData.totp_enabled || false;
-      this._renderAuthSection(statusEl, contentEl, totpEnabled);
+      
+      // Also check the commands_require_2fa setting
+      const require2faToggle = content.querySelector("#tgRequire2fa");
+      const require2fa = require2faToggle ? require2faToggle.checked : true;
+      
+      this._renderAuthSection(statusEl, contentEl, totpEnabled, require2fa);
     } catch (error) {
       if (statusEl) {
         statusEl.innerHTML = '<span class="status-error"><i class="icon-alert-circle"></i> Error</span>';
@@ -4011,16 +4020,30 @@ export class SettingsDialog {
   }
 
   /**
-   * Render the command authentication section based on lockscreen 2FA status
+   * Render the command authentication section based on lockscreen 2FA status and require2fa setting
    */
-  _renderAuthSection(statusEl, contentEl, totpEnabled) {
-    if (totpEnabled) {
+  _renderAuthSection(statusEl, contentEl, totpEnabled, require2fa = true) {
+    if (totpEnabled && require2fa) {
       statusEl.innerHTML = '<span class="status-success"><i class="icon-check-circle"></i> Protected</span>';
       contentEl.innerHTML = `
         <div class="telegram-auth-row">
           <div class="telegram-auth-info">
             <i class="icon-shield" style="color: var(--success); margin-right: 8px;"></i>
             <span>Commands are protected by lockscreen 2FA. When sessions expire, users must provide their authenticator code via <code>/login</code> command.</span>
+          </div>
+        </div>
+        <div class="telegram-auth-note">
+          <i class="icon-info"></i>
+          <span>2FA is managed in <button type="button" class="link-button" id="tg-goto-security-btn">Security Settings</button></span>
+        </div>
+      `;
+    } else if (totpEnabled && !require2fa) {
+      statusEl.innerHTML = '<span class="status-warning"><i class="icon-alert-circle"></i> Disabled</span>';
+      contentEl.innerHTML = `
+        <div class="telegram-auth-row">
+          <div class="telegram-auth-info">
+            <i class="icon-alert-triangle" style="color: var(--warning); margin-right: 8px;"></i>
+            <span>Lockscreen 2FA is configured but disabled for Telegram. Enable "Require 2FA for Commands" above to protect Telegram commands.</span>
           </div>
         </div>
         <div class="telegram-auth-note">

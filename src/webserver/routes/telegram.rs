@@ -270,7 +270,10 @@ async fn update_settings(
                 cfg.telegram.chat_id = chat_id.clone();
             }
             if let Some(timeout) = req.session_timeout_minutes {
-                cfg.telegram.session_timeout_minutes = timeout;
+                // Validate range: 5-1440 minutes (5 min to 24 hours)
+                if timeout >= 5 && timeout <= 1440 {
+                    cfg.telegram.session_timeout_minutes = timeout;
+                }
             }
             if let Some(ref notif) = req.notifications {
                 if let Some(v) = notif.position_opened {

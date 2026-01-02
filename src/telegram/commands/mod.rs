@@ -122,10 +122,11 @@ pub async fn check_auth(bot: &Bot, chat_id: ChatId, user_id: i64) -> bool {
                 // Session expired, invalidate and prompt for re-login
                 manager.invalidate_session(user_id).await;
 
-                // Check if 2FA is configured
+                // Check if 2FA is required for commands
+                let commands_require_2fa = with_config(|c| c.telegram.commands_require_2fa);
                 let totp_secret = with_config(|c| c.webserver.auth_totp_secret.clone());
-                if totp_secret.is_empty() {
-                    // No 2FA configured, auto-reactivate
+                if !commands_require_2fa || totp_secret.is_empty() {
+                    // 2FA not required or not configured, auto-reactivate
                     manager.authenticate_session(user_id).await;
                     manager.touch_session(user_id).await;
                     return true;
@@ -145,10 +146,11 @@ pub async fn check_auth(bot: &Bot, chat_id: ChatId, user_id: i64) -> bool {
             true
         }
         SessionState::Expired => {
-            // Check if 2FA is configured
+            // Check if 2FA is required for commands
+            let commands_require_2fa = with_config(|c| c.telegram.commands_require_2fa);
             let totp_secret = with_config(|c| c.webserver.auth_totp_secret.clone());
-            if totp_secret.is_empty() {
-                // No 2FA configured, auto-reactivate
+            if !commands_require_2fa || totp_secret.is_empty() {
+                // 2FA not required or not configured, auto-reactivate
                 manager.authenticate_session(user_id).await;
                 manager.touch_session(user_id).await;
                 return true;

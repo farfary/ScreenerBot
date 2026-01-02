@@ -5,7 +5,6 @@
 use crate::config::with_config;
 use crate::telegram::types::{DiscoveredChat, SessionState, TelegramSession};
 use once_cell::sync::Lazy;
-use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -37,17 +36,6 @@ impl TelegramSessionManager {
             discovered_chats: Arc::new(RwLock::new(Vec::new())),
             discovery_active: Arc::new(AtomicBool::new(false)),
         }
-    }
-
-    // ========================================================================
-    // PASSWORD HASHING (for Telegram password management API)
-    // ========================================================================
-
-    /// Hash a password using SHA-256 (used by password management routes)
-    pub fn hash_password(password: &str) -> String {
-        let mut hasher = Sha256::new();
-        hasher.update(password.as_bytes());
-        format!("{:x}", hasher.finalize())
     }
 
     // ========================================================================
