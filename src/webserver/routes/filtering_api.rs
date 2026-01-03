@@ -341,14 +341,14 @@ fn get_category_icon(category: &str) -> &'static str {
         "liquidity_lock" => "lock",
         "fees" => "percent",
         "liquidity" => "droplet",
-        "volume" => "bar-chart",
+        "volume" => "chart-bar",
         "market_cap" => "dollar-sign",
         "price_action" => "trending-up",
         "activity" => "activity",
-        "data_quality" => "alert-circle",
+        "data_quality" => "circle-alert",
         "timing" => "clock",
         "market" => "trending-up",
-        _ => "help-circle",
+        _ => "info",
     }
 }
 

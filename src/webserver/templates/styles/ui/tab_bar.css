@@ -136,6 +136,9 @@
    ============================================================================ */
 
 .sub-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: var(--tab-bar-padding-y) 16px;
   background: transparent;
   border: none;
@@ -149,6 +152,11 @@
   position: relative;
   user-select: none;
   font-family: inherit;
+}
+
+.sub-tab i {
+  font-size: 0.9em;
+  line-height: 1;
 }
 
 .sub-tab:hover {
@@ -191,6 +199,7 @@
    High Contrast Mode Support
    ============================================================================ */
 
+/* stylelint-disable-next-line media-feature-name-value-no-unknown */
 @media (prefers-contrast: high) {
   .tab,
   .sub-tab {
