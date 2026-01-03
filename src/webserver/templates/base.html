@@ -248,33 +248,35 @@
       <div class="header-row header-row-3">
         <div class="ticker-container">
           <div class="ticker-scroll" id="tickerScroll">
-            <div class="ticker-segment" id="tickerMonitoring">
+            <div class="ticker-segment" id="tickerMonitoring" title="Tokens being monitored by Pool Service">
               <i class="ticker-icon icon-scan"></i>
               <span class="ticker-text"
                 >Monitoring: <strong id="tickerMonitoringCount">—</strong></span
               >
             </div>
-            <div class="ticker-segment" id="tickerFiltering">
-              <i class="ticker-icon icon-list-filter"></i>
+            <div class="ticker-segment" id="tickerFiltering" title="Tokens that passed/failed filtering criteria">
+              <i class="ticker-icon icon-filter"></i>
               <span class="ticker-text"
-                >Passed: <strong id="tickerPassedCount">—</strong> • Rejected:
+                >Passed: <strong id="tickerPassedCount">—</strong> · Rejected:
                 <strong id="tickerRejectedCount">—</strong></span
               >
             </div>
-            <div class="ticker-segment" id="tickerPnL">
+            <div class="ticker-segment" id="tickerPnL" title="Today's realized profit and loss">
               <i class="ticker-icon icon-trending-up"></i>
               <span class="ticker-text">Today P&L: <strong id="tickerTodayPnL">—</strong></span>
             </div>
-            <div class="ticker-segment" id="tickerRPC">
+            <div class="ticker-segment" id="tickerRPC" title="RPC calls per minute and success rate">
               <i class="ticker-icon icon-zap"></i>
               <span class="ticker-text"
-                >RPC: <strong id="tickerRPCCalls">—</strong>/min •
+                >RPC: <strong id="tickerRPCCalls">—</strong>/min ·
                 <strong id="tickerRPCSuccess">—</strong>%</span
               >
             </div>
-            <div class="ticker-segment" id="tickerServices">
-              <i class="ticker-icon icon-link"></i>
-              <span class="ticker-text" id="tickerServicesText">Services: Loading...</span>
+            <div class="ticker-segment" id="tickerServices" title="Background services health status">
+              <i class="ticker-icon icon-activity"></i>
+              <span class="ticker-text" id="tickerServicesText"
+                ><span class="status-dot"></span>Services: <strong>Loading</strong></span
+              >
             </div>
           </div>
         </div>

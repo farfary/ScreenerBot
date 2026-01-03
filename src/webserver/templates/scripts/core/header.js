@@ -416,12 +416,13 @@ function updateTicker(metrics) {
   const servicesText = document.getElementById("tickerServicesText");
   if (servicesText) {
     if (metrics.system.all_services_healthy) {
-      servicesText.innerHTML = 'Services: All Healthy <i class="icon-circle-check"></i>';
-      servicesText.style.color = "#10b981";
+      servicesText.innerHTML = '<span class="status-dot"></span>Services: <strong>Healthy</strong>';
+      servicesText.style.color = "";
     } else {
       const unhealthyCount = metrics.system.unhealthy_services.length;
-      servicesText.innerHTML = `Services: ${unhealthyCount} Issues <i class="icon-triangle-alert"></i>`;
-      servicesText.style.color = metrics.system.critical_degraded ? "#ef4444" : "#fbbf24";
+      const dotClass = metrics.system.critical_degraded ? "error" : "warning";
+      servicesText.innerHTML = `<span class="status-dot ${dotClass}"></span>Services: <strong>${unhealthyCount} Issues</strong>`;
+      servicesText.style.color = "";
     }
   }
 }
