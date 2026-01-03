@@ -38,7 +38,9 @@
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 16px;
-  box-shadow: 0 20px 40px rgb(0, 0, 0, 0.4), 0 0 0 1px var(--border-color);
+  box-shadow:
+    0 20px 40px rgb(0, 0, 0, 0.4),
+    0 0 0 1px var(--border-color);
   width: 90vw;
   max-width: 1100px;
   height: 85vh;

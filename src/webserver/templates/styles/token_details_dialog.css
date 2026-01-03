@@ -2025,7 +2025,9 @@
   padding: 10px 12px;
   background: var(--bg-primary);
   border-radius: var(--radius-sm);
-  transition: background 0.15s ease, transform 0.15s ease;
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease;
 }
 
 .holder-row:hover {
@@ -2297,7 +2299,9 @@
   border: 1px solid var(--border-color);
   border-radius: 8px;
   overflow: hidden;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
 }
 
 .position-card:hover {

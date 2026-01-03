@@ -682,7 +682,9 @@
   align-items: center;
   gap: 3px;
   line-height: 1;
-  font-feature-settings: "tnum" 1, "zero" 1;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .ticker-text strong {
