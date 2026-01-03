@@ -15,7 +15,7 @@ pub mod connectivity;
 pub mod dashboard;
 pub mod events;
 pub mod features;
-pub mod filtering_api;
+pub mod filtering;
 pub mod header;
 pub mod initialization;
 pub mod lockscreen;
@@ -177,7 +177,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .merge(status::routes())
         .merge(tokens::routes())
         .merge(events::routes())
-        .merge(filtering_api::routes())
+        .merge(filtering::routes())
         .merge(positions::routes())
         .merge(dashboard::routes())
         .merge(wallet::routes())
