@@ -576,8 +576,11 @@ function renderTokenHoldings() {
   if (tokenHoldings.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
-        <i class="icon-inbox"></i>
-        <p>No token holdings</p>
+        <div class="empty-state-icon">
+          <i class="icon-coins"></i>
+        </div>
+        <h4 class="empty-state-title">No token holdings</h4>
+        <p class="empty-state-description">Tokens in this wallet will appear here</p>
       </div>
     `;
     return;
@@ -641,11 +644,30 @@ function renderSecondariesPanel() {
   if (secondaryWallets.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
-        <i class="icon-wallet"></i>
-        <p>No secondary wallets</p>
-        <small>Click "Add Wallet" to create additional wallets</small>
+        <div class="empty-state-icon">
+          <i class="icon-wallet"></i>
+        </div>
+        <h4 class="empty-state-title">No secondary wallets</h4>
+        <p class="empty-state-description">Create additional wallets to organize your trading activities across multiple accounts</p>
+        <div class="empty-state-action">
+          <button type="button" class="btn primary" id="add-wallet-empty-btn">
+            <i class="icon-plus"></i> Add Wallet
+          </button>
+        </div>
+        <div class="empty-state-hint">
+          <i class="icon-lightbulb"></i>
+          <span>Tip: Use separate wallets for different trading strategies</span>
+        </div>
       </div>
     `;
+    // Attach click handler to the empty state button
+    const emptyBtn = container.querySelector("#add-wallet-empty-btn");
+    if (emptyBtn) {
+      emptyBtn.addEventListener("click", () => {
+        const modal = $("#add-wallet-modal");
+        if (modal) modal.classList.remove("hidden");
+      });
+    }
     return;
   }
 
@@ -718,9 +740,15 @@ function renderArchivePanel() {
   if (archivedWallets.length === 0) {
     container.innerHTML = `
       <div class="empty-state">
-        <i class="icon-archive"></i>
-        <p>No archived wallets</p>
-        <small>Archived wallets will appear here</small>
+        <div class="empty-state-icon">
+          <i class="icon-archive"></i>
+        </div>
+        <h4 class="empty-state-title">No archived wallets</h4>
+        <p class="empty-state-description">Wallets you archive will be safely stored here for future reference</p>
+        <div class="empty-state-hint">
+          <i class="icon-info"></i>
+          <span>Archived wallets retain their keys and can be restored anytime</span>
+        </div>
       </div>
     `;
     return;

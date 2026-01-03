@@ -14,7 +14,7 @@
 }
 
 /* =============================================================================
-   Header Section
+   Header Section - Enhanced Design
    ============================================================================= */
 
 .wallets-header {
@@ -23,9 +23,9 @@
   justify-content: space-between;
   gap: var(--spacing-lg);
   padding: var(--spacing-md) var(--spacing-lg);
-  min-height: 64px;
+  min-height: 72px;
   border-bottom: 1px solid var(--border-color);
-  background: var(--card-bg);
+  background: linear-gradient(180deg, var(--card-bg), var(--bg-primary));
   flex-shrink: 0;
 }
 
@@ -39,18 +39,33 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 48px;
-  height: 48px;
+  width: 52px;
+  height: 52px;
   border-radius: var(--radius-lg);
   background: linear-gradient(135deg, var(--primary-alpha-20), var(--primary-alpha-5));
   color: var(--primary-color);
-  font-size: 1.25rem;
+  font-size: 1.35rem;
+  position: relative;
+  transition: transform 0.2s ease;
+}
+
+.page-badge::after {
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: calc(var(--radius-lg) + 2px);
+  background: linear-gradient(135deg, var(--primary-alpha-20), transparent);
+  z-index: -1;
+}
+
+.page-badge:hover {
+  transform: scale(1.05);
 }
 
 .page-info {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 .page-title-row {
@@ -61,28 +76,31 @@
 
 .page-title-row h1 {
   margin: 0;
-  font-size: 1.25rem;
-  font-weight: 600;
+  font-size: 1.35rem;
+  font-weight: 700;
   color: var(--text-primary);
+  letter-spacing: -0.01em;
 }
 
 .wallet-count-badge {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
+  padding: 3px 10px;
   border-radius: 999px;
   font-size: 0.65rem;
-  font-weight: 600;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
-  background: var(--primary-alpha-10);
+  letter-spacing: 0.05em;
+  background: linear-gradient(135deg, var(--primary-alpha-15), var(--primary-alpha-10));
   color: var(--primary-color);
+  border: 1px solid var(--primary-alpha-20);
 }
 
 .page-info p {
   margin: 0;
   font-size: 0.85rem;
   color: var(--text-secondary);
+  line-height: 1.4;
 }
 
 .header-right {
@@ -95,6 +113,14 @@
   display: flex;
   align-items: center;
   gap: var(--spacing-sm);
+}
+
+.header-actions .btn {
+  transition: all 0.15s ease;
+}
+
+.header-actions .btn:hover {
+  transform: translateY(-1px);
 }
 
 /* =============================================================================
@@ -142,7 +168,7 @@
 }
 
 /* =============================================================================
-   Main Wallet Section
+   Main Wallet Section - Enhanced Design
    ============================================================================= */
 
 .main-wallet-section {
@@ -156,6 +182,23 @@
   border: 1px solid var(--warning-alpha-40);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  position: relative;
+  transition: all 0.2s ease;
+}
+
+.main-wallet-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, var(--warning-color), var(--warning-alpha-50), var(--warning-color));
+}
+
+.main-wallet-card:hover {
+  border-color: var(--warning-alpha-60);
+  box-shadow: 0 4px 20px var(--warning-alpha-10);
 }
 
 .main-wallet-content {
@@ -279,42 +322,80 @@
 }
 
 /* =============================================================================
-   Stats Summary
+   Stats Summary - Enhanced Design
    ============================================================================= */
 
 .wallets-stats {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  grid-template-columns: repeat(4, 1fr);
   gap: var(--spacing-md);
+}
+
+@media (max-width: 1200px) {
+  .wallets-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .wallets-stats {
+    grid-template-columns: 1fr;
+  }
 }
 
 .stat-card {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: var(--spacing-md);
-  padding: var(--spacing-md);
+  gap: var(--spacing-sm);
+  padding: var(--spacing-lg) var(--spacing-md);
   border-radius: var(--radius-lg);
   background: var(--card-bg);
   border: 1px solid var(--border-color);
   transition: all 0.2s ease;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--primary-alpha-30), transparent);
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
 .stat-card:hover {
   border-color: var(--primary-alpha-30);
-  box-shadow: 0 2px 8px var(--shadow-sm);
+  box-shadow: 0 4px 16px var(--shadow-sm);
+  transform: translateY(-2px);
+}
+
+.stat-card:hover::before {
+  opacity: 1;
 }
 
 .stat-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 44px;
-  height: 44px;
+  width: 48px;
+  height: 48px;
   border-radius: var(--radius-lg);
   background: var(--primary-alpha-10);
   color: var(--primary-color);
-  font-size: 1.1rem;
+  font-size: 1.25rem;
   flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.stat-card:hover .stat-icon {
+  transform: scale(1.05);
 }
 
 .stat-icon.sol {
@@ -327,16 +408,26 @@
   color: var(--success-color);
 }
 
+.stat-icon.tokens {
+  background: var(--info-alpha-10);
+  color: var(--info-color);
+}
+
+.stat-icon.activity {
+  background: var(--warning-alpha-10);
+  color: var(--warning-color);
+}
+
 .stat-content {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
 }
 
 .stat-value {
-  font-family: var(--font-mono);
-  font-size: 1.1rem;
+  font-family: var(--font-data);
+  font-size: 1.5rem;
   font-weight: 700;
   font-feature-settings:
     "tnum" 1,
@@ -345,18 +436,19 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.2;
 }
 
 .stat-label {
   font-size: 0.65rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   color: var(--text-secondary);
 }
 
 /* =============================================================================
-   Token Holdings Section
+   Token Holdings Section - Enhanced Design
    ============================================================================= */
 
 .token-holdings-section {
@@ -368,21 +460,22 @@
 .token-holdings-section .section-header {
   display: flex;
   align-items: center;
-  gap: var(--spacing-sm);
+  justify-content: space-between;
+  gap: var(--spacing-md);
 }
 
 .token-holdings-section .section-header h3 {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: var(--spacing-sm);
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .token-holdings-section .section-header h3 i {
-  font-size: 0.95rem;
+  font-size: 1rem;
   color: var(--primary-color);
 }
 
@@ -391,6 +484,26 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  transition: border-color 0.2s ease;
+}
+
+.token-holdings-table:hover {
+  border-color: var(--primary-alpha-20);
+}
+
+/* Token Holdings Empty State */
+.token-holdings-table .empty-state {
+  min-height: 160px;
+  padding: var(--spacing-xl);
+}
+
+.token-holdings-table .empty-state-icon {
+  width: 56px;
+  height: 56px;
+}
+
+.token-holdings-table .empty-state-icon i {
+  font-size: 1.5rem;
 }
 
 .holdings-table {
@@ -452,7 +565,7 @@
 }
 
 /* =============================================================================
-   Wallets Table (Secondaries & Archive)
+   Wallets Table (Secondaries & Archive) - Enhanced Design
    ============================================================================= */
 
 #secondaries-table-container,
@@ -461,6 +574,13 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   overflow: hidden;
+  min-height: 280px;
+  transition: border-color 0.2s ease;
+}
+
+#secondaries-table-container:hover,
+#archive-table-container:hover {
+  border-color: var(--primary-alpha-20);
 }
 
 .wallets-table {
@@ -470,7 +590,7 @@
 
 .wallets-table th,
 .wallets-table td {
-  padding: var(--spacing-sm) var(--spacing-md);
+  padding: var(--spacing-md) var(--spacing-lg);
   text-align: left;
   border-bottom: 1px solid var(--border-color);
 }
@@ -479,18 +599,22 @@
   font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
   color: var(--text-secondary);
   background: var(--bg-secondary);
 }
 
 .wallets-table td {
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   color: var(--text-primary);
 }
 
 .wallets-table tbody tr:last-child td {
   border-bottom: none;
+}
+
+.wallets-table tbody tr {
+  transition: background 0.15s ease;
 }
 
 .wallets-table tbody tr:hover {
@@ -645,7 +769,7 @@
 }
 
 /* =============================================================================
-   Empty State
+   Empty State - Enhanced Design
    ============================================================================= */
 
 .empty-state {
@@ -654,25 +778,109 @@
   align-items: center;
   justify-content: center;
   gap: var(--spacing-sm);
-  padding: var(--spacing-xl) var(--spacing-md);
+  padding: var(--spacing-2xl) var(--spacing-lg);
   text-align: center;
+  min-height: 320px;
 }
 
-.empty-state i {
+.empty-state-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  margin-bottom: var(--spacing-xs);
+}
+
+.empty-state-icon i {
+  font-size: 1.75rem;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+/* Legacy icon style (direct child, not in icon container) */
+.empty-state > i:not(.empty-state-icon i) {
   font-size: 2.5rem;
   color: var(--text-muted);
   opacity: 0.5;
 }
 
+.empty-state-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+.empty-state-description {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  max-width: 300px;
+  line-height: 1.5;
+}
+
 .empty-state p {
   margin: 0;
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   color: var(--text-secondary);
 }
 
 .empty-state small {
   font-size: 0.8rem;
   color: var(--text-muted);
+}
+
+.empty-state-action {
+  margin-top: var(--spacing-md);
+}
+
+.empty-state-action .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 20px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  min-width: 120px;
+}
+
+.empty-state .empty-state-action .btn i,
+.empty-state-action .btn i {
+  font-size: 0.875rem !important;
+  width: auto !important;
+  height: auto !important;
+  line-height: 1;
+}
+
+.empty-state-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: var(--spacing-lg);
+  padding: 10px 16px;
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border-color);
+}
+
+.empty-state-hint i {
+  font-size: 1rem;
+  color: var(--warning-color);
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.empty-state-hint span {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
 }
 
 .loading-state {
