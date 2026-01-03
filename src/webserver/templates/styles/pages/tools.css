@@ -793,13 +793,13 @@
 }
 
 /* =============================================================================
-   State Indicators
+   State Indicators - Scoped to tools page
    ============================================================================= */
 
-.empty-state,
-.loading-state,
-.success-state,
-.error-state {
+.tools-page .empty-state,
+.tools-page .loading-state,
+.tools-page .success-state,
+.tools-page .error-state {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -811,44 +811,44 @@
   background: var(--bg-secondary);
 }
 
-.empty-state i,
-.loading-state i,
-.success-state i,
-.error-state i {
+.tools-page .empty-state i,
+.tools-page .loading-state i,
+.tools-page .success-state i,
+.tools-page .error-state i {
   font-size: 2.5rem;
   opacity: 0.5;
 }
 
-.empty-state p,
-.loading-state p,
-.success-state p,
-.error-state p {
+.tools-page .empty-state p,
+.tools-page .loading-state p,
+.tools-page .success-state p,
+.tools-page .error-state p {
   margin: 0;
   font-size: 0.9rem;
   color: var(--text-secondary);
 }
 
-.empty-state small {
+.tools-page .empty-state small {
   font-size: 0.8rem;
   color: var(--text-muted);
 }
 
-.success-state {
+.tools-page .success-state {
   background: var(--success-alpha-10);
   border: 1px solid var(--success-alpha-20);
 }
 
-.success-state i {
+.tools-page .success-state i {
   color: var(--success-color);
   opacity: 1;
 }
 
-.error-state {
+.tools-page .error-state {
   background: var(--danger-alpha-10);
   border: 1px solid var(--danger-alpha-20);
 }
 
-.error-state i {
+.tools-page .error-state i {
   color: var(--error-color);
   opacity: 1;
 }

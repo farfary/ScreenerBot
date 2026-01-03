@@ -840,25 +840,20 @@
   box-shadow: 0 4px 12px rgb(0 0 0 / 0.1);
 }
 
-/*
-  Override global .empty-state i rules from strategies.css (3rem) and tools.css (2.5rem)
-  that match .empty-state i[class^="icon-"]. Use !important to ensure this wins.
-*/
-.wallets-page .empty-state-icon i,
-.wallets-page .empty-state-icon i[class^="icon-"],
-.wallets-page .empty-state-icon i[class*=" icon-"] {
-  font-size: 1.75rem !important;
+/* Icon inside the empty state circle */
+.wallets-page .empty-state-icon i {
+  font-size: 1.75rem;
   color: var(--text-secondary);
   opacity: 0.7;
-  line-height: 1 !important;
-  margin-bottom: 0 !important;
+  line-height: 1;
+  margin-bottom: 0;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 /* Legacy icon style (direct child, not in icon container) */
-.empty-state > i:not(.empty-state-icon i) {
+.wallets-page .empty-state > i:not(.empty-state-icon i) {
   font-size: 2rem;
   color: var(--text-muted);
   opacity: 0.5;
@@ -915,13 +910,13 @@
   box-shadow: 0 4px 12px rgb(0 0 0 / 0.2);
 }
 
-.empty-state .empty-state-action .btn i,
-.empty-state-action .btn i {
-  font-size: 1rem !important;
-  width: auto !important;
-  height: auto !important;
-  line-height: 1 !important;
-  margin-bottom: 0 !important;
+/* Button icon inside empty state action */
+.wallets-page .empty-state-action .btn i {
+  font-size: 1rem;
+  width: auto;
+  height: auto;
+  line-height: 1;
+  margin-bottom: 0;
 }
 
 .empty-state-hint {
@@ -936,17 +931,11 @@
   max-width: 440px;
 }
 
-/*
-  Icon font glyphs sit on text baseline. In a flex container with align-items:center,
-  the icon BOX is centered but the glyph inside floats to the top if line-height > font-size.
-  Fix: set line-height equal to font-size so the glyph fills the box vertically.
-  Also reset margin-bottom which is inherited from .empty-state i rules.
-*/
-.wallets-page .empty-state-hint i[class^="icon-"],
-.wallets-page .empty-state-hint i[class*=" icon-"] {
+/* Hint icon - ensure proper vertical alignment with text */
+.wallets-page .empty-state-hint i {
   font-size: 1rem;
-  line-height: 1 !important;
-  margin-bottom: 0 !important;
+  line-height: 1;
+  margin-bottom: 0;
   color: var(--text-secondary);
   opacity: 0.8;
   flex-shrink: 0;

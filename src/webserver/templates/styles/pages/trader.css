@@ -1091,9 +1091,9 @@
   min-height: 100px;
 }
 
-.loading-state,
-.info-state,
-.empty-state {
+.trader-page .loading-state,
+.trader-page .info-state,
+.trader-page .empty-state {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1104,14 +1104,14 @@
   font-size: 0.875rem;
 }
 
-.loading-state i,
-.info-state i,
-.empty-state i {
+.trader-page .loading-state i,
+.trader-page .info-state i,
+.trader-page .empty-state i {
   font-size: 2rem;
   opacity: 0.5;
 }
 
-.loading-state i {
+.trader-page .loading-state i {
   animation: spin 1s linear infinite;
 }
 
