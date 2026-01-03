@@ -840,11 +840,18 @@
   box-shadow: 0 4px 12px rgb(0 0 0 / 0.1);
 }
 
-.empty-state-icon i {
-  font-size: 2.25rem;
+/*
+  Override global .empty-state i rules from strategies.css (3rem) and tools.css (2.5rem)
+  that match .empty-state i[class^="icon-"]. Use !important to ensure this wins.
+*/
+.wallets-page .empty-state-icon i,
+.wallets-page .empty-state-icon i[class^="icon-"],
+.wallets-page .empty-state-icon i[class*=" icon-"] {
+  font-size: 1.75rem !important;
   color: var(--text-secondary);
-  opacity: 0.9;
-  line-height: 0;
+  opacity: 0.7;
+  line-height: 1 !important;
+  margin-bottom: 0 !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -913,6 +920,8 @@
   font-size: 1rem !important;
   width: auto !important;
   height: auto !important;
+  line-height: 1 !important;
+  margin-bottom: 0 !important;
 }
 
 .empty-state-hint {
