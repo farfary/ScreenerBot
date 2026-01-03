@@ -101,11 +101,17 @@
    Main Content Area
    ============================================================================= */
 
+/* Wallets sub-tabs - full width, no padding */
+.wallets-tabs {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
 .wallets-main {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 var(--spacing-lg) var(--spacing-lg);
+  padding: var(--spacing-md) var(--spacing-lg) var(--spacing-lg);
   display: flex;
   flex-direction: column;
   gap: var(--spacing-lg);
