@@ -368,6 +368,14 @@ pub fn get_enabled_debug_modes() -> Vec<String> {
     modes
 }
 
+/// Prints version information to stdout (for --version flag)
+/// This MUST print to stdout (not logger) so install scripts can parse it
+pub fn print_version() {
+    // Print parsable version format: "ScreenerBot vX.Y.Z"
+    // Install scripts use: grep -oP '\d+\.\d+\.\d+' to extract version
+    println!("ScreenerBot v{}", env!("CARGO_PKG_VERSION"));
+}
+
 /// Prints debug information about current arguments and enabled debug modes
 pub fn print_debug_info() {
     let args = get_cmd_args();

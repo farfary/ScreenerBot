@@ -3,7 +3,7 @@
 //! This is the main entry point for the ScreenerBot application.
 //! The bot runs as a headless server with a web-based dashboard.
 
-use screenerbot::arguments::{print_debug_info, print_help, set_cmd_args};
+use screenerbot::arguments::{print_help, print_version, set_cmd_args};
 use screenerbot::config::utils::load_config;
 use screenerbot::logger::{error, info, LogTag};
 use screenerbot::run::run_bot;
@@ -36,7 +36,7 @@ async fn main() {
 
     // Handle version flag
     if std::env::args().any(|arg| arg == "--version" || arg == "-v") {
-        print_debug_info();
+        print_version();
         return;
     }
 
