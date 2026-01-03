@@ -1407,14 +1407,14 @@ async function renderTelegramActions(container) {
       if (response.ok && data.success) {
         statusEl.className = "config-action-status success";
         statusEl.innerHTML =
-          '<i class="icon-check-circle"></i> Test message sent successfully! Check your Telegram.';
+          '<i class="icon-circle-check"></i> Test message sent successfully! Check your Telegram.';
         Utils.showToast("Telegram test message sent", "success");
       } else {
         throw new Error(data.message || data.error || "Failed to send test message");
       }
     } catch (error) {
       statusEl.className = "config-action-status error";
-      statusEl.innerHTML = `<i class="icon-alert-circle"></i> ${Utils.escapeHtml(error.message)}`;
+      statusEl.innerHTML = `<i class="icon-circle-alert"></i> ${Utils.escapeHtml(error.message)}`;
       Utils.showToast(error.message, "error");
     } finally {
       testBtn.disabled = false;
@@ -1521,7 +1521,7 @@ async function loadTelegramAuthState(authPanel) {
       totpSection.style.display = "none";
     }
   } catch (error) {
-    passwordStatusEl.innerHTML = "<span class=\"status-error\"><i class=\"icon-alert-circle\"></i> Error</span>";
+    passwordStatusEl.innerHTML = "<span class=\"status-error\"><i class=\"icon-circle-alert\"></i> Error</span>";
     passwordContentEl.innerHTML = `<div class="telegram-auth-error">${Utils.escapeHtml(error.message)}</div>`;
   }
 }
@@ -1531,14 +1531,14 @@ async function loadTelegramAuthState(authPanel) {
  */
 function renderPasswordSection(statusEl, contentEl, isConfigured) {
   if (isConfigured) {
-    statusEl.innerHTML = "<span class=\"status-success\"><i class=\"icon-check-circle\"></i> Configured</span>";
+    statusEl.innerHTML = "<span class=\"status-success\"><i class=\"icon-circle-check\"></i> Configured</span>";
     contentEl.innerHTML = `
       <div class="telegram-auth-row">
         <div class="telegram-auth-info">
           <span>Password is set and active for Telegram bot authentication.</span>
         </div>
         <button type="button" class="btn secondary" id="telegram-change-password-btn">
-          <i class="icon-edit-2"></i> Change Password
+          <i class="icon-pencil"></i> Change Password
         </button>
       </div>
       <div class="telegram-auth-form-container" id="telegram-password-form-container" style="display: none;"></div>
@@ -1551,7 +1551,7 @@ function renderPasswordSection(statusEl, contentEl, isConfigured) {
       const isVisible = formContainer.style.display !== "none";
       if (isVisible) {
         formContainer.style.display = "none";
-        changeBtn.innerHTML = '<i class="icon-edit-2"></i> Change Password';
+        changeBtn.innerHTML = '<i class="icon-pencil"></i> Change Password';
       } else {
         formContainer.style.display = "";
         changeBtn.innerHTML = '<i class="icon-x"></i> Cancel';
@@ -1559,7 +1559,7 @@ function renderPasswordSection(statusEl, contentEl, isConfigured) {
       }
     });
   } else {
-    statusEl.innerHTML = "<span class=\"status-warning\"><i class=\"icon-alert-circle\"></i> Not Set</span>";
+    statusEl.innerHTML = "<span class=\"status-warning\"><i class=\"icon-circle-alert\"></i> Not Set</span>";
     contentEl.innerHTML = `
       <div class="telegram-auth-row">
         <div class="telegram-auth-info">
@@ -1696,7 +1696,7 @@ function renderPasswordForm(formContainer, hasExistingPassword) {
  */
 function renderTotpSection(statusEl, contentEl, isEnabled) {
   if (isEnabled) {
-    statusEl.innerHTML = "<span class=\"status-success\"><i class=\"icon-check-circle\"></i> Enabled</span>";
+    statusEl.innerHTML = "<span class=\"status-success\"><i class=\"icon-circle-check\"></i> Enabled</span>";
     contentEl.innerHTML = `
       <div class="telegram-auth-row">
         <div class="telegram-auth-info">
@@ -1724,7 +1724,7 @@ function renderTotpSection(statusEl, contentEl, isEnabled) {
       }
     });
   } else {
-    statusEl.innerHTML = "<span class=\"status-warning\"><i class=\"icon-alert-circle\"></i> Not Configured</span>";
+    statusEl.innerHTML = "<span class=\"status-warning\"><i class=\"icon-circle-alert\"></i> Not Configured</span>";
     contentEl.innerHTML = `
       <div class="telegram-auth-row">
         <div class="telegram-auth-info">
@@ -1953,7 +1953,7 @@ function renderTotpDisableForm(formContainer) {
   formContainer.innerHTML = `
     <form class="telegram-auth-form" id="telegram-totp-disable-form">
       <div class="telegram-totp-warning" role="alert">
-        <i class="icon-alert-triangle"></i>
+        <i class="icon-triangle-alert"></i>
         <span>Disabling 2FA will make your Telegram bot less secure. You can always re-enable it later.</span>
       </div>
       <div class="form-group">

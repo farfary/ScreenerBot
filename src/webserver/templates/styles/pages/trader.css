@@ -99,7 +99,7 @@
 .trader-status-bar[data-status="running"] .status-bar-icon {
   background: var(--success-alpha-15);
   color: var(--success-color);
-  animation: status-icon-pulse 2s ease-in-out infinite;
+  animation: status-icon-activity 2s ease-in-out infinite;
 }
 
 .trader-status-bar[data-status="stopped"] .status-bar-icon {
@@ -107,7 +107,7 @@
   color: var(--danger-color);
 }
 
-@keyframes status-icon-pulse {
+@keyframes status-icon-activity {
   0%,
   100% {
     box-shadow: 0 0 0 0 var(--success-alpha-30);

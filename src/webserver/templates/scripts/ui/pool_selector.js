@@ -177,7 +177,7 @@ export class PoolSelector {
 
     content.innerHTML = `
       <div class="pool-selector-error">
-        <i class="icon-alert-circle"></i>
+        <i class="icon-circle-alert"></i>
         <p>${escapeHtml(message)}</p>
         <button class="btn btn-sm" type="button">Dismiss</button>
       </div>

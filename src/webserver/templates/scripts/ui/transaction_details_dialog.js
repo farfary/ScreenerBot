@@ -85,7 +85,7 @@ export class TransactionDetailsDialog {
   _showError(message) {
     const content = this.dialogEl?.querySelector(".tab-content.active");
     if (content) {
-      content.innerHTML = `<div class="error-state"><i class="icon-alert-circle"></i><p>${Utils.escapeHtml(message)}</p></div>`;
+      content.innerHTML = `<div class="error-state"><i class="icon-circle-alert"></i><p>${Utils.escapeHtml(message)}</p></div>`;
     }
   }
 
@@ -927,7 +927,7 @@ export class TransactionDetailsDialog {
   }
 
   _getTypeIcon(type) {
-    if (!type) return "icon-help-circle";
+    if (!type) return "icon-info";
     const typeStr = typeof type === "string" ? type : Object.keys(type)[0] || "Unknown";
     const icons = {
       Buy: "icon-shopping-cart",
@@ -935,17 +935,17 @@ export class TransactionDetailsDialog {
       Transfer: "icon-send",
       Compute: "icon-cpu",
       AtaOperation: "icon-layers",
-      Failed: "icon-x-circle",
-      Unknown: "icon-help-circle",
+      Failed: "icon-circle-x",
+      Unknown: "icon-info",
       SwapSolToToken: "icon-shopping-cart",
       SwapTokenToSol: "icon-dollar-sign",
       SwapTokenToToken: "icon-repeat",
       SolTransfer: "icon-send",
       TokenTransfer: "icon-send",
       AtaClose: "icon-layers",
-      Other: "icon-more-horizontal",
+      Other: "icon-ellipsis",
     };
-    return icons[typeStr] || "icon-help-circle";
+    return icons[typeStr] || "icon-info";
   }
 
   _getTypeBadge(type) {

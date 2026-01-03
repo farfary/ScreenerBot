@@ -1947,7 +1947,7 @@ export class SettingsDialog {
                 hasPassword
                   ? `
                 <button class="btn btn-secondary btn-sm" id="securityChangePasswordBtn">
-                  <i class="icon-edit-2"></i> Change
+                  <i class="icon-pencil"></i> Change
                 </button>
                 <button class="btn btn-warning btn-sm" id="securityRemovePasswordBtn">
                   <i class="icon-trash-2"></i> Remove
@@ -2504,7 +2504,7 @@ export class SettingsDialog {
       <div class="updates-status-card error">
         <div class="status-visual">
           <div class="status-icon-wrapper error">
-            <i class="icon-alert-triangle"></i>
+            <i class="icon-triangle-alert"></i>
           </div>
         </div>
         <div class="status-content">
@@ -2536,7 +2536,7 @@ export class SettingsDialog {
       actionContent = `
         <div class="download-success">
           <div class="success-badge">
-            <i class="icon-check-circle"></i>
+            <i class="icon-circle-check"></i>
             <span>Ready to Install</span>
           </div>
           <p class="install-hint">${this._getInstallHint()}</p>
@@ -2616,7 +2616,7 @@ export class SettingsDialog {
       <div class="updates-status-card success">
         <div class="status-visual">
           <div class="status-icon-wrapper success">
-            <i class="icon-check-circle"></i>
+            <i class="icon-circle-check"></i>
           </div>
         </div>
         <div class="status-content">
@@ -3451,7 +3451,7 @@ export class SettingsDialog {
           <div class="settings-field">
             <div class="settings-field-info">
               <label>Bot Token</label>
-              <span class="settings-field-hint">${settings.bot_token && settings.bot_token.endsWith("...") ? '<i class="icon-check-circle" style="color: var(--success);"></i> Token saved' : "Get this from @BotFather on Telegram"}</span>
+              <span class="settings-field-hint">${settings.bot_token && settings.bot_token.endsWith("...") ? '<i class="icon-circle-check" style="color: var(--success);"></i> Token saved' : "Get this from @BotFather on Telegram"}</span>
             </div>
             <div class="settings-field-control telegram-token-field">
               <input type="password" id="tgBotToken" class="settings-input" placeholder="${settings.bot_token && settings.bot_token.endsWith("...") ? "Token saved (enter new to change)" : "Enter bot token"}" value="" autocomplete="off">
@@ -3475,7 +3475,7 @@ export class SettingsDialog {
                 <span class="chat-id-display">
                   <code>${settings.chat_id}</code>
                   <button class="btn btn-secondary btn-sm" id="tgChangeChatBtn" title="Change">
-                    <i class="icon-edit-2"></i>
+                    <i class="icon-pencil"></i>
                   </button>
                 </span>
               `
@@ -3681,7 +3681,7 @@ export class SettingsDialog {
       <!-- Features Section -->
       <div class="settings-section">
         <h3 class="settings-section-title">
-          <i class="icon-sliders"></i>
+          <i class=icon-sliders-horizontal></i>
           Features
         </h3>
         <p class="settings-section-description">
@@ -4033,7 +4033,7 @@ export class SettingsDialog {
     } catch (error) {
       if (statusEl) {
         statusEl.innerHTML =
-          '<span class="status-error"><i class="icon-alert-circle"></i> Error</span>';
+          '<span class="status-error"><i class="icon-circle-alert"></i> Error</span>';
       }
       if (contentEl) {
         contentEl.innerHTML = `<div class="telegram-auth-error">${this._escapeHtml(error.message)}</div>`;
@@ -4047,7 +4047,7 @@ export class SettingsDialog {
   _renderAuthSection(statusEl, contentEl, totpEnabled, require2fa = true) {
     if (totpEnabled && require2fa) {
       statusEl.innerHTML =
-        '<span class="status-success"><i class="icon-check-circle"></i> Protected</span>';
+        '<span class="status-success"><i class="icon-circle-check"></i> Protected</span>';
       contentEl.innerHTML = `
         <div class="telegram-auth-row">
           <div class="telegram-auth-info">
@@ -4062,11 +4062,11 @@ export class SettingsDialog {
       `;
     } else if (totpEnabled && !require2fa) {
       statusEl.innerHTML =
-        '<span class="status-warning"><i class="icon-alert-circle"></i> Disabled</span>';
+        '<span class="status-warning"><i class="icon-circle-alert"></i> Disabled</span>';
       contentEl.innerHTML = `
         <div class="telegram-auth-row">
           <div class="telegram-auth-info">
-            <i class="icon-alert-triangle" style="color: var(--warning); margin-right: 8px;"></i>
+            <i class="icon-triangle-alert" style="color: var(--warning); margin-right: 8px;"></i>
             <span>Lockscreen 2FA is configured but disabled for Telegram. Enable "Require 2FA for Commands" above to protect Telegram commands.</span>
           </div>
         </div>
@@ -4077,11 +4077,11 @@ export class SettingsDialog {
       `;
     } else {
       statusEl.innerHTML =
-        '<span class="status-warning"><i class="icon-alert-circle"></i> Not Configured</span>';
+        '<span class="status-warning"><i class="icon-circle-alert"></i> Not Configured</span>';
       contentEl.innerHTML = `
         <div class="telegram-auth-row">
           <div class="telegram-auth-info">
-            <i class="icon-alert-triangle" style="color: var(--warning); margin-right: 8px;"></i>
+            <i class="icon-triangle-alert" style="color: var(--warning); margin-right: 8px;"></i>
             <span>Lockscreen 2FA is not configured. Without 2FA, expired sessions will auto-reactivate without verification.</span>
           </div>
         </div>

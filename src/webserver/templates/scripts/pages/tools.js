@@ -104,7 +104,7 @@ const TOOL_DEFINITIONS = {
     id: "create-token",
     title: "Create Token",
     description: "Deploy a new SPL token on Solana",
-    icon: "icon-plus-circle",
+    icon: "icon-circle-plus",
     category: "token",
     render: renderCreateTokenTool,
   },
@@ -128,7 +128,7 @@ const TOOL_DEFINITIONS = {
     id: "volume-aggregator",
     title: "Volume Aggregator",
     description: "Generate trading volume using multiple wallets",
-    icon: "icon-bar-chart-2",
+    icon: "icon-chart-bar",
     category: "single-token",
     render: renderVolumeAggregatorTool,
   },
@@ -444,7 +444,7 @@ async function handleScanATAs() {
     if (stats.empty_count > 0) {
       listEl.innerHTML = `
         <div class="success-state">
-          <i class="icon-check-circle"></i>
+          <i class="icon-circle-check"></i>
           <p>Found ${stats.empty_count} empty ATAs worth ~${Utils.formatSol(stats.reclaimable_sol || 0)} SOL</p>
         </div>
       `;
@@ -452,7 +452,7 @@ async function handleScanATAs() {
     } else {
       listEl.innerHTML = `
         <div class="empty-state">
-          <i class="icon-check-circle"></i>
+          <i class="icon-circle-check"></i>
           <p>No empty ATAs found - wallet is clean!</p>
         </div>
       `;
@@ -461,7 +461,7 @@ async function handleScanATAs() {
     console.error("ATA scan failed:", error);
     listEl.innerHTML = `
       <div class="error-state">
-        <i class="icon-alert-circle"></i>
+        <i class="icon-circle-alert"></i>
         <p>Scan failed: ${error.message}</p>
       </div>
     `;
@@ -633,7 +633,7 @@ async function handleScanBurnTokens() {
     console.error("Burn tokens scan failed:", error);
     listEl.innerHTML = `
       <div class="error-state">
-        <i class="icon-alert-circle"></i>
+        <i class="icon-circle-alert"></i>
         <p>Scan failed: ${error.message}</p>
       </div>
     `;
@@ -654,7 +654,7 @@ function renderBurnTokenList() {
   if (tokens.length === 0) {
     listEl.innerHTML = `
       <div class="empty-state">
-        <i class="icon-check-circle"></i>
+        <i class="icon-circle-check"></i>
         <p>No tokens found in wallet</p>
       </div>
     `;
@@ -1072,7 +1072,7 @@ function renderCreateTokenTool(container, actionsContainer) {
       <i class="icon-eye"></i> Preview
     </button>
     <button class="btn primary" id="create-token-btn">
-      <i class="icon-plus-circle"></i> Create Token
+      <i class="icon-circle-plus"></i> Create Token
     </button>
   `;
 
@@ -1510,7 +1510,7 @@ async function analyzeToken(mint) {
     if (errorEl) {
       errorEl.style.display = "block";
       errorEl.innerHTML = `
-        <i class="icon-alert-circle"></i>
+        <i class="icon-circle-alert"></i>
         <p>${escapeHtml(error.message)}</p>
         <button class="btn btn-sm" onclick="document.getElementById('ta-error').style.display='none'; document.getElementById('ta-empty').style.display='flex';">
           Dismiss
@@ -1898,7 +1898,7 @@ function renderTaSecurityTab() {
           ? `
       <div class="ta-card ta-full-width">
         <div class="ta-card-title">
-          <i class="icon-alert-triangle"></i> Security Risks (${security.risks.length})
+          <i class="icon-triangle-alert"></i> Security Risks (${security.risks.length})
         </div>
         <div class="ta-risk-list">
           ${security.risks
@@ -1918,7 +1918,7 @@ function renderTaSecurityTab() {
           : `
       <div class="ta-card ta-full-width">
         <div class="ta-card-title">
-          <i class="icon-check-circle"></i> Security Risks
+          <i class="icon-circle-check"></i> Security Risks
         </div>
         <div class="ta-no-risks">
           <i class="icon-shield-check"></i>
@@ -1988,7 +1988,7 @@ function renderTaMarketTab() {
       <!-- Volume Card -->
       <div class="ta-card">
         <div class="ta-card-title">
-          <i class="icon-bar-chart-2"></i> Trading Volume
+          <i class="icon-chart-bar"></i> Trading Volume
         </div>
         <div class="ta-stat-grid">
           <div class="ta-stat-item">
@@ -2026,7 +2026,7 @@ function renderTaMarketTab() {
       <!-- Valuation Card -->
       <div class="ta-card ta-full-width">
         <div class="ta-card-title">
-          <i class="icon-pie-chart"></i> Valuation
+          <i class="icon-chart-pie"></i> Valuation
         </div>
         <div class="ta-stat-grid">
           <div class="ta-stat-item">
@@ -2669,7 +2669,7 @@ async function loadTwActiveWatches() {
     console.error("Failed to load watches:", error);
     tableEl.innerHTML = `
       <div class="error-state">
-        <i class="icon-alert-circle"></i>
+        <i class="icon-circle-alert"></i>
         <p>Failed to load watches</p>
       </div>
     `;
@@ -2867,7 +2867,7 @@ function renderVolumeAggregatorTool(container, actionsContainer) {
                 </div>
               </div>
               <div class="va-idle-state" id="va-idle-state">
-                <i class="icon-bar-chart-2"></i>
+                <i class="icon-chart-bar"></i>
                 <p>Configure settings above and click Start to begin</p>
                 <small>Requires at least 2 secondary wallets with SOL balance</small>
               </div>
@@ -2896,7 +2896,7 @@ function renderVolumeAggregatorTool(container, actionsContainer) {
       <div class="va-tab-content" id="va-tab-history">
         <div class="tool-section">
           <div class="va-history-header">
-            <h4><i class="icon-bar-chart"></i> Session Analytics</h4>
+            <h4><i class="icon-chart-bar"></i> Session Analytics</h4>
             <button class="btn btn-sm" id="va-refresh-history" type="button">
               <i class="icon-refresh-cw"></i> Refresh
             </button>
@@ -3385,7 +3385,7 @@ async function loadVaSessionHistory() {
     console.error("Failed to load VA session history:", error);
     container.innerHTML = `
       <div class="va-history-empty">
-        <i class="icon-alert-circle"></i>
+        <i class="icon-circle-alert"></i>
         <p>Failed to load history: ${error.message}</p>
       </div>
     `;
@@ -4468,7 +4468,7 @@ function renderWalletConsolidationTool(container, actionsContainer) {
       <!-- Summary Section -->
       <div class="tool-section">
         <div class="section-header">
-          <h3><i class="icon-pie-chart"></i> Summary</h3>
+          <h3><i class="icon-chart-pie"></i> Summary</h3>
           ${hintHtml}
         </div>
         <div class="section-content">
@@ -4662,7 +4662,7 @@ async function loadConsolidationData() {
     console.error("Failed to load consolidation data:", error);
     container.innerHTML = `
       <div class="error-state">
-        <i class="icon-alert-circle"></i>
+        <i class="icon-circle-alert"></i>
         <p>Failed to load: ${error.message}</p>
       </div>
     `;

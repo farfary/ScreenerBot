@@ -234,7 +234,7 @@ class SetupControllerClass {
     // Disable button during validation
     if (this.nextBtn) {
       this.nextBtn.disabled = true;
-      this.nextBtn.innerHTML = '<i class="icon-loader-2"></i> Validating...';
+      this.nextBtn.innerHTML = '<i class="icon-loader"></i> Validating...';
     }
 
     try {

@@ -197,7 +197,7 @@ async function handleSearch(e) {
   // Show loading
   resultsEl.innerHTML = `
     <div class="search-loading">
-      <i class="icon-loader-2 search-loading-icon"></i>
+      <i class="icon-loader search-loading-icon"></i>
       <span>Searching...</span>
     </div>
   `;
@@ -216,7 +216,7 @@ async function handleSearch(e) {
   } catch (error) {
     resultsEl.innerHTML = `
       <div class="search-error">
-        <i class="icon-alert-circle"></i>
+        <i class="icon-circle-alert"></i>
         <span>Error: ${escapeHTML(error.message)}</span>
       </div>
     `;

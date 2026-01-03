@@ -169,7 +169,7 @@ class BillboardDialog {
     if (container) {
       container.innerHTML = `
         <div class="billboard-state billboard-error">
-          <i class="icon-alert-circle"></i>
+          <i class="icon-circle-alert"></i>
           <span>${this._escapeHtml(message)}</span>
         </div>
       `;

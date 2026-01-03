@@ -36,7 +36,7 @@ const state = {
 
 const FILTER_TABS = [
   { id: "status", label: '<i class="icon-chart-bar"></i> Status' },
-  { id: "analytics", label: '<i class="icon-pie-chart"></i> Analytics' },
+  { id: "analytics", label: '<i class="icon-chart-pie"></i> Analytics' },
   { id: "explorer", label: '<i class="icon-folder"></i> Explorer' },
   { id: "meta", label: '<i class="icon-settings"></i> Core' },
   { id: "dexscreener", label: '<i class="icon-trending-up"></i> DexScreener' },
@@ -1001,7 +1001,7 @@ function renderAnalyticsView() {
     <div class="analytics-header">
       <div class="analytics-title-group">
         <div class="analytics-title">
-          <i class="icon-pie-chart"></i> Filtering Analysis
+          <i class="icon-chart-pie"></i> Filtering Analysis
         </div>
         <div class="analytics-subtitle">
           Performance metrics and rejection analysis
@@ -1039,7 +1039,7 @@ function renderAnalyticsView() {
             <span style="color: var(--success-color)">${data.pass_rate}%</span> pass rate
           </span>
         </div>
-        <i class="icon-check-circle kpi-icon" style="color: var(--success-color); opacity: 0.2"></i>
+        <i class="icon-circle-check kpi-icon" style="color: var(--success-color); opacity: 0.2"></i>
         <div class="pass-rate-visual" style="position: absolute; bottom: 0; left: 0; right: 0; height: 4px; border-radius: 0;">
           <div class="pass-rate-segment passed" style="width: ${data.pass_rate}%"></div>
         </div>
@@ -1054,7 +1054,7 @@ function renderAnalyticsView() {
             <span style="color: var(--error-color)">${data.rejection_rate}%</span> rejection rate
           </span>
         </div>
-        <i class="icon-x-circle kpi-icon" style="color: var(--error-color); opacity: 0.2"></i>
+        <i class="icon-circle-x kpi-icon" style="color: var(--error-color); opacity: 0.2"></i>
       </div>
     </div>
   `;
@@ -1171,12 +1171,12 @@ function renderAnalyticsView() {
   const dqHtml = data.data_quality && data.data_quality.length > 0 ? `
     <div class="analytics-section" style="margin-top: var(--spacing-lg)">
       <h3 class="analytics-section-title">
-        <i class="icon-alert-triangle"></i> Data Quality Issues
+        <i class="icon-triangle-alert"></i> Data Quality Issues
       </h3>
       <div class="dq-grid">
         ${data.data_quality.map(dq => `
           <div class="dq-card ${Utils.escapeHtml(dq.severity)}">
-            <i class="icon-alert-circle dq-icon"></i>
+            <i class="icon-circle-alert dq-icon"></i>
             <div class="dq-content">
               <span class="dq-label">${Utils.escapeHtml(dq.label)}</span>
               <div class="dq-stats">
@@ -1247,41 +1247,43 @@ function renderAnalyticsView() {
 function renderExplorerDashboard(data) {
   const topReasons = data.top_reasons || [];
   const recentRejections = data.recent_rejections || [];
+  const totalRejected = data.total_rejected || 0;
+  const totalPassed = data.total_passed || 0;
 
   return `
     <div class="explorer-empty-dashboard">
       <div class="dashboard-welcome">
         <h2>Rejection Explorer</h2>
-        <p>Analyze why tokens are being filtered out by your current configuration.</p>
+        <p>Rejected: ${Utils.formatNumber(totalRejected, 0)} · Passed: ${Utils.formatNumber(totalPassed, 0)}</p>
       </div>
 
       <div class="dashboard-grid">
         <div class="dashboard-card">
-          <h3><i class="icon-trending-down"></i> Top Rejection Reasons</h3>
+          <h3><i class="icon-trending-down"></i> Top Reasons</h3>
           <div class="top-reasons-list">
-            ${topReasons.slice(0, 8).map(r => `
+            ${topReasons.slice(0, 10).map(r => `
               <div class="top-reason-item" onclick="window.filteringPage.selectReason('${r.reason}', '${Utils.escapeHtml(r.display_label.replace(/'/g, "\\'"))}')">
                 <span class="top-reason-label">${Utils.escapeHtml(r.display_label)}</span>
-                <span class="top-reason-count">${Utils.formatNumber(r.count, 0)} tokens</span>
+                <span class="top-reason-count">${Utils.formatNumber(r.count, 0)}</span>
               </div>
             `).join('')}
-            ${topReasons.length === 0 ? '<div class="analytics-empty">No data available</div>' : ''}
+            ${topReasons.length === 0 ? '<div class="analytics-empty" style="padding: 12px; font-size: 0.75rem">No data</div>' : ''}
           </div>
         </div>
 
         <div class="dashboard-card">
-          <h3><i class="icon-clock"></i> Recent Rejections</h3>
+          <h3><i class="icon-clock"></i> Recent</h3>
           <div class="top-reasons-list">
-            ${recentRejections.slice(0, 8).map(t => `
+            ${recentRejections.slice(0, 10).map(t => `
               <div class="top-reason-item" onclick="window.filteringPage.selectReason('${t.reason}', '${Utils.escapeHtml(t.display_label.replace(/'/g, "\\'"))}')">
-                <div style="display: flex; flex-direction: column">
-                  <span class="top-reason-label">${Utils.escapeHtml(t.symbol || 'Unknown')}</span>
-                  <span style="font-size: 0.7rem; color: var(--text-secondary)">${Utils.escapeHtml(t.display_label)}</span>
+                <div style="display: flex; flex-direction: column; min-width: 0">
+                  <span class="top-reason-label" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">${Utils.escapeHtml(t.symbol || 'Unknown')}</span>
+                  <span style="font-size: 0.65rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis">${Utils.escapeHtml(t.display_label)}</span>
                 </div>
                 <span class="top-reason-count">${Utils.formatTimeAgo(new Date(t.rejected_at))}</span>
               </div>
             `).join('')}
-            ${recentRejections.length === 0 ? '<div class="analytics-empty">No recent rejections</div>' : ''}
+            ${recentRejections.length === 0 ? '<div class="analytics-empty" style="padding: 12px; font-size: 0.75rem">No recent</div>' : ''}
           </div>
         </div>
       </div>
@@ -1294,33 +1296,14 @@ function renderExplorerView() {
     return `
       <div class="analytics-loading">
         <div class="loading-spinner"></div>
-        <p>Loading explorer data...</p>
+        <p>Loading...</p>
       </div>
     `;
   }
 
   const data = state.analytics;
-  
-  // Header
-  const headerHtml = `
-    <div class="analytics-header">
-      <div class="analytics-title-group">
-        <div class="analytics-title">
-          <i class="icon-folder"></i> Rejection Explorer
-        </div>
-        <div class="analytics-subtitle">
-          Browse all rejection reasons and affected tokens
-        </div>
-      </div>
-      <div class="analytics-actions">
-        <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.refreshAnalytics()">
-          <i class="icon-refresh-cw"></i> Refresh
-        </button>
-      </div>
-    </div>
-  `;
 
-  // Tree View
+  // Compact Tree View
   const treeHtml = `
     <div class="explorer-layout">
       <div class="explorer-sidebar">
@@ -1335,7 +1318,7 @@ function renderExplorerView() {
           <i class="icon-layout"></i>
           <div class="explorer-summary-info">
             <span class="explorer-summary-label">Overview</span>
-            <span class="explorer-summary-desc">Top reasons & recent activity</span>
+            <span class="explorer-summary-desc">Summary & recent</span>
           </div>
         </div>
 
@@ -1345,7 +1328,7 @@ function renderExplorerView() {
               <div class="tree-category-header" onclick="window.filteringPage.toggleCategory('${cat.category}')">
                 <i class="icon-${Utils.escapeHtml(cat.icon)} tree-icon"></i>
                 <span class="tree-label">${Utils.escapeHtml(cat.label)}</span>
-                <span class="tree-count">${Utils.formatNumber(cat.count, 0)}</span>
+                <span class="tree-count">${Utils.formatCompactNumber(cat.count)}</span>
                 <i class="icon-chevron-down tree-toggle" id="toggle-${cat.category}"></i>
               </div>
               <div class="tree-reasons" id="reasons-${cat.category}" style="display: none">
@@ -1355,7 +1338,7 @@ function renderExplorerView() {
                        id="reason-${r.reason}"
                        data-label="${Utils.escapeHtml(r.display_label.toLowerCase())}">
                     <span class="tree-reason-label">${Utils.escapeHtml(r.display_label)}</span>
-                    <span class="tree-reason-count">${Utils.formatNumber(r.count, 0)}</span>
+                    <span class="tree-reason-count">${Utils.formatCompactNumber(r.count)}</span>
                   </div>
                 `).join('')}
               </div>
@@ -1378,7 +1361,6 @@ function renderExplorerView() {
 
   return `
     <div class="explorer-view-container">
-      ${headerHtml}
       ${treeHtml}
     </div>
   `;
@@ -2218,6 +2200,12 @@ window.filteringPage = {
     window.filteringPage.debouncedFilterTokens(query);
   },
 
+  firstPage: () => {
+    if (window.filteringPage.explorerPage > 0) {
+      window.filteringPage.loadExplorer(0);
+    }
+  },
+
   prevPage: () => {
     if (window.filteringPage.explorerPage > 0) {
       window.filteringPage.loadExplorer(window.filteringPage.explorerPage - 1);
@@ -2226,6 +2214,52 @@ window.filteringPage = {
   
   nextPage: () => {
     window.filteringPage.loadExplorer(window.filteringPage.explorerPage + 1);
+  },
+
+  lastPage: async () => {
+    // Go forward in large steps until we hit the end
+    const limit = window.filteringPage.explorerLimit;
+    const reason = window.filteringPage.currentReason;
+    if (!reason) return;
+    
+    // Estimate last page by fetching with large offset
+    let testPage = window.filteringPage.explorerPage + 100;
+    try {
+      const url = `/api/filtering/rejected-tokens?limit=${limit}&offset=${testPage * limit}&reason=${encodeURIComponent(reason)}`;
+      const response = await fetch(url);
+      const tokens = await response.json();
+      
+      if (tokens.length === 0) {
+        // Binary search for actual last page
+        let low = window.filteringPage.explorerPage;
+        let high = testPage;
+        while (low < high - 1) {
+          const mid = Math.floor((low + high) / 2);
+          const checkUrl = `/api/filtering/rejected-tokens?limit=${limit}&offset=${mid * limit}&reason=${encodeURIComponent(reason)}`;
+          const checkRes = await fetch(checkUrl);
+          const checkTokens = await checkRes.json();
+          if (checkTokens.length === 0) {
+            high = mid;
+          } else if (checkTokens.length < limit) {
+            // This is the last page
+            window.filteringPage.loadExplorer(mid);
+            return;
+          } else {
+            low = mid;
+          }
+        }
+        window.filteringPage.loadExplorer(low);
+      } else if (tokens.length < limit) {
+        // testPage is the last page
+        window.filteringPage.loadExplorer(testPage);
+      } else {
+        // Need to go further - just load testPage for now
+        window.filteringPage.loadExplorer(testPage);
+      }
+    } catch {
+      // Fallback: just go forward 10 pages
+      window.filteringPage.loadExplorer(window.filteringPage.explorerPage + 10);
+    }
   },
   
   exportCsv: () => {
@@ -2245,26 +2279,33 @@ window.filteringPage = {
     
     if (!container || !reason) return;
     
-    // Initial render with header and search
+    // Initial render with compact header and search
     if (page === 0 && !container.querySelector('.explorer-detail-header')) {
       container.innerHTML = `
         <div class="explorer-detail-header">
           <div class="detail-title-group">
             <span class="reason-badge large">${Utils.escapeHtml(label)}</span>
-            <div class="explorer-search-input-wrapper" style="width: 250px">
+            <div class="explorer-search-input-wrapper" style="width: 180px">
               <i class="icon-search"></i>
-              <input type="text" placeholder="Search tokens..." value="${Utils.escapeHtml(searchQuery)}" 
+              <input type="text" placeholder="Filter..." value="${Utils.escapeHtml(searchQuery)}" 
                      oninput="window.filteringPage.filterTokens(this.value)">
             </div>
           </div>
           <div class="detail-actions">
-            <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.exportCsv()" title="Export to CSV">
-              <i class="icon-download"></i> Export CSV
+            <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.exportCsv()" title="Export CSV">
+              <i class="icon-download"></i>
             </button>
           </div>
         </div>
         <div class="explorer-table-wrapper">
-          <div class="loading-spinner small" style="margin: 40px auto; display: block;"></div>
+          <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.8rem">Loading...</div>
+        </div>
+        <div class="pagination-controls">
+          <button class="page-btn" onclick="window.filteringPage.firstPage()" disabled title="First"><i class="icon-chevrons-left"></i></button>
+          <button class="page-btn" onclick="window.filteringPage.prevPage()" disabled title="Previous"><i class="icon-chevron-left"></i></button>
+          <span class="page-info">Page ${page + 1}</span>
+          <button class="page-btn" onclick="window.filteringPage.nextPage()" disabled title="Next"><i class="icon-chevron-right"></i></button>
+          <button class="page-btn" onclick="window.filteringPage.lastPage()" disabled title="Last"><i class="icon-chevrons-right"></i></button>
         </div>
       `;
     } else {
@@ -2288,10 +2329,20 @@ window.filteringPage = {
 
       if (tokens.length === 0) {
         wrapper.innerHTML = `
-          <div class="analytics-empty" style="padding: 60px 0">
-            <i class="icon-search" style="font-size: 2rem; opacity: 0.2; margin-bottom: 1rem; display: block;"></i>
-            No tokens found ${searchQuery ? 'matching your search' : 'for this reason'}
+          <div style="padding: 32px; text-align: center; color: var(--text-muted); font-size: 0.8rem">
+            No tokens found${searchQuery ? ' matching filter' : ''}
           </div>`;
+        // Update pagination
+        const pagination = container.querySelector('.pagination-controls');
+        if (pagination) {
+          pagination.innerHTML = `
+            <button class="page-btn" disabled><i class="icon-chevrons-left"></i></button>
+            <button class="page-btn" disabled><i class="icon-chevron-left"></i></button>
+            <span class="page-info">No results</span>
+            <button class="page-btn" disabled><i class="icon-chevron-right"></i></button>
+            <button class="page-btn" disabled><i class="icon-chevrons-right"></i></button>
+          `;
+        }
         return;
       }
       
@@ -2301,7 +2352,7 @@ window.filteringPage = {
             <tr>
               <th>Token</th>
               <th>Source</th>
-              <th style="text-align: right">Rejected At</th>
+              <th style="text-align: right">Time</th>
             </tr>
           </thead>
           <tbody>
@@ -2310,10 +2361,10 @@ window.filteringPage = {
       html += tokens.map(t => {
         const src = t.image_url;
         const logo = src
-          ? `<img class="token-logo" alt="" src="${Utils.escapeHtml(src)}" />`
-          : '<div class="token-logo" style="display: flex; align-items: center; justify-content: center; font-size: 10px; background: var(--bg-tertiary);">N/A</div>';
+          ? `<img class="token-logo" alt="" src="${Utils.escapeHtml(src)}" loading="lazy" />`
+          : '<div class="token-logo" style="display: flex; align-items: center; justify-content: center; font-size: 8px; background: var(--bg-tertiary); color: var(--text-muted)">?</div>';
         const sym = Utils.escapeHtml(t.symbol || "—");
-        const name = Utils.escapeHtml(t.name || "Unknown Token");
+        const name = Utils.escapeHtml(t.name || "Unknown");
         
         return `
         <tr>
@@ -2330,7 +2381,7 @@ window.filteringPage = {
                 <button class="btn-icon small" onclick="Utils.copyToClipboard('${t.mint}')" title="Copy Mint">
                   <i class="icon-copy"></i>
                 </button>
-                <a href="https://dexscreener.com/solana/${t.mint}" target="_blank" class="btn-icon small" title="View on DexScreener">
+                <a href="https://dexscreener.com/solana/${t.mint}" target="_blank" class="btn-icon small" title="DexScreener">
                   <i class="icon-external-link"></i>
                 </a>
               </div>
@@ -2339,28 +2390,27 @@ window.filteringPage = {
           <td>
             <span class="source-badge ${t.source.toLowerCase()}">${Utils.escapeHtml(t.source)}</span>
           </td>
-          <td style="text-align: right; font-family: var(--font-data); color: var(--text-secondary); font-size: 0.85rem">
+          <td style="text-align: right; font-family: var(--font-data); color: var(--text-muted); font-size: 0.75rem">
             ${Utils.formatTimeAgo(new Date(t.rejected_at))}
           </td>
         </tr>
       `;}).join("");
 
       html += `</tbody></table>`;
-
-      // Pagination
-      html += `
-        <div class="pagination-controls">
-          <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.prevPage()" ${page === 0 ? 'disabled' : ''}>
-            <i class="icon-chevron-left"></i> Previous
-          </button>
-          <span class="page-info">Page ${page + 1}</span>
-          <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.nextPage()" ${tokens.length < window.filteringPage.explorerLimit ? 'disabled' : ''}>
-            Next <i class="icon-chevron-right"></i>
-          </button>
-        </div>
-      `;
-      
       wrapper.innerHTML = html;
+
+      // Update pagination
+      const pagination = container.querySelector('.pagination-controls');
+      if (pagination) {
+        const hasMore = tokens.length >= window.filteringPage.explorerLimit;
+        pagination.innerHTML = `
+          <button class="page-btn" onclick="window.filteringPage.firstPage()" ${page === 0 ? 'disabled' : ''} title="First"><i class="icon-chevrons-left"></i></button>
+          <button class="page-btn" onclick="window.filteringPage.prevPage()" ${page === 0 ? 'disabled' : ''} title="Previous"><i class="icon-chevron-left"></i></button>
+          <span class="page-info">Page ${page + 1}</span>
+          <button class="page-btn" onclick="window.filteringPage.nextPage()" ${!hasMore ? 'disabled' : ''} title="Next"><i class="icon-chevron-right"></i></button>
+          <button class="page-btn" onclick="window.filteringPage.lastPage()" ${!hasMore ? 'disabled' : ''} title="Last"><i class="icon-chevrons-right"></i></button>
+        `;
+      }
       
     } catch (err) {
       console.error("Failed to load explorer:", err);

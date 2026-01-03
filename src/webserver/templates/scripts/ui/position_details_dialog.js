@@ -161,7 +161,7 @@ export class PositionDetailsDialog {
     if (content) {
       content.innerHTML = `
         <div class="pdd-error-state">
-          <i class="icon-alert-circle"></i>
+          <i class="icon-circle-alert"></i>
           <p>${Utils.escapeHtml(message)}</p>
         </div>
       `;
@@ -365,7 +365,7 @@ export class PositionDetailsDialog {
             Overview
           </button>
           <button class="tab-button" data-tab="chart">
-            <i class="icon-bar-chart-2"></i>
+            <i class="icon-chart-bar"></i>
             Chart
           </button>
           <button class="tab-button" data-tab="history">
@@ -719,7 +719,7 @@ export class PositionDetailsDialog {
     return `
       <div class="pdd-stat-card">
         <h3 class="pdd-stat-card-title">
-          <i class="icon-arrow-down-circle"></i>
+          <i class="icon-circle-arrow-down"></i>
           Entry Info
         </h3>
         <div class="pdd-stat-card-content">
@@ -810,7 +810,7 @@ export class PositionDetailsDialog {
             <div class="pdd-stat-row">
               <span class="pdd-stat-label">Verification</span>
               <span class="pdd-stat-value">
-                ${verified ? '<span class="pdd-verified"><i class="icon-check-circle"></i> Verified</span>' : '<span class="pdd-unverified"><i class="icon-clock"></i> Pending</span>'}
+                ${verified ? '<span class="pdd-verified"><i class="icon-circle-check"></i> Verified</span>' : '<span class="pdd-unverified"><i class="icon-clock"></i> Pending</span>'}
               </span>
             </div>
           </div>
@@ -845,7 +845,7 @@ export class PositionDetailsDialog {
           <div class="pdd-stat-row">
             <span class="pdd-stat-label">Exit Verified</span>
             <span class="pdd-stat-value">
-              ${pos.transaction_exit_verified ? '<span class="pdd-verified"><i class="icon-check-circle"></i> Verified</span>' : '<span class="pdd-unverified"><i class="icon-clock"></i> Pending</span>'}
+              ${pos.transaction_exit_verified ? '<span class="pdd-verified"><i class="icon-circle-check"></i> Verified</span>' : '<span class="pdd-unverified"><i class="icon-clock"></i> Pending</span>'}
             </span>
           </div>
         </div>
@@ -939,7 +939,7 @@ export class PositionDetailsDialog {
       return `
         <div class="pdd-stat-card pdd-stat-card-muted">
           <h3 class="pdd-stat-card-title">
-            <i class="icon-bar-chart-2"></i>
+            <i class="icon-chart-bar"></i>
             Market Data
           </h3>
           <div class="pdd-stat-card-empty">
@@ -952,7 +952,7 @@ export class PositionDetailsDialog {
     return `
       <div class="pdd-stat-card">
         <h3 class="pdd-stat-card-title">
-          <i class="icon-bar-chart-2"></i>
+          <i class="icon-chart-bar"></i>
           Market Data
         </h3>
         <div class="pdd-stat-card-content">
@@ -1024,7 +1024,7 @@ export class PositionDetailsDialog {
             warnings.length > 0
               ? `
           <div class="pdd-security-warnings">
-            ${warnings.map((w) => `<span class="pdd-warning-badge"><i class="icon-alert-triangle"></i> ${w}</span>`).join("")}
+            ${warnings.map((w) => `<span class="pdd-warning-badge"><i class="icon-triangle-alert"></i> ${w}</span>`).join("")}
           </div>
           `
               : ""
@@ -1053,7 +1053,7 @@ export class PositionDetailsDialog {
     const actionButtons = isOpen
       ? `
         <button class="pdd-action-btn pdd-action-add" id="pddAddBtn">
-          <i class="icon-plus-circle"></i>
+          <i class="icon-circle-plus"></i>
           <span>Add to Position</span>
         </button>
         <button class="pdd-action-btn pdd-action-partial" id="pddPartialBtn">
@@ -1061,7 +1061,7 @@ export class PositionDetailsDialog {
           <span>Partial Sell</span>
         </button>
         <button class="pdd-action-btn pdd-action-close" id="pddCloseBtn">
-          <i class="icon-x-circle"></i>
+          <i class="icon-circle-x"></i>
           <span>Close Position</span>
         </button>
       `
@@ -1423,7 +1423,7 @@ export class PositionDetailsDialog {
       if (!data?.data || data.data.length === 0) {
         chartArea.innerHTML = `
           <div class="pdd-chart-empty">
-            <i class="icon-bar-chart-2"></i>
+            <i class="icon-chart-bar"></i>
             <p>No OHLCV data available for this timeframe</p>
             <span class="pdd-chart-empty-hint">Data may not be collected for this token yet</span>
           </div>
@@ -1439,7 +1439,7 @@ export class PositionDetailsDialog {
       console.error("Error fetching OHLCV data:", error);
       chartArea.innerHTML = `
         <div class="pdd-chart-empty pdd-chart-error">
-          <i class="icon-alert-circle"></i>
+          <i class="icon-circle-alert"></i>
           <p>Failed to load chart data</p>
           <span class="pdd-chart-empty-hint">${Utils.escapeHtml(error?.message || "Unknown error")}</span>
         </div>
@@ -1638,7 +1638,7 @@ export class PositionDetailsDialog {
       .map((item) => {
         const isEntry = item.type === "entry";
         const typeClass = isEntry ? "pdd-timeline-entry" : "pdd-timeline-exit";
-        const icon = isEntry ? "icon-arrow-down-circle" : "icon-arrow-up-circle";
+        const icon = isEntry ? "icon-circle-arrow-down" : "icon-circle-arrow-up";
         const label = isEntry ? "Entry" : "Exit";
 
         let badges = "";
@@ -1782,8 +1782,8 @@ export class PositionDetailsDialog {
         const statusIcon = isPending
           ? "icon-clock"
           : isSuccess
-            ? "icon-check-circle"
-            : "icon-x-circle";
+            ? "icon-circle-check"
+            : "icon-circle-x";
 
         // Amount info
         const solChange = tx.sol_change;
@@ -2077,7 +2077,7 @@ export class PositionDetailsDialog {
 
     return `
       <div class="pdd-analytics-card pdd-price-analysis">
-        <h4><i class="icon-bar-chart-2"></i> Price Analysis</h4>
+        <h4><i class="icon-chart-bar"></i> Price Analysis</h4>
         <div class="pdd-analysis-rows">
           <div class="pdd-analysis-row">
             <span class="pdd-row-label">Entry Price</span>

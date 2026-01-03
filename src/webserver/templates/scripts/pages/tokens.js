@@ -44,7 +44,7 @@ const TOKEN_VIEWS = [
   { id: "recent", label: '<i class="icon-clock"></i> Recent', hintKey: "tokens.recentTokens" },
   {
     id: "ohlcv",
-    label: '<i class="icon-chart-candle"></i> OHLCV Data',
+    label: '<i class="icon-chart-candlestick"></i> OHLCV Data',
     hintKey: "tokens.ohlcvData",
   },
 ];
@@ -1225,7 +1225,7 @@ function createLifecycle() {
                     <div class="row-actions">
                       <button class="btn row-action" data-action="add" data-mint="${Utils.escapeHtml(
                         mint
-                      )}" title="Add to position (DCA)"${disabledAttr}><i class="icon-plus-circle"></i> Add</button>
+                      )}" title="Add to position (DCA)"${disabledAttr}><i class="icon-circle-plus"></i> Add</button>
                       <button class="btn row-action" data-action="sell" data-mint="${Utils.escapeHtml(
                         mint
                       )}" title="Sell (full or % partial)"${disabledAttr}><i class="icon-trending-down"></i> Sell</button>
@@ -1822,7 +1822,7 @@ function createLifecycle() {
       uniformRowHeight: 2,
       toolbar: {
         title: {
-          icon: "icon-chart-candle",
+          icon: "icon-chart-candlestick",
           text: "OHLCV Data",
         },
         summary: [

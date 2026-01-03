@@ -1578,17 +1578,17 @@ function renderImportResults(data) {
   let resultClass, icon, title, subtitle;
   if (errorCount === 0) {
     resultClass = "success";
-    icon = "icon-check-circle";
+    icon = "icon-circle-check";
     title = "Import Successful";
     subtitle = `All ${successCount} wallet(s) imported successfully`;
   } else if (successCount > 0) {
     resultClass = "partial";
-    icon = "icon-alert-triangle";
+    icon = "icon-triangle-alert";
     title = "Partial Success";
     subtitle = `${successCount} imported, ${errorCount} failed`;
   } else {
     resultClass = "error";
-    icon = "icon-x-circle";
+    icon = "icon-circle-x";
     title = "Import Failed";
     subtitle = `All ${errorCount} wallet(s) failed to import`;
   }

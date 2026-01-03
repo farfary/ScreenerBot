@@ -121,7 +121,7 @@ function createLifecycle() {
               <div class="row-actions">
                 <button class="btn row-action" data-action="add" data-mint="${Utils.escapeHtml(
                   mint
-                )}" title="Add to position (DCA)"><i class="icon-plus-circle"></i> Add</button>
+                )}" title="Add to position (DCA)"><i class="icon-circle-plus"></i> Add</button>
                 <button class="btn row-action" data-action="sell" data-mint="${Utils.escapeHtml(
                   mint
                 )}" title="Sell (full or % partial)"><i class="icon-trending-down"></i> Sell</button>
