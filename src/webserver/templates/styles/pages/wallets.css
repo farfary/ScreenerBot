@@ -13,6 +13,16 @@
   overflow: hidden;
 }
 
+/* Global icon centering for this page */
+.wallets-page i[class^="icon-"],
+.wallets-page i[class*=" icon-"] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+  vertical-align: middle;
+}
+
 /* =============================================================================
    Header Section - Enhanced Design
    ============================================================================= */
@@ -47,6 +57,13 @@
   font-size: 1.35rem;
   position: relative;
   transition: transform 0.2s ease;
+}
+
+.page-badge i {
+  line-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .page-badge::after {
@@ -239,6 +256,13 @@
   flex-shrink: 0;
 }
 
+.main-wallet-icon i {
+  line-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .main-wallet-info {
   display: flex;
   flex-direction: column;
@@ -399,6 +423,13 @@
   transition: transform 0.2s ease;
 }
 
+.stat-icon i {
+  line-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .stat-card:hover .stat-icon {
   transform: scale(1.05);
 }
@@ -505,10 +536,17 @@
 .token-holdings-table .empty-state-icon {
   width: 56px;
   height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .token-holdings-table .empty-state-icon i {
   font-size: 1.5rem;
+  line-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .holdings-table {
@@ -792,25 +830,29 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 80px;
-  height: 80px;
+  width: 72px;
+  height: 72px;
   flex-shrink: 0;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--bg-tertiary), var(--bg-secondary));
   border: 1px solid var(--border-color);
-  margin-bottom: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
   box-shadow: 0 4px 12px rgb(0 0 0 / 0.1);
 }
 
 .empty-state-icon i {
-  font-size: 3.5rem;
+  font-size: 2.25rem;
   color: var(--text-secondary);
-  opacity: 0.8;
+  opacity: 0.9;
+  line-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 /* Legacy icon style (direct child, not in icon container) */
 .empty-state > i:not(.empty-state-icon i) {
-  font-size: 2.5rem;
+  font-size: 2rem;
   color: var(--text-muted);
   opacity: 0.5;
 }
@@ -871,34 +913,40 @@
   font-size: 1rem !important;
   width: auto !important;
   height: auto !important;
-  line-height: 1;
 }
 
 .empty-state-hint {
   display: inline-flex;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
   margin-top: var(--spacing-xl);
-  padding: 16px 24px;
+  padding: 10px 14px;
   border-radius: var(--radius-lg);
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  max-width: 480px;
+  max-width: 440px;
 }
 
-.empty-state-hint i {
-  font-size: 1.5rem;
+/*
+  Icon font glyphs sit on text baseline. In a flex container with align-items:center,
+  the icon BOX is centered but the glyph inside floats to the top if line-height > font-size.
+  Fix: set line-height equal to font-size so the glyph fills the box vertically.
+  Also reset margin-bottom which is inherited from .empty-state i rules.
+*/
+.wallets-page .empty-state-hint i[class^="icon-"],
+.wallets-page .empty-state-hint i[class*=" icon-"] {
+  font-size: 1rem;
+  line-height: 1 !important;
+  margin-bottom: 0 !important;
   color: var(--text-secondary);
   opacity: 0.8;
-  line-height: 1;
   flex-shrink: 0;
 }
 
 .empty-state-hint span {
   font-size: 0.8rem;
   color: var(--text-secondary);
-  line-height: 1.5;
-  text-align: left;
+  line-height: 1;
 }
 
 .loading-state {
@@ -914,6 +962,10 @@
 .loading-state i {
   font-size: 1.5rem;
   color: var(--primary-color);
+  line-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .loading-state p {
