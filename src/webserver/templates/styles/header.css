@@ -638,9 +638,9 @@
 }
 
 .ticker-segment {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   font-size: 12px;
   color: var(--text-secondary);
   cursor: pointer;
@@ -652,17 +652,29 @@
 }
 
 .ticker-icon {
-  font-size: 13px;
+  font-size: 12px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
 }
 
 .ticker-text {
   font-family: var(--metric-font);
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
 }
 
 .ticker-text strong {
   color: var(--text-primary);
   font-weight: 700;
   font-size: 13px;
+}
+
+.ticker-text i {
+  font-size: 11px;
+  line-height: 1;
+  margin-left: 4px;
 }
 
 /* ============================================================================
