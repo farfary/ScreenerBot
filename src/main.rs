@@ -55,7 +55,7 @@ async fn main() {
 
                   Website: screenerbot.io           Channel: t.me/screenerbotio
                   Docs:    screenerbot.io/docs      Group:   @screenerbotio_talk
-                                                    Support: @screenerbot_support
+                  X:       x.com/screenerbotio      Support: @screenerbotio_support
 "#);
     println!("\x1b[0m");
 
