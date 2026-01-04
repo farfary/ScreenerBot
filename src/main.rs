@@ -53,8 +53,9 @@ async fn main() {
                                              SCREENERBOT
                                 ◆ Automated Solana DeFi Trading Bot ◆
 
-                  Website: screenerbot.io           Telegram: t.me/screenerbotio
-                  Docs:    screenerbot.io/docs      Support:  @screenerbot_support
+                  Website: screenerbot.io           Channel: t.me/screenerbotio
+                  Docs:    screenerbot.io/docs      Group:   @screenerbotio_talk
+                                                    Support: @screenerbot_support
 "#);
     println!("\x1b[0m");
 
