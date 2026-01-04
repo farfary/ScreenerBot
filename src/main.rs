@@ -49,8 +49,8 @@ async fn main() {
  ███████║╚██████╗██║  ██║███████╗███████╗██║ ╚████║███████╗██║  ██║██████╔╝╚██████╔╝   ██║   
  ╚══════╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝╚═════╝  ╚═════╝    ╚═╝   
 
-                                      SCREENERBOT
-                     ◆ Automated Solana DeFi Trading Bot ◆
+                                         SCREENERBOT
+                            ◆ Automated Solana DeFi Trading Bot ◆
 "#);
 
     // Initialize logger
