@@ -773,12 +773,30 @@ function createLifecycle() {
     return params;
   };
 
+  // Prevent poll reloads from racing with user actions (sort/page/search/etc.)
+  // Poll reload uses DataTable.reload(), which cancels in-flight pagination requests.
+  // If poll fires during a user-triggered load, it can repeatedly abort and re-queue
+  // requests, making even small page sizes feel "stuck".
+  let lastUserReloadAt = 0;
+
   const shouldSkipPollReload = () => {
     if (!table) return false;
 
+    // If the table is already loading, never start a poll reload.
+    // This avoids poll->abort->reload loops that delay UI updates.
+    if (table.state?.isLoading) {
+      return true;
+    }
+
+    // Skip polls shortly after a user-triggered reload (sort/search/page size/view).
+    // Keeps the UI responsive by letting the latest user action complete.
+    if (lastUserReloadAt && Date.now() - lastUserReloadAt < 2500) {
+      return true;
+    }
+
     const paginationState =
       typeof table.getPaginationState === "function" ? table.getPaginationState() : null;
-    if (paginationState?.loadingNext || paginationState?.loadingPrev) {
+    if (paginationState?.loadingNext || paginationState?.loadingPrev || paginationState?.loadingInitial) {
       return true;
     }
 
@@ -902,9 +920,14 @@ function createLifecycle() {
     const url = `/api/tokens/list?${params.toString()}`;
 
     try {
+      const requestPriority = reason === "poll" ? "normal" : "high";
+      console.debug('[Tokens] fetch start', { url, reason, priority: requestPriority, time: Date.now(), requestManager: requestManager.getStats() });
+      const startTs = Date.now();
       const data = await requestManager.fetch(url, {
-        priority: "normal",
+        priority: requestPriority,
+        signal,
       });
+      console.debug('[Tokens] fetch end', { url, reason, durationMs: Date.now() - startTs, requestManager: requestManager.getStats() });
       const items = Array.isArray(data?.items) ? data.items : [];
 
       const rejectionReasons =
@@ -1052,8 +1075,10 @@ function createLifecycle() {
     const url = `/api/tokens/list?${params.toString()}`;
 
     try {
+      const requestPriority = reason === "poll" ? "normal" : "high";
       const data = await requestManager.fetch(url, {
-        priority: "normal",
+        priority: requestPriority,
+        signal,
       });
       const items = Array.isArray(data?.items) ? data.items : [];
 
@@ -1181,6 +1206,11 @@ function createLifecycle() {
     if (reason === "poll" && shouldSkipPollReload()) {
       return Promise.resolve(null);
     }
+
+    if (reason !== "poll") {
+      lastUserReloadAt = Date.now();
+    }
+
     return table.reload({
       reason,
       silent: options.silent ?? false,

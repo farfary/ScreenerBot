@@ -195,15 +195,15 @@ impl FilteringStore {
 
         let entries = collect_entries(snapshot.as_ref(), query.view, recent_cutoff);
         // Collect raw tokens for filtering/sorting on Token fields
-        let mut tokens: Vec<_> = entries
+        // OPTIMIZATION: Use references to avoid cloning all tokens
+        let mut tokens: Vec<&Token> = entries
             .into_iter()
-            .map(|entry| entry.token.clone())
+            .map(|entry| &entry.token)
             .collect();
 
         apply_filters(&mut tokens, &query, snapshot.as_ref());
-        if matches!(query.view, FilteringView::Pool) {
-            overlay_pool_price_data(&mut tokens);
-        }
+        
+        // Sort references (using dynamic price lookup if needed)
         sort_tokens(&mut tokens, query.sort_key, query.sort_direction);
 
         let total = tokens.len();
@@ -248,11 +248,18 @@ impl FilteringStore {
             .saturating_sub(1)
             .saturating_mul(query.page_size);
         let end_idx = start_idx.saturating_add(query.page_size).min(total);
-        let items = if start_idx < total {
-            tokens[start_idx..end_idx].to_vec()
+        
+        // Clone only the page we are returning
+        let mut items: Vec<Token> = if start_idx < total {
+            tokens[start_idx..end_idx].iter().map(|t| (*t).clone()).collect()
         } else {
             Vec::new()
         };
+
+        // Apply pool price overlay only to the returned page
+        if matches!(query.view, FilteringView::Pool) {
+            overlay_pool_price_data(&mut items);
+        }
 
         let mut rejection_reasons = HashMap::new();
         let mut available_rejection_reasons = Vec::new();
@@ -377,11 +384,11 @@ impl FilteringStore {
                 Some("pool_price_last_calculated_at".to_string())
             }
             TokenSortKey::Mint => Some("mint".to_string()),
-            // Transaction sorts require in-memory sorting (need sum of buys+sells)
-            TokenSortKey::Txns5m
-            | TokenSortKey::Txns1h
-            | TokenSortKey::Txns6h
-            | TokenSortKey::Txns24h => None,
+            // Transaction sorts - mapped to SQL expressions in database.rs
+            TokenSortKey::Txns5m => Some("txns_5m".to_string()),
+            TokenSortKey::Txns1h => Some("txns_1h".to_string()),
+            TokenSortKey::Txns6h => Some("txns_6h".to_string()),
+            TokenSortKey::Txns24h => Some("txns_24h".to_string()),
         };
 
         let sort_direction = match query.sort_direction {
@@ -673,7 +680,7 @@ fn collect_entries<'a>(
     }
 }
 
-fn apply_filters(items: &mut Vec<Token>, query: &FilteringQuery, snapshot: &FilteringSnapshot) {
+fn apply_filters(items: &mut Vec<&Token>, query: &FilteringQuery, snapshot: &FilteringSnapshot) {
     // quick maps for derived flags
     let flags: std::collections::HashMap<&str, (&TokenEntry, bool, bool, bool)> = snapshot
         .tokens
@@ -767,12 +774,21 @@ fn apply_filters(items: &mut Vec<Token>, query: &FilteringQuery, snapshot: &Filt
     }
 }
 
-fn sort_tokens(items: &mut [Token], sort_key: TokenSortKey, direction: SortDirection) {
+fn sort_tokens(items: &mut Vec<&Token>, sort_key: TokenSortKey, direction: SortDirection) {
     let ascending = matches!(direction, SortDirection::Asc);
     items.sort_by(|a, b| {
         let ordering = match sort_key {
             TokenSortKey::Symbol => a.symbol.cmp(&b.symbol),
-            TokenSortKey::PriceSol => cmp_f64(Some(a.price_sol), Some(b.price_sol)),
+            TokenSortKey::PriceSol => {
+                // Use real-time pool price for sorting if available
+                let price_a = pools::get_pool_price(&a.mint)
+                    .map(|p| p.price_sol)
+                    .unwrap_or(a.price_sol);
+                let price_b = pools::get_pool_price(&b.mint)
+                    .map(|p| p.price_sol)
+                    .unwrap_or(b.price_sol);
+                cmp_f64(Some(price_a), Some(price_b))
+            }
             TokenSortKey::LiquidityUsd => cmp_f64(a.liquidity_usd, b.liquidity_usd),
             TokenSortKey::Volume24h => cmp_f64(a.volume_h24, b.volume_h24),
             TokenSortKey::Fdv => cmp_f64(a.fdv, b.fdv),

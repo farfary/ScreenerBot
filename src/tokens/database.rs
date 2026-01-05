@@ -2383,6 +2383,10 @@ impl TokenDatabase {
             Some("market_cap") => "COALESCE(d.market_cap, g.market_cap)",
             Some("price_change_h1") => "COALESCE(d.price_change_1h, g.price_change_1h)",
             Some("price_change_h24") => "COALESCE(d.price_change_24h, g.price_change_24h)",
+            Some("txns_5m") => "COALESCE(d.txns_5m_buys, 0) + COALESCE(d.txns_5m_sells, 0)",
+            Some("txns_1h") => "COALESCE(d.txns_1h_buys, 0) + COALESCE(d.txns_1h_sells, 0)",
+            Some("txns_6h") => "COALESCE(d.txns_6h_buys, 0) + COALESCE(d.txns_6h_sells, 0)",
+            Some("txns_24h") => "COALESCE(d.txns_24h_buys, 0) + COALESCE(d.txns_24h_sells, 0)",
             _ =>
                 "COALESCE(ut.market_data_last_updated_at, d.market_data_last_fetched_at, g.market_data_last_fetched_at, t.metadata_last_fetched_at)",
         };

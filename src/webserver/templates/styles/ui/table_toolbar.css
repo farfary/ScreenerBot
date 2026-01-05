@@ -8,6 +8,7 @@
   padding: 0.5rem 1rem;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
+  position: relative; /* Required for loading indicator */
 }
 
 .table-toolbar {

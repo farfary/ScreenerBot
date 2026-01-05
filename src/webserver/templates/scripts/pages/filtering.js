@@ -1084,7 +1084,7 @@ function renderAnalyticsView() {
                 </div>
               </div>
             </div>
-          `).join('') : '<div class="analytics-empty">No category data</div>'}
+          `).join("") : '<div class="analytics-empty">No category data</div>'}
         </div>
       </div>
 
@@ -1109,7 +1109,7 @@ function renderAnalyticsView() {
                 </div>
               </div>
             </div>
-          `).join('') : '<div class="analytics-empty">No source data</div>'}
+          `).join("") : '<div class="analytics-empty">No source data</div>'}
         </div>
       </div>
     </div>
@@ -1159,7 +1159,7 @@ function renderAnalyticsView() {
                     </td>
                   </tr>
                 `;
-              }).join('') : '<tr><td colspan="5" style="text-align: center; padding: 20px">No data available</td></tr>'}
+              }).join("") : '<tr><td colspan="5" style="text-align: center; padding: 20px">No data available</td></tr>'}
             </tbody>
           </table>
         </div>
@@ -1184,10 +1184,10 @@ function renderAnalyticsView() {
               </div>
             </div>
           </div>
-        `).join('')}
+        `).join("")}
       </div>
     </div>
-  ` : '';
+  ` : "";
 
   // Rejected Tokens Explorer Section
   const explorerHtml = `
@@ -1199,7 +1199,7 @@ function renderAnalyticsView() {
         <div class="explorer-controls" style="display: flex; gap: var(--spacing-sm)">
           <select id="explorer-reason-filter" class="form-select" onchange="window.filteringPage.filterExplorer()">
             <option value="">All Reasons</option>
-            ${data.top_reasons ? data.top_reasons.map(r => `<option value="${r.reason}">${Utils.escapeHtml(r.display_label)}</option>`).join('') : ''}
+            ${data.top_reasons ? data.top_reasons.map(r => `<option value="${r.reason}">${Utils.escapeHtml(r.display_label)}</option>`).join("") : ""}
           </select>
           <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.loadExplorer(0)">
             <i class="icon-refresh-cw"></i>
@@ -1266,8 +1266,8 @@ function renderExplorerDashboard(data) {
                 <span class="top-reason-label">${Utils.escapeHtml(r.display_label)}</span>
                 <span class="top-reason-count">${Utils.formatNumber(r.count, 0)}</span>
               </div>
-            `).join('')}
-            ${topReasons.length === 0 ? '<div class="analytics-empty" style="padding: 12px; font-size: 0.75rem">No data</div>' : ''}
+            `).join("")}
+            ${topReasons.length === 0 ? '<div class="analytics-empty" style="padding: 12px; font-size: 0.75rem">No data</div>' : ""}
           </div>
         </div>
 
@@ -1277,13 +1277,13 @@ function renderExplorerDashboard(data) {
             ${recentRejections.slice(0, 10).map(t => `
               <div class="top-reason-item" onclick="window.filteringPage.selectReason('${t.reason}', '${Utils.escapeHtml(t.display_label.replace(/'/g, "\\'"))}')">
                 <div style="display: flex; flex-direction: column; min-width: 0">
-                  <span class="top-reason-label" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">${Utils.escapeHtml(t.symbol || 'Unknown')}</span>
+                  <span class="top-reason-label" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">${Utils.escapeHtml(t.symbol || "Unknown")}</span>
                   <span style="font-size: 0.65rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis">${Utils.escapeHtml(t.display_label)}</span>
                 </div>
                 <span class="top-reason-count">${Utils.formatTimeAgo(new Date(t.rejected_at))}</span>
               </div>
-            `).join('')}
-            ${recentRejections.length === 0 ? '<div class="analytics-empty" style="padding: 12px; font-size: 0.75rem">No recent</div>' : ''}
+            `).join("")}
+            ${recentRejections.length === 0 ? '<div class="analytics-empty" style="padding: 12px; font-size: 0.75rem">No recent</div>' : ""}
           </div>
         </div>
       </div>
@@ -1314,7 +1314,7 @@ function renderExplorerView() {
           </div>
         </div>
 
-        <div class="explorer-summary-item ${!window.filteringPage.currentReason ? 'active' : ''}" onclick="window.filteringPage.selectSummary()">
+        <div class="explorer-summary-item ${!window.filteringPage.currentReason ? "active" : ""}" onclick="window.filteringPage.selectSummary()">
           <i class="icon-layout"></i>
           <div class="explorer-summary-info">
             <span class="explorer-summary-label">Overview</span>
@@ -1333,22 +1333,22 @@ function renderExplorerView() {
               </div>
               <div class="tree-reasons" id="reasons-${cat.category}" style="display: none">
                 ${cat.reasons.map(r => `
-                  <div class="tree-reason ${window.filteringPage.currentReason === r.reason ? 'active' : ''}" 
+                  <div class="tree-reason ${window.filteringPage.currentReason === r.reason ? "active" : ""}" 
                        onclick="window.filteringPage.selectReason('${r.reason}', '${Utils.escapeHtml(r.display_label.replace(/'/g, "\\'"))}')" 
                        id="reason-${r.reason}"
                        data-label="${Utils.escapeHtml(r.display_label.toLowerCase())}">
                     <span class="tree-reason-label">${Utils.escapeHtml(r.display_label)}</span>
                     <span class="tree-reason-count">${Utils.formatCompactNumber(r.count)}</span>
                   </div>
-                `).join('')}
+                `).join("")}
               </div>
             </div>
-          `).join('')}
+          `).join("")}
         </div>
       </div>
       <div class="explorer-content">
         <div id="explorer-detail-view">
-          ${window.filteringPage.currentReason ? '' : renderExplorerDashboard(data)}
+          ${window.filteringPage.currentReason ? "" : renderExplorerDashboard(data)}
         </div>
       </div>
     </div>
@@ -1547,7 +1547,7 @@ function renderSearchBar() {
   // Only show search bar on settings tabs (not status/analytics/explorer)
   const isSettingsTab = ["meta", "dexscreener", "geckoterminal", "rugcheck"].includes(state.activeTab);
   if (!isSettingsTab) {
-    return '';
+    return "";
   }
 
   const showSourceToggle =
@@ -1658,7 +1658,7 @@ function updateSearchBar() {
   container.innerHTML = html;
   
   // Hide the container if no content
-  container.style.display = html ? '' : 'none';
+  container.style.display = html ? "" : "none";
   
   if (html) {
     bindSearchHandler();
@@ -2079,12 +2079,12 @@ window.filteringPage = {
   explorerLimit: 50,
   currentReason: null,
   currentReasonLabel: null,
-  tokenSearchQuery: '',
+  tokenSearchQuery: "",
   
   debouncedFilterTokens: null,
 
   refreshAnalytics: async () => {
-    const btn = document.querySelector('.analytics-actions button');
+    const btn = document.querySelector(".analytics-actions button");
     if (btn) {
       const originalContent = btn.innerHTML;
       btn.innerHTML = '<div class="loading-spinner small"></div> Refreshing...';
@@ -2094,7 +2094,7 @@ window.filteringPage = {
         if (window.filteringPage.currentReason) {
           window.filteringPage.loadExplorer(window.filteringPage.explorerPage);
         } else {
-          const container = document.getElementById('explorer-detail-view');
+          const container = document.getElementById("explorer-detail-view");
           if (container && state.analytics) {
             container.innerHTML = renderExplorerDashboard(state.analytics);
           }
@@ -2114,24 +2114,24 @@ window.filteringPage = {
     if (!window.filteringPage.debouncedFilterExplorerTree) {
       window.filteringPage.debouncedFilterExplorerTree = Utils.debounce((q) => {
         const lowerQ = q.toLowerCase();
-        document.querySelectorAll('.tree-category').forEach(cat => {
+        document.querySelectorAll(".tree-category").forEach(cat => {
           let hasVisibleReason = false;
-          const reasons = cat.querySelectorAll('.tree-reason');
+          const reasons = cat.querySelectorAll(".tree-reason");
           reasons.forEach(r => {
-            const label = r.getAttribute('data-label') || '';
+            const label = r.getAttribute("data-label") || "";
             const visible = label.includes(lowerQ);
-            r.style.display = visible ? 'flex' : 'none';
+            r.style.display = visible ? "flex" : "none";
             if (visible) hasVisibleReason = true;
           });
           
-          cat.style.display = (hasVisibleReason || lowerQ === '') ? 'block' : 'none';
+          cat.style.display = (hasVisibleReason || lowerQ === "") ? "block" : "none";
           
           // Auto-expand if searching
-          const reasonsList = cat.querySelector('.tree-reasons');
-          const toggle = cat.querySelector('.tree-toggle');
-          if (lowerQ !== '' && hasVisibleReason) {
-            if (reasonsList) reasonsList.style.display = 'block';
-            if (toggle) toggle.style.transform = 'rotate(180deg)';
+          const reasonsList = cat.querySelector(".tree-reasons");
+          const toggle = cat.querySelector(".tree-toggle");
+          if (lowerQ !== "" && hasVisibleReason) {
+            if (reasonsList) reasonsList.style.display = "block";
+            if (toggle) toggle.style.transform = "rotate(180deg)";
           }
         });
       }, 150);
@@ -2143,11 +2143,11 @@ window.filteringPage = {
     window.filteringPage.currentReason = null;
     window.filteringPage.currentReasonLabel = null;
     
-    document.querySelectorAll('.tree-reason').forEach(el => el.classList.remove('active'));
-    const summaryItem = document.querySelector('.explorer-summary-item');
-    if (summaryItem) summaryItem.classList.add('active');
+    document.querySelectorAll(".tree-reason").forEach(el => el.classList.remove("active"));
+    const summaryItem = document.querySelector(".explorer-summary-item");
+    if (summaryItem) summaryItem.classList.add("active");
     
-    const container = document.getElementById('explorer-detail-view');
+    const container = document.getElementById("explorer-detail-view");
     if (container && state.analytics) {
       container.innerHTML = renderExplorerDashboard(state.analytics);
     }
@@ -2157,36 +2157,36 @@ window.filteringPage = {
     const el = document.getElementById(`reasons-${category}`);
     const toggle = document.getElementById(`toggle-${category}`);
     if (el) {
-      const isHidden = el.style.display === 'none';
-      el.style.display = isHidden ? 'block' : 'none';
+      const isHidden = el.style.display === "none";
+      el.style.display = isHidden ? "block" : "none";
       if (toggle) {
-        toggle.style.transform = isHidden ? 'rotate(180deg)' : 'rotate(0deg)';
+        toggle.style.transform = isHidden ? "rotate(180deg)" : "rotate(0deg)";
       }
     }
   },
   
   selectReason: (reason, label) => {
     // Update active state
-    document.querySelectorAll('.tree-reason').forEach(el => el.classList.remove('active'));
-    const summaryItem = document.querySelector('.explorer-summary-item');
-    if (summaryItem) summaryItem.classList.remove('active');
+    document.querySelectorAll(".tree-reason").forEach(el => el.classList.remove("active"));
+    const summaryItem = document.querySelector(".explorer-summary-item");
+    if (summaryItem) summaryItem.classList.remove("active");
     
     const activeEl = document.getElementById(`reason-${reason}`);
     if (activeEl) {
-      activeEl.classList.add('active');
+      activeEl.classList.add("active");
       // Ensure category is expanded
-      const category = activeEl.closest('.tree-reasons');
-      if (category && category.style.display === 'none') {
-        category.style.display = 'block';
-        const catId = category.id.replace('reasons-', '');
+      const category = activeEl.closest(".tree-reasons");
+      if (category && category.style.display === "none") {
+        category.style.display = "block";
+        const catId = category.id.replace("reasons-", "");
         const toggle = document.getElementById(`toggle-${catId}`);
-        if (toggle) toggle.style.transform = 'rotate(180deg)';
+        if (toggle) toggle.style.transform = "rotate(180deg)";
       }
     }
     
     window.filteringPage.currentReason = reason;
     window.filteringPage.currentReasonLabel = label;
-    window.filteringPage.tokenSearchQuery = '';
+    window.filteringPage.tokenSearchQuery = "";
     window.filteringPage.loadExplorer(0);
   },
   
@@ -2267,12 +2267,12 @@ window.filteringPage = {
     if (!reason) return;
     
     let url = `/api/filtering/export-rejected-tokens?reason=${encodeURIComponent(reason)}`;
-    window.open(url, '_blank');
+    window.open(url, "_blank");
   },
   
   loadExplorer: async (page) => {
     window.filteringPage.explorerPage = page;
-    const container = document.getElementById('explorer-detail-view');
+    const container = document.getElementById("explorer-detail-view");
     const reason = window.filteringPage.currentReason;
     const label = window.filteringPage.currentReasonLabel;
     const searchQuery = window.filteringPage.tokenSearchQuery;
@@ -2280,7 +2280,7 @@ window.filteringPage = {
     if (!container || !reason) return;
     
     // Initial render with compact header and search
-    if (page === 0 && !container.querySelector('.explorer-detail-header')) {
+    if (page === 0 && !container.querySelector(".explorer-detail-header")) {
       container.innerHTML = `
         <div class="explorer-detail-header">
           <div class="detail-title-group">
@@ -2309,7 +2309,7 @@ window.filteringPage = {
         </div>
       `;
     } else {
-      const wrapper = container.querySelector('.explorer-table-wrapper');
+      const wrapper = container.querySelector(".explorer-table-wrapper");
       if (wrapper) wrapper.innerHTML = '<div class="loading-spinner small" style="margin: 40px auto; display: block;"></div>';
     }
     
@@ -2320,20 +2320,20 @@ window.filteringPage = {
       }
       
       const response = await fetch(url);
-      if (!response.ok) throw new Error('Failed to fetch tokens');
+      if (!response.ok) throw new Error("Failed to fetch tokens");
       
       const tokens = await response.json();
-      const wrapper = container.querySelector('.explorer-table-wrapper');
+      const wrapper = container.querySelector(".explorer-table-wrapper");
       
       if (!wrapper) return;
 
       if (tokens.length === 0) {
         wrapper.innerHTML = `
           <div style="padding: 32px; text-align: center; color: var(--text-muted); font-size: 0.8rem">
-            No tokens found${searchQuery ? ' matching filter' : ''}
+            No tokens found${searchQuery ? " matching filter" : ""}
           </div>`;
         // Update pagination
-        const pagination = container.querySelector('.pagination-controls');
+        const pagination = container.querySelector(".pagination-controls");
         if (pagination) {
           pagination.innerHTML = `
             <button class="page-btn" disabled><i class="icon-chevrons-left"></i></button>
@@ -2396,25 +2396,25 @@ window.filteringPage = {
         </tr>
       `;}).join("");
 
-      html += `</tbody></table>`;
+      html += "</tbody></table>";
       wrapper.innerHTML = html;
 
       // Update pagination
-      const pagination = container.querySelector('.pagination-controls');
+      const pagination = container.querySelector(".pagination-controls");
       if (pagination) {
         const hasMore = tokens.length >= window.filteringPage.explorerLimit;
         pagination.innerHTML = `
-          <button class="page-btn" onclick="window.filteringPage.firstPage()" ${page === 0 ? 'disabled' : ''} title="First"><i class="icon-chevrons-left"></i></button>
-          <button class="page-btn" onclick="window.filteringPage.prevPage()" ${page === 0 ? 'disabled' : ''} title="Previous"><i class="icon-chevron-left"></i></button>
+          <button class="page-btn" onclick="window.filteringPage.firstPage()" ${page === 0 ? "disabled" : ""} title="First"><i class="icon-chevrons-left"></i></button>
+          <button class="page-btn" onclick="window.filteringPage.prevPage()" ${page === 0 ? "disabled" : ""} title="Previous"><i class="icon-chevron-left"></i></button>
           <span class="page-info">Page ${page + 1}</span>
-          <button class="page-btn" onclick="window.filteringPage.nextPage()" ${!hasMore ? 'disabled' : ''} title="Next"><i class="icon-chevron-right"></i></button>
-          <button class="page-btn" onclick="window.filteringPage.lastPage()" ${!hasMore ? 'disabled' : ''} title="Last"><i class="icon-chevrons-right"></i></button>
+          <button class="page-btn" onclick="window.filteringPage.nextPage()" ${!hasMore ? "disabled" : ""} title="Next"><i class="icon-chevron-right"></i></button>
+          <button class="page-btn" onclick="window.filteringPage.lastPage()" ${!hasMore ? "disabled" : ""} title="Last"><i class="icon-chevrons-right"></i></button>
         `;
       }
       
     } catch (err) {
       console.error("Failed to load explorer:", err);
-      const wrapper = container.querySelector('.explorer-table-wrapper');
+      const wrapper = container.querySelector(".explorer-table-wrapper");
       if (wrapper) {
         wrapper.innerHTML = `<div class="error-message" style="padding: 40px">Failed to load tokens: ${err.message}</div>`;
       }

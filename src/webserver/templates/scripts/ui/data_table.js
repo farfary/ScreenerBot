@@ -758,18 +758,49 @@ export class DataTable {
   }
 
   /**
+   * Render empty state
+   */
+  _renderEmptyState() {
+      const hasFilters = this.state.searchQuery || Object.keys(this.state.filters || {}).length > 0;
+      const emptyIcon = hasFilters ? "icon-search" : "icon-inbox";
+      const emptyTitle = hasFilters ? "No results found" : (this.options.emptyTitle || "No data");
+      const emptyMessage = hasFilters
+        ? "Try adjusting your search or filters"
+        : (this.options.emptyMessage || "No data to display");
+
+      return `
+        <tr>
+          <td colspan="100" class="dt-state-cell">
+            <div class="dt-empty-state">
+              <i class="dt-empty-icon ${emptyIcon}"></i>
+              <div class="dt-empty-title">${emptyTitle}</div>
+              <div class="dt-empty-message">${emptyMessage}</div>
+            </div>
+          </td>
+        </tr>`;
+  }
+
+  /**
    * Render table body rows
    */
   _renderBody() {
     if (this.state.isLoading && this.state.filteredData.length === 0) {
-      return `<tr><td colspan="100" class="dt-loading">${this.options.loadingMessage}</td></tr>`;
+      return `
+        <tr>
+          <td colspan="100" class="dt-state-cell">
+            <div class="dt-loading-state">
+              <div class="dt-loading-spinner"></div>
+              <div class="dt-loading-text">${this.options.loadingMessage}</div>
+            </div>
+          </td>
+        </tr>`;
     }
 
     // Use paginated data if client pagination is enabled
     const data = this._getClientPaginatedData();
 
     if (data.length === 0) {
-      return `<tr><td colspan="100" class="dt-empty">${this.options.emptyMessage}</td></tr>`;
+      return this._renderEmptyState();
     }
 
     return data
@@ -790,6 +821,119 @@ export class DataTable {
   }
 
   /**
+   * Render cell content (helper for _renderRow and _updateTableBody)
+   */
+  _renderCellContent(col, row) {
+    let value = row[col.id];
+    let cellContent = "";
+
+    if (col.type === "actions" && col.actions) {
+      cellContent = this._renderActionsCell(col, row);
+    } else if (col.type === "image" && col.image) {
+      cellContent = this._renderImageCell(col, row);
+    } else if (col.render && typeof col.render === "function") {
+      try {
+        cellContent = col.render(value, row);
+      } catch (error) {
+        this._log("error", `Render function failed for column ${col.id}`, error);
+        cellContent = `<span class="dt-render-error" title="${error.message}">Error</span>`;
+      }
+    } else {
+      if (value === null || value === undefined) {
+        cellContent = col.fallback || "—";
+      } else {
+        cellContent = value;
+      }
+    }
+    return cellContent;
+  }
+
+  /**
+   * Update table body in-place (diffing) to avoid full reload
+   */
+  _updateTableBody(newData) {
+    const tbody = this.elements.tbody;
+    
+    if (newData.length === 0) {
+       tbody.innerHTML = this._renderEmptyState();
+       return;
+    }
+    
+    // Check if currently showing empty state
+    if (tbody.querySelector('.dt-empty-state')) {
+       tbody.innerHTML = '';
+    }
+
+    const visibleColumns = this._getOrderedColumns();
+    const rowIdField = this.options.rowIdField;
+    
+    // Index existing rows
+    const existingRows = new Map();
+    Array.from(tbody.children).forEach(tr => {
+      const id = tr.getAttribute('data-row-id');
+      if (id) existingRows.set(id, tr);
+    });
+
+    const fragment = document.createDocumentFragment();
+    
+    newData.forEach((row, index) => {
+      const rowId = row[rowIdField] || index;
+      const rowIdStr = String(rowId);
+      let tr = existingRows.get(rowIdStr);
+      
+      if (tr) {
+        // Update existing row
+        existingRows.delete(rowIdStr);
+        
+        // Update selection state
+        const isSelected = this.state.selectedRows.has(rowId);
+        if (tr.classList.contains('selected') !== isSelected) {
+           tr.classList.toggle('selected', isSelected);
+        }
+
+        // Update cells
+        visibleColumns.forEach(col => {
+           const td = tr.querySelector(`td[data-column-id="${col.id}"]`);
+           if (td) {
+             const cellContent = this._renderCellContent(col, row);
+             
+             // Handle wrapping wrapper
+             const shouldClamp = this.options.uniformRowHeight && col.wrap !== false;
+             
+             let newContent = shouldClamp ? `<div class="dt-cell-clamp">${cellContent}</div>` : cellContent;
+             
+             if (td.innerHTML !== newContent) {
+               td.innerHTML = newContent;
+             }
+             
+             // Update data-row-id on TD just in case
+             if (td.dataset.rowId !== rowIdStr) {
+                td.dataset.rowId = rowIdStr;
+             }
+           }
+        });
+        
+        fragment.appendChild(tr);
+      } else {
+        // Create new row
+        const tr = document.createElement('tr');
+        tr.setAttribute('data-row-id', rowIdStr);
+        if (this.state.selectedRows.has(rowId)) {
+          tr.classList.add('selected');
+        }
+        tr.innerHTML = this._renderRow(row);
+        fragment.appendChild(tr);
+      }
+    });
+    
+    // Remove remaining rows
+    existingRows.forEach(tr => tr.remove());
+    
+    // Append fragment (reorders existing rows and adds new ones)
+    tbody.appendChild(fragment);
+  }
+
+  /**
    * Render individual row cells
    */
   _renderRow(row) {
@@ -797,32 +941,14 @@ export class DataTable {
 
     return visibleColumns
       .map((col) => {
-        let value = row[col.id];
-        let cellContent = "";
+        const cellContent = this._renderCellContent(col, row);
         let cellClass = col.className || "";
 
         // Handle different column types
         if (col.type === "actions" && col.actions) {
-          cellContent = this._renderActionsCell(col, row);
           cellClass += " dt-actions-cell";
         } else if (col.type === "image" && col.image) {
-          cellContent = this._renderImageCell(col, row);
           cellClass += " dt-image-cell";
-        } else if (col.render && typeof col.render === "function") {
-          // Custom renderer with error handling
-          try {
-            cellContent = col.render(value, row);
-          } catch (error) {
-            this._log("error", `Render function failed for column ${col.id}`, error);
-            cellContent = `<span class="dt-render-error" title="${error.message}">Error</span>`;
-          }
-        } else {
-          // Default text rendering
-          if (value === null || value === undefined) {
-            cellContent = col.fallback || "—";
-          } else {
-            cellContent = value;
-          }
         }
 
         // Add text wrapping class
@@ -1364,87 +1490,93 @@ export class DataTable {
       this._addEventListener(columnBtn, "click", settingsHandler);
     }
 
-    // Sortable headers
-    const headers = this.elements.thead.querySelectorAll("th.sortable");
-    headers.forEach((th) => {
-      const handler = (e) => {
-        if (e.target.classList.contains("dt-resize-handle")) return;
+    // Sortable headers - use event delegation on thead to survive innerHTML updates
+    // This is critical because _renderTable() replaces thead.innerHTML, destroying direct th handlers
+    const sortHandler = (e) => {
+      // Ignore clicks on resize handles
+      if (e.target.classList.contains("dt-resize-handle")) {
+        return;
+      }
 
-        const columnId = th.dataset.columnId;
-        if (!columnId) {
-          return;
-        }
+      // Find the closest sortable th element
+      const th = e.target.closest("th.sortable[data-column-id]");
+      if (!th) return;
 
-        if (this._getSortingMode() === "server") {
-          const currentDirection =
-            this.state.sortColumn === columnId ? this.state.sortDirection : null;
-          const nextDirection = currentDirection === "asc" ? "desc" : "asc";
-          this.state.sortColumn = columnId;
-          this.state.sortDirection = nextDirection;
-          this._saveState();
-          this._renderTable();
+      const columnId = th.dataset.columnId;
+      if (!columnId) return;
 
-          const sortingConfig = this.options.sorting || {};
-          if (typeof sortingConfig.onChange === "function") {
-            sortingConfig.onChange({
-              column: columnId,
-              direction: nextDirection,
-              table: this,
-            });
-          }
-          return;
-        }
+      if (this._getSortingMode() === "server") {
+        const currentDirection =
+          this.state.sortColumn === columnId ? this.state.sortDirection : null;
+        const nextDirection = currentDirection === "asc" ? "desc" : "asc";
+        this.state.sortColumn = columnId;
+        this.state.sortDirection = nextDirection;
 
-        if (this.state.sortColumn === columnId) {
-          this.state.sortDirection = this.state.sortDirection === "asc" ? "desc" : "asc";
-        } else {
-          this.state.sortColumn = columnId;
-          this.state.sortDirection = "asc";
-        }
-
-        this._applySort();
         this._saveState();
-        this._renderTable();
-      };
-      this._addEventListener(th, "click", handler);
-    });
+        
+        // For server-side sorting, only update header sort icons - don't re-render body
+        // The body will be re-rendered when new data arrives from the server
+        this._updateHeaderSortIndicators();
 
-    // Column resizing
-    const resizeHandles = this.elements.thead.querySelectorAll(".dt-resize-handle");
-    resizeHandles.forEach((handle) => {
-      const handler = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        const th = handle.closest("th[data-column-id]");
-        if (!th) {
-          return;
+        const sortingConfig = this.options.sorting || {};
+        if (typeof sortingConfig.onChange === "function") {
+          sortingConfig.onChange({
+            column: columnId,
+            direction: nextDirection,
+            table: this,
+          });
         }
+        return;
+      }
 
-        const columnId = th.dataset.columnId;
-        const minWidth = this._getColumnMinWidth(columnId);
+      if (this.state.sortColumn === columnId) {
+        this.state.sortDirection = this.state.sortDirection === "asc" ? "desc" : "asc";
+      } else {
+        this.state.sortColumn = columnId;
+        this.state.sortDirection = "asc";
+      }
 
-        this.resizing = {
-          columnId,
-          startX: e.pageX,
-          startWidth: th.offsetWidth,
-          minWidth,
-          leftHeader: th,
-          handle,
-        };
+      this._applySort();
+      this._saveState();
+      this._renderTable();
+    };
+    this._addEventListener(this.elements.thead, "click", sortHandler);
 
-        th.classList.add("dt-resizing");
-        handle.classList.add("active");
-        document.body.classList.add("dt-column-resizing");
+    // Column resizing - use event delegation on thead to survive innerHTML updates
+    const resizeHandler = (e) => {
+      // Only handle mousedown on resize handles
+      if (!e.target.classList.contains("dt-resize-handle")) return;
 
-        // Remove any existing listeners before adding new ones to prevent duplicates
-        document.removeEventListener("mousemove", this._handleResize);
-        document.removeEventListener("mouseup", this._handleResizeEnd);
-        document.addEventListener("mousemove", this._handleResize);
-        document.addEventListener("mouseup", this._handleResizeEnd);
+      e.preventDefault();
+      e.stopPropagation();
+
+      const handle = e.target;
+      const th = handle.closest("th[data-column-id]");
+      if (!th) return;
+
+      const columnId = th.dataset.columnId;
+      const minWidth = this._getColumnMinWidth(columnId);
+
+      this.resizing = {
+        columnId,
+        startX: e.pageX,
+        startWidth: th.offsetWidth,
+        minWidth,
+        leftHeader: th,
+        handle,
       };
-      this._addEventListener(handle, "mousedown", handler);
-    });
+
+      th.classList.add("dt-resizing");
+      handle.classList.add("active");
+      document.body.classList.add("dt-column-resizing");
+
+      // Remove any existing listeners before adding new ones to prevent duplicates
+      document.removeEventListener("mousemove", this._handleResize);
+      document.removeEventListener("mouseup", this._handleResizeEnd);
+      document.addEventListener("mousemove", this._handleResize);
+      document.addEventListener("mouseup", this._handleResizeEnd);
+    };
+    this._addEventListener(this.elements.thead, "mousedown", resizeHandler);
 
     // Image click handlers
     const imageContainers = this.elements.tbody.querySelectorAll(
@@ -2920,7 +3052,7 @@ export class DataTable {
    * Load a specific server page (for pages mode)
    * @param {number} pageNumber - Page number to load
    */
-  async _loadServerPage(pageNumber) {
+  async _loadServerPage(pageNumber, options = {}) {
     if (!this._pagination?.enabled) {
       return;
     }
@@ -2932,21 +3064,28 @@ export class DataTable {
       return;
     }
 
-    this._setLoadingState(true);
+    if (!options.silent) {
+      this._setLoadingState(true);
+    }
 
     try {
       const controller = this._createAbortController();
+      console.debug('[DataTable] _loadServerPage preparing', { pageNumber, pendingRequest: Boolean(this._pagination?.pendingRequest), paginationStats: this._pagination ? { loadingInitial: this._pagination.loadingInitial, loadingNext: this._pagination.loadingNext, loadingPrev: this._pagination.loadingPrev } : null });
       this._pagination.abortController = controller;
+
+      console.debug('[DataTable] _loadServerPage start', { pageNumber, statePageSize: this.state.serverPaginationState?.pageSize, time: Date.now() });
+      const pageStart = Date.now();
 
       const result = await loadPage({
         direction: "page",
         page: pageNumber,
         pageSize: pageSize,
-        reason: "page-navigation",
+        reason: options.reason || "page-navigation",
         context: this._pagination.context,
         signal: controller.signal,
         table: this,
       });
+      console.debug('[DataTable] _loadServerPage fetch returned', { pageNumber, durationMs: Date.now() - pageStart });
 
       if (result) {
         const normalized = this._normalizePageResult(result);
@@ -3475,7 +3614,8 @@ export class DataTable {
       this.elements.thead.innerHTML = this._renderHeader();
     }
     if (this.elements.tbody) {
-      this.elements.tbody.innerHTML = this._renderBody();
+      const visibleRows = this._getClientPaginatedData();
+      this._updateTableBody(visibleRows);
     }
 
     if (this.elements.table) {
@@ -3520,9 +3660,9 @@ export class DataTable {
       this.state.hasAutoFitted = true;
     }
 
-    // NOTE: Do NOT call _attachEvents() here - event handlers are attached once 
-    // during _init() and persist since we only replace innerHTML of elements,
-    // not the elements themselves. Re-attaching on every render causes issues
+    // NOTE: Do NOT call _attachEvents() here - event handlers use event delegation
+    // on parent elements (thead, tbody, scrollContainer) which are NOT replaced,
+    // only their innerHTML is. Re-attaching on every render would cause issues
     // with hover tracking (mouseenter fires spuriously when handlers are re-added
     // while mouse is already over the element).
 
@@ -4218,7 +4358,10 @@ export class DataTable {
     if (this._serverPaginationMode === "pages" && this._hasHybridPaginationModes()) {
       const preservePage = options.resetPage !== true;
       const page = preservePage ? this.state.serverPaginationState?.currentPage || 1 : 1;
-      return this._loadServerPage(page);
+      return this._loadServerPage(page, {
+        silent: options.silent,
+        reason: options.reason,
+      });
     }
 
     const pagination = this._pagination;
@@ -4250,7 +4393,10 @@ export class DataTable {
     pagination.loadingInitial = false;
 
     if (!silent) {
-      this._setLoadingState(true);
+      // Pass sorting column for visual feedback
+      this._setLoadingState(true, {
+        sortingColumn: reason === "reload" || reason === "sort" ? this.state.sortColumn : null,
+      });
     }
 
     pagination.loadingInitial = true;
@@ -4410,12 +4556,83 @@ export class DataTable {
     return col ? col.visible !== false : true;
   }
 
-  _setLoadingState(value) {
+  _setLoadingState(value, options = {}) {
     const normalized = Boolean(value);
-    if (this.state.isLoading === normalized) {
+    if (this.state.isLoading === normalized && !options.force) {
       return;
     }
     this.state.isLoading = normalized;
+
+    // Update wrapper loading class for CSS transitions
+    if (this.elements.wrapper) {
+      this.elements.wrapper.classList.toggle("is-loading", normalized);
+    }
+
+    // Track which column is being sorted for loading indicator
+    if (options.sortingColumn) {
+      this._loadingSortColumn = options.sortingColumn;
+    }
+    if (!normalized) {
+      this._loadingSortColumn = null;
+    }
+
+    // Update sorted column loading state
+    this._syncSortColumnLoadingState();
+  }
+
+  _syncSortColumnLoadingState() {
+    if (!this.elements.thead) return;
+
+    // Remove loading class from all columns
+    this.elements.thead.querySelectorAll("th.is-sorting").forEach((th) => {
+      th.classList.remove("is-sorting");
+    });
+
+    // Add loading class to the column being sorted
+    if (this._loadingSortColumn && this.state.isLoading) {
+      const th = this.elements.thead.querySelector(
+        `th[data-column-id="${this._loadingSortColumn}"]`
+      );
+      if (th) {
+        th.classList.add("is-sorting");
+      }
+    }
+  }
+
+  /**
+   * Update header sort indicators without re-rendering the entire table
+   * Used for server-side sorting to avoid unnecessary body re-render
+   */
+  _updateHeaderSortIndicators() {
+    if (!this.elements.thead) return;
+
+    const { sortColumn, sortDirection } = this.state;
+
+    // Update all sortable header cells
+    this.elements.thead.querySelectorAll("th.sortable[data-column-id]").forEach((th) => {
+      const columnId = th.dataset.columnId;
+      const isSorted = columnId === sortColumn;
+
+      // Update sorted class (matches _renderHeader contract)
+      th.classList.toggle("sorted", isSorted);
+
+      // Update sort icon text (matches _renderHeader contract)
+      const iconEl = th.querySelector(".dt-sort-icon");
+      if (iconEl) {
+        iconEl.textContent =
+          isSorted ? (sortDirection === "asc" ? "▲" : "▼") : "";
+      }
+
+      // Update aria-sort attribute
+      if (isSorted) {
+        th.setAttribute("aria-sort", sortDirection === "asc" ? "ascending" : "descending");
+      } else {
+        th.removeAttribute("aria-sort");
+      }
+    });
+
+    // Sync loading state on the column being sorted
+    this._syncSortColumnLoadingState();
   }
 
   /**
@@ -4876,7 +5093,9 @@ export class DataTable {
       ? this.state.filteredData.length > 0
       : false;
 
-    this._setLoadingState(true);
+    if (!options.silent) {
+      this._setLoadingState(true);
+    }
     if (!hadRows) {
       this._renderTable();
     }
