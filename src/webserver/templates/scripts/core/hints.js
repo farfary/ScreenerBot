@@ -881,25 +881,17 @@ Two-factor authentication uses time-based one-time passwords (TOTP) from apps li
     chart: {
       id: "token_details.chart",
       title: "Price Chart (OHLCV)",
-      content: `**Important:** This chart shows cached OHLCV data used for automated trading strategies, not live prices.
+      content: `**What you see:** Cached OHLCV candles for strategy evaluation (not the live pool price).
 
-**Why cached data?**
-• OHLCV data is collected and aggregated for strategy evaluation
-• Update frequency depends on token priority (positions get faster updates)
-• Used by entry/exit monitors for technical analysis decisions
+    **Why cached?**
+    • Aggregated for indicators and backtests
+    • Refresh cadence depends on token priority (open positions get faster updates)
+    • Used by entry/exit monitors — not the swap execution price
 
-**DEX Price Complexity:**
-In decentralized trading, a token can have **multiple liquidity pools** across different DEXs (Raydium, Orca, Meteora, etc.). Each pool may show slightly different prices based on:
-• Pool liquidity depth
-• Recent trading activity
-• Arbitrage lag between pools
+    **Multiple pools, different prices:**
+    Pool prices vary by liquidity depth, recent trades, and arbitrage lag across Raydium/Orca/Meteora/etc. The executed swap price depends on the route and slippage, so expect small differences vs. this chart.
 
-There is **no single "true" price** until you execute a swap — the actual price depends on which pool/route is used and current slippage.
-
-**Data Sources:**
-• DexScreener and GeckoTerminal provide aggregated OHLCV
-• Timeframe selection affects candle granularity
-• "Waiting for data" means OHLCV is being fetched`,
+    **Sources:** DexScreener + GeckoTerminal OHLCV. "Waiting for data" means candles are still being fetched.`,
       learnMoreUrl: "https://screenerbot.io/docs/concepts/pricing",
     },
 
@@ -908,79 +900,63 @@ There is **no single "true" price** until you execute a swap — the actual pric
       title: "Token Information",
       content: `Basic token metadata from on-chain and market sources.
 
-• **Mint** — unique token address on Solana (click to copy)
-• **Decimals** — token precision (usually 6-9)
-• **Age** — time since token/pool creation
-• **DEX** — primary trading venue for this token
-• **Holders** — unique wallet addresses holding the token
-• **Top 10 Hold** — percentage held by top 10 wallets
+    • **Mint** — unique token address on Solana (click to copy)
+    • **Decimals** — token precision (usually 6-9)
+    • **Age** — time since the primary pool/token was created
+    • **DEX** — primary trading venue for this token
+    • **Holders** — unique wallets holding the token
+    • **Top 10 Hold** — % held by the top 10 wallets
 
-Higher holder count and lower concentration generally indicate healthier distribution.`,
+    Higher holder count and lower concentration generally indicate healthier distribution.`,
     },
 
     liquidity: {
       id: "token_details.liquidity",
       title: "Liquidity & Market Data",
-      content: `Market metrics from the primary liquidity pool.
+      content: `Market metrics from the highest-liquidity SOL pool.
 
-• **FDV** — Fully Diluted Valuation (price × total supply)
-• **Liquidity** — USD value of pool reserves
-• **Pool SOL** — SOL reserves in the pool
-• **Pool Token** — token reserves in the pool
+    • **FDV** — price × total supply (aggregator price)
+    • **Liquidity** — USD value of pool reserves
+    • **Pool SOL** / **Pool Token** — live reserves that set pool price
 
-**Why liquidity matters:**
-• Higher liquidity = less slippage on trades
-• Low liquidity can cause significant price impact
-• Pool reserves directly determine swap prices
+    **Why it matters:**
+    • Deeper liquidity = lower slippage
+    • Shallow pools can move on small trades
+    • Pool reserves directly set swap execution price
 
-Data from DexScreener/GeckoTerminal, refreshed periodically.`,
+    Data is refreshed periodically from DexScreener/GeckoTerminal plus on-chain pool reads.`,
     },
 
     priceChanges: {
       id: "token_details.price_changes",
       title: "Price Changes",
-      content: `Price movement over various timeframes.
+      content: `Price movement over timeframes (aggregator-derived, not the live pool price).
 
-• **5M** — last 5 minutes
-• **1H** — last hour
-• **6H** — last 6 hours
-• **24H** — last 24 hours
+    • **5M / 1H / 6H / 24H** — % change from market sources
 
-**Note:** These percentages come from market aggregators and may differ slightly from on-chain pool prices due to:
-• Data aggregation delays
-• Multiple pool price averaging
-• Different calculation methodologies`,
+    May differ from on-chain pool prices because of averaging across pools, refresh cadence, and calculation methods. Use alongside the live pool price for execution decisions.`,
     },
 
     volume: {
       id: "token_details.volume",
       title: "Trading Volume",
-      content: `USD trading volume across timeframes.
+      content: `USD trading volume from market aggregators over each timeframe.
 
-Higher volume indicates:
-• More active trading interest
-• Better price discovery
-• Generally lower slippage
-
-Very low volume tokens may have:
-• Wide bid-ask spreads
-• Difficult exits
-• Higher manipulation risk`,
+    Higher volume usually means better price discovery and easier exits. Very low volume can mean wider spreads, higher slippage, and manipulation risk.`,
     },
 
     activity: {
       id: "token_details.activity",
       title: "Transaction Activity",
-      content: `Buy/sell transaction counts and ratios.
+      content: `Buy/sell **counts** per timeframe (5M/1H/6H/24H) plus ratios and derived spikes.
 
-• **Buy/Sell bars** — visual ratio of buys vs sells
-• **B/S Ratio** — buys divided by sells (>1 = more buying)
-• **Net Flow** — difference between buy and sell counts
+    • Row bars — buy vs sell share for that window (counts, not volume)
+    • Rate — txns per minute for the timeframe
+    • 24H % Buy badge — share of buys in the last 24h
+    • Net Flow — buys minus sells (24h)
+    • Insights — 24h total txns, avg per hour, and 5M spike vs 1H baseline
 
-**Interpreting activity:**
-• High buy ratio may indicate accumulation
-• High sell ratio may indicate distribution
-• Transaction count doesn't reflect volume size`,
+    High buy share can signal accumulation; high sell share can mean distribution. Combine with volume/price before acting.`,
     },
 
     security: {
