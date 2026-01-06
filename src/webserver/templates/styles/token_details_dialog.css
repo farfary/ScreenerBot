@@ -116,15 +116,15 @@
 .header-left {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   flex: 0 0 auto;
-  min-width: 180px;
+  min-width: 200px;
 }
 
 .header-logo {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
   overflow: hidden;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
@@ -142,7 +142,7 @@
 }
 
 .logo-placeholder {
-  font-size: 14px;
+  font-size: 18px;
   font-weight: 700;
   color: var(--text-muted);
   text-transform: uppercase;
@@ -151,7 +151,7 @@
 .header-title {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
 }
 
 .title-row {
@@ -161,16 +161,17 @@
 }
 
 .title-main {
-  font-size: 1rem;
-  font-weight: 700;
+  font-size: 1.25rem;
+  font-weight: 800;
   color: var(--text-primary);
   letter-spacing: -0.01em;
+  line-height: 1.2;
 }
 
 .title-sub {
-  font-size: 0.75rem;
+  font-size: 0.85rem;
   color: var(--text-secondary);
-  font-weight: 400;
+  font-weight: 500;
   max-width: 200px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -181,8 +182,9 @@
 .header-badges-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 8px;
-  padding: 0 16px 10px;
+  padding: 0 20px 10px;
   border-bottom: 1px solid var(--border-subtle, var(--border-color));
 }
 
@@ -190,6 +192,19 @@
   display: flex;
   gap: 6px;
   flex-wrap: wrap;
+}
+
+.header-status-area {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.last-updated {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .badge {
@@ -247,6 +262,8 @@
   display: flex;
   align-items: center;
   gap: 24px;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .price-loading {
@@ -265,40 +282,44 @@
 .price-sol-row {
   display: flex;
   align-items: baseline;
-  gap: 8px;
+  gap: 6px;
 }
 
 .price-sol {
-  font-size: 0.95rem;
-  font-weight: 600;
+  font-size: 1.25rem;
+  font-weight: 700;
   color: var(--text-primary);
   font-family: var(--font-data);
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
+  letter-spacing: -0.02em;
 }
 
 .price-sol-unit {
   font-size: 0.75rem;
   color: var(--text-muted);
-  font-weight: 500;
+  font-weight: 600;
+  text-transform: uppercase;
 }
 
 .price-usd {
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   color: var(--text-secondary);
   font-family: var(--font-data);
+  font-weight: 500;
 }
 
 /* Price change badge */
 .price-change {
   display: inline-flex;
   align-items: center;
-  font-size: 0.75rem;
-  font-weight: 600;
+  font-size: 0.85rem;
+  font-weight: 700;
   font-family: var(--font-data);
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: 8px;
+  letter-spacing: -0.01em;
 }
 
 .price-change.positive {
@@ -314,9 +335,11 @@
 /* Metrics row */
 .price-metrics {
   display: flex;
-  gap: 16px;
-  padding-left: 16px;
+  gap: 20px;
+  padding-left: 20px;
   border-left: 1px solid var(--border-color);
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .metric-item {
@@ -364,49 +387,55 @@
 .trade-btn {
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 8px 14px;
-  font-size: 0.7rem;
-  font-weight: 600;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 0.8rem;
+  font-weight: 700;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all 0.2s ease;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.04em;
   white-space: nowrap;
+  box-shadow: 0 1px 2px var(--shadow-sm);
 }
 
 .trade-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.5;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 .trade-btn.buy-btn {
-  color: var(--success-color);
-  background: var(--success-alpha-10);
-  border-color: var(--success-alpha-20);
-}
-
-.trade-btn.buy-btn:hover:not(:disabled) {
-  background: var(--success-alpha-20);
+  color: var(--header-text);
+  background: var(--success-color);
   border-color: var(--success-color);
 }
 
-.trade-btn.sell-btn {
-  color: var(--danger);
-  background: var(--danger-alpha-10);
-  border-color: var(--danger-alpha-20);
+.trade-btn.buy-btn:hover:not(:disabled) {
+  background: var(--success-hover);
+  border-color: var(--success-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px var(--shadow-md);
 }
 
-.trade-btn.sell-btn:hover:not(:disabled) {
-  background: var(--danger-alpha-20);
+.trade-btn.sell-btn {
+  color: var(--header-text);
+  background: var(--danger);
   border-color: var(--danger);
 }
 
+.trade-btn.sell-btn:hover:not(:disabled) {
+  background: var(--danger-hover);
+  border-color: var(--danger-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px var(--shadow-md);
+}
+
 .trade-btn svg {
-  width: 12px;
-  height: 12px;
+  width: 14px;
+  height: 14px;
 }
 
 .header-actions {
@@ -480,41 +509,66 @@
 }
 
 /* =============================================================================
-   TAB BAR - Compact Desktop App Style
-   ============================================================================= */
+  TAB BAR - Improved UI/UX (Clean Pill Style)
+  - Click focus highlight should not look like selected
+  - Keep keyboard accessibility via :focus-visible
+  ============================================================================= */
 
 .dialog-tabs {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 8px 20px;
+  gap: 8px;
+  padding: 10px 24px;
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
   overflow-x: auto;
+  /* Hide scrollbar for cleaner look */
+  scrollbar-width: none;
+}
+
+.dialog-tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .tab-button {
   display: flex;
   align-items: center;
-  gap: 6px;
+  justify-content: center;
+  gap: 8px;
   padding: 8px 16px;
+  height: 36px;
   background: transparent;
-  border: none;
-  border-radius: 6px;
-  font-size: 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 0.8125rem; /* 13px */
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   white-space: nowrap;
   flex-shrink: 0;
   position: relative;
+  
+  /* Prevent persistent “clicked” focus styling */
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.tab-button:focus {
+  outline: none;
+}
+
+/* Keyboard accessibility: show focus only when appropriate */
+.tab-button:focus-visible {
+  outline: 2px solid var(--primary-alpha-20);
+  outline-offset: 2px;
 }
 
 .tab-button i {
-  font-size: 14px;
-  opacity: 0.5;
+  font-size: 15px;
+  opacity: 0.6;
   transition: opacity 0.2s ease;
 }
 
@@ -524,31 +578,23 @@
 }
 
 .tab-button:hover i {
-  opacity: 0.8;
+  opacity: 0.9;
 }
 
 .tab-button.active {
   color: var(--primary-color);
   background: var(--primary-alpha-10);
   font-weight: 600;
-  border: 1px solid var(--primary-alpha-20);
+  border-color: var(--primary-alpha-20);
 }
 
 .tab-button.active i {
   opacity: 1;
 }
 
-/* Active indicator line */
-.tab-button.active::after {
-  content: "";
-  position: absolute;
-  bottom: -7px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 24px;
-  height: 2px;
-  background: var(--primary-color);
-  border-radius: 2px;
+/* Remove old underline indicator completely */
+.tab-button::after {
+  display: none !important;
 }
 
 /* =============================================================================
@@ -4175,28 +4221,27 @@
 .data-sources-status {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 6px 20px;
-  background: transparent;
+  gap: 12px;
+  padding: 4px 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
   font-size: 0.6rem;
-  transition:
-    opacity 0.3s ease,
-    max-height 0.3s ease;
-  max-height: 28px;
+  transition: opacity 0.3s ease;
   overflow: hidden;
 }
 
 .data-sources-status.all-loaded {
-  opacity: 0;
-  max-height: 0;
-  padding: 0 16px;
-  pointer-events: none;
+  opacity: 0.7;
+  border-color: transparent;
+  background: transparent;
+  padding: 0;
 }
 
 .source-status {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
 }
 
 .status-icon {
@@ -4244,6 +4289,7 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-weight: 600;
+  font-size: 0.55rem;
 }
 
 /* =============================================================================

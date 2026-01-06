@@ -608,24 +608,6 @@ export class TokenDetailsDialog {
       <div class="dialog-backdrop"></div>
       <div class="dialog-container">
         <div class="dialog-header">
-          <div class="data-sources-status" role="status" aria-label="Data loading status">
-            <span class="source-status" data-source="token" title="Token info">
-              <span class="status-icon pending" aria-hidden="true"></span>
-              <span class="status-label">Token</span>
-            </span>
-            <span class="source-status" data-source="dexscreener" title="Market data">
-              <span class="status-icon pending" aria-hidden="true"></span>
-              <span class="status-label">Market</span>
-            </span>
-            <span class="source-status" data-source="rugcheck" title="Security analysis">
-              <span class="status-icon pending" aria-hidden="true"></span>
-              <span class="status-label">Security</span>
-            </span>
-            <span class="source-status" data-source="ohlcv" title="Chart data">
-              <span class="status-icon pending" aria-hidden="true"></span>
-              <span class="status-label">Chart</span>
-            </span>
-          </div>
           <div class="header-top-row">
             <div class="header-left">
               <div class="header-logo">
@@ -665,8 +647,29 @@ export class TokenDetailsDialog {
               </button>
             </div>
           </div>
-          <div class="header-badges-row" id="headerBadgesRow" style="display: none;">
+          <div class="header-badges-row" id="headerBadgesRow">
             <div class="title-badges" id="headerBadges"></div>
+            <div class="header-status-area">
+              <div class="data-sources-status" role="status" aria-label="Data loading status">
+                <span class="source-status" data-source="token" title="Token info">
+                  <span class="status-icon pending" aria-hidden="true"></span>
+                  <span class="status-label">Token</span>
+                </span>
+                <span class="source-status" data-source="dexscreener" title="Market data">
+                  <span class="status-icon pending" aria-hidden="true"></span>
+                  <span class="status-label">Market</span>
+                </span>
+                <span class="source-status" data-source="rugcheck" title="Security analysis">
+                  <span class="status-icon pending" aria-hidden="true"></span>
+                  <span class="status-label">Security</span>
+                </span>
+                <span class="source-status" data-source="ohlcv" title="Chart data">
+                  <span class="status-icon pending" aria-hidden="true"></span>
+                  <span class="status-label">Chart</span>
+                </span>
+              </div>
+              <div class="last-updated" id="lastUpdatedTime"></div>
+            </div>
           </div>
         </div>
 
@@ -725,11 +728,44 @@ export class TokenDetailsDialog {
       if (token.blacklisted) badges.push('<span class="badge badge-danger">Blacklisted</span>');
       if (token.has_ohlcv) badges.push('<span class="badge badge-secondary">OHLCV</span>');
 
-      if (badges.length > 0) {
-        badgesContainer.innerHTML = badges.join("");
-        badgesRow.style.display = "flex";
+      badgesContainer.innerHTML = badges.join("");
+      // Always show badges row for layout consistency (contains status now)
+      badgesRow.style.display = "flex";
+    }
+
+    // Update Last Updated time
+    const lastUpdatedEl = this.dialogEl.querySelector("#lastUpdatedTime");
+    if (lastUpdatedEl) {
+      const marketFetchedAt = token.market_data_last_fetched_at;
+      const poolFetchedAt = token.pool_price_last_calculated_at;
+      
+      // Use the most recent timestamp
+      let lastTs = 0;
+      if (marketFetchedAt && marketFetchedAt > lastTs) lastTs = marketFetchedAt;
+      if (poolFetchedAt && poolFetchedAt > lastTs) lastTs = poolFetchedAt;
+      
+      if (lastTs > 0) {
+        // Convert timestamp (seconds or milliseconds) to relative time
+        // If it's very large, assume ms, but DB usually stores ms or sec.
+        // Rust types.rs says i64 for ts, usually ms in JS land if passed directly.
+        // Assuming backend sends milliseconds or seconds. Let's check Utils.formatTimestamp or relative
+        const now = Date.now();
+        // Check if timestamp is likely seconds (less than 2030 in s)
+        const tsMs = lastTs < 2000000000 ? lastTs * 1000 : lastTs;
+        const diff = Math.max(0, now - tsMs);
+        
+        let timeStr = "";
+        if (diff < 60000) {
+           timeStr = "Just now";
+        } else if (diff < 3600000) {
+           timeStr = Math.floor(diff / 60000) + "m ago";
+        } else {
+           timeStr = new Date(tsMs).toLocaleTimeString();
+        }
+        
+        lastUpdatedEl.textContent = `Updated: ${timeStr}`;
       } else {
-        badgesRow.style.display = "none";
+        lastUpdatedEl.textContent = "";
       }
     }
 
