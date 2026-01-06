@@ -881,17 +881,21 @@ Two-factor authentication uses time-based one-time passwords (TOTP) from apps li
     chart: {
       id: "token_details.chart",
       title: "Price Chart (OHLCV)",
-      content: `**What you see:** Cached OHLCV candles for strategy evaluation (not the live pool price).
+      content: `**Important:** This chart displays **cached OHLCV data** for strategy evaluation, *not* the live execution price.
 
-    **Why cached?**
-    • Aggregated for indicators and backtests
-    • Refresh cadence depends on token priority (open positions get faster updates)
-    • Used by entry/exit monitors — not the swap execution price
+**Why Cached Data?**
+• **Purpose:** Used by automated strategies and indicators (e.g., RSI, MA).
+• **Freshness:** Updates depend on token priority (Open positions = Faster updates).
+• **Source:** Aggregated from DexScreener/GeckoTerminal, not direct on-chain RPC.
 
-    **Multiple pools, different prices:**
-    Pool prices vary by liquidity depth, recent trades, and arbitrage lag across Raydium/Orca/Meteora/etc. The executed swap price depends on the route and slippage, so expect small differences vs. this chart.
+**DEX Price Reality:**
+In DeFi, tokens trade across **multiple pools** (Raydium, Orca, Meteora). Each pool has a unique price based on liquidity depth and recent trades.
+• **Chart Price:** An average/aggregate across markets.
+• **Swap Price:** The specific rate you get from the best route at the exact moment of trade.
 
-    **Sources:** DexScreener + GeckoTerminal OHLCV. "Waiting for data" means candles are still being fetched.`,
+*Expect small differences between this chart and your final execution price.*
+
+**Status:** "Waiting for data" means background workers are fetching fresh candles.`,
       learnMoreUrl: "https://screenerbot.io/docs/concepts/pricing",
     },
 
