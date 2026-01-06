@@ -323,14 +323,17 @@ function resolveSortColumn(sortKey) {
   if (!sortKey) {
     return null;
   }
-  return SORT_KEY_TO_COLUMN[sortKey] ?? null;
-}
-
-function resolveSortKey(columnId) {
-  if (!columnId) {
-    return null;
+  // Dynamic keys mapping back to 'updated_at'
+  if (
+    [
+      "pool_price_last_calculated_at",
+      "metadata_last_fetched_at",
+      "market_data_last_fetched_at",
+    ].includes(sortKey)
+  ) {
+    return "updated_at";
   }
-  return COLUMN_TO_SORT_KEY[columnId] ?? null;
+  return SORT_KEY_TO_COLUMN[sortKey] ?? null;
 }
 
 function normalizeSortDirection(direction) {
@@ -782,6 +785,20 @@ function createLifecycle() {
   const shouldSkipPollReload = () => {
     if (!table) return false;
 
+    // Only the Pool Service view needs real-time table refreshes.
+    // Other views are either static or user-driven and auto-reloading every poll interval
+    // can spam /api/tokens/list and interfere with sorting/pagination responsiveness.
+    if (state.view !== "pool") {
+      return true;
+    }
+
+    // In server-backed "Pages" mode we should not auto-reload the table.
+    // It triggers a full page fetch every interval (default 1s) which can
+    // overwhelm the UI and interfere with user-driven sorts/page navigation.
+    if (typeof table.getServerPaginationMode === "function" && table.getServerPaginationMode() === "pages") {
+      return true;
+    }
+
     // If the table is already loading, never start a poll reload.
     // This avoids poll->abort->reload loops that delay UI updates.
     if (table.state?.isLoading) {
@@ -864,7 +881,7 @@ function createLifecycle() {
   };
 
   const handleSortChange = ({ column, direction, restored }) => {
-    const sortKey = resolveSortKey(column);
+    const sortKey = getServerSortKey(column, state.view);
     if (!sortKey) {
       syncTableSortState({ render: true });
       return;
@@ -921,13 +938,11 @@ function createLifecycle() {
 
     try {
       const requestPriority = reason === "poll" ? "normal" : "high";
-      console.debug('[Tokens] fetch start', { url, reason, priority: requestPriority, time: Date.now(), requestManager: requestManager.getStats() });
-      const startTs = Date.now();
       const data = await requestManager.fetch(url, {
         priority: requestPriority,
         signal,
+        skipQueue: reason !== "poll",
       });
-      console.debug('[Tokens] fetch end', { url, reason, durationMs: Date.now() - startTs, requestManager: requestManager.getStats() });
       const items = Array.isArray(data?.items) ? data.items : [];
 
       const rejectionReasons =
@@ -2258,7 +2273,7 @@ function createLifecycle() {
       // Read restored sort state from table and sync to state.sort
       const restoredTableState = table.getServerState();
       if (restoredTableState?.sortColumn) {
-        const sortKey = resolveSortKey(restoredTableState.sortColumn);
+        const sortKey = getServerSortKey(restoredTableState.sortColumn, view);
         if (sortKey) {
           state.sort = {
             by: sortKey,
@@ -2270,7 +2285,7 @@ function createLifecycle() {
       } else {
         const persistedSort = loadPersistedSort(nextStateKey);
         if (persistedSort) {
-          const persistedKey = resolveSortKey(persistedSort.column);
+          const persistedKey = getServerSortKey(persistedSort.column, view);
           if (persistedKey) {
             state.sort = { by: persistedKey, direction: persistedSort.direction };
           } else {
@@ -2626,7 +2641,7 @@ function createLifecycle() {
       const tableStateKey = getTokensTableStateKey(state.view);
       const persistedSort = loadPersistedSort(tableStateKey);
       if (persistedSort) {
-        const persistedSortKey = resolveSortKey(persistedSort.column);
+        const persistedSortKey = getServerSortKey(persistedSort.column, state.view);
         if (persistedSortKey) {
           state.sort = {
             by: persistedSortKey,
@@ -2884,7 +2899,7 @@ function createLifecycle() {
       let hasSortRestored = false;
 
       if (serverState.sortColumn) {
-        const sortKey = resolveSortKey(serverState.sortColumn);
+        const sortKey = getServerSortKey(serverState.sortColumn, state.view);
         if (sortKey) {
           state.sort = {
             by: sortKey,
