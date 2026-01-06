@@ -1538,7 +1538,8 @@ export class DataTable {
 
       this._applySort();
       this._saveState();
-      this._renderTable();
+      // Force render since this is a user-initiated action (even if hovering)
+      this._renderTable({ force: true });
     };
     this._addEventListener(this.elements.thead, "click", sortHandler);
 
@@ -3126,8 +3127,8 @@ export class DataTable {
           this.state.hasAutoFitted = false;
         }
 
-        // Re-render table
-        this._renderTable({ resetScroll: true });
+        // Re-render table - force render since this is user-initiated (sort, page nav, etc.)
+        this._renderTable({ resetScroll: true, force: true });
         this._updateServerPaginationBar();
 
         // Call onPageLoaded callback if defined
