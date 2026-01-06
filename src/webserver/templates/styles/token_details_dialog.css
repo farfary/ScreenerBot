@@ -1044,9 +1044,10 @@
 
 /* Transaction Summary */
 .txn-summary {
-  display: flex;
-  justify-content: center;
-  gap: var(--spacing-md);
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  justify-items: center;
+  gap: var(--spacing-sm);
   margin-top: var(--spacing-sm);
   padding-top: var(--spacing-sm);
   border-top: 1px solid var(--border-color);
@@ -1057,8 +1058,12 @@
   flex-direction: column;
   align-items: center;
   gap: 2px;
-  padding: var(--spacing-xs) var(--spacing-sm);
-  min-width: 60px;
+  padding: var(--spacing-sm);
+  width: 100%;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  min-width: 0;
 }
 
 .txn-summary-item .summary-icon {
@@ -1217,25 +1222,45 @@
 }
 
 .txn-row {
-  display: flex;
+  display: grid;
+  grid-template-columns: 48px 1fr minmax(132px, 160px);
   align-items: center;
   gap: var(--spacing-sm);
+}
+
+.txn-time {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  line-height: 1;
 }
 
 .txn-label {
   font-size: 0.75rem;
   color: var(--text-muted);
-  width: 32px;
-  flex-shrink: 0;
+  letter-spacing: 0.02em;
+}
+
+.txn-rate {
+  font-size: 0.6rem;
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .txn-bar-container {
-  flex: 1;
   display: flex;
-  height: 8px;
-  border-radius: 4px;
+  height: 10px;
+  border-radius: 999px;
   overflow: hidden;
   background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+}
+
+.txn-bar-container.is-empty {
+  opacity: 0.55;
 }
 
 .txn-bar {
@@ -1244,34 +1269,103 @@
 
 .txn-bar.buy-bar {
   background: var(--success-color);
+  border-top-left-radius: 999px;
+  border-bottom-left-radius: 999px;
 }
 
 .txn-bar.sell-bar {
   background: var(--danger);
+  border-top-right-radius: 999px;
+  border-bottom-right-radius: 999px;
 }
 
 .txn-counts {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 0;
+}
+
+.txn-counts-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 10px minmax(0, 1fr);
+  column-gap: 4px;
+  align-items: baseline;
+  width: 100%;
   font-size: 0.75rem;
   font-family: var(--font-data);
   font-feature-settings:
     "tnum" 1,
     "zero" 1;
-  width: 70px;
-  text-align: right;
-  flex-shrink: 0;
+}
+
+.txn-counts-sub {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 .buy-count {
   color: var(--success-color);
+  text-align: right;
 }
 
 .sell-count {
   color: var(--danger);
+  text-align: right;
 }
 
 .separator {
   color: var(--text-muted);
   padding: 0 2px;
+  text-align: center;
+}
+
+/* Transaction Activity insights */
+.txn-insights {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-sm);
+  padding-top: var(--spacing-sm);
+  border-top: 1px solid var(--border-color);
+}
+
+.txn-insight {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: var(--spacing-sm);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  min-width: 0;
+}
+
+.txn-insight .insight-label {
+  font-size: 0.6rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.txn-insight .insight-value {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.txn-insight .insight-value.mono {
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
 }
 
 /* =============================================================================

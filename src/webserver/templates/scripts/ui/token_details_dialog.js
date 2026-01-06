@@ -1386,42 +1386,71 @@ export class TokenDetailsDialog {
           : "neutral"
       : "";
 
+    const h24 = txns.h24;
+    const buys24 = typeof token.buys_24h === "number" ? token.buys_24h : h24?.buys;
+    const sells24 = typeof token.sells_24h === "number" ? token.sells_24h : h24?.sells;
+    const total24 =
+      (typeof buys24 === "number" ? buys24 : 0) + (typeof sells24 === "number" ? sells24 : 0);
+    const buyPct24 = total24 > 0 && typeof buys24 === "number" ? (buys24 / total24) * 100 : null;
+
+    const m5 = txns.m5;
+    const h1 = txns.h1;
+    const total5m = (typeof m5?.buys === "number" ? m5.buys : 0) + (typeof m5?.sells === "number" ? m5.sells : 0);
+    const total1h = (typeof h1?.buys === "number" ? h1.buys : 0) + (typeof h1?.sells === "number" ? h1.sells : 0);
+    const rate5m = total5m / 5;
+    const rate1h = total1h / 60;
+    const spikeFactor = rate1h > 0 ? rate5m / rate1h : null;
+
+    const netFlow24h = typeof token.net_flow_24h === "number" ? token.net_flow_24h : null;
+    const netFlowLabel =
+      typeof netFlow24h === "number"
+        ? netFlow24h > 0
+          ? `+${Utils.formatNumber(netFlow24h, { decimals: 0 })}`
+          : Utils.formatNumber(netFlow24h, { decimals: 0 })
+        : "—";
+    const netFlowClass = typeof netFlow24h === "number" ? (netFlow24h >= 0 ? "positive" : "negative") : "";
+
     return `
       <div class="info-card compact">
         <div class="card-header">
           <span>Transaction Activity</span>
           <div class="card-header-actions">
+            ${
+              typeof buyPct24 === "number"
+                ? `<span class="ratio-badge ${buyPct24 >= 50 ? "bullish" : "bearish"}">${buyPct24.toFixed(0)}% Buy</span>`
+                : ""
+            }
             ${buySellRatio ? `<span class="ratio-badge ${ratioClass}">${buySellRatio.toFixed(2)} B/S</span>` : ""}
             ${this._renderHintTrigger("tokenDetails.activity")}
           </div>
         </div>
         <div class="card-body">
           <div class="txn-grid">
-            ${this._buildTxnRow("5M", txns.m5)}
-            ${this._buildTxnRow("1H", txns.h1)}
-            ${this._buildTxnRow("6H", txns.h6)}
-            ${this._buildTxnRow("24H", txns.h24)}
+            ${this._buildTxnRow("5M", txns.m5, { minutes: 5 })}
+            ${this._buildTxnRow("1H", txns.h1, { minutes: 60 })}
+            ${this._buildTxnRow("6H", txns.h6, { minutes: 360 })}
+            ${this._buildTxnRow("24H", txns.h24, { minutes: 1440 })}
           </div>
           ${
-            token.buys_24h !== undefined || token.sells_24h !== undefined
+            typeof token.buys_24h === "number" || typeof token.sells_24h === "number"
               ? `
           <div class="txn-summary">
             <div class="txn-summary-item buys">
               <span class="summary-icon">↗</span>
-              <span class="summary-value">${token.buys_24h ?? 0}</span>
+              <span class="summary-value">${typeof token.buys_24h === "number" ? Utils.formatNumber(token.buys_24h, { decimals: 0 }) : "—"}</span>
               <span class="summary-label">Buys</span>
             </div>
             <div class="txn-summary-item sells">
               <span class="summary-icon">↘</span>
-              <span class="summary-value">${token.sells_24h ?? 0}</span>
+              <span class="summary-value">${typeof token.sells_24h === "number" ? Utils.formatNumber(token.sells_24h, { decimals: 0 }) : "—"}</span>
               <span class="summary-label">Sells</span>
             </div>
             ${
-              token.net_flow_24h !== undefined
+              typeof token.net_flow_24h === "number"
                 ? `
-            <div class="txn-summary-item flow ${token.net_flow_24h >= 0 ? "positive" : "negative"}">
-              <span class="summary-icon">${token.net_flow_24h >= 0 ? "+" : "−"}</span>
-              <span class="summary-value">${Math.abs(token.net_flow_24h)}</span>
+            <div class="txn-summary-item flow ${netFlowClass}">
+              <span class="summary-icon">${netFlow24h >= 0 ? "+" : "−"}</span>
+              <span class="summary-value">${netFlowLabel}</span>
               <span class="summary-label">Net</span>
             </div>
             `
@@ -1431,29 +1460,75 @@ export class TokenDetailsDialog {
           `
               : ""
           }
+
+          <div class="txn-insights">
+            <div class="txn-insight">
+              <div class="insight-label">24H Total</div>
+              <div class="insight-value mono">${total24 > 0 ? Utils.formatNumber(total24, { decimals: 0 }) : "—"}</div>
+            </div>
+            <div class="txn-insight">
+              <div class="insight-label">24H Avg</div>
+              <div class="insight-value mono">${
+                total24 > 0 ? `${Utils.formatNumber(total24 / 24, { decimals: 1 })}/h` : "—"
+              }</div>
+            </div>
+            <div class="txn-insight">
+              <div class="insight-label">5M Spike</div>
+              <div class="insight-value mono">${
+                typeof spikeFactor === "number" && Number.isFinite(spikeFactor)
+                  ? `${Utils.formatNumber(spikeFactor, { decimals: 2 })}×`
+                  : "—"
+              }</div>
+            </div>
+          </div>
         </div>
       </div>
     `;
   }
 
-  _buildTxnRow(label, data) {
-    if (!data) return "";
-    const buys = data.buys ?? 0;
-    const sells = data.sells ?? 0;
-    const total = buys + sells;
-    const buyPct = total > 0 ? (buys / total) * 100 : 50;
+  _buildTxnRow(label, data, { minutes }) {
+    const buysRaw = data?.buys;
+    const sellsRaw = data?.sells;
+
+    const hasBuys = typeof buysRaw === "number";
+    const hasSells = typeof sellsRaw === "number";
+    const hasAny = hasBuys || hasSells;
+
+    const buys = hasBuys ? buysRaw : null;
+    const sells = hasSells ? sellsRaw : null;
+    const total = (typeof buys === "number" ? buys : 0) + (typeof sells === "number" ? sells : 0);
+
+    const buyPct = total > 0 && typeof buys === "number" ? (buys / total) * 100 : 50;
+    const sellPct = 100 - buyPct;
+
+    const countsTitle = hasAny
+      ? `Buys: ${typeof buys === "number" ? buys : "—"} (${total > 0 ? buyPct.toFixed(0) : "—"}%), Sells: ${typeof sells === "number" ? sells : "—"} (${total > 0 ? sellPct.toFixed(0) : "—"}%), Total: ${total}`
+      : "No transaction data";
+
+    const buyText = typeof buys === "number" ? Utils.formatNumber(buys, { decimals: 0 }) : "—";
+    const sellText = typeof sells === "number" ? Utils.formatNumber(sells, { decimals: 0 }) : "—";
+    const ratePerMin = minutes && total >= 0 ? total / minutes : null;
+    const rateText = hasAny ? `${Utils.formatNumber(ratePerMin ?? 0, { decimals: 1 })}/m` : "—";
+    const pctText = total > 0 ? `${buyPct.toFixed(0)}% / ${sellPct.toFixed(0)}%` : hasAny ? "0% / 0%" : "—";
+
     return `
-      <div class="txn-row">
-        <span class="txn-label">${label}</span>
-        <div class="txn-bar-container">
-          <div class="txn-bar buy-bar" style="width: ${buyPct}%"></div>
-          <div class="txn-bar sell-bar" style="width: ${100 - buyPct}%"></div>
+      <div class="txn-row" title="${countsTitle}">
+        <div class="txn-time">
+          <div class="txn-label">${label}</div>
+          <div class="txn-rate">${rateText}</div>
         </div>
-        <span class="txn-counts">
-          <span class="buy-count">${buys}</span>
-          <span class="separator">/</span>
-          <span class="sell-count">${sells}</span>
-        </span>
+        <div class="txn-bar-container ${hasAny ? "" : "is-empty"}" aria-label="${countsTitle}">
+          <div class="txn-bar buy-bar" style="width: ${buyPct}%"></div>
+          <div class="txn-bar sell-bar" style="width: ${sellPct}%"></div>
+        </div>
+        <div class="txn-counts">
+          <div class="txn-counts-main">
+            <span class="buy-count">${buyText}</span>
+            <span class="separator">/</span>
+            <span class="sell-count">${sellText}</span>
+          </div>
+          <div class="txn-counts-sub">${pctText}</div>
+        </div>
       </div>
     `;
   }
