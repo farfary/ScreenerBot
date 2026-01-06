@@ -1244,7 +1244,7 @@ export class TokenDetailsDialog {
         <div class="card-header">
           <span>Token Info</span>
           <div class="card-header-actions">
-            ${token.verified ? '<span class="verified-badge">✓ Verified</span>' : ""}
+            ${token.verified ? '<span class="verified-badge"><i class="icon-check"></i> Verified</span>' : ""}
             ${this._renderHintTrigger("tokenDetails.tokenInfo")}
           </div>
         </div>
@@ -1591,35 +1591,39 @@ export class TokenDetailsDialog {
   _buildSecurityLoadingContent(token) {
     return `
       <div class="security-container">
-        <div class="security-loading-notice">
-          <div class="loading-spinner-small"></div>
-          <span>Fetching security analysis from Rugcheck...</span>
-        </div>
         <div class="security-left-col">
-          <div class="security-header">
+          <div class="security-loading-notice">
+            <div class="loading-spinner-small"></div>
+            <span>Rugcheck analysis in progress...</span>
+          </div>
+          <div class="security-header security-loading" style="--i:0">
             <div class="security-header-title">
-              <span class="section-title">Security Analysis</span>
+              <span class="section-title"><i class="icon-shield-check"></i> Security Pulse</span>
               ${this._renderHintTrigger("tokenDetails.security")}
             </div>
-            <div class="security-score-container security-loading">
+            <div class="security-score-container">
               <div class="security-score-circle">
-                <svg class="score-progress" width="100" height="100" viewBox="0 0 100 100">
-                  <circle class="score-bg" cx="50" cy="50" r="38"></circle>
+                <svg class="score-progress" width="120" height="120" viewBox="0 0 120 120">
+                  <circle class="score-bg" cx="60" cy="60" r="46"></circle>
                 </svg>
                 <div class="score-content">
-                  <span class="score-value">—</span>
+                  <span class="score-value" style="opacity: 0.3;">—</span>
                 </div>
               </div>
-              <div class="score-info">
-                <span class="score-label">Analyzing...</span>
+              <div class="safety-badge" style="background: var(--bg-secondary); color: var(--text-muted);">
+                Analyzing...
               </div>
             </div>
+          </div>
+          <div class="security-bento-grid">
+             <div class="security-bento-card security-loading" style="--i:1"></div>
+             <div class="security-bento-card security-loading" style="--i:2"></div>
           </div>
           ${this._buildAuthoritiesCard(token)}
         </div>
         <div class="security-right-col">
-          <div class="security-placeholder">
-            <p>Security data will appear here once Rugcheck analysis completes.</p>
+          <div class="security-card security-loading" style="height: 400px; --i:3">
+             <div class="loading-spinner" style="margin-top: 150px;"></div>
           </div>
         </div>
       </div>
@@ -1657,58 +1661,57 @@ export class TokenDetailsDialog {
     // Safety score is 0-100 (higher = safer)
     const score = safetyScore ?? 0;
     const scorePercent = Math.min(100, Math.max(0, score));
-    const circumference = 2 * Math.PI * 38; // radius = 38 (smaller circle)
+    const circumference = 2 * Math.PI * 46; // radius = 46 for 120px ring
     const offset = circumference - (scorePercent / 100) * circumference;
 
     // Risk score for additional info
     const riskScore = token.risk_score;
 
+    // Map score label to safety badge
+    const badgeConfigs = {
+      "score-good": { label: "Shielded", class: "good" },
+      "score-ok": { label: "Safe", class: "good" },
+      "score-warn": { label: "Caution", class: "warning" },
+      "score-danger": { label: "Vulnerable", class: "critical" },
+    };
+    const badge = badgeConfigs[scoreClass] || { label: scoreLabel, class: "warning" };
+
     return `
-      <div class="security-header">
+      <div class="security-header" style="--i:0">
         <div class="security-header-title">
-          <span class="section-title">Security Analysis</span>
+          <span class="section-title"><i class="icon-shield-check"></i> Security Pulse</span>
           ${this._renderHintTrigger("tokenDetails.security")}
         </div>
         <div class="security-score-container">
           <div class="security-score-circle">
-            <svg class="score-progress" width="100" height="100" viewBox="0 0 100 100">
-              <circle class="score-bg" cx="50" cy="50" r="38"></circle>
-              <circle class="score-ring ${scoreClass}" cx="50" cy="50" r="38" 
+            <div class="score-glow ${scoreClass}"></div>
+            <svg class="score-progress" width="120" height="120" viewBox="0 0 120 120">
+              <circle class="score-bg" cx="60" cy="60" r="46"></circle>
+              <circle class="score-ring ${scoreClass}" cx="60" cy="60" r="46" 
                 style="stroke-dasharray: ${circumference}; stroke-dashoffset: ${offset};"></circle>
             </svg>
             <div class="score-content">
               <span class="score-value">${score}</span>
-              <span class="score-max">/100</span>
+              <span class="score-max">SCORE</span>
             </div>
           </div>
-          <div class="score-info">
-            <span class="score-label ${scoreClass}">${scoreLabel}</span>
-            <span class="score-hint">Safety Score</span>
-            ${
-              riskScore !== null && riskScore !== undefined
-                ? `<span class="risk-score-info">Risk: ${Utils.formatNumber(riskScore, { decimals: 0 })}</span>`
-                : ""
-            }
-            ${lastUpdated ? `<span class="score-updated">${lastUpdated}</span>` : ""}
+          <div class="safety-badge ${badge.class}">
+            ${badge.label}
           </div>
         </div>
         ${
           token.rugged
             ? `
-        <div class="rugged-warning">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
-          <span>RUGGED</span>
+        <div class="rugged-warning" style="margin-top: 15px; border-radius: 10px;">
+          <i class="icon-skull" style="font-size: 20px;"></i>
+          <span style="font-size: 1rem; letter-spacing: 0.1em; font-weight: 800;">RUGGED</span>
         </div>
         `
             : ""
         }
         ${
-          token.security_summary
-            ? `
-        <div class="security-summary">
-          <p>${this._escapeHtml(token.security_summary)}</p>
-        </div>
-        `
+          lastUpdated && !token.rugged
+            ? `<div style="text-align: center; font-size: 0.65rem; color: var(--text-muted); margin-top: 10px;">Updated ${lastUpdated}</div>`
             : ""
         }
       </div>
@@ -1719,45 +1722,48 @@ export class TokenDetailsDialog {
     const items = [];
 
     if (token.token_type) {
-      items.push({ label: "Type", value: token.token_type, icon: "📦" });
+      items.push({ label: "Token Type", value: token.token_type, icon: '<i class="icon-box"></i>' });
     }
+
     if (token.total_holders !== null && token.total_holders !== undefined) {
       items.push({
-        label: "Holders",
+        label: "Total Holders",
         value: Utils.formatCompactNumber(token.total_holders),
-        icon: "👥",
+        icon: '<i class="icon-users"></i>',
       });
     }
+
     if (token.lp_provider_count !== null && token.lp_provider_count !== undefined) {
       items.push({
         label: "LP Providers",
         value: Utils.formatNumber(token.lp_provider_count, { decimals: 0 }),
-        icon: "💧",
+        icon: '<i class="icon-droplet"></i>',
       });
     }
+
     if (token.graph_insiders_detected !== null && token.graph_insiders_detected !== undefined) {
-      const insiderClass = token.graph_insiders_detected > 0 ? "warning" : "good";
+      const isDangerous = token.graph_insiders_detected > 0;
       items.push({
-        label: "Insiders Detected",
-        value: token.graph_insiders_detected,
-        icon: "🔍",
-        class: insiderClass,
+        label: "Graph Insiders",
+        value: `${isDangerous ? "Detected" : "Clean"} ${token.graph_insiders_detected > 0 ? `(${token.graph_insiders_detected})` : ""}`,
+        icon: isDangerous ? '<i class="icon-alert-triangle"></i>' : '<i class="icon-search"></i>',
+        class: isDangerous ? "warning" : "good",
       });
     }
 
     if (items.length === 0) return "";
 
     return `
-      <div class="security-overview">
+      <div class="security-bento-grid" style="margin-top: 8px;">
         ${items
           .map(
-            (item) => `
-          <div class="overview-item ${item.class || ""}">
-            <span class="overview-icon">${item.icon}</span>
-            <span class="overview-value">${item.value}</span>
-            <span class="overview-label">${item.label}</span>
+            (item, idx) => `
+          <div class="security-bento-card" style="--i:${idx + 1}">
+            <div class="bento-icon">${item.icon}</div>
+            <div class="bento-label">${item.label}</div>
+            <div class="bento-value">${item.value}</div>
           </div>
-        `
+        `,
           )
           .join("")}
       </div>
@@ -1766,16 +1772,16 @@ export class TokenDetailsDialog {
 
   _buildAuthoritiesCard(token) {
     return `
-      <div class="security-card">
+      <div class="security-card" style="--i:2">
         <div class="card-header">
-          <span>Token Authorities</span>
-          <span class="card-subtitle">Control permissions</span>
+          <span>Token Control</span>
+          <span class="card-subtitle">Authority status</span>
         </div>
         <div class="card-body">
           <div class="authority-grid">
-            <div class="authority-item">
+            <div class="authority-item ${token.mint_authority ? "danger" : "safe"}">
               <div class="authority-header">
-                <span class="authority-label">Mint Authority</span>
+                <span class="authority-label">Mint <i class="icon-wrench"></i></span>
                 ${this._renderAuthorityBadge(token.mint_authority)}
               </div>
               ${
@@ -1783,16 +1789,17 @@ export class TokenDetailsDialog {
                   ? `
               <div class="authority-address">
                 <span class="address-value" title="${token.mint_authority}">${this._formatShortAddress(token.mint_authority)}</span>
-                <button class="btn-copy-mini" onclick="Utils.copyToClipboard('${token.mint_authority}')" title="Copy">📋</button>
+                <button class="btn-copy-mini" onclick="Utils.copyToClipboard('${token.mint_authority}')"><i class="icon-copy"></i></button>
               </div>
-              <div class="authority-warning">Can mint new tokens</div>
+              <div class="authority-status-text">At Risk</div>
               `
-                  : '<div class="authority-safe">Cannot create new tokens</div>'
+                  : '<div class="authority-status-text">Immutable</div>'
               }
             </div>
-            <div class="authority-item">
+            
+            <div class="authority-item ${token.freeze_authority ? "danger" : "safe"}">
               <div class="authority-header">
-                <span class="authority-label">Freeze Authority</span>
+                <span class="authority-label">Freeze <i class="icon-snowflake"></i></span>
                 ${this._renderAuthorityBadge(token.freeze_authority)}
               </div>
               ${
@@ -1800,11 +1807,11 @@ export class TokenDetailsDialog {
                   ? `
               <div class="authority-address">
                 <span class="address-value" title="${token.freeze_authority}">${this._formatShortAddress(token.freeze_authority)}</span>
-                <button class="btn-copy-mini" onclick="Utils.copyToClipboard('${token.freeze_authority}')" title="Copy">📋</button>
+                <button class="btn-copy-mini" onclick="Utils.copyToClipboard('${token.freeze_authority}')"><i class="icon-copy"></i></button>
               </div>
-              <div class="authority-warning">Can freeze accounts</div>
+              <div class="authority-status-text">At Risk</div>
               `
-                  : '<div class="authority-safe">Cannot freeze accounts</div>'
+                  : '<div class="authority-status-text">Revoked</div>'
               }
             </div>
           </div>
@@ -1823,7 +1830,7 @@ export class TokenDetailsDialog {
     if (top10Pct !== null && top10Pct !== undefined) {
       if (top10Pct > 80) {
         concentrationClass = "danger";
-        concentrationLabel = "Very High";
+        concentrationLabel = "Critical";
       } else if (top10Pct > 60) {
         concentrationClass = "warning";
         concentrationLabel = "High";
@@ -1836,28 +1843,33 @@ export class TokenDetailsDialog {
     const gaugeHtml = this._buildHolderGauge(top10Pct, concentrationClass);
 
     return `
-      <div class="security-card">
+      <div class="security-card" style="--i:2">
         <div class="card-header">
-          <span>Holder Distribution</span>
+          <span>Holder Health</span>
           ${concentrationLabel ? `<span class="concentration-badge ${concentrationClass}" style="margin-left:auto">${concentrationLabel}</span>` : ""}
         </div>
         <div class="card-body" style="padding: 16px;">
-           <div style="display: flex; align-items: center; justify-content: space-around;">
+           <div style="display: flex; align-items: center; justify-content: space-around; gap: 20px;">
              <div style="text-align: center;">
                 ${gaugeHtml}
-                <div style="margin-top: 6px; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Top 10</div>
+                <div style="margin-top: 8px; font-size: 10px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 1px; font-weight: 600;">Top 10 Supply</div>
              </div>
              
-             <div style="display: flex; flex-direction: column; gap: 12px; min-width: 100px;">
-                <div style="display: flex; flex-direction: column;">
-                   <span style="font-size: 11px; color: var(--text-secondary); margin-bottom: 2px;">Total Holders</span>
-                   <span style="font-weight: 600; font-size: 14px; color: var(--text-primary);">${token.total_holders ? Utils.formatNumber(token.total_holders, { decimals: 0 }) : "—"}</span>
+             <div style="display: flex; flex-direction: column; gap: 14px; flex: 1;">
+                <div class="holder-stat-item">
+                   <div style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 2px;">Total Holders</div>
+                   <div style="font-weight: 700; font-size: 16px; color: var(--text-primary); display: flex; align-items: baseline; gap: 4px;">
+                      ${token.total_holders ? Utils.formatNumber(token.total_holders, { decimals: 0 }) : "—"}
+                      <span style="font-size: 10px; font-weight: 400; color: var(--text-muted);">unique</span>
+                   </div>
                 </div>
                 
                 ${creatorPct !== null && creatorPct !== undefined ? `
-                <div style="display: flex; flex-direction: column;">
-                   <span style="font-size: 11px; color: var(--text-secondary); margin-bottom: 2px;">Creator Balance</span>
-                   <span style="font-weight: 600; font-size: 14px; color: ${creatorPct > 10 ? '#f85149' : '#3fb950'};">${creatorPct.toFixed(2)}%</span>
+                <div class="holder-stat-item">
+                   <div style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 2px;">Creator Share</div>
+                   <div style="font-weight: 700; font-size: 16px; color: ${creatorPct > 10 ? 'var(--error-color)' : 'var(--success-color)'};">
+                      ${creatorPct.toFixed(2)}%
+                   </div>
                 </div>
                 ` : ''}
              </div>
@@ -1868,28 +1880,31 @@ export class TokenDetailsDialog {
   }
 
   _buildHolderGauge(percent, colorClass) {
-     if (percent === null || percent === undefined) return '<div class="gauge-placeholder" style="width:80px;height:80px;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);">—</div>';
+     if (percent === null || percent === undefined) return `
+        <div class="gauge-placeholder" style="width:90px;height:90px;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);background:var(--bg-secondary);border-radius:50%;border:1px dashed var(--border-color);">
+            <span style="font-size: 20px; opacity: 0.5;">?</span>
+        </div>`;
      
      const p = Math.min(100, Math.max(0, percent));
-     const r = 32;
+     const r = 38;
      const c = 2 * Math.PI * r;
      const off = c - (p / 100) * c;
      
      // Color mapping
-     let strokeColor = "#3fb950"; // green
-     if (colorClass === 'danger') strokeColor = "#f85149";
+     let strokeColor = "var(--success-color)";
+     if (colorClass === 'danger') strokeColor = "var(--error-color)";
      if (colorClass === 'warning') strokeColor = "#d29922";
      if (colorClass === 'moderate') strokeColor = "#db6d28";
      
      return `
-        <div class="gauge-wrapper" style="position:relative; width:80px; height:80px;">
-             <svg width="80" height="80" viewBox="0 0 80 80" style="transform: rotate(-90deg);">
-              <circle cx="40" cy="40" r="${r}" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="6"></circle>
-              <circle cx="40" cy="40" r="${r}" fill="none" stroke="${strokeColor}" stroke-width="6"
-                style="stroke-dasharray: ${c}; stroke-dashoffset: ${off}; transition: stroke-dashoffset 0.8s ease; stroke-linecap: round;"></circle>
+        <div class="gauge-wrapper" style="position:relative; width:90px; height:90px;">
+             <svg width="90" height="90" viewBox="0 0 90 90" style="transform: rotate(-90deg);">
+              <circle cx="45" cy="45" r="${r}" fill="none" stroke="var(--bg-secondary)" stroke-width="8"></circle>
+              <circle cx="45" cy="45" r="${r}" fill="none" stroke="${strokeColor}" stroke-width="8"
+                style="stroke-dasharray: ${c}; stroke-dashoffset: ${off}; transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1); stroke-linecap: round; filter: drop-shadow(0 0 3px ${strokeColor}44);"></circle>
             </svg>
             <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); text-align:center;">
-               <div style="font-size:14px; font-weight:700; color:var(--text-primary);">${p.toFixed(0)}%</div>
+               <div style="font-size:16px; font-weight:800; color:var(--text-primary); font-family:var(--font-mono);">${p.toFixed(0)}<span style="font-size: 10px; margin-left: 1px;">%</span></div>
             </div>
         </div>
      `;
@@ -1904,12 +1919,12 @@ export class TokenDetailsDialog {
     const hasFee = token.transfer_fee_pct > 0;
 
     return `
-      <div class="security-card ${hasFee ? "has-fee" : ""}">
+      <div class="security-card ${hasFee ? "has-fee" : ""}" style="--i:2.5">
         <div class="card-header">
-          <span>Transfer Fee (Token-2022)</span>
-          ${hasFee ? `<span class="fee-badge">⚠️ ${token.transfer_fee_pct}%</span>` : '<span class="no-fee-badge">✓ No Fee</span>'}
+          <span>Transfer Tax</span>
+          ${hasFee ? `<span class="fee-badge"><i class="icon-alert-triangle"></i> ${token.transfer_fee_pct}%</span>` : '<span class="no-fee-badge"><i class="icon-check"></i> No Fee</span>'}
         </div>
-        <div class="card-body">
+        <div class="card-body" style="padding: 0;">
           ${
             hasFee
               ? `
@@ -1933,21 +1948,20 @@ export class TokenDetailsDialog {
                 ? `
             <div class="fee-row">
               <span class="fee-label">Fee Authority</span>
-              <span class="fee-value mono">${this._formatShortAddress(token.transfer_fee_authority)}</span>
+              <span class="fee-value" title="${token.transfer_fee_authority}">${this._formatShortAddress(token.transfer_fee_authority)}</span>
             </div>
             `
                 : ""
             }
           </div>
-          <div class="fee-warning">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+          <div style="padding: 10px 16px; border-top: 1px solid var(--border-color); font-size: 0.65rem; color: var(--warning-color); background: var(--warning-alpha-10); display: flex; align-items: center; gap: 8px;">
+            <i class="icon-alert-circle" style="font-size: 14px;"></i>
             <span>A ${token.transfer_fee_pct}% fee is charged on every transfer</span>
           </div>
           `
               : `
-          <div class="no-fee-info">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg>
-            <span>No transfer fee configured</span>
+          <div style="padding: 16px; color: var(--success-color); font-size: 0.75rem; font-weight: 600;">
+             <i class="icon-shield"></i> No transfer fees detected.
           </div>
           `
           }
@@ -1969,10 +1983,28 @@ export class TokenDetailsDialog {
       concentration = topHolders.slice(0, limit).reduce((sum, h) => sum + (h.percentage || 0), 0);
     }
     
-    const subtitle = `${concentration.toFixed(2)}% (Top 10)`;
+    // Top 3 Podium
+    const top3 = topHolders.slice(0, 3);
+    const podiumHtml = `
+      <div class="holders-podium small" style="margin: 20px 0;">
+        ${[1, 0, 2].map(idx => {
+          const h = top3[idx];
+          if (!h) return '<div class="podium-spot empty"></div>';
+          const name = h.owner_type && h.owner_type.length < 15 ? h.owner_type : this._formatShortAddress(h.address);
+          return `
+            <div class="podium-spot rank-${idx + 1}" title="${h.address}">
+              <div class="podium-avatar">${(idx + 1) === 1 ? '<i class="icon-crown"></i>' : (idx + 1)}</div>
+              <div class="podium-value">${h.percentage.toFixed(1)}%</div>
+              <div class="podium-pedestal"></div>
+              <div class="podium-name">${name}</div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    `;
 
     const holderRows = topHolders
-      .slice(0, 10)
+      .slice(3, 10)
       .map((holder, idx) => {
         const insiderClass = holder.is_insider ? "insider" : "";
         const ownerLabel = holder.owner_type || "";
@@ -1980,52 +2012,33 @@ export class TokenDetailsDialog {
         if (holder.is_insider) badges.push('<span class="insider-badge">Insider</span>');
         
         if (ownerLabel) {
-          // If label looks like an address (long, no spaces), format it
           const isAddress = ownerLabel.length > 30 && !ownerLabel.includes(" ");
           const displayLabel = isAddress ? this._formatShortAddress(ownerLabel) : ownerLabel;
           const cssClass = isAddress ? "owner-badge address-badge" : "owner-badge";
-          
-          badges.push(
-            `<span class="${cssClass}" title="${this._escapeHtml(ownerLabel)}">${this._escapeHtml(displayLabel)}</span>`
-          );
+          badges.push(`<span class="${cssClass}" title="${this._escapeHtml(ownerLabel)}">${this._escapeHtml(displayLabel)}</span>`);
         }
 
         return `
-        <div class="holder-row ${insiderClass}" style="--i: ${idx}">
-          <span class="holder-rank">${idx + 1}</span>
-          <span class="holder-address" title="${this._escapeHtml(holder.address)}">
-            <a href="https://solscan.io/account/${this._escapeHtml(holder.address)}" target="_blank" rel="noopener">${this._formatShortAddress(holder.address)}</a>
-          </span>
-          <span class="holder-pct">${holder.percentage.toFixed(2)}%</span>
-          <div class="holder-bar-container">
-            <div class="bar-fill" style="width: ${Math.min(holder.percentage, 100)}%"></div>
+          <div class="holder-row ${insiderClass}" style="--i: ${idx + 4}">
+            <div class="holder-rank">#${idx + 4}</div>
+            <div class="holder-address-container">
+              <span class="holder-address mono">${this._formatShortAddress(holder.address)}</span>
+              <div class="holder-badges">${badges.join("")}</div>
+            </div>
+            <div class="holder-share">${holder.percentage.toFixed(2)}%</div>
           </div>
-          <div class="holder-badges">${badges.join("")}</div>
-        </div>
-      `;
-      })
-      .join("");
-
-    // Build header row for table-like display
-    const headerRow = `
-      <div class="holders-header">
-        <span>#</span>
-        <span>Address</span>
-        <span style="text-align: right;">%</span>
-        <span>Share</span>
-        <span style="text-align: right;">Labels</span>
-      </div>
-    `;
+        `;
+      }).join("");
 
     return `
-      <div class="security-card full-width">
+      <div class="security-card main-holders-card" style="--i:3.5">
         <div class="card-header">
-          <span>Top Holders</span>
-          <span class="card-subtitle">${subtitle}</span>
+          <span>Top 10 Holders Concentration</span>
+          <span class="concentration-value">${concentration.toFixed(2)}%</span>
         </div>
-        <div class="card-body">
-          <div class="holders-list">
-            ${headerRow}
+        <div class="card-body" style="padding: 10px 16px;">
+          ${podiumHtml}
+          <div class="holders-list-small">
             ${holderRows}
           </div>
         </div>
@@ -2035,20 +2048,21 @@ export class TokenDetailsDialog {
 
   _renderAuthorityBadge(value) {
     if (value === null || value === undefined || value === "") {
-      return '<span class="auth-badge revoked"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"></polyline></svg> Revoked</span>';
+      return '<span class="status-badge status-safe">Revoked</span>';
     }
-    return '<span class="auth-badge present"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg> Present</span>';
+    return '<span class="status-badge status-danger">Present</span>';
   }
 
   _buildRisksSection(risks) {
     if (!risks || risks.length === 0) {
       return `
-        <div class="security-card full-width">
-          <div class="card-header">Security Risks</div>
+        <div class="security-card" style="--i:3">
+          <div class="card-header">
+            <span>Security Risks</span>
+          </div>
           <div class="card-body">
-            <div class="no-risks">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><polyline points="9 12 12 15 16 10"></polyline></svg>
-              <span>No security risks detected</span>
+            <div class="no-data-message" style="color: var(--success-color); font-weight: 700; display: flex; align-items: center; gap: 8px;">
+               <i class="icon-sparkles"></i> No security risks detected.
             </div>
           </div>
         </div>
@@ -2056,26 +2070,33 @@ export class TokenDetailsDialog {
     }
 
     const riskItems = risks
-      .map((risk) => {
-        const levelClass = risk.level?.toLowerCase() || "info";
+      .map((risk, idx) => {
+        const level = risk.level?.toLowerCase() || "info";
+        const riskClass = level === "danger" ? "risk-danger" : level === "warn" ? "risk-warn" : "";
+        const icon = level === "danger" ? '<i class="icon-ban"></i>' : '<i class="icon-alert-triangle"></i>';
+
         return `
-        <div class="risk-item ${levelClass}">
-          <div class="risk-header">
-            <span class="risk-name">${this._escapeHtml(risk.name)}</span>
-            <span class="risk-level ${levelClass}">${this._escapeHtml(risk.level || "Info")}</span>
+        <div class="risk-row ${riskClass}" style="--i:${idx}">
+          <div class="risk-icon">${icon}</div>
+          <div class="risk-details">
+            <div class="risk-name">${this._escapeHtml(risk.name)}</div>
+            <div class="risk-description">${this._escapeHtml(risk.description)}</div>
           </div>
-          <div class="risk-description">${this._escapeHtml(risk.description)}</div>
-          ${risk.value ? `<div class="risk-value">${this._escapeHtml(risk.value)}</div>` : ""}
         </div>
       `;
       })
       .join("");
 
     return `
-      <div class="security-card full-width">
-        <div class="card-header">Security Risks (${risks.length})</div>
-        <div class="card-body risks-list">
-          ${riskItems}
+      <div class="security-card" style="--i:3">
+        <div class="card-header">
+          <span>Security Risks</span>
+          <span class="card-subtitle">${risks.length} incidents found</span>
+        </div>
+        <div class="card-body" style="padding: 0;">
+          <div class="risks-list">
+            ${riskItems}
+          </div>
         </div>
       </div>
     `;
@@ -2084,18 +2105,17 @@ export class TokenDetailsDialog {
   // Safety score classification (0-100, higher = safer)
   _getSafetyScoreClass(score) {
     if (score === null || score === undefined) return "";
-    if (score >= 70) return "score-good";
-    if (score >= 50) return "score-ok";
-    if (score >= 30) return "score-warn";
-    return "score-danger";
+    if (score >= 70) return "score-safe";
+    if (score >= 40) return "score-caution";
+    return "score-vulnerable";
   }
 
   _getSafetyScoreLabel(score) {
     if (score === null || score === undefined) return "Unknown";
-    if (score >= 70) return "Good";
-    if (score >= 50) return "OK";
-    if (score >= 30) return "Risky";
-    return "Danger";
+    if (score >= 90) return "Shielded";
+    if (score >= 70) return "Safe";
+    if (score >= 40) return "Caution";
+    return "Vulnerable";
   }
 
   // Deprecated - kept for reference but use _getSafetyScoreClass instead
