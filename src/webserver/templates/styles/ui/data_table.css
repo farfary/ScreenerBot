@@ -567,11 +567,8 @@ body.dt-column-resizing * {
   --dt-row-line-height: 1.4;
   --dt-row-lines: var(--dt-row-lines, 2);
   --dt-row-padding-y: 16px; /* td padding top + bottom */
-
-  height: calc((var(--dt-row-line-height) * 1em * var(--dt-row-lines)) + var(--dt-row-padding-y));
-  max-height: calc(
-    (var(--dt-row-line-height) * 1em * var(--dt-row-lines)) + var(--dt-row-padding-y)
-  );
+  --dt-row-content-height: calc(var(--dt-row-line-height) * 1em * var(--dt-row-lines));
+  --dt-row-total-height: calc(var(--dt-row-content-height) + var(--dt-row-padding-y));
 }
 
 .data-table.compact.uniform-rows tbody tr {
@@ -579,8 +576,12 @@ body.dt-column-resizing * {
 }
 
 .data-table.uniform-rows td {
-  /* Ensure content doesn't expand row */
+  /* Enforce fixed height on td (more reliable than tr height) */
+  height: var(--dt-row-total-height);
+  max-height: var(--dt-row-total-height);
   line-height: var(--dt-row-line-height);
+  overflow: hidden;
+  position: relative;
 }
 
 .data-table.uniform-rows td .dt-cell-clamp {
@@ -590,6 +591,12 @@ body.dt-column-resizing * {
   -webkit-line-clamp: var(--dt-row-lines);
   overflow: hidden;
   white-space: normal;
+}
+
+/* Flex cells in uniform rows - constrain height */
+.data-table.uniform-rows td > div:first-child:last-child {
+  max-height: var(--dt-row-content-height);
+  overflow: hidden;
 }
 
 /* Text wrapping support */

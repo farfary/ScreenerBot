@@ -17,6 +17,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  max-height: 100%;
+  overflow: hidden;
 }
 
 .position-token .token-logo {
@@ -33,15 +35,28 @@
   text-align: center;
   line-height: 28px;
   font-weight: 600;
+  flex-shrink: 0;
+}
+
+/* Token text container - constrain overflow */
+.position-token > div {
+  min-width: 0;
+  overflow: hidden;
 }
 
 .position-token .token-symbol {
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .position-token .token-name {
   color: var(--text-secondary);
   font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Row actions buttons */

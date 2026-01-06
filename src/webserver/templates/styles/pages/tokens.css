@@ -20,6 +20,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  max-height: 100%;
+  overflow: hidden;
 }
 
 .token-cell .token-logo {
@@ -39,13 +41,25 @@
   font-weight: 600;
 }
 
+/* Token text container - constrain overflow */
+.token-cell > div {
+  min-width: 0;
+  overflow: hidden;
+}
+
 .token-cell .token-symbol {
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .token-cell .token-name {
   color: var(--text-secondary);
   font-size: 0.85rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .value-positive {
