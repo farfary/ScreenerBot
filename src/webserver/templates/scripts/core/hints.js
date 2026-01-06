@@ -942,21 +942,34 @@ Two-factor authentication uses time-based one-time passwords (TOTP) from apps li
       title: "Trading Volume",
       content: `USD trading volume from market aggregators over each timeframe.
 
-    Higher volume usually means better price discovery and easier exits. Very low volume can mean wider spreads, higher slippage, and manipulation risk.`,
+**Interpretation:**
+• **High Volume:** Strong interest, efficient price discovery, easier exits.
+• **Low Volume:** Risk of slippage, wider spreads, and difficulty exiting large positions.
+• **Volume/Liquidity Ratio:** High volume with low liquidity = enormous volatility.
+
+**Data Source:** Aggregated from major DEXs (Raydium, Orca, etc.) via DexScreener/GeckoTerminal.`,
     },
 
     activity: {
       id: "token_details.activity",
-      title: "Transaction Activity",
-      content: `Buy/sell **counts** per timeframe (5M/1H/6H/24H) plus ratios and derived spikes.
+      title: "Transaction Activity (Counts)",
+      content: `Analyzes the **number of trades** (buys vs. sells) across multiple timeframes. This reveals trader intent regardless of trade size.
 
-    • Row bars — buy vs sell share for that window (counts, not volume)
-    • Rate — txns per minute for the timeframe
-    • 24H % Buy badge — share of buys in the last 24h
-    • Net Flow — buys minus sells (24h)
-    • Insights — 24h total txns, avg per hour, and 5M spike vs 1H baseline
+**Metric Breakdown:**
+• **Timeframes:** 5M, 1H, 6H, 24H windows.
+• **Bars:** Visual ratio of Buy count (Green) vs. Sell count (Red).
+• **Rate:** Trades per minute (e.g., "12.5/m"). Higher rates = viral activity.
+• **Counts:** Exact number of buys/sells and their percentage share.
 
-    High buy share can signal accumulation; high sell share can mean distribution. Combine with volume/price before acting.`,
+**Insights Panel:**
+• **24H Buy %:** >50% is bullish (more buyers), <50% is bearish (more sellers).
+• **Net Flow:** Total buys minus sells. Positive = Accumulation.
+• **5M Spike:** How much faster trading is *right now* vs. the 1H average.
+  • **>1.0x:** Accelerating interest.
+  • **>3.0x:** Viral breakout or panic event.
+  • **<1.0x:** Cooling down.
+
+**Strategy Tip:** High "Buy %" with high "Spike Factor" often signals a strong breakout entry.`,
     },
 
     security: {

@@ -323,6 +323,38 @@ export class HintPopover {
     this.el.style.top = `${top}px`;
     this.el.style.left = `${left}px`;
     this.el.style.maxWidth = `${popoverWidth}px`;
+
+    // Adjust arrow position to point exactly at trigger center
+    if (arrow) {
+      // Reset first to ensure clean calculation
+      arrow.style.top = "";
+      arrow.style.left = "";
+
+      if (position === "right" || position === "left") {
+        // Vertical alignment
+        const triggerCenterY = triggerRect.top + triggerRect.height / 2;
+        const arrowY = triggerCenterY - top;
+
+        // Clamp arrow to keep it within the popover content box (accounting for rounded corners)
+        // 12px (radius) + 6px (half arrow) = ~18px safe zone
+        const safeZone = 18;
+        const clampedY = Math.max(safeZone, Math.min(arrowY, popoverHeight - safeZone));
+
+        arrow.style.top = `${clampedY}px`;
+        // ensure margin-top doesn't shift it further if we set explicit top
+        // CSS has margin-top: -6px; which centers it if top is center.
+        // If we set exact center pixel, we keep margin-top to offset the arrow height.
+      } else {
+        // Horizontal alignment (top/bottom)
+        const triggerCenterX = triggerRect.left + triggerRect.width / 2;
+        const arrowX = triggerCenterX - left;
+
+        const safeZone = 18;
+        const clampedX = Math.max(safeZone, Math.min(arrowX, popoverWidth - safeZone));
+
+        arrow.style.left = `${clampedX}px`;
+      }
+    }
   }
 
   /**
