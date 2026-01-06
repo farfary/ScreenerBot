@@ -3899,6 +3899,16 @@ export class DataTable {
       preserveScroll: normalized.preserveScroll,
     };
 
+    // Always force-render pagination updates so new rows appear even while the
+    // user is hovering/scrolling (interaction guard would otherwise skip renders)
+    const metaWithForce = {
+      ...meta,
+      renderOptions: {
+        ...(meta.renderOptions || {}),
+        force: true,
+      },
+    };
+
     const mode = normalized.mode?.toString().toLowerCase?.();
     const effectiveDirection =
       direction === "initial" && mode === "append"
@@ -3909,20 +3919,20 @@ export class DataTable {
 
     if (effectiveDirection === "prev" || mode === "prepend") {
       this._prependData(normalized.rows, {
-        ...meta,
+        ...metaWithForce,
         preserveScroll: normalized.preserveScroll ?? options.preserveScroll ?? undefined,
       });
     } else if (effectiveDirection === "next" || mode === "append") {
-      this._appendData(normalized.rows, meta);
+      this._appendData(normalized.rows, metaWithForce);
     } else {
       const renderOptions = {
-        ...(meta.renderOptions || {}),
+        ...(metaWithForce.renderOptions || {}),
       };
       if (normalized.resetScroll ?? options.resetScroll) {
         renderOptions.resetScroll = true;
       }
       this._replaceData(normalized.rows, {
-        ...meta,
+        ...metaWithForce,
         renderOptions,
       });
     }
