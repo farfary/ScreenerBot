@@ -3033,6 +3033,10 @@ export class DataTable {
     // Update toggle button states
     this._updateModeToggleUI();
 
+    // Immediately update pagination bar to reflect new mode (before async reload)
+    // This ensures UI updates instantly rather than waiting for data fetch
+    this._updateServerPaginationBar();
+
     if (newMode === "pages") {
       // Disable scroll loading, load first page
       this._scrollLoadingDisabled = true;
@@ -3043,7 +3047,7 @@ export class DataTable {
       await this.reload({ reason: "mode-switch", resetScroll: true });
     }
 
-    // Re-render footer/pagination bar
+    // Re-render footer/pagination bar after data loads (ensures correct state after reload)
     this._updateServerPaginationBar();
 
     this._log("info", "Pagination mode switched", { mode: newMode });
@@ -3411,7 +3415,8 @@ export class DataTable {
     // Clean up old event handlers before replacing DOM
     this._cleanupServerPaginationEvents();
 
-    const existingBar = this.elements.serverPaginationBar;
+    // Always re-query DOM for the element (cache may be stale after table re-renders)
+    const existingBar = this.elements.wrapper.querySelector(".dt-server-pagination-bar");
     const newBarHtml = this._renderServerPaginationBar();
 
     if (existingBar) {
