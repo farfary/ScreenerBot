@@ -77,6 +77,7 @@ pub struct TransactionListRow {
     pub token_symbol: Option<String>,
     pub router: Option<String>,
     pub sol_delta: f64,
+    pub token_amount: Option<f64>,
     pub fee_sol: f64,
     pub fee_lamports: Option<u64>,
     pub ata_rents: f64,
@@ -1506,6 +1507,26 @@ impl TransactionDatabase {
             }
         }
 
+        // Apply mint filter (JSON text search for efficiency)
+        if let Some(ref mint) = filters.mint {
+            let trimmed = mint.trim();
+            if !trimmed.is_empty() {
+                // Search in both swap info and transfers
+                // We reuse the same param index since we push the same value twice? 
+                // No, rusqlite params are positional passed as slice. 
+                // Wait, params_vec is linear. I need to push it once? 
+                // query string: ... ?5 OR ... ?5 ... 
+                // Rusqlite supports ?NNN syntax.
+                
+                let param_idx = params_vec.len() + 1;
+                query.push_str(&format!(
+                    " AND (p.token_swap_info LIKE ?{} OR p.token_transfers LIKE ?{})",
+                    param_idx, param_idx
+                ));
+                params_vec.push(Box::new(format!("%{}%", trimmed)));
+            }
+        }
+
         // Fetch 3x limit to allow Rust-side filtering
         let fetch_limit = effective_limit * 3;
         query.push_str(&format!(
@@ -1606,6 +1627,23 @@ impl TransactionDatabase {
                     .map(|info| info.router.clone())
                     .filter(|router| !router.is_empty());
 
+                let mut token_amount = swap_info.as_ref().map(|info| {
+                    if info.swap_type == "sol_to_token" {
+                        info.output_ui_amount
+                    } else {
+                        info.input_ui_amount
+                    }
+                });
+
+                if token_amount.is_none() {
+                    if let Some(transfers) = token_transfers.as_ref() {
+                        token_amount = transfers
+                            .iter()
+                            .find(|t| t.amount > 0.0)
+                            .map(|t| t.amount);
+                    }
+                }
+
                 Ok(TransactionListRow {
                     signature,
                     timestamp,
@@ -1618,6 +1656,7 @@ impl TransactionDatabase {
                     token_symbol,
                     router,
                     sol_delta,
+                    token_amount,
                     fee_sol,
                     fee_lamports,
                     ata_rents,

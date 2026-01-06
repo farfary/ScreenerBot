@@ -694,6 +694,10 @@ export class TokenDetailsDialog {
             <i class="icon-link"></i>
             Links
           </button>
+          <button class="tab-button" data-tab="transactions">
+            <i class="icon-activity"></i>
+            Txns
+          </button>
         </div>
 
         <div class="dialog-body">
@@ -712,6 +716,9 @@ export class TokenDetailsDialog {
           <div class="tab-content" data-tab-content="links">
             <div class="loading-spinner">Loading...</div>
           </div>
+          <div class="tab-content" data-tab-content="transactions">
+            <div class="loading-spinner">Loading...</div>
+          </div>
         </div>
       </div>
     `;
@@ -724,6 +731,21 @@ export class TokenDetailsDialog {
     if (badgesContainer && badgesRow) {
       const badges = [];
       if (token.verified) badges.push('<span class="badge badge-success">Verified</span>');
+      
+      // Mutable/Immutable badge
+      if (token.is_mutable === false) {
+        badges.push('<span class="badge badge-success">Immutable</span>');
+      } else if (token.is_mutable === true) {
+        badges.push('<span class="badge badge-warning">Mutable</span>');
+      }
+
+      // Update Authority badge
+      if (token.update_authority) {
+        const auth = token.update_authority;
+        const trunc = auth.slice(0, 4) + '...' + auth.slice(-4);
+        badges.push(`<span class="badge badge-secondary" title="Update Authority: ${auth}">Auth: ${trunc}</span>`);
+      }
+
       if (token.has_open_position) badges.push('<span class="badge badge-info">Position</span>');
       if (token.blacklisted) badges.push('<span class="badge badge-danger">Blacklisted</span>');
       if (token.has_ohlcv) badges.push('<span class="badge badge-secondary">OHLCV</span>');
@@ -1069,6 +1091,9 @@ export class TokenDetailsDialog {
         break;
       case "links":
         this._loadLinksTab(content);
+        break;
+      case "transactions":
+        this._loadTransactionsTab(content);
         break;
     }
   }
@@ -1618,7 +1643,7 @@ export class TokenDetailsDialog {
           ${this._buildHoldersCard(token)}
           ${this._buildTransferFeeCard(token)}
           ${this._buildRisksSection(token.security_risks)}
-          ${this._buildTopHoldersSection(token.top_holders)}
+          ${this._buildTopHoldersSection(token)}
         </div>
       </div>
     `;
@@ -1789,68 +1814,85 @@ export class TokenDetailsDialog {
   }
 
   _buildHoldersCard(token) {
-    const top10Pct = token.top_10_concentration;
+    const top10Pct = token.top_10_holders_pct !== undefined ? token.top_10_holders_pct : token.top_10_concentration;
     const creatorPct = token.creator_balance_pct;
 
     // Determine concentration risk level
-    let concentrationClass = "";
-    let concentrationLabel = "";
+    let concentrationClass = "good";
+    let concentrationLabel = "Healthy";
     if (top10Pct !== null && top10Pct !== undefined) {
       if (top10Pct > 80) {
         concentrationClass = "danger";
-        concentrationLabel = "Very High Risk";
+        concentrationLabel = "Very High";
       } else if (top10Pct > 60) {
         concentrationClass = "warning";
         concentrationLabel = "High";
       } else if (top10Pct > 40) {
         concentrationClass = "moderate";
         concentrationLabel = "Moderate";
-      } else {
-        concentrationClass = "good";
-        concentrationLabel = "Healthy";
       }
     }
+
+    const gaugeHtml = this._buildHolderGauge(top10Pct, concentrationClass);
 
     return `
       <div class="security-card">
         <div class="card-header">
           <span>Holder Distribution</span>
-          ${concentrationLabel ? `<span class="concentration-badge ${concentrationClass}">${concentrationLabel}</span>` : ""}
+          ${concentrationLabel ? `<span class="concentration-badge ${concentrationClass}" style="margin-left:auto">${concentrationLabel}</span>` : ""}
         </div>
-        <div class="card-body">
-          <div class="holder-stats">
-            <div class="holder-stat">
-              <span class="stat-label">Total Holders</span>
-              <span class="stat-value">${token.total_holders ? Utils.formatNumber(token.total_holders, { decimals: 0 }) : "—"}</span>
-            </div>
-            <div class="holder-stat">
-              <span class="stat-label">Top 10 Hold</span>
-              <span class="stat-value ${concentrationClass}">${top10Pct !== null && top10Pct !== undefined ? top10Pct.toFixed(2) + "%" : "—"}</span>
-            </div>
-            ${
-              creatorPct !== null && creatorPct !== undefined
-                ? `
-            <div class="holder-stat">
-              <span class="stat-label">Creator Balance</span>
-              <span class="stat-value ${creatorPct > 10 ? "warning" : ""}">${creatorPct.toFixed(2)}%</span>
-            </div>
-            `
-                : ""
-            }
-          </div>
-          ${
-            top10Pct !== null && top10Pct !== undefined
-              ? `
-          <div class="concentration-bar">
-            <div class="bar-fill ${concentrationClass}" style="width: ${Math.min(top10Pct, 100)}%"></div>
-            <div class="bar-label">Top 10 holders own ${top10Pct.toFixed(1)}% of supply</div>
-          </div>
-          `
-              : ""
-          }
+        <div class="card-body" style="padding: 16px;">
+           <div style="display: flex; align-items: center; justify-content: space-around;">
+             <div style="text-align: center;">
+                ${gaugeHtml}
+                <div style="margin-top: 6px; font-size: 11px; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Top 10</div>
+             </div>
+             
+             <div style="display: flex; flex-direction: column; gap: 12px; min-width: 100px;">
+                <div style="display: flex; flex-direction: column;">
+                   <span style="font-size: 11px; color: var(--text-secondary); margin-bottom: 2px;">Total Holders</span>
+                   <span style="font-weight: 600; font-size: 14px; color: var(--text-primary);">${token.total_holders ? Utils.formatNumber(token.total_holders, { decimals: 0 }) : "—"}</span>
+                </div>
+                
+                ${creatorPct !== null && creatorPct !== undefined ? `
+                <div style="display: flex; flex-direction: column;">
+                   <span style="font-size: 11px; color: var(--text-secondary); margin-bottom: 2px;">Creator Balance</span>
+                   <span style="font-weight: 600; font-size: 14px; color: ${creatorPct > 10 ? '#f85149' : '#3fb950'};">${creatorPct.toFixed(2)}%</span>
+                </div>
+                ` : ''}
+             </div>
+           </div>
         </div>
       </div>
     `;
+  }
+
+  _buildHolderGauge(percent, colorClass) {
+     if (percent === null || percent === undefined) return '<div class="gauge-placeholder" style="width:80px;height:80px;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);">—</div>';
+     
+     const p = Math.min(100, Math.max(0, percent));
+     const r = 32;
+     const c = 2 * Math.PI * r;
+     const off = c - (p / 100) * c;
+     
+     // Color mapping
+     let strokeColor = "#3fb950"; // green
+     if (colorClass === 'danger') strokeColor = "#f85149";
+     if (colorClass === 'warning') strokeColor = "#d29922";
+     if (colorClass === 'moderate') strokeColor = "#db6d28";
+     
+     return `
+        <div class="gauge-wrapper" style="position:relative; width:80px; height:80px;">
+             <svg width="80" height="80" viewBox="0 0 80 80" style="transform: rotate(-90deg);">
+              <circle cx="40" cy="40" r="${r}" fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="6"></circle>
+              <circle cx="40" cy="40" r="${r}" fill="none" stroke="${strokeColor}" stroke-width="6"
+                style="stroke-dasharray: ${c}; stroke-dashoffset: ${off}; transition: stroke-dashoffset 0.8s ease; stroke-linecap: round;"></circle>
+            </svg>
+            <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); text-align:center;">
+               <div style="font-size:14px; font-weight:700; color:var(--text-primary);">${p.toFixed(0)}%</div>
+            </div>
+        </div>
+     `;
   }
 
   _buildTransferFeeCard(token) {
@@ -1914,10 +1956,20 @@ export class TokenDetailsDialog {
     `;
   }
 
-  _buildTopHoldersSection(topHolders) {
+  _buildTopHoldersSection(token) {
+    const topHolders = token.top_holders;
     if (!topHolders || topHolders.length === 0) {
       return "";
     }
+
+    // Calculate concentration (use backend value or fallback sum)
+    let concentration = token.top_10_concentration;
+    if (concentration === undefined || concentration === null) {
+      const limit = Math.min(topHolders.length, 10);
+      concentration = topHolders.slice(0, limit).reduce((sum, h) => sum + (h.percentage || 0), 0);
+    }
+    
+    const subtitle = `${concentration.toFixed(2)}% (Top 10)`;
 
     const holderRows = topHolders
       .slice(0, 10)
@@ -1926,11 +1978,20 @@ export class TokenDetailsDialog {
         const ownerLabel = holder.owner_type || "";
         const badges = [];
         if (holder.is_insider) badges.push('<span class="insider-badge">Insider</span>');
-        if (ownerLabel)
-          badges.push(`<span class="owner-badge">${this._escapeHtml(ownerLabel)}</span>`);
+        
+        if (ownerLabel) {
+          // If label looks like an address (long, no spaces), format it
+          const isAddress = ownerLabel.length > 30 && !ownerLabel.includes(" ");
+          const displayLabel = isAddress ? this._formatShortAddress(ownerLabel) : ownerLabel;
+          const cssClass = isAddress ? "owner-badge address-badge" : "owner-badge";
+          
+          badges.push(
+            `<span class="${cssClass}" title="${this._escapeHtml(ownerLabel)}">${this._escapeHtml(displayLabel)}</span>`
+          );
+        }
 
         return `
-        <div class="holder-row ${insiderClass}">
+        <div class="holder-row ${insiderClass}" style="--i: ${idx}">
           <span class="holder-rank">${idx + 1}</span>
           <span class="holder-address" title="${this._escapeHtml(holder.address)}">
             <a href="https://solscan.io/account/${this._escapeHtml(holder.address)}" target="_blank" rel="noopener">${this._formatShortAddress(holder.address)}</a>
@@ -1960,7 +2021,7 @@ export class TokenDetailsDialog {
       <div class="security-card full-width">
         <div class="card-header">
           <span>Top Holders</span>
-          <span class="card-subtitle">${topHolders.length} addresses</span>
+          <span class="card-subtitle">${subtitle}</span>
         </div>
         <div class="card-body">
           <div class="holders-list">
@@ -3007,6 +3068,173 @@ export class TokenDetailsDialog {
       </div>
     `;
   }
+
+  // =========================================================================
+  // TRANSACTIONS TAB
+  // =========================================================================
+
+  async _loadTransactionsTab(content) {
+    if (content.dataset.loaded === "true") return;
+
+    content.innerHTML = '<div class="loading-spinner">Loading transactions...</div>';
+
+    try {
+      // Fetch 24h of transactions (limit 1000 usually enough for chart unless very high volume)
+      const response = await requestManager.fetch(`/api/tokens/${this.tokenData.mint}/transactions?limit=1000`);
+      
+      if (response && response.success) {
+        const transactions = response.data || [];
+        content.innerHTML = this._buildTransactionsHTML();
+        
+        // Wait for DOM
+        setTimeout(() => {
+          this._renderTransactionsChart(transactions);
+          this._renderTransactionsList(transactions);
+        }, 50);
+        
+        content.dataset.loaded = "true";
+      } else {
+        content.innerHTML = '<div class="empty-state">No transaction data available</div>';
+      }
+    } catch (err) {
+      console.error("Failed to load transactions:", err);
+      content.innerHTML = '<div class="error-state">Failed to load transactions</div>';
+    }
+  }
+
+  _buildTransactionsHTML() {
+    return `
+      <div class="transactions-container" style="display: flex; flex-direction: column; gap: 16px; padding: 16px; height: 100%; overflow: auto;">
+        <div class="transactions-chart-section" style="background: var(--bg-surface); padding: 12px; border-radius: 8px; border: 1px solid var(--border-color);">
+          <div class="section-header" style="margin-bottom: 8px; font-size: 14px; color: var(--text-secondary);">
+             <span style="font-weight: 600; color: var(--text-primary);">24h Transaction Activity</span>
+             <span style="font-size: 12px; opacity: 0.7;">(Hourly Count)</span>
+          </div>
+          <div id="txns-chart" style="width: 100%; height: 200px;"></div>
+        </div>
+        <div class="transactions-list-section" style="background: var(--bg-surface); border-radius: 8px; border: 1px solid var(--border-color); flex: 1; display: flex; flex-direction: column; overflow: hidden;">
+          <div class="section-header" style="padding: 12px; border-bottom: 1px solid var(--border-color); font-weight: 600; color: var(--text-primary);">Last 100 Transactions</div>
+          <div id="txns-list" class="simple-table-container" style="overflow-y: auto; flex: 1;"></div>
+        </div>
+      </div>
+    `;
+  }
+
+  _renderTransactionsChart(transactions) {
+    const chartContainer = this.dialogEl.querySelector("#txns-chart");
+    if (!chartContainer) return;
+
+    // Aggregate by hour buckets
+    const buckets = {};
+    const now = Math.floor(Date.now() / 1000);
+    const start = now - 24 * 3600;
+    
+    // Initialize buckets
+    for (let i = 0; i < 24; i++) {
+       const ts = start + i * 3600;
+       const hourKey = Math.floor(ts / 3600) * 3600;
+       buckets[hourKey] = { time: hourKey, value: 0 };
+    }
+
+    transactions.forEach(tx => {
+       // Use timestamp (ISO string from backend)
+       const date = new Date(tx.timestamp);
+       const ts = date.getTime() / 1000;
+       
+       if (ts < start) return;
+       const hourKey = Math.floor(ts / 3600) * 3600;
+       if (!buckets[hourKey]) buckets[hourKey] = { time: hourKey, value: 0 };
+       buckets[hourKey].value += 1;
+    });
+
+    const data = Object.values(buckets).sort((a, b) => a.time - b.time);
+
+    // Create Chart
+    // Ensure LightweightCharts is available
+    if (typeof LightweightCharts === 'undefined') {
+        chartContainer.innerHTML = 'Chart library missing';
+        return;
+    }
+
+    const chart = LightweightCharts.createChart(chartContainer, {
+      layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#8b949e' },
+      grid: { vertLines: { visible: false }, horzLines: { color: '#30363d' } },
+      rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.1, bottom: 0 } },
+      timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false },
+      crosshair: { vertLine: { labelVisible: false }, horzLine: { labelVisible: false } }, // minimal
+    });
+    
+    const series = chart.addHistogramSeries({ color: '#238636' });
+    series.setData(data);
+    chart.timeScale().fitContent();
+
+    // Auto-resize
+    const resizeObserver = new ResizeObserver(entries => {
+      if (entries.length === 0 || !entries[0].contentRect) return;
+      const { width, height } = entries[0].contentRect;
+      chart.applyOptions({ width, height });
+    });
+    resizeObserver.observe(chartContainer);
+    
+    // Save reference for cleanup if needed
+    this.txChart = chart;
+  }
+
+  _renderTransactionsList(transactions) {
+    const container = this.dialogEl.querySelector("#txns-list");
+    if (!container) return;
+
+    const recent = transactions.slice(0, 100);
+    
+    // Simple HTML table for speed
+    const rows = recent.map(tx => {
+       // Use safe field access (backend returns transaction_type, sol_delta)
+       const txType = (tx.transaction_type || tx.type || 'UNKNOWN').toLowerCase();
+       const isBuy = txType.includes('buy') || (txType === 'swap' && (tx.direction || '').toLowerCase() === 'incoming');
+       
+       const typeLabel = txType.toUpperCase();
+       
+       // Style based on type
+       let typeStyle = 'color: var(--text-secondary);';
+       if (isBuy) typeStyle = 'color: var(--success-color, #3fb950);';
+       else if (txType.includes('sell') || (txType === 'swap' && (tx.direction || '').toLowerCase() === 'outgoing')) typeStyle = 'color: var(--error-color, #f85149);';
+       
+       const timeDisplay = new Date(tx.timestamp).toLocaleTimeString();
+
+       // Price (if available) - generic transactions typically don't have price
+       const price = tx.price_sol ? Utils.formatPriceSol(tx.price_sol) : "—";
+       
+       // Total SOL (use sol_delta absolute value)
+       const amount = tx.amount_sol !== undefined ? tx.amount_sol : Math.abs(tx.sol_delta || 0);
+       const total = Utils.formatNumber(amount, { decimals: 2 });
+       
+       return `
+         <div style="display: grid; grid-template-columns: 1fr 0.8fr 1.2fr 1fr 0.5fr; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border-color); font-size: 13px;">
+           <span style="color: var(--text-secondary);">${timeDisplay}</span>
+           <span style="font-weight: 600; ${typeStyle}">${typeLabel}</span>
+           <span style="font-family: monospace;">${price}</span>
+           <span>${total} SOL</span>
+           <a href="https://solscan.io/tx/${tx.signature}" target="_blank" style="color: var(--text-secondary); text-align: right;"><i class="icon-external-link"></i></a>
+         </div>
+       `;
+    }).join("");
+
+    container.innerHTML = `
+      <div style="display: flex; flex-direction: column;">
+         <div style="display: grid; grid-template-columns: 1fr 0.8fr 1.2fr 1fr 0.5fr; gap: 8px; padding: 8px 12px; background: var(--bg-input, #0d1117); font-size: 12px; color: var(--text-secondary); font-weight: 600; position: sticky; top: 0;">
+           <span>Time</span>
+           <span>Type</span>
+           <span>Price</span>
+           <span>Total</span>
+           <span>Link</span>
+         </div>
+         <div style="flex: 1;">
+           ${rows}
+         </div>
+      </div>
+    `;
+  }
+
 
   _buildExplorerLink(url, name) {
     return `

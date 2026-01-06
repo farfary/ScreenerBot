@@ -64,6 +64,8 @@ fn convert_rugcheck_to_data(info: &RugcheckInfo) -> RugcheckData {
         score_description: None,
         mint_authority: info.mint_authority.clone(),
         freeze_authority: info.freeze_authority.clone(),
+        update_authority: info.token_update_authority.clone(),
+        is_mutable: info.token_mutable,
         top_10_holders_pct: top_pct,
         total_holders: info.total_holders,
         total_lp_providers: info.total_lp_providers,

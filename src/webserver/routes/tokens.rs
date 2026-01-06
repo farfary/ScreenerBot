@@ -877,6 +877,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/tokens/:mint/blacklist", post(add_to_blacklist))
         .route("/tokens/:mint/blacklist", delete(remove_from_blacklist))
         .route("/tokens/:mint/blacklist", get(get_blacklist_status))
+        // Transactions endpoint
+        .route("/tokens/:mint/transactions", get(get_token_transactions))
 }
 
 // =============================================================================
@@ -2187,7 +2189,16 @@ async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse>
     let pair_created_at = token_birth_ts.or(created_at_ts);
 
     // Prefer pool price (real-time on-chain) over token cached price
-    let price_usd = price_sol.map(|p| p * 150.0); // Rough SOL/USD conversion; ideally fetch SOL price
+    let sol_price_usd = crate::sol_price::get_sol_price();
+    let price_usd = if let Some(sol_p) = price_sol {
+        if sol_p > 0.0 && sol_price_usd > 0.0 {
+            Some(sol_p * sol_price_usd)
+        } else {
+            None
+        }
+    } else {
+        Some(token.price_usd)
+    };
 
     // Build price change periods from flat fields
     let price_change_periods = PeriodStats {
@@ -2636,6 +2647,57 @@ async fn get_token_dexscreener(
 }
 
 /// Get token statistics
+// =============================================================================
+// TRANSACTIONS HANDLER
+// =============================================================================
+
+/// GET /api/tokens/:mint/transactions
+///
+/// Get recent transactions for a specific token.
+/// Filters the global transaction database for transactions involving this mint.
+async fn get_token_transactions(
+    Path(mint): Path<String>,
+) -> Result<Json<Vec<crate::transactions::database::TransactionListRow>>, StatusCode> {
+    logger::debug(
+        LogTag::Webserver,
+        &format!("Fetching transactions for token: {}", mint),
+    );
+
+    // Get connection to transaction database
+    let db = match crate::transactions::database::get_transaction_database().await {
+        Some(db) => db,
+        None => {
+            logger::error(
+                LogTag::Webserver,
+                "Transaction database not available when fetching token transactions",
+            );
+            return Err(StatusCode::SERVICE_UNAVAILABLE);
+        }
+    };
+
+    // Create filters: specific mint
+    let mut filters = crate::transactions::database::TransactionListFilters::default();
+    filters.mint = Some(mint.clone());
+    
+    // Fetch recent transactions (limit 50)
+    match db.list_transactions(&filters, None, 50).await {
+        Ok(result) => {
+            logger::debug(
+                LogTag::Webserver,
+                &format!("Found {} transactions for token {}", result.items.len(), mint),
+            );
+            Ok(Json(result.items))
+        }
+        Err(e) => {
+            logger::error(
+                LogTag::Webserver,
+                &format!("Failed to fetch transactions for token {}: {}", mint, e),
+            );
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
+    }
+}
+
 async fn get_tokens_stats() -> Result<Json<TokenStatsResponse>, StatusCode> {
     match filtering::fetch_stats().await {
         Ok(snapshot) => {

@@ -102,6 +102,8 @@ impl TokenDatabase {
             .unwrap_or(now_ts)
         };
 
+        let is_mutable_flag = data.is_mutable.map(|b| if b { 1 } else { 0 });
+
         conn.execute(
             "INSERT INTO security_rugcheck (
                 mint,
@@ -112,6 +114,8 @@ impl TokenDatabase {
                 score_description,
                 mint_authority,
                 freeze_authority,
+                update_authority,
+                is_mutable,
                 top_10_holders_pct,
                 total_supply,
                 total_holders,
@@ -131,7 +135,7 @@ impl TokenDatabase {
                 security_data_first_fetched_at
              ) VALUES (
                 ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11,
-                ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25
+                ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27
              )
              ON CONFLICT(mint) DO UPDATE SET
                 token_type = excluded.token_type,
@@ -141,6 +145,8 @@ impl TokenDatabase {
                 score_description = excluded.score_description,
                 mint_authority = excluded.mint_authority,
                 freeze_authority = excluded.freeze_authority,
+                update_authority = excluded.update_authority,
+                is_mutable = excluded.is_mutable,
                 top_10_holders_pct = excluded.top_10_holders_pct,
                 total_supply = excluded.total_supply,
                 total_holders = excluded.total_holders,
@@ -166,6 +172,8 @@ impl TokenDatabase {
                 &data.score_description,
                 &data.mint_authority,
                 &data.freeze_authority,
+                &data.update_authority,
+                is_mutable_flag,
                 data.top_10_holders_pct,
                 &data.total_supply,
                 data.total_holders,
@@ -359,6 +367,8 @@ impl TokenDatabase {
                     score_description: None,
                     mint_authority: None,
                     freeze_authority: None,
+                    update_authority: None,
+                    is_mutable: None,
                     top_10_holders_pct: None,
                     total_holders: None,
                     total_lp_providers: None,
@@ -1289,7 +1299,9 @@ impl TokenDatabase {
                     top_holders,
                     markets,
                     security_data_last_fetched_at,
-                    security_data_first_fetched_at
+                    security_data_first_fetched_at,
+                    update_authority,
+                    is_mutable
                  FROM security_rugcheck WHERE mint = ?1",
             )
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
@@ -1302,6 +1314,8 @@ impl TokenDatabase {
             let first_fetched_ts: i64 = row.get(23)?;
             let rugged_flag: Option<i64> = row.get(18)?;
             let is_rugged = rugged_flag.unwrap_or(0) != 0;
+            let is_mutable_flag: Option<i64> = row.get(25)?;
+            let is_mutable = is_mutable_flag.map(|f| f != 0);
 
             let risks: Vec<SecurityRisk> = serde_json::from_str(&risks_json)
                 .map_err(|e| rusqlite::Error::ToSqlConversionFailure(Box::new(e)))?;
@@ -1317,6 +1331,8 @@ impl TokenDatabase {
                 score_description: row.get(4)?,
                 mint_authority: row.get(5)?,
                 freeze_authority: row.get(6)?,
+                update_authority: row.get(24)?,
+                is_mutable,
                 top_10_holders_pct: row.get(7)?,
                 total_supply: row.get(8)?,
                 total_holders: row.get(9)?,
@@ -2424,7 +2440,8 @@ impl TokenDatabase {
                 g.pool_count, g.reserve_in_usd,
                 g.market_data_last_fetched_at as g_market_data_last_fetched_at,
                 g.image_url as g_image_url,
-                ut.last_rejection_reason, ut.last_rejection_source, ut.last_rejection_at
+                ut.last_rejection_reason, ut.last_rejection_source, ut.last_rejection_at,
+                sr.update_authority, sr.is_mutable
             FROM tokens t
             LEFT JOIN security_rugcheck sr ON t.mint = sr.mint
             LEFT JOIN blacklist bl ON t.mint = bl.mint
@@ -2529,6 +2546,10 @@ impl TokenDatabase {
                 let last_rejection_source: Option<String> = row.get(62)?;
                 let last_rejection_at: Option<i64> = row.get(63)?;
 
+                // New security fields 64..=65
+                let update_authority: Option<String> = row.get(64)?;
+                let is_mutable: Option<bool> = row.get::<_, Option<i64>>(65)?.map(|v| v != 0);
+
                 Ok((
                     mint,
                     symbol,
@@ -2597,6 +2618,8 @@ impl TokenDatabase {
                     last_rejection_reason,
                     last_rejection_source,
                     last_rejection_at,
+                    update_authority,
+                    is_mutable,
                 ))
             })
             .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
@@ -2671,6 +2694,8 @@ impl TokenDatabase {
                 last_rejection_reason,
                 last_rejection_source,
                 last_rejection_at,
+                update_authority,
+                is_mutable,
             ) = row_result.map_err(|e| TokenError::Database(format!("Row parse failed: {}", e)))?;
 
             // Parse all timestamps
@@ -3013,6 +3038,8 @@ impl TokenDatabase {
                 // Security Information - authority fields loaded for filtering
                 mint_authority,
                 freeze_authority,
+                update_authority,
+                is_mutable,
                 security_score,
                 security_score_normalised: None, // Not loaded in this query
                 is_rugged,
@@ -3021,6 +3048,7 @@ impl TokenDatabase {
                 lp_provider_count: None,
                 security_risks: vec![],
                 total_holders: None,
+                top_10_holders_pct: None,
                 top_holders: vec![],
                 creator_balance_pct: None,
                 transfer_fee_pct: None,
@@ -3229,6 +3257,8 @@ fn assemble_token(
     let token_type = security_ref.and_then(|sec| sec.token_type.clone());
     let mint_authority = security_ref.and_then(|sec| sec.mint_authority.clone());
     let freeze_authority = security_ref.and_then(|sec| sec.freeze_authority.clone());
+    let update_authority = security_ref.and_then(|sec| sec.update_authority.clone());
+    let is_mutable = security_ref.and_then(|sec| sec.is_mutable);
     let security_score = security_ref.and_then(|sec| sec.score);
     let security_score_normalised = security_ref.and_then(|sec| sec.score_normalised);
     let is_rugged = security_ref.map(|sec| sec.rugged).unwrap_or(false);
@@ -3239,6 +3269,7 @@ fn assemble_token(
         .map(|sec| sec.top_holders.clone())
         .unwrap_or_else(Vec::new);
     let total_holders = security_ref.and_then(|sec| sec.total_holders);
+    let top_10_holders_pct = security_ref.and_then(|sec| sec.top_10_holders_pct);
     let creator_balance_pct = security_ref.and_then(|sec| sec.creator_balance_pct);
     let transfer_fee_pct = security_ref.and_then(|sec| sec.transfer_fee_pct);
     let transfer_fee_max_amount = security_ref.and_then(|sec| sec.transfer_fee_max_amount);
@@ -3331,6 +3362,8 @@ fn assemble_token(
         // Security information
         mint_authority,
         freeze_authority,
+        update_authority,
+        is_mutable,
         security_score,
         security_score_normalised,
         is_rugged,
@@ -3339,6 +3372,7 @@ fn assemble_token(
         lp_provider_count,
         security_risks,
         total_holders,
+        top_10_holders_pct,
         top_holders,
         creator_balance_pct,
         transfer_fee_pct,
@@ -3380,6 +3414,8 @@ fn assemble_token_without_market_data(
     let token_type = security_ref.and_then(|sec| sec.token_type.clone());
     let mint_authority = security_ref.and_then(|sec| sec.mint_authority.clone());
     let freeze_authority = security_ref.and_then(|sec| sec.freeze_authority.clone());
+    let update_authority = security_ref.and_then(|sec| sec.update_authority.clone());
+    let is_mutable = security_ref.and_then(|sec| sec.is_mutable);
     let security_score = security_ref.and_then(|sec| sec.score);
     let security_score_normalised = security_ref.and_then(|sec| sec.score_normalised);
     let is_rugged = security_ref.map(|sec| sec.rugged).unwrap_or(false);
@@ -3390,6 +3426,7 @@ fn assemble_token_without_market_data(
         .map(|sec| sec.top_holders.clone())
         .unwrap_or_else(Vec::new);
     let total_holders = security_ref.and_then(|sec| sec.total_holders);
+    let top_10_holders_pct = security_ref.and_then(|sec| sec.top_10_holders_pct);
     let creator_balance_pct = security_ref.and_then(|sec| sec.creator_balance_pct);
     let transfer_fee_pct = security_ref.and_then(|sec| sec.transfer_fee_pct);
     let transfer_fee_max_amount = security_ref.and_then(|sec| sec.transfer_fee_max_amount);
@@ -3490,6 +3527,8 @@ fn assemble_token_without_market_data(
         // Security Information
         mint_authority,
         freeze_authority,
+        update_authority,
+        is_mutable,
         security_score,
         security_score_normalised,
         is_rugged,
@@ -3498,6 +3537,7 @@ fn assemble_token_without_market_data(
         lp_provider_count,
         security_risks,
         total_holders,
+        top_10_holders_pct,
         top_holders,
         creator_balance_pct,
         transfer_fee_pct,

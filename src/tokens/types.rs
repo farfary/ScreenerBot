@@ -198,6 +198,8 @@ pub struct Token {
     // Token authorities
     pub mint_authority: Option<String>,
     pub freeze_authority: Option<String>,
+    pub update_authority: Option<String>,
+    pub is_mutable: Option<bool>,
 
     // Security assessment
     /// Raw risk score from Rugcheck (0-150000+, HIGHER = MORE RISKY)
@@ -216,6 +218,7 @@ pub struct Token {
     pub total_holders: Option<i64>,
     pub top_holders: Vec<TokenHolder>,
     pub creator_balance_pct: Option<f64>,
+    pub top_10_holders_pct: Option<f64>,
 
     // Token-2022 transfer fee
     pub transfer_fee_pct: Option<f64>,
@@ -531,6 +534,8 @@ pub struct RugcheckData {
     pub score_description: Option<String>,
     pub mint_authority: Option<String>,
     pub freeze_authority: Option<String>,
+    pub update_authority: Option<String>,
+    pub is_mutable: Option<bool>,
     pub top_10_holders_pct: Option<f64>,
     pub total_holders: Option<i64>,
     pub total_lp_providers: Option<i64>,

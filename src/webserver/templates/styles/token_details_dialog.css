@@ -2144,7 +2144,7 @@
 
 .holders-header {
   display: grid;
-  grid-template-columns: 28px minmax(100px, 1fr) 64px 90px 90px;
+  grid-template-columns: 32px minmax(110px, 3fr) 60px 70px minmax(90px, 2fr);
   align-items: center;
   gap: 8px;
   padding: 6px 10px;
@@ -2159,48 +2159,88 @@
 
 .holder-row {
   display: grid;
-  grid-template-columns: 28px minmax(100px, 1fr) 64px 90px 90px;
+  grid-template-columns: 32px minmax(110px, 3fr) 60px 70px minmax(90px, 2fr);
   align-items: center;
   gap: 8px;
   padding: 10px 12px;
-  background: var(--bg-primary);
-  border-radius: var(--radius-sm);
+  background: transparent;
+  border-bottom: 1px solid var(--border-subtle, var(--border-color));
+  border-radius: 0;
   transition:
     background 0.15s ease,
     transform 0.15s ease;
+  animation: slideInRow 0.4s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+  animation-delay: calc(var(--i) * 0.04s);
+}
+
+.holder-row:last-child {
+  border-bottom: none;
+}
+
+@keyframes slideInRow {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .holder-row:hover {
-  background: var(--bg-card-hover);
+  background: var(--bg-secondary);
+  border-color: transparent;
   transform: translateX(2px);
+  border-radius: var(--radius-sm);
 }
 
+/* Insider Style - Left Banner */
 .holder-row.insider {
-  background: var(--warning-alpha-10);
-  border: 1px solid var(--warning-alpha-20);
+  background: linear-gradient(90deg, var(--warning-alpha-05), transparent);
+  border: none;
+  border-bottom: 1px solid var(--border-subtle, var(--border-color));
+  border-left: 3px solid var(--warning-color);
+  padding-left: 9px; /* Compensate for border */
 }
 
 .holder-row.insider:hover {
-  background: var(--warning-alpha-15);
+  background: var(--warning-alpha-10);
+  border-left-width: 4px;
+  padding-left: 8px;
 }
 
 .holder-rank {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   font-size: 0.7rem;
   font-weight: 700;
   color: var(--text-muted);
-  background: var(--bg-secondary);
+  background: var(--bg-tertiary);
   border-radius: 50%;
+  font-feature-settings: "tnum";
 }
 
-.holder-row:nth-child(-n + 4) .holder-rank {
-  /* Top 3 holders get accent colors */
-  color: var(--primary-color);
-  background: var(--primary-alpha-15);
+/* Rank Colors (Header is child 1, so rows are 2,3,4) */
+.holder-row:nth-child(2) .holder-rank {
+  color: #ffd700;
+  background: rgba(255, 215, 0, 0.1);
+  box-shadow: 0 0 0 1px rgba(255, 215, 0, 0.2);
+}
+
+.holder-row:nth-child(3) .holder-rank {
+  color: #e0e0e0;
+  background: rgba(224, 224, 224, 0.1);
+  box-shadow: 0 0 0 1px rgba(224, 224, 224, 0.2);
+}
+
+.holder-row:nth-child(4) .holder-rank {
+  color: #cd7f32;
+  background: rgba(205, 127, 50, 0.1);
+  box-shadow: 0 0 0 1px rgba(205, 127, 50, 0.2);
 }
 
 .holder-address {
@@ -2209,22 +2249,32 @@
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  position: relative;
 }
 
 .holder-address a {
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
+  padding: 2px 0;
+  border-radius: 4px;
+}
+
+.holder-row:hover .holder-address a {
   color: var(--link-color);
-  transition: color 0.15s ease;
 }
 
 .holder-address a:hover {
-  color: var(--text-primary);
-  text-decoration: underline;
+  text-decoration: none;
+  background: var(--bg-tertiary);
+  padding: 2px 6px;
+  margin-left: -6px;
 }
 
 .holder-pct {
   font-size: 0.8rem;
   font-weight: 700;
   color: var(--text-primary);
+  opacity: 0.9;
   font-family: var(--font-data);
   font-feature-settings:
     "tnum" 1,
@@ -2234,17 +2284,18 @@
 
 .holder-bar-container {
   position: relative;
-  height: 8px;
-  background: var(--bg-secondary);
-  border-radius: 4px;
+  height: 6px;
+  background: var(--bg-tertiary); /* Darker track */
+  border-radius: 3px;
   overflow: hidden;
 }
 
 .holder-bar-container .bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, var(--primary-color), var(--primary-alpha-50));
-  border-radius: 4px;
-  transition: width 0.3s ease;
+  background: linear-gradient(90deg, var(--primary-color), var(--primary-alpha-80));
+  border-radius: 3px;
+  transition: width 1s cubic-bezier(0.2, 0.8, 0.2, 1);
+  box-shadow: 0 0 4px var(--primary-alpha-30);
 }
 
 .holder-badges {
@@ -2259,29 +2310,42 @@
   align-items: center;
   gap: 3px;
   font-size: 0.6rem;
-  font-weight: 600;
+  font-weight: 700;
   padding: 2px 6px;
-  border-radius: 6px;
+  border-radius: 4px;
   color: var(--warning-color);
-  background: var(--warning-alpha-20);
+  background: var(--warning-alpha-10);
+  border: 1px solid var(--warning-alpha-30);
   white-space: nowrap;
+  letter-spacing: 0.02em;
 }
 
 .insider-badge::before {
   content: "⚠";
-  font-size: 0.55rem;
+  font-size: 0.6rem;
+  font-weight: 400;
 }
 
 .owner-badge {
   display: inline-flex;
   align-items: center;
   font-size: 0.6rem;
-  font-weight: 500;
+  font-weight: 600;
   padding: 2px 6px;
-  border-radius: 6px;
+  border-radius: 4px;
   color: var(--text-secondary);
-  background: var(--bg-secondary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle, var(--border-color));
   white-space: nowrap;
+}
+
+.address-badge {
+  font-family: var(--font-mono);
+  letter-spacing: -0.02em;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-muted);
 }
 
 /* Security Risks */
