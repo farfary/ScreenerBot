@@ -3071,11 +3071,7 @@ export class DataTable {
 
     try {
       const controller = this._createAbortController();
-      console.debug('[DataTable] _loadServerPage preparing', { pageNumber, pendingRequest: Boolean(this._pagination?.pendingRequest), paginationStats: this._pagination ? { loadingInitial: this._pagination.loadingInitial, loadingNext: this._pagination.loadingNext, loadingPrev: this._pagination.loadingPrev } : null });
       this._pagination.abortController = controller;
-
-      console.debug('[DataTable] _loadServerPage start', { pageNumber, statePageSize: this.state.serverPaginationState?.pageSize, time: Date.now() });
-      const pageStart = Date.now();
 
       const result = await loadPage({
         direction: "page",
@@ -3086,7 +3082,6 @@ export class DataTable {
         signal: controller.signal,
         table: this,
       });
-      console.debug('[DataTable] _loadServerPage fetch returned', { pageNumber, durationMs: Date.now() - pageStart });
 
       if (result) {
         const normalized = this._normalizePageResult(result);
