@@ -187,16 +187,21 @@ impl TelegramNotifier {
                 pnl_sol,
                 pnl_percent,
                 exit_reason,
+                entry_price,
+                exit_price,
+                invested,
+                received,
+                duration_secs,
             } => formatters::msg_position_closed(
                 token_symbol,
                 token_mint,
                 *pnl_sol,
                 *pnl_percent,
-                0.0, // entry_price not provided
-                0.0, // exit_price not provided
-                0.0, // invested not provided
-                0.0, // received not provided
-                0,   // duration not provided
+                *entry_price,
+                *exit_price,
+                *invested,
+                *received,
+                *duration_secs,
                 exit_reason,
             ),
 

@@ -37,6 +37,11 @@ pub enum NotificationType {
         pnl_sol: f64,
         pnl_percent: f64,
         exit_reason: String,
+        entry_price: f64,
+        exit_price: f64,
+        invested: f64,
+        received: f64,
+        duration_secs: u64,
     },
 
     /// Notification when a partial exit is executed
@@ -164,6 +169,11 @@ impl Notification {
         pnl_sol: f64,
         pnl_percent: f64,
         exit_reason: String,
+        entry_price: f64,
+        exit_price: f64,
+        invested: f64,
+        received: f64,
+        duration_secs: u64,
     ) -> Self {
         Self::new(NotificationType::PositionClosed {
             token_symbol,
@@ -171,6 +181,11 @@ impl Notification {
             pnl_sol,
             pnl_percent,
             exit_reason,
+            entry_price,
+            exit_price,
+            invested,
+            received,
+            duration_secs,
         })
     }
 

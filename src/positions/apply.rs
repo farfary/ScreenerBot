@@ -249,12 +249,27 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                     // Use position.pnl and position.pnl_percent which were set in the state update above
                                     let final_pnl_sol = position.pnl.unwrap_or(0.0);
                                     let final_pnl_pct = position.pnl_percent.unwrap_or(0.0);
+                                    let entry_price = position.average_entry_price;
+                                    let exit_price = position.effective_exit_price.unwrap_or(0.0);
+                                    let invested = position.total_size_sol;
+                                    let received = position.sol_received.unwrap_or(0.0);
+                                    let duration_secs = position
+                                        .exit_time
+                                        .map(|exit| {
+                                            (exit - position.entry_time).num_seconds().max(0) as u64
+                                        })
+                                        .unwrap_or(0);
                                     queue_notification(Notification::position_closed(
                                         position.symbol.clone(),
                                         position.mint.clone(),
                                         final_pnl_sol,
                                         final_pnl_pct,
                                         exit_reason,
+                                        entry_price,
+                                        exit_price,
+                                        invested,
+                                        received,
+                                        duration_secs,
                                     ));
                                 }
                             }
