@@ -50,12 +50,21 @@ pub async fn handle_callback_query(
         // Pagination
         ["page", session_id, page_num_str, ..] => {
             if let Ok(page_num) = page_num_str.parse::<usize>() {
+                // Get message ID - required for editing
+                let message_id = match query.message.as_ref() {
+                    Some(msg) => msg.id(),
+                    None => {
+                        logger::warning(LogTag::Telegram, "Pagination callback without message context");
+                        return Ok(());
+                    }
+                };
+                
                 if let Some((items, total_pages, total_items)) = PAGINATION_MANAGER.get_page(session_id, page_num) {
                     let text = formatters::format_tokens_page(&items, page_num, total_pages, total_items);
                     let keyboard = keyboards::pagination_keyboard(session_id, page_num, total_pages);
 
                     // Update the message
-                    bot.edit_message_text(chat_id, query.message.as_ref().map(|m| m.id()).unwrap(), text)
+                    bot.edit_message_text(chat_id, message_id, text)
                         .parse_mode(ParseMode::Html)
                         .link_preview_options(teloxide::types::LinkPreviewOptions {
                             is_disabled: true,
