@@ -14,7 +14,8 @@ use crate::{
     logger::{self, LogTag},
     tokens::{
         get_recent_rejections_async, get_rejected_tokens_async, get_rejection_stats_async,
-        get_rejection_stats_with_time_filter_async, get_token_info_batch_async,
+        get_rejection_stats_with_time_filter_async, get_rejection_stats_aggregated_async,
+        get_token_info_batch_async,
     },
     webserver::state::AppState,
     webserver::utils::{error_response, success_response},
@@ -453,10 +454,16 @@ async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
     // Fetch stats and rejection data
     let stats_result = filtering::fetch_stats().await;
     
-    // Query update_tracking for UNIQUE tokens rejected in time range
-    // This is the correct semantic - counting unique tokens, not cumulative rejection events
-    // Default (no time range) = current snapshot of all rejected tokens
-    let rejection_result = get_rejection_stats_with_time_filter_async(query.start_time, query.end_time).await;
+    // Choose correct data source based on whether we want "Current State" or "Historical Data"
+    let rejection_result = if query.start_time.is_some() || query.end_time.is_some() {
+        // Time range specified -> Use history table (rejection_stats)
+        // This gives us the cumulative volume of rejections over time
+        get_rejection_stats_aggregated_async(query.start_time, query.end_time).await
+    } else {
+        // No time range -> Use current state snapshot (update_tracking)
+        // This gives us the current snapshot of rejected tokens (one per token)
+        get_rejection_stats_with_time_filter_async(None, None).await
+    };
     
     let recent_result = get_recent_rejections_async(20).await;
     
