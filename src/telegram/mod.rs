@@ -81,6 +81,7 @@ pub mod discovery;
 pub mod formatters;
 pub mod keyboards;
 pub mod notifier;
+pub mod pagination;
 pub mod polling;
 pub mod service;
 pub mod session;

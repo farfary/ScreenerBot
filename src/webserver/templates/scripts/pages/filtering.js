@@ -1023,44 +1023,51 @@ function renderStatusView() {
   }
 
   return `
-    <div class="status-view">
-      <div class="status-card dominant">
-        <span class="metric-label">Total Tokens</span>
-        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(total_tokens, 0))}</span>
-        <span class="metric-meta">In filtering cache</span>
+    <div class="filtering-status-layout">
+      <div class="status-metrics-section">
+        <h4 class="section-title">Overview</h4>
+        <div class="status-view">
+          <div class="status-card dominant">
+            <span class="metric-label">Total Tokens</span>
+            <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(total_tokens, 0))}</span>
+            <span class="metric-meta">In filtering cache</span>
+          </div>
+          <div class="status-card">
+            <span class="metric-label">With Price</span>
+            <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(with_pool_price, 0))}</span>
+            <span class="metric-meta">${Utils.escapeHtml(`${Utils.formatPercentValue(priceRate, { includeSign: false, decimals: 1 })} have pricing`)}</span>
+          </div>
+          <div class="status-card dominant">
+            <span class="metric-label">Passed Filters</span>
+            <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(passed_filtering, 0))}</span>
+            <span class="metric-meta">${Utils.escapeHtml(`${Utils.formatPercentValue(passedRate, { includeSign: false, decimals: 1 })} passed`)}</span>
+          </div>
+          <div class="status-card">
+            <span class="metric-label">Open Positions</span>
+            <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(open_positions, 0))}</span>
+            <span class="metric-meta">Active trades</span>
+          </div>
+          <div class="status-card warning">
+            <span class="metric-label">Blacklisted</span>
+            <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(blacklisted, 0))}</span>
+            <span class="metric-meta">Flagged tokens</span>
+          </div>
+          <div class="status-card">
+            <span class="metric-label">With OHLCV</span>
+            <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(with_ohlcv, 0))}</span>
+            <span class="metric-meta">Historical data ready</span>
+          </div>
+          <div class="status-card">
+            <span class="metric-label">Last Updated</span>
+            <span class="metric-value">${updated_at ? Utils.escapeHtml(Utils.formatTimeAgo(new Date(updated_at))) : "Never"}</span>
+            <span class="metric-meta">${updated_at ? Utils.escapeHtml(new Date(updated_at).toLocaleString()) : "No refresh yet"}</span>
+          </div>
+        </div>
       </div>
-      <div class="status-card">
-        <span class="metric-label">With Price</span>
-        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(with_pool_price, 0))}</span>
-        <span class="metric-meta">${Utils.escapeHtml(`${Utils.formatPercentValue(priceRate, { includeSign: false, decimals: 1 })} have pricing`)}</span>
-      </div>
-      <div class="status-card dominant">
-        <span class="metric-label">Passed Filters</span>
-        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(passed_filtering, 0))}</span>
-        <span class="metric-meta">${Utils.escapeHtml(`${Utils.formatPercentValue(passedRate, { includeSign: false, decimals: 1 })} passed`)}</span>
-      </div>
-      <div class="status-card">
-        <span class="metric-label">Open Positions</span>
-        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(open_positions, 0))}</span>
-        <span class="metric-meta">Active trades</span>
-      </div>
-      <div class="status-card warning">
-        <span class="metric-label">Blacklisted</span>
-        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(blacklisted, 0))}</span>
-        <span class="metric-meta">Flagged tokens</span>
-      </div>
-      <div class="status-card">
-        <span class="metric-label">With OHLCV</span>
-        <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(with_ohlcv, 0))}</span>
-        <span class="metric-meta">Historical data ready</span>
-      </div>
-      <div class="status-card">
-        <span class="metric-label">Last Updated</span>
-        <span class="metric-value">${updated_at ? Utils.escapeHtml(Utils.formatTimeAgo(new Date(updated_at))) : "Never"}</span>
-        <span class="metric-meta">${updated_at ? Utils.escapeHtml(new Date(updated_at).toLocaleString()) : "No refresh yet"}</span>
+      <div class="status-rejection-section">
+        ${rejectionBreakdown}
       </div>
     </div>
-    ${rejectionBreakdown}
   `;
 }
 

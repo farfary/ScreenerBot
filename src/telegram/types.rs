@@ -81,6 +81,12 @@ pub enum NotificationType {
 
     /// Bot shutdown notification
     BotStopped { reason: String },
+
+    /// Notification when new tokens are found by filtering
+    NewTokensFound {
+        session_id: String,
+        new_count: usize,
+    },
 }
 
 /// Severity levels for system errors
@@ -239,6 +245,11 @@ impl Notification {
     /// Create a bot stopped notification
     pub fn bot_stopped(reason: String) -> Self {
         Self::new(NotificationType::BotStopped { reason })
+    }
+
+    /// Create a new tokens found notification
+    pub fn new_tokens_found(session_id: String, new_count: usize) -> Self {
+        Self::new(NotificationType::NewTokensFound { session_id, new_count })
     }
 }
 

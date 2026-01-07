@@ -8,6 +8,8 @@ use crate::telegram::formatters;
 use crate::telegram::types::{ErrorSeverity, Notification, NotificationType};
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, InlineKeyboardButton, InlineKeyboardMarkup, ParseMode};
+use crate::telegram::keyboards;
+use crate::telegram::pagination::PAGINATION_MANAGER;
 use tokio::sync::mpsc;
 
 /// Telegram notifier for sending messages
@@ -55,6 +57,31 @@ impl TelegramNotifier {
 
     /// Send a notification
     pub async fn send(&self, notification: &Notification) -> Result<(), String> {
+        // Handle pagination notification
+        if let NotificationType::NewTokensFound { session_id, .. } = &notification.notification_type {
+            if let Some((items, total_pages, total_items)) = PAGINATION_MANAGER.get_page(session_id, 1) {
+                let text = formatters::format_tokens_page(&items, 1, total_pages, total_items);
+                let keyboard = keyboards::pagination_keyboard(session_id, 1, total_pages);
+                
+                self.bot
+                    .send_message(self.chat_id, text)
+                    .parse_mode(ParseMode::Html)
+                    .link_preview_options(teloxide::types::LinkPreviewOptions {
+                        is_disabled: true,
+                        url: None,
+                        prefer_small_media: false,
+                        prefer_large_media: false,
+                        show_above_text: false,
+                    })
+                    .reply_markup(keyboard)
+                    .await
+                    .map_err(|e| format!("Failed to send pagination message: {}", e))?;
+                
+                logger::info(LogTag::Telegram, "Sent paginated token notification");
+                return Ok(());
+            } 
+        }
+
         let message = self.format_notification(notification);
         self.send_message(&message).await
     }
@@ -235,6 +262,10 @@ impl TelegramNotifier {
             NotificationType::BotStopped { reason } => {
                 formatters::msg_bot_stopped(reason, 0, 0, 0.0)
             }
+
+            NotificationType::NewTokensFound { new_count, .. } => {
+                format!("🔍 <b>Filtering Alert</b>\n\nFound {} new tokens matching your criteria.", new_count)
+            }
         }
     }
 
@@ -385,6 +416,7 @@ fn should_send_notification(notification: &Notification) -> bool {
         NotificationType::BotCommand { .. } => true, // Always send command responses
         NotificationType::BotStarted { .. } => config.notify_on_startup,
         NotificationType::BotStopped { .. } => config.notify_on_shutdown,
+        NotificationType::NewTokensFound { .. } => true,
     }
 }
 

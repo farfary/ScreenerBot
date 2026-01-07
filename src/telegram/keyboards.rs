@@ -406,3 +406,33 @@ mod tests {
         assert!(callback.len() <= 64);
     }
 }
+
+// === PAGINATION KEYBOARD ===
+
+/// Create pagination controls
+pub fn pagination_keyboard(session_id: &str, current_page: usize, total_pages: usize) -> InlineKeyboardMarkup {
+    let mut row = Vec::new();
+
+    // Previous Button
+    if current_page > 0 {
+        row.push(btn("⬅️ Prev", &format!("page:{}:{}:{}", session_id, current_page - 1, total_pages)));
+    } else {
+        // Spacer if no prev button to keep alignment
+        row.push(btn("⏺️", "noop"));
+    }
+
+    // Page Indicator (middle)
+    row.push(btn(
+        &format!("{}/{}", current_page + 1, total_pages),
+        "noop" // No action on click
+    ));
+
+    // Next Button
+    if current_page < total_pages.saturating_sub(1) {
+        row.push(btn("Next ➡️", &format!("page:{}:{}:{}", session_id, current_page + 1, total_pages)));
+    } else {
+        row.push(btn("⏺️", "noop"));
+    }
+
+    InlineKeyboardMarkup::new(vec![row])
+}

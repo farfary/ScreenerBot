@@ -9,7 +9,7 @@ use super::trading::{execute_force_stop, handle_pause_entries_command, handle_st
 use crate::config::{update_config_section, with_config};
 use crate::logger::{self, LogTag};
 use crate::positions;
-use crate::telegram::{formatters, keyboards};
+use crate::telegram::{formatters, keyboards, pagination::PAGINATION_MANAGER};
 use crate::trader::manual::{manual_add, manual_sell};
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, InlineKeyboardMarkup, ParseMode};
@@ -46,6 +46,38 @@ pub async fn handle_callback_query(
     match parts.as_slice() {
         // Menu navigation
         ["menu", "main"] => send_main_menu(bot, chat_id).await,
+        
+        // Pagination
+        ["page", session_id, page_num_str, ..] => {
+            if let Ok(page_num) = page_num_str.parse::<usize>() {
+                if let Some((items, total_pages, total_items)) = PAGINATION_MANAGER.get_page(session_id, page_num) {
+                    let text = formatters::format_tokens_page(&items, page_num, total_pages, total_items);
+                    let keyboard = keyboards::pagination_keyboard(session_id, page_num, total_pages);
+
+                    // Update the message
+                    bot.edit_message_text(chat_id, query.message.as_ref().map(|m| m.id()).unwrap(), text)
+                        .parse_mode(ParseMode::Html)
+                        .link_preview_options(teloxide::types::LinkPreviewOptions {
+                            is_disabled: true,
+                            url: None,
+                            prefer_small_media: false,
+                            prefer_large_media: false,
+                            show_above_text: false,
+                        })
+                        .reply_markup(keyboard)
+                        .await
+                        .map_err(|e| format!("Failed to update pagination: {}", e))?;
+                } else {
+                    bot.send_message(chat_id, "⚠️ Pagination session expired.")
+                        .await
+                        .map_err(|e| format!("Failed to send expiry message: {}", e))?;
+                }
+            }
+            Ok(())
+        }
+        
+        ["noop"] => Ok(()),
+
         ["menu", "positions"] => send_positions_menu(bot, chat_id).await,
         ["menu", "settings"] => send_settings_menu(bot, chat_id).await,
         ["menu", "refresh"] => send_main_menu(bot, chat_id).await,

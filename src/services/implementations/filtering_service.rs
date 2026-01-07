@@ -1,10 +1,13 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
+use std::collections::HashSet;
 
 use async_trait::async_trait;
 
 use crate::filtering;
+use crate::telegram::{queue_notification, Notification};
+use crate::telegram::pagination::PAGINATION_MANAGER;
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use crate::tokens::{cleanup_rejection_history_async, cleanup_rejection_stats_async};
@@ -106,9 +109,27 @@ impl Service for FilteringService {
                     _ = tokio::time::sleep(sleep_duration) => {}
                 }
 
+                // Capture state before refresh
+                let prev_passed = filtering::get_passed_tokens().await.unwrap_or_default();
+                let prev_mints: HashSet<String> = prev_passed.iter().map(|t| t.mint.clone()).collect();
+
                 match filtering::refresh().await {
                     Ok(_) => {
                         operations.fetch_add(1, Ordering::Relaxed);
+
+                        // Check for new tokens
+                        if let Ok(current_passed) = filtering::get_passed_tokens().await {
+                            let new_tokens: Vec<_> = current_passed.into_iter()
+                                .filter(|t| !prev_mints.contains(&t.mint))
+                                .collect();
+
+                            if !new_tokens.is_empty() {
+                                logger::info(LogTag::Filtering, &format!("Found {} new passed tokens", new_tokens.len()));
+                                
+                                let session_id = PAGINATION_MANAGER.create_session(new_tokens.clone(), None);
+                                queue_notification(Notification::new_tokens_found(session_id, new_tokens.len()));
+                            }
+                        }
                     }
                     Err(err) => {
                         errors.fetch_add(1, Ordering::Relaxed);

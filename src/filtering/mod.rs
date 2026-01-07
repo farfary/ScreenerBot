@@ -13,6 +13,11 @@ pub async fn get_filtered_token_mints() -> Result<Vec<String>, String> {
     store::get_filtered_mints().await
 }
 
+/// Obtain full passed tokens list
+pub async fn get_passed_tokens() -> Result<Vec<PassedToken>, String> {
+    store::get_passed_tokens().await
+}
+
 /// Rebuild the cached filtering snapshot synchronously (used by services)
 pub async fn refresh() -> Result<(), String> {
     store::refresh_snapshot().await
