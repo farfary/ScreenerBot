@@ -3630,6 +3630,7 @@ export class SettingsDialog {
           dca_executed: true,
           errors: true,
           startup_shutdown: true,
+          filtering_alerts: true,
         },
         commands_enabled: true,
         inline_actions: true,
@@ -3928,6 +3929,19 @@ export class SettingsDialog {
               </label>
             </div>
           </div>
+
+          <div class="settings-field">
+            <div class="settings-field-info">
+              <label>Filtering Alerts</label>
+              <span class="settings-field-hint">Notify when new tokens pass filtering criteria</span>
+            </div>
+            <div class="settings-field-control">
+              <label class="settings-toggle">
+                <input type="checkbox" id="tgNotifyFiltering" ${settings.notifications?.filtering_alerts !== false ? "checked" : ""}>
+                <span class="settings-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -4216,6 +4230,7 @@ export class SettingsDialog {
       { id: "#tgNotifyDca", key: "dca_executed" },
       { id: "#tgNotifyError", key: "errors" },
       { id: "#tgNotifyStartup", key: "startup_shutdown" },
+      { id: "#tgNotifyFiltering", key: "filtering_alerts" },
     ];
 
     notificationHandlers.forEach(({ id, key }) => {

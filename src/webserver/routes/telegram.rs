@@ -81,6 +81,7 @@ pub struct NotificationSettings {
     pub dca_executed: bool,
     pub errors: bool,
     pub startup_shutdown: bool,
+    pub filtering_alerts: bool,
 }
 
 #[derive(Deserialize)]
@@ -103,6 +104,7 @@ pub struct UpdateNotificationSettings {
     pub dca_executed: Option<bool>,
     pub errors: Option<bool>,
     pub startup_shutdown: Option<bool>,
+    pub filtering_alerts: Option<bool>,
 }
 
 // === ROUTES ===
@@ -211,6 +213,7 @@ async fn get_settings(State(_state): State<Arc<AppState>>) -> Response {
             dca_executed: config.notify_dca_executed,
             errors: config.notify_system_errors,
             startup_shutdown: config.notify_on_startup,
+            filtering_alerts: config.notify_filtering_alerts,
         },
         commands_enabled: config.commands_enabled,
         inline_actions: config.inline_actions_enabled,
@@ -264,6 +267,9 @@ async fn update_settings(
                 if let Some(v) = notif.startup_shutdown {
                     cfg.telegram.notify_on_startup = v;
                     cfg.telegram.notify_on_shutdown = v;
+                }
+                if let Some(v) = notif.filtering_alerts {
+                    cfg.telegram.notify_filtering_alerts = v;
                 }
             }
             if let Some(commands) = req.commands_enabled {

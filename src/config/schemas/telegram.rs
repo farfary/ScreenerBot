@@ -168,6 +168,14 @@ config_struct! {
         })]
         notify_on_shutdown: bool = true,
 
+        /// Notify when new tokens pass filtering criteria
+        #[metadata(field_metadata! {
+            label: "Filtering Alerts",
+            hint: "Notify when new tokens pass your filtering criteria",
+            category: "Notifications",
+        })]
+        notify_filtering_alerts: bool = true,
+
         // === Thresholds Section ===
         /// Minimum trade amount (SOL) to trigger notification
         #[metadata(field_metadata! {

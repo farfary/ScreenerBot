@@ -421,7 +421,7 @@ fn should_send_notification(notification: &Notification) -> bool {
         NotificationType::BotCommand { .. } => true, // Always send command responses
         NotificationType::BotStarted { .. } => config.notify_on_startup,
         NotificationType::BotStopped { .. } => config.notify_on_shutdown,
-        NotificationType::NewTokensFound { .. } => true,
+        NotificationType::NewTokensFound { .. } => config.notify_filtering_alerts,
     }
 }
 
