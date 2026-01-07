@@ -708,3 +708,180 @@ pub fn format_tokens_page(tokens: &[PassedToken], page: usize, total_pages: usiz
     text.push_str(&format!("<i>Page {} of {}</i>", page + 1, total_pages));
     text
 }
+
+/// Format token detail for Telegram display
+/// Shows comprehensive token info: price, liquidity, volume, security, age
+pub fn format_token_detail(token: &crate::tokens::types::Token) -> String {
+    use chrono::Utc;
+
+    // Symbol and name header
+    let name_part = if token.name.is_empty() {
+        String::new()
+    } else {
+        format!(" ({})", html_escape(&token.name))
+    };
+
+    // Price formatting (price_sol and price_usd are f64, not Option)
+    let price_sol = format!("{} SOL", format_price(token.price_sol));
+    let price_usd = format!("${:.6}", token.price_usd);
+
+    // Price changes
+    let change_1h = token
+        .price_change_h1
+        .map(|c| {
+            let emoji = if c >= 0.0 { "🟢" } else { "🔴" };
+            let sign = if c >= 0.0 { "+" } else { "" };
+            format!("{}{:.1}% {}", sign, c, emoji)
+        })
+        .unwrap_or_else(|| "N/A".to_string());
+
+    let change_24h = token
+        .price_change_h24
+        .map(|c| {
+            let emoji = if c >= 0.0 { "🟢" } else { "🔴" };
+            let sign = if c >= 0.0 { "+" } else { "" };
+            format!("{}{:.1}% {}", sign, c, emoji)
+        })
+        .unwrap_or_else(|| "N/A".to_string());
+
+    // Liquidity formatting
+    let liquidity = token
+        .liquidity_usd
+        .map(|l| {
+            if l >= 1_000_000.0 {
+                format!("${:.2}M", l / 1_000_000.0)
+            } else if l >= 1_000.0 {
+                format!("${:.1}K", l / 1_000.0)
+            } else {
+                format!("${:.0}", l)
+            }
+        })
+        .unwrap_or_else(|| "N/A".to_string());
+
+    // Volume formatting (use volume_h24)
+    let volume = token
+        .volume_h24
+        .map(|v| {
+            if v >= 1_000_000.0 {
+                format!("${:.2}M", v / 1_000_000.0)
+            } else if v >= 1_000.0 {
+                format!("${:.1}K", v / 1_000.0)
+            } else {
+                format!("${:.0}", v)
+            }
+        })
+        .unwrap_or_else(|| "N/A".to_string());
+
+    // Market cap formatting
+    let mcap = token
+        .market_cap
+        .map(|m| {
+            if m >= 1_000_000.0 {
+                format!("${:.2}M", m / 1_000_000.0)
+            } else if m >= 1_000.0 {
+                format!("${:.1}K", m / 1_000.0)
+            } else {
+                format!("${:.0}", m)
+            }
+        })
+        .unwrap_or_else(|| "N/A".to_string());
+
+    // Security score (use security_score_normalised - 0-100, HIGHER = MORE RISKY)
+    let security = token
+        .security_score_normalised
+        .map(|s| {
+            let (emoji, label) = match s {
+                0..=10 => ("✅", "Safe"),
+                11..=30 => ("🟢", "Low Risk"),
+                31..=60 => ("🟡", "Medium"),
+                _ => ("🔴", "High Risk"),
+            };
+            format!("{} {} ({})", emoji, label, s)
+        })
+        .unwrap_or_else(|| "❓ Unknown".to_string());
+
+    // Token age (blockchain_created_at is Option<DateTime<Utc>>)
+    let age = token
+        .blockchain_created_at
+        .map(|created| {
+            let duration = Utc::now().signed_duration_since(created);
+
+            if duration.num_days() > 0 {
+                format!("{}d {}h", duration.num_days(), duration.num_hours() % 24)
+            } else if duration.num_hours() > 0 {
+                format!("{}h {}m", duration.num_hours(), duration.num_minutes() % 60)
+            } else {
+                format!("{}m", duration.num_minutes())
+            }
+        })
+        .unwrap_or_else(|| "N/A".to_string());
+
+    // Holders (use total_holders)
+    let holders = token
+        .total_holders
+        .map(|h| format!("{}", h))
+        .unwrap_or_else(|| "N/A".to_string());
+
+    // Transactions (use helper methods)
+    let txns_1h = token
+        .txns_1h_total()
+        .map(|t| format!("{}", t))
+        .unwrap_or_else(|| "N/A".to_string());
+
+    let txns_24h = token
+        .txns_24h_total()
+        .map(|t| format!("{}", t))
+        .unwrap_or_else(|| "N/A".to_string());
+
+    // Blacklist status
+    let blacklist_status = if token.is_blacklisted {
+        "\n\n⚠️ <b>This token is blacklisted</b>"
+    } else {
+        ""
+    };
+
+    // Rejection reason
+    let rejection_info = token
+        .last_rejection_reason
+        .as_ref()
+        .map(|r| format!("\n\n❌ <b>Last Rejection:</b> {}", html_escape(r)))
+        .unwrap_or_default();
+
+    format!(
+        "📊 <b>${}{}</b>\n\n\
+         <b>💰 Price:</b>\n\
+         ├ SOL: {}\n\
+         └ USD: {}\n\n\
+         <b>📈 Changes:</b>\n\
+         ├ 1h: {}\n\
+         └ 24h: {}\n\n\
+         <b>💧 Market Data:</b>\n\
+         ├ Liquidity: {}\n\
+         ├ Volume 24h: {}\n\
+         └ Market Cap: {}\n\n\
+         <b>📊 Activity:</b>\n\
+         ├ Holders: {}\n\
+         ├ Txns 1h: {}\n\
+         └ Txns 24h: {}\n\n\
+         <b>🛡️ Security:</b> {}\n\
+         <b>⏱️ Age:</b> {}\n\n\
+         <b>🔗 Mint:</b>\n<code>{}</code>{}{}",
+        html_escape(&token.symbol),
+        name_part,
+        price_sol,
+        price_usd,
+        change_1h,
+        change_24h,
+        liquidity,
+        volume,
+        mcap,
+        holders,
+        txns_1h,
+        txns_24h,
+        security,
+        age,
+        &token.mint,
+        blacklist_status,
+        rejection_info
+    )
+}

@@ -7,7 +7,7 @@ mod menu;
 mod status;
 mod trading;
 
-pub use callbacks::handle_callback_query;
+pub use callbacks::{handle_callback_query, send_token_detail, send_tokens_list, send_tokens_menu};
 pub use menu::{handle_menu_command, send_main_menu};
 pub use status::{
     handle_balance_command, handle_positions_command, handle_stats_command, handle_status_command,
@@ -62,6 +62,17 @@ pub async fn handle_command(
         return Ok(());
     };
 
+    // Handle /token_XXXXXX dynamic command for viewing token details
+    if command.starts_with("/token_") {
+        let mint_short = &command[7..]; // Remove "/token_" prefix
+        if !mint_short.is_empty() {
+            if !check_auth(bot, chat_id, user_id).await {
+                return Ok(());
+            }
+            return callbacks::send_token_detail(bot, chat_id, mint_short).await;
+        }
+    }
+
     // Check authentication for sensitive commands
     let is_sensitive = matches!(
         command,
@@ -78,6 +89,8 @@ pub async fn handle_command(
             | "/resume_trading"
             | "/start"
             | "/stop"
+            | "/tokens"
+            | "/rejected"
     );
 
     if is_sensitive && !check_auth(bot, chat_id, user_id).await {
@@ -109,6 +122,12 @@ pub async fn handle_command(
         }
         "/login" => {
             return handle_login_command(bot, chat_id, user_id).await;
+        }
+        "/tokens" => {
+            return callbacks::send_tokens_menu(bot, chat_id).await;
+        }
+        "/rejected" => {
+            return callbacks::send_tokens_list(bot, chat_id, "rejected").await;
         }
         _ => {}
     }

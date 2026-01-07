@@ -37,7 +37,8 @@ pub async fn handle_callback_query(
             || parts[0] == "dca"
             || parts[0] == "close"
             || parts[0] == "bl"
-            || parts[0] == "toggle");
+            || parts[0] == "toggle"
+            || parts[0] == "token");
 
     if is_sensitive_callback && !check_auth(bot, chat_id, user_id).await {
         return Ok(()); // Auth check failed, message already sent
@@ -162,6 +163,37 @@ pub async fn handle_callback_query(
         // Settings toggles
         ["toggle", setting] => handle_toggle(bot, chat_id, setting).await,
         ["settings", section] => handle_settings_section(bot, chat_id, section).await,
+
+        // Token Explorer navigation
+        ["menu", "tokens"] => send_tokens_menu(bot, chat_id).await,
+        ["tokens", "menu"] => send_tokens_menu(bot, chat_id).await,
+        ["tokens", "passed"] => send_tokens_list(bot, chat_id, "passed").await,
+        ["tokens", "rejected"] => send_tokens_list(bot, chat_id, "rejected").await,
+        ["tokens", "recent"] => send_tokens_list(bot, chat_id, "recent").await,
+        ["tokens", "all"] => send_tokens_list(bot, chat_id, "all").await,
+        ["tokens", "stats"] => send_filter_stats(bot, chat_id).await,
+        ["tokens", "stats", "refresh"] => send_filter_stats(bot, chat_id).await,
+        ["tokens", "search"] => send_search_prompt(bot, chat_id).await,
+        ["tokens", "page", view, page_str] => {
+            let page = page_str.parse::<usize>().unwrap_or(1);
+            send_tokens_page(bot, chat_id, view, page).await
+        }
+        ["tokens", "refresh", view] => send_tokens_list(bot, chat_id, view).await,
+
+        // Token detail & actions
+        ["token", "view", mint_short] => send_token_detail(bot, chat_id, mint_short).await,
+        ["token", "buy", mint_short, amount_str] => {
+            let amount: f64 = amount_str.parse().unwrap_or(0.1);
+            send_confirm_token_buy(bot, chat_id, mint_short, amount).await
+        }
+        ["token", "blacklist", mint_short] => send_confirm_token_blacklist(bot, chat_id, mint_short).await,
+
+        // Execute token actions (after confirmation)
+        ["exec", "tokenbuy", mint_short, amount_str] => {
+            let amount: f64 = amount_str.parse().unwrap_or(0.1);
+            execute_token_buy(bot, chat_id, mint_short, amount).await
+        }
+        ["exec", "tokenbl", mint_short] => execute_token_blacklist(bot, chat_id, mint_short).await,
 
         _ => {
             logger::debug(LogTag::Telegram, &format!("Unknown callback: {}", data));
@@ -716,5 +748,469 @@ async fn handle_settings_section(bot: &Bot, chat_id: ChatId, section: &str) -> R
             send_with_keyboard(bot, chat_id, msg, keyboard).await
         }
         _ => send_settings_menu(bot, chat_id).await,
+    }
+}
+
+// ============================================================================
+// TOKEN EXPLORER
+// ============================================================================
+
+/// Send token explorer main menu
+pub async fn send_tokens_menu(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
+    let stats = match crate::filtering::fetch_stats().await {
+        Ok(s) => s,
+        Err(e) => {
+            let msg = format!("❌ Failed to fetch stats: {}", e);
+            return send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await;
+        }
+    };
+
+    let msg = format!(
+        "🔍 <b>Token Explorer</b>\n\n\
+         📊 <b>Current Stats:</b>\n\
+         ├ ✅ Passed: {}\n\
+         ├ ❌ Rejected: {}\n\
+         ├ 💰 With Price: {}\n\
+         └ 📋 Total: {}\n\n\
+         <i>Select a view to browse tokens:</i>",
+        stats.passed_filtering,
+        stats.total_tokens.saturating_sub(stats.passed_filtering),
+        stats.with_pool_price,
+        stats.total_tokens
+    );
+
+    send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await
+}
+
+/// Send paginated token list for a view
+pub async fn send_tokens_list(bot: &Bot, chat_id: ChatId, view: &str) -> Result<(), String> {
+    send_tokens_page(bot, chat_id, view, 1).await
+}
+
+/// Send a specific page of tokens
+async fn send_tokens_page(
+    bot: &Bot,
+    chat_id: ChatId,
+    view: &str,
+    page: usize,
+) -> Result<(), String> {
+    use crate::filtering::types::{FilteringQuery, FilteringView, SortDirection, TokenSortKey};
+
+    let filtering_view = match view {
+        "passed" => FilteringView::Passed,
+        "rejected" => FilteringView::Rejected,
+        "recent" => FilteringView::Recent,
+        "all" => FilteringView::All,
+        _ => FilteringView::Passed,
+    };
+
+    let query = FilteringQuery {
+        view: filtering_view,
+        page,
+        page_size: 10, // 10 tokens per page for Telegram
+        sort_key: TokenSortKey::LiquidityUsd,
+        sort_direction: SortDirection::Desc,
+        ..Default::default()
+    };
+
+    let result = match crate::filtering::query_tokens(query).await {
+        Ok(r) => r,
+        Err(e) => {
+            let msg = format!("❌ Failed to fetch tokens: {}", e);
+            return send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await;
+        }
+    };
+
+    if result.items.is_empty() {
+        let msg = format!("📭 No tokens found in <b>{}</b> view.", view);
+        return send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await;
+    }
+
+    let view_emoji = match view {
+        "passed" => "✅",
+        "rejected" => "❌",
+        "recent" => "🆕",
+        "all" => "📋",
+        _ => "📊",
+    };
+
+    let mut msg = format!(
+        "{} <b>{} Tokens</b> ({}/{})\n\n",
+        view_emoji,
+        view.to_uppercase(),
+        result.page,
+        result.total_pages
+    );
+
+    for (i, token) in result.items.iter().enumerate() {
+        let idx = (page - 1) * 10 + i + 1;
+        let symbol = &token.symbol;
+        let mint_short = &token.mint[..8.min(token.mint.len())];
+
+        // Format liquidity
+        let liquidity = token
+            .liquidity_usd
+            .map(|l| {
+                if l >= 1_000_000.0 {
+                    format!("${:.1}M", l / 1_000_000.0)
+                } else if l >= 1_000.0 {
+                    format!("${:.1}K", l / 1_000.0)
+                } else {
+                    format!("${:.0}", l)
+                }
+            })
+            .unwrap_or_else(|| "N/A".to_string());
+
+        // Add rejection reason for rejected view
+        let reason_part = if view == "rejected" {
+            result
+                .rejection_reasons
+                .get(&token.mint)
+                .map(|r| format!("\n   └ ⚠️ {}", r))
+                .unwrap_or_default()
+        } else {
+            String::new()
+        };
+
+        msg.push_str(&format!(
+            "{}. <b>${}</b> ({}) • {}{}\n   /token_{}\n",
+            idx, symbol, mint_short, liquidity, reason_part, mint_short
+        ));
+    }
+
+    msg.push_str("\n<i>Tap /token_XXXXXX to view details</i>");
+
+    let keyboard = keyboards::tokens_list_keyboard(view, page, result.total_pages);
+    send_with_keyboard(bot, chat_id, &msg, keyboard).await
+}
+
+/// Send filter statistics
+async fn send_filter_stats(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
+    let stats = match crate::filtering::fetch_stats().await {
+        Ok(s) => s,
+        Err(e) => {
+            let msg = format!("❌ Failed to fetch stats: {}", e);
+            return send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await;
+        }
+    };
+
+    let rejected_count = stats.total_tokens.saturating_sub(stats.passed_filtering);
+    let passed_pct = if stats.total_tokens > 0 {
+        (stats.passed_filtering as f64 / stats.total_tokens as f64) * 100.0
+    } else {
+        0.0
+    };
+    let rejected_pct = if stats.total_tokens > 0 {
+        (rejected_count as f64 / stats.total_tokens as f64) * 100.0
+    } else {
+        0.0
+    };
+
+    let msg = format!(
+        "📊 <b>Filter Statistics</b>\n\n\
+         <b>Token Counts:</b>\n\
+         ├ ✅ Passed: {} ({:.1}%)\n\
+         ├ ❌ Rejected: {} ({:.1}%)\n\
+         ├ 🚫 Blacklisted: {}\n\
+         ├ 💰 With Pool Price: {}\n\
+         ├ 📈 Open Positions: {}\n\
+         └ 📋 Total Discovered: {}\n\n\
+         <b>Last Updated:</b>\n\
+         └ 🕐 {}\n\n\
+         <i>Stats refresh automatically every 3 minutes</i>",
+        stats.passed_filtering,
+        passed_pct,
+        rejected_count,
+        rejected_pct,
+        stats.blacklisted,
+        stats.with_pool_price,
+        stats.open_positions,
+        stats.total_tokens,
+        stats.updated_at.format("%Y-%m-%d %H:%M UTC")
+    );
+
+    send_with_keyboard(bot, chat_id, &msg, keyboards::filter_stats_keyboard()).await
+}
+
+/// Send token detail view
+pub async fn send_token_detail(bot: &Bot, chat_id: ChatId, mint_short: &str) -> Result<(), String> {
+    use crate::tokens::get_full_token_async;
+
+    // Try to find token by mint prefix from the filtering store
+    let token = match find_token_by_prefix(mint_short).await {
+        Some(t) => t,
+        None => {
+            let msg = "❌ Token not found. Try searching with a longer prefix.";
+            return send_with_keyboard(bot, chat_id, msg, keyboards::tokens_menu()).await;
+        }
+    };
+
+    // Check if user has a position
+    let has_position = positions::get_open_positions()
+        .await
+        .iter()
+        .any(|p| p.mint == token.mint);
+
+    // Format token details
+    let liquidity = token
+        .liquidity_usd
+        .map(|l| formatters::format_usd(l))
+        .unwrap_or_else(|| "N/A".to_string());
+    let volume_24h = token
+        .volume_h24
+        .map(|v| formatters::format_usd(v))
+        .unwrap_or_else(|| "N/A".to_string());
+    let price_change = token
+        .price_change_h24
+        .map(|c| format!("{:+.2}%", c))
+        .unwrap_or_else(|| "N/A".to_string());
+
+    let risk_text = token
+        .security_score_normalised
+        .map(|s| {
+            let emoji = if s <= 30 {
+                "🟢"
+            } else if s <= 60 {
+                "🟡"
+            } else {
+                "🔴"
+            };
+            format!("{} Risk: {}/100", emoji, s)
+        })
+        .unwrap_or_else(|| "⚪ Risk: Unknown".to_string());
+
+    let position_text = if has_position {
+        "✅ <b>You have an open position</b>\n\n"
+    } else {
+        ""
+    };
+
+    let msg = format!(
+        "🪙 <b>${}</b>\n\
+         <code>{}</code>\n\n\
+         {}\
+         💰 <b>Price:</b> {} SOL\n\
+         📊 <b>Liquidity:</b> {}\n\
+         📈 <b>24h Volume:</b> {}\n\
+         📉 <b>24h Change:</b> {}\n\
+         {}\n\n\
+         <i>Use buttons below to trade or view more.</i>",
+        token.symbol,
+        formatters::format_mint_display(&token.mint),
+        position_text,
+        formatters::format_price(token.price_sol),
+        liquidity,
+        volume_24h,
+        price_change,
+        risk_text
+    );
+
+    send_with_keyboard(
+        bot,
+        chat_id,
+        &msg,
+        keyboards::token_detail_keyboard(&token.mint, has_position),
+    )
+    .await
+}
+
+/// Find a token by mint prefix from the filtering store
+async fn find_token_by_prefix(prefix: &str) -> Option<crate::tokens::types::Token> {
+    use crate::filtering::types::{FilteringQuery, FilteringView};
+
+    // Search across all tokens
+    let query = FilteringQuery {
+        view: FilteringView::All,
+        search: Some(prefix.to_string()),
+        page: 1,
+        page_size: 1,
+        ..Default::default()
+    };
+
+    match crate::filtering::query_tokens(query).await {
+        Ok(result) if !result.items.is_empty() => Some(result.items.into_iter().next().unwrap()),
+        _ => None,
+    }
+}
+
+/// Send search prompt
+async fn send_search_prompt(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
+    let msg = "🔍 <b>Search Token</b>\n\n\
+               Send a token symbol or mint address to search.\n\n\
+               <i>Example: /token_BONK or /token_So11111</i>";
+    send_with_keyboard(bot, chat_id, msg, keyboards::tokens_menu()).await
+}
+
+/// Confirmation dialog for buying a token (from token explorer)
+async fn send_confirm_token_buy(
+    bot: &Bot,
+    chat_id: ChatId,
+    mint_short: &str,
+    amount: f64,
+) -> Result<(), String> {
+    let token = match find_token_by_prefix(mint_short).await {
+        Some(t) => t,
+        None => {
+            let msg = "❌ Token not found";
+            return send_with_keyboard(bot, chat_id, msg, keyboards::tokens_menu()).await;
+        }
+    };
+
+    let msg = format!(
+        "💰 <b>Confirm Buy</b>\n\n\
+         Token: ${}\n\
+         Mint: <code>{}</code>\n\
+         Amount: {} SOL\n\n\
+         ⏰ <i>Confirm within 30 seconds</i>",
+        token.symbol,
+        formatters::format_mint_display(&token.mint),
+        amount
+    );
+
+    send_with_keyboard(
+        bot,
+        chat_id,
+        &msg,
+        keyboards::confirm_token_buy(&token.mint, &token.symbol, amount),
+    )
+    .await
+}
+
+/// Confirmation dialog for blacklisting a token (from token explorer - not position)
+async fn send_confirm_token_blacklist(
+    bot: &Bot,
+    chat_id: ChatId,
+    mint_short: &str,
+) -> Result<(), String> {
+    let token = match find_token_by_prefix(mint_short).await {
+        Some(t) => t,
+        None => {
+            let msg = "❌ Token not found";
+            return send_with_keyboard(bot, chat_id, msg, keyboards::tokens_menu()).await;
+        }
+    };
+
+    let msg = format!(
+        "🚫 <b>Blacklist Token?</b>\n\n\
+         Token: ${}\n\
+         Mint: <code>{}</code>\n\n\
+         This will prevent this token from passing filters.",
+        token.symbol,
+        formatters::format_mint_display(&token.mint)
+    );
+
+    send_with_keyboard(
+        bot,
+        chat_id,
+        &msg,
+        keyboards::confirm_token_blacklist(&token.mint, &token.symbol),
+    )
+    .await
+}
+
+/// Execute token blacklist (from token explorer - not position)
+async fn execute_token_blacklist(
+    bot: &Bot,
+    chat_id: ChatId,
+    mint_short: &str,
+) -> Result<(), String> {
+    let token = match find_token_by_prefix(mint_short).await {
+        Some(t) => t,
+        None => {
+            let msg = "❌ Token not found";
+            return send_with_keyboard(bot, chat_id, msg, keyboards::tokens_menu()).await;
+        }
+    };
+
+    // Add to blacklist using token database
+    let mint_clone = token.mint.clone();
+    let blacklist_result = tokio::task::spawn_blocking(move || {
+        if let Some(db) = crate::tokens::get_global_database() {
+            crate::tokens::cleanup::blacklist_token(&mint_clone, "Blacklisted via Telegram", &db)
+        } else {
+            Err(crate::tokens::TokenError::Database(
+                "Database not available".to_string(),
+            ))
+        }
+    })
+    .await;
+
+    match blacklist_result {
+        Ok(Ok(())) => {
+            let msg = format!(
+                "🚫 <b>Token Blacklisted</b>\n\n\
+                 Token: ${}\n\
+                 Status: Added to blacklist",
+                token.symbol
+            );
+            send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await
+        }
+        Ok(Err(e)) => {
+            logger::warning(LogTag::Telegram, &format!("Failed to blacklist token: {}", e));
+            let msg = format!("❌ <b>Blacklist Failed</b>\n\nError: {}", e);
+            send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await
+        }
+        Err(e) => {
+            logger::warning(LogTag::Telegram, &format!("Failed to blacklist token: {}", e));
+            let msg = format!("❌ <b>Blacklist Failed</b>\n\nError: {}", e);
+            send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await
+        }
+    }
+}
+
+/// Execute token buy (quick buy from token explorer)
+async fn execute_token_buy(
+    bot: &Bot,
+    chat_id: ChatId,
+    mint_short: &str,
+    amount: f64,
+) -> Result<(), String> {
+    // Find token by mint prefix
+    let token = match find_token_by_prefix(mint_short).await {
+        Some(t) => t,
+        None => {
+            let msg = "❌ Token not found";
+            return send_with_keyboard(bot, chat_id, msg, keyboards::tokens_menu()).await;
+        }
+    };
+
+    let msg = format!(
+        "💰 <b>Buying ${}</b>\n\n\
+         ├ Amount: {} SOL\n\
+         └ Token: {}...\n\n\
+         ⏳ Processing...",
+        token.symbol,
+        amount,
+        &token.mint[..12.min(token.mint.len())]
+    );
+
+    bot.send_message(chat_id, &msg)
+        .parse_mode(ParseMode::Html)
+        .await
+        .map_err(|e| format!("Failed to send: {}", e))?;
+
+    // Execute the buy via manual trading system
+    match manual_add(&token.mint, amount).await {
+        Ok(_) => {
+            let success_msg = format!(
+                "✅ <b>Buy Order Executed</b>\n\n\
+                 ├ Token: ${}\n\
+                 ├ Amount: {} SOL\n\
+                 └ Status: Success\n\n\
+                 <i>Position opened! View in /positions</i>",
+                token.symbol, amount
+            );
+            send_with_keyboard(bot, chat_id, &success_msg, keyboards::main_menu_compact()).await
+        }
+        Err(e) => {
+            let error_msg = format!(
+                "❌ <b>Buy Failed</b>\n\n\
+                 ├ Token: ${}\n\
+                 └ Error: {}\n\n\
+                 <i>Check logs for details</i>",
+                token.symbol, e
+            );
+            send_with_keyboard(bot, chat_id, &error_msg, keyboards::tokens_menu()).await
+        }
     }
 }

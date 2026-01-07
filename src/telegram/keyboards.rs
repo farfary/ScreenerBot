@@ -69,10 +69,11 @@ pub fn main_menu() -> InlineKeyboardMarkup {
             btn("💰 Balance", "cmd:balance"),
             btn("📈 Stats", "cmd:stats"),
         ],
-        // Row 2: Controls
+        // Row 2: Token Explorer & Controls
         vec![
-            btn("⏸️ Pause Entries", "cmd:pause_entries"),
-            btn("⏹️ Stop Trading", "cmd:stop_trader"),
+            btn("🔍 Tokens", "menu:tokens"),
+            btn("⏸️ Pause", "cmd:pause_entries"),
+            btn("⏹️ Stop", "cmd:stop_trader"),
         ],
         // Row 3: Settings & Refresh
         vec![
@@ -214,7 +215,7 @@ pub fn confirm_force_stop() -> InlineKeyboardMarkup {
     ]])
 }
 
-/// Confirmation for blacklisting a token
+/// Confirmation for blacklisting a token (from position context)
 pub fn confirm_blacklist(mint: &str, symbol: &str) -> InlineKeyboardMarkup {
     let m = mint_short(mint);
 
@@ -224,6 +225,32 @@ pub fn confirm_blacklist(mint: &str, symbol: &str) -> InlineKeyboardMarkup {
             &format!("exec:bl:{}", m),
         ),
         btn("❌ Cancel", &format!("pos:{}", m)),
+    ]])
+}
+
+/// Confirmation for blacklisting a token (from token explorer - no position)
+pub fn confirm_token_blacklist(mint: &str, symbol: &str) -> InlineKeyboardMarkup {
+    let m = mint_short(mint);
+
+    InlineKeyboardMarkup::new(vec![vec![
+        btn(
+            &format!("🚫 Blacklist {}", symbol),
+            &format!("exec:tokenbl:{}", m),
+        ),
+        btn("❌ Cancel", "tokens:menu"),
+    ]])
+}
+
+/// Confirmation for buying a token
+pub fn confirm_token_buy(mint: &str, symbol: &str, amount: f64) -> InlineKeyboardMarkup {
+    let m = mint_short(mint);
+
+    InlineKeyboardMarkup::new(vec![vec![
+        btn(
+            &format!("✅ Buy {} SOL", amount),
+            &format!("exec:tokenbuy:{}:{}", m, amount),
+        ),
+        btn("❌ Cancel", &format!("token:view:{}", m)),
     ]])
 }
 
@@ -435,4 +462,119 @@ pub fn pagination_keyboard(session_id: &str, current_page: usize, total_pages: u
     }
 
     InlineKeyboardMarkup::new(vec![row])
+}
+
+// === TOKEN EXPLORER KEYBOARDS ===
+
+/// Main token explorer menu with navigation options
+pub fn tokens_menu() -> InlineKeyboardMarkup {
+    InlineKeyboardMarkup::new(vec![
+        // Row 1: Primary views
+        vec![
+            btn("✅ Passed", "tokens:passed"),
+            btn("❌ Rejected", "tokens:rejected"),
+        ],
+        // Row 2: Additional views
+        vec![
+            btn("🆕 New (24h)", "tokens:recent"),
+            btn("📋 All Tokens", "tokens:all"),
+        ],
+        // Row 3: Tools
+        vec![
+            btn("🔍 Search Token", "tokens:search"),
+            btn("📊 Filter Stats", "tokens:stats"),
+        ],
+        // Row 4: Navigation
+        vec![btn("◀️ Back to Menu", "menu:main")],
+    ])
+}
+
+/// Paginated token list with navigation controls
+/// `view` is one of: passed, rejected, recent, all, blacklisted
+pub fn tokens_list_keyboard(view: &str, current_page: usize, total_pages: usize) -> InlineKeyboardMarkup {
+    let mut rows: Vec<Vec<InlineKeyboardButton>> = vec![];
+
+    // Row 1: Pagination (only if multiple pages)
+    if total_pages > 1 {
+        let mut nav_row = Vec::new();
+
+        // Previous Button (pages are 1-indexed, so check > 1)
+        if current_page > 1 {
+            nav_row.push(btn(
+                "⬅️ Prev",
+                &format!("tokens:page:{}:{}", view, current_page - 1),
+            ));
+        }
+
+        // Page Indicator
+        nav_row.push(btn(
+            &format!("{}/{}", current_page + 1, total_pages),
+            "noop",
+        ));
+
+        // Next Button
+        if current_page < total_pages.saturating_sub(1) {
+            nav_row.push(btn(
+                "➡️ Next",
+                &format!("tokens:page:{}:{}", view, current_page + 1),
+            ));
+        }
+
+        rows.push(nav_row);
+    }
+
+    // Row 2: Actions
+    rows.push(vec![
+        btn("🔄 Refresh", &format!("tokens:refresh:{}", view)),
+        btn("◀️ Back", "tokens:menu"),
+    ]);
+
+    InlineKeyboardMarkup::new(rows)
+}
+
+/// Token detail actions with buy options or position link
+/// If has_position is true, shows "View Position" instead of buy buttons
+pub fn token_detail_keyboard(mint: &str, has_position: bool) -> InlineKeyboardMarkup {
+    let m = mint_short(mint);
+    let dex_url = format!("https://dexscreener.com/solana/{}", mint);
+
+    if has_position {
+        // Token already in position - show position link
+        InlineKeyboardMarkup::new(vec![
+            // Row 1: Position link
+            vec![btn("📊 View Position", &format!("pos:{}", m))],
+            // Row 2: Actions
+            vec![
+                btn("🚫 Blacklist", &format!("token:blacklist:{}", m)),
+                url_btn("🔗 DexScreener", &dex_url),
+            ],
+            // Row 3: Navigation
+            vec![btn("◀️ Back to Tokens", "tokens:menu")],
+        ])
+    } else {
+        // No position - show buy buttons
+        InlineKeyboardMarkup::new(vec![
+            // Row 1: Buy options
+            vec![
+                btn("💰 0.1 SOL", &format!("token:buy:{}:0.1", m)),
+                btn("💰 0.25 SOL", &format!("token:buy:{}:0.25", m)),
+                btn("💰 0.5 SOL", &format!("token:buy:{}:0.5", m)),
+            ],
+            // Row 2: Actions
+            vec![
+                btn("🚫 Blacklist", &format!("token:blacklist:{}", m)),
+                url_btn("🔗 DexScreener", &dex_url),
+            ],
+            // Row 3: Navigation
+            vec![btn("◀️ Back to Tokens", "tokens:menu")],
+        ])
+    }
+}
+
+/// Filter stats view with refresh and back buttons
+pub fn filter_stats_keyboard() -> InlineKeyboardMarkup {
+    InlineKeyboardMarkup::new(vec![vec![
+        btn("🔄 Refresh Stats", "tokens:stats:refresh"),
+        btn("◀️ Back", "tokens:menu"),
+    ]])
 }

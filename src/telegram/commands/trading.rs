@@ -131,6 +131,9 @@ pub fn handle_help_command() -> String {
      /positions - List open positions with P&L\n\
      /balance - Show wallet SOL balance\n\
      /stats - Today's trading statistics\n\n\
+     <b>🔍 Tokens</b>\n\
+     /tokens - Browse filtered tokens\n\
+     /rejected - View rejected tokens\n\n\
      <b>⚡ Controls</b>\n\
      /menu - Open interactive control menu\n\
      /start - Enable trading\n\
