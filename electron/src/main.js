@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, Tray, Menu, dialog, nativeImage } = require('electron');
 const path = require('path');
 const { spawn } = require('child_process');
 const http = require('http');
@@ -32,6 +32,100 @@ const CONFIG = {
 let mainWindow = null;
 let backendProcess = null;
 let isQuitting = false;
+let tray = null;
+
+/**
+ * Get the path to tray icon based on platform
+ */
+function getTrayIconPath() {
+  // Use different sizes based on platform
+  // Windows: 16x16 or 32x32 ICO
+  // macOS: 16x16 or 22x22 PNG (template image)
+  // Linux: 16x16 or 22x22 PNG
+  const iconName = process.platform === 'win32' ? 'icon.ico' : 'icon.png';
+  return path.join(__dirname, '..', 'assets', iconName);
+}
+
+/**
+ * Create the system tray icon (Windows/Linux only)
+ */
+function createTray() {
+  // macOS uses dock, not system tray
+  if (process.platform === 'darwin') {
+    return;
+  }
+  
+  const iconPath = getTrayIconPath();
+  
+  // Create tray icon - resize for better visibility
+  let trayIcon;
+  try {
+    trayIcon = nativeImage.createFromPath(iconPath);
+    // Resize to appropriate size for system tray
+    trayIcon = trayIcon.resize({ width: 16, height: 16 });
+  } catch (err) {
+    console.error('[Electron] Failed to load tray icon:', err);
+    return;
+  }
+  
+  tray = new Tray(trayIcon);
+  tray.setToolTip('ScreenerBot - Solana Trading Bot');
+  
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Show ScreenerBot',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+        }
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit ScreenerBot',
+      click: () => {
+        isQuitting = true;
+        app.quit();
+      }
+    }
+  ]);
+  
+  tray.setContextMenu(contextMenu);
+  
+  // Double-click to show window (Windows)
+  tray.on('double-click', () => {
+    if (mainWindow) {
+      mainWindow.show();
+      mainWindow.focus();
+    }
+  });
+  
+  console.log('[Electron] System tray created');
+}
+
+/**
+ * Show exit confirmation dialog (Windows/Linux only)
+ * Returns: 'minimize' | 'quit' | 'cancel'
+ */
+async function showExitDialog() {
+  const result = await dialog.showMessageBox(mainWindow, {
+    type: 'question',
+    buttons: ['Minimize to Tray', 'Quit Completely', 'Cancel'],
+    defaultId: 0,
+    cancelId: 2,
+    title: 'Close ScreenerBot',
+    message: 'What would you like to do?',
+    detail: 'ScreenerBot can continue running in the background. The trading bot will keep monitoring and trading while minimized to the system tray.',
+    icon: nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'icon.png'))
+  });
+  
+  switch (result.response) {
+    case 0: return 'minimize';
+    case 1: return 'quit';
+    default: return 'cancel';
+  }
+}
 
 /**
  * Get the path to the screenerbot binary
@@ -334,12 +428,35 @@ function createWindow() {
     return { action: 'deny' };
   });
 
-  // macOS: Hide window instead of closing (dock behavior)
-  mainWindow.on('close', (event) => {
-    if (process.platform === 'darwin' && !isQuitting) {
+  // Handle window close event
+  mainWindow.on('close', async (event) => {
+    // If we're already quitting, let it close
+    if (isQuitting) {
+      return;
+    }
+    
+    // macOS: Hide window instead of closing (dock behavior)
+    if (process.platform === 'darwin') {
       event.preventDefault();
       mainWindow.hide();
+      return;
     }
+    
+    // Windows/Linux: Show exit confirmation dialog
+    event.preventDefault();
+    
+    const choice = await showExitDialog();
+    
+    if (choice === 'minimize') {
+      // Minimize to system tray
+      mainWindow.hide();
+      console.log('[Electron] Minimized to system tray');
+    } else if (choice === 'quit') {
+      // Quit the application
+      isQuitting = true;
+      app.quit();
+    }
+    // 'cancel' - do nothing, window stays open
   });
 
   mainWindow.on('closed', () => {
@@ -373,6 +490,9 @@ async function initialize() {
   console.log('[Electron] Initializing application...');
   console.log('[Electron] Packaged:', app.isPackaged);
   console.log('[Electron] Process arch:', process.arch);
+  
+  // Create system tray (Windows/Linux only)
+  createTray();
   
   // Create window first
   createWindow();
@@ -441,6 +561,12 @@ app.on('before-quit', () => {
 });
 
 app.on('will-quit', (event) => {
+  // Clean up tray
+  if (tray) {
+    tray.destroy();
+    tray = null;
+  }
+  
   if (backendProcess) {
     console.log('[Electron] Will quit - stopping backend');
     event.preventDefault();
@@ -453,9 +579,18 @@ app.on('will-quit', (event) => {
   }
 });
 
-// macOS: Don't quit when all windows are closed
+// Windows/Linux: Don't quit when all windows are closed if minimized to tray
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  // On macOS, apps typically stay active until explicitly quit
+  // On Windows/Linux, we keep running if minimized to tray
+  if (process.platform === 'darwin') {
+    // macOS: Don't quit (dock behavior)
+    return;
+  }
+  
+  // Windows/Linux: Only quit if isQuitting flag is set
+  // Otherwise the app is minimized to tray
+  if (isQuitting) {
     app.quit();
   }
 });
