@@ -453,12 +453,10 @@ async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
     // Fetch stats and rejection data
     let stats_result = filtering::fetch_stats().await;
     
-    // Use aggregated stats table for time-range queries (much faster than rejection_history)
-    let rejection_result = if query.start_time.is_some() || query.end_time.is_some() {
-        get_rejection_stats_aggregated_async(query.start_time, query.end_time).await
-    } else {
-        get_rejection_stats_async().await
-    };
+    // Always use rejection_stats table for consistent analytics
+    // This table tracks cumulative rejection events over time
+    // When no time range is provided, get all data (None, None)
+    let rejection_result = get_rejection_stats_aggregated_async(query.start_time, query.end_time).await;
     
     let recent_result = get_recent_rejections_async(20).await;
     
