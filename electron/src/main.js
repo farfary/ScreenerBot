@@ -5,6 +5,17 @@ const http = require('http');
 const fs = require('fs');
 const os = require('os');
 
+// ============================================================================
+// SINGLE INSTANCE LOCK - Must be checked FIRST before any other initialization
+// ============================================================================
+const gotTheLock = app.requestSingleInstanceLock();
+if (!gotTheLock) {
+  console.log('[Electron] Another instance is already running, quitting...');
+  app.quit();
+  // Exit immediately to prevent any further code execution
+  process.exit(0);
+}
+
 // Configuration
 const CONFIG = {
   port: 8080,
@@ -415,19 +426,13 @@ app.on('activate', () => {
   }
 });
 
-// Prevent multiple instances
-const gotTheLock = app.requestSingleInstanceLock();
-if (!gotTheLock) {
-  console.log('[Electron] Another instance is running, quitting...');
-  app.quit();
-} else {
-  app.on('second-instance', () => {
-    if (mainWindow) {
-      if (mainWindow.isMinimized()) mainWindow.restore();
-      mainWindow.focus();
-    }
-  });
-}
+// Handle second instance attempt - focus existing window
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+  }
+});
 
 // Handle quit
 app.on('before-quit', () => {

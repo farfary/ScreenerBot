@@ -125,6 +125,9 @@ module.exports = {
         description: 'Automated Solana DeFi trading bot with wallet management',
         language: 1033, // English (United States)
         icon: path.join(__dirname, 'assets', 'icon.ico'),
+        // CRITICAL: Set arch to match build target - defaults to x86 if not specified!
+        // This determines whether the MSI installs to "Program Files" (x64) or "Program Files (x86)"
+        arch: targetArch === 'arm64' ? 'x64' : targetArch, // WIX doesn't support arm64 yet, use x64 for arm64 builds
         ui: {
           chooseDirectory: true, // Allow user to choose install directory
         },
