@@ -1485,26 +1485,54 @@ impl TokenDatabase {
 
     /// Get rejection statistics grouped by reason
     pub fn get_rejection_stats(&self) -> TokenResult<Vec<(String, String, i64)>> {
+        self.get_rejection_stats_with_time_filter(None, None)
+    }
+
+    /// Get rejection statistics grouped by reason with optional time filter
+    /// Queries update_tracking table for UNIQUE tokens rejected in time range
+    /// This is the correct semantic - counting unique tokens, not cumulative events
+    pub fn get_rejection_stats_with_time_filter(
+        &self,
+        start_time: Option<i64>,
+        end_time: Option<i64>,
+    ) -> TokenResult<Vec<(String, String, i64)>> {
         let conn = self
             .conn
             .lock()
             .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
 
-        let mut stmt = conn
-            .prepare(
-                "SELECT 
+        // Build query with optional time filters on last_rejection_at
+        let mut query = "SELECT 
                     last_rejection_reason, 
                     last_rejection_source, 
                     COUNT(*) as count 
                  FROM update_tracking 
-                 WHERE last_rejection_reason IS NOT NULL 
-                 GROUP BY last_rejection_reason, last_rejection_source 
-                 ORDER BY count DESC",
-            )
+                 WHERE last_rejection_reason IS NOT NULL".to_string();
+
+        if start_time.is_some() {
+            query.push_str(" AND last_rejection_at >= :start_time");
+        }
+        if end_time.is_some() {
+            query.push_str(" AND last_rejection_at <= :end_time");
+        }
+
+        query.push_str(" GROUP BY last_rejection_reason, last_rejection_source ORDER BY count DESC");
+
+        let mut stmt = conn
+            .prepare(&query)
             .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
 
+        // Bind parameters
+        let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = Vec::new();
+        if let Some(ref start) = start_time {
+            params.push((":start_time", start));
+        }
+        if let Some(ref end) = end_time {
+            params.push((":end_time", end));
+        }
+
         let rows = stmt
-            .query_map([], |row| {
+            .query_map(params.as_slice(), |row| {
                 Ok((
                     row.get::<_, String>(0)?,
                     row.get::<_, String>(1).unwrap_or_default(),
@@ -4000,6 +4028,19 @@ pub async fn get_rejection_stats_async() -> TokenResult<Vec<(String, String, i64
     let db = get_global_database()
         .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
     tokio::task::spawn_blocking(move || db.get_rejection_stats())
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async: get rejection statistics with optional time filter
+/// Counts UNIQUE tokens rejected in the time range (not cumulative events)
+pub async fn get_rejection_stats_with_time_filter_async(
+    start_time: Option<i64>,
+    end_time: Option<i64>,
+) -> TokenResult<Vec<(String, String, i64)>> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+    tokio::task::spawn_blocking(move || db.get_rejection_stats_with_time_filter(start_time, end_time))
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
 }

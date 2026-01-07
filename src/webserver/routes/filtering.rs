@@ -14,7 +14,7 @@ use crate::{
     logger::{self, LogTag},
     tokens::{
         get_recent_rejections_async, get_rejected_tokens_async, get_rejection_stats_async,
-        get_rejection_stats_aggregated_async, get_token_info_batch_async,
+        get_rejection_stats_with_time_filter_async, get_token_info_batch_async,
     },
     webserver::state::AppState,
     webserver::utils::{error_response, success_response},
@@ -453,10 +453,10 @@ async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
     // Fetch stats and rejection data
     let stats_result = filtering::fetch_stats().await;
     
-    // Always use rejection_stats table for consistent analytics
-    // This table tracks cumulative rejection events over time
-    // When no time range is provided, get all data (None, None)
-    let rejection_result = get_rejection_stats_aggregated_async(query.start_time, query.end_time).await;
+    // Query update_tracking for UNIQUE tokens rejected in time range
+    // This is the correct semantic - counting unique tokens, not cumulative rejection events
+    // Default (no time range) = current snapshot of all rejected tokens
+    let rejection_result = get_rejection_stats_with_time_filter_async(query.start_time, query.end_time).await;
     
     let recent_result = get_recent_rejections_async(20).await;
     

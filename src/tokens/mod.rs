@@ -45,6 +45,7 @@ pub use database::{
     get_recent_rejections_async,
     get_rejection_stats_async,
     get_rejection_stats_for_range_async,
+    get_rejection_stats_with_time_filter_async,
     get_rejected_tokens_async,
     get_token_async,
     get_token_info_batch_async,
