@@ -1076,21 +1076,12 @@ function renderStatusView() {
 // ============================================================================
 
 function renderAnalyticsView() {
-  // Show loading state when switching time ranges
-  if (state.isLoadingAnalytics) {
+  // Show loading state when switching time ranges or initially loading
+  if (state.isLoadingAnalytics || !state.analytics) {
     return `
       <div class="analytics-loading">
         <div class="loading-spinner"></div>
         <p>Loading analytics for ${getTimeRangeLabel()}...</p>
-      </div>
-    `;
-  }
-  
-  if (!state.analytics) {
-    return `
-      <div class="analytics-loading">
-        <div class="loading-spinner"></div>
-        <p>Loading analytics data...</p>
       </div>
     `;
   }
@@ -1109,7 +1100,7 @@ function renderAnalyticsView() {
     <div class="analytics-header">
       <div class="analytics-title-group">
         <div class="analytics-title">
-          <i class="icon-chart-pie"></i> Filtering Analysis
+          <i class="icon-chart-pie"></i> Analytics
         </div>
         <div class="analytics-subtitle">
           ${Utils.escapeHtml(timeRangeText)}

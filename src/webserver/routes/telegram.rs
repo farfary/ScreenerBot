@@ -82,6 +82,8 @@ pub struct NotificationSettings {
     pub errors: bool,
     pub startup_shutdown: bool,
     pub filtering_alerts: bool,
+    pub trade_alerts: bool,
+    pub daily_summary: bool,
 }
 
 #[derive(Deserialize)]
@@ -105,6 +107,8 @@ pub struct UpdateNotificationSettings {
     pub errors: Option<bool>,
     pub startup_shutdown: Option<bool>,
     pub filtering_alerts: Option<bool>,
+    pub trade_alerts: Option<bool>,
+    pub daily_summary: Option<bool>,
 }
 
 // === ROUTES ===
@@ -214,6 +218,8 @@ async fn get_settings(State(_state): State<Arc<AppState>>) -> Response {
             errors: config.notify_system_errors,
             startup_shutdown: config.notify_on_startup,
             filtering_alerts: config.notify_filtering_alerts,
+            trade_alerts: config.notify_trade_alerts,
+            daily_summary: config.notify_daily_summary,
         },
         commands_enabled: config.commands_enabled,
         inline_actions: config.inline_actions_enabled,
@@ -270,6 +276,12 @@ async fn update_settings(
                 }
                 if let Some(v) = notif.filtering_alerts {
                     cfg.telegram.notify_filtering_alerts = v;
+                }
+                if let Some(v) = notif.trade_alerts {
+                    cfg.telegram.notify_trade_alerts = v;
+                }
+                if let Some(v) = notif.daily_summary {
+                    cfg.telegram.notify_daily_summary = v;
                 }
             }
             if let Some(commands) = req.commands_enabled {

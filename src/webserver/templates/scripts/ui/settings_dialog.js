@@ -3631,6 +3631,8 @@ export class SettingsDialog {
           errors: true,
           startup_shutdown: true,
           filtering_alerts: true,
+          trade_alerts: true,
+          daily_summary: false,
         },
         commands_enabled: true,
         inline_actions: true,
@@ -3942,6 +3944,32 @@ export class SettingsDialog {
               </label>
             </div>
           </div>
+
+          <div class="settings-field">
+            <div class="settings-field-info">
+              <label>Trade Alerts</label>
+              <span class="settings-field-hint">Notify on significant trades for watched tokens</span>
+            </div>
+            <div class="settings-field-control">
+              <label class="settings-toggle">
+                <input type="checkbox" id="tgNotifyTradeAlerts" ${settings.notifications?.trade_alerts !== false ? "checked" : ""}>
+                <span class="settings-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="settings-field">
+            <div class="settings-field-info">
+              <label>Daily Summary</label>
+              <span class="settings-field-hint">Receive daily trading activity and P&L summary</span>
+            </div>
+            <div class="settings-field-control">
+              <label class="settings-toggle">
+                <input type="checkbox" id="tgNotifyDailySummary" ${settings.notifications?.daily_summary === true ? "checked" : ""}>
+                <span class="settings-toggle-slider"></span>
+              </label>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -4231,6 +4259,8 @@ export class SettingsDialog {
       { id: "#tgNotifyError", key: "errors" },
       { id: "#tgNotifyStartup", key: "startup_shutdown" },
       { id: "#tgNotifyFiltering", key: "filtering_alerts" },
+      { id: "#tgNotifyTradeAlerts", key: "trade_alerts" },
+      { id: "#tgNotifyDailySummary", key: "daily_summary" },
     ];
 
     notificationHandlers.forEach(({ id, key }) => {
