@@ -695,8 +695,6 @@ pub fn format_tokens_page(tokens: &[PassedToken], page: usize, total_pages: usiz
     for token in tokens.iter() {
         let safe_symbol = html_escape(&token.symbol);
         let safe_name = html_escape(token.name.as_deref().unwrap_or("Unknown"));
-        let mint_short = &token.mint[..4];
-        let mint_end = &token.mint[token.mint.len()-4..];
         
         text.push_str(&format!(
             "• <b>{}</b> ({})\n  <code>{}</code>\n  <a href=\"https://dexscreener.com/solana/{}\">DexScreener</a>\n\n",

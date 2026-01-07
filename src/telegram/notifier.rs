@@ -59,9 +59,9 @@ impl TelegramNotifier {
     pub async fn send(&self, notification: &Notification) -> Result<(), String> {
         // Handle pagination notification
         if let NotificationType::NewTokensFound { session_id, .. } = &notification.notification_type {
-            if let Some((items, total_pages, total_items)) = PAGINATION_MANAGER.get_page(session_id, 1) {
-                let text = formatters::format_tokens_page(&items, 1, total_pages, total_items);
-                let keyboard = keyboards::pagination_keyboard(session_id, 1, total_pages);
+            if let Some((items, total_pages, total_items)) = PAGINATION_MANAGER.get_page(session_id, 0) {
+                let text = formatters::format_tokens_page(&items, 0, total_pages, total_items);
+                let keyboard = keyboards::pagination_keyboard(session_id, 0, total_pages);
                 
                 self.bot
                     .send_message(self.chat_id, text)
