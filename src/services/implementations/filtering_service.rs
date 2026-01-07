@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use crate::filtering;
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
-use crate::tokens::cleanup_rejection_history_async;
+use crate::tokens::{cleanup_rejection_history_async, cleanup_rejection_stats_async};
 
 // Timing constants
 const FILTER_CACHE_TTL_SECS: u64 = 30;
@@ -119,11 +119,13 @@ impl Service for FilteringService {
             }
         }));
 
-        // Rejection history cleanup task - prevents unbounded database growth
+        // Rejection history and stats cleanup task - prevents unbounded database growth
         let shutdown_cleanup = Arc::clone(&shutdown);
         let cleanup_handle = tokio::spawn(async move {
             // Do initial cleanup immediately on start
-            logger::info(LogTag::Filtering, "Running initial rejection history cleanup...");
+            logger::info(LogTag::Filtering, "Running initial rejection data cleanup...");
+            
+            // Cleanup old rejection_history entries
             match cleanup_rejection_history_async(REJECTION_HISTORY_HOURS_TO_KEEP).await {
                 Ok(deleted) => {
                     if deleted > 0 {
@@ -140,6 +142,24 @@ impl Service for FilteringService {
                     );
                 }
             }
+            
+            // Cleanup old rejection_stats entries (aggregated hourly buckets)
+            match cleanup_rejection_stats_async(REJECTION_HISTORY_HOURS_TO_KEEP).await {
+                Ok(deleted) => {
+                    if deleted > 0 {
+                        logger::info(
+                            LogTag::Filtering,
+                            &format!("Initial cleanup: removed {} old rejection stats buckets", deleted),
+                        );
+                    }
+                }
+                Err(e) => {
+                    logger::warning(
+                        LogTag::Filtering,
+                        &format!("Initial rejection stats cleanup failed: {}", e),
+                    );
+                }
+            }
 
             // Then continue with periodic cleanup loop
             loop {
@@ -148,6 +168,7 @@ impl Service for FilteringService {
                     _ = tokio::time::sleep(Duration::from_secs(REJECTION_HISTORY_CLEANUP_INTERVAL_SECS)) => {}
                 }
 
+                // Cleanup rejection_history
                 match cleanup_rejection_history_async(REJECTION_HISTORY_HOURS_TO_KEEP).await {
                     Ok(deleted) => {
                         if deleted > 0 {
@@ -161,6 +182,24 @@ impl Service for FilteringService {
                         logger::warning(
                             LogTag::Filtering,
                             &format!("Rejection history cleanup failed: {}", e),
+                        );
+                    }
+                }
+                
+                // Cleanup rejection_stats (aggregated hourly buckets)
+                match cleanup_rejection_stats_async(REJECTION_HISTORY_HOURS_TO_KEEP).await {
+                    Ok(deleted) => {
+                        if deleted > 0 {
+                            logger::debug(
+                                LogTag::Filtering,
+                                &format!("Rejection stats cleanup: removed {} buckets older than {}h", deleted, REJECTION_HISTORY_HOURS_TO_KEEP),
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        logger::warning(
+                            LogTag::Filtering,
+                            &format!("Rejection stats cleanup failed: {}", e),
                         );
                     }
                 }

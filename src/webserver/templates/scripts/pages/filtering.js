@@ -103,10 +103,13 @@ async function setTimeRangePreset(preset) {
   state.isLoadingAnalytics = true;
   render();
   
-  await loadAnalytics();
-  
-  state.isLoadingAnalytics = false;
-  render();
+  try {
+    await loadAnalytics();
+  } finally {
+    // Always clear loading state, even on error
+    state.isLoadingAnalytics = false;
+    render();
+  }
 }
 
 async function setCustomTimeRange(startDate, endDate) {
@@ -2141,6 +2144,18 @@ export function createLifecycle() {
   return {
     async init() {
       console.log("[Filtering] Initializing");
+      
+      // Validate time range state consistency - if preset is "custom" but times are null, reset to "all"
+      if (state.timeRange.preset === "custom" && (!state.timeRange.startTime || !state.timeRange.endTime)) {
+        console.warn("[Filtering] Inconsistent time range state detected, resetting to 'all'");
+        state.timeRange.preset = "all";
+        state.timeRange.startTime = null;
+        state.timeRange.endTime = null;
+        AppState.save("filtering_timeRangePreset", "all");
+        AppState.save("filtering_timeRangeStart", null);
+        AppState.save("filtering_timeRangeEnd", null);
+      }
+      
       await loadData();
     },
 
@@ -2312,10 +2327,13 @@ window.filteringPage = {
     state.isLoadingAnalytics = true;
     render();
     
-    await loadAnalytics();
-    
-    state.isLoadingAnalytics = false;
-    render();
+    try {
+      await loadAnalytics();
+    } finally {
+      // Always clear loading state, even on error
+      state.isLoadingAnalytics = false;
+      render();
+    }
   },
 
   refreshAnalytics: async () => {
