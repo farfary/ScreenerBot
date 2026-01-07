@@ -112,19 +112,6 @@ async function setTimeRangePreset(preset) {
   }
 }
 
-async function setCustomTimeRange(startDate, endDate) {
-  if (startDate) {
-    state.timeRange.startTime = Math.floor(new Date(startDate).getTime() / 1000);
-  }
-  if (endDate) {
-    state.timeRange.endTime = Math.floor(new Date(endDate).getTime() / 1000);
-  }
-  state.timeRange.preset = "custom";
-  AppState.save("filtering_timeRangePreset", "custom");
-  await loadAnalytics();
-  render();
-}
-
 function getTimeRangeLabel() {
   const { preset, startTime, endTime } = state.timeRange;
   if (preset === "all" || (!startTime && !endTime)) {
@@ -931,10 +918,6 @@ async function fetchAnalytics() {
 // RENDERING
 // ============================================================================
 
-// ============================================================================
-// RENDERING
-// ============================================================================
-
 function renderInfoBar() {
   if (!state.stats) return "";
 
@@ -947,8 +930,8 @@ function renderInfoBar() {
     updated_at,
   } = state.stats;
 
-  const priceRate = total_tokens > 0 ? ((with_pool_price / total_tokens) * 100).toFixed(1) : 0;
-  const passedRate = total_tokens > 0 ? ((passed_filtering / total_tokens) * 100).toFixed(1) : 0;
+  const priceRate = total_tokens > 0 ? (with_pool_price / total_tokens) * 100 : 0;
+  const passedRate = total_tokens > 0 ? (passed_filtering / total_tokens) * 100 : 0;
   const cacheAge = updated_at ? Utils.formatTimeAgo(new Date(updated_at)) : "Never";
 
   return `
@@ -958,11 +941,11 @@ function renderInfoBar() {
       </div>
       <div class="info-item">
         <span class="label">Priced:</span>
-        <span class="value">${Utils.escapeHtml(Utils.formatNumber(with_pool_price, 0))} (${Utils.escapeHtml(priceRate)}%)</span>
+        <span class="value">${Utils.escapeHtml(Utils.formatNumber(with_pool_price, 0))} (${Utils.escapeHtml(Utils.formatPercentValue(priceRate, { includeSign: false, decimals: 1 }))})</span>
       </div>
       <div class="info-item highlight">
         <span class="label">Passed:</span>
-        <span class="value">${Utils.escapeHtml(Utils.formatNumber(passed_filtering, 0))} (${Utils.escapeHtml(passedRate)}%)</span>
+        <span class="value">${Utils.escapeHtml(Utils.formatNumber(passed_filtering, 0))} (${Utils.escapeHtml(Utils.formatPercentValue(passedRate, { includeSign: false, decimals: 1 }))})</span>
       </div>
       <div class="info-item">
         <span class="label">Positions:</span>
@@ -992,8 +975,8 @@ function renderStatusView() {
     updated_at,
   } = state.stats;
 
-  const priceRate = total_tokens > 0 ? ((with_pool_price / total_tokens) * 100).toFixed(1) : 0;
-  const passedRate = total_tokens > 0 ? ((passed_filtering / total_tokens) * 100).toFixed(1) : 0;
+  const priceRate = total_tokens > 0 ? (with_pool_price / total_tokens) * 100 : 0;
+  const passedRate = total_tokens > 0 ? (passed_filtering / total_tokens) * 100 : 0;
 
   // Render rejection breakdown if available
   let rejectionBreakdown = "";
@@ -1049,12 +1032,12 @@ function renderStatusView() {
       <div class="status-card">
         <span class="metric-label">With Price</span>
         <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(with_pool_price, 0))}</span>
-        <span class="metric-meta">${Utils.escapeHtml(`${priceRate}% have pricing`)}</span>
+        <span class="metric-meta">${Utils.escapeHtml(`${Utils.formatPercentValue(priceRate, { includeSign: false, decimals: 1 })} have pricing`)}</span>
       </div>
       <div class="status-card dominant">
         <span class="metric-label">Passed Filters</span>
         <span class="metric-value">${Utils.escapeHtml(Utils.formatNumber(passed_filtering, 0))}</span>
-        <span class="metric-meta">${Utils.escapeHtml(`${passedRate}% passed`)}</span>
+        <span class="metric-meta">${Utils.escapeHtml(`${Utils.formatPercentValue(passedRate, { includeSign: false, decimals: 1 })} passed`)}</span>
       </div>
       <div class="status-card">
         <span class="metric-label">Open Positions</span>
@@ -1111,7 +1094,7 @@ function renderAnalyticsView() {
   const timeRangeText = state.timeRange.preset === "all" 
     ? "Showing all-time rejection statistics" 
     : state.timeRange.preset === "custom"
-      ? `Showing rejections from custom range`
+      ? "Showing rejections from custom range"
       : `Showing rejections from last ${TIME_RANGE_PRESETS[state.timeRange.preset]?.label || "period"}`;
   
   // Header with time range filter (no refresh button - use footer refresh)
@@ -1173,13 +1156,13 @@ function renderAnalyticsView() {
       <div class="kpi-card">
         <div class="kpi-content">
           <span class="kpi-label">Passed Tokens</span>
-          <span class="kpi-value" style="color: var(--success-color)">${Utils.formatNumber(data.total_passed, 0)}</span>
+          <span class="kpi-value text-success">${Utils.formatNumber(data.total_passed, 0)}</span>
           <span class="kpi-subtext">
-            <span style="color: var(--success-color)">${data.pass_rate}%</span> pass rate
+            <span class="text-success">${Utils.formatPercentValue(data.pass_rate, { includeSign: false })}</span> pass rate
           </span>
         </div>
-        <i class="icon-circle-check kpi-icon" style="color: var(--success-color); opacity: 0.2"></i>
-        <div class="pass-rate-visual" style="position: absolute; bottom: 0; left: 0; right: 0; height: 4px; border-radius: 0;">
+        <i class="icon-circle-check kpi-icon text-success" style="opacity: 0.2"></i>
+        <div class="pass-rate-visual">
           <div class="pass-rate-segment passed" style="width: ${data.pass_rate}%"></div>
         </div>
       </div>
@@ -1188,12 +1171,12 @@ function renderAnalyticsView() {
       <div class="kpi-card">
         <div class="kpi-content">
           <span class="kpi-label">Rejected Tokens</span>
-          <span class="kpi-value" style="color: var(--error-color)">${Utils.formatNumber(data.total_rejected, 0)}</span>
+          <span class="kpi-value text-error">${Utils.formatNumber(data.total_rejected, 0)}</span>
           <span class="kpi-subtext">
-            <span style="color: var(--error-color)">${data.rejection_rate}%</span> rejection rate
+            <span class="text-error">${Utils.formatPercentValue(data.rejection_rate, { includeSign: false })}</span> rejection rate
           </span>
         </div>
-        <i class="icon-circle-x kpi-icon" style="color: var(--error-color); opacity: 0.2"></i>
+        <i class="icon-circle-x kpi-icon text-error" style="opacity: 0.2"></i>
       </div>
     </div>
   `;
@@ -1219,7 +1202,7 @@ function renderAnalyticsView() {
                 </div>
                 <div class="bar-meta">
                   <span>${Utils.formatNumber(cat.count, 0)} tokens</span>
-                  <span>${cat.percentage}%</span>
+                  <span>${Utils.formatPercentValue(cat.percentage, { includeSign: false })}</span>
                 </div>
               </div>
             </div>
@@ -1236,7 +1219,7 @@ function renderAnalyticsView() {
           ${data.by_source && data.by_source.length > 0 ? data.by_source.map(src => `
             <div class="bar-chart-row">
               <div class="bar-label-col">
-                <div class="bar-label" style="font-weight: 600; width: auto">${Utils.escapeHtml(src.source)}</div>
+                <div class="bar-label font-bold w-auto">${Utils.escapeHtml(src.source)}</div>
               </div>
               <div class="bar-track-col">
                 <div class="bar-track">
@@ -1244,7 +1227,7 @@ function renderAnalyticsView() {
                 </div>
                 <div class="bar-meta">
                   <span>${Utils.formatNumber(src.count, 0)} tokens</span>
-                  <span>${src.percentage}%</span>
+                  <span>${Utils.formatPercentValue(src.percentage, { includeSign: false })}</span>
                 </div>
               </div>
             </div>
@@ -1258,7 +1241,7 @@ function renderAnalyticsView() {
   const bottomHtml = `
     <div class="charts-grid">
       <!-- Top Rejection Reasons -->
-      <div class="chart-card" style="grid-column: span 2">
+      <div class="chart-card span-2">
         <div class="chart-header">
           <div class="chart-title"><i class="icon-list"></i> Top Rejection Reasons</div>
         </div>
@@ -1268,9 +1251,9 @@ function renderAnalyticsView() {
               <tr>
                 <th>Reason</th>
                 <th>Category</th>
-                <th style="text-align: right">Count</th>
-                <th style="text-align: right">%</th>
-                <th style="text-align: right">Impact</th>
+                <th class="text-end">Count</th>
+                <th class="text-end">%</th>
+                <th class="text-end">Impact</th>
               </tr>
             </thead>
             <tbody>
@@ -1280,16 +1263,16 @@ function renderAnalyticsView() {
                 return `
                   <tr>
                     <td>
-                      <span style="font-weight: 500">${Utils.escapeHtml(r.display_label)}</span>
+                      <span class="font-medium">${Utils.escapeHtml(r.display_label)}</span>
                     </td>
                     <td>
                       <span class="reason-badge">${Utils.escapeHtml(r.category)}</span>
                     </td>
-                    <td style="text-align: right; font-family: var(--font-data)">
+                    <td class="text-end font-data">
                       ${Utils.formatNumber(r.count, 0)}
                     </td>
-                    <td style="text-align: right; font-family: var(--font-data); color: var(--text-secondary)">
-                      ${r.percentage}%
+                    <td class="text-end font-data text-secondary">
+                      ${Utils.formatPercentValue(r.percentage, { includeSign: false })}
                     </td>
                     <td class="reason-bar-cell">
                       <div class="mini-bar">
@@ -1298,7 +1281,7 @@ function renderAnalyticsView() {
                     </td>
                   </tr>
                 `;
-              }).join("") : '<tr><td colspan="5" style="text-align: center; padding: 20px">No data available</td></tr>'}
+              }).join("") : '<tr><td colspan="5" class="text-center p-20">No data available</td></tr>'}
             </tbody>
           </table>
         </div>
@@ -1306,69 +1289,7 @@ function renderAnalyticsView() {
     </div>
   `;
 
-  // Data Quality Section (if exists)
-  const dqHtml = data.data_quality && data.data_quality.length > 0 ? `
-    <div class="analytics-section" style="margin-top: var(--spacing-lg)">
-      <h3 class="analytics-section-title">
-        <i class="icon-triangle-alert"></i> Data Quality Issues
-      </h3>
-      <div class="dq-grid">
-        ${data.data_quality.map(dq => `
-          <div class="dq-card ${Utils.escapeHtml(dq.severity)}">
-            <i class="icon-circle-alert dq-icon"></i>
-            <div class="dq-content">
-              <span class="dq-label">${Utils.escapeHtml(dq.label)}</span>
-              <div class="dq-stats">
-                ${Utils.formatNumber(dq.count, 0)} tokens (${dq.percentage}%)
-              </div>
-            </div>
-          </div>
-        `).join("")}
-      </div>
-    </div>
-  ` : "";
-
-  // Rejected Tokens Explorer Section
-  const explorerHtml = `
-    <div class="analytics-section" style="margin-top: var(--spacing-lg)">
-      <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md)">
-        <h3 class="analytics-section-title" style="margin: 0">
-          <i class="icon-search"></i> Rejected Tokens Explorer
-        </h3>
-        <div class="explorer-controls" style="display: flex; gap: var(--spacing-sm)">
-          <select id="explorer-reason-filter" class="form-select" onchange="window.filteringPage.filterExplorer()">
-            <option value="">All Reasons</option>
-            ${data.top_reasons ? data.top_reasons.map(r => `<option value="${r.reason}">${Utils.escapeHtml(r.display_label)}</option>`).join("") : ""}
-          </select>
-          <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.loadExplorer(0)">
-            <i class="icon-refresh-cw"></i>
-          </button>
-          <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.exportCsv()" title="Export to CSV">
-            <i class="icon-download"></i>
-          </button>
-        </div>
-      </div>
-      
-      <div class="explorer-table-container" id="rejected-tokens-table">
-        <div class="loading-spinner small"></div> Loading tokens...
-      </div>
-      
-      <div class="pagination-controls" style="display: flex; justify-content: center; gap: var(--spacing-md); margin-top: var(--spacing-md)">
-        <button class="btn btn-sm btn-secondary" id="explorer-prev" onclick="window.filteringPage.prevPage()" disabled>Previous</button>
-        <span id="explorer-page-info" style="align-self: center; font-family: var(--font-data)">Page 1</span>
-        <button class="btn btn-sm btn-secondary" id="explorer-next" onclick="window.filteringPage.nextPage()">Next</button>
-      </div>
-    </div>
-  `;
-
   // Trigger initial load of explorer data if not already loaded
-  // setTimeout(() => {
-  //   if (!state.explorerLoaded) {
-  //     window.filteringPage.loadExplorer(0);
-  //     state.explorerLoaded = true;
-  //   }
-  // }, 100);
-
   return `
     <div class="analytics-view">
       ${headerHtml}
@@ -1406,7 +1327,7 @@ function renderExplorerDashboard(data) {
                 <span class="top-reason-count">${Utils.formatNumber(r.count, 0)}</span>
               </div>
             `).join("")}
-            ${topReasons.length === 0 ? '<div class="analytics-empty" style="padding: 12px; font-size: 0.75rem">No data</div>' : ""}
+            ${topReasons.length === 0 ? '<div class="analytics-empty-compact">No data</div>' : ""}
           </div>
         </div>
 
@@ -1415,14 +1336,14 @@ function renderExplorerDashboard(data) {
           <div class="top-reasons-list">
             ${recentRejections.slice(0, 10).map(t => `
               <div class="top-reason-item" onclick="window.filteringPage.selectReason('${t.reason}', '${Utils.escapeHtml(t.display_label.replace(/'/g, "\\'"))}')">
-                <div style="display: flex; flex-direction: column; min-width: 0">
-                  <span class="top-reason-label" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">${Utils.escapeHtml(t.symbol || "Unknown")}</span>
-                  <span style="font-size: 0.65rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis">${Utils.escapeHtml(t.display_label)}</span>
+                <div class="flex-col min-w-0">
+                  <span class="top-reason-label truncate">${Utils.escapeHtml(t.symbol || "Unknown")}</span>
+                  <span class="text-xs truncate">${Utils.escapeHtml(t.display_label)}</span>
                 </div>
                 <span class="top-reason-count">${Utils.formatTimeAgo(new Date(t.rejected_at))}</span>
               </div>
             `).join("")}
-            ${recentRejections.length === 0 ? '<div class="analytics-empty" style="padding: 12px; font-size: 0.75rem">No recent</div>' : ""}
+            ${recentRejections.length === 0 ? '<div class="analytics-empty-compact">No recent</div>' : ""}
           </div>
         </div>
       </div>
@@ -1990,7 +1911,6 @@ async function handleRefreshSnapshot() {
 
   try {
     await refreshSnapshot();
-    // Removed success toast - silent refresh, only show errors
     // Reload stats after refresh
     setTimeout(() => loadStats(), 1000);
   } catch (error) {
@@ -2192,7 +2112,13 @@ export function createLifecycle() {
         // Re-register deactivate cleanup (cleanups are cleared after each deactivate)
         // and force-show tab bar to handle race conditions with TabBarManager
         ctx.manageTabBar(tabBar);
-        tabBar.show({ force: true });
+        // Ensure registry is up to date in case of page reload/HMR
+        TabBarManager.register("filtering", tabBar);
+        
+        // Force show in next frame to ensure DOM is ready and override any race conditions
+        requestAnimationFrame(() => {
+          if (tabBar) tabBar.show({ force: true });
+        });
       }
 
       if (!poller) {
@@ -2532,7 +2458,7 @@ window.filteringPage = {
         <div class="explorer-detail-header">
           <div class="detail-title-group">
             <span class="reason-badge large">${Utils.escapeHtml(label)}</span>
-            <div class="explorer-search-input-wrapper" style="width: 180px">
+            <div class="explorer-search-input-wrapper width-180">
               <i class="icon-search"></i>
               <input type="text" placeholder="Filter..." value="${Utils.escapeHtml(searchQuery)}" 
                      oninput="window.filteringPage.filterTokens(this.value)">
@@ -2545,7 +2471,7 @@ window.filteringPage = {
           </div>
         </div>
         <div class="explorer-table-wrapper">
-          <div style="padding: 24px; text-align: center; color: var(--text-muted); font-size: 0.8rem">Loading...</div>
+          <div class="explorer-empty-state">Loading...</div>
         </div>
         <div class="pagination-controls">
           <button class="page-btn" onclick="window.filteringPage.firstPage()" disabled title="First"><i class="icon-chevrons-left"></i></button>
@@ -2557,7 +2483,7 @@ window.filteringPage = {
       `;
     } else {
       const wrapper = container.querySelector(".explorer-table-wrapper");
-      if (wrapper) wrapper.innerHTML = '<div class="loading-spinner small" style="margin: 40px auto; display: block;"></div>';
+      if (wrapper) wrapper.innerHTML = '<div class="loading-spinner small explorer-loading-full"></div>';
     }
     
     try {
@@ -2576,7 +2502,7 @@ window.filteringPage = {
 
       if (tokens.length === 0) {
         wrapper.innerHTML = `
-          <div style="padding: 32px; text-align: center; color: var(--text-muted); font-size: 0.8rem">
+          <div class="explorer-empty-state">
             No tokens found${searchQuery ? " matching filter" : ""}
           </div>`;
         // Update pagination
@@ -2599,7 +2525,7 @@ window.filteringPage = {
             <tr>
               <th>Token</th>
               <th>Source</th>
-              <th style="text-align: right">Time</th>
+              <th class="text-end">Time</th>
             </tr>
           </thead>
           <tbody>
@@ -2609,7 +2535,7 @@ window.filteringPage = {
         const src = t.image_url;
         const logo = src
           ? `<img class="token-logo" alt="" src="${Utils.escapeHtml(src)}" loading="lazy" />`
-          : '<div class="token-logo" style="display: flex; align-items: center; justify-content: center; font-size: 8px; background: var(--bg-tertiary); color: var(--text-muted)">?</div>';
+          : '<div class="token-logo token-logo-placeholder">?</div>';
         const sym = Utils.escapeHtml(t.symbol || "—");
         const name = Utils.escapeHtml(t.name || "Unknown");
         
@@ -2637,7 +2563,7 @@ window.filteringPage = {
           <td>
             <span class="source-badge ${t.source.toLowerCase()}">${Utils.escapeHtml(t.source)}</span>
           </td>
-          <td style="text-align: right; font-family: var(--font-data); color: var(--text-muted); font-size: 0.75rem">
+          <td class="table-time-cell">
             ${Utils.formatTimeAgo(new Date(t.rejected_at))}
           </td>
         </tr>
@@ -2663,7 +2589,7 @@ window.filteringPage = {
       console.error("Failed to load explorer:", err);
       const wrapper = container.querySelector(".explorer-table-wrapper");
       if (wrapper) {
-        wrapper.innerHTML = `<div class="error-message" style="padding: 40px">Failed to load tokens: ${err.message}</div>`;
+        wrapper.innerHTML = `<div class="error-message p-lg">Failed to load tokens: ${err.message}</div>`;
       }
     }
   }
