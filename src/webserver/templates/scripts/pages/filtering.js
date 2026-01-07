@@ -1114,7 +1114,7 @@ function renderAnalyticsView() {
       ? `Showing rejections from custom range`
       : `Showing rejections from last ${TIME_RANGE_PRESETS[state.timeRange.preset]?.label || "period"}`;
   
-  // Header with time range filter
+  // Header with time range filter (no refresh button - use footer refresh)
   const headerHtml = `
     <div class="analytics-header">
       <div class="analytics-title-group">
@@ -1124,11 +1124,6 @@ function renderAnalyticsView() {
         <div class="analytics-subtitle">
           ${Utils.escapeHtml(timeRangeText)}
         </div>
-      </div>
-      <div class="analytics-actions">
-        <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.refreshAnalytics()">
-          <i class="icon-refresh-cw"></i> Refresh
-        </button>
       </div>
     </div>
     
@@ -2337,27 +2332,24 @@ window.filteringPage = {
   },
 
   refreshAnalytics: async () => {
-    const btn = document.querySelector(".analytics-actions button");
-    if (btn) {
-      const originalContent = btn.innerHTML;
-      btn.innerHTML = '<div class="loading-spinner small"></div> Refreshing...';
-      btn.disabled = true;
-      try {
-        await loadAnalytics();
-        if (window.filteringPage.currentReason) {
-          window.filteringPage.loadExplorer(window.filteringPage.explorerPage);
-        } else {
-          const container = document.getElementById("explorer-detail-view");
-          if (container && state.analytics) {
-            container.innerHTML = renderExplorerDashboard(state.analytics);
-          }
-        }
-      } finally {
-        btn.innerHTML = originalContent;
-        btn.disabled = false;
-      }
-    } else {
+    // Simply load analytics and re-render - no inline button spinner needed
+    // The footer refresh button and isLoadingAnalytics state handle UX
+    state.isLoadingAnalytics = true;
+    render();
+    
+    try {
       await loadAnalytics();
+      if (window.filteringPage.currentReason) {
+        window.filteringPage.loadExplorer(window.filteringPage.explorerPage);
+      } else {
+        const container = document.getElementById("explorer-detail-view");
+        if (container && state.analytics) {
+          container.innerHTML = renderExplorerDashboard(state.analytics);
+        }
+      }
+    } finally {
+      state.isLoadingAnalytics = false;
+      render();
     }
   },
   
@@ -2480,6 +2472,7 @@ window.filteringPage = {
     try {
       const url = `/api/filtering/rejected-tokens?limit=${limit}&offset=${testPage * limit}&reason=${encodeURIComponent(reason)}`;
       const response = await fetch(url);
+      if (!response.ok) throw new Error("Failed to fetch tokens");
       const tokens = await response.json();
       
       if (tokens.length === 0) {
@@ -2490,6 +2483,7 @@ window.filteringPage = {
           const mid = Math.floor((low + high) / 2);
           const checkUrl = `/api/filtering/rejected-tokens?limit=${limit}&offset=${mid * limit}&reason=${encodeURIComponent(reason)}`;
           const checkRes = await fetch(checkUrl);
+          if (!checkRes.ok) throw new Error("Failed to fetch tokens");
           const checkTokens = await checkRes.json();
           if (checkTokens.length === 0) {
             high = mid;
