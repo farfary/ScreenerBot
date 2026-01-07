@@ -33,6 +33,7 @@ let mainWindow = null;
 let backendProcess = null;
 let isQuitting = false;
 let tray = null;
+let isExitDialogOpen = false; // Guard flag to prevent multiple exit dialogs
 
 /**
  * Get the path to tray icon based on platform
@@ -57,10 +58,21 @@ function createTray() {
   
   const iconPath = getTrayIconPath();
   
+  // Validate icon file exists
+  if (!fs.existsSync(iconPath)) {
+    console.error('[Electron] Tray icon not found:', iconPath);
+    return;
+  }
+  
   // Create tray icon - resize for better visibility
   let trayIcon;
   try {
     trayIcon = nativeImage.createFromPath(iconPath);
+    // Check if icon loaded successfully
+    if (trayIcon.isEmpty()) {
+      console.error('[Electron] Tray icon is empty/invalid:', iconPath);
+      return;
+    }
     // Resize to appropriate size for system tray
     trayIcon = trayIcon.resize({ width: 16, height: 16 });
   } catch (err) {
@@ -109,21 +121,31 @@ function createTray() {
  * Returns: 'minimize' | 'quit' | 'cancel'
  */
 async function showExitDialog() {
-  const result = await dialog.showMessageBox(mainWindow, {
-    type: 'question',
-    buttons: ['Minimize to Tray', 'Quit Completely', 'Cancel'],
-    defaultId: 0,
-    cancelId: 2,
-    title: 'Close ScreenerBot',
-    message: 'What would you like to do?',
-    detail: 'ScreenerBot can continue running in the background. The trading bot will keep monitoring and trading while minimized to the system tray.',
-    icon: nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'icon.png'))
-  });
+  // Prevent multiple dialogs from stacking
+  if (isExitDialogOpen) {
+    return 'cancel';
+  }
+  isExitDialogOpen = true;
   
-  switch (result.response) {
-    case 0: return 'minimize';
-    case 1: return 'quit';
-    default: return 'cancel';
+  try {
+    const result = await dialog.showMessageBox(mainWindow, {
+      type: 'question',
+      buttons: ['Minimize to Tray', 'Quit Completely', 'Cancel'],
+      defaultId: 0,
+      cancelId: 2,
+      title: 'Close ScreenerBot',
+      message: 'What would you like to do?',
+      detail: 'ScreenerBot can continue running in the background. The trading bot will keep monitoring and trading while minimized to the system tray.',
+      icon: nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'icon.png'))
+    });
+    
+    switch (result.response) {
+      case 0: return 'minimize';
+      case 1: return 'quit';
+      default: return 'cancel';
+    }
+  } finally {
+    isExitDialogOpen = false;
   }
 }
 
