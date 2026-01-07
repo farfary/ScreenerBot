@@ -1882,6 +1882,15 @@ export class SettingsDialog {
         status = data.data || data;
       }
 
+      // Also fetch TOTP status
+      const totpResponse = await fetch("/api/auth/totp/status");
+      let totpStatus = { enabled: false };
+      if (totpResponse.ok) {
+        const totpData = await totpResponse.json();
+        totpStatus = totpData.data || totpData;
+      }
+      status.totp_enabled = totpStatus.enabled;
+
       content.innerHTML = this._buildSecurityTab(status);
       this._attachSecurityHandlers(content, status);
       enhanceAllSelects(content);
@@ -1900,6 +1909,7 @@ export class SettingsDialog {
     const passwordType = status.password_type || "pin6";
     const autoLockSecs = status.auto_lock_timeout_secs || 0;
     const lockOnBlur = status.lock_on_blur || false;
+    const totpEnabled = status.totp_enabled || false;
 
     // Password type display name
     const typeNames = {
@@ -2018,6 +2028,38 @@ export class SettingsDialog {
         </div>
       </div>
 
+      <!-- Two-Factor Authentication -->
+      <div class="settings-section">
+        <h3 class="settings-section-title">
+          <i class="icon-shield-check"></i>
+          Two-Factor Authentication
+        </h3>
+        <p class="settings-section-description">
+          Add an extra layer of security using an authenticator app (Google Authenticator, Authy, etc.)
+        </p>
+
+        <div class="settings-group">
+          <div class="settings-field">
+            <div class="settings-field-info">
+              <label>2FA Status</label>
+              <span class="settings-field-hint">
+                ${totpEnabled ? "Two-factor authentication is enabled" : "Not configured"}
+              </span>
+            </div>
+            <div class="settings-field-control">
+              ${totpEnabled ?
+                `<button class="btn btn-warning btn-sm" id="securityDisable2FABtn" ${!hasPassword ? "disabled" : ""}>
+                  <i class="icon-x"></i> Disable 2FA
+                </button>` :
+                `<button class="btn btn-primary btn-sm" id="securityEnable2FABtn" ${!hasPassword ? "disabled" : ""}>
+                  <i class="icon-shield-check"></i> Enable 2FA
+                </button>`
+              }
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Password Setup Modal Container -->
       <div id="securityPasswordModal" class="security-modal" style="display: none;">
         <div class="security-modal-backdrop"></div>
@@ -2092,6 +2134,18 @@ export class SettingsDialog {
           Utils.showToast("Cannot lock - lockscreen not ready", "error");
         }
       });
+    }
+
+    // Enable 2FA button
+    const enable2FABtn = content.querySelector("#securityEnable2FABtn");
+    if (enable2FABtn) {
+      enable2FABtn.addEventListener("click", () => this._showTotpSetupModal(content));
+    }
+
+    // Disable 2FA button
+    const disable2FABtn = content.querySelector("#securityDisable2FABtn");
+    if (disable2FABtn) {
+      disable2FABtn.addEventListener("click", () => this._disableTotp(content));
     }
   }
 
@@ -2387,6 +2441,205 @@ export class SettingsDialog {
         Utils.showToast("Failed to remove password: " + error.message, "error");
       }
     };
+  }
+
+  /**
+   * Show TOTP setup modal with QR code and verification
+   */
+  async _showTotpSetupModal(content) {
+    const modal = content.querySelector("#securityPasswordModal");
+    const title = content.querySelector("#securityModalTitle");
+    const body = content.querySelector("#securityModalBody");
+    const closeBtn = content.querySelector("#securityModalClose");
+    const backdrop = modal.querySelector(".security-modal-backdrop");
+
+    if (!modal || !body) return;
+
+    title.textContent = "Enable Two-Factor Authentication";
+    body.innerHTML = `
+      <div class="totp-setup-step" id="totpStep1">
+        <p style="color: var(--text-secondary); margin-bottom: 1rem;">Enter your password to continue:</p>
+        <div class="security-form-group">
+          <input type="password" id="totpSetupPassword" class="settings-input" placeholder="Enter password" autocomplete="current-password">
+        </div>
+        <div class="totp-setup-actions" style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem;">
+          <button class="btn btn-secondary btn-sm" id="totpCancelBtn">Cancel</button>
+          <button class="btn btn-primary btn-sm" id="totpContinueBtn">Continue</button>
+        </div>
+      </div>
+      <div class="totp-setup-step" id="totpStep2" style="display: none;">
+        <div id="totpQrContainer" style="text-align: center; margin: 1rem 0;"></div>
+        <div class="totp-manual-entry" style="margin: 1rem 0;">
+          <label style="font-size: 0.75rem; color: var(--text-secondary);">Manual entry code:</label>
+          <code id="totpSecretCode" style="display: block; padding: 0.5rem; background: var(--bg-tertiary); border-radius: 4px; margin-top: 0.25rem; word-break: break-all; font-family: monospace;"></code>
+        </div>
+        <p style="margin: 1rem 0; color: var(--text-secondary);">Enter the 6-digit code from your authenticator app:</p>
+        <div class="security-form-group">
+          <input type="text" id="totpVerifyCode" class="settings-input" placeholder="000000" maxlength="6" pattern="[0-9]{6}" style="text-align: center; font-size: 1.25rem; letter-spacing: 0.25em;">
+        </div>
+        <div class="totp-setup-actions" style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem;">
+          <button class="btn btn-secondary btn-sm" id="totpBackBtn">Back</button>
+          <button class="btn btn-primary btn-sm" id="totpVerifyBtn">Verify & Enable</button>
+        </div>
+      </div>
+    `;
+
+    modal.style.display = "flex";
+
+    let currentSecret = "";
+
+    // Close handlers
+    const closeModal = () => {
+      modal.style.display = "none";
+    };
+
+    closeBtn.onclick = closeModal;
+    backdrop.onclick = closeModal;
+
+    // Cancel button
+    body.querySelector("#totpCancelBtn")?.addEventListener("click", closeModal);
+
+    // Continue to step 2
+    body.querySelector("#totpContinueBtn")?.addEventListener("click", async () => {
+      const password = body.querySelector("#totpSetupPassword")?.value;
+      if (!password) {
+        Utils.showToast("Please enter your password", "error");
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/auth/totp/setup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          Utils.showToast(data.error || data.message || "Failed to setup 2FA", "error");
+          return;
+        }
+
+        const result = data.data || data;
+        currentSecret = result.secret;
+
+        // Show QR code
+        const qrContainer = body.querySelector("#totpQrContainer");
+        qrContainer.innerHTML = `<img src="${result.qr_code}" alt="TOTP QR Code" style="max-width: 200px; height: auto; border-radius: 8px;">`;
+
+        // Show manual code
+        body.querySelector("#totpSecretCode").textContent = result.secret;
+
+        // Switch to step 2
+        body.querySelector("#totpStep1").style.display = "none";
+        body.querySelector("#totpStep2").style.display = "block";
+      } catch (err) {
+        Utils.showToast("Failed to setup 2FA", "error");
+      }
+    });
+
+    // Back button
+    body.querySelector("#totpBackBtn")?.addEventListener("click", () => {
+      body.querySelector("#totpStep1").style.display = "block";
+      body.querySelector("#totpStep2").style.display = "none";
+    });
+
+    // Verify button
+    body.querySelector("#totpVerifyBtn")?.addEventListener("click", async () => {
+      const code = body.querySelector("#totpVerifyCode")?.value;
+      if (!code || code.length !== 6) {
+        Utils.showToast("Please enter a 6-digit code", "error");
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/auth/totp/verify-setup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ secret: currentSecret, code }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          Utils.showToast(data.error || data.message || "Invalid code", "error");
+          return;
+        }
+
+        Utils.showToast("Two-factor authentication enabled!", "success");
+        closeModal();
+        // Reload security tab
+        await this._loadSecurityTab(content);
+      } catch (err) {
+        Utils.showToast("Failed to verify code", "error");
+      }
+    });
+  }
+
+  /**
+   * Disable TOTP 2FA with password confirmation
+   */
+  async _disableTotp(content) {
+    const modal = content.querySelector("#securityPasswordModal");
+    const title = content.querySelector("#securityModalTitle");
+    const body = content.querySelector("#securityModalBody");
+    const closeBtn = content.querySelector("#securityModalClose");
+    const backdrop = modal.querySelector(".security-modal-backdrop");
+
+    if (!modal || !body) return;
+
+    title.textContent = "Disable Two-Factor Authentication";
+    body.innerHTML = `
+      <div class="security-form">
+        <p style="color: var(--text-secondary); margin-bottom: 1rem;">Enter your password to disable 2FA:</p>
+        <div class="security-form-group">
+          <input type="password" id="totpDisablePassword" class="settings-input" placeholder="Enter password" autocomplete="current-password">
+        </div>
+        <div class="totp-setup-actions" style="display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem;">
+          <button class="btn btn-secondary btn-sm" id="totpDisableCancelBtn">Cancel</button>
+          <button class="btn btn-warning btn-sm" id="totpDisableConfirmBtn">Disable 2FA</button>
+        </div>
+      </div>
+    `;
+
+    modal.style.display = "flex";
+
+    // Close handlers
+    const closeModal = () => {
+      modal.style.display = "none";
+    };
+
+    closeBtn.onclick = closeModal;
+    backdrop.onclick = closeModal;
+
+    body.querySelector("#totpDisableCancelBtn")?.addEventListener("click", closeModal);
+
+    body.querySelector("#totpDisableConfirmBtn")?.addEventListener("click", async () => {
+      const password = body.querySelector("#totpDisablePassword")?.value;
+      if (!password) {
+        Utils.showToast("Please enter your password", "error");
+        return;
+      }
+
+      try {
+        const response = await fetch("/api/auth/totp/disable", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password }),
+        });
+
+        const data = await response.json();
+        if (!response.ok) {
+          Utils.showToast(data.error || data.message || "Failed to disable 2FA", "error");
+          return;
+        }
+
+        Utils.showToast("Two-factor authentication disabled", "success");
+        closeModal();
+        await this._loadSecurityTab(content);
+      } catch (err) {
+        Utils.showToast("Failed to disable 2FA", "error");
+      }
+    });
   }
 
   /**
