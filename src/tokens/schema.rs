@@ -195,6 +195,29 @@ pub const CREATE_TABLES: &[&str] = &[
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )
     "#,
+    // Rejection history table for time-range analytics
+    r#"
+    CREATE TABLE IF NOT EXISTS rejection_history (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        mint TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        source TEXT NOT NULL,
+        rejected_at INTEGER NOT NULL
+    )
+    "#,
+    // Aggregated rejection stats table (hourly buckets) - replaces per-event logging
+    r#"
+    CREATE TABLE IF NOT EXISTS rejection_stats (
+        bucket_hour INTEGER NOT NULL,
+        reason TEXT NOT NULL,
+        source TEXT NOT NULL,
+        rejection_count INTEGER NOT NULL DEFAULT 0,
+        unique_tokens INTEGER NOT NULL DEFAULT 0,
+        first_seen INTEGER NOT NULL,
+        last_seen INTEGER NOT NULL,
+        PRIMARY KEY (bucket_hour, reason, source)
+    )
+    "#,
 ];
 
 /// All CREATE INDEX statements
@@ -214,6 +237,9 @@ pub const CREATE_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_market_gecko_last_fetch ON market_geckoterminal(market_data_last_fetched_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_market_gecko_first_fetch ON market_geckoterminal(market_data_first_fetched_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_market_gecko_liquidity ON market_geckoterminal(liquidity_usd DESC)",
+
+    // Rejection stats index (hourly buckets)
+    "CREATE INDEX IF NOT EXISTS idx_rejection_stats_hour ON rejection_stats(bucket_hour DESC)",
 
     // Token pools indexes
     "CREATE INDEX IF NOT EXISTS idx_token_pools_mint ON token_pools(mint)",
@@ -242,6 +268,11 @@ pub const CREATE_INDEXES: &[&str] = &[
     // Token favorites indexes
     "CREATE INDEX IF NOT EXISTS idx_favorites_mint ON token_favorites(mint)",
     "CREATE INDEX IF NOT EXISTS idx_favorites_created ON token_favorites(created_at DESC)",
+
+    // Rejection history indexes (for time-range queries)
+    "CREATE INDEX IF NOT EXISTS idx_rejection_history_time ON rejection_history(rejected_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_rejection_history_reason_time ON rejection_history(reason, rejected_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_rejection_history_mint ON rejection_history(mint)",
 ];
 
 /// ALTER TABLE statements for schema migrations (existing databases)

@@ -2113,3 +2113,144 @@
   padding: 4px 10px;
   font-size: 0.75rem;
 }
+
+/* ============================================================================
+   TIME RANGE FILTER - Analytics date/time filtering
+   ============================================================================ */
+
+.time-range-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--bg-secondary);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacing-md);
+  flex-wrap: wrap;
+}
+
+.time-range-presets {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  padding: 2px;
+}
+
+.time-preset-btn {
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s ease;
+  font-family: var(--font-data);
+}
+
+.time-preset-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.time-preset-btn.active {
+  background: var(--accent-color);
+  color: #fff;
+}
+
+.time-range-custom {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.custom-range-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.custom-range-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-hover);
+}
+
+.custom-range-toggle.active {
+  background: var(--accent-bg);
+  color: var(--accent-color);
+  border-color: var(--accent-color);
+}
+
+.custom-range-inputs {
+  display: none;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.custom-range-inputs.show {
+  display: flex;
+}
+
+.time-input {
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  font-family: var(--font-data);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  min-width: 180px;
+}
+
+.time-input:focus {
+  outline: none;
+  border-color: var(--accent-color);
+  box-shadow: 0 0 0 2px var(--accent-bg);
+}
+
+.time-separator {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+/* Time range info badge in analytics subtitle */
+.time-range-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--accent-bg);
+  color: var(--accent-color);
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 500;
+  margin-left: var(--spacing-sm);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .time-range-filter {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .custom-range-inputs {
+    flex-wrap: wrap;
+  }
+  
+  .time-input {
+    min-width: 150px;
+  }
+}

@@ -28,10 +28,18 @@ const state = {
   hasChanges: false,
   isSaving: false,
   isRefreshing: false,
+  isLoadingAnalytics: false, // Loading state for analytics section
+  analyticsRequestId: 0, // Request ID to prevent race conditions
   lastSaved: null,
   searchQuery: AppState.load("filtering_searchQuery", ""),
   activeTab: AppState.load("filtering_activeTab", "status"),
   initialized: false,
+  // Time range filter for analytics - persist all values
+  timeRange: {
+    preset: AppState.load("filtering_timeRangePreset", "all"),
+    startTime: AppState.load("filtering_timeRangeStart", null),
+    endTime: AppState.load("filtering_timeRangeEnd", null),
+  },
 };
 
 const FILTER_TABS = [
@@ -46,6 +54,15 @@ const FILTER_TABS = [
 
 const TABBAR_STATE_KEY = "filtering.tab";
 
+// Time range presets (in seconds)
+const TIME_RANGE_PRESETS = {
+  "1h": { label: "1H", seconds: 60 * 60 },
+  "6h": { label: "6H", seconds: 6 * 60 * 60 },
+  "24h": { label: "24H", seconds: 24 * 60 * 60 },
+  "7d": { label: "7D", seconds: 7 * 24 * 60 * 60 },
+  "all": { label: "All", seconds: null },
+};
+
 let tabBar = null;
 const eventCleanups = [];
 
@@ -54,6 +71,68 @@ function addTrackedListener(element, event, handler) {
   if (!element) return;
   element.addEventListener(event, handler);
   eventCleanups.push(() => element.removeEventListener(event, handler));
+}
+
+// Time range filter functions
+// Helper to format timestamp for datetime-local input (local time, not UTC)
+function formatTimestampForInput(timestamp) {
+  if (!timestamp) return "";
+  const date = new Date(timestamp * 1000);
+  const pad = (n) => n.toString().padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+async function setTimeRangePreset(preset) {
+  const now = Math.floor(Date.now() / 1000);
+  state.timeRange.preset = preset;
+  
+  if (preset === "all" || preset === "custom") {
+    state.timeRange.startTime = null;
+    state.timeRange.endTime = null;
+  } else if (TIME_RANGE_PRESETS[preset]) {
+    state.timeRange.startTime = now - TIME_RANGE_PRESETS[preset].seconds;
+    state.timeRange.endTime = now;
+  }
+  
+  // Persist all time range state
+  AppState.save("filtering_timeRangePreset", preset);
+  AppState.save("filtering_timeRangeStart", state.timeRange.startTime);
+  AppState.save("filtering_timeRangeEnd", state.timeRange.endTime);
+  
+  // Show loading state immediately
+  state.isLoadingAnalytics = true;
+  render();
+  
+  await loadAnalytics();
+  
+  state.isLoadingAnalytics = false;
+  render();
+}
+
+async function setCustomTimeRange(startDate, endDate) {
+  if (startDate) {
+    state.timeRange.startTime = Math.floor(new Date(startDate).getTime() / 1000);
+  }
+  if (endDate) {
+    state.timeRange.endTime = Math.floor(new Date(endDate).getTime() / 1000);
+  }
+  state.timeRange.preset = "custom";
+  AppState.save("filtering_timeRangePreset", "custom");
+  await loadAnalytics();
+  render();
+}
+
+function getTimeRangeLabel() {
+  const { preset, startTime, endTime } = state.timeRange;
+  if (preset === "all" || (!startTime && !endTime)) {
+    return "All Time";
+  }
+  if (preset === "custom") {
+    const start = startTime ? new Date(startTime * 1000).toLocaleString() : "∞";
+    const end = endTime ? new Date(endTime * 1000).toLocaleString() : "Now";
+    return `${start} → ${end}`;
+  }
+  return TIME_RANGE_PRESETS[preset]?.label || "Custom";
 }
 
 // ============================================================================
@@ -821,7 +900,26 @@ async function fetchRejectionStats() {
 }
 
 async function fetchAnalytics() {
-  return await requestManager.fetch("/api/filtering/analytics", {
+  // Build URL with time range parameters if set
+  let url = "/api/filtering/analytics";
+  const params = new URLSearchParams();
+  
+  if (state.timeRange.startTime) {
+    params.set("start_time", state.timeRange.startTime.toString());
+  }
+  if (state.timeRange.endTime) {
+    params.set("end_time", state.timeRange.endTime.toString());
+  }
+  if (state.timeRange.preset && state.timeRange.preset !== "all") {
+    params.set("preset", state.timeRange.preset);
+  }
+  
+  const queryString = params.toString();
+  if (queryString) {
+    url += "?" + queryString;
+  }
+  
+  return await requestManager.fetch(url, {
     priority: "normal",
   });
 }
@@ -985,6 +1083,16 @@ function renderStatusView() {
 // ============================================================================
 
 function renderAnalyticsView() {
+  // Show loading state when switching time ranges
+  if (state.isLoadingAnalytics) {
+    return `
+      <div class="analytics-loading">
+        <div class="loading-spinner"></div>
+        <p>Loading analytics for ${getTimeRangeLabel()}...</p>
+      </div>
+    `;
+  }
+  
   if (!state.analytics) {
     return `
       <div class="analytics-loading">
@@ -996,7 +1104,14 @@ function renderAnalyticsView() {
 
   const data = state.analytics;
   
-  // Header
+  // Time range info text
+  const timeRangeText = state.timeRange.preset === "all" 
+    ? "Showing all-time rejection statistics" 
+    : state.timeRange.preset === "custom"
+      ? `Showing rejections from custom range`
+      : `Showing rejections from last ${TIME_RANGE_PRESETS[state.timeRange.preset]?.label || "period"}`;
+  
+  // Header with time range filter
   const headerHtml = `
     <div class="analytics-header">
       <div class="analytics-title-group">
@@ -1004,13 +1119,39 @@ function renderAnalyticsView() {
           <i class="icon-chart-pie"></i> Filtering Analysis
         </div>
         <div class="analytics-subtitle">
-          Performance metrics and rejection analysis
+          ${Utils.escapeHtml(timeRangeText)}
         </div>
       </div>
       <div class="analytics-actions">
         <button class="btn btn-sm btn-secondary" onclick="window.filteringPage.refreshAnalytics()">
           <i class="icon-refresh-cw"></i> Refresh
         </button>
+      </div>
+    </div>
+    
+    <!-- Time Range Filter -->
+    <div class="time-range-filter">
+      <div class="time-range-presets">
+        <button class="time-preset-btn ${state.timeRange.preset === "1h" ? "active" : ""}" onclick="window.filteringPage.setTimeRangePreset('1h')">1H</button>
+        <button class="time-preset-btn ${state.timeRange.preset === "6h" ? "active" : ""}" onclick="window.filteringPage.setTimeRangePreset('6h')">6H</button>
+        <button class="time-preset-btn ${state.timeRange.preset === "24h" ? "active" : ""}" onclick="window.filteringPage.setTimeRangePreset('24h')">24H</button>
+        <button class="time-preset-btn ${state.timeRange.preset === "7d" ? "active" : ""}" onclick="window.filteringPage.setTimeRangePreset('7d')">7D</button>
+        <button class="time-preset-btn ${state.timeRange.preset === "all" ? "active" : ""}" onclick="window.filteringPage.setTimeRangePreset('all')">All</button>
+      </div>
+      <div class="time-range-custom">
+        <div class="custom-range-toggle ${state.timeRange.preset === "custom" ? "active" : ""}" onclick="window.filteringPage.toggleCustomRange()">
+          <i class="icon-calendar"></i> Custom
+        </div>
+        <div class="custom-range-inputs ${state.timeRange.preset === "custom" ? "show" : ""}">
+          <input type="datetime-local" id="time-range-start" class="time-input" 
+            value="${formatTimestampForInput(state.timeRange.startTime)}"
+            onchange="window.filteringPage.updateCustomRange()">
+          <span class="time-separator">→</span>
+          <input type="datetime-local" id="time-range-end" class="time-input" 
+            value="${formatTimestampForInput(state.timeRange.endTime)}"
+            onchange="window.filteringPage.updateCustomRange()">
+          <button class="btn btn-sm btn-primary" onclick="window.filteringPage.applyCustomRange()">Apply</button>
+        </div>
       </div>
     </div>
   `;
@@ -1956,14 +2097,26 @@ async function loadStats() {
 }
 
 async function loadAnalytics() {
+  // Increment request ID to track this request and prevent race conditions
+  const thisRequestId = ++state.analyticsRequestId;
+  
   try {
     const response = await fetchAnalytics();
+    
+    // Check if this is still the latest request (prevent stale data from overwriting)
+    if (thisRequestId !== state.analyticsRequestId) {
+      return; // A newer request was made, discard this response
+    }
+    
     state.analytics = response.data || response;
     // Re-render to show analytics data
     updateConfigPanels({ preserveScroll: false });
   } catch (error) {
-    console.error("Failed to load analytics:", error);
-    state.analytics = null;
+    // Only log error if this is still the active request
+    if (thisRequestId === state.analyticsRequestId) {
+      console.error("Failed to load analytics:", error);
+      state.analytics = null;
+    }
   }
 }
 
@@ -2082,6 +2235,88 @@ window.filteringPage = {
   tokenSearchQuery: "",
   
   debouncedFilterTokens: null,
+
+  // Time range filter functions
+  setTimeRangePreset: (preset) => {
+    setTimeRangePreset(preset);
+  },
+  
+  toggleCustomRange: () => {
+    if (state.timeRange.preset === "custom") {
+      // Already in custom mode, toggle off to all
+      setTimeRangePreset("all");
+    } else {
+      // Switch to custom mode
+      state.timeRange.preset = "custom";
+      AppState.save("filtering_timeRangePreset", "custom");
+      render();
+    }
+  },
+  
+  updateCustomRange: () => {
+    // Just update state without triggering refresh yet
+    const startInput = document.getElementById("time-range-start");
+    const endInput = document.getElementById("time-range-end");
+    if (startInput && startInput.value) {
+      state.timeRange.startTime = Math.floor(new Date(startInput.value).getTime() / 1000);
+    }
+    if (endInput && endInput.value) {
+      state.timeRange.endTime = Math.floor(new Date(endInput.value).getTime() / 1000);
+    }
+  },
+  
+  applyCustomRange: async () => {
+    const startInput = document.getElementById("time-range-start");
+    const endInput = document.getElementById("time-range-end");
+    
+    // Parse dates
+    let startTime = null;
+    let endTime = null;
+    
+    if (startInput && startInput.value) {
+      startTime = Math.floor(new Date(startInput.value).getTime() / 1000);
+    }
+    if (endInput && endInput.value) {
+      endTime = Math.floor(new Date(endInput.value).getTime() / 1000);
+    }
+    
+    // Validation: ensure both dates are provided
+    if (!startTime || !endTime) {
+      Utils.showToast("Please select both start and end dates", "error");
+      return;
+    }
+    
+    // Validation: start must be before end
+    if (startTime >= endTime) {
+      Utils.showToast("Start time must be before end time", "error");
+      return;
+    }
+    
+    // Validation: end cannot be in the future (with 1 minute tolerance)
+    const now = Math.floor(Date.now() / 1000);
+    if (endTime > now + 60) {
+      Utils.showToast("End time cannot be in the future", "error");
+      return;
+    }
+    
+    state.timeRange.startTime = startTime;
+    state.timeRange.endTime = endTime;
+    state.timeRange.preset = "custom";
+    
+    // Persist all state
+    AppState.save("filtering_timeRangePreset", "custom");
+    AppState.save("filtering_timeRangeStart", startTime);
+    AppState.save("filtering_timeRangeEnd", endTime);
+    
+    // Show loading state
+    state.isLoadingAnalytics = true;
+    render();
+    
+    await loadAnalytics();
+    
+    state.isLoadingAnalytics = false;
+    render();
+  },
 
   refreshAnalytics: async () => {
     const btn = document.querySelector(".analytics-actions button");

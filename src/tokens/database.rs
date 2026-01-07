@@ -1647,6 +1647,202 @@ impl TokenDatabase {
         Ok(results)
     }
 
+    /// Insert rejection event into history table (for time-range analytics)
+    pub fn insert_rejection_history(
+        &self,
+        mint: &str,
+        reason: &str,
+        source: &str,
+        rejected_at: i64,
+    ) -> TokenResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        conn.execute(
+            "INSERT INTO rejection_history (mint, reason, source, rejected_at) VALUES (?1, ?2, ?3, ?4)",
+            params![mint, reason, source, rejected_at],
+        )
+        .map_err(|e| TokenError::Database(format!("Failed to insert rejection history: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Get rejection statistics for a specific time range
+    pub fn get_rejection_stats_for_range(
+        &self,
+        start_time: Option<i64>,
+        end_time: Option<i64>,
+    ) -> TokenResult<Vec<(String, String, i64)>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        // If no time range specified, fall back to current rejection stats (update_tracking table)
+        if start_time.is_none() && end_time.is_none() {
+            return self.get_rejection_stats();
+        }
+
+        // Query rejection_history table for time-range stats
+        let mut query = "SELECT reason, source, COUNT(*) as count FROM rejection_history WHERE 1=1".to_string();
+        
+        if start_time.is_some() {
+            query.push_str(" AND rejected_at >= :start_time");
+        }
+        if end_time.is_some() {
+            query.push_str(" AND rejected_at <= :end_time");
+        }
+        
+        query.push_str(" GROUP BY reason, source ORDER BY count DESC");
+
+        let mut stmt = conn
+            .prepare(&query)
+            .map_err(|e| TokenError::Database(format!("Failed to prepare: {}", e)))?;
+
+        let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = Vec::new();
+        if let Some(ref start) = start_time {
+            params.push((":start_time", start));
+        }
+        if let Some(ref end) = end_time {
+            params.push((":end_time", end));
+        }
+
+        let rows = stmt
+            .query_map(params.as_slice(), |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1).unwrap_or_default(),
+                    row.get::<_, i64>(2)?,
+                ))
+            })
+            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            if let Ok(entry) = row {
+                results.push(entry);
+            }
+        }
+
+        Ok(results)
+    }
+
+    /// Cleanup old rejection history entries (keep last N hours)
+    /// This is critical for database size management - rejection history grows ~5GB/day
+    pub fn cleanup_rejection_history(&self, hours_to_keep: i64) -> TokenResult<usize> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let cutoff = chrono::Utc::now().timestamp() - (hours_to_keep * 60 * 60);
+        
+        let deleted = conn.execute(
+            "DELETE FROM rejection_history WHERE rejected_at < ?1",
+            params![cutoff],
+        )
+        .map_err(|e| TokenError::Database(format!("Failed to cleanup rejection history: {}", e)))?;
+
+        Ok(deleted)
+    }
+
+    /// Upsert rejection stat into aggregated hourly bucket table
+    /// This replaces per-event logging with O(1) aggregation
+    pub fn upsert_rejection_stat(&self, reason: &str, source: &str, timestamp: i64) -> TokenResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        // Round timestamp to hour bucket
+        let bucket_hour = (timestamp / 3600) * 3600;
+
+        conn.execute(
+            "INSERT INTO rejection_stats (bucket_hour, reason, source, rejection_count, unique_tokens, first_seen, last_seen)
+             VALUES (?1, ?2, ?3, 1, 1, ?4, ?4)
+             ON CONFLICT(bucket_hour, reason, source) DO UPDATE SET
+                 rejection_count = rejection_count + 1,
+                 last_seen = ?4",
+            params![bucket_hour, reason, source, timestamp],
+        )
+        .map_err(|e| TokenError::Database(format!("Upsert rejection stat failed: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// Get rejection statistics from aggregated table for a time range
+    pub fn get_rejection_stats_aggregated(
+        &self,
+        start_time: Option<i64>,
+        end_time: Option<i64>,
+    ) -> TokenResult<Vec<(String, String, i64)>> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let mut query = "SELECT reason, source, SUM(rejection_count) as total FROM rejection_stats WHERE 1=1".to_string();
+
+        if start_time.is_some() {
+            query.push_str(" AND bucket_hour >= :start_time");
+        }
+        if end_time.is_some() {
+            query.push_str(" AND bucket_hour <= :end_time");
+        }
+
+        query.push_str(" GROUP BY reason, source ORDER BY total DESC");
+
+        let mut stmt = conn
+            .prepare(&query)
+            .map_err(|e| TokenError::Database(format!("Prepare failed: {}", e)))?;
+
+        let mut params: Vec<(&str, &dyn rusqlite::ToSql)> = Vec::new();
+        if let Some(ref start) = start_time {
+            params.push((":start_time", start));
+        }
+        if let Some(ref end) = end_time {
+            params.push((":end_time", end));
+        }
+
+        let rows = stmt
+            .query_map(params.as_slice(), |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1).unwrap_or_default(),
+                    row.get::<_, i64>(2)?,
+                ))
+            })
+            .map_err(|e| TokenError::Database(format!("Query failed: {}", e)))?;
+
+        let mut results = Vec::new();
+        for row in rows {
+            if let Ok(entry) = row {
+                results.push(entry);
+            }
+        }
+        Ok(results)
+    }
+
+    /// Cleanup old aggregated rejection stats (keep last N hours)
+    pub fn cleanup_rejection_stats(&self, hours_to_keep: i64) -> TokenResult<usize> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let cutoff = chrono::Utc::now().timestamp() - (hours_to_keep * 3600);
+
+        let deleted = conn.execute(
+            "DELETE FROM rejection_stats WHERE bucket_hour < ?1",
+            params![cutoff],
+        )
+        .map_err(|e| TokenError::Database(format!("Delete rejection stats failed: {}", e)))?;
+
+        Ok(deleted)
+    }
+
     /// Check if token has stale market data (>2 minutes old or missing)
     pub fn is_market_data_stale(&self, mint: &str, threshold_seconds: i64) -> TokenResult<bool> {
         let conn = self
@@ -3837,6 +4033,82 @@ pub async fn get_rejected_tokens_async(
     })
     .await
     .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async: insert rejection history event (for time-range analytics)
+pub async fn insert_rejection_history_async(
+    mint: &str,
+    reason: &str,
+    source: &str,
+    rejected_at: i64,
+) -> TokenResult<()> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+    let mint_owned = mint.to_string();
+    let reason_owned = reason.to_string();
+    let source_owned = source.to_string();
+    tokio::task::spawn_blocking(move || {
+        db.insert_rejection_history(&mint_owned, &reason_owned, &source_owned, rejected_at)
+    })
+    .await
+    .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async: get rejection statistics for a specific time range
+pub async fn get_rejection_stats_for_range_async(
+    start_time: Option<i64>,
+    end_time: Option<i64>,
+) -> TokenResult<Vec<(String, String, i64)>> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+    tokio::task::spawn_blocking(move || db.get_rejection_stats_for_range(start_time, end_time))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async: cleanup old rejection history entries (keep last N hours)
+pub async fn cleanup_rejection_history_async(hours_to_keep: i64) -> TokenResult<usize> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+    tokio::task::spawn_blocking(move || db.cleanup_rejection_history(hours_to_keep))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async: upsert rejection stat into aggregated hourly bucket
+pub async fn upsert_rejection_stat_async(
+    reason: &str,
+    source: &str,
+    timestamp: i64,
+) -> TokenResult<()> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+    let reason = reason.to_string();
+    let source = source.to_string();
+    tokio::task::spawn_blocking(move || db.upsert_rejection_stat(&reason, &source, timestamp))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async: get rejection statistics from aggregated table
+pub async fn get_rejection_stats_aggregated_async(
+    start_time: Option<i64>,
+    end_time: Option<i64>,
+) -> TokenResult<Vec<(String, String, i64)>> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+    tokio::task::spawn_blocking(move || db.get_rejection_stats_aggregated(start_time, end_time))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async: cleanup old aggregated rejection stats
+pub async fn cleanup_rejection_stats_async(hours_to_keep: i64) -> TokenResult<usize> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+    tokio::task::spawn_blocking(move || db.cleanup_rejection_stats(hours_to_keep))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
 }
 
 fn map_tracking_row(row: &rusqlite::Row) -> rusqlite::Result<UpdateTrackingInfo> {

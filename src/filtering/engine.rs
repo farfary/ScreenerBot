@@ -10,8 +10,8 @@ use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::tokens::types::{DataSource, Token};
 use crate::tokens::{
-    clear_rejection_status_async, get_all_tokens_for_filtering_async, list_blacklisted_tokens_async,
-    update_rejection_status_async,
+    clear_rejection_status_async, get_all_tokens_for_filtering_async, upsert_rejection_stat_async,
+    list_blacklisted_tokens_async, update_rejection_status_async,
 };
 
 use super::sources::{self, FilterRejectionReason};
@@ -389,6 +389,27 @@ pub async fn compute_snapshot(
                             &format!(
                                 "Failed to persist rejection status for {}: {}",
                                 mint_for_rejection, e
+                            ),
+                        );
+                    }
+                });
+
+                // Upsert into aggregated rejection_stats table (hourly buckets)
+                let reason_for_stats = reason_label.clone();
+                let source_for_stats = reason_source.clone();
+                tokio::spawn(async move {
+                    if let Err(e) = upsert_rejection_stat_async(
+                        &reason_for_stats,
+                        &source_for_stats,
+                        rejection_time,
+                    )
+                    .await
+                    {
+                        logger::debug(
+                            LogTag::Filtering,
+                            &format!(
+                                "Failed to upsert rejection stat: {}",
+                                e
                             ),
                         );
                     }

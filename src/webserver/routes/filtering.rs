@@ -14,7 +14,7 @@ use crate::{
     logger::{self, LogTag},
     tokens::{
         get_recent_rejections_async, get_rejected_tokens_async, get_rejection_stats_async,
-        get_token_info_batch_async,
+        get_rejection_stats_aggregated_async, get_token_info_batch_async,
     },
     webserver::state::AppState,
     webserver::utils::{error_response, success_response},
@@ -411,9 +411,19 @@ struct AnalyticsResponse {
     // Recent rejections
     recent_rejections: Vec<RecentRejectionEntry>,
     
+    // Time range filter info
+    time_range: Option<TimeRangeInfo>,
+    
     // Metadata
     last_updated: String,
     timestamp: String,
+}
+
+#[derive(Debug, Serialize)]
+struct TimeRangeInfo {
+    start_time: Option<i64>,
+    end_time: Option<i64>,
+    preset: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -426,12 +436,30 @@ struct RecentRejectionEntry {
     rejected_at: String,
 }
 
+#[derive(Debug, Deserialize)]
+struct AnalyticsQuery {
+    /// Start time as Unix timestamp (seconds)
+    start_time: Option<i64>,
+    /// End time as Unix timestamp (seconds)
+    end_time: Option<i64>,
+    /// Preset name for reference (1h, 6h, 24h, 7d, all)
+    preset: Option<String>,
+}
+
 /// GET /api/filtering/analytics
 /// Comprehensive filtering analytics with detailed breakdowns
-async fn get_analytics() -> Response {
+/// Supports optional time range filtering via start_time and end_time query params
+async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
     // Fetch stats and rejection data
     let stats_result = filtering::fetch_stats().await;
-    let rejection_result = get_rejection_stats_async().await;
+    
+    // Use aggregated stats table for time-range queries (much faster than rejection_history)
+    let rejection_result = if query.start_time.is_some() || query.end_time.is_some() {
+        get_rejection_stats_aggregated_async(query.start_time, query.end_time).await
+    } else {
+        get_rejection_stats_async().await
+    };
+    
     let recent_result = get_recent_rejections_async(20).await;
     
     match (stats_result, rejection_result, recent_result) {
@@ -628,6 +656,17 @@ async fn get_analytics() -> Response {
             
             let rejection_rate = 100.0 - pass_rate;
             
+            // Build time range info if filtering was applied
+            let time_range = if query.start_time.is_some() || query.end_time.is_some() {
+                Some(TimeRangeInfo {
+                    start_time: query.start_time,
+                    end_time: query.end_time,
+                    preset: query.preset.clone(),
+                })
+            } else {
+                None
+            };
+            
             success_response(AnalyticsResponse {
                 total_tokens,
                 total_rejected,
@@ -639,6 +678,7 @@ async fn get_analytics() -> Response {
                 data_quality,
                 top_reasons,
                 recent_rejections,
+                time_range,
                 last_updated: stats.updated_at.to_rfc3339(),
                 timestamp: Utc::now().to_rfc3339(),
             })
