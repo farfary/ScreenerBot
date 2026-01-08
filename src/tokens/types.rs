@@ -609,6 +609,7 @@ pub struct UpdateTrackingInfo {
     pub last_error: Option<String>,
     pub last_error_at: Option<DateTime<Utc>>,
     pub market_error_count: u64,
+    pub market_error_type: Option<String>,
     pub security_error_count: u64,
 }
 

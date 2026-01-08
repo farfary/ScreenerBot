@@ -176,6 +176,7 @@ pub const CREATE_TABLES: &[&str] = &[
         last_security_error TEXT,
         last_security_error_at INTEGER,
         security_error_type TEXT,
+        market_error_type TEXT,
         last_rejection_reason TEXT,
         last_rejection_source TEXT,
         last_rejection_at INTEGER,
@@ -289,6 +290,8 @@ pub const ALTER_STATEMENTS: &[&str] = &[
     // Add mutable metadata tracking to security_rugcheck
     "ALTER TABLE security_rugcheck ADD COLUMN update_authority TEXT",
     "ALTER TABLE security_rugcheck ADD COLUMN is_mutable INTEGER",
+    // Add permanent failure tracking for market data (similar to security_error_type)
+    "ALTER TABLE update_tracking ADD COLUMN market_error_type TEXT",
 ];
 
 /// Performance PRAGMAs

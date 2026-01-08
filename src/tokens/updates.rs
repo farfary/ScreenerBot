@@ -39,9 +39,71 @@ use tokio::sync::{Mutex, Notify, Semaphore};
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
+/// Number of consecutive failures before marking a token as permanently failed for market data
+/// "Token not listed" errors are considered permanent after this many attempts
+const PERMANENT_FAILURE_THRESHOLD: u32 = 3;
+
 /// Check if updates should be paused due to active tools
 fn should_skip_for_tools() -> bool {
     crate::global::are_tools_active()
+}
+
+/// Determine the market error type based on failure messages
+/// - "Token not listed" → "not_listed" (potentially permanent after threshold)
+/// - Other errors → "temporary" (transient, will retry with backoff)
+fn classify_market_error(failures: &[String]) -> &'static str {
+    // Check if ALL failures are "not listed" type
+    let all_not_listed = failures
+        .iter()
+        .all(|f| f.contains("not listed") || f.contains("Token not listed"));
+
+    if all_not_listed && !failures.is_empty() {
+        "not_listed"
+    } else {
+        "temporary"
+    }
+}
+
+/// Record a market error and potentially mark as permanent failure
+/// Returns true if the token was marked as permanently failed
+fn handle_market_failure(
+    db: &TokenDatabase,
+    mint: &str,
+    failures: &[String],
+) -> bool {
+    let error_type = classify_market_error(failures);
+    let message = failures.join(" | ");
+
+    match db.record_market_error(mint, &message, error_type) {
+        Ok(error_count) => {
+            // Mark as permanent if it's a "not listed" error and we've hit the threshold
+            if error_type == "not_listed" && error_count >= PERMANENT_FAILURE_THRESHOLD {
+                // Update to permanent status
+                if let Err(e) = db.record_market_error(mint, &message, "permanent") {
+                    logger::error(
+                        LogTag::Tokens,
+                        &format!("Failed to mark {} as permanent failure: {}", mint, e),
+                    );
+                    return false;
+                }
+                logger::info(
+                    LogTag::Tokens,
+                    &format!(
+                        "Marked {} as permanently failed for market data after {} attempts (not listed on any exchange)",
+                        mint, error_count
+                    ),
+                );
+                return true;
+            }
+        }
+        Err(e) => {
+            logger::error(
+                LogTag::Tokens,
+                &format!("Failed to record market error for {}: {}", mint, e),
+            );
+        }
+    }
+    false
 }
 
 /// Filter out the token currently being viewed in the dashboard
@@ -887,18 +949,7 @@ async fn update_uninitialized_tokens(db: &TokenDatabase, coordinator: &RateLimit
             Ok(results) => {
                 for result in results {
                     if result.is_total_failure() {
-                        let message = result.failures.join(" | ");
-                        if let Err(err) =
-                            db.record_market_error(result.mint.as_str(), message.as_str())
-                        {
-                            logger::error(
-                                LogTag::Tokens,
-                                &format!(
-                                    "Failed to record seed error for {}: {}",
-                                    result.mint, err
-                                ),
-                            );
-                        }
+                        handle_market_failure(db, &result.mint, &result.failures);
                     } else if result.is_partial_failure() {
                         logger::warning(
                             LogTag::Tokens,
@@ -975,15 +1026,7 @@ async fn update_open_position_tokens(db: &TokenDatabase, coordinator: &RateLimit
                             LogTag::Tokens,
                             &format!("Total failure for {}: {:?}", result.mint, result.failures),
                         );
-                        let message = result.failures.join(" | ");
-                        if let Err(err) =
-                            db.record_market_error(result.mint.as_str(), message.as_str())
-                        {
-                            logger::error(
-                                LogTag::Tokens,
-                                &format!("Failed to record error for {}: {}", result.mint, err),
-                            );
-                        }
+                        handle_market_failure(db, &result.mint, &result.failures);
                     } else if result.is_partial_failure() {
                         logger::warning(
                             LogTag::Tokens,
@@ -1059,15 +1102,7 @@ async fn update_pool_tracked_tokens(db: &TokenDatabase, coordinator: &RateLimitC
             Ok(results) => {
                 for result in results {
                     if result.is_total_failure() {
-                        let message = result.failures.join(" | ");
-                        if let Err(err) =
-                            db.record_market_error(result.mint.as_str(), message.as_str())
-                        {
-                            logger::error(
-                                LogTag::Tokens,
-                                &format!("Failed to record error for {}: {}", result.mint, err),
-                            );
-                        }
+                        handle_market_failure(db, &result.mint, &result.failures);
                     } else if result.is_partial_failure() {
                         logger::warning(
                             LogTag::Tokens,
@@ -1158,15 +1193,7 @@ async fn update_filter_passed_tokens(db: &TokenDatabase, coordinator: &RateLimit
             Ok(results) => {
                 for result in results {
                     if result.is_total_failure() {
-                        let message = result.failures.join(" | ");
-                        if let Err(err) =
-                            db.record_market_error(result.mint.as_str(), message.as_str())
-                        {
-                            logger::error(
-                                LogTag::Tokens,
-                                &format!("Failed to record error for {}: {}", result.mint, err),
-                            );
-                        }
+                        handle_market_failure(db, &result.mint, &result.failures);
                     } else if result.is_partial_failure() {
                         logger::warning(
                             LogTag::Tokens,
@@ -1229,14 +1256,7 @@ async fn update_background_tokens(db: &TokenDatabase, coordinator: &RateLimitCoo
         Ok(results) => {
             for result in results {
                 if result.is_total_failure() {
-                    let message = result.failures.join(" | ");
-                    if let Err(err) = db.record_market_error(result.mint.as_str(), message.as_str())
-                    {
-                        logger::error(
-                            LogTag::Tokens,
-                            &format!("Failed to record error for {}: {}", result.mint, err),
-                        );
-                    }
+                    handle_market_failure(db, &result.mint, &result.failures);
                 } else if result.is_partial_failure() {
                     logger::warning(
                         LogTag::Tokens,

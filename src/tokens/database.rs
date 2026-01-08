@@ -1368,7 +1368,7 @@ impl TokenDatabase {
     // UPDATE TRACKING OPERATIONS
     // ========================================================================
 
-    /// Get tokens by priority with limit
+    /// Get tokens by priority with limit (excludes permanently failed market data tokens)
     pub fn get_tokens_by_priority(&self, priority: i32, limit: usize) -> TokenResult<Vec<String>> {
         let conn = self
             .conn
@@ -1380,6 +1380,7 @@ impl TokenDatabase {
                 "SELECT mint FROM update_tracking 
                  WHERE priority = ?1
                  AND (last_error_at IS NULL OR last_error_at < strftime('%s','now') - 180)
+                 AND (market_error_type IS NULL OR market_error_type != 'permanent')
                  ORDER BY market_data_last_updated_at ASC NULLS FIRST 
                  LIMIT ?2",
             )
@@ -1394,7 +1395,7 @@ impl TokenDatabase {
             .map_err(|e| TokenError::Database(format!("Failed to collect: {}", e)))
     }
 
-    /// Get oldest non-blacklisted tokens
+    /// Get oldest non-blacklisted tokens (excludes permanently failed market data tokens)
     pub fn get_oldest_non_blacklisted(&self, limit: usize) -> TokenResult<Vec<String>> {
         let conn = self
             .conn
@@ -1407,6 +1408,7 @@ impl TokenDatabase {
              LEFT JOIN blacklist b ON t.mint = b.mint
              LEFT JOIN update_tracking u ON t.mint = u.mint
              WHERE b.mint IS NULL
+             AND (u.market_error_type IS NULL OR u.market_error_type != 'permanent')
              ORDER BY COALESCE(u.market_data_last_updated_at, 0) ASC
              LIMIT ?1",
             )
@@ -2151,7 +2153,7 @@ impl TokenDatabase {
         Ok(result)
     }
 
-    /// Get tokens that have never received market data
+    /// Get tokens that have never received market data (excludes permanently failed)
     pub fn get_tokens_without_market_data(&self, limit: usize) -> TokenResult<Vec<String>> {
         let conn = self
             .conn
@@ -2168,6 +2170,7 @@ impl TokenDatabase {
                  AND md.mint IS NULL
                  AND mg.mint IS NULL
                  AND (u.last_error_at IS NULL OR u.last_error_at < strftime('%s','now') - 180)
+                 AND (u.market_error_type IS NULL OR u.market_error_type != 'permanent')
                  ORDER BY u.priority DESC, t.first_discovered_at ASC
                  LIMIT ?1",
             )
@@ -2180,6 +2183,25 @@ impl TokenDatabase {
         mints
             .collect::<Result<Vec<_>, _>>()
             .map_err(|e| TokenError::Database(format!("Failed to collect: {}", e)))
+    }
+
+    /// Count tokens with permanent market data failure (not listed on any exchange)
+    /// These tokens are excluded from market data update attempts
+    pub fn count_permanent_market_failures(&self) -> TokenResult<u64> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM update_tracking WHERE market_error_type = 'permanent'",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(|e| TokenError::Database(format!("Failed to count: {}", e)))?;
+
+        Ok(count as u64)
     }
 
     /// Get tokens without security (Rugcheck) data with exponential backoff for errors
@@ -2237,8 +2259,19 @@ impl TokenDatabase {
             .map_err(|e| TokenError::Database(format!("Failed to collect: {}", e)))
     }
 
-    /// Record a failed market update attempt (used to throttle retries)
-    pub fn record_market_error(&self, mint: &str, message: &str) -> TokenResult<()> {
+    /// Record a failed market update attempt with error type tracking
+    ///
+    /// Error types:
+    /// - "temporary": Transient errors (rate limit, network issues) - retry with backoff
+    /// - "permanent": Token not listed on any exchange - stop retrying after threshold
+    ///
+    /// Returns the new error count for the token
+    pub fn record_market_error(
+        &self,
+        mint: &str,
+        message: &str,
+        error_type: &str,
+    ) -> TokenResult<u32> {
         let conn = self
             .conn
             .lock()
@@ -2246,11 +2279,47 @@ impl TokenDatabase {
 
         let now = Utc::now().timestamp();
 
+        // Update error tracking with type and increment count
         conn.execute(
-            "UPDATE update_tracking SET last_error = ?1, last_error_at = ?2 WHERE mint = ?3",
-            params![message, now, mint],
+            "UPDATE update_tracking SET 
+                last_error = ?1, 
+                last_error_at = ?2, 
+                market_error_count = market_error_count + 1,
+                market_error_type = ?3
+             WHERE mint = ?4",
+            params![message, now, error_type, mint],
         )
         .map_err(|e| TokenError::Database(format!("Failed to record market error: {}", e)))?;
+
+        // Get the new error count
+        let error_count: u32 = conn
+            .query_row(
+                "SELECT market_error_count FROM update_tracking WHERE mint = ?1",
+                params![mint],
+                |row| row.get(0),
+            )
+            .unwrap_or(1);
+
+        Ok(error_count)
+    }
+
+    /// Clear market error tracking (called after successful market data fetch)
+    pub fn clear_market_error(&self, mint: &str) -> TokenResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        conn.execute(
+            "UPDATE update_tracking SET 
+                market_error_count = 0,
+                last_error = NULL,
+                last_error_at = NULL,
+                market_error_type = NULL
+             WHERE mint = ?1",
+            params![mint],
+        )
+        .map_err(|e| TokenError::Database(format!("Failed to clear market error: {}", e)))?;
 
         Ok(())
     }
@@ -2264,12 +2333,15 @@ impl TokenDatabase {
 
         let now = Utc::now().timestamp();
 
+        // Also clear any market error state on success
         conn.execute(
             "UPDATE update_tracking SET 
                 market_data_last_updated_at = ?1,
                 market_data_update_count = market_data_update_count + 1,
                 last_error = NULL,
-                last_error_at = NULL
+                last_error_at = NULL,
+                market_error_count = 0,
+                market_error_type = NULL
              WHERE mint = ?2",
             params![now, mint],
         )
@@ -2586,7 +2658,7 @@ impl TokenDatabase {
                         security_data_last_updated_at, security_data_update_count,
                         metadata_last_updated_at, decimals_last_updated_at,
                         pool_price_last_calculated_at, pool_price_last_used_pool_address,
-                        last_error, last_error_at, market_error_count,
+                        last_error, last_error_at, market_error_count, market_error_type,
                         last_security_error, last_security_error_at, security_error_count
                  FROM update_tracking
                  WHERE mint = ?1",
@@ -2621,7 +2693,7 @@ impl TokenDatabase {
                             security_data_last_updated_at, security_data_update_count,
                             metadata_last_updated_at, decimals_last_updated_at,
                             pool_price_last_calculated_at, pool_price_last_used_pool_address,
-                            last_error, last_error_at, market_error_count,
+                            last_error, last_error_at, market_error_count, market_error_type,
                             last_security_error, last_security_error_at, security_error_count
                      FROM update_tracking
                      WHERE priority = ?1
@@ -2645,7 +2717,7 @@ impl TokenDatabase {
                             security_data_last_updated_at, security_data_update_count,
                             metadata_last_updated_at, decimals_last_updated_at,
                             pool_price_last_calculated_at, pool_price_last_used_pool_address,
-                            last_error, last_error_at, market_error_count,
+                            last_error, last_error_at, market_error_count, market_error_type,
                             last_security_error, last_security_error_at, security_error_count
                      FROM update_tracking
                      ORDER BY priority DESC, COALESCE(market_data_last_updated_at, 0) ASC, mint ASC
@@ -2798,6 +2870,9 @@ impl TokenDatabase {
     ///
     /// If limit=0, returns ALL tokens. Otherwise returns limit tokens with offset.
     ///
+    /// If require_market_data=true, only returns tokens that have DexScreener OR GeckoTerminal data.
+    /// This significantly reduces memory usage for filtering (144k -> ~56k tokens).
+    ///
     /// PERFORMANCE: Uses LEFT JOINs to fetch all data in a single query, avoiding N+1 problem.
     pub fn get_all_tokens_optional_market(
         &self,
@@ -2805,6 +2880,7 @@ impl TokenDatabase {
         offset: usize,
         sort_by: Option<&str>,
         sort_direction: Option<&str>,
+        require_market_data: bool,
     ) -> TokenResult<Vec<Token>> {
         let conn = self
             .conn
@@ -2882,12 +2958,23 @@ impl TokenDatabase {
             LEFT JOIN market_geckoterminal g ON t.mint = g.mint
         "#;
 
+        // PERF: When require_market_data=true, only load tokens with market data
+        // This reduces initial load from 144k to ~56k tokens (60% reduction)
+        let where_clause = if require_market_data {
+            " WHERE (d.mint IS NOT NULL OR g.mint IS NOT NULL)"
+        } else {
+            ""
+        };
+
         let query = if limit == 0 {
-            format!("{} ORDER BY {} {}", select_base, order_column, direction)
+            format!(
+                "{}{} ORDER BY {} {}",
+                select_base, where_clause, order_column, direction
+            )
         } else {
             format!(
-                "{} ORDER BY {} {} LIMIT {} OFFSET {}",
-                select_base, order_column, direction, limit, offset
+                "{}{} ORDER BY {} {} LIMIT {} OFFSET {}",
+                select_base, where_clause, order_column, direction, limit, offset
             )
         };
 
@@ -4136,22 +4223,25 @@ pub async fn get_all_tokens_optional_market_async(
             offset,
             sort_by.as_deref(),
             sort_direction.as_deref(),
+            false, // Load all tokens including those without market data
         )
     })
     .await
     .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
 }
 
-/// Async: Load ALL tokens in a single batch query for filtering.
+/// Async: Load tokens for filtering with market data optimization.
 /// PERF: Uses efficient JOINs to avoid N+1 query problem.
-/// Returns all tokens with market data and security fields needed for filtering.
+/// PERF: Only loads tokens with DexScreener OR GeckoTerminal data (reduces 144k -> ~56k tokens).
+/// Returns tokens with market data and security fields needed for filtering.
 pub async fn get_all_tokens_for_filtering_async() -> TokenResult<Vec<Token>> {
     let db = get_global_database()
         .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
 
     tokio::task::spawn_blocking(move || {
-        // Use limit=0 to get ALL tokens, no sorting needed for filtering
-        db.get_all_tokens_optional_market(0, 0, None, None)
+        // PERF: require_market_data=true reduces initial load by ~60%
+        // Tokens without market data are immediately rejected anyway (dex_data_missing)
+        db.get_all_tokens_optional_market(0, 0, None, None, true)
     })
     .await
     .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
@@ -4198,6 +4288,15 @@ pub async fn is_market_data_stale_async(mint: &str, threshold_seconds: i64) -> T
         .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
     let mint_owned = mint.to_string();
     tokio::task::spawn_blocking(move || db.is_market_data_stale(&mint_owned, threshold_seconds))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async: count tokens with permanent market data failure
+pub async fn count_permanent_market_failures_async() -> TokenResult<u64> {
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+    tokio::task::spawn_blocking(move || db.count_permanent_market_failures())
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
 }
@@ -4432,9 +4531,10 @@ fn map_tracking_row(row: &rusqlite::Row) -> rusqlite::Result<UpdateTrackingInfo>
     let last_error: Option<String> = row.get(10)?;
     let last_error_at = ts_to_datetime(row.get::<_, Option<i64>>(11)?);
     let market_error_count = row.get::<_, Option<i64>>(12)?.unwrap_or(0).max(0) as u64;
-    let last_security_error: Option<String> = row.get(13)?;
-    let last_security_error_at = ts_to_datetime(row.get::<_, Option<i64>>(14)?);
-    let security_error_count = row.get::<_, Option<i64>>(15)?.unwrap_or(0).max(0) as u64;
+    let market_error_type: Option<String> = row.get(13)?;
+    let last_security_error: Option<String> = row.get(14)?;
+    let last_security_error_at = ts_to_datetime(row.get::<_, Option<i64>>(15)?);
+    let security_error_count = row.get::<_, Option<i64>>(16)?.unwrap_or(0).max(0) as u64;
 
     Ok(UpdateTrackingInfo {
         mint,
@@ -4448,6 +4548,7 @@ fn map_tracking_row(row: &rusqlite::Row) -> rusqlite::Result<UpdateTrackingInfo>
         pool_price_last_calculated_at: pool_price_last_calculated,
         pool_price_last_used_pool_address,
         market_error_count,
+        market_error_type,
         security_error_count,
         last_error,
         last_error_at,
