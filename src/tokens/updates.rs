@@ -78,8 +78,8 @@ fn handle_market_failure(
         Ok(error_count) => {
             // Mark as permanent if it's a "not listed" error and we've hit the threshold
             if error_type == "not_listed" && error_count >= PERMANENT_FAILURE_THRESHOLD {
-                // Update to permanent status
-                if let Err(e) = db.record_market_error(mint, &message, "permanent") {
+                // Update to permanent status (without incrementing count again)
+                if let Err(e) = db.mark_market_permanent(mint) {
                     logger::error(
                         LogTag::Tokens,
                         &format!("Failed to mark {} as permanent failure: {}", mint, e),

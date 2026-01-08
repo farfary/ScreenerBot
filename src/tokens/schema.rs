@@ -265,6 +265,7 @@ pub const CREATE_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_tracking_pool_calc ON update_tracking(pool_price_last_calculated_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_tracking_priority_market ON update_tracking(priority DESC, market_data_last_updated_at ASC)",
     "CREATE INDEX IF NOT EXISTS idx_tracking_priority_calc ON update_tracking(priority DESC, pool_price_last_calculated_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_tracking_market_error_type ON update_tracking(market_error_type)",
 
     // Composite indexes for common sorting patterns
     "CREATE INDEX IF NOT EXISTS idx_tokens_discovery_mint ON tokens(first_discovered_at DESC, mint)",

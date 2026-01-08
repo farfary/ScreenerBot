@@ -7,6 +7,7 @@ use rusqlite::{params, params_from_iter, Connection, Row};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
+use crate::logger::{self, LogTag};
 use crate::tokens::pools;
 use crate::tokens::types::{
     DataSource, DexScreenerData, GeckoTerminalData, Priority, RugcheckData, SecurityRisk,
@@ -1518,7 +1519,7 @@ impl TokenDatabase {
                     Ok(rows) => updated += rows,
                     Err(e) => {
                         // Log but continue - don't fail entire batch
-                        eprintln!("batch_clear_rejection_status error for {}: {}", mint, e);
+                        logger::warning(LogTag::Tokens, &format!("batch_clear_rejection_status error for {}: {}", mint, e));
                     }
                 }
             }
@@ -1556,7 +1557,7 @@ impl TokenDatabase {
                 match stmt.execute(params![priority, mint]) {
                     Ok(rows) => updated += rows,
                     Err(e) => {
-                        eprintln!("batch_update_priority error for {}: {}", mint, e);
+                        logger::warning(LogTag::Tokens, &format!("batch_update_priority error for {}: {}", mint, e));
                     }
                 }
             }
@@ -1603,7 +1604,7 @@ impl TokenDatabase {
                 match stmt.execute(params![reason, source, rejected_at, mint]) {
                     Ok(rows) => updated += rows,
                     Err(e) => {
-                        eprintln!("batch_update_rejection_status error for {}: {}", mint, e);
+                        logger::warning(LogTag::Tokens, &format!("batch_update_rejection_status error for {}: {}", mint, e));
                     }
                 }
             }
@@ -1652,7 +1653,7 @@ impl TokenDatabase {
                 match stmt.execute(params![bucket_hour, reason, source, timestamp]) {
                     Ok(_) => updated += 1,
                     Err(e) => {
-                        eprintln!("batch_upsert_rejection_stats error: {}", e);
+                        logger::warning(LogTag::Tokens, &format!("batch_upsert_rejection_stats error: {}", e));
                     }
                 }
             }
@@ -2324,6 +2325,24 @@ impl TokenDatabase {
         Ok(())
     }
 
+    /// Mark a token as permanently failed for market data updates
+    /// This only updates the error_type without incrementing the error count
+    /// Used when a token has hit the failure threshold and should be excluded from updates
+    pub fn mark_market_permanent(&self, mint: &str) -> TokenResult<()> {
+        let conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        conn.execute(
+            "UPDATE update_tracking SET market_error_type = 'permanent' WHERE mint = ?1",
+            params![mint],
+        )
+        .map_err(|e| TokenError::Database(format!("Failed to mark market permanent: {}", e)))?;
+
+        Ok(())
+    }
+
     /// Mark market data as updated (called after successful DexScreener or GeckoTerminal fetch)
     pub fn mark_market_data_updated(&self, mint: &str) -> TokenResult<()> {
         let conn = self
@@ -2697,6 +2716,7 @@ impl TokenDatabase {
                             last_security_error, last_security_error_at, security_error_count
                      FROM update_tracking
                      WHERE priority = ?1
+                       AND (market_error_type IS NULL OR market_error_type != 'permanent')
                      ORDER BY COALESCE(market_data_last_updated_at, 0) ASC, mint ASC
                      LIMIT ?2",
                 )
@@ -2720,6 +2740,7 @@ impl TokenDatabase {
                             last_error, last_error_at, market_error_count, market_error_type,
                             last_security_error, last_security_error_at, security_error_count
                      FROM update_tracking
+                     WHERE (market_error_type IS NULL OR market_error_type != 'permanent')
                      ORDER BY priority DESC, COALESCE(market_data_last_updated_at, 0) ASC, mint ASC
                      LIMIT ?1",
                 )
