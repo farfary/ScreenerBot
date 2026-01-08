@@ -149,7 +149,7 @@ config_struct! {
         transactions_enabled: bool = true,
         #[metadata(field_metadata! {
             label: "Min TX (5min)",
-            hint: "Min transactions in last 5 minutes (1+ is minimal)",
+            hint: "Min transactions in last 5 minutes (0 = don't require immediate activity)",
             min: 0,
             max: 1000,
             step: 1,
@@ -157,10 +157,11 @@ config_struct! {
             impact: "medium",
             category: "Activity",
         })]
-        min_transactions_5min: i64 = 1,
+        // Default 0: Don't require immediate activity - new tokens may have quiet periods
+        min_transactions_5min: i64 = 0,
         #[metadata(field_metadata! {
             label: "Min TX (1h)",
-            hint: "Min transactions in last hour (sustained activity)",
+            hint: "Min transactions in last hour (1 = just needs some activity)",
             min: 0,
             max: 10000,
             step: 5,
@@ -168,7 +169,8 @@ config_struct! {
             impact: "medium",
             category: "Activity",
         })]
-        min_transactions_1h: i64 = 5,
+        // Default 1: Just need some activity, not heavy trading
+        min_transactions_1h: i64 = 1,
 
         // Volume checks (new feature)
         #[metadata(field_metadata! {
@@ -656,7 +658,7 @@ config_struct! {
         holder_distribution_enabled: bool = true,
         #[metadata(field_metadata! {
             label: "Max Top Holder %",
-            hint: "15% means top holder can own max 15% supply",
+            hint: "40% = top holder can own max 40% supply (most new tokens have concentrated ownership)",
             min: 0,
             max: 100,
             step: 1,
@@ -664,10 +666,11 @@ config_struct! {
             impact: "critical",
             category: "Holder Distribution",
         })]
-        max_top_holder_pct: f64 = 15.0,
+        // Default 40%: Most new tokens have concentrated ownership initially
+        max_top_holder_pct: f64 = 40.0,
         #[metadata(field_metadata! {
             label: "Max Top 3 Holders %",
-            hint: "Combined max for top 3 holders (lower = more distributed)",
+            hint: "Combined max for top 3 holders (60% allows reasonable concentration)",
             min: 0,
             max: 100,
             step: 1,
@@ -675,10 +678,11 @@ config_struct! {
             impact: "high",
             category: "Holder Distribution",
         })]
-        max_top_3_holders_pct: f64 = 35.0,
+        // Default 60%: Allow reasonable concentration for newer tokens
+        max_top_3_holders_pct: f64 = 60.0,
         #[metadata(field_metadata! {
             label: "Min Unique Holders",
-            hint: "500+ indicates community adoption",
+            hint: "50+ filters very new tokens while allowing most to pass",
             min: 0,
             max: 1000000,
             step: 50,
@@ -686,7 +690,8 @@ config_struct! {
             impact: "medium",
             category: "Holder Distribution",
         })]
-        min_unique_holders: u32 = 500,
+        // Default 50: Filters very new tokens but allows most established ones to pass
+        min_unique_holders: u32 = 50,
 
         // LP lock checks
         #[metadata(field_metadata! {
