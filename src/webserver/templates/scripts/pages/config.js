@@ -6,6 +6,7 @@ import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { requestManager } from "../core/request_manager.js";
 import * as Hints from "../core/hints.js";
 import { HintTrigger } from "../ui/hint_popover.js";
+import { ConfigExportDialog, ConfigImportDialog } from "../ui/config_import_export_dialog.js";
 
 const CONFIG_STATE_KEY = "config.page";
 const DEFAULT_SECTION = "trader";
@@ -1766,6 +1767,34 @@ function attachEventHandlers(ctx) {
     };
     on(resetButton, "click", handler);
     ctx.onDispose(() => off(resetButton, "click", handler));
+  }
+
+  // Export button
+  const exportButton = $("#configExportButton");
+  if (exportButton) {
+    const handler = async () => {
+      const result = await ConfigExportDialog.show();
+      if (result.exported) {
+        // Optionally refresh after export
+      }
+    };
+    on(exportButton, "click", handler);
+    ctx.onDispose(() => off(exportButton, "click", handler));
+  }
+
+  // Import button
+  const importButton = $("#configImportButton");
+  if (importButton) {
+    const handler = async () => {
+      const result = await ConfigImportDialog.show();
+      if (result.imported) {
+        // Reload config after import
+        await loadConfig();
+        render();
+      }
+    };
+    on(importButton, "click", handler);
+    ctx.onDispose(() => off(importButton, "click", handler));
   }
 }
 

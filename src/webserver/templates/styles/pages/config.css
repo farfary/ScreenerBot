@@ -185,6 +185,15 @@
   background: linear-gradient(to top, var(--bg-secondary), var(--bg-card-hover));
 }
 
+.config-sidebar-footer-row {
+  display: flex;
+  gap: 8px;
+}
+
+.config-sidebar-footer-row .config-action-btn {
+  flex: 1;
+}
+
 .config-action-btn {
   display: flex;
   align-items: center;

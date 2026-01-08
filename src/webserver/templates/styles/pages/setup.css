@@ -544,19 +544,25 @@
 .ring-outer {
   inset: 0;
   border-color: rgb(88 166 255 / 0.15);
-  animation: ring-pulse 2s ease-in-out infinite, ring-rotate 8s linear infinite;
+  animation:
+    ring-pulse 2s ease-in-out infinite,
+    ring-rotate 8s linear infinite;
 }
 
 .ring-middle {
   inset: 15px;
   border-color: rgb(88 166 255 / 0.25);
-  animation: ring-pulse 2s ease-in-out 0.3s infinite, ring-rotate 6s linear infinite reverse;
+  animation:
+    ring-pulse 2s ease-in-out 0.3s infinite,
+    ring-rotate 6s linear infinite reverse;
 }
 
 .ring-inner {
   inset: 30px;
   border-color: rgb(88 166 255 / 0.4);
-  animation: ring-pulse 2s ease-in-out 0.6s infinite, ring-rotate 4s linear infinite;
+  animation:
+    ring-pulse 2s ease-in-out 0.6s infinite,
+    ring-rotate 4s linear infinite;
 }
 
 /* Active scanning effect on rings */
@@ -686,11 +692,7 @@
 .verification-card-glow {
   position: absolute;
   inset: -50%;
-  background: radial-gradient(
-    circle at center,
-    rgb(88 166 255 / 0.15) 0%,
-    transparent 70%
-  );
+  background: radial-gradient(circle at center, rgb(88 166 255 / 0.15) 0%, transparent 70%);
   opacity: 0;
   animation: card-glow-pulse 2s ease-in-out infinite;
   pointer-events: none;
@@ -705,11 +707,7 @@
 }
 
 .setup-verification-item.verified .verification-card-glow {
-  background: radial-gradient(
-    circle at center,
-    rgb(63 185 80 / 0.1) 0%,
-    transparent 70%
-  );
+  background: radial-gradient(circle at center, rgb(63 185 80 / 0.1) 0%, transparent 70%);
   opacity: 1;
   animation: none;
 }

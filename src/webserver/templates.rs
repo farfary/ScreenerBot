@@ -60,6 +60,8 @@ const BILLBOARD_DIALOG_STYLES: &str = include_str!("templates/styles/ui/billboar
 const BILLBOARD_ROW_STYLES: &str = include_str!("templates/styles/ui/billboard_row.css");
 const POOL_SELECTOR_STYLES: &str = include_str!("templates/styles/ui/pool_selector.css");
 const EXIT_DIALOG_STYLES: &str = include_str!("templates/styles/ui/exit_dialog.css");
+const CONFIG_IMPORT_EXPORT_DIALOG_STYLES: &str =
+    include_str!("templates/styles/config_import_export_dialog.css");
 
 // Assets (logos, icons)
 pub const LOGO_SVG: &str = include_str!("assets/logo.svg");
@@ -133,6 +135,8 @@ pub const BILLBOARD_DIALOG_UI: &str = include_str!("templates/scripts/ui/billboa
 pub const BILLBOARD_ROW_UI: &str = include_str!("templates/scripts/ui/billboard_row.js");
 pub const POOL_SELECTOR_UI: &str = include_str!("templates/scripts/ui/pool_selector.js");
 pub const EXIT_DIALOG_UI: &str = include_str!("templates/scripts/ui/exit_dialog.js");
+pub const CONFIG_IMPORT_EXPORT_DIALOG_UI: &str =
+    include_str!("templates/scripts/ui/config_import_export_dialog.js");
 
 pub const SERVICES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/services.js");
 pub const TRANSACTIONS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/transactions.js");
@@ -249,6 +253,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         BILLBOARD_ROW_STYLES,
         POOL_SELECTOR_STYLES,
         EXIT_DIALOG_STYLES,
+        CONFIG_IMPORT_EXPORT_DIALOG_STYLES,
         // Splash, onboarding, and setup screens (always included for proper transitions)
         SPLASH_PAGE_STYLES,
         ONBOARDING_PAGE_STYLES,

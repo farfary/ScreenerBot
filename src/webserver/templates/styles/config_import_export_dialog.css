@@ -1,0 +1,803 @@
+/* Config Import/Export Dialog Styles */
+
+/* ============================================================================
+   DIALOG BASE STYLES
+   ============================================================================ */
+
+.config-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  background: rgb(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.config-dialog-backdrop.visible {
+  opacity: 1;
+}
+
+.config-dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.95);
+  z-index: 9999;
+  width: min(640px, 90vw);
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  box-shadow:
+    0 24px 48px rgb(0, 0, 0, 0.4),
+    0 0 0 1px rgb(255, 255, 255, 0.05) inset;
+  opacity: 0;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
+}
+
+.config-dialog.visible {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+/* ============================================================================
+   DIALOG HEADER
+   ============================================================================ */
+
+.config-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  border-radius: 16px 16px 0 0;
+}
+
+.config-dialog-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.config-dialog-title i {
+  font-size: 1.125rem;
+  color: var(--primary-color);
+}
+
+.config-dialog-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.config-dialog-close:hover {
+  background: var(--danger-alpha-10);
+  color: var(--error-color);
+}
+
+/* ============================================================================
+   DIALOG BODY
+   ============================================================================ */
+
+.config-dialog-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+.config-dialog-intro {
+  margin-bottom: 16px;
+}
+
+.config-dialog-intro p {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+/* ============================================================================
+   SECTIONS SELECTION
+   ============================================================================ */
+
+.config-dialog-sections {
+  margin-bottom: 16px;
+}
+
+.config-dialog-sections-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.config-dialog-sections-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.config-dialog-sections-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.config-dialog-link-btn {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--primary-color);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.config-dialog-link-btn:hover {
+  background: var(--primary-alpha-10);
+}
+
+.config-dialog-sep {
+  color: var(--text-tertiary);
+  font-size: 0.625rem;
+}
+
+/* Export Dialog - Grid Layout */
+.config-dialog-sections-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.config-section-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.config-section-item:hover {
+  border-color: var(--primary-alpha-40);
+  background: var(--bg-card-hover);
+}
+
+.config-section-item.selected {
+  border-color: var(--primary-color);
+  background: var(--primary-alpha-10);
+  box-shadow: 0 0 0 1px var(--primary-alpha-20);
+}
+
+.config-section-item input[type="checkbox"] {
+  margin-top: 2px;
+  accent-color: var(--primary-color);
+}
+
+.config-section-item-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.config-section-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--primary-alpha-10);
+  color: var(--primary-color);
+  font-size: 0.875rem;
+  flex-shrink: 0;
+}
+
+.config-section-item-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.config-section-item-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.config-section-item-hint {
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ============================================================================
+   IMPORT DIALOG - SECTIONS LIST
+   ============================================================================ */
+
+.config-import-sections-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.config-import-section-item {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  overflow: hidden;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.config-import-section-item:hover {
+  border-color: var(--primary-alpha-40);
+}
+
+.config-import-section-item.selected {
+  border-color: var(--primary-color);
+  background: var(--primary-alpha-05);
+}
+
+.config-import-section-item.not-present {
+  opacity: 0.5;
+}
+
+.config-import-section-item.invalid {
+  border-color: var(--error-color);
+  background: var(--danger-alpha-05);
+}
+
+.config-import-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  cursor: pointer;
+}
+
+.config-import-section-header input[type="checkbox"] {
+  accent-color: var(--primary-color);
+}
+
+.config-import-section-header input[type="checkbox"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.config-import-section-content {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.config-import-section-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: var(--primary-alpha-10);
+  color: var(--primary-color);
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.config-import-section-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.config-import-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.config-import-section-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.config-import-section-hint {
+  font-size: 0.75rem;
+  color: var(--text-tertiary);
+}
+
+/* Status Icons */
+.status-icon {
+  font-size: 0.875rem;
+}
+
+.status-icon.not-present {
+  color: var(--text-tertiary);
+}
+
+.status-icon.invalid {
+  color: var(--error-color);
+}
+
+.status-icon.changes {
+  color: var(--warning-color);
+}
+
+.status-icon.no-changes {
+  color: var(--success-color);
+}
+
+/* Changes Badge */
+.config-import-changes-badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--warning-alpha-15);
+  color: var(--warning-color);
+  font-size: 0.6875rem;
+  font-weight: 500;
+}
+
+/* Section Error */
+.config-import-section-error {
+  padding: 8px 12px;
+  margin: 0 12px 8px;
+  border-radius: 6px;
+  background: var(--danger-alpha-10);
+  color: var(--error-color);
+  font-size: 0.75rem;
+  font-family: var(--font-mono);
+  overflow-wrap: break-word;
+}
+
+/* Changes Toggle Button */
+.config-import-toggle-changes {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.config-import-toggle-changes:hover {
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.config-import-toggle-changes i {
+  font-size: 0.625rem;
+}
+
+/* Changes List */
+.config-import-changes-list {
+  padding: 8px 12px;
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border-color);
+}
+
+.config-import-change-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.config-import-change-item:last-child {
+  border-bottom: none;
+}
+
+.config-import-change-field {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+}
+
+.config-import-change-values {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.6875rem;
+  font-family: var(--font-mono);
+}
+
+.config-import-change-values i {
+  font-size: 0.5rem;
+  color: var(--text-tertiary);
+}
+
+.config-import-change-current {
+  color: var(--text-secondary);
+  text-decoration: line-through;
+  opacity: 0.7;
+}
+
+.config-import-change-imported {
+  color: var(--success-color);
+}
+
+.config-import-change-imported .null {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+.config-import-change-imported .true {
+  color: var(--success-color);
+}
+
+.config-import-change-imported .false {
+  color: var(--error-color);
+}
+
+.config-import-change-imported .number {
+  color: var(--info-color);
+}
+
+.config-import-change-more {
+  padding: 6px 0;
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
+/* ============================================================================
+   WARNINGS
+   ============================================================================ */
+
+.config-import-warnings {
+  margin-bottom: 16px;
+  padding: 12px;
+  border: 1px solid var(--warning-alpha-30);
+  border-radius: 8px;
+  background: var(--warning-alpha-10);
+}
+
+.config-import-warnings-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: var(--warning-color);
+  font-size: 0.8125rem;
+  font-weight: 600;
+}
+
+.config-import-warning-item {
+  padding: 4px 0 4px 24px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+/* ============================================================================
+   DROPZONE
+   ============================================================================ */
+
+.config-import-dropzone {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  padding: 24px;
+  border: 2px dashed var(--border-color);
+  border-radius: 12px;
+  background: var(--bg-secondary);
+  cursor: pointer;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+.config-import-dropzone:hover,
+.config-import-dropzone.dragover {
+  border-color: var(--primary-color);
+  background: var(--primary-alpha-05);
+}
+
+.config-import-dropzone-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  text-align: center;
+}
+
+.config-import-dropzone-content i {
+  font-size: 2.5rem;
+  color: var(--text-tertiary);
+  transition: color 0.2s ease;
+}
+
+.config-import-dropzone:hover .config-import-dropzone-content i,
+.config-import-dropzone.dragover .config-import-dropzone-content i {
+  color: var(--primary-color);
+}
+
+.config-import-dropzone-title {
+  font-size: 0.9375rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.config-import-dropzone-hint {
+  font-size: 0.8125rem;
+  color: var(--text-tertiary);
+}
+
+/* File Info */
+.config-import-file-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border: 1px solid var(--success-alpha-30);
+  border-radius: 8px;
+  background: var(--success-alpha-10);
+}
+
+.config-import-file-info[hidden] {
+  display: none;
+}
+
+.config-import-file-info i {
+  font-size: 1.25rem;
+  color: var(--success-color);
+}
+
+.config-import-file-info span {
+  flex: 1;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.config-import-clear-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.config-import-clear-btn:hover {
+  background: var(--danger-alpha-10);
+  color: var(--error-color);
+}
+
+/* Loading */
+.config-import-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.config-import-loading[hidden] {
+  display: none;
+}
+
+.config-import-loading i {
+  font-size: 1.5rem;
+  color: var(--primary-color);
+}
+
+/* ============================================================================
+   OPTIONS
+   ============================================================================ */
+
+.config-dialog-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+}
+
+.config-dialog-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.config-dialog-option input[type="checkbox"] {
+  margin-top: 3px;
+  accent-color: var(--primary-color);
+}
+
+.config-dialog-option-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.config-dialog-option-label {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.config-dialog-option-hint {
+  font-size: 0.6875rem;
+  color: var(--text-tertiary);
+}
+
+/* ============================================================================
+   DIALOG FOOTER
+   ============================================================================ */
+
+.config-dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-top: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  border-radius: 0 0 16px 16px;
+}
+
+.config-dialog-footer-info {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.config-dialog-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.config-dialog-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    opacity 0.15s ease;
+}
+
+.config-dialog-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.config-dialog-btn.primary {
+  background: var(--primary-color);
+  color: white;
+}
+
+.config-dialog-btn.primary:hover:not(:disabled) {
+  background: var(--primary-hover);
+}
+
+.config-dialog-btn.secondary {
+  background: transparent;
+  border-color: var(--border-color);
+  color: var(--text-secondary);
+}
+
+.config-dialog-btn.secondary:hover:not(:disabled) {
+  background: var(--bg-card-hover);
+  border-color: var(--text-tertiary);
+  color: var(--text-primary);
+}
+
+.config-dialog-btn i {
+  font-size: 0.875rem;
+}
+
+/* Spinning loader */
+.config-dialog-btn .spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================================================
+   RESPONSIVE
+   ============================================================================ */
+
+@media (width <= 600px) {
+  .config-dialog {
+    width: 95vw;
+    max-height: 90vh;
+    border-radius: 12px;
+  }
+
+  .config-dialog-header,
+  .config-dialog-footer {
+    padding: 12px 16px;
+  }
+
+  .config-dialog-body {
+    padding: 16px;
+  }
+
+  .config-dialog-sections-grid {
+    grid-template-columns: 1fr;
+  }
+}

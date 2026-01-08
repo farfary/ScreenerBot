@@ -121,6 +121,10 @@ pub fn routes() -> Router<Arc<AppState>> {
             "/config/telegram",
             patch(patch_any_config::<config::TelegramConfig>),
         )
+        // Import/Export endpoints
+        .route("/config/export", post(export_config))
+        .route("/config/import/preview", post(import_config_preview))
+        .route("/config/import", post(import_config))
         // Utility endpoints
         .route("/config/reload", post(reload_config_from_disk))
         .route("/config/reset", post(reset_config_to_defaults))
@@ -646,4 +650,597 @@ async fn get_config_diff() -> Response {
             None,
         ),
     }
+}
+
+// ============================================================================
+// IMPORT/EXPORT ENDPOINTS
+// ============================================================================
+
+/// List of all config sections that can be imported/exported
+const CONFIG_SECTIONS: &[&str] = &[
+    "rpc",
+    "trader",
+    "positions",
+    "filtering",
+    "swaps",
+    "tokens",
+    "sol_price",
+    "events",
+    "services",
+    "monitoring",
+    "ohlcv",
+    "gui",
+    "telegram",
+];
+
+#[derive(Debug, Deserialize)]
+pub struct ExportConfigRequest {
+    /// Which sections to export. If empty or None, exports all sections.
+    pub sections: Option<Vec<String>>,
+    /// Whether to include GUI settings (default: true)
+    #[serde(default = "default_true")]
+    pub include_gui: bool,
+    /// Whether to include metadata like export timestamp
+    #[serde(default = "default_true")]
+    pub include_metadata: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Serialize)]
+pub struct ExportConfigResponse {
+    pub config: serde_json::Value,
+    pub sections: Vec<String>,
+    pub exported_at: String,
+    pub version: String,
+}
+
+/// POST /api/config/export - Export configuration with options
+async fn export_config(Json(request): Json<ExportConfigRequest>) -> Response {
+    // Determine which sections to export
+    let sections_to_export: Vec<&str> = match &request.sections {
+        Some(sections) if !sections.is_empty() => sections
+            .iter()
+            .filter(|s| CONFIG_SECTIONS.contains(&s.as_str()))
+            .map(|s| s.as_str())
+            .collect(),
+        _ => CONFIG_SECTIONS.to_vec(),
+    };
+
+    // Filter out GUI if requested
+    let sections_to_export: Vec<&str> = if !request.include_gui {
+        sections_to_export
+            .into_iter()
+            .filter(|s| *s != "gui")
+            .collect()
+    } else {
+        sections_to_export
+    };
+
+    // Build the export object
+    let mut export_obj = serde_json::Map::new();
+
+    config::with_config(|cfg| {
+        for section in &sections_to_export {
+            let section_value = match *section {
+                "rpc" => serde_json::to_value(&cfg.rpc).ok(),
+                "trader" => serde_json::to_value(&cfg.trader).ok(),
+                "positions" => serde_json::to_value(&cfg.positions).ok(),
+                "filtering" => serde_json::to_value(&cfg.filtering).ok(),
+                "swaps" => serde_json::to_value(&cfg.swaps).ok(),
+                "tokens" => serde_json::to_value(&cfg.tokens).ok(),
+                "sol_price" => serde_json::to_value(&cfg.sol_price).ok(),
+                "events" => serde_json::to_value(&cfg.events).ok(),
+                "services" => serde_json::to_value(&cfg.services).ok(),
+                "monitoring" => serde_json::to_value(&cfg.monitoring).ok(),
+                "ohlcv" => serde_json::to_value(&cfg.ohlcv).ok(),
+                "gui" => serde_json::to_value(&cfg.gui).ok(),
+                "telegram" => serde_json::to_value(&cfg.telegram).ok(),
+                _ => None,
+            };
+
+            if let Some(value) = section_value {
+                export_obj.insert(section.to_string(), value);
+            }
+        }
+    });
+
+    // Add metadata if requested
+    if request.include_metadata {
+        export_obj.insert(
+            "timestamp".to_string(),
+            serde_json::Value::String(chrono::Utc::now().to_rfc3339()),
+        );
+    }
+
+    success_response(ExportConfigResponse {
+        config: serde_json::Value::Object(export_obj),
+        sections: sections_to_export.iter().map(|s| s.to_string()).collect(),
+        exported_at: chrono::Utc::now().to_rfc3339(),
+        version: env!("CARGO_PKG_VERSION").to_string(),
+    })
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ImportConfigPreviewRequest {
+    /// The JSON config data to preview
+    pub config: serde_json::Value,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SectionPreview {
+    pub name: String,
+    pub label: String,
+    pub present: bool,
+    pub valid: bool,
+    pub field_count: usize,
+    pub error: Option<String>,
+    pub changes: Vec<FieldChange>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct FieldChange {
+    pub field: String,
+    pub current: serde_json::Value,
+    pub imported: serde_json::Value,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ImportPreviewResponse {
+    pub valid: bool,
+    pub sections: Vec<SectionPreview>,
+    pub warnings: Vec<String>,
+    pub total_changes: usize,
+}
+
+/// Helper to get section label for display
+fn get_section_label(section: &str) -> String {
+    match section {
+        "rpc" => "RPC".to_string(),
+        "trader" => "Auto Trader".to_string(),
+        "positions" => "Positions".to_string(),
+        "filtering" => "Filtering".to_string(),
+        "swaps" => "Swaps".to_string(),
+        "tokens" => "Tokens".to_string(),
+        "sol_price" => "SOL Price".to_string(),
+        "events" => "Events".to_string(),
+        "services" => "Services".to_string(),
+        "monitoring" => "Monitoring".to_string(),
+        "ohlcv" => "OHLCV".to_string(),
+        "gui" => "GUI".to_string(),
+        "telegram" => "Telegram".to_string(),
+        _ => section.to_string(),
+    }
+}
+
+/// Count fields in a JSON value (recursive for objects)
+fn count_fields(value: &serde_json::Value) -> usize {
+    match value {
+        serde_json::Value::Object(map) => map.len(),
+        _ => 0,
+    }
+}
+
+/// Compare two JSON values and return field changes
+fn compare_values(
+    current: &serde_json::Value,
+    imported: &serde_json::Value,
+    prefix: &str,
+) -> Vec<FieldChange> {
+    let mut changes = Vec::new();
+
+    if let (Some(curr_obj), Some(imp_obj)) = (current.as_object(), imported.as_object()) {
+        for (key, imp_val) in imp_obj {
+            let field_path = if prefix.is_empty() {
+                key.clone()
+            } else {
+                format!("{}.{}", prefix, key)
+            };
+
+            match curr_obj.get(key) {
+                Some(curr_val) => {
+                    if curr_val != imp_val {
+                        // Check if both are objects for recursive comparison
+                        if curr_val.is_object() && imp_val.is_object() {
+                            changes.extend(compare_values(curr_val, imp_val, &field_path));
+                        } else {
+                            changes.push(FieldChange {
+                                field: field_path,
+                                current: curr_val.clone(),
+                                imported: imp_val.clone(),
+                            });
+                        }
+                    }
+                }
+                None => {
+                    // New field being added
+                    changes.push(FieldChange {
+                        field: field_path,
+                        current: serde_json::Value::Null,
+                        imported: imp_val.clone(),
+                    });
+                }
+            }
+        }
+    }
+
+    changes
+}
+
+/// POST /api/config/import/preview - Preview what would be imported
+async fn import_config_preview(Json(request): Json<ImportConfigPreviewRequest>) -> Response {
+    let imported = request.config;
+    let mut sections = Vec::new();
+    let mut warnings = Vec::new();
+    let mut total_changes = 0;
+
+    let imported_obj = match imported.as_object() {
+        Some(obj) => obj,
+        None => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "INVALID_FORMAT",
+                "Config must be a JSON object",
+                None,
+            );
+        }
+    };
+
+    // Check for unknown sections
+    for key in imported_obj.keys() {
+        if key != "timestamp" && !CONFIG_SECTIONS.contains(&key.as_str()) {
+            warnings.push(format!("Unknown section '{}' will be ignored", key));
+        }
+    }
+
+    // Analyze each known section
+    for section in CONFIG_SECTIONS {
+        let section_value = imported_obj.get(*section);
+        let present = section_value.is_some();
+
+        if !present {
+            sections.push(SectionPreview {
+                name: section.to_string(),
+                label: get_section_label(section),
+                present: false,
+                valid: true,
+                field_count: 0,
+                error: None,
+                changes: Vec::new(),
+            });
+            continue;
+        }
+
+        let value = section_value.unwrap();
+        let field_count = count_fields(value);
+
+        // Validate by attempting to deserialize
+        let validation_result: Result<(), String> = match *section {
+            "rpc" => serde_json::from_value::<config::RpcConfig>(value.clone())
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            "trader" => serde_json::from_value::<config::TraderConfig>(value.clone())
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            "positions" => serde_json::from_value::<config::PositionsConfig>(value.clone())
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            "filtering" => serde_json::from_value::<config::FilteringConfig>(value.clone())
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            "swaps" => serde_json::from_value::<config::SwapsConfig>(value.clone())
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            "tokens" => serde_json::from_value::<config::TokensConfig>(value.clone())
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            "sol_price" => serde_json::from_value::<config::SolPriceConfig>(value.clone())
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            "events" => serde_json::from_value::<config::EventsConfig>(value.clone())
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            "services" => serde_json::from_value::<config::ServicesConfig>(value.clone())
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            "monitoring" => serde_json::from_value::<config::MonitoringConfig>(value.clone())
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            "ohlcv" => serde_json::from_value::<config::OhlcvConfig>(value.clone())
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            "gui" => serde_json::from_value::<config::GuiConfig>(value.clone())
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            "telegram" => serde_json::from_value::<config::TelegramConfig>(value.clone())
+                .map(|_| ())
+                .map_err(|e| e.to_string()),
+            _ => Ok(()),
+        };
+
+        // Get current config for comparison
+        let current_value = config::with_config(|cfg| match *section {
+            "rpc" => serde_json::to_value(&cfg.rpc).ok(),
+            "trader" => serde_json::to_value(&cfg.trader).ok(),
+            "positions" => serde_json::to_value(&cfg.positions).ok(),
+            "filtering" => serde_json::to_value(&cfg.filtering).ok(),
+            "swaps" => serde_json::to_value(&cfg.swaps).ok(),
+            "tokens" => serde_json::to_value(&cfg.tokens).ok(),
+            "sol_price" => serde_json::to_value(&cfg.sol_price).ok(),
+            "events" => serde_json::to_value(&cfg.events).ok(),
+            "services" => serde_json::to_value(&cfg.services).ok(),
+            "monitoring" => serde_json::to_value(&cfg.monitoring).ok(),
+            "ohlcv" => serde_json::to_value(&cfg.ohlcv).ok(),
+            "gui" => serde_json::to_value(&cfg.gui).ok(),
+            "telegram" => serde_json::to_value(&cfg.telegram).ok(),
+            _ => None,
+        });
+
+        let changes = if let Some(curr) = current_value {
+            compare_values(&curr, value, "")
+        } else {
+            Vec::new()
+        };
+
+        total_changes += changes.len();
+
+        sections.push(SectionPreview {
+            name: section.to_string(),
+            label: get_section_label(section),
+            present: true,
+            valid: validation_result.is_ok(),
+            field_count,
+            error: validation_result.err(),
+            changes,
+        });
+    }
+
+    let all_valid = sections.iter().filter(|s| s.present).all(|s| s.valid);
+
+    success_response(ImportPreviewResponse {
+        valid: all_valid,
+        sections,
+        warnings,
+        total_changes,
+    })
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ImportConfigRequest {
+    /// The JSON config data to import
+    pub config: serde_json::Value,
+    /// Which sections to import. If empty or None, imports all present sections.
+    pub sections: Option<Vec<String>>,
+    /// Whether to merge with existing config (true) or replace sections entirely (false)
+    #[serde(default)]
+    pub merge: bool,
+    /// Whether to save to disk after import
+    #[serde(default = "default_true")]
+    pub save_to_disk: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ImportConfigResponse {
+    pub success: bool,
+    pub message: String,
+    pub imported_sections: Vec<String>,
+    pub saved_to_disk: bool,
+    pub timestamp: String,
+}
+
+/// POST /api/config/import - Import configuration
+async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response {
+    let imported = request.config;
+
+    let imported_obj = match imported.as_object() {
+        Some(obj) => obj,
+        None => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "INVALID_FORMAT",
+                "Config must be a JSON object",
+                None,
+            );
+        }
+    };
+
+    // Determine which sections to import
+    let sections_to_import: Vec<String> = match &request.sections {
+        Some(sections) if !sections.is_empty() => sections
+            .iter()
+            .filter(|s| {
+                CONFIG_SECTIONS.contains(&s.as_str()) && imported_obj.contains_key(s.as_str())
+            })
+            .cloned()
+            .collect(),
+        _ => imported_obj
+            .keys()
+            .filter(|k| CONFIG_SECTIONS.contains(&k.as_str()))
+            .cloned()
+            .collect(),
+    };
+
+    if sections_to_import.is_empty() {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "NO_SECTIONS",
+            "No valid sections found to import",
+            None,
+        );
+    }
+
+    // Import each section
+    let mut imported_sections = Vec::new();
+    let mut errors = Vec::new();
+
+    for section in &sections_to_import {
+        let value = match imported_obj.get(section) {
+            Some(v) => v.clone(),
+            None => continue,
+        };
+
+        let result: Result<(), String> = (|| {
+            // Get current config for merging if needed
+            let final_value = if request.merge {
+                let current = config::with_config(|cfg| match section.as_str() {
+                    "rpc" => serde_json::to_value(&cfg.rpc).ok(),
+                    "trader" => serde_json::to_value(&cfg.trader).ok(),
+                    "positions" => serde_json::to_value(&cfg.positions).ok(),
+                    "filtering" => serde_json::to_value(&cfg.filtering).ok(),
+                    "swaps" => serde_json::to_value(&cfg.swaps).ok(),
+                    "tokens" => serde_json::to_value(&cfg.tokens).ok(),
+                    "sol_price" => serde_json::to_value(&cfg.sol_price).ok(),
+                    "events" => serde_json::to_value(&cfg.events).ok(),
+                    "services" => serde_json::to_value(&cfg.services).ok(),
+                    "monitoring" => serde_json::to_value(&cfg.monitoring).ok(),
+                    "ohlcv" => serde_json::to_value(&cfg.ohlcv).ok(),
+                    "gui" => serde_json::to_value(&cfg.gui).ok(),
+                    "telegram" => serde_json::to_value(&cfg.telegram).ok(),
+                    _ => None,
+                });
+
+                if let Some(mut curr) = current {
+                    // Merge: imported values override current
+                    if let (Some(curr_obj), Some(imp_obj)) =
+                        (curr.as_object_mut(), value.as_object())
+                    {
+                        for (key, val) in imp_obj {
+                            curr_obj.insert(key.clone(), val.clone());
+                        }
+                    }
+                    curr
+                } else {
+                    value
+                }
+            } else {
+                value
+            };
+
+            // Apply the update
+            match section.as_str() {
+                "rpc" => {
+                    let cfg: config::RpcConfig = serde_json::from_value(final_value)
+                        .map_err(|e| format!("Invalid RpcConfig: {}", e))?;
+                    config::update_config_section(
+                        |c| c.rpc = cfg,
+                        false, // Don't save yet
+                    )?;
+                }
+                "trader" => {
+                    let cfg: config::TraderConfig = serde_json::from_value(final_value)
+                        .map_err(|e| format!("Invalid TraderConfig: {}", e))?;
+                    config::update_config_section(|c| c.trader = cfg, false)?;
+                }
+                "positions" => {
+                    let cfg: config::PositionsConfig = serde_json::from_value(final_value)
+                        .map_err(|e| format!("Invalid PositionsConfig: {}", e))?;
+                    config::update_config_section(|c| c.positions = cfg, false)?;
+                }
+                "filtering" => {
+                    let cfg: config::FilteringConfig = serde_json::from_value(final_value)
+                        .map_err(|e| format!("Invalid FilteringConfig: {}", e))?;
+                    config::update_config_section(|c| c.filtering = cfg, false)?;
+                }
+                "swaps" => {
+                    let cfg: config::SwapsConfig = serde_json::from_value(final_value)
+                        .map_err(|e| format!("Invalid SwapsConfig: {}", e))?;
+                    config::update_config_section(|c| c.swaps = cfg, false)?;
+                }
+                "tokens" => {
+                    let cfg: config::TokensConfig = serde_json::from_value(final_value)
+                        .map_err(|e| format!("Invalid TokensConfig: {}", e))?;
+                    config::update_config_section(|c| c.tokens = cfg, false)?;
+                }
+                "sol_price" => {
+                    let cfg: config::SolPriceConfig = serde_json::from_value(final_value)
+                        .map_err(|e| format!("Invalid SolPriceConfig: {}", e))?;
+                    config::update_config_section(|c| c.sol_price = cfg, false)?;
+                }
+                "events" => {
+                    let cfg: config::EventsConfig = serde_json::from_value(final_value)
+                        .map_err(|e| format!("Invalid EventsConfig: {}", e))?;
+                    config::update_config_section(|c| c.events = cfg, false)?;
+                }
+                "services" => {
+                    let cfg: config::ServicesConfig = serde_json::from_value(final_value)
+                        .map_err(|e| format!("Invalid ServicesConfig: {}", e))?;
+                    config::update_config_section(|c| c.services = cfg, false)?;
+                }
+                "monitoring" => {
+                    let cfg: config::MonitoringConfig = serde_json::from_value(final_value)
+                        .map_err(|e| format!("Invalid MonitoringConfig: {}", e))?;
+                    config::update_config_section(|c| c.monitoring = cfg, false)?;
+                }
+                "ohlcv" => {
+                    let cfg: config::OhlcvConfig = serde_json::from_value(final_value)
+                        .map_err(|e| format!("Invalid OhlcvConfig: {}", e))?;
+                    config::update_config_section(|c| c.ohlcv = cfg, false)?;
+                }
+                "gui" => {
+                    let cfg: config::GuiConfig = serde_json::from_value(final_value)
+                        .map_err(|e| format!("Invalid GuiConfig: {}", e))?;
+                    config::update_config_section(|c| c.gui = cfg, false)?;
+                }
+                "telegram" => {
+                    let cfg: config::TelegramConfig = serde_json::from_value(final_value)
+                        .map_err(|e| format!("Invalid TelegramConfig: {}", e))?;
+                    config::update_config_section(|c| c.telegram = cfg, false)?;
+                }
+                _ => return Err(format!("Unknown section: {}", section)),
+            }
+
+            Ok(())
+        })();
+
+        match result {
+            Ok(()) => imported_sections.push(section.clone()),
+            Err(e) => errors.push(format!("{}: {}", section, e)),
+        }
+    }
+
+    // Save to disk if requested and at least one section imported
+    let saved_to_disk = if request.save_to_disk && !imported_sections.is_empty() {
+        match config::save_config(None) {
+            Ok(()) => true,
+            Err(e) => {
+                errors.push(format!("Failed to save to disk: {}", e));
+                false
+            }
+        }
+    } else {
+        false
+    };
+
+    if imported_sections.is_empty() {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "IMPORT_FAILED",
+            &format!("Failed to import config: {}", errors.join(", ")),
+            None,
+        );
+    }
+
+    let message = if errors.is_empty() {
+        format!(
+            "Successfully imported {} section(s)",
+            imported_sections.len()
+        )
+    } else {
+        format!(
+            "Imported {} section(s) with {} error(s): {}",
+            imported_sections.len(),
+            errors.len(),
+            errors.join(", ")
+        )
+    };
+
+    success_response(ImportConfigResponse {
+        success: true,
+        message,
+        imported_sections,
+        saved_to_disk,
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    })
 }
