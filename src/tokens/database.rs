@@ -1483,6 +1483,185 @@ impl TokenDatabase {
         Ok(())
     }
 
+    /// Batch clear rejection status for multiple tokens (PERF optimization)
+    /// Uses a single transaction instead of spawning individual tasks
+    pub fn batch_clear_rejection_status(&self, mints: &[String]) -> TokenResult<usize> {
+        if mints.is_empty() {
+            return Ok(0);
+        }
+
+        let mut conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let tx = conn
+            .transaction()
+            .map_err(|e| TokenError::Database(format!("Transaction start failed: {}", e)))?;
+
+        let mut updated = 0;
+        {
+            let mut stmt = tx
+                .prepare_cached(
+                    "UPDATE update_tracking SET 
+                        last_rejection_reason = NULL, 
+                        last_rejection_source = NULL, 
+                        last_rejection_at = NULL 
+                     WHERE mint = ?1",
+                )
+                .map_err(|e| TokenError::Database(format!("Prepare failed: {}", e)))?;
+
+            for mint in mints {
+                match stmt.execute(params![mint]) {
+                    Ok(rows) => updated += rows,
+                    Err(e) => {
+                        // Log but continue - don't fail entire batch
+                        eprintln!("batch_clear_rejection_status error for {}: {}", mint, e);
+                    }
+                }
+            }
+        }
+
+        tx.commit()
+            .map_err(|e| TokenError::Database(format!("Transaction commit failed: {}", e)))?;
+
+        Ok(updated)
+    }
+
+    /// Batch update priority for multiple tokens (PERF optimization)
+    /// Uses a single transaction instead of spawning individual tasks
+    pub fn batch_update_priority(&self, mints: &[String], priority: i32) -> TokenResult<usize> {
+        if mints.is_empty() {
+            return Ok(0);
+        }
+
+        let mut conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let tx = conn
+            .transaction()
+            .map_err(|e| TokenError::Database(format!("Transaction start failed: {}", e)))?;
+
+        let mut updated = 0;
+        {
+            let mut stmt = tx
+                .prepare_cached("UPDATE update_tracking SET priority = ?1 WHERE mint = ?2")
+                .map_err(|e| TokenError::Database(format!("Prepare failed: {}", e)))?;
+
+            for mint in mints {
+                match stmt.execute(params![priority, mint]) {
+                    Ok(rows) => updated += rows,
+                    Err(e) => {
+                        eprintln!("batch_update_priority error for {}: {}", mint, e);
+                    }
+                }
+            }
+        }
+
+        tx.commit()
+            .map_err(|e| TokenError::Database(format!("Transaction commit failed: {}", e)))?;
+
+        Ok(updated)
+    }
+
+    /// Batch update rejection status for multiple tokens (PERF optimization)
+    /// updates: Vec of (mint, reason, source, rejected_at)
+    pub fn batch_update_rejection_status(
+        &self,
+        updates: &[(String, String, String, i64)],
+    ) -> TokenResult<usize> {
+        if updates.is_empty() {
+            return Ok(0);
+        }
+
+        let mut conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let tx = conn
+            .transaction()
+            .map_err(|e| TokenError::Database(format!("Transaction start failed: {}", e)))?;
+
+        let mut updated = 0;
+        {
+            let mut stmt = tx
+                .prepare_cached(
+                    "UPDATE update_tracking SET 
+                        last_rejection_reason = ?1, 
+                        last_rejection_source = ?2, 
+                        last_rejection_at = ?3 
+                     WHERE mint = ?4",
+                )
+                .map_err(|e| TokenError::Database(format!("Prepare failed: {}", e)))?;
+
+            for (mint, reason, source, rejected_at) in updates {
+                match stmt.execute(params![reason, source, rejected_at, mint]) {
+                    Ok(rows) => updated += rows,
+                    Err(e) => {
+                        eprintln!("batch_update_rejection_status error for {}: {}", mint, e);
+                    }
+                }
+            }
+        }
+
+        tx.commit()
+            .map_err(|e| TokenError::Database(format!("Transaction commit failed: {}", e)))?;
+
+        Ok(updated)
+    }
+
+    /// Batch upsert rejection stats (PERF optimization)
+    /// stats: Vec of (reason, source, timestamp)
+    pub fn batch_upsert_rejection_stats(
+        &self,
+        stats: &[(String, String, i64)],
+    ) -> TokenResult<usize> {
+        if stats.is_empty() {
+            return Ok(0);
+        }
+
+        let mut conn = self
+            .conn
+            .lock()
+            .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
+
+        let tx = conn
+            .transaction()
+            .map_err(|e| TokenError::Database(format!("Transaction start failed: {}", e)))?;
+
+        let mut updated = 0;
+        {
+            let mut stmt = tx
+                .prepare_cached(
+                    "INSERT INTO rejection_stats (bucket_hour, reason, source, rejection_count, unique_tokens, first_seen, last_seen)
+                     VALUES (?1, ?2, ?3, 1, 1, ?4, ?4)
+                     ON CONFLICT(bucket_hour, reason, source) DO UPDATE SET
+                         rejection_count = rejection_count + 1,
+                         last_seen = ?4",
+                )
+                .map_err(|e| TokenError::Database(format!("Prepare failed: {}", e)))?;
+
+            for (reason, source, timestamp) in stats {
+                // Round timestamp to hour bucket
+                let bucket_hour = (timestamp / 3600) * 3600;
+                match stmt.execute(params![bucket_hour, reason, source, timestamp]) {
+                    Ok(_) => updated += 1,
+                    Err(e) => {
+                        eprintln!("batch_upsert_rejection_stats error: {}", e);
+                    }
+                }
+            }
+        }
+
+        tx.commit()
+            .map_err(|e| TokenError::Database(format!("Transaction commit failed: {}", e)))?;
+
+        Ok(updated)
+    }
+
     /// Get rejection statistics grouped by reason
     pub fn get_rejection_stats(&self) -> TokenResult<Vec<(String, String, i64)>> {
         self.get_rejection_stats_with_time_filter(None, None)
@@ -4048,6 +4227,64 @@ pub async fn clear_rejection_status_async(mint: &str) -> TokenResult<()> {
         .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
     let mint_owned = mint.to_string();
     tokio::task::spawn_blocking(move || db.clear_rejection_status(&mint_owned))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async: batch clear rejection status for multiple tokens (PERF optimization)
+/// Reduces 130k+ tokio::spawn calls to a single blocking task with transaction
+pub async fn batch_clear_rejection_status_async(mints: Vec<String>) -> TokenResult<usize> {
+    if mints.is_empty() {
+        return Ok(0);
+    }
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+    tokio::task::spawn_blocking(move || db.batch_clear_rejection_status(&mints))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async: batch update priority for multiple tokens (PERF optimization)
+/// Reduces 130k+ tokio::spawn calls to a single blocking task with transaction
+pub async fn batch_update_priority_async(mints: Vec<String>, priority: i32) -> TokenResult<usize> {
+    if mints.is_empty() {
+        return Ok(0);
+    }
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+    tokio::task::spawn_blocking(move || db.batch_update_priority(&mints, priority))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async: batch update rejection status for multiple tokens (PERF optimization)
+/// Reduces 130k+ tokio::spawn calls to a single blocking task with transaction
+/// updates: Vec of (mint, reason, source, rejected_at)
+pub async fn batch_update_rejection_status_async(
+    updates: Vec<(String, String, String, i64)>,
+) -> TokenResult<usize> {
+    if updates.is_empty() {
+        return Ok(0);
+    }
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+    tokio::task::spawn_blocking(move || db.batch_update_rejection_status(&updates))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+}
+
+/// Async: batch upsert rejection stats (PERF optimization)
+/// Reduces 130k+ tokio::spawn calls to a single blocking task with transaction
+/// stats: Vec of (reason, source, timestamp)
+pub async fn batch_upsert_rejection_stats_async(
+    stats: Vec<(String, String, i64)>,
+) -> TokenResult<usize> {
+    if stats.is_empty() {
+        return Ok(0);
+    }
+    let db = get_global_database()
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+    tokio::task::spawn_blocking(move || db.batch_upsert_rejection_stats(&stats))
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
 }

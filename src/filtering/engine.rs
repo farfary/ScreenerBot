@@ -10,8 +10,9 @@ use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::tokens::types::{DataSource, Token};
 use crate::tokens::{
-    clear_rejection_status_async, get_all_tokens_for_filtering_async,
-    list_blacklisted_tokens_async, update_rejection_status_async, upsert_rejection_stat_async,
+    batch_clear_rejection_status_async, batch_update_priority_async,
+    batch_update_rejection_status_async, batch_upsert_rejection_stats_async,
+    get_all_tokens_for_filtering_async, list_blacklisted_tokens_async,
 };
 
 use super::sources::{self, FilterRejectionReason};
@@ -260,6 +261,13 @@ pub async fn compute_snapshot(
         }
     }
 
+    // PERF: Collect batch data instead of spawning individual tasks
+    // This reduces 260k+ tokio::spawn calls to just 4 batch operations
+    let mut batch_clear_mints: Vec<String> = Vec::new();
+    let mut batch_priority_mints: Vec<String> = Vec::new();
+    let mut batch_rejection_updates: Vec<(String, String, String, i64)> = Vec::new();
+    let mut batch_rejection_stats: Vec<(String, String, i64)> = Vec::new();
+
     for token in tokens.iter() {
         stats.total_processed += 1;
 
@@ -302,36 +310,9 @@ pub async fn compute_snapshot(
                     passed_time,
                 });
 
-                // Clear any previous rejection status when token passes
-                let mint_for_clear = token.mint.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = clear_rejection_status_async(&mint_for_clear).await {
-                        logger::debug(
-                            LogTag::Filtering,
-                            &format!(
-                                "Failed to clear rejection status for {}: {}",
-                                mint_for_clear, e
-                            ),
-                        );
-                    }
-                });
-
-                // Set priority for passed tokens: FilterPassed (60)
-                // This is separate from PoolTracked priority (75) to avoid conflicts
-                let mint_for_priority = token.mint.clone();
-                tokio::spawn(async move {
-                    if let Err(e) =
-                        crate::tokens::update_token_priority_async(&mint_for_priority, 60).await
-                    {
-                        logger::error(
-                            LogTag::Filtering,
-                            &format!(
-                                "Failed to set FilterPassed priority for {}: {}",
-                                mint_for_priority, e
-                            ),
-                        );
-                    }
-                });
+                // PERF: Collect for batch processing instead of spawning individual tasks
+                batch_clear_mints.push(token.mint.clone());
+                batch_priority_mints.push(token.mint.clone());
 
                 // DEBUG: Record token passed (sample to avoid spam)
                 if stats.passed % 10 == 1 {
@@ -371,46 +352,14 @@ pub async fn compute_snapshot(
                     rejection_time,
                 });
 
-                // Persist rejection status to database for later lookup
-                let mint_for_rejection = token.mint.clone();
-                let reason_for_db = reason_label.clone();
-                let source_for_db = reason_source.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = update_rejection_status_async(
-                        &mint_for_rejection,
-                        &reason_for_db,
-                        &source_for_db,
-                        rejection_time,
-                    )
-                    .await
-                    {
-                        logger::debug(
-                            LogTag::Filtering,
-                            &format!(
-                                "Failed to persist rejection status for {}: {}",
-                                mint_for_rejection, e
-                            ),
-                        );
-                    }
-                });
-
-                // Upsert into aggregated rejection_stats table (hourly buckets)
-                let reason_for_stats = reason_label.clone();
-                let source_for_stats = reason_source.clone();
-                tokio::spawn(async move {
-                    if let Err(e) = upsert_rejection_stat_async(
-                        &reason_for_stats,
-                        &source_for_stats,
-                        rejection_time,
-                    )
-                    .await
-                    {
-                        logger::debug(
-                            LogTag::Filtering,
-                            &format!("Failed to upsert rejection stat: {}", e),
-                        );
-                    }
-                });
+                // PERF: Collect for batch processing instead of spawning individual tasks
+                batch_rejection_updates.push((
+                    token.mint.clone(),
+                    reason_label.clone(),
+                    reason_source.clone(),
+                    rejection_time,
+                ));
+                batch_rejection_stats.push((reason_label.clone(), reason_source, rejection_time));
 
                 // DEBUG: Record token rejection (sample to avoid spam)
                 if stats.rejected % 10 == 1 {
@@ -435,6 +384,63 @@ pub async fn compute_snapshot(
             }
         }
     }
+
+    // PERF: Spawn only 4 batch tasks instead of 260k+ individual tasks
+    // This dramatically reduces memory usage and task scheduler overhead
+    let passed_count = batch_clear_mints.len();
+    let rejected_count = batch_rejection_updates.len();
+
+    if !batch_clear_mints.is_empty() {
+        tokio::spawn(async move {
+            if let Err(e) = batch_clear_rejection_status_async(batch_clear_mints).await {
+                logger::warning(
+                    LogTag::Filtering,
+                    &format!("Failed to batch clear rejection status: {}", e),
+                );
+            }
+        });
+    }
+
+    if !batch_priority_mints.is_empty() {
+        tokio::spawn(async move {
+            if let Err(e) = batch_update_priority_async(batch_priority_mints, 60).await {
+                logger::warning(
+                    LogTag::Filtering,
+                    &format!("Failed to batch update priorities: {}", e),
+                );
+            }
+        });
+    }
+
+    if !batch_rejection_updates.is_empty() {
+        tokio::spawn(async move {
+            if let Err(e) = batch_update_rejection_status_async(batch_rejection_updates).await {
+                logger::warning(
+                    LogTag::Filtering,
+                    &format!("Failed to batch update rejection status: {}", e),
+                );
+            }
+        });
+    }
+
+    if !batch_rejection_stats.is_empty() {
+        tokio::spawn(async move {
+            if let Err(e) = batch_upsert_rejection_stats_async(batch_rejection_stats).await {
+                logger::warning(
+                    LogTag::Filtering,
+                    &format!("Failed to batch upsert rejection stats: {}", e),
+                );
+            }
+        });
+    }
+
+    logger::debug(
+        LogTag::Filtering,
+        &format!(
+            "Batch DB updates: passed={} (clear+priority), rejected={} (status+stats)",
+            passed_count, rejected_count
+        ),
+    );
 
     let elapsed_ms = start.elapsed().as_millis();
 
