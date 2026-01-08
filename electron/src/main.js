@@ -393,6 +393,103 @@ function saveWindowState() {
 }
 
 /**
+ * Check and install Visual C++ Redistributable if missing (Windows Only)
+ * Returns true if safe to proceed, false if we should stop/restart
+ */
+async function checkAndInstallVCRedist() {
+  if (process.platform !== 'win32') return true;
+
+  // 1. Quick Check: Look for the DLL in System32
+  // This is a reliable heuristic for standard users
+  const system32 = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32');
+  const dllPath = path.join(system32, 'vcruntime140.dll');
+  
+  if (fs.existsSync(dllPath)) {
+    console.log('[Electron] VCRedist check: Found vcruntime140.dll');
+    return true; // Exists, proceed
+  }
+
+  console.log('[Electron] VCRedist check: DLL missing, prompting user...');
+  updateLoadingStatus('Checking dependencies...');
+
+  // 2. Prompt User
+  const { response } = await dialog.showMessageBox(mainWindow, {
+    type: 'warning',
+    title: 'Missing Dependency',
+    message: 'Visual C++ Redistributable is missing',
+    detail: 'ScreenerBot requires Microsoft Visual C++ Redistributable to run. Would you like to install it now?',
+    buttons: ['Install & Fix', 'Exit'],
+    defaultId: 0,
+    cancelId: 1,
+    icon: nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'icon.png'))
+  });
+
+  if (response !== 0) {
+    app.quit();
+    return false;
+  }
+
+  // 3. Locate Bundled Installer
+  let redistPath;
+  const isArm64 = process.arch === 'arm64';
+  const redistName = isArm64 ? 'vc_redist.arm64.exe' : 'vc_redist.x64.exe';
+
+  if (app.isPackaged) {
+    redistPath = path.join(process.resourcesPath, redistName);
+  } else {
+    // Dev path
+    redistPath = path.join(__dirname, '..', 'redist', redistName);
+  }
+
+  if (!fs.existsSync(redistPath)) {
+    dialog.showErrorBox('Installer Not Found', `Could not locate ${redistName} correctly.`);
+    const downloadUrl = isArm64 
+      ? 'https://aka.ms/vs/17/release/vc_redist.arm64.exe'
+      : 'https://aka.ms/vs/17/release/vc_redist.x64.exe';
+    shell.openExternal(downloadUrl);
+    return false;
+  }
+
+  // 4. Run Installer
+  // /install /passive /norestart -> Installs with progress bar but no user interaction required
+  updateLoadingStatus('Installing system dependencies...');
+  
+  try {
+    await new Promise((resolve, reject) => {
+      const installer = spawn(redistPath, ['/install', '/passive', '/norestart'], {
+        detached: true,
+        stdio: 'ignore'
+      });
+      
+      installer.on('exit', (code) => {
+        // Code 0 = Success, 3010 = Success (Restart Required)
+        if (code === 0 || code === 3010) resolve();
+        else reject(new Error(`Installer exited with code ${code}`));
+      });
+      
+      installer.on('error', reject);
+    });
+
+    dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: 'Installation Complete',
+      message: 'Dependencies installed successfully.',
+      detail: 'ScreenerBot will now start.',
+      buttons: ['OK']
+    });
+    
+    return true; // Proceed to start backend
+
+  } catch (err) {
+    console.error('[Electron] Redist installation failed:', err);
+    dialog.showErrorBox('Installation Failed', 'Please install Visual C++ Redistributable manually.');
+    shell.openExternal('https://aka.ms/vs/17/release/vc_redist.x64.exe');
+    app.quit();
+    return false;
+  }
+}
+
+/**
  * Create the main window
  */
 function createWindow() {
@@ -523,10 +620,16 @@ async function initialize() {
   // Load loading page
   loadLoadingPage();
   
-  // Send initial status after page loads
-  mainWindow.webContents.once('did-finish-load', () => {
-    updateLoadingStatus('Initializing...');
-  });
+  // Wait for loading page to be ready so we can show updates
+  if (mainWindow.webContents.isLoading()) {
+    await new Promise(resolve => mainWindow.webContents.once('did-finish-load', resolve));
+  }
+  
+  updateLoadingStatus('Initializing...');
+
+  // Check dependencies (Windows)
+  const dependenciesOk = await checkAndInstallVCRedist();
+  if (!dependenciesOk) return;
 
   // Start the backend
   updateLoadingStatus('Starting backend services...');

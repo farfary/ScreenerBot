@@ -25,7 +25,10 @@ module.exports = {
     appCategoryType: 'public.app-category.finance',
     icon: path.join(__dirname, 'assets', 'icon'),
     extraResource: [
-      path.join(__dirname, '..', 'target', 'release', binaryName)
+      path.join(__dirname, '..', 'target', 'release', binaryName),
+      ...(isWindows ? [
+        path.join(__dirname, 'redist', isArm64 ? 'vc_redist.arm64.exe' : 'vc_redist.x64.exe')
+      ] : [])
     ],
     // macOS code signing (disabled by default - enable for distribution)
     // osxSign: {},
