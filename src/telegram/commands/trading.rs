@@ -15,21 +15,19 @@ fn is_trader_enabled() -> bool {
 
 /// Handle /start command - Welcome message and enable trading
 pub async fn handle_start_command() -> String {
-    let currently_enabled = is_trader_enabled();
+    // Ideally we'd check for errors, but for the start command we want to be seamless
+    let _ = update_config_section(
+        |cfg| {
+            cfg.trader.enabled = true;
+        },
+        true,
+    );
 
-    if currently_enabled {
-        "🚀 <b>ScreenerBot is Ready!</b>\n\n\
-        Trading is <b>enabled</b>.\n\n\
-        Use the keyboard below to control the bot.\n\
-        Type /help for available commands."
-            .to_string()
-    } else {
-        "🚀 <b>Welcome to ScreenerBot!</b>\n\n\
-        Trading is currently <b>disabled</b>.\n\n\
-        Use the keyboard below to control the bot.\n\
-        Press ▶️ Resume to start trading."
-            .to_string()
-    }
+    "🚀 <b>ScreenerBot is Ready!</b>\n\n\
+    Trading is <b>enabled</b>.\n\n\
+    Use the keyboard below to control the bot.\n\
+    Type /help for available commands."
+        .to_string()
 }
 
 /// Handle /stop command - Disable trading
@@ -49,7 +47,7 @@ pub async fn handle_stop_command() -> String {
     ) {
         Ok(()) => {
             logger::info(LogTag::Telegram, "Trading disabled via Telegram command");
-            "🛑 <b>Trading Disabled</b>\n\nThe bot will stop entering new positions.\nExisting positions will continue to be monitored."
+            "🛑 <b>Trading Disabled</b>\n\nAll trading monitors (entries & exits) are stopped.\nUse /pause to stop only entries."
                 .to_string()
         }
         Err(e) => {
@@ -79,6 +77,10 @@ pub async fn handle_resume_entries_command() -> String {
     match update_config_section(
         |cfg| {
             cfg.trader.entry_monitor_enabled = true;
+            // Ensure master switch is on so resume actually works if previously stopped
+            if !cfg.trader.enabled {
+                cfg.trader.enabled = true;
+            }
         },
         true,
     ) {
@@ -125,25 +127,27 @@ pub async fn handle_resume_command() -> String {
 
 /// Handle /help command
 pub fn handle_help_command() -> String {
-    "🤖 <b>ScreenerBot Commands</b>\n\n\
-     <b>📊 Info</b>\n\
-     /status - Bot status, uptime, and trading state\n\
-     /positions - List open positions with P&L\n\
-     /balance - Show wallet SOL balance\n\
-     /stats - Today's trading statistics\n\n\
-     <b>🔍 Tokens</b>\n\
-     /tokens - Browse filtered tokens\n\
-     /rejected - View rejected tokens\n\n\
-     <b>⚡ Controls</b>\n\
-     /menu - Open interactive control menu\n\
-     /start - Enable trading\n\
-     /stop - Disable trading (keeps monitoring)\n\
-     /pause - Pause entry monitor only\n\
-     /resume - Resume entry monitor\n\
-     /force_stop - Emergency halt all trading\n\
-     /resume_trading - Clear force stop flag\n\
-     /login - Authenticate with 2FA code\n\n\
-     <i>Note: Commands only work from the configured chat ID.</i>"
+    "🤖 <b>ScreenerBot Help</b>\n\n\
+     <b>📊 Dashboard</b>\n\
+     /status — System status & uptime\n\
+     /stats — Daily performance\n\
+     /balance — Wallet balance\n\
+     /positions — Open positions\n\n\
+     <b>🔍 Market</b>\n\
+     /tokens — Token explorer\n\
+     /rejected — Filtered tokens\n\n\
+     <b>⚡ Trading</b>\n\
+     /start — Enable trading system\n\
+     /stop — Disable trading system\n\
+     /pause — Pause new entries\n\
+     /resume — Resume new entries\n\
+     /menu — Interactive menu\n\n\
+     <b>🚨 Safety</b>\n\
+     /force_stop — <b>EMERGENCY HALT</b>\n\
+     /resume_trading — Clear emergency status\n\n\
+     <b>⚙️ System</b>\n\
+     /login — 2FA Authentication\n\n\
+     <i>Tip: Tap a command to run it.</i>"
         .to_string()
 }
 

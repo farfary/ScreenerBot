@@ -328,12 +328,11 @@ async fn send_confirm_sell(
                 .remaining_token_amount
                 .unwrap_or(pos.token_amount.unwrap_or(0)) as f64;
             let msg = format!(
-                "⚠️ <b>Confirm Sell {}%</b>\n\n\
-                 Token: {}\n\
-                 Selling: {}% of position\n\
-                 Est. tokens: {:.0}\n\n\
-                 ⏰ <i>Confirm within 30 seconds</i>",
-                percent,
+                "⚠️ <b>Confirm Sell</b>\n\n\
+                 Token — {}\n\
+                 Amount — {}%\n\
+                 Tokens — {:.0}\n\n\
+                 <i>Confirm within 30s to execute.</i>",
                 pos.symbol,
                 percent,
                 tokens * (percent as f64 / 100.0)
@@ -367,10 +366,10 @@ async fn send_confirm_dca(
     match position {
         Some(pos) => {
             let msg = format!(
-                "⚠️ <b>Confirm DCA</b>\n\n\
-                 Token: {}\n\
-                 Adding: {} SOL\n\n\
-                 ⏰ <i>Confirm within 30 seconds</i>",
+                "⚠️ <b>Confirm Buy More</b>\n\n\
+                 Token — {}\n\
+                 Add — {} SOL\n\n\
+                 <i>Confirm within 30s to execute.</i>",
                 pos.symbol, amount
             );
             send_with_keyboard(
@@ -426,20 +425,20 @@ async fn send_confirm_close_all(bot: &Bot, chat_id: ChatId) -> Result<(), String
     let positions = positions::get_open_positions().await;
     let msg = format!(
         "⚠️ <b>Close All Positions?</b>\n\n\
-         This will close {} positions.\n\n\
-         ⏰ <i>Confirm within 30 seconds</i>",
+         Count — {}\n\n\
+         <i>This will market sell all open positions.\nConfirm within 30s.</i>",
         positions.len()
     );
     send_with_keyboard(bot, chat_id, &msg, keyboards::confirm_close_all()).await
 }
 
 async fn send_confirm_force_stop(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
-    let msg = "🚨 <b>FORCE STOP CONFIRMATION</b>\n\n\
+    let msg = "🚨 <b>FORCE STOP</b>\n\n\
          This will immediately halt ALL trading:\n\
          • No new entries\n\
          • No exits\n\
          • No DCA\n\n\
-         ⚠️ <b>Are you absolutely sure?</b>";
+         ⚠️ <b>This is an emergency action.</b>";
     send_with_keyboard(bot, chat_id, msg, keyboards::confirm_force_stop()).await
 }
 
@@ -457,9 +456,9 @@ async fn send_confirm_blacklist(
         Some(pos) => {
             let msg = format!(
                 "🚫 <b>Blacklist Token?</b>\n\n\
-                 Token: {}\n\
-                 Mint: <code>{}</code>\n\n\
-                 This will close the position and prevent future entries.",
+                 Token — {}\n\
+                 Mint — <code>{}</code>\n\n\
+                 <i>This will close the position and prevent future entries.</i>",
                 pos.symbol,
                 formatters::format_mint_display(&pos.mint)
             );
@@ -505,9 +504,9 @@ async fn execute_sell(
                 Ok(result) => {
                     let msg = format!(
                         "✅ <b>Sell Executed</b>\n\n\
-                         Token: {}\n\
-                         Sold: {}%\n\
-                         Received: {:.4} SOL",
+                         Token — {}\n\
+                         Sold — {}%\n\
+                         Received — {:.4} SOL",
                         pos.symbol,
                         percent,
                         result.executed_size_sol.unwrap_or(0.0)
@@ -550,8 +549,8 @@ async fn execute_dca(
                 Ok(_) => {
                     let msg = format!(
                         "✅ <b>DCA Executed</b>\n\n\
-                         Token: {}\n\
-                         Added: {} SOL",
+                         Token — {}\n\
+                         Added — {} SOL",
                         pos.symbol, amount
                     );
                     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await
@@ -598,8 +597,8 @@ async fn execute_close_all(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
 
     let msg = format!(
         "📊 <b>Close All Complete</b>\n\n\
-         ✅ Closed: {}\n\
-         ❌ Failed: {}",
+         ✅ Closed — {}\n\
+         ❌ Failed — {}",
         success, failed
     );
     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu()).await
@@ -646,8 +645,8 @@ async fn execute_blacklist(bot: &Bot, chat_id: ChatId, mint_short: &str) -> Resu
 
             let msg = format!(
                 "🚫 <b>Token Blacklisted</b>\n\n\
-                 Token: {}\n\
-                 Position closed and token added to blacklist.",
+                 Token — {}\n\
+                 Status — Closed & Blacklisted",
                 pos.symbol
             );
             send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu()).await
@@ -766,13 +765,13 @@ pub async fn send_tokens_menu(bot: &Bot, chat_id: ChatId) -> Result<(), String> 
     };
 
     let msg = format!(
-        "🔍 <b>Token Explorer</b>\n\n\
-         📊 <b>Current Stats:</b>\n\
-         ├ ✅ Passed: {}\n\
-         ├ ❌ Rejected: {}\n\
-         ├ 💰 With Price: {}\n\
-         └ 📋 Total: {}\n\n\
-         <i>Select a view to browse tokens:</i>",
+        "🔍 <b>Market Explorer</b>\n\n\
+         <b>Overview</b>\n\
+         Passed Filter — {}\n\
+         Rejected — {}\n\
+         Active Prices — {}\n\
+         Total Discovered — {}\n\n\
+         <i>Select a category to browse:</i>",
         stats.passed_filtering,
         stats.total_tokens.saturating_sub(stats.passed_filtering),
         stats.with_pool_price,
@@ -834,10 +833,18 @@ async fn send_tokens_page(
         _ => "📊",
     };
 
+    let view_name = match view {
+        "passed" => "Passed Filter",
+        "rejected" => "Rejected",
+        "recent" => "Recently Added",
+        "all" => "All Tokens",
+        _ => view,
+    };
+
     let mut msg = format!(
-        "{} <b>{} Tokens</b> ({}/{})\n\n",
+        "{} <b>{}</b> (Page {}/{})\n\n",
         view_emoji,
-        view.to_uppercase(),
+        view_name,
         result.page,
         result.total_pages
     );
@@ -860,6 +867,13 @@ async fn send_tokens_page(
                 }
             })
             .unwrap_or_else(|| "N/A".to_string());
+        
+        // Format price
+        let price = if token.price_sol > 0.0 {
+             format!("{} SOL", formatters::format_price(token.price_sol))
+        } else {
+            "N/A".to_string()
+        };
 
         // Add rejection reason for rejected view
         let reason_part = if view == "rejected" {
@@ -873,12 +887,12 @@ async fn send_tokens_page(
         };
 
         msg.push_str(&format!(
-            "{}. <b>${}</b> ({}) • {}{}\n   /token_{}\n",
-            idx, symbol, mint_short, liquidity, reason_part, mint_short
+            "{}. <b>${}</b> ({})\n   Liq: {} • Price: {}{}\n   /token_{}\n\n",
+            idx, symbol, mint_short, liquidity, price, reason_part, mint_short
         ));
     }
 
-    msg.push_str("\n<i>Tap /token_XXXXXX to view details</i>");
+    msg.push_str("<i>Tap /token_ID to view details</i>");
 
     let keyboard = keyboards::tokens_list_keyboard(view, page, result.total_pages);
     send_with_keyboard(bot, chat_id, &msg, keyboard).await
@@ -907,17 +921,18 @@ async fn send_filter_stats(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
     };
 
     let msg = format!(
-        "📊 <b>Filter Statistics</b>\n\n\
-         <b>Token Counts:</b>\n\
-         ├ ✅ Passed: {} ({:.1}%)\n\
-         ├ ❌ Rejected: {} ({:.1}%)\n\
-         ├ 🚫 Blacklisted: {}\n\
-         ├ 💰 With Pool Price: {}\n\
-         ├ 📈 Open Positions: {}\n\
-         └ 📋 Total Discovered: {}\n\n\
-         <b>Last Updated:</b>\n\
-         └ 🕐 {}\n\n\
-         <i>Stats refresh automatically every 3 minutes</i>",
+        "📊 <b>Filter Analysis</b>\n\n\
+         <b>Distribution</b>\n\
+         ✅ Passed — {} ({:.1}%)\n\
+         ❌ Rejected — {} ({:.1}%)\n\
+         🚫 Blacklisted — {}\n\n\
+         <b>Coverage</b>\n\
+         💰 With Pool Price — {}\n\
+         📈 Open Positions — {}\n\
+         📋 Total Discovered — {}\n\n\
+         <b>Last Updated</b>\n\
+         🕐 {}\n\n\
+         <i>Auto-refreshes every 3m</i>",
         stats.passed_filtering,
         passed_pct,
         rejected_count,
@@ -926,7 +941,7 @@ async fn send_filter_stats(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
         stats.with_pool_price,
         stats.open_positions,
         stats.total_tokens,
-        stats.updated_at.format("%Y-%m-%d %H:%M UTC")
+        stats.updated_at.format("%H:%M:%S UTC")
     );
 
     send_with_keyboard(bot, chat_id, &msg, keyboards::filter_stats_keyboard()).await
@@ -975,26 +990,27 @@ pub async fn send_token_detail(bot: &Bot, chat_id: ChatId, mint_short: &str) -> 
             } else {
                 "🔴"
             };
-            format!("{} Risk: {}/100", emoji, s)
+            format!("{} Risk Assessment: {}/100", emoji, s)
         })
-        .unwrap_or_else(|| "⚪ Risk: Unknown".to_string());
+        .unwrap_or_else(|| "⚪ Risk Assessment: Unknown".to_string());
 
     let position_text = if has_position {
-        "✅ <b>You have an open position</b>\n\n"
+        "✅ <b>Active Position</b>\n\n"
     } else {
         ""
     };
 
     let msg = format!(
-        "🪙 <b>${}</b>\n\
+        "🪙 <b>{}</b> (${})\n\
          <code>{}</code>\n\n\
          {}\
-         💰 <b>Price:</b> {} SOL\n\
-         📊 <b>Liquidity:</b> {}\n\
-         📈 <b>24h Volume:</b> {}\n\
-         📉 <b>24h Change:</b> {}\n\
+         Price — {} SOL\n\
+         Liquidity — {}\n\
+         24h Volume — {}\n\
+         24h Change — {}\n\n\
          {}\n\n\
-         <i>Use buttons below to trade or view more.</i>",
+         <i>Select action:</i>",
+        token.name,
         token.symbol,
         formatters::format_mint_display(&token.mint),
         position_text,
@@ -1035,8 +1051,8 @@ async fn find_token_by_prefix(prefix: &str) -> Option<crate::tokens::types::Toke
 
 /// Send search prompt
 async fn send_search_prompt(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
-    let msg = "🔍 <b>Search Token</b>\n\n\
-               Send a token symbol or mint address to search.\n\n\
+    let msg = "🔍 <b>Search Market</b>\n\n\
+               Enter symbol or mint address to search:\n\n\
                <i>Example: /token_BONK or /token_So11111</i>";
     send_with_keyboard(bot, chat_id, msg, keyboards::tokens_menu()).await
 }
@@ -1057,11 +1073,11 @@ async fn send_confirm_token_buy(
     };
 
     let msg = format!(
-        "💰 <b>Confirm Buy</b>\n\n\
-         Token: ${}\n\
-         Mint: <code>{}</code>\n\
-         Amount: {} SOL\n\n\
-         ⏰ <i>Confirm within 30 seconds</i>",
+        "💰 <b>Confirm Direct Buy</b>\n\n\
+         Token — ${}\n\
+         Mint — <code>{}</code>\n\
+         Amount — {} SOL\n\n\
+         <i>Confirm within 30s to execute.</i>",
         token.symbol,
         formatters::format_mint_display(&token.mint),
         amount
@@ -1092,9 +1108,9 @@ async fn send_confirm_token_blacklist(
 
     let msg = format!(
         "🚫 <b>Blacklist Token?</b>\n\n\
-         Token: ${}\n\
-         Mint: <code>{}</code>\n\n\
-         This will prevent this token from passing filters.",
+         Token — ${}\n\
+         Mint — <code>{}</code>\n\n\
+         <i>This will prevent this token from satisfying filters.</i>",
         token.symbol,
         formatters::format_mint_display(&token.mint)
     );
@@ -1139,8 +1155,8 @@ async fn execute_token_blacklist(
         Ok(Ok(())) => {
             let msg = format!(
                 "🚫 <b>Token Blacklisted</b>\n\n\
-                 Token: ${}\n\
-                 Status: Added to blacklist",
+                 Token — ${}\n\
+                 Status — Added to blacklist",
                 token.symbol
             );
             send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await
@@ -1175,13 +1191,11 @@ async fn execute_token_buy(
     };
 
     let msg = format!(
-        "💰 <b>Buying ${}</b>\n\n\
-         ├ Amount: {} SOL\n\
-         └ Token: {}...\n\n\
-         ⏳ Processing...",
+        "💰 <b>Processing Buy...</b>\n\n\
+         Token — ${}\n\
+         Amount — {} SOL",
         token.symbol,
-        amount,
-        &token.mint[..12.min(token.mint.len())]
+        amount
     );
 
     bot.send_message(chat_id, &msg)
@@ -1193,11 +1207,10 @@ async fn execute_token_buy(
     match manual_add(&token.mint, amount).await {
         Ok(_) => {
             let success_msg = format!(
-                "✅ <b>Buy Order Executed</b>\n\n\
-                 ├ Token: ${}\n\
-                 ├ Amount: {} SOL\n\
-                 └ Status: Success\n\n\
-                 <i>Position opened! View in /positions</i>",
+                "✅ <b>Buy Successful</b>\n\n\
+                 Token — ${}\n\
+                 Amount — {} SOL\n\n\
+                 <i>View details in /positions</i>",
                 token.symbol, amount
             );
             send_with_keyboard(bot, chat_id, &success_msg, keyboards::main_menu_compact()).await
@@ -1205,9 +1218,8 @@ async fn execute_token_buy(
         Err(e) => {
             let error_msg = format!(
                 "❌ <b>Buy Failed</b>\n\n\
-                 ├ Token: ${}\n\
-                 └ Error: {}\n\n\
-                 <i>Check logs for details</i>",
+                 Token — ${}\n\
+                 Error — {}",
                 token.symbol, e
             );
             send_with_keyboard(bot, chat_id, &error_msg, keyboards::tokens_menu()).await

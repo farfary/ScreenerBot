@@ -19,7 +19,7 @@ pub async fn handle_status_command() -> String {
     let force_stopped = crate::global::is_force_stopped();
 
     let status_emoji = if force_stopped {
-        "🚨"
+        "�"
     } else if trading_enabled {
         "🟢"
     } else {
@@ -27,30 +27,33 @@ pub async fn handle_status_command() -> String {
     };
 
     let trading_status = if force_stopped {
-        "Force Stopped"
+        "<b>STOPPED</b> (Force Stop Active)"
     } else if trading_enabled {
-        "Active"
+        "<b>ACTIVE</b>"
     } else {
-        "Paused"
+        "<b>PAUSED</b>"
     };
 
-    let entry_icon = if entry_enabled { "✅" } else { "⏸️" };
-    let exit_icon = if exit_enabled { "✅" } else { "⏸️" };
+    let entry_status = if entry_enabled { "ON" } else { "OFF" };
+    let exit_status = if exit_enabled { "ON" } else { "OFF" };
 
     format!(
-        "{} <b>Status</b>  ·  v{}\n\n\
-         <b>Trading:</b> {}\n\
-         ├ Entry: {}\n\
-         └ Exit: {}\n\n\
-         📦 Positions: {}\n\
-         ⏱️ Uptime: {}",
+        "{} <b>System Status</b>\n\n\
+         <b>System</b>\n\
+         State — {}\n\
+         Uptime — {}\n\
+         Version — v{}\n\n\
+         <b>Trading</b>\n\
+         Entries — {}\n\
+         Exits — {}\n\
+         Positions — {}",
         status_emoji,
-        VERSION,
         trading_status,
-        entry_icon,
-        exit_icon,
-        open_positions,
         format_duration(uptime),
+        VERSION,
+        entry_status,
+        exit_status,
+        open_positions,
     )
 }
 
@@ -59,10 +62,10 @@ pub async fn handle_positions_command() -> String {
     let positions = positions::get_open_positions().await;
 
     if positions.is_empty() {
-        return "📦 <b>No Open Positions</b>".to_string();
+        return "📦 <b>No Open Positions</b>\n\nWaiting for opportunities...".to_string();
     }
 
-    let mut response = format!("📦 <b>Positions ({})</b>\n\n", positions.len());
+    let mut response = format!("📦 <b>Open Positions ({})</b>\n\n", positions.len());
 
     let mut total_invested = 0.0;
     let mut total_pnl = 0.0;
@@ -72,15 +75,20 @@ pub async fn handle_positions_command() -> String {
         let pnl_sol = pos.unrealized_pnl.unwrap_or(0.0);
         let pnl_emoji = if pnl_pct >= 0.0 { "🟢" } else { "🔴" };
         let sign = if pnl_pct >= 0.0 { "+" } else { "" };
+        let symbol = if pos.symbol.len() > 6 {
+            format!("{}..", &pos.symbol[..5])
+        } else {
+            pos.symbol.clone()
+        };
 
         response.push_str(&format!(
-            "{}. <code>${}</code> {} {}{:.1}%  ·  {} SOL\n",
-            i + 1,
-            pos.symbol,
+            "{} <b>{}</b>\n   {}{} SOL ({}{:.1}%)\n",
             pnl_emoji,
+            symbol,
             sign,
-            pnl_pct,
-            format_sol(pos.total_size_sol),
+            format_sol(pnl_sol),
+            sign,
+            pnl_pct
         ));
 
         total_invested += pos.total_size_sol;
@@ -91,12 +99,12 @@ pub async fn handle_positions_command() -> String {
         response.push_str(&format!("\n<i>+{} more...</i>\n", positions.len() - 10));
     }
 
-    let pnl_emoji = if total_pnl >= 0.0 { "🟢" } else { "🔴" };
+    let sign = if total_pnl >= 0.0 { "+" } else { "" };
     response.push_str(&format!(
-        "\n<b>Total:</b> {} SOL  ·  {} SOL {}",
+        "\n<b>Portfolio Summary</b>\nInvested — {} SOL\nNet P&L — {}{} SOL",
         format_sol(total_invested),
+        sign,
         format_sol(total_pnl),
-        pnl_emoji,
     ));
 
     response
@@ -118,13 +126,14 @@ pub async fn handle_balance_command() -> String {
     let usd_value = sol_balance * sol_price_usd;
 
     format!(
-        "💰 <b>Balance</b>\n\n\
-         <code>{}</code>\n\n\
-         🪨 <b>{} SOL</b>\n\
-         💵 ${:.2}",
-        format_mint_display(&wallet_address),
+        "💰 <b>Wallet Balance</b>\n\n\
+         <b>{} SOL</b>\n\
+         ≈ ${:.2} USD\n\n\
+         <a href=\"https://solscan.io/account/{}\">{}</a>",
         format_sol(sol_balance),
         usd_value,
+        wallet_address,
+        format_mint_display(&wallet_address),
     )
 }
 
@@ -144,10 +153,10 @@ pub async fn handle_stats_command() -> String {
     let sign = if total_pnl >= 0.0 { "+" } else { "" };
 
     format!(
-        "📈 <b>Stats</b>\n\n\
-         📦 Positions: {}\n\
-         💵 Invested: {} SOL\n\
-         📊 P&L: {}{} SOL {}",
+        "📈 <b>Daily Statistics</b>\n\n\
+         Positions — {}\n\
+         Invested — {} SOL\n\
+         P&L — {}{} SOL {}",
         positions.len(),
         format_sol(total_invested),
         sign,

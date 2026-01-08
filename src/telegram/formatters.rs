@@ -202,19 +202,18 @@ pub fn msg_position_opened(
     format!(
         r#"🟢 <b>Position Opened</b>
 
-<b>${}</b>  ·  <code>{}</code>
+<b>${}</b> — <code>{}</code>
 
-├ 💰 Size: <b>{} SOL</b>
-├ 💎 Price: {} SOL
-├ 🪙 Tokens: {}
-└ 📍 DEX: {}"#,
+💰 Size — <b>{} SOL</b>
+💎 Price — {} SOL
+🪙 Tokens — {}
+📍 DEX — {}"#,
         html_escape(symbol),
         format_mint_display(mint),
         format_sol(amount_sol),
         format_price(entry_price),
         format_tokens_f64(tokens),
-        html_escape(dex),
-    )
+        html_escape(dex),    )
 }
 
 /// Format position closed notification
@@ -245,16 +244,16 @@ pub fn msg_position_closed(
     };
 
     format!(
-        r#"{} <b>Position Closed</b>  ·  {}
+        r#"{} <b>Position Closed</b> — {}
 
-<b>${}</b>  ·  {}
+<b>${}</b> — {}
 
-├ 📈 Entry: {} SOL
-├ 📉 Exit: {} SOL
-├ 💵 Invested: {} SOL
-├ 💰 Received: {} SOL
-├ ⏱️ Duration: {}
-└ 📋 Reason: {}"#,
+📈 Entry — {} SOL
+📉 Exit — {} SOL
+💵 Invested — {} SOL
+💰 Received — {} SOL
+⏱️ Duration — {}
+📋 Reason — {}"#,
         header_emoji,
         result_text,
         html_escape(symbol),
@@ -283,11 +282,11 @@ pub fn msg_partial_exit(
     format!(
         r#"{} <b>Partial Exit</b>
 
-<b>${}</b>  ·  Sold {:.0}%
+<b>${}</b> — Sold {:.0}%
 
-├ 💰 Received: {} SOL
-├ 📊 P&L: {}
-└ 📦 Remaining: {:.0}%"#,
+💰 Received — {} SOL
+📊 P&L — {}
+📦 Remaining — {:.0}%"#,
         emoji,
         html_escape(symbol),
         exit_pct,
@@ -311,9 +310,9 @@ pub fn msg_dca_executed(
 
 <b>${}</b>
 
-├ ➕ Added: <b>{} SOL</b>
-├ 💰 Total: {} SOL
-└ 💎 Avg: {} SOL"#,
+➕ Added — <b>{} SOL</b>
+💰 Total — {} SOL
+💎 Avg — {} SOL"#,
         dca_count,
         html_escape(symbol),
         format_sol(dca_amount_sol),
@@ -345,21 +344,21 @@ pub fn msg_bot_started(
         String::new()
     } else {
         format!(
-            "\n<b>Wallet:</b> <code>{}</code>",
+            "\n<b>Wallet</b> — <code>{}</code>",
             format_mint_display(wallet_address)
         )
     };
 
     let balance_line = if balance_sol > 0.0 {
-        format!("\n<b>Balance:</b> {} SOL", format_sol(balance_sol))
+        format!("\n<b>Balance</b> — {} SOL", format_sol(balance_sol))
     } else {
         String::new()
     };
 
     format!(
         "🚀 <b>ScreenerBot Started</b>\n\n\
-         <b>Version:</b> {}\n\
-         <b>Mode:</b> {}{}{}
+         <b>Version</b> — {}\n\
+         <b>Mode</b> — {}{}{}
 \n\
          ✅ Ready for trading!",
         html_escape(version),
@@ -378,9 +377,9 @@ pub fn msg_bot_stopped(
 ) -> String {
     let summary = if trades_executed > 0 || total_pnl.abs() > 0.0 {
         format!(
-            "\n\n<b>Session:</b>\n\
-             ├ Trades: {}\n\
-             └ P&L: {} SOL",
+            "\n\n<b>Session</b>\n\
+             Trades — {}\n\
+             P&L — {} SOL",
             trades_executed,
             format_sol(total_pnl),
         )
@@ -389,14 +388,14 @@ pub fn msg_bot_stopped(
     };
 
     let uptime_line = if uptime_secs > 0 {
-        format!("\n<b>Uptime:</b> {}", format_duration(uptime_secs))
+        format!("\n<b>Uptime</b> — {}", format_duration(uptime_secs))
     } else {
         String::new()
     };
 
     format!(
         "🛑 <b>ScreenerBot Stopped</b>\n\n\
-         <b>Reason:</b> {}{}{}
+         <b>Reason</b> — {}{}{}
 \n\
          Goodbye! 👋",
         html_escape(reason),
@@ -424,14 +423,14 @@ pub fn msg_daily_summary(
     let pnl_emoji = if total_pnl_sol >= 0.0 { "🟢" } else { "🔴" };
 
     format!(
-        r#"{} <b>Daily Summary</b>  ·  {}
+        r#"{} <b>Daily Summary</b> — {}
 
 <b>Performance</b>
-├ Trades: {} ({}🟢 {}🔴)
-├ Win Rate: {:.0}%
-└ P&L: <b>{} SOL</b> {}
+Trades — {} ({}🟢 {}🔴)
+Win Rate — {:.0}%
+P&L — <b>{} SOL</b> {}
 
-📦 Open Positions: {}"#,
+📦 Open Positions — {}"#,
         emoji,
         html_escape(date),
         total_trades,
@@ -465,18 +464,18 @@ pub fn msg_status(
     let pnl_emoji = if today_pnl >= 0.0 { "🟢" } else { "🔴" };
 
     format!(
-        r#"📊 <b>Status</b>  ·  v{}
+        r#"📊 <b>Status</b> — v{}
 
-<b>Trading:</b> {}
-├ Entry Monitor: {}
-└ Exit Monitor: {}
+<b>Trading</b> — {}
+Entry Monitor — {}
+Exit Monitor — {}
 
 <b>Portfolio</b>
-├ 💰 Balance: {} SOL
-├ 📦 Positions: {}
-└ 📈 Today: {} SOL {}
+💰 Balance — {} SOL
+📦 Positions — {}
+📈 Today — {} SOL {}
 
-⏱️ Uptime: {}"#,
+⏱️ Uptime — {}"#,
         html_escape(version),
         trading_status,
         entry_status,
@@ -496,10 +495,10 @@ pub fn msg_balance(sol_balance: f64, usd_value: f64, positions_value: f64) -> St
     format!(
         r#"💰 <b>Wallet Balance</b>
 
-├ 🪨 SOL: <b>{}</b>
-├ 💵 USD: {}
-├ 📦 Positions: {} SOL
-└ 📊 Total: <b>{} SOL</b>"#,
+🪨 SOL — <b>{}</b>
+💵 USD — {}
+📦 Positions — {} SOL
+📊 Total — <b>{} SOL</b>"#,
         format_sol(sol_balance),
         format_usd(usd_value),
         format_sol(positions_value),
@@ -524,7 +523,7 @@ pub fn msg_positions_list(positions: &[(String, f64, f64, String)]) -> String {
         let sign = if *pnl_pct >= 0.0 { "+" } else { "" };
 
         lines.push(format!(
-            "{}. <code>${}</code> {} {}{:.1}% · {} SOL · {}",
+            "{}. <code>${}</code> {} {}{:.1}% — {} SOL — {}",
             i + 1,
             html_escape(symbol),
             emoji,
@@ -539,7 +538,7 @@ pub fn msg_positions_list(positions: &[(String, f64, f64, String)]) -> String {
     }
 
     lines.push(format!(
-        "\n<b>Total:</b> {} SOL  ·  P&L: {} SOL",
+        "\n<b>Total</b> — {} SOL — P&L: {} SOL",
         format_sol(total_value),
         format_sol(total_pnl),
     ));
@@ -563,7 +562,7 @@ pub fn msg_position_detail(
 ) -> String {
     let emoji = if pnl_pct >= 0.0 { "📈" } else { "📉" };
     let dca_line = if dca_count > 0 {
-        format!("\n├ 🔢 DCA: #{}", dca_count)
+        format!("\n🔢 DCA — #{}", dca_count)
     } else {
         String::new()
     };
@@ -574,12 +573,12 @@ pub fn msg_position_detail(
 
 {}
 
-├ 📈 Entry: {} SOL
-├ 📉 Current: {} SOL
-├ 💵 Invested: {} SOL
-├ 💰 Value: {} SOL
-├ 🪨 Tokens: {}{}
-└ ⏱️ Duration: {}"#,
+📈 Entry — {} SOL
+📉 Current — {} SOL
+💵 Invested — {} SOL
+💰 Value — {} SOL
+🪙 Tokens — {}{}
+⏱️ Duration — {}"#,
         emoji,
         html_escape(symbol),
         format_mint_display(mint),
@@ -605,10 +604,10 @@ pub fn msg_confirm_close(
     format!(
         r#"⚠️ <b>Close Position?</b>
 
-<b>${}</b>  ·  {}
+<b>${}</b> — {}
 
 Selling {} tokens
-Estimated: <b>{} SOL</b>
+Estimated — <b>{} SOL</b>
 
 <i>⏰ Confirm within 30 seconds</i>"#,
         html_escape(symbol),
@@ -844,28 +843,28 @@ pub fn format_token_detail(token: &crate::tokens::types::Token) -> String {
     let rejection_info = token
         .last_rejection_reason
         .as_ref()
-        .map(|r| format!("\n\n❌ <b>Last Rejection:</b> {}", html_escape(r)))
+        .map(|r| format!("\n\n❌ <b>Last Rejection</b> — {}", html_escape(r)))
         .unwrap_or_default();
 
     format!(
         "📊 <b>${}{}</b>\n\n\
-         <b>💰 Price:</b>\n\
-         ├ SOL: {}\n\
-         └ USD: {}\n\n\
-         <b>📈 Changes:</b>\n\
-         ├ 1h: {}\n\
-         └ 24h: {}\n\n\
-         <b>💧 Market Data:</b>\n\
-         ├ Liquidity: {}\n\
-         ├ Volume 24h: {}\n\
-         └ Market Cap: {}\n\n\
-         <b>📊 Activity:</b>\n\
-         ├ Holders: {}\n\
-         ├ Txns 1h: {}\n\
-         └ Txns 24h: {}\n\n\
-         <b>🛡️ Security:</b> {}\n\
-         <b>⏱️ Age:</b> {}\n\n\
-         <b>🔗 Mint:</b>\n<code>{}</code>{}{}",
+         <b>💰 Price</b>\n\
+         SOL — {}\n\
+         USD — {}\n\n\
+         <b>📈 Changes</b>\n\
+         1h — {}\n\
+         24h — {}\n\n\
+         <b>💧 Market Data</b>\n\
+         Liquidity — {}\n\
+         Volume 24h — {}\n\
+         Market Cap — {}\n\n\
+         <b>📊 Activity</b>\n\
+         Holders — {}\n\
+         Txns 1h — {}\n\
+         Txns 24h — {}\n\n\
+         <b>🛡️ Security</b> — {}\n\
+         <b>⏱️ Age</b> — {}\n\n\
+         🔗 <b>Mint</b>\n<code>{}</code>{}{}",
         html_escape(&token.symbol),
         name_part,
         price_sol,
