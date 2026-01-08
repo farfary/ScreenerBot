@@ -1141,6 +1141,70 @@ pub struct ImportConfigResponse {
     pub timestamp: String,
 }
 
+/// Helper to apply a section value to a config struct (used for validation before commit)
+fn apply_section_to_config(
+    cfg: &mut config::Config,
+    section: &str,
+    value: serde_json::Value,
+) -> Result<(), String> {
+    match section {
+        "rpc" => {
+            cfg.rpc = serde_json::from_value(value)
+                .map_err(|e| format!("Invalid RpcConfig: {}", e))?;
+        }
+        "trader" => {
+            cfg.trader = serde_json::from_value(value)
+                .map_err(|e| format!("Invalid TraderConfig: {}", e))?;
+        }
+        "positions" => {
+            cfg.positions = serde_json::from_value(value)
+                .map_err(|e| format!("Invalid PositionsConfig: {}", e))?;
+        }
+        "filtering" => {
+            cfg.filtering = serde_json::from_value(value)
+                .map_err(|e| format!("Invalid FilteringConfig: {}", e))?;
+        }
+        "swaps" => {
+            cfg.swaps = serde_json::from_value(value)
+                .map_err(|e| format!("Invalid SwapsConfig: {}", e))?;
+        }
+        "tokens" => {
+            cfg.tokens = serde_json::from_value(value)
+                .map_err(|e| format!("Invalid TokensConfig: {}", e))?;
+        }
+        "sol_price" => {
+            cfg.sol_price = serde_json::from_value(value)
+                .map_err(|e| format!("Invalid SolPriceConfig: {}", e))?;
+        }
+        "events" => {
+            cfg.events = serde_json::from_value(value)
+                .map_err(|e| format!("Invalid EventsConfig: {}", e))?;
+        }
+        "services" => {
+            cfg.services = serde_json::from_value(value)
+                .map_err(|e| format!("Invalid ServicesConfig: {}", e))?;
+        }
+        "monitoring" => {
+            cfg.monitoring = serde_json::from_value(value)
+                .map_err(|e| format!("Invalid MonitoringConfig: {}", e))?;
+        }
+        "ohlcv" => {
+            cfg.ohlcv = serde_json::from_value(value)
+                .map_err(|e| format!("Invalid OhlcvConfig: {}", e))?;
+        }
+        "gui" => {
+            cfg.gui = serde_json::from_value(value)
+                .map_err(|e| format!("Invalid GuiConfig: {}", e))?;
+        }
+        "telegram" => {
+            cfg.telegram = serde_json::from_value(value)
+                .map_err(|e| format!("Invalid TelegramConfig: {}", e))?;
+        }
+        _ => return Err(format!("Unknown section: {}", section)),
+    }
+    Ok(())
+}
+
 /// POST /api/config/import - Import configuration
 async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response {
     let imported = request.config;
@@ -1182,7 +1246,9 @@ async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response {
         );
     }
 
-    // Import each section
+    // PHASE 1: Build a candidate config by cloning current and applying all changes
+    // This allows us to validate BEFORE modifying the live config
+    let mut candidate_config = config::get_config_clone();
     let mut imported_sections = Vec::new();
     let mut errors = Vec::new();
 
@@ -1192,25 +1258,25 @@ async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response {
             None => continue,
         };
 
-        let result: Result<(), String> = (|| {
-            // Get current config for merging if needed
+        let result: Result<serde_json::Value, String> = (|| {
+            // Get current config section for merging if needed
             let final_value = if request.merge {
-                let current = config::with_config(|cfg| match section.as_str() {
-                    "rpc" => serde_json::to_value(&cfg.rpc).ok(),
-                    "trader" => serde_json::to_value(&cfg.trader).ok(),
-                    "positions" => serde_json::to_value(&cfg.positions).ok(),
-                    "filtering" => serde_json::to_value(&cfg.filtering).ok(),
-                    "swaps" => serde_json::to_value(&cfg.swaps).ok(),
-                    "tokens" => serde_json::to_value(&cfg.tokens).ok(),
-                    "sol_price" => serde_json::to_value(&cfg.sol_price).ok(),
-                    "events" => serde_json::to_value(&cfg.events).ok(),
-                    "services" => serde_json::to_value(&cfg.services).ok(),
-                    "monitoring" => serde_json::to_value(&cfg.monitoring).ok(),
-                    "ohlcv" => serde_json::to_value(&cfg.ohlcv).ok(),
-                    "gui" => serde_json::to_value(&cfg.gui).ok(),
-                    "telegram" => serde_json::to_value(&cfg.telegram).ok(),
+                let current = match section.as_str() {
+                    "rpc" => serde_json::to_value(&candidate_config.rpc).ok(),
+                    "trader" => serde_json::to_value(&candidate_config.trader).ok(),
+                    "positions" => serde_json::to_value(&candidate_config.positions).ok(),
+                    "filtering" => serde_json::to_value(&candidate_config.filtering).ok(),
+                    "swaps" => serde_json::to_value(&candidate_config.swaps).ok(),
+                    "tokens" => serde_json::to_value(&candidate_config.tokens).ok(),
+                    "sol_price" => serde_json::to_value(&candidate_config.sol_price).ok(),
+                    "events" => serde_json::to_value(&candidate_config.events).ok(),
+                    "services" => serde_json::to_value(&candidate_config.services).ok(),
+                    "monitoring" => serde_json::to_value(&candidate_config.monitoring).ok(),
+                    "ohlcv" => serde_json::to_value(&candidate_config.ohlcv).ok(),
+                    "gui" => serde_json::to_value(&candidate_config.gui).ok(),
+                    "telegram" => serde_json::to_value(&candidate_config.telegram).ok(),
                     _ => None,
-                });
+                };
 
                 if let Some(mut curr) = current {
                     // Merge: imported values override current
@@ -1229,111 +1295,88 @@ async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response {
                 value
             };
 
-            // Apply the update
-            match section.as_str() {
-                "rpc" => {
-                    let cfg: config::RpcConfig = serde_json::from_value(final_value)
-                        .map_err(|e| format!("Invalid RpcConfig: {}", e))?;
-                    config::update_config_section(
-                        |c| c.rpc = cfg,
-                        false, // Don't save yet
-                    )?;
-                }
-                "trader" => {
-                    let cfg: config::TraderConfig = serde_json::from_value(final_value)
-                        .map_err(|e| format!("Invalid TraderConfig: {}", e))?;
-                    config::update_config_section(|c| c.trader = cfg, false)?;
-                }
-                "positions" => {
-                    let cfg: config::PositionsConfig = serde_json::from_value(final_value)
-                        .map_err(|e| format!("Invalid PositionsConfig: {}", e))?;
-                    config::update_config_section(|c| c.positions = cfg, false)?;
-                }
-                "filtering" => {
-                    let cfg: config::FilteringConfig = serde_json::from_value(final_value)
-                        .map_err(|e| format!("Invalid FilteringConfig: {}", e))?;
-                    config::update_config_section(|c| c.filtering = cfg, false)?;
-                }
-                "swaps" => {
-                    let cfg: config::SwapsConfig = serde_json::from_value(final_value)
-                        .map_err(|e| format!("Invalid SwapsConfig: {}", e))?;
-                    config::update_config_section(|c| c.swaps = cfg, false)?;
-                }
-                "tokens" => {
-                    let cfg: config::TokensConfig = serde_json::from_value(final_value)
-                        .map_err(|e| format!("Invalid TokensConfig: {}", e))?;
-                    config::update_config_section(|c| c.tokens = cfg, false)?;
-                }
-                "sol_price" => {
-                    let cfg: config::SolPriceConfig = serde_json::from_value(final_value)
-                        .map_err(|e| format!("Invalid SolPriceConfig: {}", e))?;
-                    config::update_config_section(|c| c.sol_price = cfg, false)?;
-                }
-                "events" => {
-                    let cfg: config::EventsConfig = serde_json::from_value(final_value)
-                        .map_err(|e| format!("Invalid EventsConfig: {}", e))?;
-                    config::update_config_section(|c| c.events = cfg, false)?;
-                }
-                "services" => {
-                    let cfg: config::ServicesConfig = serde_json::from_value(final_value)
-                        .map_err(|e| format!("Invalid ServicesConfig: {}", e))?;
-                    config::update_config_section(|c| c.services = cfg, false)?;
-                }
-                "monitoring" => {
-                    let cfg: config::MonitoringConfig = serde_json::from_value(final_value)
-                        .map_err(|e| format!("Invalid MonitoringConfig: {}", e))?;
-                    config::update_config_section(|c| c.monitoring = cfg, false)?;
-                }
-                "ohlcv" => {
-                    let cfg: config::OhlcvConfig = serde_json::from_value(final_value)
-                        .map_err(|e| format!("Invalid OhlcvConfig: {}", e))?;
-                    config::update_config_section(|c| c.ohlcv = cfg, false)?;
-                }
-                "gui" => {
-                    let cfg: config::GuiConfig = serde_json::from_value(final_value)
-                        .map_err(|e| format!("Invalid GuiConfig: {}", e))?;
-                    config::update_config_section(|c| c.gui = cfg, false)?;
-                }
-                "telegram" => {
-                    let cfg: config::TelegramConfig = serde_json::from_value(final_value)
-                        .map_err(|e| format!("Invalid TelegramConfig: {}", e))?;
-                    config::update_config_section(|c| c.telegram = cfg, false)?;
-                }
-                _ => return Err(format!("Unknown section: {}", section)),
-            }
-
-            Ok(())
+            Ok(final_value)
         })();
 
         match result {
-            Ok(()) => imported_sections.push(section.clone()),
+            Ok(final_value) => {
+                // Apply to candidate config
+                if let Err(e) = apply_section_to_config(&mut candidate_config, section, final_value)
+                {
+                    errors.push(format!("{}: {}", section, e));
+                } else {
+                    imported_sections.push(section.clone());
+                }
+            }
             Err(e) => errors.push(format!("{}: {}", section, e)),
         }
     }
 
-    // Validate the full config after all sections are imported
+    // PHASE 2: Validate the full candidate config BEFORE committing
     // This catches cross-field validation errors (e.g., DCA settings require valid thresholds)
     if !imported_sections.is_empty() {
-        let full_config = config::get_config_clone();
-        if let Err(validation_error) = config::validate_config(&full_config) {
-            errors.push(format!("Config validation failed: {}", validation_error));
+        if let Err(validation_error) = config::validate_config(&candidate_config) {
+            // Validation failed - don't commit anything
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "VALIDATION_FAILED",
+                &format!(
+                    "Config validation failed: {}. No changes were applied.",
+                    validation_error
+                ),
+                None,
+            );
         }
     }
 
-    // Save to disk if requested, at least one section imported, and no validation errors
-    let has_validation_errors = errors.iter().any(|e| e.starts_with("Config validation"));
-    let saved_to_disk =
-        if request.save_to_disk && !imported_sections.is_empty() && !has_validation_errors {
-            match config::save_config(None) {
-                Ok(()) => true,
-                Err(e) => {
-                    errors.push(format!("Failed to save to disk: {}", e));
-                    false
+    // PHASE 3: Validation passed - commit the changes atomically
+    if !imported_sections.is_empty() {
+        if let Err(e) = config::update_config_section(
+            |cfg| {
+                // Apply all validated sections at once
+                for section in &imported_sections {
+                    match section.as_str() {
+                        "rpc" => cfg.rpc = candidate_config.rpc.clone(),
+                        "trader" => cfg.trader = candidate_config.trader.clone(),
+                        "positions" => cfg.positions = candidate_config.positions.clone(),
+                        "filtering" => cfg.filtering = candidate_config.filtering.clone(),
+                        "swaps" => cfg.swaps = candidate_config.swaps.clone(),
+                        "tokens" => cfg.tokens = candidate_config.tokens.clone(),
+                        "sol_price" => cfg.sol_price = candidate_config.sol_price.clone(),
+                        "events" => cfg.events = candidate_config.events.clone(),
+                        "services" => cfg.services = candidate_config.services.clone(),
+                        "monitoring" => cfg.monitoring = candidate_config.monitoring.clone(),
+                        "ohlcv" => cfg.ohlcv = candidate_config.ohlcv.clone(),
+                        "gui" => cfg.gui = candidate_config.gui.clone(),
+                        "telegram" => cfg.telegram = candidate_config.telegram.clone(),
+                        _ => {}
+                    }
                 }
+            },
+            false, // Don't save to disk yet
+        ) {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "COMMIT_FAILED",
+                &format!("Failed to commit config changes: {}", e),
+                None,
+            );
+        }
+    }
+
+    // PHASE 4: Save to disk if requested and no errors
+    let saved_to_disk = if request.save_to_disk && !imported_sections.is_empty() && errors.is_empty()
+    {
+        match config::save_config(None) {
+            Ok(()) => true,
+            Err(e) => {
+                errors.push(format!("Failed to save to disk: {}", e));
+                false
             }
-        } else {
-            false
-        };
+        }
+    } else {
+        false
+    };
 
     if imported_sections.is_empty() {
         return error_response(
@@ -1351,7 +1394,7 @@ async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response {
         )
     } else {
         format!(
-            "Imported {} section(s) with {} error(s): {}",
+            "Imported {} section(s) with {} warning(s): {}",
             imported_sections.len(),
             errors.len(),
             errors.join(", ")
