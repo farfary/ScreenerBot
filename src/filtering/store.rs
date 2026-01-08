@@ -196,7 +196,11 @@ impl FilteringStore {
         let entries = collect_entries(snapshot.as_ref(), query.view, recent_cutoff);
         // Collect raw tokens for filtering/sorting on Token fields
         // OPTIMIZATION: Use references to avoid cloning all tokens
-        let mut tokens: Vec<&Token> = entries.into_iter().map(|entry| &entry.token).collect();
+        // Arc<Token> derefs to Token, so we can get &Token from it
+        let mut tokens: Vec<&Token> = entries
+            .into_iter()
+            .map(|entry| entry.token.as_ref())
+            .collect();
 
         apply_filters(&mut tokens, &query, snapshot.as_ref());
 

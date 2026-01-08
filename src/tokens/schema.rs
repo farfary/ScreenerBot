@@ -325,15 +325,16 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), String> {
             .map_err(|e| format!("Failed to create table: {}", e))?;
     }
 
-    // Create indexes
+    // Apply ALTER statements BEFORE indexes (for existing databases - columns must exist before indexes)
+    // Ignore errors if column already exists
+    for statement in ALTER_STATEMENTS {
+        let _ = conn.execute(statement, []);
+    }
+
+    // Create indexes (after ALTERs so new columns exist)
     for statement in CREATE_INDEXES {
         conn.execute(statement, [])
             .map_err(|e| format!("Failed to create index: {}", e))?;
-    }
-
-    // Apply ALTER statements (for existing databases - ignore errors if column already exists)
-    for statement in ALTER_STATEMENTS {
-        let _ = conn.execute(statement, []);
     }
 
     Ok(())

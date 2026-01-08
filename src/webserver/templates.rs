@@ -204,7 +204,11 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     let needs_initialization = !global::is_initialization_complete();
     html = html.replace(
         "{{NEEDS_INITIALIZATION}}",
-        if needs_initialization { "true" } else { "false" },
+        if needs_initialization {
+            "true"
+        } else {
+            "false"
+        },
     );
 
     // Inject splash, onboarding, setup, and lockscreen screens

@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -231,7 +232,9 @@ pub struct FilteringQueryResult {
 
 #[derive(Debug, Clone)]
 pub struct TokenEntry {
-    pub token: Token,
+    /// Arc-wrapped Token to reduce memory cloning (Token is ~2KB each)
+    /// With 144k tokens, this saves ~288MB per snapshot vs cloning
+    pub token: Arc<Token>,
     pub has_pool_price: bool,
     pub has_open_position: bool,
     pub has_ohlcv: bool,

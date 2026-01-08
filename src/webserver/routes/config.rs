@@ -687,8 +687,21 @@ const CONFIG_SECTIONS: &[&str] = &[
 /// Sensitive fields that should be sanitized on export (path format: "section.nested.field")
 const SENSITIVE_FIELDS: &[(&str, &[&str])] = &[
     ("telegram", &["bot_token"]),
-    ("gui", &["dashboard.lockscreen.password_hash", "dashboard.lockscreen.password_salt"]),
-    ("webserver", &["auth_password_hash", "auth_password_salt", "auth_totp_secret"]),
+    (
+        "gui",
+        &[
+            "dashboard.lockscreen.password_hash",
+            "dashboard.lockscreen.password_salt",
+        ],
+    ),
+    (
+        "webserver",
+        &[
+            "auth_password_hash",
+            "auth_password_salt",
+            "auth_totp_secret",
+        ],
+    ),
 ];
 
 /// Sanitize a section by removing/masking sensitive fields
@@ -1149,8 +1162,8 @@ fn apply_section_to_config(
 ) -> Result<(), String> {
     match section {
         "rpc" => {
-            cfg.rpc = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid RpcConfig: {}", e))?;
+            cfg.rpc =
+                serde_json::from_value(value).map_err(|e| format!("Invalid RpcConfig: {}", e))?;
         }
         "trader" => {
             cfg.trader = serde_json::from_value(value)
@@ -1165,8 +1178,8 @@ fn apply_section_to_config(
                 .map_err(|e| format!("Invalid FilteringConfig: {}", e))?;
         }
         "swaps" => {
-            cfg.swaps = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid SwapsConfig: {}", e))?;
+            cfg.swaps =
+                serde_json::from_value(value).map_err(|e| format!("Invalid SwapsConfig: {}", e))?;
         }
         "tokens" => {
             cfg.tokens = serde_json::from_value(value)
@@ -1189,12 +1202,12 @@ fn apply_section_to_config(
                 .map_err(|e| format!("Invalid MonitoringConfig: {}", e))?;
         }
         "ohlcv" => {
-            cfg.ohlcv = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid OhlcvConfig: {}", e))?;
+            cfg.ohlcv =
+                serde_json::from_value(value).map_err(|e| format!("Invalid OhlcvConfig: {}", e))?;
         }
         "gui" => {
-            cfg.gui = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid GuiConfig: {}", e))?;
+            cfg.gui =
+                serde_json::from_value(value).map_err(|e| format!("Invalid GuiConfig: {}", e))?;
         }
         "telegram" => {
             cfg.telegram = serde_json::from_value(value)
@@ -1365,18 +1378,18 @@ async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response {
     }
 
     // PHASE 4: Save to disk if requested and no errors
-    let saved_to_disk = if request.save_to_disk && !imported_sections.is_empty() && errors.is_empty()
-    {
-        match config::save_config(None) {
-            Ok(()) => true,
-            Err(e) => {
-                errors.push(format!("Failed to save to disk: {}", e));
-                false
+    let saved_to_disk =
+        if request.save_to_disk && !imported_sections.is_empty() && errors.is_empty() {
+            match config::save_config(None) {
+                Ok(()) => true,
+                Err(e) => {
+                    errors.push(format!("Failed to save to disk: {}", e));
+                    false
+                }
             }
-        }
-    } else {
-        false
-    };
+        } else {
+            false
+        };
 
     if imported_sections.is_empty() {
         return error_response(

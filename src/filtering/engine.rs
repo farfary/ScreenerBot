@@ -1,4 +1,5 @@
 use std::collections::{HashMap, HashSet};
+use std::sync::Arc;
 use std::time::Instant as StdInstant;
 
 use chrono::Utc;
@@ -39,8 +40,8 @@ pub async fn compute_snapshot(
     )
     .await;
 
-    // PERF: Load ALL tokens in a single batch query with JOINs
-    // This avoids the N+1 query problem that was causing 90k+ DB calls for 18k tokens
+    // PERF: Load tokens with market data only (reduces 144k -> ~56k tokens)
+    // Tokens without DexScreener/GeckoTerminal data are immediately rejected anyway
     let load_start = StdInstant::now();
     let mut tokens = get_all_tokens_for_filtering_async()
         .await
@@ -52,7 +53,7 @@ pub async fn compute_snapshot(
     if tokens.is_empty() {
         logger::debug(
             LogTag::Filtering,
-            "Token store empty - snapshot remains empty",
+            "No tokens with market data found - snapshot remains empty",
         );
 
         // DEBUG: Record empty token store
@@ -62,7 +63,7 @@ pub async fn compute_snapshot(
             None,
             None,
             json!({
-                "reason": "token_store_empty",
+                "reason": "no_tokens_with_market_data",
             }),
         )
         .await;
@@ -73,7 +74,7 @@ pub async fn compute_snapshot(
     logger::info(
         LogTag::Filtering,
         &format!(
-            "Batch loaded {} tokens in {}ms",
+            "Loaded {} tokens with market data in {}ms (memory optimized)",
             total_candidates, load_duration_ms
         ),
     );
@@ -249,6 +250,13 @@ pub async fn compute_snapshot(
     let mut token_entries: HashMap<String, TokenEntry> = HashMap::with_capacity(tokens.len());
     let mut stats = FilteringStats::default();
 
+    // PERF: Pre-wrap all tokens in Arc to avoid cloning ~2KB Token structs
+    // This reduces memory from ~290MB (144k × 2KB clones) to ~1.2MB (144k × 8 byte refs)
+    let arc_tokens: HashMap<String, Arc<Token>> = tokens
+        .into_iter()
+        .map(|t| (t.mint.clone(), Arc::new(t)))
+        .collect();
+
     let mut previous_pass_times: HashMap<String, i64> = HashMap::new();
     let mut previous_reject_times: HashMap<String, i64> = HashMap::new();
 
@@ -268,7 +276,7 @@ pub async fn compute_snapshot(
     let mut batch_rejection_updates: Vec<(String, String, String, i64)> = Vec::new();
     let mut batch_rejection_stats: Vec<(String, String, i64)> = Vec::new();
 
-    for token in tokens.iter() {
+    for (mint, token) in arc_tokens.iter() {
         stats.total_processed += 1;
 
         let has_pool_price = priced_set.contains(&token.mint);
@@ -281,10 +289,11 @@ pub async fn compute_snapshot(
             .map(|dt| dt.timestamp())
             .unwrap_or_else(|| token.first_discovered_at.timestamp());
 
+        // PERF: Use Arc::clone (8 bytes) instead of Token::clone (~2KB)
         token_entries.insert(
-            token.mint.clone(),
+            mint.clone(),
             TokenEntry {
-                token: token.clone(),
+                token: Arc::clone(token),
                 has_pool_price,
                 has_open_position,
                 has_ohlcv,

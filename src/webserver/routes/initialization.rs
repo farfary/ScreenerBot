@@ -140,7 +140,10 @@ async fn initialization_status() -> Response {
 /// POST /api/initialization/onboarding/complete
 /// Mark onboarding as complete in memory only (NOT persisted until setup completes)
 async fn complete_onboarding() -> Response {
-    logger::info(LogTag::Webserver, "Marking onboarding as complete (in-memory only)");
+    logger::info(
+        LogTag::Webserver,
+        "Marking onboarding as complete (in-memory only)",
+    );
 
     // IMPORTANT: Do NOT save to disk here!
     // The config.toml should only be created when the user completes the full setup flow
