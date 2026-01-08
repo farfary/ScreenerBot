@@ -264,7 +264,10 @@ impl Notification {
 
     /// Create a new tokens found notification
     pub fn new_tokens_found(session_id: String, new_count: usize) -> Self {
-        Self::new(NotificationType::NewTokensFound { session_id, new_count })
+        Self::new(NotificationType::NewTokensFound {
+            session_id,
+            new_count,
+        })
     }
 }
 

@@ -5,11 +5,11 @@
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::telegram::formatters;
+use crate::telegram::keyboards;
+use crate::telegram::pagination::PAGINATION_MANAGER;
 use crate::telegram::types::{ErrorSeverity, Notification, NotificationType};
 use teloxide::prelude::*;
 use teloxide::types::{ChatId, InlineKeyboardButton, InlineKeyboardMarkup, ParseMode};
-use crate::telegram::keyboards;
-use crate::telegram::pagination::PAGINATION_MANAGER;
 use tokio::sync::mpsc;
 
 /// Telegram notifier for sending messages
@@ -58,11 +58,14 @@ impl TelegramNotifier {
     /// Send a notification
     pub async fn send(&self, notification: &Notification) -> Result<(), String> {
         // Handle pagination notification
-        if let NotificationType::NewTokensFound { session_id, .. } = &notification.notification_type {
-            if let Some((items, total_pages, total_items)) = PAGINATION_MANAGER.get_page(session_id, 0) {
+        if let NotificationType::NewTokensFound { session_id, .. } = &notification.notification_type
+        {
+            if let Some((items, total_pages, total_items)) =
+                PAGINATION_MANAGER.get_page(session_id, 0)
+            {
                 let text = formatters::format_tokens_page(&items, 0, total_pages, total_items);
                 let keyboard = keyboards::pagination_keyboard(session_id, 0, total_pages);
-                
+
                 self.bot
                     .send_message(self.chat_id, text)
                     .parse_mode(ParseMode::Html)
@@ -76,10 +79,10 @@ impl TelegramNotifier {
                     .reply_markup(keyboard)
                     .await
                     .map_err(|e| format!("Failed to send pagination message: {}", e))?;
-                
+
                 logger::info(LogTag::Telegram, "Sent paginated token notification");
                 return Ok(());
-            } 
+            }
         }
 
         let message = self.format_notification(notification);
@@ -269,7 +272,10 @@ impl TelegramNotifier {
             }
 
             NotificationType::NewTokensFound { new_count, .. } => {
-                format!("🔍 <b>Filtering Alert</b>\n\nFound {} new tokens matching your criteria.", new_count)
+                format!(
+                    "🔍 <b>Filtering Alert</b>\n\nFound {} new tokens matching your criteria.",
+                    new_count
+                )
             }
         }
     }

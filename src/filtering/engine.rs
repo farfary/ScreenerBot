@@ -10,8 +10,8 @@ use crate::logger::{self, LogTag};
 use crate::positions;
 use crate::tokens::types::{DataSource, Token};
 use crate::tokens::{
-    clear_rejection_status_async, get_all_tokens_for_filtering_async, upsert_rejection_stat_async,
-    list_blacklisted_tokens_async, update_rejection_status_async,
+    clear_rejection_status_async, get_all_tokens_for_filtering_async,
+    list_blacklisted_tokens_async, update_rejection_status_async, upsert_rejection_stat_async,
 };
 
 use super::sources::{self, FilterRejectionReason};
@@ -407,10 +407,7 @@ pub async fn compute_snapshot(
                     {
                         logger::debug(
                             LogTag::Filtering,
-                            &format!(
-                                "Failed to upsert rejection stat: {}",
-                                e
-                            ),
+                            &format!("Failed to upsert rejection stat: {}", e),
                         );
                     }
                 });

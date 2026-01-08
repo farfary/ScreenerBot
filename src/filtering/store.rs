@@ -196,13 +196,10 @@ impl FilteringStore {
         let entries = collect_entries(snapshot.as_ref(), query.view, recent_cutoff);
         // Collect raw tokens for filtering/sorting on Token fields
         // OPTIMIZATION: Use references to avoid cloning all tokens
-        let mut tokens: Vec<&Token> = entries
-            .into_iter()
-            .map(|entry| &entry.token)
-            .collect();
+        let mut tokens: Vec<&Token> = entries.into_iter().map(|entry| &entry.token).collect();
 
         apply_filters(&mut tokens, &query, snapshot.as_ref());
-        
+
         // Sort references (using dynamic price lookup if needed)
         sort_tokens(&mut tokens, query.sort_key, query.sort_direction);
 
@@ -248,10 +245,13 @@ impl FilteringStore {
             .saturating_sub(1)
             .saturating_mul(query.page_size);
         let end_idx = start_idx.saturating_add(query.page_size).min(total);
-        
+
         // Clone only the page we are returning
         let mut items: Vec<Token> = if start_idx < total {
-            tokens[start_idx..end_idx].iter().map(|t| (*t).clone()).collect()
+            tokens[start_idx..end_idx]
+                .iter()
+                .map(|t| (*t).clone())
+                .collect()
         } else {
             Vec::new()
         };

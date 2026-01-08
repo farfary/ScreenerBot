@@ -1,15 +1,15 @@
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use std::collections::HashSet;
 
 use async_trait::async_trait;
 
 use crate::filtering;
-use crate::telegram::{queue_notification, Notification};
-use crate::telegram::pagination::PAGINATION_MANAGER;
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
+use crate::telegram::pagination::PAGINATION_MANAGER;
+use crate::telegram::{queue_notification, Notification};
 use crate::tokens::{cleanup_rejection_history_async, cleanup_rejection_stats_async};
 
 // Timing constants
@@ -111,7 +111,8 @@ impl Service for FilteringService {
 
                 // Capture state before refresh
                 let prev_passed = filtering::get_passed_tokens().await.unwrap_or_default();
-                let prev_mints: HashSet<String> = prev_passed.iter().map(|t| t.mint.clone()).collect();
+                let prev_mints: HashSet<String> =
+                    prev_passed.iter().map(|t| t.mint.clone()).collect();
 
                 match filtering::refresh().await {
                     Ok(_) => {
@@ -119,15 +120,23 @@ impl Service for FilteringService {
 
                         // Check for new tokens
                         if let Ok(current_passed) = filtering::get_passed_tokens().await {
-                            let new_tokens: Vec<_> = current_passed.into_iter()
+                            let new_tokens: Vec<_> = current_passed
+                                .into_iter()
                                 .filter(|t| !prev_mints.contains(&t.mint))
                                 .collect();
 
                             if !new_tokens.is_empty() {
-                                logger::info(LogTag::Filtering, &format!("Found {} new passed tokens", new_tokens.len()));
-                                
-                                let session_id = PAGINATION_MANAGER.create_session(new_tokens.clone(), None);
-                                queue_notification(Notification::new_tokens_found(session_id, new_tokens.len()));
+                                logger::info(
+                                    LogTag::Filtering,
+                                    &format!("Found {} new passed tokens", new_tokens.len()),
+                                );
+
+                                let session_id =
+                                    PAGINATION_MANAGER.create_session(new_tokens.clone(), None);
+                                queue_notification(Notification::new_tokens_found(
+                                    session_id,
+                                    new_tokens.len(),
+                                ));
                             }
                         }
                     }
@@ -144,15 +153,21 @@ impl Service for FilteringService {
         let shutdown_cleanup = Arc::clone(&shutdown);
         let cleanup_handle = tokio::spawn(async move {
             // Do initial cleanup immediately on start
-            logger::info(LogTag::Filtering, "Running initial rejection data cleanup...");
-            
+            logger::info(
+                LogTag::Filtering,
+                "Running initial rejection data cleanup...",
+            );
+
             // Cleanup old rejection_history entries
             match cleanup_rejection_history_async(REJECTION_HISTORY_HOURS_TO_KEEP).await {
                 Ok(deleted) => {
                     if deleted > 0 {
                         logger::info(
                             LogTag::Filtering,
-                            &format!("Initial cleanup: removed {} old rejection history entries", deleted),
+                            &format!(
+                                "Initial cleanup: removed {} old rejection history entries",
+                                deleted
+                            ),
                         );
                     }
                 }
@@ -163,14 +178,17 @@ impl Service for FilteringService {
                     );
                 }
             }
-            
+
             // Cleanup old rejection_stats entries (aggregated hourly buckets)
             match cleanup_rejection_stats_async(REJECTION_HISTORY_HOURS_TO_KEEP).await {
                 Ok(deleted) => {
                     if deleted > 0 {
                         logger::info(
                             LogTag::Filtering,
-                            &format!("Initial cleanup: removed {} old rejection stats buckets", deleted),
+                            &format!(
+                                "Initial cleanup: removed {} old rejection stats buckets",
+                                deleted
+                            ),
                         );
                     }
                 }
@@ -195,7 +213,10 @@ impl Service for FilteringService {
                         if deleted > 0 {
                             logger::debug(
                                 LogTag::Filtering,
-                                &format!("Rejection history cleanup: removed {} entries older than {}h", deleted, REJECTION_HISTORY_HOURS_TO_KEEP),
+                                &format!(
+                                    "Rejection history cleanup: removed {} entries older than {}h",
+                                    deleted, REJECTION_HISTORY_HOURS_TO_KEEP
+                                ),
                             );
                         }
                     }
@@ -206,14 +227,17 @@ impl Service for FilteringService {
                         );
                     }
                 }
-                
+
                 // Cleanup rejection_stats (aggregated hourly buckets)
                 match cleanup_rejection_stats_async(REJECTION_HISTORY_HOURS_TO_KEEP).await {
                     Ok(deleted) => {
                         if deleted > 0 {
                             logger::debug(
                                 LogTag::Filtering,
-                                &format!("Rejection stats cleanup: removed {} buckets older than {}h", deleted, REJECTION_HISTORY_HOURS_TO_KEEP),
+                                &format!(
+                                    "Rejection stats cleanup: removed {} buckets older than {}h",
+                                    deleted, REJECTION_HISTORY_HOURS_TO_KEEP
+                                ),
                             );
                         }
                     }

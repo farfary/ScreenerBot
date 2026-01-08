@@ -34,11 +34,13 @@ class SplashController {
       (typeof window !== "undefined" && window.process && window.process.type);
 
     if (isElectron) {
-      // Immediately hide splash and proceed to dashboard
+      // Immediately hide splash - Electron has its own loading screen
+      // But still check initialization status to decide what to show
       const splashEl = document.getElementById("splashScreen");
       if (splashEl) {
         splashEl.style.display = "none";
       }
+      // The router.js will handle showing setup screen if needed
       return;
     }
 
@@ -163,24 +165,32 @@ class SplashController {
   transitionTo(destination) {
     if (!this.splashEl) return;
 
+    // If going to onboarding/setup, add initialization-mode class to hide dashboard
+    // This prevents dashboard elements from being visible behind overlays
+    if (destination === "onboarding" || destination === "setup") {
+      document.body.classList.add("initialization-mode");
+    }
+
+    // Show next screen BEFORE fading splash to prevent flash
+    switch (destination) {
+      case "onboarding":
+        this.showOnboarding();
+        break;
+      case "setup":
+        this.showSetup();
+        break;
+      case "dashboard":
+        // Remove initialization-mode to show dashboard
+        document.body.classList.remove("initialization-mode");
+        break;
+    }
+
     // Add fade-out class
     this.splashEl.classList.add("fade-out");
 
-    // Wait for animation then handle transition
+    // Wait for animation then hide splash
     setTimeout(() => {
       this.splashEl.style.display = "none";
-
-      switch (destination) {
-        case "onboarding":
-          this.showOnboarding();
-          break;
-        case "setup":
-          this.showSetup();
-          break;
-        case "dashboard":
-          // Dashboard is already rendered, just show it
-          break;
-      }
     }, 500);
   }
 

@@ -437,12 +437,19 @@ mod tests {
 // === PAGINATION KEYBOARD ===
 
 /// Create pagination controls
-pub fn pagination_keyboard(session_id: &str, current_page: usize, total_pages: usize) -> InlineKeyboardMarkup {
+pub fn pagination_keyboard(
+    session_id: &str,
+    current_page: usize,
+    total_pages: usize,
+) -> InlineKeyboardMarkup {
     let mut row = Vec::new();
 
     // Previous Button
     if current_page > 0 {
-        row.push(btn("⬅️ Prev", &format!("page:{}:{}:{}", session_id, current_page - 1, total_pages)));
+        row.push(btn(
+            "⬅️ Prev",
+            &format!("page:{}:{}:{}", session_id, current_page - 1, total_pages),
+        ));
     } else {
         // Spacer if no prev button to keep alignment
         row.push(btn("⏺️", "noop"));
@@ -451,12 +458,15 @@ pub fn pagination_keyboard(session_id: &str, current_page: usize, total_pages: u
     // Page Indicator (middle)
     row.push(btn(
         &format!("{}/{}", current_page + 1, total_pages),
-        "noop" // No action on click
+        "noop", // No action on click
     ));
 
     // Next Button
     if current_page < total_pages.saturating_sub(1) {
-        row.push(btn("Next ➡️", &format!("page:{}:{}:{}", session_id, current_page + 1, total_pages)));
+        row.push(btn(
+            "Next ➡️",
+            &format!("page:{}:{}:{}", session_id, current_page + 1, total_pages),
+        ));
     } else {
         row.push(btn("⏺️", "noop"));
     }
@@ -491,7 +501,11 @@ pub fn tokens_menu() -> InlineKeyboardMarkup {
 
 /// Paginated token list with navigation controls
 /// `view` is one of: passed, rejected, recent, all, blacklisted
-pub fn tokens_list_keyboard(view: &str, current_page: usize, total_pages: usize) -> InlineKeyboardMarkup {
+pub fn tokens_list_keyboard(
+    view: &str,
+    current_page: usize,
+    total_pages: usize,
+) -> InlineKeyboardMarkup {
     let mut rows: Vec<Vec<InlineKeyboardButton>> = vec![];
 
     // Row 1: Pagination (only if multiple pages)

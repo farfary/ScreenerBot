@@ -7,6 +7,8 @@ class SetupControllerClass {
     this.totalSteps = 3;
     this.initialized = false;
     this.servicesPoller = null;
+    this.walletValidationTimeout = null;
+    this.rpcValidationTimeout = null;
   }
 
   init() {
@@ -32,8 +34,24 @@ class SetupControllerClass {
 
     this.bindEvents();
     this.setupInputMasking();
+    this.loadVersion();
     this.setStep(1);
     this.initialized = true;
+  }
+
+  async loadVersion() {
+    try {
+      const response = await fetch("/api/version");
+      if (response.ok) {
+        const data = await response.json();
+        const versionEl = document.getElementById("setup-version");
+        if (versionEl && data.version) {
+          versionEl.textContent = `v${data.version}`;
+        }
+      }
+    } catch {
+      console.warn("[Setup] Failed to load version");
+    }
   }
 
   bindEvents() {
@@ -48,18 +66,64 @@ class SetupControllerClass {
       this.retryBtn.addEventListener("click", () => this.retry());
     }
 
-    // Input validation
+    // Input validation with debouncing
     if (this.walletInput) {
-      this.walletInput.addEventListener("input", () => this.validateWallet());
+      this.walletInput.addEventListener("input", () => this.debouncedValidateWallet());
     }
     if (this.rpcInput) {
-      this.rpcInput.addEventListener("input", () => this.validateRpc());
+      this.rpcInput.addEventListener("input", () => this.debouncedValidateRpc());
     }
 
     // Toggle password visibility
     const toggleBtn = document.querySelector('[data-toggle="wallet-private-key"]');
     if (toggleBtn) {
       toggleBtn.addEventListener("click", () => this.toggleVisibility());
+    }
+
+    // Wallet address copy button
+    const copyBtn = document.querySelector(".wallet-copy-btn");
+    if (copyBtn) {
+      copyBtn.addEventListener("click", () => this.copyWalletAddress());
+    }
+
+    // Setup card hover spotlight effect
+    document.addEventListener("mousemove", (e) => {
+      const setupScreen = document.getElementById("setupScreen");
+      if (!setupScreen || setupScreen.style.display === "none") return;
+
+      const cards = document.querySelectorAll(".setup-step-content.active .setup-card");
+      cards.forEach((card) => {
+        const rect = card.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        card.style.setProperty("--x", `${x}px`);
+        card.style.setProperty("--y", `${y}px`);
+      });
+    });
+  }
+
+  debouncedValidateWallet() {
+    clearTimeout(this.walletValidationTimeout);
+    this.walletValidationTimeout = setTimeout(() => this.validateWallet(), 300);
+  }
+
+  debouncedValidateRpc() {
+    clearTimeout(this.rpcValidationTimeout);
+    this.rpcValidationTimeout = setTimeout(() => this.validateRpc(), 300);
+  }
+
+  copyWalletAddress() {
+    const addressEl = document.querySelector(".wallet-address-text");
+    if (addressEl && addressEl.textContent) {
+      navigator.clipboard.writeText(addressEl.textContent).then(() => {
+        const copyBtn = document.querySelector(".wallet-copy-btn");
+        if (copyBtn) {
+          copyBtn.innerHTML = '<i class="icon-check"></i>';
+          setTimeout(() => {
+            copyBtn.innerHTML = '<i class="icon-copy"></i>';
+          }, 1500);
+        }
+      });
     }
   }
 
@@ -152,11 +216,28 @@ class SetupControllerClass {
   retry() {
     this.hideError();
     this.resetVerificationStates();
+    this.hideWalletPreview();
     this.setStep(1);
   }
 
+  hideWalletPreview() {
+    const previewEl = document.getElementById("wallet-address-preview");
+    if (previewEl) {
+      previewEl.style.display = "none";
+    }
+  }
+
+  showWalletPreview(address) {
+    const previewEl = document.getElementById("wallet-address-preview");
+    const addressText = document.querySelector(".wallet-address-text");
+    if (previewEl && addressText) {
+      addressText.textContent = address;
+      previewEl.style.display = "flex";
+    }
+  }
+
   // Validation methods
-  validateWallet() {
+  async validateWallet() {
     const value = this.walletInput?.value.trim() || "";
     const validationEl = document.getElementById("wallet-validation");
     if (!validationEl) return;
@@ -164,20 +245,65 @@ class SetupControllerClass {
     if (!value) {
       validationEl.className = "setup-validation";
       validationEl.style.display = "none";
+      this.hideWalletPreview();
       return;
     }
 
-    // Basic format check
+    // Basic format check with detailed validation
+    let isValidFormat = false;
+    let formatType = "";
+
     if (value.startsWith("[") && value.endsWith("]")) {
+      try {
+        const arr = JSON.parse(value);
+        if (Array.isArray(arr) && arr.length === 64) {
+          isValidFormat = true;
+          formatType = "JSON array (64 bytes)";
+        } else if (Array.isArray(arr)) {
+          validationEl.className = "setup-validation error";
+          validationEl.innerHTML = `<i class="icon-x"></i> Invalid array length: ${arr.length} (expected 64 bytes)`;
+          this.hideWalletPreview();
+          return;
+        }
+      } catch {
+        validationEl.className = "setup-validation error";
+        validationEl.innerHTML = '<i class="icon-x"></i> Invalid JSON format';
+        this.hideWalletPreview();
+        return;
+      }
+    } else if (/^[1-9A-HJ-NP-Za-km-z]{43,88}$/.test(value)) {
+      isValidFormat = true;
+      formatType = "base58";
+    }
+
+    if (isValidFormat) {
       validationEl.className = "setup-validation success";
-      validationEl.innerHTML = '<i class="icon-check"></i> Valid JSON array format';
-    } else if (value.length >= 32) {
-      validationEl.className = "setup-validation success";
-      validationEl.innerHTML = '<i class="icon-check"></i> Valid base58 format';
+      validationEl.innerHTML = `<i class="icon-check"></i> Valid ${formatType} format`;
+
+      // Try to get wallet address preview via API
+      try {
+        const response = await fetch("/api/initialization/validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            wallet_private_key: value,
+            rpc_urls: [],
+          }),
+        });
+        if (response.ok) {
+          const result = await response.json();
+          if (result.wallet_address) {
+            this.showWalletPreview(result.wallet_address);
+          }
+        }
+      } catch {
+        // Ignore preview errors
+      }
     } else {
       validationEl.className = "setup-validation error";
       validationEl.innerHTML =
         '<i class="icon-x"></i> Invalid key format. Must be base58 string or JSON array.';
+      this.hideWalletPreview();
     }
   }
 
@@ -257,6 +383,12 @@ class SetupControllerClass {
     const walletDetails = document.getElementById("wallet-details");
     const rpcStatus = document.getElementById("rpc-status");
     const rpcDetails = document.getElementById("rpc-details");
+    const walletCard = document.getElementById("wallet-verification-card");
+    const rpcCard = document.getElementById("rpc-verification-card");
+
+    // Add verifying class for visual feedback
+    walletCard?.classList.add("verifying");
+    rpcCard?.classList.add("verifying");
 
     try {
       // Call validate API
@@ -268,7 +400,9 @@ class SetupControllerClass {
         throw new Error(errorMsg);
       }
 
-      // Update wallet validation
+      // Update wallet validation with animation
+      walletCard?.classList.remove("verifying");
+      walletCard?.classList.add("verified");
       if (walletStatus) {
         walletStatus.className = "setup-verification-status success";
         walletStatus.innerHTML =
@@ -279,7 +413,12 @@ class SetupControllerClass {
         walletDetails.textContent = `Address: ${result.wallet_address}`;
       }
 
+      // Small delay for staggered animation
+      await new Promise((resolve) => setTimeout(resolve, 300));
+
       // Update RPC validation
+      rpcCard?.classList.remove("verifying");
+      rpcCard?.classList.add("verified");
       if (rpcStatus) {
         rpcStatus.className = "setup-verification-status success";
         rpcStatus.innerHTML = '<i class="icon-check"></i><span>RPC connections verified</span>';
@@ -313,6 +452,10 @@ class SetupControllerClass {
         this.startServicesProgress();
       }, 1000);
     } catch (error) {
+      // Remove verifying states
+      walletCard?.classList.remove("verifying");
+      rpcCard?.classList.remove("verifying");
+      
       this.showError(error.message);
       // Reset verification states
       if (walletStatus) {
@@ -449,6 +592,14 @@ class SetupControllerClass {
       const el = document.getElementById(id);
       if (el) {
         el.classList.remove("show");
+      }
+    });
+
+    // Reset verification card classes
+    ["wallet-verification-card", "rpc-verification-card"].forEach((id) => {
+      const el = document.getElementById(id);
+      if (el) {
+        el.classList.remove("verifying", "verified");
       }
     });
 

@@ -59,7 +59,7 @@ impl PaginationManager {
         }
 
         let total_pages = (total_items + session.items_per_page - 1) / session.items_per_page;
-        
+
         // Clamp page to valid range
         let page = if page >= total_pages {
             total_pages.saturating_sub(1)
@@ -81,8 +81,7 @@ impl PaginationManager {
     pub fn cleanup(&self) {
         // Remove sessions older than TTL
         let now = Instant::now();
-        self.sessions.retain(|_, session| {
-            now.duration_since(session.created_at) < SESSION_TTL
-        });
+        self.sessions
+            .retain(|_, session| now.duration_since(session.created_at) < SESSION_TTL);
     }
 }

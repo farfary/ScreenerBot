@@ -403,7 +403,61 @@ function getPageFromPath() {
 }
 
 async function bootstrapRouter() {
-  await waitForReady();
+  const status = await waitForReady();
+
+  // If initialization is required (new install), check onboarding first
+  if (status && status.initialization_required) {
+    console.log("[Router] Initialization required, checking onboarding status...");
+
+    // Add initialization-mode class to hide dashboard elements
+    // This prevents dashboard from showing through during onboarding/setup
+    document.body.classList.add("initialization-mode");
+
+    // Check if onboarding needs to be shown first
+    if (!status.onboarding_complete) {
+      console.log("[Router] Showing onboarding introduction...");
+
+      // Show onboarding screen
+      const onboardingEl = document.getElementById("onboardingScreen");
+      if (onboardingEl) {
+        onboardingEl.style.display = "grid";
+        // Initialize onboarding controller
+        if (window.OnboardingController) {
+          window.OnboardingController.init();
+        }
+      }
+
+      // Update URL to reflect onboarding mode
+      window.history.replaceState(null, "", "/initialization");
+
+      // Don't initialize the main router - user must complete onboarding first
+      return;
+    }
+
+    // Onboarding done, show setup screen
+    console.log("[Router] Onboarding complete, showing setup screen...");
+
+    // Show the setup wrapper and screen
+    const wrapperEl = document.getElementById("setupScreenWrapper");
+    if (wrapperEl) {
+      wrapperEl.style.display = "block";
+    }
+
+    const setupEl = document.getElementById("setupScreen");
+    if (setupEl) {
+      setupEl.style.display = "grid";
+      // Initialize setup controller
+      if (window.SetupController) {
+        window.SetupController.init();
+      }
+    }
+
+    // Update URL to reflect setup mode
+    window.history.replaceState(null, "", "/initialization");
+
+    // Don't initialize the main router - user must complete setup first
+    return;
+  }
 
   // Initialize AppState from server before pages load
   // All state is stored server-side, no localStorage

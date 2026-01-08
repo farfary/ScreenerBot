@@ -88,11 +88,11 @@
     </script>
 
     <title>{{TITLE}} - ScreenerBot</title>
-    
+
     <!-- Favicon -->
     <link rel="icon" type="image/svg+xml" href="/assets/logo.svg" />
     <link rel="apple-touch-icon" href="/assets/logo.png" />
-    
+
     <script src="/assets/lightweight-charts.js"></script>
     <style>
       /* Critical styles to prevent white flash on startup */
@@ -107,17 +107,37 @@
 
   <body>
     <!-- Hide splash immediately if loaded from Electron (detected via query param) -->
+    <!-- Also add initialization-mode class immediately if setup is needed to prevent dashboard flash -->
     <script>
-      if (
-        window.location.search.includes("electron=1") ||
-        navigator.userAgent.includes("Electron")
-      ) {
-        document.documentElement.classList.add("electron-mode");
-      }
+      (function() {
+        var isElectron = window.location.search.includes("electron=1") ||
+                         navigator.userAgent.includes("Electron");
+        var needsInit = {{NEEDS_INITIALIZATION}};
+        
+        if (isElectron) {
+          document.documentElement.classList.add("electron-mode");
+        }
+        
+        // Add initialization-mode immediately if setup is required
+        // This prevents dashboard from flashing before onboarding/setup screens appear
+        if (needsInit) {
+          document.body.classList.add("initialization-mode");
+        }
+      })();
     </script>
     <style>
       .electron-mode #splashScreen {
         display: none !important;
+      }
+      
+      /* Hide dashboard elements during initialization mode */
+      /* This prevents dashboard from showing through during splash/onboarding/setup */
+      body.initialization-mode .modern-header,
+      body.initialization-mode .app-main,
+      body.initialization-mode .status-bar,
+      body.initialization-mode .electron-titlebar-bg {
+        display: none !important;
+        visibility: hidden !important;
       }
     </style>
 
@@ -253,13 +273,21 @@
       <div class="header-row header-row-3">
         <div class="ticker-container">
           <div class="ticker-scroll" id="tickerScroll">
-            <div class="ticker-segment" id="tickerMonitoring" title="Tokens being monitored by Pool Service">
+            <div
+              class="ticker-segment"
+              id="tickerMonitoring"
+              title="Tokens being monitored by Pool Service"
+            >
               <i class="ticker-icon icon-scan"></i>
               <span class="ticker-text"
                 >Monitoring: <strong id="tickerMonitoringCount">—</strong></span
               >
             </div>
-            <div class="ticker-segment" id="tickerFiltering" title="Tokens that passed/failed filtering criteria">
+            <div
+              class="ticker-segment"
+              id="tickerFiltering"
+              title="Tokens that passed/failed filtering criteria"
+            >
               <i class="ticker-icon icon-filter"></i>
               <span class="ticker-text"
                 >Passed: <strong id="tickerPassedCount">—</strong> · Rejected:
@@ -270,14 +298,22 @@
               <i class="ticker-icon icon-trending-up"></i>
               <span class="ticker-text">Today P&L: <strong id="tickerTodayPnL">—</strong></span>
             </div>
-            <div class="ticker-segment" id="tickerRPC" title="RPC calls per minute and success rate">
+            <div
+              class="ticker-segment"
+              id="tickerRPC"
+              title="RPC calls per minute and success rate"
+            >
               <i class="ticker-icon icon-zap"></i>
               <span class="ticker-text"
                 >RPC: <strong id="tickerRPCCalls">—</strong>/min ·
                 <strong id="tickerRPCSuccess">—</strong>%</span
               >
             </div>
-            <div class="ticker-segment" id="tickerServices" title="Background services health status">
+            <div
+              class="ticker-segment"
+              id="tickerServices"
+              title="Background services health status"
+            >
               <i class="ticker-icon icon-activity"></i>
               <span class="ticker-text" id="tickerServicesText"
                 ><span class="status-dot"></span>Services: <strong>Loading</strong></span

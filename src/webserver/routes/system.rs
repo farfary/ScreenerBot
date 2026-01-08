@@ -44,6 +44,7 @@ pub struct BootStatusResponse {
     pub timestamp: String,
     pub initialization_required: bool,
     pub initialization_complete: bool,
+    pub onboarding_complete: bool,
     pub core_services_ready: bool,
     pub ui_ready: bool,
     pub ready_for_requests: bool,
@@ -299,10 +300,28 @@ async fn boot_status(State(state): State<Arc<AppState>>) -> Response {
 
     let retry_after_ms = if ui_ready { None } else { Some(750) };
 
+    // Get onboarding status from config
+    let onboarding_complete = if initialization_required {
+        // Check if onboarding was previously completed
+        crate::arguments::is_dashboard_onboarding_forced()
+            .then(|| false)
+            .unwrap_or_else(|| {
+                let config_path = crate::paths::get_config_path();
+                if config_path.exists() {
+                    crate::config::with_config(|cfg| cfg.gui.dashboard.startup.onboarding_complete)
+                } else {
+                    false
+                }
+            })
+    } else {
+        true // Already initialized, onboarding must be done
+    };
+
     let response = BootStatusResponse {
         timestamp: timestamp.to_rfc3339(),
         initialization_required,
         initialization_complete,
+        onboarding_complete,
         core_services_ready,
         ui_ready,
         ready_for_requests,

@@ -138,24 +138,28 @@ async fn initialization_status() -> Response {
 }
 
 /// POST /api/initialization/onboarding/complete
-/// Mark onboarding as complete and persist to config
+/// Mark onboarding as complete in memory only (NOT persisted until setup completes)
 async fn complete_onboarding() -> Response {
-    logger::info(LogTag::Webserver, "Marking onboarding as complete");
+    logger::info(LogTag::Webserver, "Marking onboarding as complete (in-memory only)");
 
+    // IMPORTANT: Do NOT save to disk here!
+    // The config.toml should only be created when the user completes the full setup flow
+    // (via /api/initialization/complete). Setting save_to_disk=false ensures we only
+    // update the in-memory config state for the current session.
     if let Err(e) = config::update_config_section(
         |cfg| {
             cfg.gui.dashboard.startup.onboarding_complete = true;
         },
-        true,
+        false, // Do NOT save to disk - config.toml should not exist until setup is done
     ) {
         logger::error(
             LogTag::Webserver,
-            &format!("Failed to persist onboarding state: {}", e),
+            &format!("Failed to update onboarding state: {}", e),
         );
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "CONFIG_ERROR",
-            "Failed to save onboarding state",
+            "Failed to update onboarding state",
             Some(&e),
         );
     }
@@ -377,7 +381,8 @@ async fn complete_initialization(Json(request): Json<CompleteInitializationReque
         "Creating configuration with encrypted wallet...",
     );
 
-    let config = Config {
+    // Create config with encrypted credentials and mark setup as complete
+    let mut config = Config {
         wallet_encrypted: encrypted.ciphertext,
         wallet_nonce: encrypted.nonce,
         rpc: crate::config::schemas::RpcConfig {
@@ -386,6 +391,9 @@ async fn complete_initialization(Json(request): Json<CompleteInitializationReque
         },
         ..Default::default()
     };
+
+    // Mark onboarding as complete since user finished the full setup flow
+    config.gui.dashboard.startup.onboarding_complete = true;
 
     let config_path = crate::paths::get_config_path();
     if let Err(e) =

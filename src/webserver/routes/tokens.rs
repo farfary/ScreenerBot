@@ -2678,13 +2678,17 @@ async fn get_token_transactions(
     // Create filters: specific mint
     let mut filters = crate::transactions::database::TransactionListFilters::default();
     filters.mint = Some(mint.clone());
-    
+
     // Fetch recent transactions (limit 50)
     match db.list_transactions(&filters, None, 50).await {
         Ok(result) => {
             logger::debug(
                 LogTag::Webserver,
-                &format!("Found {} transactions for token {}", result.items.len(), mint),
+                &format!(
+                    "Found {} transactions for token {}",
+                    result.items.len(),
+                    mint
+                ),
             );
             Ok(Json(result.items))
         }

@@ -1512,12 +1512,12 @@ impl TransactionDatabase {
             let trimmed = mint.trim();
             if !trimmed.is_empty() {
                 // Search in both swap info and transfers
-                // We reuse the same param index since we push the same value twice? 
-                // No, rusqlite params are positional passed as slice. 
-                // Wait, params_vec is linear. I need to push it once? 
-                // query string: ... ?5 OR ... ?5 ... 
+                // We reuse the same param index since we push the same value twice?
+                // No, rusqlite params are positional passed as slice.
+                // Wait, params_vec is linear. I need to push it once?
+                // query string: ... ?5 OR ... ?5 ...
                 // Rusqlite supports ?NNN syntax.
-                
+
                 let param_idx = params_vec.len() + 1;
                 query.push_str(&format!(
                     " AND (p.token_swap_info LIKE ?{} OR p.token_transfers LIKE ?{})",
@@ -1637,10 +1637,7 @@ impl TransactionDatabase {
 
                 if token_amount.is_none() {
                     if let Some(transfers) = token_transfers.as_ref() {
-                        token_amount = transfers
-                            .iter()
-                            .find(|t| t.amount > 0.0)
-                            .map(|t| t.amount);
+                        token_amount = transfers.iter().find(|t| t.amount > 0.0).map(|t| t.amount);
                     }
                 }
 

@@ -366,8 +366,8 @@ async fn wait_for_shutdown_signal() -> Result<(), String> {
 
         let mut sigint =
             signal(SignalKind::interrupt()).map_err(|e| format!("Failed to bind SIGINT: {}", e))?;
-        let mut sigterm =
-            signal(SignalKind::terminate()).map_err(|e| format!("Failed to bind SIGTERM: {}", e))?;
+        let mut sigterm = signal(SignalKind::terminate())
+            .map_err(|e| format!("Failed to bind SIGTERM: {}", e))?;
         let mut sighup =
             signal(SignalKind::hangup()).map_err(|e| format!("Failed to bind SIGHUP: {}", e))?;
         let mut sigquit =

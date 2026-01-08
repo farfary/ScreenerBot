@@ -1,10 +1,14 @@
 <!-- Setup Screen - Compact Professional Layout -->
 <div id="setupScreen" class="setup-screen">
+  <!-- Window Title Bar (Drag Region) -->
+  <div class="window-titlebar"></div>
+
   <!-- Compact Header with Progress -->
   <header class="setup-header">
     <div class="setup-header-left">
       <img src="/assets/logo.svg" alt="ScreenerBot" class="setup-logo" />
       <span class="setup-brand">ScreenerBot</span>
+      <span class="setup-version" id="setup-version"></span>
     </div>
 
     <!-- Progress steps -->
@@ -71,6 +75,13 @@
               </div>
               <div class="setup-hint">5Jv8...xyz or [1,2,3,...]</div>
               <div class="setup-validation" id="wallet-validation"></div>
+              <div class="setup-wallet-preview" id="wallet-address-preview" style="display: none">
+                <i class="icon-wallet"></i>
+                <span class="wallet-address-text">Loading address...</span>
+                <button type="button" class="wallet-copy-btn" title="Copy address">
+                  <i class="icon-copy"></i>
+                </button>
+              </div>
             </div>
           </div>
 
@@ -152,22 +163,26 @@
 
       <!-- Step 2: Verification -->
       <div class="setup-step-content" data-step="2">
-        <div
-          class="setup-step-header"
-          style="
-            margin-bottom: 1.5rem;
-            border-bottom: 1px solid var(--border-color, #30363d);
-            padding-bottom: 1rem;
-          "
-        >
-          <div>
-            <h2 class="setup-step-title">Verifying Configuration</h2>
-            <p class="setup-step-description">Testing credentials and RPC connections...</p>
+        <!-- Centered verification visual -->
+        <div class="verification-hero">
+          <div class="verification-visual">
+            <div class="verification-rings">
+              <div class="verification-ring ring-outer"></div>
+              <div class="verification-ring ring-middle"></div>
+              <div class="verification-ring ring-inner"></div>
+            </div>
+            <div class="verification-icon-center">
+              <i class="icon-shield-check"></i>
+            </div>
           </div>
+          <h2 class="verification-title">Verifying Configuration</h2>
+          <p class="verification-subtitle">Connecting to Solana network and validating credentials...</p>
         </div>
 
+        <!-- Verification cards -->
         <div class="setup-verification">
-          <div class="setup-verification-item">
+          <div class="setup-verification-item" id="wallet-verification-card">
+            <div class="verification-card-glow"></div>
             <div class="setup-verification-icon"><i class="icon-key"></i></div>
             <div class="setup-verification-content">
               <h4>Wallet Validation</h4>
@@ -177,9 +192,13 @@
               </div>
               <div class="setup-verification-details" id="wallet-details"></div>
             </div>
+            <div class="verification-check-icon">
+              <i class="icon-circle-check"></i>
+            </div>
           </div>
 
-          <div class="setup-verification-item">
+          <div class="setup-verification-item" id="rpc-verification-card">
+            <div class="verification-card-glow"></div>
             <div class="setup-verification-icon"><i class="icon-globe"></i></div>
             <div class="setup-verification-content">
               <h4>RPC Connection</h4>
@@ -188,6 +207,9 @@
                 <span>Testing endpoints...</span>
               </div>
               <div class="setup-verification-details" id="rpc-details"></div>
+            </div>
+            <div class="verification-check-icon">
+              <i class="icon-circle-check"></i>
             </div>
           </div>
         </div>

@@ -33,6 +33,8 @@ pub mod updates;
 
 // Re-export main types for convenience
 pub use database::{
+    cleanup_rejection_history_async,
+    cleanup_rejection_stats_async,
     // Async wrappers for external code
     clear_rejection_status_async,
     count_tokens_async,
@@ -43,10 +45,11 @@ pub use database::{
     get_full_token_for_source_async,
     get_global_database,
     get_recent_rejections_async,
+    get_rejected_tokens_async,
+    get_rejection_stats_aggregated_async,
     get_rejection_stats_async,
     get_rejection_stats_for_range_async,
     get_rejection_stats_with_time_filter_async,
-    get_rejected_tokens_async,
     get_token_async,
     get_token_info_batch_async,
     get_tokens_no_market_async,
@@ -57,10 +60,7 @@ pub use database::{
     list_tokens_async,
     update_rejection_status_async,
     update_token_priority_async,
-    cleanup_rejection_history_async,
     upsert_rejection_stat_async,
-    get_rejection_stats_aggregated_async,
-    cleanup_rejection_stats_async,
     TokenBlacklistRecord,
     TokenDatabase,
 };

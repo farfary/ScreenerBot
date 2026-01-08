@@ -13,9 +13,9 @@ use crate::{
     filtering,
     logger::{self, LogTag},
     tokens::{
-        get_recent_rejections_async, get_rejected_tokens_async, get_rejection_stats_async,
-        get_rejection_stats_with_time_filter_async, get_rejection_stats_aggregated_async,
-        get_token_info_batch_async,
+        get_recent_rejections_async, get_rejected_tokens_async,
+        get_rejection_stats_aggregated_async, get_rejection_stats_async,
+        get_rejection_stats_with_time_filter_async, get_token_info_batch_async,
     },
     webserver::state::AppState,
     webserver::utils::{error_response, success_response},
@@ -28,8 +28,14 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/filtering/stats", get(get_stats))
         .route("/filtering/rejection-stats", get(get_rejection_stats))
         .route("/filtering/analytics", get(get_analytics))
-        .route("/filtering/rejected-tokens", get(get_rejected_tokens_handler))
-        .route("/filtering/export-rejected-tokens", get(export_rejected_tokens))
+        .route(
+            "/filtering/rejected-tokens",
+            get(get_rejected_tokens_handler),
+        )
+        .route(
+            "/filtering/export-rejected-tokens",
+            get(export_rejected_tokens),
+        )
 }
 
 #[derive(Debug, Serialize)]
@@ -279,9 +285,15 @@ async fn get_rejection_stats() -> Response {
 /// Categorize rejection reason into high-level category
 fn get_rejection_category(reason: &str) -> &'static str {
     if reason.starts_with("rug_") {
-        if reason.contains("authority") || reason.contains("rugged") || reason.contains("level_danger") {
+        if reason.contains("authority")
+            || reason.contains("rugged")
+            || reason.contains("level_danger")
+        {
             "security"
-        } else if reason.contains("holder") || reason.contains("insider") || reason.contains("creator") {
+        } else if reason.contains("holder")
+            || reason.contains("insider")
+            || reason.contains("creator")
+        {
             "distribution"
         } else if reason.contains("lp_") {
             "liquidity_lock"
@@ -396,25 +408,25 @@ struct AnalyticsResponse {
     total_passed: usize,
     pass_rate: f64,
     rejection_rate: f64,
-    
+
     // Category breakdown
     by_category: Vec<CategoryBreakdown>,
-    
+
     // Source breakdown
     by_source: Vec<SourceBreakdown>,
-    
+
     // Data quality
     data_quality: Vec<DataQualityMetric>,
-    
+
     // Top rejection reasons (detailed)
     top_reasons: Vec<RejectionStatEntry>,
 
     // Recent rejections
     recent_rejections: Vec<RecentRejectionEntry>,
-    
+
     // Time range filter info
     time_range: Option<TimeRangeInfo>,
-    
+
     // Metadata
     last_updated: String,
     timestamp: String,
@@ -453,7 +465,7 @@ struct AnalyticsQuery {
 async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
     // Fetch stats and rejection data
     let stats_result = filtering::fetch_stats().await;
-    
+
     // Choose correct data source based on whether we want "Current State" or "Historical Data"
     let rejection_result = if query.start_time.is_some() || query.end_time.is_some() {
         // Time range specified -> Use history table (rejection_stats)
@@ -464,44 +476,49 @@ async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
         // This gives us the current snapshot of rejected tokens (one per token)
         get_rejection_stats_with_time_filter_async(None, None).await
     };
-    
+
     let recent_result = get_recent_rejections_async(20).await;
-    
+
     match (stats_result, rejection_result, recent_result) {
         (Ok(stats), Ok(raw_stats), Ok(recent_raw)) => {
             let total_tokens = stats.total_tokens;
             let total_passed = stats.passed_filtering;
-            
+
             // Calculate totals and build category/source maps
             let mut by_category_map: HashMap<String, Vec<(String, String, i64)>> = HashMap::new();
             let mut by_source_map: HashMap<String, Vec<(String, String, i64)>> = HashMap::new();
             let mut total_rejected: i64 = 0;
-            
+
             // Data quality specific counts
             let mut data_quality_counts: HashMap<String, i64> = HashMap::new();
-            
+
             for (reason, source, count) in &raw_stats {
                 total_rejected += count;
-                
+
                 let category = get_rejection_category(reason).to_string();
                 by_category_map.entry(category.clone()).or_default().push((
                     reason.clone(),
                     get_rejection_display_label(reason),
                     *count,
                 ));
-                
+
                 by_source_map.entry(source.clone()).or_default().push((
                     reason.clone(),
                     get_rejection_display_label(reason),
                     *count,
                 ));
-                
+
                 // Track data quality issues specifically
-                if reason.contains("missing") || reason.contains("no_decimals") || reason == "dex_data_missing" || reason == "gecko_data_missing" || reason == "rug_data_missing" {
+                if reason.contains("missing")
+                    || reason.contains("no_decimals")
+                    || reason == "dex_data_missing"
+                    || reason == "gecko_data_missing"
+                    || reason == "rug_data_missing"
+                {
                     *data_quality_counts.entry(reason.clone()).or_insert(0) += count;
                 }
             }
-            
+
             // Build category breakdown
             let mut by_category: Vec<CategoryBreakdown> = by_category_map
                 .into_iter()
@@ -512,7 +529,7 @@ async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
                     } else {
                         0.0
                     };
-                    
+
                     let mut reason_entries: Vec<CategoryReasonEntry> = reasons
                         .into_iter()
                         .map(|(reason, display_label, count)| {
@@ -529,9 +546,9 @@ async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
                             }
                         })
                         .collect();
-                    
+
                     reason_entries.sort_by(|a, b| b.count.cmp(&a.count));
-                    
+
                     CategoryBreakdown {
                         label: get_category_label(&category).to_string(),
                         icon: get_category_icon(&category).to_string(),
@@ -542,9 +559,9 @@ async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
                     }
                 })
                 .collect();
-            
+
             by_category.sort_by(|a, b| b.count.cmp(&a.count));
-            
+
             // Build source breakdown
             let mut by_source: Vec<SourceBreakdown> = by_source_map
                 .into_iter()
@@ -555,7 +572,7 @@ async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
                     } else {
                         0.0
                     };
-                    
+
                     let mut top_reasons: Vec<RejectionStatEntry> = reasons
                         .into_iter()
                         .map(|(reason, display_label, count)| {
@@ -574,10 +591,10 @@ async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
                             }
                         })
                         .collect();
-                    
+
                     top_reasons.sort_by(|a, b| b.count.cmp(&a.count));
                     top_reasons.truncate(5); // Top 5 per source
-                    
+
                     SourceBreakdown {
                         source,
                         count: src_count,
@@ -586,9 +603,9 @@ async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
                     }
                 })
                 .collect();
-            
+
             by_source.sort_by(|a, b| b.count.cmp(&a.count));
-            
+
             // Build data quality metrics
             let data_quality: Vec<DataQualityMetric> = data_quality_counts
                 .into_iter()
@@ -614,7 +631,7 @@ async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
                     }
                 })
                 .collect();
-            
+
             // Build top reasons list
             let mut top_reasons: Vec<RejectionStatEntry> = raw_stats
                 .into_iter()
@@ -634,33 +651,33 @@ async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
                     }
                 })
                 .collect();
-            
+
             top_reasons.sort_by(|a, b| b.count.cmp(&a.count));
-            
+
             // Build recent rejections list
             let recent_rejections: Vec<RecentRejectionEntry> = recent_raw
                 .into_iter()
-                .map(|(mint, reason, source, ts, symbol)| {
-                    RecentRejectionEntry {
-                        mint,
-                        symbol,
-                        display_label: get_rejection_display_label(&reason),
-                        reason,
-                        source,
-                        rejected_at: DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc::now()).to_rfc3339(),
-                    }
+                .map(|(mint, reason, source, ts, symbol)| RecentRejectionEntry {
+                    mint,
+                    symbol,
+                    display_label: get_rejection_display_label(&reason),
+                    reason,
+                    source,
+                    rejected_at: DateTime::from_timestamp(ts, 0)
+                        .unwrap_or_else(|| Utc::now())
+                        .to_rfc3339(),
                 })
                 .collect();
-            
+
             // Calculate rates
             let pass_rate = if total_tokens > 0 {
                 (total_passed as f64 / total_tokens as f64) * 100.0
             } else {
                 0.0
             };
-            
+
             let rejection_rate = 100.0 - pass_rate;
-            
+
             // Build time range info if filtering was applied
             let time_range = if query.start_time.is_some() || query.end_time.is_some() {
                 Some(TimeRangeInfo {
@@ -671,7 +688,7 @@ async fn get_analytics(Query(query): Query<AnalyticsQuery>) -> Response {
             } else {
                 None
             };
-            
+
             success_response(AnalyticsResponse {
                 total_tokens,
                 total_rejected,
@@ -753,33 +770,38 @@ struct RejectedTokenEntry {
 async fn get_rejected_tokens_handler(Query(params): Query<RejectedTokensQuery>) -> Response {
     let limit = params.limit.unwrap_or(50).min(100); // Max 100 per page
     let offset = params.offset.unwrap_or(0);
-    
-    match get_rejected_tokens_async(params.reason, params.source, params.search, limit, offset).await {
+
+    match get_rejected_tokens_async(params.reason, params.source, params.search, limit, offset)
+        .await
+    {
         Ok(tokens) => {
             // Collect mints for batch token info lookup
             let mints: Vec<String> = tokens.iter().map(|(mint, _, _, _)| mint.clone()).collect();
-            
+
             // Fetch token info (symbol, name, image) in a single batch query
             let token_info = get_token_info_batch_async(mints).await.unwrap_or_default();
-            
-            let entries: Vec<RejectedTokenEntry> = tokens.into_iter().map(|(mint, reason, source, ts)| {
-                let (symbol, name, image_url) = token_info
-                    .get(&mint)
-                    .cloned()
-                    .unwrap_or((None, None, None));
-                
-                RejectedTokenEntry {
-                    mint,
-                    symbol,
-                    name,
-                    image_url,
-                    display_label: get_rejection_display_label(&reason),
-                    reason,
-                    source,
-                    rejected_at: DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc::now()).to_rfc3339(),
-                }
-            }).collect();
-            
+
+            let entries: Vec<RejectedTokenEntry> = tokens
+                .into_iter()
+                .map(|(mint, reason, source, ts)| {
+                    let (symbol, name, image_url) =
+                        token_info.get(&mint).cloned().unwrap_or((None, None, None));
+
+                    RejectedTokenEntry {
+                        mint,
+                        symbol,
+                        name,
+                        image_url,
+                        display_label: get_rejection_display_label(&reason),
+                        reason,
+                        source,
+                        rejected_at: DateTime::from_timestamp(ts, 0)
+                            .unwrap_or_else(|| Utc::now())
+                            .to_rfc3339(),
+                    }
+                })
+                .collect();
+
             success_response(entries)
         }
         Err(err) => {
@@ -803,12 +825,16 @@ async fn export_rejected_tokens(Query(params): Query<RejectedTokensQuery>) -> Re
     // Fetch up to 100,000 tokens for export
     let limit = 100000;
     let offset = 0;
-    
-    match get_rejected_tokens_async(params.reason, params.source, params.search, limit, offset).await {
+
+    match get_rejected_tokens_async(params.reason, params.source, params.search, limit, offset)
+        .await
+    {
         Ok(tokens) => {
             let mut wtr = csv::Writer::from_writer(vec![]);
             // Write header
-            if let Err(e) = wtr.write_record(&["Mint", "Reason", "Display Label", "Source", "Rejected At"]) {
+            if let Err(e) =
+                wtr.write_record(&["Mint", "Reason", "Display Label", "Source", "Rejected At"])
+            {
                 return error_response(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "CSV_ERROR",
@@ -816,12 +842,14 @@ async fn export_rejected_tokens(Query(params): Query<RejectedTokensQuery>) -> Re
                     None,
                 );
             }
-            
+
             // Write records
             for (mint, reason, source, ts) in tokens {
-                let dt = DateTime::from_timestamp(ts, 0).unwrap_or_else(|| Utc::now()).to_rfc3339();
+                let dt = DateTime::from_timestamp(ts, 0)
+                    .unwrap_or_else(|| Utc::now())
+                    .to_rfc3339();
                 let display_label = get_rejection_display_label(&reason);
-                
+
                 if let Err(e) = wtr.write_record(&[mint, reason, display_label, source, dt]) {
                     return error_response(
                         StatusCode::INTERNAL_SERVER_ERROR,
@@ -831,28 +859,34 @@ async fn export_rejected_tokens(Query(params): Query<RejectedTokensQuery>) -> Re
                     );
                 }
             }
-            
+
             match wtr.into_inner() {
                 Ok(data) => {
-                    let filename = format!("rejected_tokens_{}.csv", Utc::now().format("%Y%m%d_%H%M%S"));
-                    
+                    let filename =
+                        format!("rejected_tokens_{}.csv", Utc::now().format("%Y%m%d_%H%M%S"));
+
                     Response::builder()
                         .header("Content-Type", "text/csv")
-                        .header("Content-Disposition", format!("attachment; filename=\"{}\"", filename))
+                        .header(
+                            "Content-Disposition",
+                            format!("attachment; filename=\"{}\"", filename),
+                        )
                         .body(axum::body::Body::from(data))
-                        .unwrap_or_else(|_| error_response(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "RESPONSE_ERROR",
-                            "Failed to build response",
-                            None,
-                        ))
+                        .unwrap_or_else(|_| {
+                            error_response(
+                                StatusCode::INTERNAL_SERVER_ERROR,
+                                "RESPONSE_ERROR",
+                                "Failed to build response",
+                                None,
+                            )
+                        })
                 }
                 Err(e) => error_response(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "CSV_ERROR",
                     &format!("Failed to finalize CSV: {}", e),
                     None,
-                )
+                ),
             }
         }
         Err(err) => {

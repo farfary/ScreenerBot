@@ -19,9 +19,9 @@ const LOG_RETENTION_HOURS: u64 = 24; // Keep logs for 24 hours
 const MAX_LOG_FILES: usize = 7; // Keep maximum 7 days of logs as backup
 
 /// Buffer configuration for high-performance logging
-const FLUSH_INTERVAL_WRITES: u64 = 100; // Flush every 100 writes
+const FLUSH_INTERVAL_WRITES: u64 = 1; // Flush every write for debugging
 const CLEANUP_INTERVAL_WRITES: u64 = 1000; // Cleanup every 1000 writes
-const FILE_BUFFER_SIZE: usize = 64 * 1024; // 64KB buffer
+const FILE_BUFFER_SIZE: usize = 4 * 1024; // 4KB buffer
 
 /// File logger state for thread-safe file operations
 struct FileLogger {

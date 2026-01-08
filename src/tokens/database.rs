@@ -1507,7 +1507,8 @@ impl TokenDatabase {
                     last_rejection_source, 
                     COUNT(*) as count 
                  FROM update_tracking 
-                 WHERE last_rejection_reason IS NOT NULL".to_string();
+                 WHERE last_rejection_reason IS NOT NULL"
+            .to_string();
 
         if start_time.is_some() {
             query.push_str(" AND last_rejection_at >= :start_time");
@@ -1516,7 +1517,8 @@ impl TokenDatabase {
             query.push_str(" AND last_rejection_at <= :end_time");
         }
 
-        query.push_str(" GROUP BY last_rejection_reason, last_rejection_source ORDER BY count DESC");
+        query
+            .push_str(" GROUP BY last_rejection_reason, last_rejection_source ORDER BY count DESC");
 
         let mut stmt = conn
             .prepare(&query)
@@ -1613,22 +1615,37 @@ impl TokenDatabase {
         } else {
             "SELECT mint, last_rejection_reason, last_rejection_source, last_rejection_at 
              FROM update_tracking 
-             WHERE last_rejection_reason IS NOT NULL".to_string()
+             WHERE last_rejection_reason IS NOT NULL"
+                .to_string()
         };
-        
+
         if reason_filter.is_some() {
-            query.push_str(if search_filter.is_some() { " AND ut.last_rejection_reason = :reason" } else { " AND last_rejection_reason = :reason" });
+            query.push_str(if search_filter.is_some() {
+                " AND ut.last_rejection_reason = :reason"
+            } else {
+                " AND last_rejection_reason = :reason"
+            });
         }
-        
+
         if source_filter.is_some() {
-            query.push_str(if search_filter.is_some() { " AND ut.last_rejection_source = :source" } else { " AND last_rejection_source = :source" });
+            query.push_str(if search_filter.is_some() {
+                " AND ut.last_rejection_source = :source"
+            } else {
+                " AND last_rejection_source = :source"
+            });
         }
 
         if search_filter.is_some() {
-            query.push_str(" AND (ut.mint LIKE :search OR t.symbol LIKE :search OR t.name LIKE :search)");
+            query.push_str(
+                " AND (ut.mint LIKE :search OR t.symbol LIKE :search OR t.name LIKE :search)",
+            );
         }
-        
-        query.push_str(if search_filter.is_some() { " ORDER BY ut.last_rejection_at DESC LIMIT :limit OFFSET :offset" } else { " ORDER BY last_rejection_at DESC LIMIT :limit OFFSET :offset" });
+
+        query.push_str(if search_filter.is_some() {
+            " ORDER BY ut.last_rejection_at DESC LIMIT :limit OFFSET :offset"
+        } else {
+            " ORDER BY last_rejection_at DESC LIMIT :limit OFFSET :offset"
+        });
 
         let mut stmt = conn
             .prepare(&query)
@@ -1642,7 +1659,7 @@ impl TokenDatabase {
         if let Some(ref source) = source_filter {
             params.push((":source", source));
         }
-        
+
         let search_pattern;
         if let Some(ref search) = search_filter {
             search_pattern = format!("%{}%", search);
@@ -1714,15 +1731,16 @@ impl TokenDatabase {
         }
 
         // Query rejection_history table for time-range stats
-        let mut query = "SELECT reason, source, COUNT(*) as count FROM rejection_history WHERE 1=1".to_string();
-        
+        let mut query =
+            "SELECT reason, source, COUNT(*) as count FROM rejection_history WHERE 1=1".to_string();
+
         if start_time.is_some() {
             query.push_str(" AND rejected_at >= :start_time");
         }
         if end_time.is_some() {
             query.push_str(" AND rejected_at <= :end_time");
         }
-        
+
         query.push_str(" GROUP BY reason, source ORDER BY count DESC");
 
         let mut stmt = conn
@@ -1766,19 +1784,27 @@ impl TokenDatabase {
             .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
 
         let cutoff = chrono::Utc::now().timestamp() - (hours_to_keep * 60 * 60);
-        
-        let deleted = conn.execute(
-            "DELETE FROM rejection_history WHERE rejected_at < ?1",
-            params![cutoff],
-        )
-        .map_err(|e| TokenError::Database(format!("Failed to cleanup rejection history: {}", e)))?;
+
+        let deleted = conn
+            .execute(
+                "DELETE FROM rejection_history WHERE rejected_at < ?1",
+                params![cutoff],
+            )
+            .map_err(|e| {
+                TokenError::Database(format!("Failed to cleanup rejection history: {}", e))
+            })?;
 
         Ok(deleted)
     }
 
     /// Upsert rejection stat into aggregated hourly bucket table
     /// This replaces per-event logging with O(1) aggregation
-    pub fn upsert_rejection_stat(&self, reason: &str, source: &str, timestamp: i64) -> TokenResult<()> {
+    pub fn upsert_rejection_stat(
+        &self,
+        reason: &str,
+        source: &str,
+        timestamp: i64,
+    ) -> TokenResult<()> {
         let conn = self
             .conn
             .lock()
@@ -1811,7 +1837,9 @@ impl TokenDatabase {
             .lock()
             .map_err(|e| TokenError::Database(format!("Lock failed: {}", e)))?;
 
-        let mut query = "SELECT reason, source, SUM(rejection_count) as total FROM rejection_stats WHERE 1=1".to_string();
+        let mut query =
+            "SELECT reason, source, SUM(rejection_count) as total FROM rejection_stats WHERE 1=1"
+                .to_string();
 
         if start_time.is_some() {
             query.push_str(" AND bucket_hour >= :start_time");
@@ -1862,11 +1890,12 @@ impl TokenDatabase {
 
         let cutoff = chrono::Utc::now().timestamp() - (hours_to_keep * 3600);
 
-        let deleted = conn.execute(
-            "DELETE FROM rejection_stats WHERE bucket_hour < ?1",
-            params![cutoff],
-        )
-        .map_err(|e| TokenError::Database(format!("Delete rejection stats failed: {}", e)))?;
+        let deleted = conn
+            .execute(
+                "DELETE FROM rejection_stats WHERE bucket_hour < ?1",
+                params![cutoff],
+            )
+            .map_err(|e| TokenError::Database(format!("Delete rejection stats failed: {}", e)))?;
 
         Ok(deleted)
     }
@@ -4040,9 +4069,11 @@ pub async fn get_rejection_stats_with_time_filter_async(
 ) -> TokenResult<Vec<(String, String, i64)>> {
     let db = get_global_database()
         .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
-    tokio::task::spawn_blocking(move || db.get_rejection_stats_with_time_filter(start_time, end_time))
-        .await
-        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+    tokio::task::spawn_blocking(move || {
+        db.get_rejection_stats_with_time_filter(start_time, end_time)
+    })
+    .await
+    .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
 }
 
 /// Async: get rejected tokens list
@@ -4051,12 +4082,10 @@ pub async fn get_recent_rejections_async(
 ) -> TokenResult<Vec<(String, String, String, i64, Option<String>)>> {
     let db = get_global_database()
         .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
-    
-    tokio::task::spawn_blocking(move || {
-        db.get_recent_rejections(limit)
-    })
-    .await
-    .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
+
+    tokio::task::spawn_blocking(move || db.get_recent_rejections(limit))
+        .await
+        .map_err(|e| TokenError::Database(format!("Join error: {}", e)))?
 }
 
 pub async fn get_rejected_tokens_async(
@@ -4068,7 +4097,7 @@ pub async fn get_rejected_tokens_async(
 ) -> TokenResult<Vec<(String, String, String, i64)>> {
     let db = get_global_database()
         .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
-    
+
     tokio::task::spawn_blocking(move || {
         db.get_rejected_tokens(reason_filter, source_filter, search_filter, limit, offset)
     })

@@ -1,10 +1,16 @@
 <!-- Onboarding Flow - First-time user introduction -->
 <div id="onboardingScreen" class="onboarding-screen" style="display: none">
-  <!-- Header -->
-  <header class="onboarding-header">
+  <!-- Window Title Bar (Drag Region) -->
+  <div class="window-titlebar"></div>
+
+  <!-- Hero Section (Logo & Brand) -->
+  <div class="onboarding-hero">
     <img src="/assets/logo.svg" alt="ScreenerBot" class="onboarding-logo" />
-    <span class="onboarding-brand">ScreenerBot</span>
-  </header>
+    <div class="onboarding-brand-container">
+      <span class="onboarding-brand">ScreenerBot</span>
+      <span class="onboarding-version" id="onboarding-version"></span>
+    </div>
+  </div>
 
   <!-- Main content with slides -->
   <main class="onboarding-content">

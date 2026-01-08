@@ -313,13 +313,27 @@
 }
 
 /* Common Analytics Utilities */
-.text-success { color: var(--success-color) !important; }
-.text-error { color: var(--error-color) !important; }
-.text-warning { color: var(--warning-color) !important; }
-.text-end { text-align: end !important; }
-.font-medium { font-weight: 500 !important; }
-.font-data { font-family: var(--font-data) !important; }
-.span-2 { grid-column: span 2 !important; }
+.text-success {
+  color: var(--success-color) !important;
+}
+.text-error {
+  color: var(--error-color) !important;
+}
+.text-warning {
+  color: var(--warning-color) !important;
+}
+.text-end {
+  text-align: end !important;
+}
+.font-medium {
+  font-weight: 500 !important;
+}
+.font-data {
+  font-family: var(--font-data) !important;
+}
+.span-2 {
+  grid-column: span 2 !important;
+}
 
 /* Analytics Components */
 .pass-rate-visual {
@@ -413,8 +427,12 @@
   color: var(--text-muted);
 }
 
-.p-lg { padding: var(--spacing-lg) !important; }
-.m-t-lg { margin-top: var(--spacing-lg) !important; }
+.p-lg {
+  padding: var(--spacing-lg) !important;
+}
+.m-t-lg {
+  margin-top: var(--spacing-lg) !important;
+}
 
 .m-0 {
   margin: 0 !important;
@@ -802,8 +820,8 @@
   .filtering-status-layout {
     grid-template-columns: 1fr;
   }
-  
-  .status-metrics-section, 
+
+  .status-metrics-section,
   .status-rejection-section {
     width: 100%;
     min-width: 0;
@@ -2402,11 +2420,11 @@
     flex-direction: column;
     align-items: flex-start;
   }
-  
+
   .custom-range-inputs {
     flex-wrap: wrap;
   }
-  
+
   .time-input {
     min-width: 150px;
   }

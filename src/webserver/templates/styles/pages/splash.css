@@ -11,6 +11,9 @@
   background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #1c2128 100%);
   opacity: 1;
   transition: opacity 0.5s ease-out;
+  -webkit-app-region: drag; /* Allow window dragging during load */
+  user-select: none;
+  isolation: isolate; /* Create new stacking context */
 }
 
 .splash-screen.fade-out {

@@ -20,7 +20,7 @@ pub struct RpcEndpointTestResult {
 
 /// Test a single RPC endpoint without using the global RPC client
 ///
-/// Uses short timeouts (3s) and validates the endpoint is mainnet.
+/// Uses 10s timeout to accommodate TLS initialization on cold starts.
 /// Returns detailed test results including latency.
 pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
     logger::debug(LogTag::Rpc, &format!("Testing RPC endpoint: {}", url));
@@ -42,8 +42,9 @@ pub async fn test_rpc_endpoint(url: &str) -> RpcEndpointTestResult {
         "method": "getHealth"
     });
 
+    // Use 10s timeout to handle cold starts where TLS initialization takes longer
     let client = match reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(3))
+        .timeout(std::time::Duration::from_secs(10))
         .build()
     {
         Ok(c) => c,

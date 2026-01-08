@@ -92,12 +92,7 @@ body.dt-column-resizing .data-table col {
   left: 0;
   right: 0;
   height: 2px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    var(--primary-color),
-    transparent
-  );
+  background: linear-gradient(90deg, transparent, var(--primary-color), transparent);
   background-size: 200% 100%;
   animation: dt-loading-slide 1.2s ease-in-out infinite;
 }

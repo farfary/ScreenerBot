@@ -196,6 +196,13 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     html = html.replace("{{IS_GUI_MODE}}", if is_gui { "true" } else { "false" });
     html = html.replace("{{ASSET_VERSION}}", asset_version.as_str());
 
+    // Inject initialization state for early DOM setup (prevents dashboard flash)
+    let needs_initialization = !global::is_initialization_complete();
+    html = html.replace(
+        "{{NEEDS_INITIALIZATION}}",
+        if needs_initialization { "true" } else { "false" },
+    );
+
     // Inject splash, onboarding, setup, and lockscreen screens
     html = html.replace("{{SPLASH_SCREEN}}", SPLASH_PAGE);
     html = html.replace("{{ONBOARDING_SCREEN}}", ONBOARDING_PAGE);

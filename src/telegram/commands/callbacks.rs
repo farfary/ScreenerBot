@@ -47,7 +47,7 @@ pub async fn handle_callback_query(
     match parts.as_slice() {
         // Menu navigation
         ["menu", "main"] => send_main_menu(bot, chat_id).await,
-        
+
         // Pagination
         ["page", session_id, page_num_str, ..] => {
             if let Ok(page_num) = page_num_str.parse::<usize>() {
@@ -55,14 +55,21 @@ pub async fn handle_callback_query(
                 let message_id = match query.message.as_ref() {
                     Some(msg) => msg.id(),
                     None => {
-                        logger::warning(LogTag::Telegram, "Pagination callback without message context");
+                        logger::warning(
+                            LogTag::Telegram,
+                            "Pagination callback without message context",
+                        );
                         return Ok(());
                     }
                 };
-                
-                if let Some((items, total_pages, total_items)) = PAGINATION_MANAGER.get_page(session_id, page_num) {
-                    let text = formatters::format_tokens_page(&items, page_num, total_pages, total_items);
-                    let keyboard = keyboards::pagination_keyboard(session_id, page_num, total_pages);
+
+                if let Some((items, total_pages, total_items)) =
+                    PAGINATION_MANAGER.get_page(session_id, page_num)
+                {
+                    let text =
+                        formatters::format_tokens_page(&items, page_num, total_pages, total_items);
+                    let keyboard =
+                        keyboards::pagination_keyboard(session_id, page_num, total_pages);
 
                     // Update the message
                     bot.edit_message_text(chat_id, message_id, text)
@@ -85,7 +92,7 @@ pub async fn handle_callback_query(
             }
             Ok(())
         }
-        
+
         ["noop"] => Ok(()),
 
         ["menu", "positions"] => send_positions_menu(bot, chat_id).await,
@@ -186,7 +193,9 @@ pub async fn handle_callback_query(
             let amount: f64 = amount_str.parse().unwrap_or(0.1);
             send_confirm_token_buy(bot, chat_id, mint_short, amount).await
         }
-        ["token", "blacklist", mint_short] => send_confirm_token_blacklist(bot, chat_id, mint_short).await,
+        ["token", "blacklist", mint_short] => {
+            send_confirm_token_blacklist(bot, chat_id, mint_short).await
+        }
 
         // Execute token actions (after confirmation)
         ["exec", "tokenbuy", mint_short, amount_str] => {
@@ -843,10 +852,7 @@ async fn send_tokens_page(
 
     let mut msg = format!(
         "{} <b>{}</b> (Page {}/{})\n\n",
-        view_emoji,
-        view_name,
-        result.page,
-        result.total_pages
+        view_emoji, view_name, result.page, result.total_pages
     );
 
     for (i, token) in result.items.iter().enumerate() {
@@ -867,10 +873,10 @@ async fn send_tokens_page(
                 }
             })
             .unwrap_or_else(|| "N/A".to_string());
-        
+
         // Format price
         let price = if token.price_sol > 0.0 {
-             format!("{} SOL", formatters::format_price(token.price_sol))
+            format!("{} SOL", formatters::format_price(token.price_sol))
         } else {
             "N/A".to_string()
         };
@@ -1162,12 +1168,18 @@ async fn execute_token_blacklist(
             send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await
         }
         Ok(Err(e)) => {
-            logger::warning(LogTag::Telegram, &format!("Failed to blacklist token: {}", e));
+            logger::warning(
+                LogTag::Telegram,
+                &format!("Failed to blacklist token: {}", e),
+            );
             let msg = format!("❌ <b>Blacklist Failed</b>\n\nError: {}", e);
             send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await
         }
         Err(e) => {
-            logger::warning(LogTag::Telegram, &format!("Failed to blacklist token: {}", e));
+            logger::warning(
+                LogTag::Telegram,
+                &format!("Failed to blacklist token: {}", e),
+            );
             let msg = format!("❌ <b>Blacklist Failed</b>\n\nError: {}", e);
             send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await
         }
@@ -1194,8 +1206,7 @@ async fn execute_token_buy(
         "💰 <b>Processing Buy...</b>\n\n\
          Token — ${}\n\
          Amount — {} SOL",
-        token.symbol,
-        amount
+        token.symbol, amount
     );
 
     bot.send_message(chat_id, &msg)

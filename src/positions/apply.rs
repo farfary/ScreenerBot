@@ -41,18 +41,17 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             fee_lamports,
             sol_size,
         } => {
-            let updated =
-                update_position_state_by_id(position_id, |pos| {
-                    pos.transaction_entry_verified = true;
-                    pos.effective_entry_price = Some(effective_entry_price);
-                    pos.total_size_sol = sol_size;
-                    pos.token_amount = Some(token_amount_units);
-                    pos.entry_fee_lamports = Some(fee_lamports);
-                    pos.entry_size_sol = sol_size;
-                    pos.remaining_token_amount = Some(token_amount_units);
-                    pos.average_entry_price = effective_entry_price;
-                })
-                .await;
+            let updated = update_position_state_by_id(position_id, |pos| {
+                pos.transaction_entry_verified = true;
+                pos.effective_entry_price = Some(effective_entry_price);
+                pos.total_size_sol = sol_size;
+                pos.token_amount = Some(token_amount_units);
+                pos.entry_fee_lamports = Some(fee_lamports);
+                pos.entry_size_sol = sol_size;
+                pos.remaining_token_amount = Some(token_amount_units);
+                pos.average_entry_price = effective_entry_price;
+            })
+            .await;
 
             if updated && requires_db_update {
                 if let Some(position) = get_position_by_id(position_id).await {
@@ -125,29 +124,28 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             fee_lamports,
             exit_time,
         } => {
-            let updated =
-                update_position_state_by_id(position_id, |pos| {
-                    pos.transaction_exit_verified = true;
-                    pos.effective_exit_price = Some(effective_exit_price);
-                    pos.sol_received = Some(sol_received);
-                    pos.exit_fee_lamports = Some(fee_lamports);
-                    pos.exit_time = Some(exit_time);
+            let updated = update_position_state_by_id(position_id, |pos| {
+                pos.transaction_exit_verified = true;
+                pos.effective_exit_price = Some(effective_exit_price);
+                pos.sol_received = Some(sol_received);
+                pos.exit_fee_lamports = Some(fee_lamports);
+                pos.exit_time = Some(exit_time);
 
-                    // CRITICAL FIX: Update closed_reason to remove pending verification suffix
-                    // This ensures database state matches verification status
-                    if let Some(reason) = &pos.closed_reason {
-                        if reason.ends_with(super::PENDING_VERIFICATION_SUFFIX) {
-                            pos.closed_reason = Some(
-                                reason
-                                    .trim_end_matches(super::PENDING_VERIFICATION_SUFFIX)
-                                    .to_string(),
-                            );
-                        }
+                // CRITICAL FIX: Update closed_reason to remove pending verification suffix
+                // This ensures database state matches verification status
+                if let Some(reason) = &pos.closed_reason {
+                    if reason.ends_with(super::PENDING_VERIFICATION_SUFFIX) {
+                        pos.closed_reason = Some(
+                            reason
+                                .trim_end_matches(super::PENDING_VERIFICATION_SUFFIX)
+                                .to_string(),
+                        );
                     }
+                }
 
-                    // Note: exit_price is already set by close_position_direct to market price
-                })
-                .await;
+                // Note: exit_price is already set by close_position_direct to market price
+            })
+            .await;
 
             if updated && requires_db_update {
                 if let Some(position) = get_position_by_id(position_id).await {
@@ -327,14 +325,13 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             position_id,
             exit_time,
         } => {
-            let updated =
-                update_position_state_by_id(position_id, |pos| {
-                    pos.synthetic_exit = true;
-                    pos.transaction_exit_verified = true;
-                    pos.exit_time = Some(exit_time);
-                    pos.closed_reason = Some("synthetic_exit_permanent_failure".to_string());
-                })
-                .await;
+            let updated = update_position_state_by_id(position_id, |pos| {
+                pos.synthetic_exit = true;
+                pos.transaction_exit_verified = true;
+                pos.exit_time = Some(exit_time);
+                pos.closed_reason = Some("synthetic_exit_permanent_failure".to_string());
+            })
+            .await;
 
             if updated && requires_db_update {
                 if let Some(position) = get_position_by_id(position_id).await {
@@ -453,36 +450,35 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             exit_signature,
             exit_percentage,
         } => {
-            let updated =
-                update_position_state_by_id(position_id, |pos| {
-                    // Update remaining token amount
-                    if let Some(remaining) = pos.remaining_token_amount {
-                        pos.remaining_token_amount = Some(remaining.saturating_sub(exit_amount));
-                    }
+            let updated = update_position_state_by_id(position_id, |pos| {
+                // Update remaining token amount
+                if let Some(remaining) = pos.remaining_token_amount {
+                    pos.remaining_token_amount = Some(remaining.saturating_sub(exit_amount));
+                }
 
-                    // Update total exited amount
-                    pos.total_exited_amount += exit_amount;
+                // Update total exited amount
+                pos.total_exited_amount += exit_amount;
 
-                    // Calculate new average exit price (weighted average)
-                    let total_exited = pos.total_exited_amount;
-                    if let Some(prev_avg) = pos.average_exit_price {
-                        let prev_weight = (total_exited - exit_amount) as f64 / total_exited as f64;
-                        let new_weight = exit_amount as f64 / total_exited as f64;
-                        pos.average_exit_price =
-                            Some((prev_avg * prev_weight) + (effective_exit_price * new_weight));
-                    } else {
-                        pos.average_exit_price = Some(effective_exit_price);
-                    }
+                // Calculate new average exit price (weighted average)
+                let total_exited = pos.total_exited_amount;
+                if let Some(prev_avg) = pos.average_exit_price {
+                    let prev_weight = (total_exited - exit_amount) as f64 / total_exited as f64;
+                    let new_weight = exit_amount as f64 / total_exited as f64;
+                    pos.average_exit_price =
+                        Some((prev_avg * prev_weight) + (effective_exit_price * new_weight));
+                } else {
+                    pos.average_exit_price = Some(effective_exit_price);
+                }
 
-                    // Increment partial exit count
-                    pos.partial_exit_count += 1;
+                // Increment partial exit count
+                pos.partial_exit_count += 1;
 
-                    // Update SOL received (cumulative)
-                    pos.sol_received = Some(pos.sol_received.unwrap_or(0.0) + sol_received);
+                // Update SOL received (cumulative)
+                pos.sol_received = Some(pos.sol_received.unwrap_or(0.0) + sol_received);
 
-                    // CRITICAL: Do NOT set exit_time or exit_signature - position still open!
-                })
-                .await;
+                // CRITICAL: Do NOT set exit_time or exit_signature - position still open!
+            })
+            .await;
 
             if updated && requires_db_update {
                 if let Some(mut position) = get_position_by_id(position_id).await {

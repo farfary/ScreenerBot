@@ -213,7 +213,8 @@ pub fn msg_position_opened(
         format_sol(amount_sol),
         format_price(entry_price),
         format_tokens_f64(tokens),
-        html_escape(dex),    )
+        html_escape(dex),
+    )
 }
 
 /// Format position closed notification
@@ -681,9 +682,14 @@ mod tests {
 use crate::filtering::types::PassedToken;
 
 /// Format a page of tokens for pagination display
-pub fn format_tokens_page(tokens: &[PassedToken], page: usize, total_pages: usize, total_items: usize) -> String {
+pub fn format_tokens_page(
+    tokens: &[PassedToken],
+    page: usize,
+    total_pages: usize,
+    total_items: usize,
+) -> String {
     let mut text = String::new();
-    
+
     text.push_str(&format!("<b>🔍 Filter Results</b> ({})\n\n", total_items));
 
     if tokens.is_empty() {
@@ -694,7 +700,7 @@ pub fn format_tokens_page(tokens: &[PassedToken], page: usize, total_pages: usiz
     for token in tokens.iter() {
         let safe_symbol = html_escape(&token.symbol);
         let safe_name = html_escape(token.name.as_deref().unwrap_or("Unknown"));
-        
+
         text.push_str(&format!(
             "• <b>{}</b> ({})\n  <code>{}</code>\n  <a href=\"https://dexscreener.com/solana/{}\">DexScreener</a>\n\n",
             safe_symbol,

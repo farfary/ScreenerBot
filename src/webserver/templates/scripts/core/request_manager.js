@@ -166,7 +166,7 @@ class RequestManager {
             signal: controller.signal,
           });
 
-          clearTimeout(timeoutId);
+          // don't clear timeout until we have the body
 
           if (!response.ok) {
             this._recordFailure(endpoint);

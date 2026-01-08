@@ -292,7 +292,9 @@ impl FilterRejectionReason {
             FilterRejectionReason::GeckoTerminalPriceChange1hTooHigh => "1h price change too high",
             FilterRejectionReason::GeckoTerminalPriceChange1hMissing => "1h price change missing",
             FilterRejectionReason::GeckoTerminalPriceChange24hTooLow => "24h price change too low",
-            FilterRejectionReason::GeckoTerminalPriceChange24hTooHigh => "24h price change too high",
+            FilterRejectionReason::GeckoTerminalPriceChange24hTooHigh => {
+                "24h price change too high"
+            }
             FilterRejectionReason::GeckoTerminalPriceChange24hMissing => "24h price change missing",
             FilterRejectionReason::GeckoTerminalPoolCountTooLow => "Pool count too low",
             FilterRejectionReason::GeckoTerminalPoolCountTooHigh => "Pool count too high",

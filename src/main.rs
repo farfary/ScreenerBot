@@ -101,7 +101,10 @@ fn send_telegram_crash_notification(bot_token: &str, chat_id: &str, message: &st
     {
         Ok(c) => c,
         Err(e) => {
-            eprintln!("⚠️ Could not create HTTP client for crash notification: {}", e);
+            eprintln!(
+                "⚠️ Could not create HTTP client for crash notification: {}",
+                e
+            );
             return;
         }
     };
@@ -151,7 +154,8 @@ async fn main() {
 
     // Print banner
     println!("\x1b[36;1;3m");
-    println!(r#"
+    println!(
+        r#"
    ███████╗ ██████╗██████╗ ███████╗███████╗███╗   ██╗███████╗██████╗ ██████╗  ██████╗ ████████╗
    ██╔════╝██╔════╝██╔══██╗██╔════╝██╔════╝████╗  ██║██╔════╝██╔══██╗██╔══██╗██╔═══██╗╚══██╔══╝
    ███████╗██║     ██████╔╝█████╗  █████╗  ██╔██╗ ██║█████╗  ██████╔╝██████╔╝██║   ██║   ██║   
@@ -165,11 +169,16 @@ async fn main() {
                   Website: screenerbot.io           Channel: t.me/screenerbotio
                   Docs:    screenerbot.io/docs      Group:   t.me/screenerbotio_talk
                   X:       x.com/screenerbotio      Support: t.me/screenerbotio_support
-"#);
+"#
+    );
     println!("\x1b[0m");
 
     // Initialize logger
     screenerbot::logger::init();
+    info(
+        LogTag::System,
+        "Logger initialized, attempting to load config...",
+    );
 
     // Load configuration
     if let Err(e) = load_config() {
@@ -179,6 +188,7 @@ async fn main() {
         );
         return;
     }
+    info(LogTag::System, "Configuration loaded successfully");
 
     // Set up panic hook for crash notifications (after config is loaded)
     setup_panic_hook();
