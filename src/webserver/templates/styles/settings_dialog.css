@@ -2792,18 +2792,59 @@ button.link-button:hover {
 
 .discovery-instructions {
   display: flex;
-  align-items: center;
+  flex-direction: column;
   gap: var(--spacing-sm, 8px);
-  padding: var(--spacing-sm, 8px) var(--spacing-md, 12px);
+  padding: var(--spacing-md, 14px);
   background: var(--primary-alpha-10);
   border: 1px solid var(--primary-alpha-20);
-  border-radius: 6px;
-  color: var(--link-color);
+  border-radius: 8px;
   font-size: 0.85rem;
 }
 
-.discovery-instructions i {
-  font-size: 1.1rem;
+.discovery-step {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm, 8px);
+  color: var(--text-primary);
+}
+
+.step-number {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  background: var(--primary-color);
+  color: var(--bg-primary);
+  border-radius: 50%;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.discovery-info-box {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm, 8px);
+  padding: var(--spacing-sm, 8px) var(--spacing-md, 12px);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin: var(--spacing-xs, 4px) 0 var(--spacing-xs, 4px) 28px;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.discovery-info-box i {
+  color: var(--link-color);
+  font-size: 0.9rem;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.discovery-info-box strong {
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 .discovery-spinner {

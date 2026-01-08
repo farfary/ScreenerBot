@@ -227,6 +227,9 @@ pub const CREATE_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_tokens_blockchain_created ON tokens(blockchain_created_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_tokens_metadata_fetched ON tokens(metadata_last_fetched_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_tokens_symbol ON tokens(symbol)",
+    // Case-insensitive search indexes for symbol and name (improves dashboard search performance)
+    "CREATE INDEX IF NOT EXISTS idx_tokens_symbol_nocase ON tokens(symbol COLLATE NOCASE)",
+    "CREATE INDEX IF NOT EXISTS idx_tokens_name_nocase ON tokens(name COLLATE NOCASE)",
 
     // DexScreener market data indexes
     "CREATE INDEX IF NOT EXISTS idx_market_dex_last_fetch ON market_dexscreener(market_data_last_fetched_at DESC)",

@@ -60,7 +60,7 @@ const TIME_RANGE_PRESETS = {
   "6h": { label: "6H", seconds: 6 * 60 * 60 },
   "24h": { label: "24H", seconds: 24 * 60 * 60 },
   "7d": { label: "7D", seconds: 7 * 24 * 60 * 60 },
-  "all": { label: "All", seconds: null },
+  all: { label: "All", seconds: null },
 };
 
 let tabBar = null;
@@ -85,7 +85,7 @@ function formatTimestampForInput(timestamp) {
 async function setTimeRangePreset(preset) {
   const now = Math.floor(Date.now() / 1000);
   state.timeRange.preset = preset;
-  
+
   if (preset === "all" || preset === "custom") {
     state.timeRange.startTime = null;
     state.timeRange.endTime = null;
@@ -93,16 +93,16 @@ async function setTimeRangePreset(preset) {
     state.timeRange.startTime = now - TIME_RANGE_PRESETS[preset].seconds;
     state.timeRange.endTime = now;
   }
-  
+
   // Persist all time range state
   AppState.save("filtering_timeRangePreset", preset);
   AppState.save("filtering_timeRangeStart", state.timeRange.startTime);
   AppState.save("filtering_timeRangeEnd", state.timeRange.endTime);
-  
+
   // Show loading state immediately
   state.isLoadingAnalytics = true;
   render();
-  
+
   try {
     await loadAnalytics();
   } finally {
@@ -893,7 +893,7 @@ async function fetchAnalytics() {
   // Build URL with time range parameters if set
   let url = "/api/filtering/analytics";
   const params = new URLSearchParams();
-  
+
   if (state.timeRange.startTime) {
     params.set("start_time", state.timeRange.startTime.toString());
   }
@@ -903,12 +903,12 @@ async function fetchAnalytics() {
   if (state.timeRange.preset && state.timeRange.preset !== "all") {
     params.set("preset", state.timeRange.preset);
   }
-  
+
   const queryString = params.toString();
   if (queryString) {
     url += "?" + queryString;
   }
-  
+
   return await requestManager.fetch(url, {
     priority: "normal",
   });
@@ -1087,14 +1087,15 @@ function renderAnalyticsView() {
   }
 
   const data = state.analytics;
-  
+
   // Time range info text
-  const timeRangeText = state.timeRange.preset === "all" 
-    ? "Showing all-time rejection statistics" 
-    : state.timeRange.preset === "custom"
-      ? "Showing rejections from custom range"
-      : `Showing rejections from last ${TIME_RANGE_PRESETS[state.timeRange.preset]?.label || "period"}`;
-  
+  const timeRangeText =
+    state.timeRange.preset === "all"
+      ? "Showing all-time rejection statistics"
+      : state.timeRange.preset === "custom"
+        ? "Showing rejections from custom range"
+        : `Showing rejections from last ${TIME_RANGE_PRESETS[state.timeRange.preset]?.label || "period"}`;
+
   // Header with time range filter (no refresh button - use footer refresh)
   const headerHtml = `
     <div class="analytics-header">
@@ -1188,7 +1189,11 @@ function renderAnalyticsView() {
           <div class="chart-title"><i class="icon-layers"></i> Rejection by Category</div>
         </div>
         <div class="chart-body">
-          ${data.by_category && data.by_category.length > 0 ? data.by_category.map(cat => `
+          ${
+            data.by_category && data.by_category.length > 0
+              ? data.by_category
+                  .map(
+                    (cat) => `
             <div class="bar-chart-row">
               <div class="bar-label-col">
                 <div class="bar-icon"><i class="icon-${Utils.escapeHtml(cat.icon)}"></i></div>
@@ -1204,7 +1209,11 @@ function renderAnalyticsView() {
                 </div>
               </div>
             </div>
-          `).join("") : '<div class="analytics-empty">No category data</div>'}
+          `
+                  )
+                  .join("")
+              : '<div class="analytics-empty">No category data</div>'
+          }
         </div>
       </div>
 
@@ -1214,7 +1223,11 @@ function renderAnalyticsView() {
           <div class="chart-title"><i class="icon-git-branch"></i> Rejection by Source</div>
         </div>
         <div class="chart-body">
-          ${data.by_source && data.by_source.length > 0 ? data.by_source.map(src => `
+          ${
+            data.by_source && data.by_source.length > 0
+              ? data.by_source
+                  .map(
+                    (src) => `
             <div class="bar-chart-row">
               <div class="bar-label-col">
                 <div class="bar-label font-bold w-auto">${Utils.escapeHtml(src.source)}</div>
@@ -1229,7 +1242,11 @@ function renderAnalyticsView() {
                 </div>
               </div>
             </div>
-          `).join("") : '<div class="analytics-empty">No source data</div>'}
+          `
+                  )
+                  .join("")
+              : '<div class="analytics-empty">No source data</div>'
+          }
         </div>
       </div>
     </div>
@@ -1255,10 +1272,14 @@ function renderAnalyticsView() {
               </tr>
             </thead>
             <tbody>
-              ${data.top_reasons && data.top_reasons.length > 0 ? data.top_reasons.slice(0, 10).map(r => {
-                const maxCount = data.top_reasons[0].count;
-                const relativePercent = (r.count / maxCount) * 100;
-                return `
+              ${
+                data.top_reasons && data.top_reasons.length > 0
+                  ? data.top_reasons
+                      .slice(0, 10)
+                      .map((r) => {
+                        const maxCount = data.top_reasons[0].count;
+                        const relativePercent = (r.count / maxCount) * 100;
+                        return `
                   <tr>
                     <td>
                       <span class="font-medium">${Utils.escapeHtml(r.display_label)}</span>
@@ -1279,7 +1300,10 @@ function renderAnalyticsView() {
                     </td>
                   </tr>
                 `;
-              }).join("") : '<tr><td colspan="5" class="text-center p-20">No data available</td></tr>'}
+                      })
+                      .join("")
+                  : '<tr><td colspan="5" class="text-center p-20">No data available</td></tr>'
+              }
             </tbody>
           </table>
         </div>
@@ -1319,12 +1343,17 @@ function renderExplorerDashboard(data) {
         <div class="dashboard-card">
           <h3><i class="icon-trending-down"></i> Top Reasons</h3>
           <div class="top-reasons-list">
-            ${topReasons.slice(0, 10).map(r => `
+            ${topReasons
+              .slice(0, 10)
+              .map(
+                (r) => `
               <div class="top-reason-item" onclick="window.filteringPage.selectReason('${r.reason}', '${Utils.escapeHtml(r.display_label.replace(/'/g, "\\'"))}')">
                 <span class="top-reason-label">${Utils.escapeHtml(r.display_label)}</span>
                 <span class="top-reason-count">${Utils.formatNumber(r.count, 0)}</span>
               </div>
-            `).join("")}
+            `
+              )
+              .join("")}
             ${topReasons.length === 0 ? '<div class="analytics-empty-compact">No data</div>' : ""}
           </div>
         </div>
@@ -1332,7 +1361,10 @@ function renderExplorerDashboard(data) {
         <div class="dashboard-card">
           <h3><i class="icon-clock"></i> Recent</h3>
           <div class="top-reasons-list">
-            ${recentRejections.slice(0, 10).map(t => `
+            ${recentRejections
+              .slice(0, 10)
+              .map(
+                (t) => `
               <div class="top-reason-item" onclick="window.filteringPage.selectReason('${t.reason}', '${Utils.escapeHtml(t.display_label.replace(/'/g, "\\'"))}')">
                 <div class="flex-col min-w-0">
                   <span class="top-reason-label truncate">${Utils.escapeHtml(t.symbol || "Unknown")}</span>
@@ -1340,7 +1372,9 @@ function renderExplorerDashboard(data) {
                 </div>
                 <span class="top-reason-count">${Utils.formatTimeAgo(new Date(t.rejected_at))}</span>
               </div>
-            `).join("")}
+            `
+              )
+              .join("")}
             ${recentRejections.length === 0 ? '<div class="analytics-empty-compact">No recent</div>' : ""}
           </div>
         </div>
@@ -1381,7 +1415,9 @@ function renderExplorerView() {
         </div>
 
         <div class="explorer-tree">
-          ${data.by_category.map(cat => `
+          ${data.by_category
+            .map(
+              (cat) => `
             <div class="tree-category" data-category="${cat.category}">
               <div class="tree-category-header" onclick="window.filteringPage.toggleCategory('${cat.category}')">
                 <i class="icon-${Utils.escapeHtml(cat.icon)} tree-icon"></i>
@@ -1390,7 +1426,9 @@ function renderExplorerView() {
                 <i class="icon-chevron-down tree-toggle" id="toggle-${cat.category}"></i>
               </div>
               <div class="tree-reasons" id="reasons-${cat.category}" style="display: none">
-                ${cat.reasons.map(r => `
+                ${cat.reasons
+                  .map(
+                    (r) => `
                   <div class="tree-reason ${window.filteringPage.currentReason === r.reason ? "active" : ""}" 
                        onclick="window.filteringPage.selectReason('${r.reason}', '${Utils.escapeHtml(r.display_label.replace(/'/g, "\\'"))}')" 
                        id="reason-${r.reason}"
@@ -1398,10 +1436,14 @@ function renderExplorerView() {
                     <span class="tree-reason-label">${Utils.escapeHtml(r.display_label)}</span>
                     <span class="tree-reason-count">${Utils.formatCompactNumber(r.count)}</span>
                   </div>
-                `).join("")}
+                `
+                  )
+                  .join("")}
               </div>
             </div>
-          `).join("")}
+          `
+            )
+            .join("")}
         </div>
       </div>
       <div class="explorer-content">
@@ -1603,7 +1645,9 @@ function renderSourceToggle(source) {
 
 function renderSearchBar() {
   // Only show search bar on settings tabs (not status/analytics/explorer)
-  const isSettingsTab = ["meta", "dexscreener", "geckoterminal", "rugcheck"].includes(state.activeTab);
+  const isSettingsTab = ["meta", "dexscreener", "geckoterminal", "rugcheck"].includes(
+    state.activeTab
+  );
   if (!isSettingsTab) {
     return "";
   }
@@ -1714,10 +1758,10 @@ function updateSearchBar() {
 
   const html = renderSearchBar();
   container.innerHTML = html;
-  
+
   // Hide the container if no content
   container.style.display = html ? "" : "none";
-  
+
   if (html) {
     bindSearchHandler();
     bindSourceToggleHandlers();
@@ -2001,7 +2045,7 @@ async function loadStats() {
     ]);
     state.stats = statsResponse.data || statsResponse;
     state.rejectionStats = rejectionStatsResponse.data || rejectionStatsResponse;
-    
+
     // Also load analytics if on analytics tab
     if (state.activeTab === "analytics") {
       await loadAnalytics();
@@ -2015,15 +2059,15 @@ async function loadStats() {
 async function loadAnalytics() {
   // Increment request ID to track this request and prevent race conditions
   const thisRequestId = ++state.analyticsRequestId;
-  
+
   try {
     const response = await fetchAnalytics();
-    
+
     // Check if this is still the latest request (prevent stale data from overwriting)
     if (thisRequestId !== state.analyticsRequestId) {
       return; // A newer request was made, discard this response
     }
-    
+
     state.analytics = response.data || response;
     // Re-render to show analytics data
     updateConfigPanels({ preserveScroll: false });
@@ -2038,12 +2082,12 @@ async function loadAnalytics() {
 
 async function loadData() {
   await Promise.all([loadConfig(), loadStats()]);
-  
+
   // If active tab is analytics or explorer, load analytics data
   if (state.activeTab === "analytics" || state.activeTab === "explorer") {
     await loadAnalytics();
   }
-  
+
   render();
 }
 
@@ -2057,9 +2101,12 @@ export function createLifecycle() {
   return {
     async init() {
       console.log("[Filtering] Initializing");
-      
+
       // Validate time range state consistency - if preset is "custom" but times are null, reset to "all"
-      if (state.timeRange.preset === "custom" && (!state.timeRange.startTime || !state.timeRange.endTime)) {
+      if (
+        state.timeRange.preset === "custom" &&
+        (!state.timeRange.startTime || !state.timeRange.endTime)
+      ) {
         console.warn("[Filtering] Inconsistent time range state detected, resetting to 'all'");
         state.timeRange.preset = "all";
         state.timeRange.startTime = null;
@@ -2068,7 +2115,7 @@ export function createLifecycle() {
         AppState.save("filtering_timeRangeStart", null);
         AppState.save("filtering_timeRangeEnd", null);
       }
-      
+
       await loadData();
     },
 
@@ -2087,12 +2134,12 @@ export function createLifecycle() {
             state.activeTab = tabId;
             AppState.save("filtering_activeTab", tabId);
             updateSearchBar();
-            
+
             // Load analytics data if switching to analytics or explorer tab
             if ((tabId === "analytics" || tabId === "explorer") && !state.analytics) {
               await loadAnalytics();
             }
-            
+
             updateConfigPanels({ scrollTop: 0 });
           },
         });
@@ -2112,7 +2159,7 @@ export function createLifecycle() {
         ctx.manageTabBar(tabBar);
         // Ensure registry is up to date in case of page reload/HMR
         TabBarManager.register("filtering", tabBar);
-        
+
         // Force show in next frame to ensure DOM is ready and override any race conditions
         requestAnimationFrame(() => {
           if (tabBar) tabBar.show({ force: true });
@@ -2167,14 +2214,14 @@ window.filteringPage = {
   currentReason: null,
   currentReasonLabel: null,
   tokenSearchQuery: "",
-  
+
   debouncedFilterTokens: null,
 
   // Time range filter functions
   setTimeRangePreset: (preset) => {
     setTimeRangePreset(preset);
   },
-  
+
   toggleCustomRange: () => {
     if (state.timeRange.preset === "custom") {
       // Already in custom mode, toggle off to all
@@ -2186,7 +2233,7 @@ window.filteringPage = {
       render();
     }
   },
-  
+
   updateCustomRange: () => {
     // Just update state without triggering refresh yet
     const startInput = document.getElementById("time-range-start");
@@ -2198,54 +2245,54 @@ window.filteringPage = {
       state.timeRange.endTime = Math.floor(new Date(endInput.value).getTime() / 1000);
     }
   },
-  
+
   applyCustomRange: async () => {
     const startInput = document.getElementById("time-range-start");
     const endInput = document.getElementById("time-range-end");
-    
+
     // Parse dates
     let startTime = null;
     let endTime = null;
-    
+
     if (startInput && startInput.value) {
       startTime = Math.floor(new Date(startInput.value).getTime() / 1000);
     }
     if (endInput && endInput.value) {
       endTime = Math.floor(new Date(endInput.value).getTime() / 1000);
     }
-    
+
     // Validation: ensure both dates are provided
     if (!startTime || !endTime) {
       Utils.showToast("Please select both start and end dates", "error");
       return;
     }
-    
+
     // Validation: start must be before end
     if (startTime >= endTime) {
       Utils.showToast("Start time must be before end time", "error");
       return;
     }
-    
+
     // Validation: end cannot be in the future (with 1 minute tolerance)
     const now = Math.floor(Date.now() / 1000);
     if (endTime > now + 60) {
       Utils.showToast("End time cannot be in the future", "error");
       return;
     }
-    
+
     state.timeRange.startTime = startTime;
     state.timeRange.endTime = endTime;
     state.timeRange.preset = "custom";
-    
+
     // Persist all state
     AppState.save("filtering_timeRangePreset", "custom");
     AppState.save("filtering_timeRangeStart", startTime);
     AppState.save("filtering_timeRangeEnd", endTime);
-    
+
     // Show loading state
     state.isLoadingAnalytics = true;
     render();
-    
+
     try {
       await loadAnalytics();
     } finally {
@@ -2260,7 +2307,7 @@ window.filteringPage = {
     // The footer refresh button and isLoadingAnalytics state handle UX
     state.isLoadingAnalytics = true;
     render();
-    
+
     try {
       await loadAnalytics();
       if (window.filteringPage.currentReason) {
@@ -2276,25 +2323,25 @@ window.filteringPage = {
       render();
     }
   },
-  
+
   debouncedFilterExplorerTree: null,
 
   filterExplorerTree: (query) => {
     if (!window.filteringPage.debouncedFilterExplorerTree) {
       window.filteringPage.debouncedFilterExplorerTree = Utils.debounce((q) => {
         const lowerQ = q.toLowerCase();
-        document.querySelectorAll(".tree-category").forEach(cat => {
+        document.querySelectorAll(".tree-category").forEach((cat) => {
           let hasVisibleReason = false;
           const reasons = cat.querySelectorAll(".tree-reason");
-          reasons.forEach(r => {
+          reasons.forEach((r) => {
             const label = r.getAttribute("data-label") || "";
             const visible = label.includes(lowerQ);
             r.style.display = visible ? "flex" : "none";
             if (visible) hasVisibleReason = true;
           });
-          
-          cat.style.display = (hasVisibleReason || lowerQ === "") ? "block" : "none";
-          
+
+          cat.style.display = hasVisibleReason || lowerQ === "" ? "block" : "none";
+
           // Auto-expand if searching
           const reasonsList = cat.querySelector(".tree-reasons");
           const toggle = cat.querySelector(".tree-toggle");
@@ -2311,17 +2358,17 @@ window.filteringPage = {
   selectSummary: () => {
     window.filteringPage.currentReason = null;
     window.filteringPage.currentReasonLabel = null;
-    
-    document.querySelectorAll(".tree-reason").forEach(el => el.classList.remove("active"));
+
+    document.querySelectorAll(".tree-reason").forEach((el) => el.classList.remove("active"));
     const summaryItem = document.querySelector(".explorer-summary-item");
     if (summaryItem) summaryItem.classList.add("active");
-    
+
     const container = document.getElementById("explorer-detail-view");
     if (container && state.analytics) {
       container.innerHTML = renderExplorerDashboard(state.analytics);
     }
   },
-  
+
   toggleCategory: (category) => {
     const el = document.getElementById(`reasons-${category}`);
     const toggle = document.getElementById(`toggle-${category}`);
@@ -2333,13 +2380,13 @@ window.filteringPage = {
       }
     }
   },
-  
+
   selectReason: (reason, label) => {
     // Update active state
-    document.querySelectorAll(".tree-reason").forEach(el => el.classList.remove("active"));
+    document.querySelectorAll(".tree-reason").forEach((el) => el.classList.remove("active"));
     const summaryItem = document.querySelector(".explorer-summary-item");
     if (summaryItem) summaryItem.classList.remove("active");
-    
+
     const activeEl = document.getElementById(`reason-${reason}`);
     if (activeEl) {
       activeEl.classList.add("active");
@@ -2352,13 +2399,13 @@ window.filteringPage = {
         if (toggle) toggle.style.transform = "rotate(180deg)";
       }
     }
-    
+
     window.filteringPage.currentReason = reason;
     window.filteringPage.currentReasonLabel = label;
     window.filteringPage.tokenSearchQuery = "";
     window.filteringPage.loadExplorer(0);
   },
-  
+
   filterTokens: (query) => {
     if (!window.filteringPage.debouncedFilterTokens) {
       window.filteringPage.debouncedFilterTokens = Utils.debounce((q) => {
@@ -2380,7 +2427,7 @@ window.filteringPage = {
       window.filteringPage.loadExplorer(window.filteringPage.explorerPage - 1);
     }
   },
-  
+
   nextPage: () => {
     window.filteringPage.loadExplorer(window.filteringPage.explorerPage + 1);
   },
@@ -2390,7 +2437,7 @@ window.filteringPage = {
     const limit = window.filteringPage.explorerLimit;
     const reason = window.filteringPage.currentReason;
     if (!reason) return;
-    
+
     // Estimate last page by fetching with large offset
     let testPage = window.filteringPage.explorerPage + 100;
     try {
@@ -2398,7 +2445,7 @@ window.filteringPage = {
       const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch tokens");
       const tokens = await response.json();
-      
+
       if (tokens.length === 0) {
         // Binary search for actual last page
         let low = window.filteringPage.explorerPage;
@@ -2432,24 +2479,24 @@ window.filteringPage = {
       window.filteringPage.loadExplorer(window.filteringPage.explorerPage + 10);
     }
   },
-  
+
   exportCsv: () => {
     const reason = window.filteringPage.currentReason;
     if (!reason) return;
-    
+
     let url = `/api/filtering/export-rejected-tokens?reason=${encodeURIComponent(reason)}`;
     window.open(url, "_blank");
   },
-  
+
   loadExplorer: async (page) => {
     window.filteringPage.explorerPage = page;
     const container = document.getElementById("explorer-detail-view");
     const reason = window.filteringPage.currentReason;
     const label = window.filteringPage.currentReasonLabel;
     const searchQuery = window.filteringPage.tokenSearchQuery;
-    
+
     if (!container || !reason) return;
-    
+
     // Initial render with compact header and search
     if (page === 0 && !container.querySelector(".explorer-detail-header")) {
       container.innerHTML = `
@@ -2481,21 +2528,22 @@ window.filteringPage = {
       `;
     } else {
       const wrapper = container.querySelector(".explorer-table-wrapper");
-      if (wrapper) wrapper.innerHTML = '<div class="loading-spinner small explorer-loading-full"></div>';
+      if (wrapper)
+        wrapper.innerHTML = '<div class="loading-spinner small explorer-loading-full"></div>';
     }
-    
+
     try {
       let url = `/api/filtering/rejected-tokens?limit=${window.filteringPage.explorerLimit}&offset=${page * window.filteringPage.explorerLimit}&reason=${encodeURIComponent(reason)}`;
       if (searchQuery) {
         url += `&search=${encodeURIComponent(searchQuery)}`;
       }
-      
+
       const response = await fetch(url);
       if (!response.ok) throw new Error("Failed to fetch tokens");
-      
+
       const tokens = await response.json();
       const wrapper = container.querySelector(".explorer-table-wrapper");
-      
+
       if (!wrapper) return;
 
       if (tokens.length === 0) {
@@ -2516,7 +2564,7 @@ window.filteringPage = {
         }
         return;
       }
-      
+
       let html = `
         <table class="reasons-table">
           <thead>
@@ -2528,16 +2576,17 @@ window.filteringPage = {
           </thead>
           <tbody>
       `;
-      
-      html += tokens.map(t => {
-        const src = t.image_url;
-        const logo = src
-          ? `<img class="token-logo" alt="" src="${Utils.escapeHtml(src)}" loading="lazy" />`
-          : '<div class="token-logo token-logo-placeholder">?</div>';
-        const sym = Utils.escapeHtml(t.symbol || "—");
-        const name = Utils.escapeHtml(t.name || "Unknown");
-        
-        return `
+
+      html += tokens
+        .map((t) => {
+          const src = t.image_url;
+          const logo = src
+            ? `<img class="token-logo" alt="" src="${Utils.escapeHtml(src)}" loading="lazy" />`
+            : '<div class="token-logo token-logo-placeholder">?</div>';
+          const sym = Utils.escapeHtml(t.symbol || "—");
+          const name = Utils.escapeHtml(t.name || "Unknown");
+
+          return `
         <tr>
           <td>
             <div class="token-info-cell">
@@ -2565,7 +2614,9 @@ window.filteringPage = {
             ${Utils.formatTimeAgo(new Date(t.rejected_at))}
           </td>
         </tr>
-      `;}).join("");
+      `;
+        })
+        .join("");
 
       html += "</tbody></table>";
       wrapper.innerHTML = html;
@@ -2582,7 +2633,6 @@ window.filteringPage = {
           <button class="page-btn" onclick="window.filteringPage.lastPage()" ${!hasMore ? "disabled" : ""} title="Last"><i class="icon-chevrons-right"></i></button>
         `;
       }
-      
     } catch (err) {
       console.error("Failed to load explorer:", err);
       const wrapper = container.querySelector(".explorer-table-wrapper");
@@ -2590,7 +2640,7 @@ window.filteringPage = {
         wrapper.innerHTML = `<div class="error-message p-lg">Failed to load tokens: ${err.message}</div>`;
       }
     }
-  }
+  },
 };
 
 // Register the page with the lifecycle system

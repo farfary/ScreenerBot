@@ -731,7 +731,7 @@ export class TokenDetailsDialog {
     if (badgesContainer && badgesRow) {
       const badges = [];
       if (token.verified) badges.push('<span class="badge badge-success">Verified</span>');
-      
+
       // Mutable/Immutable badge
       if (token.is_mutable === false) {
         badges.push('<span class="badge badge-success">Immutable</span>');
@@ -742,8 +742,10 @@ export class TokenDetailsDialog {
       // Update Authority badge
       if (token.update_authority) {
         const auth = token.update_authority;
-        const trunc = auth.slice(0, 4) + '...' + auth.slice(-4);
-        badges.push(`<span class="badge badge-secondary" title="Update Authority: ${auth}">Auth: ${trunc}</span>`);
+        const trunc = auth.slice(0, 4) + "..." + auth.slice(-4);
+        badges.push(
+          `<span class="badge badge-secondary" title="Update Authority: ${auth}">Auth: ${trunc}</span>`
+        );
       }
 
       if (token.has_open_position) badges.push('<span class="badge badge-info">Position</span>');
@@ -760,12 +762,12 @@ export class TokenDetailsDialog {
     if (lastUpdatedEl) {
       const marketFetchedAt = token.market_data_last_fetched_at;
       const poolFetchedAt = token.pool_price_last_calculated_at;
-      
+
       // Use the most recent timestamp
       let lastTs = 0;
       if (marketFetchedAt && marketFetchedAt > lastTs) lastTs = marketFetchedAt;
       if (poolFetchedAt && poolFetchedAt > lastTs) lastTs = poolFetchedAt;
-      
+
       if (lastTs > 0) {
         // Convert timestamp (seconds or milliseconds) to relative time
         // If it's very large, assume ms, but DB usually stores ms or sec.
@@ -775,16 +777,16 @@ export class TokenDetailsDialog {
         // Check if timestamp is likely seconds (less than 2030 in s)
         const tsMs = lastTs < 2000000000 ? lastTs * 1000 : lastTs;
         const diff = Math.max(0, now - tsMs);
-        
+
         let timeStr = "";
         if (diff < 60000) {
-           timeStr = "Just now";
+          timeStr = "Just now";
         } else if (diff < 3600000) {
-           timeStr = Math.floor(diff / 60000) + "m ago";
+          timeStr = Math.floor(diff / 60000) + "m ago";
         } else {
-           timeStr = new Date(tsMs).toLocaleTimeString();
+          timeStr = new Date(tsMs).toLocaleTimeString();
         }
-        
+
         lastUpdatedEl.textContent = `Updated: ${timeStr}`;
       } else {
         lastUpdatedEl.textContent = "";
@@ -1420,8 +1422,10 @@ export class TokenDetailsDialog {
 
     const m5 = txns.m5;
     const h1 = txns.h1;
-    const total5m = (typeof m5?.buys === "number" ? m5.buys : 0) + (typeof m5?.sells === "number" ? m5.sells : 0);
-    const total1h = (typeof h1?.buys === "number" ? h1.buys : 0) + (typeof h1?.sells === "number" ? h1.sells : 0);
+    const total5m =
+      (typeof m5?.buys === "number" ? m5.buys : 0) + (typeof m5?.sells === "number" ? m5.sells : 0);
+    const total1h =
+      (typeof h1?.buys === "number" ? h1.buys : 0) + (typeof h1?.sells === "number" ? h1.sells : 0);
     const rate5m = total5m / 5;
     const rate1h = total1h / 60;
     const spikeFactor = rate1h > 0 ? rate5m / rate1h : null;
@@ -1433,7 +1437,8 @@ export class TokenDetailsDialog {
           ? `+${Utils.formatNumber(netFlow24h, { decimals: 0 })}`
           : Utils.formatNumber(netFlow24h, { decimals: 0 })
         : "—";
-    const netFlowClass = typeof netFlow24h === "number" ? (netFlow24h >= 0 ? "positive" : "negative") : "";
+    const netFlowClass =
+      typeof netFlow24h === "number" ? (netFlow24h >= 0 ? "positive" : "negative") : "";
 
     return `
       <div class="info-card compact">
@@ -1534,7 +1539,8 @@ export class TokenDetailsDialog {
     const sellText = typeof sells === "number" ? Utils.formatNumber(sells, { decimals: 0 }) : "—";
     const ratePerMin = minutes && total >= 0 ? total / minutes : null;
     const rateText = hasAny ? `${Utils.formatNumber(ratePerMin ?? 0, { decimals: 1 })}/m` : "—";
-    const pctText = total > 0 ? `${buyPct.toFixed(0)}% / ${sellPct.toFixed(0)}%` : hasAny ? "0% / 0%" : "—";
+    const pctText =
+      total > 0 ? `${buyPct.toFixed(0)}% / ${sellPct.toFixed(0)}%` : hasAny ? "0% / 0%" : "—";
 
     return `
       <div class="txn-row" title="${countsTitle}">
@@ -1722,7 +1728,11 @@ export class TokenDetailsDialog {
     const items = [];
 
     if (token.token_type) {
-      items.push({ label: "Token Type", value: token.token_type, icon: '<i class="icon-box"></i>' });
+      items.push({
+        label: "Token Type",
+        value: token.token_type,
+        icon: '<i class="icon-box"></i>',
+      });
     }
 
     if (token.total_holders !== null && token.total_holders !== undefined) {
@@ -1763,7 +1773,7 @@ export class TokenDetailsDialog {
             <div class="bento-label">${item.label}</div>
             <div class="bento-value">${item.value}</div>
           </div>
-        `,
+        `
           )
           .join("")}
       </div>
@@ -1821,7 +1831,10 @@ export class TokenDetailsDialog {
   }
 
   _buildHoldersCard(token) {
-    const top10Pct = token.top_10_holders_pct !== undefined ? token.top_10_holders_pct : token.top_10_concentration;
+    const top10Pct =
+      token.top_10_holders_pct !== undefined
+        ? token.top_10_holders_pct
+        : token.top_10_concentration;
     const creatorPct = token.creator_balance_pct;
 
     // Determine concentration risk level
@@ -1864,14 +1877,18 @@ export class TokenDetailsDialog {
                    </div>
                 </div>
                 
-                ${creatorPct !== null && creatorPct !== undefined ? `
+                ${
+                  creatorPct !== null && creatorPct !== undefined
+                    ? `
                 <div class="holder-stat-item">
                    <div style="font-size: 10px; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 2px;">Creator Share</div>
-                   <div style="font-weight: 700; font-size: 16px; color: ${creatorPct > 10 ? 'var(--error-color)' : 'var(--success-color)'};">
+                   <div style="font-weight: 700; font-size: 16px; color: ${creatorPct > 10 ? "var(--error-color)" : "var(--success-color)"};">
                       ${creatorPct.toFixed(2)}%
                    </div>
                 </div>
-                ` : ''}
+                `
+                    : ""
+                }
              </div>
            </div>
         </div>
@@ -1880,23 +1897,24 @@ export class TokenDetailsDialog {
   }
 
   _buildHolderGauge(percent, colorClass) {
-     if (percent === null || percent === undefined) return `
+    if (percent === null || percent === undefined)
+      return `
         <div class="gauge-placeholder" style="width:90px;height:90px;display:flex;align-items:center;justify-content:center;color:var(--text-secondary);background:var(--bg-secondary);border-radius:50%;border:1px dashed var(--border-color);">
             <span style="font-size: 20px; opacity: 0.5;">?</span>
         </div>`;
-     
-     const p = Math.min(100, Math.max(0, percent));
-     const r = 38;
-     const c = 2 * Math.PI * r;
-     const off = c - (p / 100) * c;
-     
-     // Color mapping
-     let strokeColor = "var(--success-color)";
-     if (colorClass === 'danger') strokeColor = "var(--error-color)";
-     if (colorClass === 'warning') strokeColor = "#d29922";
-     if (colorClass === 'moderate') strokeColor = "#db6d28";
-     
-     return `
+
+    const p = Math.min(100, Math.max(0, percent));
+    const r = 38;
+    const c = 2 * Math.PI * r;
+    const off = c - (p / 100) * c;
+
+    // Color mapping
+    let strokeColor = "var(--success-color)";
+    if (colorClass === "danger") strokeColor = "var(--error-color)";
+    if (colorClass === "warning") strokeColor = "#d29922";
+    if (colorClass === "moderate") strokeColor = "#db6d28";
+
+    return `
         <div class="gauge-wrapper" style="position:relative; width:90px; height:90px;">
              <svg width="90" height="90" viewBox="0 0 90 90" style="transform: rotate(-90deg);">
               <circle cx="45" cy="45" r="${r}" fill="none" stroke="var(--bg-secondary)" stroke-width="8"></circle>
@@ -1982,24 +2000,29 @@ export class TokenDetailsDialog {
       const limit = Math.min(topHolders.length, 10);
       concentration = topHolders.slice(0, limit).reduce((sum, h) => sum + (h.percentage || 0), 0);
     }
-    
+
     // Top 3 Podium
     const top3 = topHolders.slice(0, 3);
     const podiumHtml = `
       <div class="holders-podium small" style="margin: 20px 0;">
-        ${[1, 0, 2].map(idx => {
-          const h = top3[idx];
-          if (!h) return '<div class="podium-spot empty"></div>';
-          const name = h.owner_type && h.owner_type.length < 15 ? h.owner_type : this._formatShortAddress(h.address);
-          return `
+        ${[1, 0, 2]
+          .map((idx) => {
+            const h = top3[idx];
+            if (!h) return '<div class="podium-spot empty"></div>';
+            const name =
+              h.owner_type && h.owner_type.length < 15
+                ? h.owner_type
+                : this._formatShortAddress(h.address);
+            return `
             <div class="podium-spot rank-${idx + 1}" title="${h.address}">
-              <div class="podium-avatar">${(idx + 1) === 1 ? '<i class="icon-crown"></i>' : (idx + 1)}</div>
+              <div class="podium-avatar">${idx + 1 === 1 ? '<i class="icon-crown"></i>' : idx + 1}</div>
               <div class="podium-value">${h.percentage.toFixed(1)}%</div>
               <div class="podium-pedestal"></div>
               <div class="podium-name">${name}</div>
             </div>
           `;
-        }).join('')}
+          })
+          .join("")}
       </div>
     `;
 
@@ -2010,12 +2033,14 @@ export class TokenDetailsDialog {
         const ownerLabel = holder.owner_type || "";
         const badges = [];
         if (holder.is_insider) badges.push('<span class="insider-badge">Insider</span>');
-        
+
         if (ownerLabel) {
           const isAddress = ownerLabel.length > 30 && !ownerLabel.includes(" ");
           const displayLabel = isAddress ? this._formatShortAddress(ownerLabel) : ownerLabel;
           const cssClass = isAddress ? "owner-badge address-badge" : "owner-badge";
-          badges.push(`<span class="${cssClass}" title="${this._escapeHtml(ownerLabel)}">${this._escapeHtml(displayLabel)}</span>`);
+          badges.push(
+            `<span class="${cssClass}" title="${this._escapeHtml(ownerLabel)}">${this._escapeHtml(displayLabel)}</span>`
+          );
         }
 
         return `
@@ -2028,7 +2053,8 @@ export class TokenDetailsDialog {
             <div class="holder-share">${holder.percentage.toFixed(2)}%</div>
           </div>
         `;
-      }).join("");
+      })
+      .join("");
 
     return `
       <div class="security-card main-holders-card" style="--i:3.5">
@@ -2073,7 +2099,8 @@ export class TokenDetailsDialog {
       .map((risk, idx) => {
         const level = risk.level?.toLowerCase() || "info";
         const riskClass = level === "danger" ? "risk-danger" : level === "warn" ? "risk-warn" : "";
-        const icon = level === "danger" ? '<i class="icon-ban"></i>' : '<i class="icon-alert-triangle"></i>';
+        const icon =
+          level === "danger" ? '<i class="icon-ban"></i>' : '<i class="icon-alert-triangle"></i>';
 
         return `
         <div class="risk-row ${riskClass}" style="--i:${idx}">
@@ -3100,18 +3127,20 @@ export class TokenDetailsDialog {
 
     try {
       // Fetch 24h of transactions (limit 1000 usually enough for chart unless very high volume)
-      const response = await requestManager.fetch(`/api/tokens/${this.tokenData.mint}/transactions?limit=1000`);
-      
+      const response = await requestManager.fetch(
+        `/api/tokens/${this.tokenData.mint}/transactions?limit=1000`
+      );
+
       if (response && response.success) {
         const transactions = response.data || [];
         content.innerHTML = this._buildTransactionsHTML();
-        
+
         // Wait for DOM
         setTimeout(() => {
           this._renderTransactionsChart(transactions);
           this._renderTransactionsList(transactions);
         }, 50);
-        
+
         content.dataset.loaded = "true";
       } else {
         content.innerHTML = '<div class="empty-state">No transaction data available</div>';
@@ -3148,54 +3177,54 @@ export class TokenDetailsDialog {
     const buckets = {};
     const now = Math.floor(Date.now() / 1000);
     const start = now - 24 * 3600;
-    
+
     // Initialize buckets
     for (let i = 0; i < 24; i++) {
-       const ts = start + i * 3600;
-       const hourKey = Math.floor(ts / 3600) * 3600;
-       buckets[hourKey] = { time: hourKey, value: 0 };
+      const ts = start + i * 3600;
+      const hourKey = Math.floor(ts / 3600) * 3600;
+      buckets[hourKey] = { time: hourKey, value: 0 };
     }
 
-    transactions.forEach(tx => {
-       // Use timestamp (ISO string from backend)
-       const date = new Date(tx.timestamp);
-       const ts = date.getTime() / 1000;
-       
-       if (ts < start) return;
-       const hourKey = Math.floor(ts / 3600) * 3600;
-       if (!buckets[hourKey]) buckets[hourKey] = { time: hourKey, value: 0 };
-       buckets[hourKey].value += 1;
+    transactions.forEach((tx) => {
+      // Use timestamp (ISO string from backend)
+      const date = new Date(tx.timestamp);
+      const ts = date.getTime() / 1000;
+
+      if (ts < start) return;
+      const hourKey = Math.floor(ts / 3600) * 3600;
+      if (!buckets[hourKey]) buckets[hourKey] = { time: hourKey, value: 0 };
+      buckets[hourKey].value += 1;
     });
 
     const data = Object.values(buckets).sort((a, b) => a.time - b.time);
 
     // Create Chart
     // Ensure LightweightCharts is available
-    if (typeof LightweightCharts === 'undefined') {
-        chartContainer.innerHTML = 'Chart library missing';
-        return;
+    if (typeof LightweightCharts === "undefined") {
+      chartContainer.innerHTML = "Chart library missing";
+      return;
     }
 
     const chart = LightweightCharts.createChart(chartContainer, {
-      layout: { background: { type: 'solid', color: 'transparent' }, textColor: '#8b949e' },
-      grid: { vertLines: { visible: false }, horzLines: { color: '#30363d' } },
+      layout: { background: { type: "solid", color: "transparent" }, textColor: "#8b949e" },
+      grid: { vertLines: { visible: false }, horzLines: { color: "#30363d" } },
       rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.1, bottom: 0 } },
       timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false },
       crosshair: { vertLine: { labelVisible: false }, horzLine: { labelVisible: false } }, // minimal
     });
-    
-    const series = chart.addHistogramSeries({ color: '#238636' });
+
+    const series = chart.addHistogramSeries({ color: "#238636" });
     series.setData(data);
     chart.timeScale().fitContent();
 
     // Auto-resize
-    const resizeObserver = new ResizeObserver(entries => {
+    const resizeObserver = new ResizeObserver((entries) => {
       if (entries.length === 0 || !entries[0].contentRect) return;
       const { width, height } = entries[0].contentRect;
       chart.applyOptions({ width, height });
     });
     resizeObserver.observe(chartContainer);
-    
+
     // Save reference for cleanup if needed
     this.txChart = chart;
   }
@@ -3205,30 +3234,37 @@ export class TokenDetailsDialog {
     if (!container) return;
 
     const recent = transactions.slice(0, 100);
-    
-    // Simple HTML table for speed
-    const rows = recent.map(tx => {
-       // Use safe field access (backend returns transaction_type, sol_delta)
-       const txType = (tx.transaction_type || tx.type || 'UNKNOWN').toLowerCase();
-       const isBuy = txType.includes('buy') || (txType === 'swap' && (tx.direction || '').toLowerCase() === 'incoming');
-       
-       const typeLabel = txType.toUpperCase();
-       
-       // Style based on type
-       let typeStyle = 'color: var(--text-secondary);';
-       if (isBuy) typeStyle = 'color: var(--success-color, #3fb950);';
-       else if (txType.includes('sell') || (txType === 'swap' && (tx.direction || '').toLowerCase() === 'outgoing')) typeStyle = 'color: var(--error-color, #f85149);';
-       
-       const timeDisplay = new Date(tx.timestamp).toLocaleTimeString();
 
-       // Price (if available) - generic transactions typically don't have price
-       const price = tx.price_sol ? Utils.formatPriceSol(tx.price_sol) : "—";
-       
-       // Total SOL (use sol_delta absolute value)
-       const amount = tx.amount_sol !== undefined ? tx.amount_sol : Math.abs(tx.sol_delta || 0);
-       const total = Utils.formatNumber(amount, { decimals: 2 });
-       
-       return `
+    // Simple HTML table for speed
+    const rows = recent
+      .map((tx) => {
+        // Use safe field access (backend returns transaction_type, sol_delta)
+        const txType = (tx.transaction_type || tx.type || "UNKNOWN").toLowerCase();
+        const isBuy =
+          txType.includes("buy") ||
+          (txType === "swap" && (tx.direction || "").toLowerCase() === "incoming");
+
+        const typeLabel = txType.toUpperCase();
+
+        // Style based on type
+        let typeStyle = "color: var(--text-secondary);";
+        if (isBuy) typeStyle = "color: var(--success-color, #3fb950);";
+        else if (
+          txType.includes("sell") ||
+          (txType === "swap" && (tx.direction || "").toLowerCase() === "outgoing")
+        )
+          typeStyle = "color: var(--error-color, #f85149);";
+
+        const timeDisplay = new Date(tx.timestamp).toLocaleTimeString();
+
+        // Price (if available) - generic transactions typically don't have price
+        const price = tx.price_sol ? Utils.formatPriceSol(tx.price_sol) : "—";
+
+        // Total SOL (use sol_delta absolute value)
+        const amount = tx.amount_sol !== undefined ? tx.amount_sol : Math.abs(tx.sol_delta || 0);
+        const total = Utils.formatNumber(amount, { decimals: 2 });
+
+        return `
          <div style="display: grid; grid-template-columns: 1fr 0.8fr 1.2fr 1fr 0.5fr; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border-color); font-size: 13px;">
            <span style="color: var(--text-secondary);">${timeDisplay}</span>
            <span style="font-weight: 600; ${typeStyle}">${typeLabel}</span>
@@ -3237,7 +3273,8 @@ export class TokenDetailsDialog {
            <a href="https://solscan.io/tx/${tx.signature}" target="_blank" style="color: var(--text-secondary); text-align: right;"><i class="icon-external-link"></i></a>
          </div>
        `;
-    }).join("");
+      })
+      .join("");
 
     container.innerHTML = `
       <div style="display: flex; flex-direction: column;">
@@ -3254,7 +3291,6 @@ export class TokenDetailsDialog {
       </div>
     `;
   }
-
 
   _buildExplorerLink(url, name) {
     return `
@@ -3769,3 +3805,45 @@ export class TokenDetailsDialog {
     this.tabHandlers.clear();
   }
 }
+
+// ============================================================================
+// Global Event Listener for Context Menu "View Details" Action
+// ============================================================================
+// This listener allows any page to open the TokenDetailsDialog via custom event
+// dispatched from context_menu.js when user clicks "View Details"
+
+let globalDialogInstance = null;
+
+window.addEventListener("screenerbot:open-token-details", async (event) => {
+  const { mint, symbol } = event.detail || {};
+
+  if (!mint) {
+    console.error("[TokenDetailsDialog] Event received without mint address");
+    return;
+  }
+
+  console.log(`[TokenDetailsDialog] Opening details for ${symbol || mint}`);
+
+  // Close existing dialog if open for a different token
+  if (globalDialogInstance && globalDialogInstance.dialogEl) {
+    if (globalDialogInstance.tokenData?.mint === mint) {
+      // Already open for this token, do nothing
+      console.log("[TokenDetailsDialog] Dialog already open for this token");
+      return;
+    }
+    globalDialogInstance.close();
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  }
+
+  // Create new dialog instance if needed
+  if (!globalDialogInstance) {
+    globalDialogInstance = new TokenDetailsDialog({
+      onClose: () => {
+        // Keep instance for reuse, just clean up state
+      },
+    });
+  }
+
+  // Open dialog with minimal token data (dialog will fetch full details)
+  await globalDialogInstance.show({ mint, symbol: symbol || "" });
+});

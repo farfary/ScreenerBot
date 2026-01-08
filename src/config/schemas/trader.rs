@@ -55,6 +55,12 @@ config_struct! {
     /// Trading system configuration
     pub struct TraderConfig {
         // Trader control
+        #[metadata(field_metadata! {
+            label: "Enabled",
+            hint: "Master switch for the trading system",
+            impact: "critical",
+            category: "Core Trading",
+        })]
         enabled: bool = true,
 
         // Core trading parameters
@@ -209,6 +215,16 @@ config_struct! {
         entry_check_concurrency: usize = 10,
 
         // Sell concurrency
+        #[metadata(field_metadata! {
+            label: "Sell Concurrency",
+            hint: "Number of sell operations to execute concurrently (higher = faster exits)",
+            min: 1,
+            max: 20,
+            step: 1,
+            unit: "concurrent",
+            impact: "medium",
+            category: "Performance",
+        })]
         sell_concurrency: usize = 5,
 
         // ==================== DCA CONFIGURATION ====================

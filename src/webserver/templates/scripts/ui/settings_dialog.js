@@ -2047,11 +2047,12 @@ export class SettingsDialog {
               </span>
             </div>
             <div class="settings-field-control">
-              ${totpEnabled ?
-                `<button class="btn btn-warning btn-sm" id="securityDisable2FABtn" ${!hasPassword ? "disabled" : ""}>
+              ${
+                totpEnabled
+                  ? `<button class="btn btn-warning btn-sm" id="securityDisable2FABtn" ${!hasPassword ? "disabled" : ""}>
                   <i class="icon-x"></i> Disable 2FA
-                </button>` :
-                `<button class="btn btn-primary btn-sm" id="securityEnable2FABtn" ${!hasPassword ? "disabled" : ""}>
+                </button>`
+                  : `<button class="btn btn-primary btn-sm" id="securityEnable2FABtn" ${!hasPassword ? "disabled" : ""}>
                   <i class="icon-shield-check"></i> Enable 2FA
                 </button>`
               }
@@ -3748,8 +3749,25 @@ export class SettingsDialog {
           <div class="settings-field discovery-section" id="tgDiscoverySection" style="display: none;">
             <div class="discovery-status" id="tgDiscoveryStatus">
               <div class="discovery-instructions">
-                <i class="icon-message-circle"></i>
-                <span>Send any message to your bot in Telegram...</span>
+                <div class="discovery-step">
+                  <span class="step-number">1</span>
+                  <span>Add your bot to a Telegram group, or start a direct chat with it</span>
+                </div>
+                <div class="discovery-step">
+                  <span class="step-number">2</span>
+                  <span>For groups: Check @BotFather → /mybots → [your bot] → Bot Settings → Group Privacy</span>
+                </div>
+                <div class="discovery-info-box">
+                  <i class="icon-info"></i>
+                  <div>
+                    <strong>Privacy Mode OFF:</strong> Bot receives all group messages<br/>
+                    <strong>Privacy Mode ON:</strong> Bot only receives messages when @mentioned
+                  </div>
+                </div>
+                <div class="discovery-step">
+                  <span class="step-number">3</span>
+                  <span>Send any message (or @mention your bot if Privacy Mode is ON)</span>
+                </div>
               </div>
               <div class="discovery-spinner">
                 <i class="icon-loader spin"></i>

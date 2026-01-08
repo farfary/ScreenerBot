@@ -317,13 +317,14 @@ function stopBackend() {
     // Send SIGTERM for graceful shutdown
     backendProcess.kill('SIGTERM');
     
-    // Force kill after 5 seconds if still running
+    // Force kill after 30 seconds if still running
+    // (ServiceManager has 10s per-task timeout, needs time for graceful shutdown)
     setTimeout(() => {
       if (backendProcess) {
         console.log('[Electron] Force killing backend...');
         backendProcess.kill('SIGKILL');
       }
-    }, 5000);
+    }, 30000);
   }
 }
 

@@ -352,21 +352,50 @@ fn register_all_services(manager: &mut ServiceManager) {
     );
 }
 
-/// Wait for shutdown signal (Ctrl+C)
+/// Wait for shutdown signal (Ctrl+C, SIGTERM, SIGHUP, SIGQUIT on Unix)
 async fn wait_for_shutdown_signal() -> Result<(), String> {
     logger::info(
         LogTag::System,
-        "Waiting for Ctrl+C (press twice to force kill)",
+        "Waiting for shutdown signal (press Ctrl+C twice to force kill)",
     );
 
-    // First Ctrl+C triggers graceful shutdown
-    tokio::signal::ctrl_c()
-        .await
-        .map_err(|e| format!("Failed to listen for shutdown signal: {}", e))?;
+    // Platform-specific signal handling
+    #[cfg(unix)]
+    let signal_name = {
+        use tokio::signal::unix::{signal, SignalKind};
+
+        let mut sigint =
+            signal(SignalKind::interrupt()).map_err(|e| format!("Failed to bind SIGINT: {}", e))?;
+        let mut sigterm =
+            signal(SignalKind::terminate()).map_err(|e| format!("Failed to bind SIGTERM: {}", e))?;
+        let mut sighup =
+            signal(SignalKind::hangup()).map_err(|e| format!("Failed to bind SIGHUP: {}", e))?;
+        let mut sigquit =
+            signal(SignalKind::quit()).map_err(|e| format!("Failed to bind SIGQUIT: {}", e))?;
+
+        tokio::select! {
+            _ = sigint.recv() => "SIGINT",
+            _ = sigterm.recv() => "SIGTERM",
+            _ = sighup.recv() => "SIGHUP",
+            _ = sigquit.recv() => "SIGQUIT",
+        }
+    };
+
+    #[cfg(windows)]
+    let signal_name = {
+        // On Windows, ctrl_c() handles Ctrl+C and Ctrl+Break
+        tokio::signal::ctrl_c()
+            .await
+            .map_err(|e| format!("Failed to listen for shutdown signal: {}", e))?;
+        "CTRL_C"
+    };
 
     logger::warning(
         LogTag::System,
-        "Shutdown signal received. Press Ctrl+C again to force kill.",
+        &format!(
+            "Shutdown signal received ({}). Press Ctrl+C again to force kill.",
+            signal_name
+        ),
     );
 
     // Spawn a background listener for a second Ctrl+C to exit immediately

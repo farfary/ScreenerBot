@@ -442,6 +442,22 @@ pub async fn update_position_state(mint: &str, updater: impl FnOnce(&mut Positio
     }
 }
 
+/// Update position in state by position ID (database ID)
+/// Use this when multiple positions may exist for the same token to ensure
+/// updates target the correct specific position.
+pub async fn update_position_state_by_id(
+    position_id: i64,
+    updater: impl FnOnce(&mut Position),
+) -> bool {
+    let mut positions = POSITIONS.write().await;
+    if let Some(position) = positions.iter_mut().find(|p| p.id == Some(position_id)) {
+        updater(position);
+        true
+    } else {
+        false
+    }
+}
+
 /// Retrieve a position by database ID from in-memory state
 pub async fn get_position_by_id(position_id: i64) -> Option<Position> {
     let positions = POSITIONS.read().await;

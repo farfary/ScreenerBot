@@ -1508,7 +1508,10 @@ async function renderTelegramAuthSection(container) {
           body: JSON.stringify({ commands_require_2fa: toggle.checked }),
         });
         if (response.ok) {
-          Utils.showToast(toggle.checked ? "2FA required for commands" : "2FA not required for commands", "success");
+          Utils.showToast(
+            toggle.checked ? "2FA required for commands" : "2FA not required for commands",
+            "success"
+          );
         }
       } catch {
         Utils.showToast("Failed to update setting", "error");

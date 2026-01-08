@@ -5,8 +5,10 @@
 
 use screenerbot::arguments::{print_help, print_version, set_cmd_args};
 use screenerbot::config::utils::load_config;
+use screenerbot::config::with_config;
 use screenerbot::logger::{error, info, LogTag};
 use screenerbot::run::run_bot;
+use std::panic;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
@@ -21,6 +23,113 @@ pub fn is_shutdown_requested() -> bool {
 /// Request application shutdown
 pub fn request_shutdown() {
     SHUTDOWN_FLAG.store(true, Ordering::SeqCst);
+}
+
+/// Set up panic hook to send Telegram notification when bot crashes
+fn setup_panic_hook() {
+    // Get Telegram config before setting hook (config is already loaded at this point)
+    let (enabled, bot_token, chat_id) = with_config(|cfg| {
+        (
+            cfg.telegram.enabled,
+            cfg.telegram.bot_token.clone(),
+            cfg.telegram.chat_id.clone(),
+        )
+    });
+
+    let default_panic = panic::take_hook();
+    panic::set_hook(Box::new(move |panic_info| {
+        // Log the panic to stderr
+        eprintln!("\n🚨 PANIC: {:?}\n", panic_info);
+
+        // Try to send Telegram notification if configured
+        if enabled && !bot_token.is_empty() && !chat_id.is_empty() {
+            let location = panic_info
+                .location()
+                .map(|l| format!("{}:{}", l.file(), l.line()))
+                .unwrap_or_else(|| "unknown".to_string());
+
+            let payload = panic_info.payload();
+            let panic_message = if let Some(s) = payload.downcast_ref::<&str>() {
+                (*s).to_string()
+            } else if let Some(s) = payload.downcast_ref::<String>() {
+                s.clone()
+            } else {
+                "Unknown panic".to_string()
+            };
+
+            // Truncate message if too long
+            let panic_message = if panic_message.len() > 200 {
+                format!("{}...", &panic_message[..200])
+            } else {
+                panic_message
+            };
+
+            let message = format!(
+                "🚨 <b>Bot Crashed!</b>\n\n\
+                 <b>Location:</b> <code>{}</code>\n\
+                 <b>Error:</b> {}\n\n\
+                 ⚠️ Please restart the bot.",
+                location, panic_message
+            );
+
+            let bot_token_clone = bot_token.clone();
+            let chat_id_clone = chat_id.clone();
+
+            // Spawn a thread for blocking HTTP call (tokio runtime may be unavailable in panic)
+            let handle = std::thread::spawn(move || {
+                send_telegram_crash_notification(&bot_token_clone, &chat_id_clone, &message);
+            });
+
+            // Wait up to 5 seconds for notification to send
+            let _ = handle.join();
+        }
+
+        // Call default panic handler
+        default_panic(panic_info);
+    }));
+}
+
+/// Send crash notification directly via Telegram API (blocking, for panic context)
+fn send_telegram_crash_notification(bot_token: &str, chat_id: &str, message: &str) {
+    use std::collections::HashMap;
+    use std::time::Duration;
+
+    // Use reqwest blocking client (panic-safe, no async runtime needed)
+    let client = match reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(5))
+        .build()
+    {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("⚠️ Could not create HTTP client for crash notification: {}", e);
+            return;
+        }
+    };
+
+    let url = format!("https://api.telegram.org/bot{}/sendMessage", bot_token);
+
+    let mut params = HashMap::new();
+    params.insert("chat_id", chat_id);
+    params.insert("text", message);
+    params.insert("parse_mode", "HTML");
+
+    match client.post(&url).form(&params).send() {
+        Ok(response) => {
+            if response.status().is_success() {
+                eprintln!("✅ Crash notification sent to Telegram");
+            } else {
+                eprintln!(
+                    "⚠️ Telegram API returned error: {} - {}",
+                    response.status(),
+                    response.text().unwrap_or_default()
+                );
+            }
+        }
+        Err(e) => {
+            eprintln!("⚠️ Failed to send crash notification: {}", e);
+            eprintln!("📝 Crash message: {}", message);
+        }
+    }
 }
 
 #[tokio::main]
@@ -70,6 +179,9 @@ async fn main() {
         );
         return;
     }
+
+    // Set up panic hook for crash notifications (after config is loaded)
+    setup_panic_hook();
 
     info(LogTag::System, "ScreenerBot starting...");
 

@@ -600,7 +600,10 @@ function createLifecycle() {
     ];
 
     // Check if the select has a CustomSelect instance attached
-    if (select._customSelectInstance && typeof select._customSelectInstance.setOptions === "function") {
+    if (
+      select._customSelectInstance &&
+      typeof select._customSelectInstance.setOptions === "function"
+    ) {
       select._customSelectInstance.setOptions(newOptions);
       select._customSelectInstance.setValue(currentValue);
     } else {
@@ -795,7 +798,10 @@ function createLifecycle() {
     // In server-backed "Pages" mode we should not auto-reload the table.
     // It triggers a full page fetch every interval (default 1s) which can
     // overwhelm the UI and interfere with user-driven sorts/page navigation.
-    if (typeof table.getServerPaginationMode === "function" && table.getServerPaginationMode() === "pages") {
+    if (
+      typeof table.getServerPaginationMode === "function" &&
+      table.getServerPaginationMode() === "pages"
+    ) {
       return true;
     }
 
@@ -813,7 +819,11 @@ function createLifecycle() {
 
     const paginationState =
       typeof table.getPaginationState === "function" ? table.getPaginationState() : null;
-    if (paginationState?.loadingNext || paginationState?.loadingPrev || paginationState?.loadingInitial) {
+    if (
+      paginationState?.loadingNext ||
+      paginationState?.loadingPrev ||
+      paginationState?.loadingInitial
+    ) {
       return true;
     }
 
@@ -830,13 +840,13 @@ function createLifecycle() {
       if (pageSizeSelect && document.activeElement === pageSizeSelect) {
         return true;
       }
-      
+
       // Skip if any row is currently being hovered (prevents hover state loss)
       const hoveredRow = container.querySelector("tr.dt-row:hover");
       if (hoveredRow) {
         return true;
       }
-      
+
       // Skip if any input, select, or button in table is focused
       const focusedElement = document.activeElement;
       if (focusedElement && container.contains(focusedElement)) {

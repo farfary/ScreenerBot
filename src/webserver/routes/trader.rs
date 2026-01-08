@@ -1065,6 +1065,16 @@ async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
 }
 
 async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
+    // Check force stop
+    if crate::global::is_force_stopped() {
+        return error_response(
+            StatusCode::FORBIDDEN,
+            "ForceStopped",
+            "Manual trading disabled - Force stop is active",
+            None,
+        );
+    }
+
     // Enforce blacklist for add (no override)
     if let Some(db) = crate::tokens::database::get_global_database() {
         if let Ok(true) = tokio::task::spawn_blocking({

@@ -782,7 +782,7 @@ function renderBurnTokenRow(token) {
         ${
           token.value_sol && token.value_sol > 0.0001
             ? `<span class="burn-token-value">~${Utils.formatSol(token.value_sol)}</span>`
-            : "<span class=\"burn-token-value no-value\">No value</span>"
+            : '<span class="burn-token-value no-value">No value</span>'
         }
       </div>
       <div class="burn-token-rent">
@@ -4271,7 +4271,7 @@ function updateMultiSellSelectionSummary() {
 
   if (summary) {
     if (selectedCount === 0) {
-      summary.innerHTML = "<span class=\"text-muted\">No wallets selected</span>";
+      summary.innerHTML = '<span class="text-muted">No wallets selected</span>';
     } else {
       summary.innerHTML = `<span class="text-primary">Selected: ${selectedCount} wallet${selectedCount > 1 ? "s" : ""}</span>`;
     }
@@ -4697,7 +4697,7 @@ function updateConsolidationSelectionSummary() {
 
   if (summary) {
     if (selectedCount === 0) {
-      summary.innerHTML = "<span class=\"text-muted\">Select wallets to consolidate</span>";
+      summary.innerHTML = '<span class="text-muted">Select wallets to consolidate</span>';
     } else {
       summary.innerHTML = `
         <span class="text-primary">Selected: ${selectedCount} wallet${selectedCount > 1 ? "s" : ""}</span>

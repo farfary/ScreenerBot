@@ -254,7 +254,7 @@ export class DataTable {
     // Hybrid pagination mode: 'scroll' (infinite scroll) or 'pages' (server-side page navigation)
     this._serverPaginationMode = "scroll";
     this._scrollLoadingDisabled = false;
-    
+
     // Interaction tracking: skip re-renders while user is hovering/interacting
     this._isHovering = false;
     this._hoverTimeout = null;
@@ -761,14 +761,14 @@ export class DataTable {
    * Render empty state
    */
   _renderEmptyState() {
-      const hasFilters = this.state.searchQuery || Object.keys(this.state.filters || {}).length > 0;
-      const emptyIcon = hasFilters ? "icon-search" : "icon-inbox";
-      const emptyTitle = hasFilters ? "No results found" : (this.options.emptyTitle || "No data");
-      const emptyMessage = hasFilters
-        ? "Try adjusting your search or filters"
-        : (this.options.emptyMessage || "No data to display");
+    const hasFilters = this.state.searchQuery || Object.keys(this.state.filters || {}).length > 0;
+    const emptyIcon = hasFilters ? "icon-search" : "icon-inbox";
+    const emptyTitle = hasFilters ? "No results found" : this.options.emptyTitle || "No data";
+    const emptyMessage = hasFilters
+      ? "Try adjusting your search or filters"
+      : this.options.emptyMessage || "No data to display";
 
-      return `
+    return `
         <tr>
           <td colspan="100" class="dt-state-cell">
             <div class="dt-empty-state">
@@ -853,82 +853,84 @@ export class DataTable {
    */
   _updateTableBody(newData) {
     const tbody = this.elements.tbody;
-    
+
     if (newData.length === 0) {
-       tbody.innerHTML = this._renderEmptyState();
-       return;
+      tbody.innerHTML = this._renderEmptyState();
+      return;
     }
-    
+
     // Check if currently showing empty state
-    if (tbody.querySelector('.dt-empty-state')) {
-       tbody.innerHTML = '';
+    if (tbody.querySelector(".dt-empty-state")) {
+      tbody.innerHTML = "";
     }
 
     const visibleColumns = this._getOrderedColumns();
     const rowIdField = this.options.rowIdField;
-    
+
     // Index existing rows
     const existingRows = new Map();
-    Array.from(tbody.children).forEach(tr => {
-      const id = tr.getAttribute('data-row-id');
+    Array.from(tbody.children).forEach((tr) => {
+      const id = tr.getAttribute("data-row-id");
       if (id) existingRows.set(id, tr);
     });
 
     const fragment = document.createDocumentFragment();
-    
+
     newData.forEach((row, index) => {
       const rowId = row[rowIdField] || index;
       const rowIdStr = String(rowId);
       let tr = existingRows.get(rowIdStr);
-      
+
       if (tr) {
         // Update existing row
         existingRows.delete(rowIdStr);
-        
+
         // Update selection state
         const isSelected = this.state.selectedRows.has(rowId);
-        if (tr.classList.contains('selected') !== isSelected) {
-           tr.classList.toggle('selected', isSelected);
+        if (tr.classList.contains("selected") !== isSelected) {
+          tr.classList.toggle("selected", isSelected);
         }
 
         // Update cells
-        visibleColumns.forEach(col => {
-           const td = tr.querySelector(`td[data-column-id="${col.id}"]`);
-           if (td) {
-             const cellContent = this._renderCellContent(col, row);
-             
-             // Handle wrapping wrapper
-             const shouldClamp = this.options.uniformRowHeight && col.wrap !== false;
-             
-             let newContent = shouldClamp ? `<div class="dt-cell-clamp">${cellContent}</div>` : cellContent;
-             
-             if (td.innerHTML !== newContent) {
-               td.innerHTML = newContent;
-             }
-             
-             // Update data-row-id on TD just in case
-             if (td.dataset.rowId !== rowIdStr) {
-                td.dataset.rowId = rowIdStr;
-             }
-           }
+        visibleColumns.forEach((col) => {
+          const td = tr.querySelector(`td[data-column-id="${col.id}"]`);
+          if (td) {
+            const cellContent = this._renderCellContent(col, row);
+
+            // Handle wrapping wrapper
+            const shouldClamp = this.options.uniformRowHeight && col.wrap !== false;
+
+            let newContent = shouldClamp
+              ? `<div class="dt-cell-clamp">${cellContent}</div>`
+              : cellContent;
+
+            if (td.innerHTML !== newContent) {
+              td.innerHTML = newContent;
+            }
+
+            // Update data-row-id on TD just in case
+            if (td.dataset.rowId !== rowIdStr) {
+              td.dataset.rowId = rowIdStr;
+            }
+          }
         });
-        
+
         fragment.appendChild(tr);
       } else {
         // Create new row
-        const tr = document.createElement('tr');
-        tr.setAttribute('data-row-id', rowIdStr);
+        const tr = document.createElement("tr");
+        tr.setAttribute("data-row-id", rowIdStr);
         if (this.state.selectedRows.has(rowId)) {
-          tr.classList.add('selected');
+          tr.classList.add("selected");
         }
         tr.innerHTML = this._renderRow(row);
         fragment.appendChild(tr);
       }
     });
-    
+
     // Remove remaining rows
-    existingRows.forEach(tr => tr.remove());
-    
+    existingRows.forEach((tr) => tr.remove());
+
     // Append fragment (reorders existing rows and adds new ones)
     tbody.appendChild(fragment);
   }
@@ -1513,7 +1515,7 @@ export class DataTable {
         this.state.sortDirection = nextDirection;
 
         this._saveState();
-        
+
         // For server-side sorting, only update header sort icons - don't re-render body
         // The body will be re-rendered when new data arrives from the server
         this._updateHeaderSortIndicators();
@@ -1879,7 +1881,7 @@ export class DataTable {
       };
       this._addEventListener(this.elements.tbody, "click", handler);
     }
-    
+
     // Hover tracking for render skipping during user interaction
     // This prevents table re-renders while user is hovering rows
     const mouseEnterHandler = () => {
@@ -3547,7 +3549,7 @@ export class DataTable {
     if (this._isHovering) {
       return true;
     }
-    
+
     const container = this.elements?.container;
     if (!container) return false;
 
@@ -4040,17 +4042,17 @@ export class DataTable {
    */
   _isDataUnchanged(newRows) {
     const currentData = this.state.data;
-    
+
     // Different lengths means definitely changed
     if (currentData.length !== newRows.length) {
       return false;
     }
-    
+
     // Empty arrays are equal
     if (currentData.length === 0) {
       return true;
     }
-    
+
     // Use rowKey if available for faster comparison
     const rowKey = this.options.rowKey;
     if (rowKey) {
@@ -4058,12 +4060,12 @@ export class DataTable {
       for (let i = 0; i < newRows.length; i++) {
         const oldRow = currentData[i];
         const newRow = newRows[i];
-        
+
         // Check if key changed
         if (oldRow?.[rowKey] !== newRow?.[rowKey]) {
           return false;
         }
-        
+
         // Quick shallow comparison of visible columns
         for (const col of this.options.columns) {
           if (oldRow?.[col.id] !== newRow?.[col.id]) {
@@ -4073,7 +4075,7 @@ export class DataTable {
       }
       return true;
     }
-    
+
     // Fallback: JSON stringify comparison (slower but thorough)
     try {
       return JSON.stringify(currentData) === JSON.stringify(newRows);
@@ -4087,7 +4089,7 @@ export class DataTable {
     const sanitized = Array.isArray(rows)
       ? rows.filter((row) => row !== null && row !== undefined)
       : [];
-    
+
     // Check if data has actually changed to avoid unnecessary re-renders
     // This prevents DOM churn during polling when data is the same
     if (!meta.forceRender && this._isDataUnchanged(sanitized)) {
@@ -4096,7 +4098,7 @@ export class DataTable {
       this._setLoadingState(false);
       return;
     }
-    
+
     const isInitialLoad = this.state.data.length === 0;
     this.state.data = [...sanitized];
     // Only reset hasAutoFitted on initial load, not on data refreshes
@@ -4630,8 +4632,7 @@ export class DataTable {
       // Update sort icon text (matches _renderHeader contract)
       const iconEl = th.querySelector(".dt-sort-icon");
       if (iconEl) {
-        iconEl.textContent =
-          isSorted ? (sortDirection === "asc" ? "▲" : "▼") : "";
+        iconEl.textContent = isSorted ? (sortDirection === "asc" ? "▲" : "▼") : "";
       }
 
       // Update aria-sort attribute
@@ -5226,7 +5227,7 @@ export class DataTable {
       cancelAnimationFrame(this._pendingRAF);
       this._pendingRAF = null;
     }
-    
+
     // Cancel hover timeout
     if (this._hoverTimeout) {
       clearTimeout(this._hoverTimeout);

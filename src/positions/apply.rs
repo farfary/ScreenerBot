@@ -7,7 +7,7 @@ use super::{
     state::{
         clear_pending_dca_swap, get_position_by_id, get_position_by_mint,
         release_global_position_permit, remove_position, remove_signature_from_index,
-        update_position_state, POSITIONS,
+        update_position_state, update_position_state_by_id, POSITIONS,
     },
     transitions::PositionTransition,
 };
@@ -42,7 +42,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             sol_size,
         } => {
             let updated =
-                update_position_state(&find_mint_by_position_id(position_id).await?, |pos| {
+                update_position_state_by_id(position_id, |pos| {
                     pos.transaction_entry_verified = true;
                     pos.effective_entry_price = Some(effective_entry_price);
                     pos.total_size_sol = sol_size;
@@ -126,7 +126,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             exit_time,
         } => {
             let updated =
-                update_position_state(&find_mint_by_position_id(position_id).await?, |pos| {
+                update_position_state_by_id(position_id, |pos| {
                     pos.transaction_exit_verified = true;
                     pos.effective_exit_price = Some(effective_exit_price);
                     pos.sol_received = Some(sol_received);
@@ -156,7 +156,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         crate::positions::calculate_position_pnl(&position, None).await;
 
                     // Atomically update position with PnL in a single operation
-                    let pnl_updated = update_position_state(&position.mint, |pos| {
+                    let pnl_updated = update_position_state_by_id(position_id, |pos| {
                         pos.pnl = Some(pnl_sol);
                         pos.pnl_percent = Some(pnl_pct);
                         // Clear unrealized PnL (position is now closed)
@@ -283,10 +283,9 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
         }
 
         PositionTransition::ExitFailedClearForRetry { position_id } => {
-            let mint = find_mint_by_position_id(position_id).await?;
             // Capture old signature to purge index entry (prevent stale sig->mint mapping)
             let mut old_sig: Option<String> = None;
-            let updated = update_position_state(&mint, |pos| {
+            let updated = update_position_state_by_id(position_id, |pos| {
                 if let Some(sig) = pos.exit_transaction_signature.clone() {
                     old_sig = Some(sig);
                 }
@@ -329,7 +328,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             exit_time,
         } => {
             let updated =
-                update_position_state(&find_mint_by_position_id(position_id).await?, |pos| {
+                update_position_state_by_id(position_id, |pos| {
                     pos.synthetic_exit = true;
                     pos.transaction_exit_verified = true;
                     pos.exit_time = Some(exit_time);
@@ -455,7 +454,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             exit_percentage,
         } => {
             let updated =
-                update_position_state(&find_mint_by_position_id(position_id).await?, |pos| {
+                update_position_state_by_id(position_id, |pos| {
                     // Update remaining token amount
                     if let Some(remaining) = pos.remaining_token_amount {
                         pos.remaining_token_amount = Some(remaining.saturating_sub(exit_amount));
@@ -497,7 +496,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         .await;
 
                         // Update unrealized PnL in memory
-                        update_position_state(&position.mint, |pos| {
+                        update_position_state_by_id(position_id, |pos| {
                             pos.unrealized_pnl = Some(pnl_sol);
                             pos.unrealized_pnl_percent = Some(pnl_pct);
                         })
@@ -704,13 +703,14 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
             dca_time,
             dca_signature,
         } => {
+            // Get mint for decimals lookup
             let mint = find_mint_by_position_id(position_id).await?;
 
             // Get token decimals for accurate price calculation
             let decimals = crate::tokens::get_decimals(&mint).await.unwrap_or(9); // Default to 9 if not found
 
             let updated =
-        update_position_state(&mint, |pos| {
+        update_position_state_by_id(position_id, |pos| {
           // Update remaining token amount (add new tokens)
           if let Some(remaining) = pos.remaining_token_amount {
             pos.remaining_token_amount = Some(remaining + tokens_bought);
