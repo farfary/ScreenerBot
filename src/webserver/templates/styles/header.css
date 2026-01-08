@@ -54,10 +54,20 @@
 .header-row-1 {
   display: flex;
   align-items: center;
-  gap: 32px;
-  padding: 8px 24px;
-  height: 50px;
+  gap: 20px; /* Reduced from 48px */
+  padding: 0 32px; /* Removed vertical padding, relying on height */
+  height: 72px; /* Increased from 50px to fit cards */
   background: transparent; /* Inherit from .modern-header */
+}
+
+/* Electron Windows/Linux: Reserve space for window controls on the right */
+.electron-window-controls .header-row-1 {
+  padding-right: 160px;
+}
+
+/* Electron macOS: Traffic lights are on left, right side follows standard spacing */
+.electron-macos .header-row-1 {
+  padding-right: 32px;
 }
 
 /* Brand/Logo - unified container */
@@ -182,7 +192,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  padding: 8px 12px;
+  padding: 8px 16px; /* Increased horizontal padding */
   background: transparent;
   border-radius: 0;
   border: none;
@@ -445,10 +455,10 @@
 .header-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 16px; /* Increased from 12px */
   margin-left: auto;
   border-left: 2px solid rgb(255, 255, 255, 0.1);
-  padding-left: 24px;
+  padding-left: 32px; /* Increased from 24px */
 }
 
 .header-action-dropdown {
@@ -565,7 +575,7 @@
   display: flex;
   align-items: center;
   height: 100%;
-  padding: 0 24px;
+  padding: 0 32px; /* Aligned with header-row-1 */
   gap: 8px;
 }
 
@@ -619,7 +629,7 @@
   display: flex;
   align-items: center;
   height: 100%;
-  padding: 0 20px;
+  padding: 0 32px; /* Aligned with header-row-1 */
   gap: 0;
   white-space: nowrap;
 }

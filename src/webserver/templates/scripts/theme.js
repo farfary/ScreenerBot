@@ -18,13 +18,23 @@
     navigator.platform.toUpperCase().indexOf("MAC") >= 0;
 
   // Apply macOS styling if running in Electron on macOS
-  if (isElectron && isMacOS) {
-    console.log("[Theme] Detected macOS in Electron - applying platform styles");
-    document.body.classList.add("electron-macos");
-    const header = document.querySelector(".modern-header");
-    if (header) {
-      header.classList.add("electron-macos");
-      console.log("[Theme] Added macOS-specific styling classes");
+  if (isElectron) {
+    if (isMacOS) {
+      console.log("[Theme] Detected macOS in Electron - applying platform styles");
+      document.body.classList.add("electron-macos");
+      const header = document.querySelector(".modern-header");
+      if (header) {
+        header.classList.add("electron-macos");
+        console.log("[Theme] Added macOS-specific styling classes");
+      }
+    } else {
+      // Windows/Linux need space for window controls on the right
+      console.log("[Theme] Detected Windows/Linux in Electron - applying platform styles");
+      document.body.classList.add("electron-window-controls");
+      const header = document.querySelector(".modern-header");
+      if (header) {
+        header.classList.add("electron-window-controls");
+      }
     }
   }
 
