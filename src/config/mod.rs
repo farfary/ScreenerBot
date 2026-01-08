@@ -98,5 +98,5 @@ pub use utils::{
     get_config_clone, get_wallet_keypair, get_wallet_pubkey, get_wallet_pubkey_string,
     is_config_initialized, load_config, load_config_from_path, reload_config,
     reload_config_from_path, reset_config_to_defaults_preserving_credentials, save_config,
-    update_config_section, with_config, CONFIG,
+    update_config_section, validate_config, with_config, CONFIG,
 };

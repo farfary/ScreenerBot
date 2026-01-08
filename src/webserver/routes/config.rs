@@ -339,6 +339,7 @@ where
             "MonitoringConfig" => serde_json::to_value(&cfg.monitoring).ok(),
             "OhlcvConfig" => serde_json::to_value(&cfg.ohlcv).ok(),
             "GuiConfig" => serde_json::to_value(&cfg.gui).ok(),
+            "TelegramConfig" => serde_json::to_value(&cfg.telegram).ok(),
             _ => None,
         });
 
@@ -475,6 +476,16 @@ where
                 config::update_config_section(
                     |cfg| {
                         cfg.gui = new_config;
+                    },
+                    true,
+                )?;
+            }
+            "TelegramConfig" => {
+                let new_config: config::TelegramConfig = serde_json::from_value(section_json)
+                    .map_err(|e| format!("Invalid TelegramConfig: {}", e))?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.telegram = new_config;
                     },
                     true,
                 )?;
@@ -673,6 +684,83 @@ const CONFIG_SECTIONS: &[&str] = &[
     "telegram",
 ];
 
+/// Sensitive fields that should be sanitized on export (path format: "section.nested.field")
+const SENSITIVE_FIELDS: &[(&str, &[&str])] = &[
+    ("telegram", &["bot_token"]),
+    ("gui", &["dashboard.lockscreen.password_hash", "dashboard.lockscreen.password_salt"]),
+    ("webserver", &["auth_password_hash", "auth_password_salt", "auth_totp_secret"]),
+];
+
+/// Sanitize a section by removing/masking sensitive fields
+fn sanitize_section(section_name: &str, value: &mut serde_json::Value) {
+    for (section, fields) in SENSITIVE_FIELDS {
+        if *section != section_name {
+            continue;
+        }
+        for field_path in *fields {
+            remove_nested_field(value, field_path);
+        }
+    }
+}
+
+/// Remove a nested field by dot-separated path (e.g., "dashboard.lockscreen.password_hash")
+fn remove_nested_field(value: &mut serde_json::Value, path: &str) {
+    let parts: Vec<&str> = path.split('.').collect();
+    if parts.is_empty() {
+        return;
+    }
+
+    let mut current = value;
+    for (i, part) in parts.iter().enumerate() {
+        if i == parts.len() - 1 {
+            // Last part - remove the field
+            if let Some(obj) = current.as_object_mut() {
+                obj.remove(*part);
+            }
+        } else {
+            // Navigate to nested object
+            if let Some(obj) = current.as_object_mut() {
+                if let Some(next) = obj.get_mut(*part) {
+                    current = next;
+                } else {
+                    return; // Path not found
+                }
+            } else {
+                return; // Not an object
+            }
+        }
+    }
+}
+
+/// Check if a nested field exists by dot-separated path
+fn has_nested_field(value: &serde_json::Value, path: &str) -> bool {
+    let parts: Vec<&str> = path.split('.').collect();
+    if parts.is_empty() {
+        return false;
+    }
+
+    let mut current = value;
+    for (i, part) in parts.iter().enumerate() {
+        if let Some(obj) = current.as_object() {
+            if i == parts.len() - 1 {
+                // Last part - check if field exists and is non-empty
+                if let Some(val) = obj.get(*part) {
+                    return !val.is_null()
+                        && !(val.is_string() && val.as_str().unwrap_or("").is_empty());
+                }
+                return false;
+            } else if let Some(next) = obj.get(*part) {
+                current = next;
+            } else {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+    false
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ExportConfigRequest {
     /// Which sections to export. If empty or None, exports all sections.
@@ -683,6 +771,10 @@ pub struct ExportConfigRequest {
     /// Whether to include metadata like export timestamp
     #[serde(default = "default_true")]
     pub include_metadata: bool,
+    /// Whether to sanitize sensitive fields (bot tokens, password hashes, etc.)
+    /// Default: true for security. Set to false only for full backup purposes.
+    #[serde(default = "default_true")]
+    pub sanitize_secrets: bool,
 }
 
 fn default_true() -> bool {
@@ -721,6 +813,7 @@ async fn export_config(Json(request): Json<ExportConfigRequest>) -> Response {
 
     // Build the export object
     let mut export_obj = serde_json::Map::new();
+    let sanitize = request.sanitize_secrets;
 
     config::with_config(|cfg| {
         for section in &sections_to_export {
@@ -741,7 +834,11 @@ async fn export_config(Json(request): Json<ExportConfigRequest>) -> Response {
                 _ => None,
             };
 
-            if let Some(value) = section_value {
+            if let Some(mut value) = section_value {
+                // Sanitize sensitive fields if requested
+                if sanitize {
+                    sanitize_section(section, &mut value);
+                }
                 export_obj.insert(section.to_string(), value);
             }
         }
@@ -892,6 +989,20 @@ async fn import_config_preview(Json(request): Json<ImportConfigPreviewRequest>) 
     for key in imported_obj.keys() {
         if key != "timestamp" && !CONFIG_SECTIONS.contains(&key.as_str()) {
             warnings.push(format!("Unknown section '{}' will be ignored", key));
+        }
+    }
+
+    // Check for security-sensitive fields being imported
+    for (section, fields) in SENSITIVE_FIELDS {
+        if let Some(section_val) = imported_obj.get(*section) {
+            for field_path in *fields {
+                if has_nested_field(section_val, field_path) {
+                    warnings.push(format!(
+                        "⚠️ Security warning: Importing '{}.{}' may overwrite authentication settings",
+                        section, field_path
+                    ));
+                }
+            }
         }
     }
 
@@ -1200,18 +1311,29 @@ async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response {
         }
     }
 
-    // Save to disk if requested and at least one section imported
-    let saved_to_disk = if request.save_to_disk && !imported_sections.is_empty() {
-        match config::save_config(None) {
-            Ok(()) => true,
-            Err(e) => {
-                errors.push(format!("Failed to save to disk: {}", e));
-                false
-            }
+    // Validate the full config after all sections are imported
+    // This catches cross-field validation errors (e.g., DCA settings require valid thresholds)
+    if !imported_sections.is_empty() {
+        let full_config = config::get_config_clone();
+        if let Err(validation_error) = config::validate_config(&full_config) {
+            errors.push(format!("Config validation failed: {}", validation_error));
         }
-    } else {
-        false
-    };
+    }
+
+    // Save to disk if requested, at least one section imported, and no validation errors
+    let has_validation_errors = errors.iter().any(|e| e.starts_with("Config validation"));
+    let saved_to_disk =
+        if request.save_to_disk && !imported_sections.is_empty() && !has_validation_errors {
+            match config::save_config(None) {
+                Ok(()) => true,
+                Err(e) => {
+                    errors.push(format!("Failed to save to disk: {}", e));
+                    false
+                }
+            }
+        } else {
+            false
+        };
 
     if imported_sections.is_empty() {
         return error_response(

@@ -108,7 +108,7 @@ pub fn reload_config() -> Result<(), String> {
 /// # Returns
 /// - `Ok(())` - Configuration is valid
 /// - `Err(String)` - Validation error message
-fn validate_config(config: &Config) -> Result<(), String> {
+pub fn validate_config(config: &Config) -> Result<(), String> {
     // Trader validation
     if config.trader.max_open_positions == 0 {
         return Err("trader.max_open_positions must be greater than 0".to_string());
