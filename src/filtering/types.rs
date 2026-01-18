@@ -279,6 +279,9 @@ impl Default for FilteringSnapshot {
 
 #[derive(Debug, Clone)]
 pub struct FilteringStatsSnapshot {
+    /// Total tokens in the database (all tokens, including those without market data)
+    pub total_tokens_in_database: usize,
+    /// Total tokens loaded in filtering snapshot (only those with market data)
     pub total_tokens: usize,
     pub with_pool_price: usize,
     pub open_positions: usize,

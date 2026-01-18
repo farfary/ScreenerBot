@@ -515,6 +515,9 @@ async fn fetch_and_add_token_from_external(mint: &str) -> Option<crate::tokens::
 /// Token statistics response
 #[derive(Debug, Serialize)]
 pub struct TokenStatsResponse {
+    /// Total tokens in database (all tokens, including those without market data)
+    pub total_tokens_in_database: usize,
+    /// Tokens with market data loaded in filtering snapshot
     pub total_tokens: usize,
     pub with_pool_price: usize,
     pub open_positions: usize,
@@ -2708,7 +2711,8 @@ async fn get_tokens_stats() -> Result<Json<TokenStatsResponse>, StatusCode> {
             logger::info(
                 LogTag::Webserver,
                 &format!(
-                    "total={} pool={} open={} blacklist={}",
+                    "db_total={} snapshot={} pool={} open={} blacklist={}",
+                    snapshot.total_tokens_in_database,
                     snapshot.total_tokens,
                     snapshot.with_pool_price,
                     snapshot.open_positions,
@@ -2717,6 +2721,7 @@ async fn get_tokens_stats() -> Result<Json<TokenStatsResponse>, StatusCode> {
             );
 
             Ok(Json(TokenStatsResponse {
+                total_tokens_in_database: snapshot.total_tokens_in_database,
                 total_tokens: snapshot.total_tokens,
                 with_pool_price: snapshot.with_pool_price,
                 open_positions: snapshot.open_positions,
