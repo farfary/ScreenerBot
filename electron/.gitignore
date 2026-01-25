@@ -11,6 +11,15 @@ dist/
 *.zip
 *.app
 
+# Rust artifacts (copied during build)
+target/
+
+# VC++ Redistributables (downloaded during build, ~50MB)
+redist/
+
+# Sync artifacts from Windows VM
+electron/
+
 # OS files
 .DS_Store
 Thumbs.db
