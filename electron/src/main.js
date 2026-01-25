@@ -365,7 +365,8 @@ function loadWindowState() {
     height: CONFIG.windowHeight,
     x: undefined,
     y: undefined,
-    isMaximized: false
+    isMaximized: false,
+    zoomLevel: 0
   };
 }
 
@@ -382,7 +383,8 @@ function saveWindowState() {
       height: bounds.height,
       x: bounds.x,
       y: bounds.y,
-      isMaximized: mainWindow.isMaximized()
+      isMaximized: mainWindow.isMaximized(),
+      zoomLevel: mainWindow.webContents.getZoomLevel()
     };
     
     const statePath = getWindowStatePath();
@@ -524,6 +526,10 @@ function createWindow() {
     if (windowState.isMaximized) {
       mainWindow.maximize();
     }
+    // Restore zoom level
+    if (windowState.zoomLevel !== undefined && windowState.zoomLevel !== 0) {
+      mainWindow.webContents.setZoomLevel(windowState.zoomLevel);
+    }
   });
   
   // Save window state when it changes
@@ -539,8 +545,32 @@ function createWindow() {
     }
   });
   
-  mainWindow.on('maximize', saveWindowState);
-  mainWindow.on('unmaximize', saveWindowState);
+  mainWindow.on('maximize', () => {
+    saveWindowState();
+    if (mainWindow && !mainWindow.webContents.isDestroyed()) {
+      mainWindow.webContents.send('window:maximize-change', true);
+    }
+  });
+  
+  mainWindow.on('unmaximize', () => {
+    saveWindowState();
+    if (mainWindow && !mainWindow.webContents.isDestroyed()) {
+      mainWindow.webContents.send('window:maximize-change', false);
+    }
+  });
+
+  // Notify renderer of fullscreen changes
+  mainWindow.on('enter-full-screen', () => {
+    if (mainWindow && !mainWindow.webContents.isDestroyed()) {
+      mainWindow.webContents.send('window:fullscreen-change', true);
+    }
+  });
+  
+  mainWindow.on('leave-full-screen', () => {
+    if (mainWindow && !mainWindow.webContents.isDestroyed()) {
+      mainWindow.webContents.send('window:fullscreen-change', false);
+    }
+  });
 
   // Handle external links
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -587,6 +617,256 @@ function createWindow() {
 }
 
 /**
+ * Create the application menu with keyboard shortcuts
+ */
+function createApplicationMenu() {
+  const isMac = process.platform === 'darwin';
+  
+  const template = [
+    // App menu (macOS only)
+    ...(isMac ? [{
+      label: app.name,
+      submenu: [
+        {
+          label: 'About ScreenerBot',
+          click: () => {
+            dialog.showMessageBox(mainWindow, {
+              type: 'info',
+              title: 'About ScreenerBot',
+              message: 'ScreenerBot',
+              detail: `Version ${app.getVersion()}\n\nAdvanced Solana wallet management and auto-trading bot.\n\nhttps://screenerbot.io\n\n© 2024-2026 ScreenerBot`,
+              buttons: ['OK']
+            });
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Check for Updates...',
+          click: async () => {
+            await shell.openExternal('https://screenerbot.io/download');
+          }
+        },
+        { type: 'separator' },
+        { role: 'services' },
+        { type: 'separator' },
+        { role: 'hide' },
+        { role: 'hideOthers' },
+        { role: 'unhide' },
+        { type: 'separator' },
+        { role: 'quit' }
+      ]
+    }] : []),
+    
+    // File menu
+    {
+      label: 'File',
+      submenu: [
+        {
+          label: 'Open Data Folder',
+          accelerator: isMac ? 'Cmd+Shift+D' : 'Ctrl+Shift+D',
+          click: () => {
+            shell.openPath(app.getPath('userData'));
+          }
+        },
+        {
+          label: 'Open Logs Folder',
+          click: () => {
+            const logsPath = path.join(app.getPath('userData'), 'logs');
+            if (fs.existsSync(logsPath)) {
+              shell.openPath(logsPath);
+            } else {
+              shell.openPath(app.getPath('userData'));
+            }
+          }
+        },
+        { type: 'separator' },
+        isMac ? { role: 'close' } : { role: 'quit' }
+      ]
+    },
+    
+    // Edit menu
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        ...(isMac ? [
+          { role: 'pasteAndMatchStyle' },
+          { role: 'delete' },
+          { role: 'selectAll' },
+        ] : [
+          { role: 'delete' },
+          { type: 'separator' },
+          { role: 'selectAll' }
+        ])
+      ]
+    },
+    
+    // View menu - CRITICAL FOR ZOOM SHORTCUTS
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+        { type: 'separator' },
+        { role: 'toggleDevTools' }
+      ]
+    },
+    
+    // Window menu
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        ...(isMac ? [
+          { type: 'separator' },
+          { role: 'front' },
+          { type: 'separator' },
+          { role: 'window' }
+        ] : [
+          { role: 'close' }
+        ])
+      ]
+    },
+    
+    // Help menu
+    {
+      label: 'Help',
+      submenu: [
+        {
+          label: 'Documentation',
+          accelerator: 'F1',
+          click: async () => {
+            await shell.openExternal('https://screenerbot.io/docs');
+          }
+        },
+        {
+          label: 'Keyboard Shortcuts',
+          click: () => {
+            const shortcuts = isMac ? `
+Keyboard Shortcuts:
+
+Window Controls:
+  Cmd+M          Minimize
+  Cmd+W          Close Window
+  Cmd+Q          Quit
+  Cmd+Ctrl+F     Toggle Fullscreen
+
+Zoom:
+  Cmd++          Zoom In
+  Cmd+-          Zoom Out
+  Cmd+0          Reset Zoom
+
+Navigation:
+  Cmd+R          Reload Dashboard
+  Cmd+Shift+D    Open Data Folder
+
+Other:
+  F1             Open Documentation
+  Cmd+Alt+I      Toggle DevTools
+` : `
+Keyboard Shortcuts:
+
+Window Controls:
+  Alt+F4         Quit
+  F11            Toggle Fullscreen
+
+Zoom:
+  Ctrl++         Zoom In
+  Ctrl+-         Zoom Out
+  Ctrl+0         Reset Zoom
+
+Navigation:
+  Ctrl+R         Reload Dashboard
+  Ctrl+Shift+D   Open Data Folder
+
+Other:
+  F1             Open Documentation
+  Ctrl+Shift+I   Toggle DevTools
+`;
+            dialog.showMessageBox(mainWindow, {
+              type: 'info',
+              title: 'Keyboard Shortcuts',
+              message: 'ScreenerBot Keyboard Shortcuts',
+              detail: shortcuts.trim(),
+              buttons: ['OK']
+            });
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Telegram Channel',
+          click: async () => {
+            await shell.openExternal('https://t.me/screenerbotio');
+          }
+        },
+        {
+          label: 'Telegram Community',
+          click: async () => {
+            await shell.openExternal('https://t.me/screenerbotio_talk');
+          }
+        },
+        {
+          label: 'Telegram Support',
+          click: async () => {
+            await shell.openExternal('https://t.me/screenerbotio_support');
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Follow on X (Twitter)',
+          click: async () => {
+            await shell.openExternal('https://x.com/screenerbotio');
+          }
+        },
+        {
+          label: 'Visit Website',
+          click: async () => {
+            await shell.openExternal('https://screenerbot.io');
+          }
+        },
+        { type: 'separator' },
+        {
+          label: 'Check for Updates...',
+          click: async () => {
+            await shell.openExternal('https://screenerbot.io/download');
+          }
+        },
+        ...(!isMac ? [
+          { type: 'separator' },
+          {
+            label: 'About ScreenerBot',
+            click: () => {
+              dialog.showMessageBox(mainWindow, {
+                type: 'info',
+                title: 'About ScreenerBot',
+                message: 'ScreenerBot',
+                detail: `Version ${app.getVersion()}\n\nAdvanced Solana wallet management and auto-trading bot.\n\nhttps://screenerbot.io\n\n© 2024-2026 ScreenerBot`,
+                buttons: ['OK']
+              });
+            }
+          }
+        ] : [])
+      ]
+    }
+  ];
+  
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
+/**
  * Load the main application URL
  */
 function loadMainApp() {
@@ -616,6 +896,9 @@ async function initialize() {
   
   // Create window first
   createWindow();
+  
+  // Create application menu with keyboard shortcuts
+  createApplicationMenu();
   
   // Load loading page
   loadLoadingPage();
@@ -696,12 +979,20 @@ app.on('will-quit', (event) => {
   if (backendProcess) {
     console.log('[Electron] Will quit - stopping backend');
     event.preventDefault();
+    
+    // Listen for backend exit
+    backendProcess.once('exit', () => {
+      console.log('[Electron] Backend stopped, exiting app');
+      app.exit(0);
+    });
+    
     stopBackend();
     
-    // Wait a bit then quit
+    // Fallback: force exit after 35 seconds (after SIGKILL timeout)
     setTimeout(() => {
+      console.log('[Electron] Forcing app exit after timeout');
       app.exit(0);
-    }, 1000);
+    }, 35000);
   }
 });
 
@@ -726,43 +1017,85 @@ app.on('window-all-closed', () => {
 // ============================================================================
 
 ipcMain.handle('app:minimize', () => {
-  if (mainWindow) mainWindow.minimize();
+  if (mainWindow) {
+    mainWindow.minimize();
+    return true;
+  }
+  return false;
 });
 
 ipcMain.handle('app:maximize', () => {
   if (mainWindow) {
     if (mainWindow.isMaximized()) {
       mainWindow.unmaximize();
+      return false;
     } else {
       mainWindow.maximize();
+      return true;
     }
   }
+  return false;
 });
 
 ipcMain.handle('app:close', () => {
-  if (mainWindow) mainWindow.close();
+  if (mainWindow) {
+    mainWindow.close();
+    return true;
+  }
+  return false;
 });
 
 ipcMain.handle('app:zoom-in', () => {
   if (mainWindow) {
     const currentZoom = mainWindow.webContents.getZoomLevel();
-    mainWindow.webContents.setZoomLevel(currentZoom + 0.5);
+    // Limit zoom to max +5 (about 300%)
+    if (currentZoom < 5) {
+      mainWindow.webContents.setZoomLevel(currentZoom + 0.5);
+    }
+    return mainWindow.webContents.getZoomLevel();
   }
+  return 0;
 });
 
 ipcMain.handle('app:zoom-out', () => {
   if (mainWindow) {
     const currentZoom = mainWindow.webContents.getZoomLevel();
-    mainWindow.webContents.setZoomLevel(currentZoom - 0.5);
+    // Limit zoom to min -5 (about 25%)
+    if (currentZoom > -5) {
+      mainWindow.webContents.setZoomLevel(currentZoom - 0.5);
+    }
+    return mainWindow.webContents.getZoomLevel();
   }
+  return 0;
 });
 
 ipcMain.handle('app:zoom-reset', () => {
   if (mainWindow) {
     mainWindow.webContents.setZoomLevel(0);
   }
+  return 0;
+});
+
+ipcMain.handle('app:get-zoom-level', () => {
+  return mainWindow ? mainWindow.webContents.getZoomLevel() : 0;
 });
 
 ipcMain.handle('app:get-version', () => {
   return app.getVersion();
+});
+
+ipcMain.handle('app:toggle-fullscreen', () => {
+  if (mainWindow) {
+    mainWindow.setFullScreen(!mainWindow.isFullScreen());
+    return mainWindow.isFullScreen();
+  }
+  return false;
+});
+
+ipcMain.handle('app:is-fullscreen', () => {
+  return mainWindow ? mainWindow.isFullScreen() : false;
+});
+
+ipcMain.handle('app:is-maximized', () => {
+  return mainWindow ? mainWindow.isMaximized() : false;
 });
