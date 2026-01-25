@@ -1407,7 +1407,7 @@ function renderExplorerView() {
         </div>
 
         <div class="explorer-summary-item ${!window.filteringPage.currentReason ? "active" : ""}" onclick="window.filteringPage.selectSummary()">
-          <i class="icon-layout"></i>
+          <i class="icon-layout-dashboard"></i>
           <div class="explorer-summary-info">
             <span class="explorer-summary-label">Overview</span>
             <span class="explorer-summary-desc">Summary & recent</span>

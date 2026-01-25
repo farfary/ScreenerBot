@@ -1988,7 +1988,7 @@ export class TokenDetailsDialog {
             }
           </div>
           <div style="padding: 10px 16px; border-top: 1px solid var(--border-color); font-size: 0.65rem; color: var(--warning-color); background: var(--warning-alpha-10); display: flex; align-items: center; gap: 8px;">
-            <i class="icon-alert-circle" style="font-size: 14px;"></i>
+            <i class="icon-circle-alert" style="font-size: 14px;"></i>
             <span>A ${token.transfer_fee_pct}% fee is charged on every transfer</span>
           </div>
           `

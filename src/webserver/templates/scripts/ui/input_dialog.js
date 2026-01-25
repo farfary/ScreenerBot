@@ -90,7 +90,7 @@ class InputDialog {
 
     // Variant icons
     const variantIcons = {
-      default: '<i class="icon-edit"></i>',
+      default: '<i class="icon-pencil"></i>',
       warning: '<i class="icon-circle-alert"></i>',
     };
 

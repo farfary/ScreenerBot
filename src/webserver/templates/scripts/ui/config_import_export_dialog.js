@@ -42,7 +42,7 @@ const SECTION_META = {
     hint: "System monitoring configuration",
   },
   ohlcv: { label: "OHLCV", icon: "icon-clock", hint: "Candlestick data settings" },
-  gui: { label: "GUI", icon: "icon-layout", hint: "Dashboard and UI settings" },
+  gui: { label: "GUI", icon: "icon-layout-dashboard", hint: "Dashboard and UI settings" },
   telegram: { label: "Telegram", icon: "icon-send", hint: "Telegram bot configuration" },
 };
 
@@ -412,7 +412,7 @@ export class ConfigImportDialog {
         </div>
         <div class="config-import-dropzone" id="importDropzone">
           <div class="config-import-dropzone-content">
-            <i class="icon-file-json"></i>
+            <i class="icon-file-code"></i>
             <span class="config-import-dropzone-title">Drop config file here</span>
             <span class="config-import-dropzone-hint">or click to browse</span>
           </div>
@@ -547,12 +547,12 @@ export class ConfigImportDialog {
       });
 
       const statusIcon = !section.present
-        ? '<i class="icon-minus-circle status-icon not-present" title="Not in file"></i>'
+        ? '<i class="icon-circle-minus status-icon not-present" title="Not in file"></i>'
         : !section.valid
-          ? '<i class="icon-alert-circle status-icon invalid" title="Invalid configuration"></i>'
+          ? '<i class="icon-circle-alert status-icon invalid" title="Invalid configuration"></i>'
           : section.changes.length > 0
-            ? `<i class="icon-edit status-icon changes" title="${section.changes.length} change(s)"></i>`
-            : '<i class="icon-check-circle status-icon no-changes" title="No changes"></i>';
+            ? `<i class="icon-pencil status-icon changes" title="${section.changes.length} change(s)"></i>`
+            : '<i class="icon-circle-check status-icon no-changes" title="No changes"></i>';
 
       const changesBadge =
         section.present && section.changes.length > 0
