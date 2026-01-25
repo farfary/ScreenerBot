@@ -30,8 +30,8 @@ impl ConditionEvaluator for CandleSizeCondition {
             return Err("No candles available".to_string());
         }
 
-        // Get the most recent candle
-        let candle = candles.last().unwrap();
+        // Get the most recent candle (safe - checked above)
+        let candle = candles.last().ok_or("No candles available")?;
 
         // Calculate candle metrics
         let body_size = (candle.close - candle.open).abs();

@@ -230,7 +230,7 @@ impl StrategyEvaluator {
             entry_time: position.entry_time,
             current_size_sol: position.total_size_sol,
             unrealized_profit_pct,
-            position_age_hours: (Utc::now() - position.entry_time).num_hours() as f64,
+            position_age_hours: (Utc::now() - position.entry_time).num_seconds() as f64 / 3600.0,
         };
 
         // Build market data (could be enriched from pools/tokens if needed)

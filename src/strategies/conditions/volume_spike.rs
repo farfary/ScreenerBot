@@ -34,8 +34,8 @@ impl ConditionEvaluator for VolumeSpikeCondition {
             ));
         }
 
-        // Get current candle volume
-        let current_candle = candles.last().unwrap();
+        // Get current candle volume (safe - checked above)
+        let current_candle = candles.last().ok_or("No candles available")?;
         let current_volume = current_candle.volume;
 
         // Calculate average volume over lookback period (excluding current)
