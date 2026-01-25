@@ -3215,12 +3215,12 @@ export class TokenDetailsDialog {
 
     // Create Chart
     // Ensure LightweightCharts is available
-    if (typeof LightweightCharts === "undefined") {
+    if (!window.LightweightCharts) {
       chartContainer.innerHTML = "Chart library missing";
       return;
     }
 
-    const chart = LightweightCharts.createChart(chartContainer, {
+    const chart = window.LightweightCharts.createChart(chartContainer, {
       layout: { background: { type: "solid", color: "transparent" }, textColor: "#8b949e" },
       grid: { vertLines: { visible: false }, horzLines: { color: "#30363d" } },
       rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.1, bottom: 0 } },

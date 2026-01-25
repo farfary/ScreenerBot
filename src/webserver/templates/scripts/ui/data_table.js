@@ -52,7 +52,7 @@
  *       }
  *     ],
  *     buttons: [
- *       { id: 'refresh', label: 'Refresh', icon: '🔄', onClick: () => table.refresh() }
+ *       { id: 'refresh', label: 'Refresh', icon: 'icon-refresh-cw', onClick: () => table.refresh() }
  *     ]
  *   },
  *   sorting: { column: 'name', direction: 'asc' },
@@ -91,7 +91,7 @@
  *     alt: string | (row) => string - Alt text (optional)
  *     size: number - Image size in px (optional, default: 32)
  *     shape: 'circle' | 'square' | 'rounded' - Image shape (optional, default: 'rounded')
- *     fallback: string - Fallback image URL or emoji (optional, default: '🖼️')
+ *     fallback: string - Fallback image URL (optional)
  *     lazyLoad: boolean - Enable lazy loading (optional, default: true)
  *     withText: boolean - Show text alongside image (optional, default: false)
  *     textField: string - Field name for text to display (optional, uses column id)

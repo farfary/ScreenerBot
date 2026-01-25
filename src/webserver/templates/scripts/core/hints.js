@@ -432,10 +432,10 @@ Configure thresholds in Config.`,
       content: `Background services powering ScreenerBot.
 
 Service states:
-• 🟢 **Running** — operating normally
-• 🟡 **Starting** — initializing
-• 🔴 **Stopped** — not running
-• ⚠️ **Error** — failed, may auto-restart
+• **Running** (green) — operating normally
+• **Starting** (yellow) — initializing
+• **Stopped** (red) — not running
+• **Error** (warning) — failed, may auto-restart
 
 Services have dependencies and start in order.`,
     },
@@ -583,7 +583,7 @@ Burning tokens permanently removes them from your wallet and from circulation.
 • **Has Value** - Tokens with liquidity (consider selling instead)
 • **Zero Liquidity** - Dust/worthless tokens (safe to burn)
 
-**⚠️ Warning:** This action is **irreversible**. Burned tokens cannot be recovered under any circumstances.
+**Warning:** This action is **irreversible**. Burned tokens cannot be recovered under any circumstances.
 
 **After burning:** Run Wallet Cleanup to close empty ATAs and reclaim SOL rent.`,
     },

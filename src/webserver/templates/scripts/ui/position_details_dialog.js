@@ -2354,7 +2354,7 @@ export class PositionDetailsDialog {
         ? `<div class="pdd-authority-row">
           <span class="label">Mint Authority:</span>
           <span class="pdd-status ${security.has_mint_authority ? "warning" : "safe"}">
-            ${security.has_mint_authority ? "Active ⚠️" : "Revoked ✓"}
+            ${security.has_mint_authority ? "Active <i class='icon-triangle-alert'></i>" : "Revoked ✓"}
           </span>
         </div>`
         : "";
@@ -2364,7 +2364,7 @@ export class PositionDetailsDialog {
         ? `<div class="pdd-authority-row">
           <span class="label">Freeze Authority:</span>
           <span class="pdd-status ${security.has_freeze_authority ? "warning" : "safe"}">
-            ${security.has_freeze_authority ? "Active ⚠️" : "Revoked ✓"}
+            ${security.has_freeze_authority ? "Active <i class='icon-triangle-alert'></i>" : "Revoked ✓"}
           </span>
         </div>`
         : "";
@@ -2382,17 +2382,17 @@ export class PositionDetailsDialog {
     const socialLinks = [];
     if (tokenInfo?.website) {
       socialLinks.push(
-        `<a href="${tokenInfo.website}" target="_blank" class="pdd-social-link">🌐 Website</a>`
+        `<a href="${tokenInfo.website}" target="_blank" class="pdd-social-link"><i class="icon-globe"></i> Website</a>`
       );
     }
     if (tokenInfo?.twitter) {
       socialLinks.push(
-        `<a href="${tokenInfo.twitter}" target="_blank" class="pdd-social-link">🐦 Twitter</a>`
+        `<a href="${tokenInfo.twitter}" target="_blank" class="pdd-social-link"><i class="icon-twitter"></i> Twitter</a>`
       );
     }
     if (tokenInfo?.telegram) {
       socialLinks.push(
-        `<a href="${tokenInfo.telegram}" target="_blank" class="pdd-social-link">📱 Telegram</a>`
+        `<a href="${tokenInfo.telegram}" target="_blank" class="pdd-social-link"><i class="icon-smartphone"></i> Telegram</a>`
       );
     }
 

@@ -978,7 +978,7 @@ export class TradeActionDialog {
       overlay.className = "trade-slippage-warning-overlay";
       overlay.innerHTML = `
         <div class="trade-slippage-warning">
-          <div class="slippage-warning-icon">⚠️</div>
+          <div class="slippage-warning-icon"><i class="icon-triangle-alert"></i></div>
           <div class="slippage-warning-title">High Price Impact Warning</div>
           <div class="slippage-warning-text">
             This trade has a price impact of <strong>${impactPct.toFixed(2)}%</strong>, 

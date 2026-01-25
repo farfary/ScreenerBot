@@ -19,8 +19,8 @@
  * const tabBar = new TabBar({
  *   container: '#subTabsContainer',
  *   tabs: [
- *     { id: 'pool', label: '💧 Pool Service' },
- *     { id: 'all', label: '📋 All Tokens' }
+ *     { id: 'pool', label: 'Pool Service' },
+ *     { id: 'all', label: 'All Tokens' }
  *   ],
  *   defaultTab: 'pool',
  *   stateKey: 'tokens.activeTab',

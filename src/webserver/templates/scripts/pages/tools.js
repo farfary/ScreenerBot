@@ -902,7 +902,7 @@ async function handleBurnSelectedTokens() {
     "Confirm Burn",
     `Are you sure you want to burn <strong>${selectedCount}</strong> token${selectedCount !== 1 ? "s" : ""}?` +
       (totalValue > 0.0001
-        ? `<br><br>⚠️ Total estimated value: <strong>${Utils.formatSol(totalValue)}</strong>`
+        ? `<br><br><i class="icon-triangle-alert"></i> Total estimated value: <strong>${Utils.formatSol(totalValue)}</strong>`
         : ""),
     "Continue",
     "Cancel"
@@ -912,7 +912,7 @@ async function handleBurnSelectedTokens() {
 
   // Second confirmation (critical warning)
   const secondConfirm = await showBurnConfirmation(
-    "⚠️ Final Warning",
+    "Final Warning",
     `<div class="burn-final-warning">
       <p><strong>This action is IRREVERSIBLE!</strong></p>
       <p>The following ${selectedCount} token${selectedCount !== 1 ? "s" : ""} will be permanently destroyed and cannot be recovered under any circumstances.</p>
@@ -3935,8 +3935,8 @@ function updateMultiBuyProgress(status) {
 
 function formatWalletStatus(status) {
   const icons = {
-    pending: "⏳",
-    running: "🔄",
+    pending: "...",
+    running: "↻",
     success: "✓",
     failed: "✗",
   };
