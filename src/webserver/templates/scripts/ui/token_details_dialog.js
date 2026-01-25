@@ -946,13 +946,19 @@ export class TokenDetailsDialog {
   async _handleBuyClick() {
     const dialog = this._ensureTradeDialog();
     const symbol = this.fullTokenData?.symbol || this.tokenData?.symbol || "?";
+    const mint = this.tokenData?.mint;
     const balance = await this._getWalletBalance();
+
+    if (!mint) {
+      Utils.showToast("No mint address available", "error");
+      return;
+    }
 
     try {
       const result = await dialog.open({
         action: "buy",
         symbol,
-        context: { balance },
+        context: { balance, mint },
       });
 
       if (!result) return; // User cancelled
@@ -987,12 +993,21 @@ export class TokenDetailsDialog {
   async _handleSellClick() {
     const dialog = this._ensureTradeDialog();
     const symbol = this.fullTokenData?.symbol || this.tokenData?.symbol || "?";
+    const mint = this.tokenData?.mint;
+
+    if (!mint) {
+      Utils.showToast("No mint address available", "error");
+      return;
+    }
+
+    // Get holdings for sell percentage calculation
+    const holdings = this.fullTokenData?.holdings || 0;
 
     try {
       const result = await dialog.open({
         action: "sell",
         symbol,
-        context: {},
+        context: { mint, holdings },
       });
 
       if (!result) return; // User cancelled

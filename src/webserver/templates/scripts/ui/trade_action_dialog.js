@@ -79,6 +79,7 @@ export class TradeActionDialog {
     this._isLoading = false;
     this._previousActiveElement = null;
     this._resolveOpen = null;
+    this._settingInputProgrammatically = false; // Prevent input handler during programmatic changes
 
     this.currentAction = null;
     this.currentContext = null;
@@ -236,16 +237,16 @@ export class TradeActionDialog {
     this.closeBtn = overlay.querySelector('[data-action="close"]');
 
     // Quote preview elements
-    this.quoteSection = overlay.querySelector('.trade-action-quote-section');
-    this.quoteRefreshBtn = overlay.querySelector('.trade-action-quote-refresh');
-    this.quoteAgeEl = overlay.querySelector('.quote-age');
-    this.quoteOutputEl = overlay.querySelector('.quote-output');
-    this.quoteImpactEl = overlay.querySelector('.quote-impact');
-    this.quotePlatformFeeEl = overlay.querySelector('.quote-platform-fee');
-    this.quoteNetworkFeeEl = overlay.querySelector('.quote-network-fee');
-    this.quoteRouteEl = overlay.querySelector('.quote-route');
-    this.quoteSlippageEl = overlay.querySelector('.quote-slippage');
-    this.quoteErrorTextEl = overlay.querySelector('.quote-error-text');
+    this.quoteSection = overlay.querySelector(".trade-action-quote-section");
+    this.quoteRefreshBtn = overlay.querySelector(".trade-action-quote-refresh");
+    this.quoteAgeEl = overlay.querySelector(".quote-age");
+    this.quoteOutputEl = overlay.querySelector(".quote-output");
+    this.quoteImpactEl = overlay.querySelector(".quote-impact");
+    this.quotePlatformFeeEl = overlay.querySelector(".quote-platform-fee");
+    this.quoteNetworkFeeEl = overlay.querySelector(".quote-network-fee");
+    this.quoteRouteEl = overlay.querySelector(".quote-route");
+    this.quoteSlippageEl = overlay.querySelector(".quote-slippage");
+    this.quoteErrorTextEl = overlay.querySelector(".quote-error-text");
 
     on(overlay, "click", this._overlayListener);
     on(this.closeBtn, "click", this._closeListener);
@@ -335,7 +336,7 @@ export class TradeActionDialog {
 
     // Clear quote state
     this._stopQuoteRefreshTimer();
-    this._setQuoteState('idle');
+    this._setQuoteState("idle");
 
     this.root.classList.remove("is-visible");
     this.root.setAttribute("aria-hidden", "true");
@@ -662,8 +663,10 @@ export class TradeActionDialog {
     btn.classList.add("selected");
     this._selectedPreset = { value, type };
 
-    // Fill input
+    // Fill input - use flag to prevent input handler from clearing preset
+    this._settingInputProgrammatically = true;
     this.inputField.value = value;
+    this._settingInputProgrammatically = false;
 
     // Clear error and validate
     this._clearError();
@@ -674,6 +677,10 @@ export class TradeActionDialog {
   }
 
   _handleInputChange() {
+    // Skip if value was set programmatically (e.g., by clicking preset)
+    if (this._settingInputProgrammatically) {
+      return;
+    }
     // Clear preset selection when user types
     this.presetsContainer.querySelectorAll(".trade-action-preset-btn").forEach((b) => {
       b.classList.remove("selected");
@@ -775,7 +782,7 @@ export class TradeActionDialog {
     }
   }
 
-  _handleConfirmClick() {
+  async _handleConfirmClick() {
     if (this._isLoading) return;
 
     const value = this._getInputValue();
@@ -785,6 +792,23 @@ export class TradeActionDialog {
       const error = this._validateInput(this.currentAction, value, this.currentContext);
       if (error) {
         this._showError(error);
+        return;
+      }
+    }
+
+    // Slippage warning check (price impact > 5%)
+    if (this._quoteData && this._quoteData.price_impact_pct > 5) {
+      const confirmed = await this._showSlippageWarning(this._quoteData.price_impact_pct);
+      if (!confirmed) {
+        return; // User cancelled
+      }
+    }
+
+    // Token balance verification for sell
+    if (this.currentAction === "sell" && this.currentContext?.mint) {
+      const verifyResult = await this._verifyTokenBalance();
+      if (!verifyResult.ok) {
+        this._showError(verifyResult.error);
         return;
       }
     }
@@ -807,6 +831,78 @@ export class TradeActionDialog {
     }
 
     this.close({ restoreFocus: true });
+  }
+
+  /**
+   * Show slippage warning dialog for high price impact trades
+   * @param {number} impactPct - Price impact percentage
+   * @returns {Promise<boolean>} True if user confirms, false if cancelled
+   */
+  _showSlippageWarning(impactPct) {
+    return new Promise((resolve) => {
+      const overlay = document.createElement("div");
+      overlay.className = "trade-slippage-warning-overlay";
+      overlay.innerHTML = `
+        <div class="trade-slippage-warning">
+          <div class="slippage-warning-icon">⚠️</div>
+          <div class="slippage-warning-title">High Price Impact Warning</div>
+          <div class="slippage-warning-text">
+            This trade has a price impact of <strong>${impactPct.toFixed(2)}%</strong>, 
+            which is higher than recommended (5%). You may receive significantly less 
+            than expected.
+          </div>
+          <div class="slippage-warning-buttons">
+            <button class="slippage-warning-btn cancel">Cancel</button>
+            <button class="slippage-warning-btn confirm">Proceed Anyway</button>
+          </div>
+        </div>
+      `;
+
+      overlay.querySelector(".cancel").onclick = () => {
+        overlay.remove();
+        resolve(false);
+      };
+      overlay.querySelector(".confirm").onclick = () => {
+        overlay.remove();
+        resolve(true);
+      };
+
+      document.body.appendChild(overlay);
+    });
+  }
+
+  /**
+   * Verify token balance before sell to prevent stale data trades
+   * @returns {Promise<{ok: boolean, error?: string}>}
+   */
+  async _verifyTokenBalance() {
+    try {
+      const res = await fetch(`/api/positions/${encodeURIComponent(this.currentContext.mint)}/details`);
+      if (!res.ok) {
+        return { ok: false, error: "Could not verify token balance" };
+      }
+      const data = await res.json();
+      if (!data.success || !data.data?.position?.summary) {
+        return { ok: false, error: "Position not found - it may have been closed" };
+      }
+
+      const pos = data.data.position.summary;
+      const currentHoldings = pos.remaining_token_amount ?? pos.token_amount ?? 0;
+      const expectedHoldings = this.currentContext.holdings || 0;
+
+      // Allow 1% variance for rounding
+      const variance = Math.abs(currentHoldings - expectedHoldings) / expectedHoldings;
+      if (variance > 0.01 && expectedHoldings > 0) {
+        return {
+          ok: false,
+          error: `Token balance changed. Expected ${expectedHoldings.toFixed(2)}, now ${currentHoldings.toFixed(2)}. Please refresh.`,
+        };
+      }
+
+      return { ok: true };
+    } catch {
+      return { ok: false, error: "Network error verifying balance" };
+    }
   }
 
   _handleCancelClick() {
@@ -860,24 +956,24 @@ export class TradeActionDialog {
 
     const amount = this._getSelectedAmount();
     if (!amount || amount <= 0) {
-      this._setQuoteState('idle');
+      this._setQuoteState("idle");
       return;
     }
 
-    this._setQuoteState('loading');
+    this._setQuoteState("loading");
     this._quoteData = null;
     this._quoteError = null;
 
-    const direction = this.currentAction === 'sell' ? 'sell' : 'buy';
+    const direction = this.currentAction === "sell" ? "sell" : "buy";
 
     try {
       // Build URL based on direction
       let url;
-      if (direction === 'sell') {
+      if (direction === "sell") {
         // For sell, amount is percentage, calculate token amount from holdings
         const holdings = this.currentContext.holdings || 0;
         if (holdings <= 0) {
-          throw new Error('No holdings available to sell');
+          throw new Error("No holdings available to sell");
         }
         const tokenAmount = holdings * (amount / 100);
         url = `/api/trader/quote?mint=${encodeURIComponent(this.currentContext.mint)}&amount_tokens=${tokenAmount}&direction=sell`;
@@ -896,17 +992,17 @@ export class TradeActionDialog {
         this._quoteError = null;
         this._quoteTimestamp = Date.now();
         this._renderQuote(data.data);
-        this._setQuoteState('loaded');
+        this._setQuoteState("loaded");
         this._startQuoteRefreshTimer();
       } else {
-        throw new Error(data.error?.message || 'Failed to fetch quote');
+        throw new Error(data.error?.message || "Failed to fetch quote");
       }
     } catch (err) {
       if (!this._isOpen) return;
       this._quoteError = err.message;
       this._quoteData = null;
       this.quoteErrorTextEl.textContent = err.message;
-      this._setQuoteState('error');
+      this._setQuoteState("error");
     }
   }
 
@@ -917,13 +1013,13 @@ export class TradeActionDialog {
     // Price impact with color
     const impactPct = quote.price_impact_pct.toFixed(2);
     this.quoteImpactEl.textContent = `${impactPct}%`;
-    this.quoteImpactEl.className = 'quote-value quote-impact';
+    this.quoteImpactEl.className = "quote-value quote-impact";
     if (quote.price_impact_pct > 5) {
-      this.quoteImpactEl.classList.add('impact-high');
+      this.quoteImpactEl.classList.add("impact-high");
     } else if (quote.price_impact_pct > 1) {
-      this.quoteImpactEl.classList.add('impact-medium');
+      this.quoteImpactEl.classList.add("impact-medium");
     } else {
-      this.quoteImpactEl.classList.add('impact-low');
+      this.quoteImpactEl.classList.add("impact-low");
     }
 
     // Fees
@@ -931,7 +1027,7 @@ export class TradeActionDialog {
     this.quoteNetworkFeeEl.textContent = `~${quote.network_fee_sol.toFixed(6)} SOL`;
 
     // Route and slippage
-    this.quoteRouteEl.textContent = quote.router || 'Unknown';
+    this.quoteRouteEl.textContent = quote.router || "Unknown";
     this.quoteSlippageEl.textContent = `${(quote.slippage_bps / 100).toFixed(1)}%`;
   }
 
