@@ -261,6 +261,11 @@ class ConfirmationDialog {
       this._checkboxHandler = null;
     }
 
+    if (this._trapFocusHandler && this.element) {
+      this.element.removeEventListener("keydown", this._trapFocusHandler);
+      this._trapFocusHandler = null;
+    }
+
     // Animate out
     if (this.backdrop) {
       this.backdrop.classList.remove("confirmation-dialog-backdrop--visible");
@@ -297,7 +302,7 @@ class ConfirmationDialog {
     const firstElement = focusableElements[0];
     const lastElement = focusableElements[focusableElements.length - 1];
 
-    this.element.addEventListener("keydown", (e) => {
+    this._trapFocusHandler = (e) => {
       if (e.key === "Tab") {
         if (e.shiftKey && document.activeElement === firstElement) {
           e.preventDefault();
@@ -307,7 +312,8 @@ class ConfirmationDialog {
           firstElement.focus();
         }
       }
-    });
+    };
+    this.element.addEventListener("keydown", this._trapFocusHandler);
   }
 }
 

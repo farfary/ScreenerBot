@@ -462,7 +462,7 @@ class ContextMenuManager {
       type: "item",
       label: "View Details",
       icon: "eye",
-      action: () => this._viewTokenDetails(context),
+      action: () => this._viewPositionDetails(context),
     });
 
     // Favorites toggle
@@ -1401,6 +1401,20 @@ class ContextMenuManager {
     window.dispatchEvent(
       new CustomEvent("screenerbot:open-token-details", {
         detail: { mint: context.mint, symbol: context.symbol },
+      })
+    );
+  }
+
+  _viewPositionDetails(context) {
+    // Dispatch custom event to open position details dialog
+    window.dispatchEvent(
+      new CustomEvent("screenerbot:open-position-details", {
+        detail: {
+          id: context.id,
+          mint: context.mint,
+          symbol: context.symbol,
+          position_type: context.position_type,
+        },
       })
     );
   }

@@ -1170,10 +1170,16 @@ export class PositionDetailsDialog {
       const viewBtn = content.querySelector("#pddViewTokenBtn");
       if (viewBtn) {
         const handler = () => {
-          // Close this dialog and open token details
+          // Close this dialog and open token details via global event
+          const mint = pos.mint;
+          const symbol = pos.symbol;
           this.close();
-          // The parent page should handle opening token details
-          this.onTradeComplete({ action: "view_token", mint: pos.mint });
+          // Dispatch global event to open token details dialog
+          window.dispatchEvent(
+            new CustomEvent("screenerbot:open-token-details", {
+              detail: { mint, symbol },
+            })
+          );
         };
         viewBtn.addEventListener("click", handler);
         this._actionHandlers.push({ element: viewBtn, handler });
@@ -2597,3 +2603,52 @@ export class PositionDetailsDialog {
     return typeMap[type.toLowerCase()] || Utils.escapeHtml(type);
   }
 }
+
+// ============================================================================
+// Global Event Listener for Context Menu "View Details" Action (Positions)
+// ============================================================================
+// This listener allows any page to open the PositionDetailsDialog via custom event
+// dispatched from context_menu.js when user clicks "View Details" on a position row
+
+let globalPositionDialogInstance = null;
+
+window.addEventListener("screenerbot:open-position-details", async (event) => {
+  const { id, mint, symbol, position_type } = event.detail || {};
+
+  if (!id && !mint) {
+    console.error("[PositionDetailsDialog] Event received without id or mint");
+    return;
+  }
+
+  console.log(`[PositionDetailsDialog] Opening details for position ${id || mint}`);
+
+  // Close existing dialog if open for a different position
+  if (globalPositionDialogInstance && globalPositionDialogInstance.dialogEl) {
+    const currentId = globalPositionDialogInstance.positionData?.id;
+    const currentMint = globalPositionDialogInstance.positionData?.mint;
+    if ((id && currentId === id) || (!id && currentMint === mint)) {
+      // Already open for this position, do nothing
+      console.log("[PositionDetailsDialog] Dialog already open for this position");
+      return;
+    }
+    globalPositionDialogInstance.close();
+    await new Promise((resolve) => setTimeout(resolve, 350));
+  }
+
+  // Create new dialog instance if needed
+  if (!globalPositionDialogInstance) {
+    globalPositionDialogInstance = new PositionDetailsDialog({
+      onClose: () => {
+        // Keep instance for reuse, just clean up state
+      },
+    });
+  }
+
+  // Open dialog with position data (dialog will fetch full details)
+  await globalPositionDialogInstance.show({
+    id,
+    mint,
+    symbol: symbol || "",
+    position_type: position_type || "open",
+  });
+});
