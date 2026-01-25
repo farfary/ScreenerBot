@@ -687,5 +687,16 @@ class ToastManager {
 // Create singleton instance
 export const toastManager = new ToastManager();
 
+/**
+ * Convenience function for showing toasts
+ * @param {string} message - Toast message
+ * @param {string} type - Toast type (success, error, warning, info)
+ * @param {object} options - Additional options
+ * @returns {string} Toast ID
+ */
+export function showToast(message, type = "info", options = {}) {
+  return toastManager.show(message, { type, ...options });
+}
+
 // Export class for testing
 export { ToastManager };
