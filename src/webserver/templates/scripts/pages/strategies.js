@@ -1851,11 +1851,49 @@ export function createLifecycle() {
       return false;
     }
 
-    try {
-      const data = await requestManager.fetch(`/api/strategies/${currentStrategy.id}/validate`, {
-        method: "POST",
-        priority: "high",
+    // Make sure rule tree is up to date
+    updateRuleTreeFromEditor();
+
+    // Check if strategy has conditions
+    if (!currentStrategy.rules) {
+      Utils.showToast({
+        type: "warning",
+        title: "No Conditions",
+        message: "Add at least one condition before validating",
       });
+      updateValidationStatus(false, "No conditions defined");
+      return false;
+    }
+
+    try {
+      let data;
+
+      if (currentStrategy.id) {
+        // Strategy exists on server - use ID-based validation
+        data = await requestManager.fetch(`/api/strategies/${currentStrategy.id}/validate`, {
+          method: "POST",
+          priority: "high",
+        });
+      } else {
+        // Unsaved strategy - use inline validation with JSON body
+        const body = {
+          name: currentStrategy.name || "Untitled",
+          description: currentStrategy.description || null,
+          strategy_type: currentStrategy.type,
+          enabled: !!currentStrategy.enabled,
+          priority: currentStrategy.priority ?? 10,
+          rules: currentStrategy.rules,
+          parameters: currentStrategy.parameters || {},
+          author: currentStrategy.author || null,
+        };
+
+        data = await requestManager.fetch("/api/strategies/validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+          priority: "high",
+        });
+      }
 
       if (data.valid) {
         updateValidationStatus(true, "Strategy is valid");

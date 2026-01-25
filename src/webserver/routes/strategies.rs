@@ -784,6 +784,13 @@ pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         // Strategy CRUD
         .route("/", get(list_strategies).post(create_strategy))
+        // Inline validation (must be before /:id routes to avoid path conflict)
+        .route("/validate", post(validate_strategy_inline_handler))
+        // Condition schemas
+        .route("/conditions/schemas", get(get_condition_schemas))
+        // Templates
+        .route("/templates", get(list_templates))
+        // Routes with path parameters (must come after static routes)
         .route(
             "/:id",
             get(get_strategy_detail)
@@ -793,13 +800,9 @@ pub fn routes() -> Router<Arc<AppState>> {
         // Performance and testing
         .route("/:id/performance", get(get_strategy_performance_stats))
         .route("/:id/test", post(test_strategy))
-        // Validate / Deploy
+        // Validate / Deploy (by ID)
         .route("/:id/validate", post(validate_strategy_handler))
         .route("/:id/deploy", post(deploy_strategy_handler))
-        // Condition schemas
-        .route("/conditions/schemas", get(get_condition_schemas))
-        // Templates
-        .route("/templates", get(list_templates))
 }
 
 /// GET /api/strategies/templates - List available strategy templates
@@ -871,6 +874,59 @@ async fn validate_strategy_handler(Path(id): Path<String>) -> Response {
                 &format!("Failed to get strategy: {}", e),
             )
         }
+    };
+
+    match strategies::validate_strategy(&strategy).await {
+        Ok(_) => success_response(serde_json::json!({"valid": true})),
+        Err(e) => success_response(serde_json::json!({"valid": false, "errors": [e]})),
+    }
+}
+
+/// POST /api/strategies/validate - Validate a strategy from JSON body (for unsaved strategies)
+async fn validate_strategy_inline_handler(Json(request): Json<StrategyRequest>) -> Response {
+    logger::info(
+        LogTag::Webserver,
+        &format!("POST /api/strategies/validate - name={}", request.name),
+    );
+
+    // Parse strategy type
+    let strategy_type = match request.strategy_type.to_uppercase().as_str() {
+        "ENTRY" => StrategyType::Entry,
+        "EXIT" => StrategyType::Exit,
+        _ => {
+            return success_response(serde_json::json!({
+                "valid": false,
+                "errors": ["Invalid strategy type. Must be ENTRY or EXIT"]
+            }));
+        }
+    };
+
+    // Parse rules
+    let rules: RuleTree = match serde_json::from_value(request.rules) {
+        Ok(rules) => rules,
+        Err(e) => {
+            return success_response(serde_json::json!({
+                "valid": false,
+                "errors": [format!("Invalid rules JSON: {}", e)]
+            }));
+        }
+    };
+
+    let now = Utc::now();
+    let strategy = Strategy {
+        id: "validation-check".to_string(),
+        name: request.name,
+        description: request.description,
+        strategy_type,
+        enabled: request.enabled,
+        priority: request.priority,
+        timeframe: request.timeframe,
+        rules,
+        parameters: request.parameters,
+        created_at: now,
+        updated_at: now,
+        author: request.author,
+        version: 1,
     };
 
     match strategies::validate_strategy(&strategy).await {
