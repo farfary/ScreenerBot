@@ -50,18 +50,25 @@
 }
 
 .sidebar-footer {
-  padding: 1rem;
+  padding: 0.75rem 1rem;
   border-top: 1px solid var(--border-color);
   background: var(--surface-color);
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
 }
 
-.secondary-actions {
+.sidebar-footer-row {
   display: flex;
   gap: 0.5rem;
-  justify-content: center;
+  align-items: center;
+}
+
+.sidebar-footer-row .flex-1 {
+  flex: 1;
+}
+
+.sidebar-footer-row .btn-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
 }
 
 /* Strategy List Items */
@@ -207,18 +214,43 @@
 
 .header-actions {
   display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.header-divider {
+  width: 1px;
+  height: 20px;
+  background: var(--border-color);
+  margin: 0 0.25rem;
+}
+
+.header-action-group {
+  display: flex;
   gap: 0.375rem;
   align-items: center;
 }
 
 .header-actions .btn {
-  padding: 6px 10px;
+  padding: 6px 12px;
   font-size: 0.8rem;
   height: 32px;
   border-radius: 6px;
   gap: 6px;
   font-weight: 500;
   transition: all 0.2s ease;
+}
+
+.header-actions .btn.ghost {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+
+.header-actions .btn.ghost:hover {
+  background: var(--hover-color);
+  color: var(--text-color);
+  border-color: var(--text-muted);
 }
 
 .header-actions .btn .icon {

@@ -27,14 +27,13 @@
     </div>
 
     <div class="sidebar-footer">
-      <button class="btn primary full-width" id="create-strategy">
-        <i class="icon-plus"></i> New Strategy
-      </button>
-      <div class="secondary-actions">
-        <button class="btn-icon" id="import-strategy" title="Import">
+      <div class="sidebar-footer-row">
+        <button class="btn primary flex-1" id="create-strategy">
+          <i class="icon-plus"></i> New Strategy
+        </button>
+        <button class="btn-icon" id="import-strategy" title="Import Strategy">
           <i class="icon-download"></i>
         </button>
-        <!-- Future: Export, Duplicate, etc. -->
       </div>
     </div>
   </aside>
@@ -59,14 +58,17 @@
           <label class="enable-toggle">
             <input type="checkbox" id="strategy-enabled-toggle" />
             <span class="toggle-track"></span>
-            <span class="toggle-label">Enable</span>
+            <span class="toggle-label">Enabled</span>
           </label>
-          <button class="btn" id="validate-strategy" title="Validate Strategy">
-            <i class="icon-check"></i> Validate
-          </button>
-          <button class="btn primary" id="save-strategy" title="Save Strategy">
-            <i class="icon-save"></i> Save
-          </button>
+          <span class="header-divider"></span>
+          <div class="header-action-group">
+            <button class="btn ghost" id="validate-strategy" title="Validate Strategy">
+              <i class="icon-check-circle"></i> Validate
+            </button>
+            <button class="btn primary" id="save-strategy" title="Save Strategy">
+              <i class="icon-save"></i> Save
+            </button>
+          </div>
         </div>
       </div>
     </header>
