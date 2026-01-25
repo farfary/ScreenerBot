@@ -95,6 +95,47 @@ function createTray() {
     },
     { type: 'separator' },
     {
+      label: 'Open Dashboard',
+      click: () => {
+        if (mainWindow) {
+          mainWindow.show();
+          mainWindow.focus();
+          mainWindow.loadURL(`http://${CONFIG.host}:${CONFIG.port}?electron=1`);
+        }
+      }
+    },
+    {
+      label: 'Open Data Folder',
+      click: () => {
+        shell.openPath(app.getPath('userData'));
+      }
+    },
+    {
+      label: 'Open Logs Folder',
+      click: () => {
+        const logsPath = path.join(app.getPath('userData'), 'logs');
+        if (fs.existsSync(logsPath)) {
+          shell.openPath(logsPath);
+        } else {
+          shell.openPath(app.getPath('userData'));
+        }
+      }
+    },
+    { type: 'separator' },
+    {
+      label: 'Documentation',
+      click: async () => {
+        await shell.openExternal('https://screenerbot.io/docs');
+      }
+    },
+    {
+      label: 'Telegram Support',
+      click: async () => {
+        await shell.openExternal('https://t.me/screenerbotio_support');
+      }
+    },
+    { type: 'separator' },
+    {
       label: 'Quit ScreenerBot',
       click: () => {
         isQuitting = true;
