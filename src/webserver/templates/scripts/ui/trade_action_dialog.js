@@ -93,6 +93,14 @@ export class TradeActionDialog {
     this._inputChangeListener = this._handleInputChange.bind(this);
     this._focusTrap = null;
 
+    // Quote preview state
+    this._quoteData = null;
+    this._quoteLoading = false;
+    this._quoteError = null;
+    this._quoteTimestamp = null;
+    this._quoteRefreshTimer = null;
+    this._fetchQuoteDebounced = this._debounce(this._fetchQuote.bind(this), 400);
+
     this._ensureElements();
   }
 
@@ -144,6 +152,57 @@ export class TradeActionDialog {
               <span class="trade-action-error-text"></span>
             </div>
           </div>
+          <div class="trade-action-quote-section" data-state="idle">
+            <div class="trade-action-quote-header">
+              <span class="trade-action-quote-title">Quote Preview</span>
+              <button type="button" class="trade-action-quote-refresh" aria-label="Refresh quote">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+                </svg>
+                <span class="quote-age"></span>
+              </button>
+            </div>
+            <div class="trade-action-quote-idle">
+              <span>Select an amount to see quote</span>
+            </div>
+            <div class="trade-action-quote-loading">
+              <div class="trade-action-quote-spinner"></div>
+              <span>Fetching quote...</span>
+            </div>
+            <div class="trade-action-quote-error">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 8v4M12 16h.01"/>
+              </svg>
+              <span class="quote-error-text"></span>
+            </div>
+            <div class="trade-action-quote-content">
+              <div class="quote-row quote-row-main">
+                <span class="quote-label">You Receive</span>
+                <span class="quote-value quote-output"></span>
+              </div>
+              <div class="quote-row">
+                <span class="quote-label">Price Impact</span>
+                <span class="quote-value quote-impact"></span>
+              </div>
+              <div class="quote-row">
+                <span class="quote-label">Platform Fee</span>
+                <span class="quote-value quote-platform-fee"></span>
+              </div>
+              <div class="quote-row">
+                <span class="quote-label">Network Fee</span>
+                <span class="quote-value quote-network-fee"></span>
+              </div>
+              <div class="quote-row">
+                <span class="quote-label">Route</span>
+                <span class="quote-value quote-route"></span>
+              </div>
+              <div class="quote-row">
+                <span class="quote-label">Slippage</span>
+                <span class="quote-value quote-slippage"></span>
+              </div>
+            </div>
+          </div>
         </div>
         <footer class="trade-action-footer">
           <button type="button" class="trade-action-btn trade-action-btn-cancel" data-action="cancel">
@@ -176,11 +235,24 @@ export class TradeActionDialog {
     this.cancelBtn = overlay.querySelector('[data-action="cancel"]');
     this.closeBtn = overlay.querySelector('[data-action="close"]');
 
+    // Quote preview elements
+    this.quoteSection = overlay.querySelector('.trade-action-quote-section');
+    this.quoteRefreshBtn = overlay.querySelector('.trade-action-quote-refresh');
+    this.quoteAgeEl = overlay.querySelector('.quote-age');
+    this.quoteOutputEl = overlay.querySelector('.quote-output');
+    this.quoteImpactEl = overlay.querySelector('.quote-impact');
+    this.quotePlatformFeeEl = overlay.querySelector('.quote-platform-fee');
+    this.quoteNetworkFeeEl = overlay.querySelector('.quote-network-fee');
+    this.quoteRouteEl = overlay.querySelector('.quote-route');
+    this.quoteSlippageEl = overlay.querySelector('.quote-slippage');
+    this.quoteErrorTextEl = overlay.querySelector('.quote-error-text');
+
     on(overlay, "click", this._overlayListener);
     on(this.closeBtn, "click", this._closeListener);
     on(this.cancelBtn, "click", this._cancelListener);
     on(this.confirmBtn, "click", this._confirmListener);
     on(this.inputField, "input", this._inputChangeListener);
+    on(this.quoteRefreshBtn, "click", this._handleQuoteRefresh.bind(this));
   }
 
   /**
@@ -211,6 +283,12 @@ export class TradeActionDialog {
     this.currentContext = context;
     this._selectedPreset = null;
     this._isLoading = false;
+
+    // Reset quote state
+    this._quoteData = null;
+    this._quoteError = null;
+    this._quoteTimestamp = null;
+    this._stopQuoteRefreshTimer();
 
     // Create promise before rendering
     const resultPromise = new Promise((resolve) => {
@@ -254,6 +332,10 @@ export class TradeActionDialog {
     if (!this._isOpen) {
       return;
     }
+
+    // Clear quote state
+    this._stopQuoteRefreshTimer();
+    this._setQuoteState('idle');
 
     this.root.classList.remove("is-visible");
     this.root.setAttribute("aria-hidden", "true");
@@ -382,6 +464,11 @@ export class TradeActionDialog {
 
   _renderContext(action, symbol, context) {
     const rows = [];
+
+    // Store mint for quote fetching
+    if (context.mint) {
+      this.currentContext.mint = context.mint;
+    }
 
     // Token info with symbol highlight
     rows.push(`
@@ -581,6 +668,9 @@ export class TradeActionDialog {
     // Clear error and validate
     this._clearError();
     this._updateConfirmButton();
+
+    // Fetch quote for new amount
+    this._fetchQuoteDebounced();
   }
 
   _handleInputChange() {
@@ -593,6 +683,9 @@ export class TradeActionDialog {
     // Clear error and validate
     this._clearError();
     this._updateConfirmButton();
+
+    // Fetch quote when input changes
+    this._fetchQuoteDebounced();
   }
 
   _updateConfirmButton() {
@@ -750,5 +843,146 @@ export class TradeActionDialog {
       event.stopPropagation();
       this._handleConfirmClick();
     }
+  }
+
+  _debounce(func, wait) {
+    let timeout;
+    return (...args) => {
+      clearTimeout(timeout);
+      timeout = setTimeout(() => func.apply(this, args), wait);
+    };
+  }
+
+  async _fetchQuote() {
+    if (!this._isOpen || !this.currentContext?.mint) {
+      return;
+    }
+
+    const amount = this._getSelectedAmount();
+    if (!amount || amount <= 0) {
+      this._setQuoteState('idle');
+      return;
+    }
+
+    this._setQuoteState('loading');
+    this._quoteData = null;
+    this._quoteError = null;
+
+    const direction = this.currentAction === 'sell' ? 'sell' : 'buy';
+
+    try {
+      // Build URL based on direction
+      let url;
+      if (direction === 'sell') {
+        // For sell, amount is percentage, calculate token amount from holdings
+        const holdings = this.currentContext.holdings || 0;
+        if (holdings <= 0) {
+          throw new Error('No holdings available to sell');
+        }
+        const tokenAmount = holdings * (amount / 100);
+        url = `/api/trader/quote?mint=${encodeURIComponent(this.currentContext.mint)}&amount_tokens=${tokenAmount}&direction=sell`;
+      } else {
+        // For buy/add, amount is SOL
+        url = `/api/trader/quote?mint=${encodeURIComponent(this.currentContext.mint)}&amount_sol=${amount}&direction=buy`;
+      }
+
+      const response = await fetch(url);
+      const data = await response.json();
+
+      if (!this._isOpen) return; // Dialog closed during fetch
+
+      if (data.success && data.data) {
+        this._quoteData = data.data;
+        this._quoteError = null;
+        this._quoteTimestamp = Date.now();
+        this._renderQuote(data.data);
+        this._setQuoteState('loaded');
+        this._startQuoteRefreshTimer();
+      } else {
+        throw new Error(data.error?.message || 'Failed to fetch quote');
+      }
+    } catch (err) {
+      if (!this._isOpen) return;
+      this._quoteError = err.message;
+      this._quoteData = null;
+      this.quoteErrorTextEl.textContent = err.message;
+      this._setQuoteState('error');
+    }
+  }
+
+  _renderQuote(quote) {
+    // Output amount
+    this.quoteOutputEl.textContent = `~${quote.output_formatted}`;
+
+    // Price impact with color
+    const impactPct = quote.price_impact_pct.toFixed(2);
+    this.quoteImpactEl.textContent = `${impactPct}%`;
+    this.quoteImpactEl.className = 'quote-value quote-impact';
+    if (quote.price_impact_pct > 5) {
+      this.quoteImpactEl.classList.add('impact-high');
+    } else if (quote.price_impact_pct > 1) {
+      this.quoteImpactEl.classList.add('impact-medium');
+    } else {
+      this.quoteImpactEl.classList.add('impact-low');
+    }
+
+    // Fees
+    this.quotePlatformFeeEl.textContent = `${quote.platform_fee_pct}% (${quote.platform_fee_sol.toFixed(6)} SOL)`;
+    this.quoteNetworkFeeEl.textContent = `~${quote.network_fee_sol.toFixed(6)} SOL`;
+
+    // Route and slippage
+    this.quoteRouteEl.textContent = quote.router || 'Unknown';
+    this.quoteSlippageEl.textContent = `${(quote.slippage_bps / 100).toFixed(1)}%`;
+  }
+
+  _setQuoteState(state) {
+    if (this.quoteSection) {
+      this.quoteSection.dataset.state = state;
+    }
+  }
+
+  _getSelectedAmount() {
+    // First check for selected preset
+    if (this._selectedPreset !== null) {
+      // For all actions, return the preset value
+      // For sell, this is the percentage (25, 50, 75, 100)
+      // For buy/add, this is the SOL amount
+      return this._selectedPreset.value;
+    }
+    // Then check input field
+    const inputVal = parseFloat(this.inputField?.value);
+    if (!isNaN(inputVal) && inputVal > 0) {
+      return inputVal;
+    }
+    return null;
+  }
+
+  _startQuoteRefreshTimer() {
+    this._stopQuoteRefreshTimer();
+    this._quoteRefreshTimer = setInterval(() => {
+      if (this._isOpen && this._quoteData) {
+        const age = Math.floor((Date.now() - this._quoteTimestamp) / 1000);
+        if (this.quoteAgeEl) {
+          this.quoteAgeEl.textContent = `${age}s`;
+        }
+        // Auto-refresh after 15 seconds
+        if (age >= 15) {
+          this._fetchQuote();
+        }
+      }
+    }, 1000);
+  }
+
+  _stopQuoteRefreshTimer() {
+    if (this._quoteRefreshTimer) {
+      clearInterval(this._quoteRefreshTimer);
+      this._quoteRefreshTimer = null;
+    }
+  }
+
+  _handleQuoteRefresh(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    this._fetchQuote();
   }
 }

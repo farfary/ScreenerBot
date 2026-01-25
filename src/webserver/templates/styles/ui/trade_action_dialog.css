@@ -502,6 +502,186 @@ body.trade-action-dialog-open {
   display: block;
 }
 
+/* ========================================
+   Quote Preview Section
+   ======================================== */
+
+.trade-action-quote-section {
+  margin-top: 16px;
+  padding: 12px;
+  background: rgb(var(--color-surface) / 60%);
+  border: 1px solid rgb(var(--color-border));
+  border-radius: var(--radius-md, 6px);
+}
+
+.trade-action-quote-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.trade-action-quote-title {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: rgb(var(--color-text-secondary));
+}
+
+.trade-action-quote-refresh {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  font-size: 0.7rem;
+  color: rgb(var(--color-text-secondary));
+  background: transparent;
+  border: 1px solid rgb(var(--color-border));
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.trade-action-quote-refresh svg {
+  width: 12px;
+  height: 12px;
+}
+
+.trade-action-quote-refresh:hover {
+  color: rgb(var(--color-text-primary));
+  border-color: rgb(var(--color-text-secondary));
+  background: rgb(var(--color-surface-elevated));
+}
+
+.trade-action-quote-refresh:active svg {
+  animation: trade-spinner 0.6s linear;
+}
+
+.quote-age {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Quote States */
+.trade-action-quote-idle,
+.trade-action-quote-loading,
+.trade-action-quote-error,
+.trade-action-quote-content {
+  display: none;
+}
+
+.trade-action-quote-section[data-state="idle"] .trade-action-quote-idle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  font-size: 0.8rem;
+  color: rgb(var(--color-text-tertiary));
+}
+
+.trade-action-quote-section[data-state="loading"] .trade-action-quote-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px;
+  font-size: 0.8rem;
+  color: rgb(var(--color-text-secondary));
+}
+
+.trade-action-quote-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgb(var(--color-border));
+  border-top-color: rgb(var(--color-accent));
+  border-radius: 50%;
+  animation: trade-spinner 0.8s linear infinite;
+}
+
+.trade-action-quote-section[data-state="error"] .trade-action-quote-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 12px;
+  font-size: 0.8rem;
+  color: rgb(var(--color-error, 248 81 73));
+  background: rgb(var(--color-error, 248 81 73) / 10%);
+  border-radius: var(--radius-sm, 4px);
+}
+
+.trade-action-quote-error svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.trade-action-quote-section[data-state="loaded"] .trade-action-quote-content {
+  display: block;
+}
+
+.trade-action-quote-section[data-state="loaded"] .trade-action-quote-refresh,
+.trade-action-quote-section[data-state="error"] .trade-action-quote-refresh {
+  opacity: 1;
+}
+
+.trade-action-quote-section[data-state="idle"] .trade-action-quote-refresh,
+.trade-action-quote-section[data-state="loading"] .trade-action-quote-refresh {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Quote Content */
+.quote-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  border-bottom: 1px solid rgb(var(--color-border) / 50%);
+}
+
+.quote-row:last-child {
+  border-bottom: none;
+}
+
+.quote-row-main {
+  padding: 8px 0;
+}
+
+.quote-row-main .quote-value {
+  font-size: 1rem;
+  font-weight: 600;
+  color: rgb(var(--color-text-primary));
+}
+
+.quote-label {
+  font-size: 0.75rem;
+  color: rgb(var(--color-text-secondary));
+}
+
+.quote-value {
+  font-size: 0.8rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: rgb(var(--color-text-primary));
+}
+
+/* Impact colors */
+.quote-impact.impact-low {
+  color: rgb(var(--color-success, 63 185 80));
+}
+
+.quote-impact.impact-medium {
+  color: rgb(var(--color-warning, 210 153 34));
+}
+
+.quote-impact.impact-high {
+  color: rgb(var(--color-error, 248 81 73));
+}
+
 /* Animations */
 
 @keyframes trade-overlay-fade-in {
