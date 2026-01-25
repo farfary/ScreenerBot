@@ -113,6 +113,14 @@ export class TradeActionDialog {
     this._quickMintInputListener = this._handleQuickMintInput.bind(this);
     this._quoteRefreshListener = this._handleQuoteRefresh.bind(this);
 
+    // Search state
+    this._searchResults = [];
+    this._searchSelectedIndex = -1;
+    this._searchDropdownEl = null;
+    this._searchDebounceTimer = null;
+    this._isSearching = false;
+    this._searchKeyListener = this._handleSearchKeyDown.bind(this);
+
     // Quote preview state
     this._quoteData = null;
     this._quoteLoading = false;
@@ -239,7 +247,7 @@ export class TradeActionDialog {
           <div class="quick-trade-mint-content">
             <label class="quick-trade-mint-label">Enter Token Mint Address</label>
             <div class="quick-trade-mint-input-wrapper">
-              <input type="text" class="quick-trade-mint-input" placeholder="Paste Solana mint address..." autocomplete="off" spellcheck="false" />
+              <input type="text" class="quick-trade-mint-input" placeholder="Enter mint address or search by symbol..." autocomplete="off" spellcheck="false" />
               <button type="button" class="quick-trade-paste-btn" aria-label="Paste from clipboard">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
@@ -247,6 +255,7 @@ export class TradeActionDialog {
                 </svg>
               </button>
             </div>
+            <div class="quick-trade-search-results" data-visible="false"></div>
             <div class="quick-trade-recent" data-visible="false">
               <span class="quick-trade-recent-label">Recent:</span>
               <div class="quick-trade-recent-list"></div>
@@ -321,6 +330,7 @@ export class TradeActionDialog {
     this._quickMintStepEl = overlay.querySelector(".quick-trade-mint-step");
     this._quickMintInputEl = overlay.querySelector(".quick-trade-mint-input");
     this._quickPasteBtnEl = overlay.querySelector(".quick-trade-paste-btn");
+    this._searchDropdownEl = overlay.querySelector(".quick-trade-search-results");
     this._quickContinueBtnEl = overlay.querySelector(".quick-trade-continue-btn");
     this._quickCancelBtnEl = overlay.querySelector(".quick-trade-cancel-btn");
     this._quickTokenPreviewEl = overlay.querySelector(".quick-trade-token-preview");
@@ -346,6 +356,7 @@ export class TradeActionDialog {
     on(this._quickContinueBtnEl, "click", this._quickContinueListener);
     on(this._quickCancelBtnEl, "click", this._cancelListener);
     on(this._quickMintInputEl, "input", this._quickMintInputListener);
+    on(this._quickMintInputEl, "keydown", this._searchKeyListener);
   }
 
   /**
@@ -527,6 +538,8 @@ export class TradeActionDialog {
     off(this._quickContinueBtnEl, "click", this._quickContinueListener);
     off(this._quickCancelBtnEl, "click", this._cancelListener);
     off(this._quickMintInputEl, "input", this._quickMintInputListener);
+    off(this._quickMintInputEl, "keydown", this._searchKeyListener);
+    this._clearSearchDebounce();
 
     if (this.root.parentNode) {
       this.root.parentNode.removeChild(this.root);
@@ -1358,6 +1371,10 @@ export class TradeActionDialog {
     this._quickTokenLoadingEl.style.display = "none";
     this._quickTokenInfoEl.style.display = "none";
 
+    // Reset search state
+    this._hideSearchResults();
+    this._clearSearchDebounce();
+
     // Render recent trades
     this._renderRecentTrades();
   }
@@ -1381,35 +1398,194 @@ export class TradeActionDialog {
 
   /**
    * Handle mint input changes in quick trade mode
+   * Detects if input is a mint address or a search query
    */
   _handleQuickMintInput() {
     const value = this._quickMintInputEl.value.trim();
 
     // Hide error when typing
     this._quickErrorEl.setAttribute("data-visible", "false");
+    this._clearSearchDebounce();
 
     if (!value) {
       this._quickContinueBtnEl.disabled = true;
       this._quickTokenPreviewEl.setAttribute("data-visible", "false");
+      this._hideSearchResults();
       this._fetchedTokenData = null;
       return;
     }
 
-    // Validate mint format
-    if (!this._isValidMint(value)) {
-      this._quickContinueBtnEl.disabled = true;
-      this._quickTokenPreviewEl.setAttribute("data-visible", "false");
-      this._fetchedTokenData = null;
+    // Check if it looks like a mint address (base58, 32-44 chars)
+    if (this._isValidMint(value)) {
+      // It's a mint address - hide search, fetch token info directly
+      this._hideSearchResults();
+      this._fetchQuickTokenInfo(value);
+      return;
+    }
 
-      // Only show error if they've typed enough characters
-      if (value.length >= 32) {
-        this._showQuickError("Invalid mint address format");
+    // It's a search query - hide token preview, show search results
+    this._quickTokenPreviewEl.setAttribute("data-visible", "false");
+    this._quickContinueBtnEl.disabled = true;
+    this._fetchedTokenData = null;
+
+    // Only search if query is at least 2 characters
+    if (value.length >= 2) {
+      this._searchDebounceTimer = setTimeout(() => {
+        this._searchTokens(value);
+      }, 300);
+    } else {
+      this._hideSearchResults();
+    }
+  }
+
+  /**
+   * Clear search debounce timer
+   */
+  _clearSearchDebounce() {
+    if (this._searchDebounceTimer) {
+      clearTimeout(this._searchDebounceTimer);
+      this._searchDebounceTimer = null;
+    }
+  }
+
+  /**
+   * Search tokens by symbol/name
+   * @param {string} query - Search query
+   */
+  async _searchTokens(query) {
+    if (this._isSearching) return;
+    this._isSearching = true;
+
+    try {
+      const response = await fetch(`/api/tokens/search?q=${encodeURIComponent(query)}&limit=5`);
+
+      if (!this._isOpen || this._quickMintInputEl.value.trim() !== query) {
+        return; // Dialog closed or query changed
       }
+
+      if (!response.ok) {
+        this._hideSearchResults();
+        return;
+      }
+
+      const data = await response.json();
+
+      if (!data.success || !data.data || data.data.length === 0) {
+        this._hideSearchResults();
+        return;
+      }
+
+      this._searchResults = data.data;
+      this._searchSelectedIndex = -1;
+      this._renderSearchResults();
+    } catch {
+      this._hideSearchResults();
+    } finally {
+      this._isSearching = false;
+    }
+  }
+
+  /**
+   * Render search results dropdown
+   */
+  _renderSearchResults() {
+    if (!this._searchDropdownEl || this._searchResults.length === 0) {
+      this._hideSearchResults();
       return;
     }
 
-    // Valid format - fetch token info
-    this._fetchQuickTokenInfo(value);
+    this._searchDropdownEl.innerHTML = this._searchResults
+      .map((token, index) => {
+        const mintShort = token.mint ? `${token.mint.slice(0, 4)}...${token.mint.slice(-4)}` : "";
+        return `
+          <div class="search-result-item" data-index="${index}" data-mint="${Utils.escapeHtml(token.mint)}">
+            <span class="search-result-symbol">${Utils.escapeHtml(token.symbol || "???")} </span>
+            <span class="search-result-name">${Utils.escapeHtml(token.name || "Unknown")}</span>
+            <span class="search-result-mint">${mintShort}</span>
+          </div>
+        `;
+      })
+      .join("");
+
+    this._searchDropdownEl.setAttribute("data-visible", "true");
+
+    // Attach click listeners
+    this._searchDropdownEl.querySelectorAll(".search-result-item").forEach((item) => {
+      item.addEventListener("click", (e) => {
+        const mint = e.currentTarget.getAttribute("data-mint");
+        if (mint) {
+          this._selectSearchResult(mint);
+        }
+      });
+    });
+  }
+
+  /**
+   * Hide search results dropdown
+   */
+  _hideSearchResults() {
+    if (this._searchDropdownEl) {
+      this._searchDropdownEl.setAttribute("data-visible", "false");
+      this._searchDropdownEl.innerHTML = "";
+    }
+    this._searchResults = [];
+    this._searchSelectedIndex = -1;
+  }
+
+  /**
+   * Select a search result and populate the mint input
+   * @param {string} mint - The mint address to select
+   */
+  _selectSearchResult(mint) {
+    this._quickMintInputEl.value = mint;
+    this._hideSearchResults();
+    this._fetchQuickTokenInfo(mint);
+  }
+
+  /**
+   * Handle keyboard navigation in search results
+   * @param {KeyboardEvent} e
+   */
+  _handleSearchKeyDown(e) {
+    if (!this._searchDropdownEl || this._searchResults.length === 0) {
+      return;
+    }
+
+    const isVisible = this._searchDropdownEl.getAttribute("data-visible") === "true";
+    if (!isVisible) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      this._searchSelectedIndex = Math.min(
+        this._searchSelectedIndex + 1,
+        this._searchResults.length - 1
+      );
+      this._highlightSearchResult();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      this._searchSelectedIndex = Math.max(this._searchSelectedIndex - 1, 0);
+      this._highlightSearchResult();
+    } else if (e.key === "Enter" && this._searchSelectedIndex >= 0) {
+      e.preventDefault();
+      e.stopPropagation();
+      const selected = this._searchResults[this._searchSelectedIndex];
+      if (selected?.mint) {
+        this._selectSearchResult(selected.mint);
+      }
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      this._hideSearchResults();
+    }
+  }
+
+  /**
+   * Highlight the currently selected search result
+   */
+  _highlightSearchResult() {
+    const items = this._searchDropdownEl.querySelectorAll(".search-result-item");
+    items.forEach((item, idx) => {
+      item.classList.toggle("selected", idx === this._searchSelectedIndex);
+    });
   }
 
   /**
@@ -1676,6 +1852,64 @@ export class TradeActionDialog {
       .quick-trade-paste-btn.error-flash {
         background: rgba(239, 68, 68, 0.15);
         border-color: var(--color-error);
+      }
+      
+      /* Quick Trade Search Results */
+      .quick-trade-search-results {
+        display: none;
+        flex-direction: column;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        max-height: 200px;
+        overflow-y: auto;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      }
+      .quick-trade-search-results[data-visible="true"] {
+        display: flex;
+      }
+      
+      .search-result-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1rem;
+        cursor: pointer;
+        transition: background-color 0.1s;
+        border-bottom: 1px solid var(--color-border);
+      }
+      .search-result-item:last-child {
+        border-bottom: none;
+      }
+      .search-result-item:hover,
+      .search-result-item.selected {
+        background: var(--color-surface-hover);
+      }
+      .search-result-item.selected {
+        background: rgba(99, 102, 241, 0.15);
+      }
+      
+      .search-result-symbol {
+        font-weight: 600;
+        font-size: 0.9375rem;
+        color: var(--color-text-primary);
+        min-width: 60px;
+      }
+      
+      .search-result-name {
+        flex: 1;
+        font-size: 0.8125rem;
+        color: var(--color-text-secondary);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      
+      .search-result-mint {
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        color: var(--color-text-muted);
+        flex-shrink: 0;
       }
       
       /* Quick Trade Recent Tokens */

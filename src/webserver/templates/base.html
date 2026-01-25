@@ -588,6 +588,181 @@
       initBillboard();
     </script>
 
+    <!-- Global keyboard shortcuts for Quick Buy/Sell -->
+    <script type="module">
+      import { TradeActionDialog } from "/scripts/ui/trade_action_dialog.js?v={{ASSET_VERSION}}";
+      import { playSuccess, playError } from "/scripts/core/sounds.js?v={{ASSET_VERSION}}";
+      import { showToast } from "/scripts/core/toast.js?v={{ASSET_VERSION}}";
+
+      // Global trade dialog instance for keyboard shortcuts
+      let globalTradeDialog = null;
+
+      /**
+       * Check if setup, onboarding, lockscreen, or splash screens are active
+       */
+      function isSystemScreenActive() {
+        const screens = [
+          "splash-screen",
+          "setupScreen",
+          "setupScreenWrapper",
+          "onboardingScreen",
+          "lockscreenOverlay",
+        ];
+        for (const id of screens) {
+          const el = document.getElementById(id);
+          if (el && el.style.display !== "none" && !el.classList.contains("hidden")) {
+            return true;
+          }
+        }
+        return document.body.classList.contains("initialization-mode");
+      }
+
+      /**
+       * Check if any dialog/modal is currently open
+       */
+      function isDialogOpen() {
+        // Trade action dialog overlay
+        const tradeDialog = document.querySelector(".trade-action-dialog-overlay.is-visible");
+        if (tradeDialog) return true;
+
+        // Search dialog
+        const searchDialog = document.querySelector(".search-dialog.visible");
+        if (searchDialog) return true;
+
+        // Settings dialog
+        const settingsDialog = document.querySelector(".settings-dialog-overlay.visible");
+        if (settingsDialog) return true;
+
+        // Any visible confirmation dialogs
+        const confirmDialog = document.querySelector(".confirmation-dialog-overlay.visible");
+        if (confirmDialog) return true;
+
+        // Position/token details dialogs
+        const detailsDialog = document.querySelector(
+          ".position-details-dialog-overlay.visible, .token-details-dialog-overlay.visible"
+        );
+        if (detailsDialog) return true;
+
+        return false;
+      }
+
+      /**
+       * Open quick trade dialog
+       * @param {'buy' | 'sell'} action
+       */
+      async function openQuickTrade(action) {
+        if (!globalTradeDialog) {
+          globalTradeDialog = new TradeActionDialog();
+        }
+
+        // Build context - for buy, pre-fetch wallet balance
+        let context = {};
+        if (action === "buy") {
+          try {
+            const walletRes = await fetch("/api/wallet/balance");
+            if (walletRes.ok) {
+              const walletData = await walletRes.json();
+              context.balance = walletData.sol_balance || 0;
+            }
+          } catch {
+            context.balance = 0;
+          }
+        }
+
+        // Open trade dialog in quick mode
+        const result = await globalTradeDialog.open({
+          action,
+          mode: "quick",
+          symbol: null,
+          context,
+        });
+
+        if (!result) return;
+
+        // Get the mint from the dialog's context
+        const mint = globalTradeDialog.currentContext?.mint;
+        if (!mint) {
+          playError();
+          showToast("No token selected", "error");
+          return;
+        }
+
+        // Execute trade
+        try {
+          const endpoint =
+            action === "sell" ? "/api/trader/manual/sell" : "/api/trader/manual/buy";
+
+          const body =
+            action === "sell"
+              ? { mint, percentage: result.percentage }
+              : { mint, amount_sol: result.amount };
+
+          const response = await fetch(endpoint, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(body),
+          });
+
+          if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error || `${action} failed`);
+          }
+
+          const symbol =
+            globalTradeDialog.currentContext?.symbol || mint.slice(0, 6) + "...";
+          playSuccess();
+          showToast(
+            `${action === "sell" ? "Sell" : "Buy"} order submitted for ${symbol}`,
+            "success"
+          );
+        } catch (error) {
+          playError();
+          showToast(error.message || `Failed to ${action}`, "error");
+        }
+      }
+
+      /**
+       * Global keydown handler for quick trade shortcuts
+       */
+      function handleGlobalKeydown(e) {
+        // Skip if user is typing in an input field
+        if (
+          e.target.matches('input, textarea, select, [contenteditable="true"]') &&
+          !e.target.closest(".search-dialog") // Allow in search if closing
+        ) {
+          return;
+        }
+
+        // Skip if system screen or dialog is active
+        if (isSystemScreenActive() || isDialogOpen()) {
+          return;
+        }
+
+        const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+        const modifier = isMac ? e.metaKey : e.ctrlKey;
+
+        // Cmd/Ctrl+B → Quick Buy
+        if (modifier && !e.shiftKey && e.key.toLowerCase() === "b") {
+          e.preventDefault();
+          openQuickTrade("buy");
+          return;
+        }
+
+        // Cmd/Ctrl+Shift+S → Quick Sell
+        if (modifier && e.shiftKey && e.key.toLowerCase() === "s") {
+          e.preventDefault();
+          openQuickTrade("sell");
+          return;
+        }
+      }
+
+      // Register global keyboard shortcut
+      document.addEventListener("keydown", handleGlobalKeydown);
+
+      // Expose for external use if needed
+      window.__quickTrade = openQuickTrade;
+    </script>
+
     <!-- Splash, Onboarding, Setup, and Lockscreen Controllers (non-module for immediate execution) -->
     <script src="/scripts/core/splash.js?v={{ASSET_VERSION}}"></script>
     <script src="/scripts/core/onboarding.js?v={{ASSET_VERSION}}"></script>

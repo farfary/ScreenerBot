@@ -523,6 +523,16 @@ function createLifecycle() {
 
       setupPeriodTabs();
       setupAutoTraderControl();
+
+      // Update shortcut hints based on platform (Mac vs Windows/Linux)
+      const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0;
+      if (!isMac) {
+        // Convert Mac symbols to Windows/Linux format
+        const buyHint = document.querySelector("#quickBuyControl .shortcut-hint");
+        const sellHint = document.querySelector("#quickSellControl .shortcut-hint");
+        if (buyHint) buyHint.textContent = "Ctrl+B";
+        if (sellHint) sellHint.textContent = "Ctrl+⇧S";
+      }
     },
 
     activate: (ctx) => {
