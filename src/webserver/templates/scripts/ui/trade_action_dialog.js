@@ -247,6 +247,10 @@ export class TradeActionDialog {
                 </svg>
               </button>
             </div>
+            <div class="quick-trade-recent" data-visible="false">
+              <span class="quick-trade-recent-label">Recent:</span>
+              <div class="quick-trade-recent-list"></div>
+            </div>
             <div class="quick-trade-error" data-visible="false">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <circle cx="12" cy="12" r="10"/>
@@ -958,6 +962,11 @@ export class TradeActionDialog {
       result = value === "" ? {} : { amount: value };
     }
 
+    // Save to recent trades (for quick mode or any trade with mint)
+    if (this.currentContext?.mint) {
+      this._saveRecentTrade(this.currentContext.mint, this._currentSymbol);
+    }
+
     // Resolve promise
     if (this._resolveOpen) {
       this._resolveOpen(result);
@@ -1095,6 +1104,80 @@ export class TradeActionDialog {
       clearTimeout(timeout);
       timeout = setTimeout(() => func.apply(this, args), wait);
     };
+  }
+
+  // ============================================
+  // Recent Trades Methods
+  // ============================================
+
+  /**
+   * Load recent trades from localStorage
+   * @returns {Array<{mint: string, symbol: string, timestamp: number}>}
+   */
+  _loadRecentTrades() {
+    try {
+      const stored = localStorage.getItem("screenerbot_recent_trades");
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Save a recent trade to localStorage
+   * @param {string} mint - Token mint address
+   * @param {string} symbol - Token symbol
+   */
+  _saveRecentTrade(mint, symbol) {
+    if (!mint) return;
+    try {
+      let recent = this._loadRecentTrades();
+      // Remove if already exists
+      recent = recent.filter((r) => r.mint !== mint);
+      // Add to front
+      recent.unshift({ mint, symbol: symbol || "Unknown", timestamp: Date.now() });
+      // Keep max 10
+      recent = recent.slice(0, 10);
+      localStorage.setItem("screenerbot_recent_trades", JSON.stringify(recent));
+    } catch {
+      // Ignore localStorage errors
+    }
+  }
+
+  /**
+   * Render recent trades chips in quick trade mint step
+   */
+  _renderRecentTrades() {
+    const container = this._quickMintStepEl?.querySelector(".quick-trade-recent-list");
+    if (!container) return;
+
+    const recent = this._loadRecentTrades();
+    if (recent.length === 0) {
+      container.closest(".quick-trade-recent")?.setAttribute("data-visible", "false");
+      return;
+    }
+
+    container.closest(".quick-trade-recent")?.setAttribute("data-visible", "true");
+    container.innerHTML = recent
+      .map(
+        (r) => `
+        <button type="button" class="quick-trade-recent-chip" data-mint="${Utils.escapeHtml(r.mint)}" title="${Utils.escapeHtml(r.mint)}">
+          ${Utils.escapeHtml(r.symbol)}
+        </button>
+      `
+      )
+      .join("");
+
+    // Attach click listeners
+    container.querySelectorAll(".quick-trade-recent-chip").forEach((chip) => {
+      chip.addEventListener("click", (e) => {
+        const mint = e.currentTarget.getAttribute("data-mint");
+        if (mint) {
+          this._quickMintInputEl.value = mint;
+          this._handleQuickMintInput();
+        }
+      });
+    });
   }
 
   async _fetchQuote() {
@@ -1274,6 +1357,9 @@ export class TradeActionDialog {
     this._quickTokenPreviewEl.setAttribute("data-visible", "false");
     this._quickTokenLoadingEl.style.display = "none";
     this._quickTokenInfoEl.style.display = "none";
+
+    // Render recent trades
+    this._renderRecentTrades();
   }
 
   /**
@@ -1590,6 +1676,56 @@ export class TradeActionDialog {
       .quick-trade-paste-btn.error-flash {
         background: rgba(239, 68, 68, 0.15);
         border-color: var(--color-error);
+      }
+      
+      /* Quick Trade Recent Tokens */
+      .quick-trade-recent {
+        display: none;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+        margin-top: 0.25rem;
+      }
+      .quick-trade-recent[data-visible="true"] {
+        display: flex;
+      }
+      .quick-trade-recent-label {
+        font-size: 0.75rem;
+        color: var(--color-text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        flex-shrink: 0;
+      }
+      .quick-trade-recent-list {
+        display: flex;
+        gap: 0.375rem;
+        flex-wrap: wrap;
+      }
+      .quick-trade-recent-chip {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.625rem;
+        font-family: var(--font-mono);
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--color-text-secondary);
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: 9999px;
+        cursor: pointer;
+        transition: all 0.15s;
+        max-width: 80px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .quick-trade-recent-chip:hover {
+        background: var(--color-surface-hover);
+        border-color: var(--color-primary);
+        color: var(--color-text-primary);
+      }
+      .quick-trade-recent-chip:active {
+        transform: scale(0.95);
       }
       
       /* Quick Trade Error */
