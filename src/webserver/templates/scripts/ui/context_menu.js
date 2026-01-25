@@ -1263,7 +1263,10 @@ class ContextMenuManager {
       const result = await dialog.open({
         action: "buy",
         symbol: context.symbol,
-        context: { balance },
+        context: {
+          balance,
+          mint: context.mint,
+        },
       });
 
       if (!result) return;
@@ -1293,10 +1296,29 @@ class ContextMenuManager {
       const { TradeActionDialog } = await import("../ui/trade_action_dialog.js");
       const dialog = new TradeActionDialog();
 
+      // Fetch token holdings from position for quote calculation
+      let holdings = 0;
+      try {
+        const posRes = await fetch(`/api/positions/${encodeURIComponent(context.mint)}/details`);
+        if (posRes.ok) {
+          const posData = await posRes.json();
+          if (posData.success && posData.data?.position?.summary) {
+            const pos = posData.data.position.summary;
+            // Use remaining_token_amount if available (after partial exits), otherwise token_amount
+            holdings = pos.remaining_token_amount ?? pos.token_amount ?? 0;
+          }
+        }
+      } catch {
+        // Use 0 as fallback if position fetch fails
+      }
+
       const result = await dialog.open({
         action: "sell",
         symbol: context.symbol,
-        context: {},
+        context: {
+          mint: context.mint,
+          holdings,
+        },
       });
 
       if (!result) return;
@@ -1335,7 +1357,10 @@ class ContextMenuManager {
       const result = await dialog.open({
         action: "add",
         symbol: context.symbol,
-        context: { balance },
+        context: {
+          balance,
+          mint: context.mint,
+        },
       });
 
       if (!result) return;

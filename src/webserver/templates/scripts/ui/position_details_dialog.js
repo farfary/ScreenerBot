@@ -1186,14 +1186,18 @@ export class PositionDetailsDialog {
       this.tradeDialog = new TradeActionDialog();
     }
 
-    const result = await this.tradeDialog.open("add", {
-      mint: pos.mint,
+    const result = await this.tradeDialog.open({
+      action: "add",
       symbol: pos.symbol,
-      entrySize: pos.entry_size_sol,
-      currentSize: pos.total_size_sol,
+      context: {
+        mint: pos.mint,
+        balance: pos.wallet_balance || 0,
+        entrySize: pos.entry_size_sol,
+        currentSize: pos.total_size_sol,
+      },
     });
 
-    if (result && result.confirmed) {
+    if (result) {
       // Set loading state
       const originalText = btn?.innerHTML;
       if (btn) {
@@ -1206,7 +1210,7 @@ export class PositionDetailsDialog {
           method: "POST",
           body: JSON.stringify({
             mint: pos.mint,
-            amount_sol: result.value,
+            amount_sol: result.amount,
           }),
           priority: "high",
         });
@@ -1235,13 +1239,16 @@ export class PositionDetailsDialog {
       this.tradeDialog = new TradeActionDialog();
     }
 
-    const result = await this.tradeDialog.open("sell", {
-      mint: pos.mint,
+    const result = await this.tradeDialog.open({
+      action: "sell",
       symbol: pos.symbol,
-      tokenAmount: pos.remaining_token_amount || pos.token_amount,
+      context: {
+        mint: pos.mint,
+        holdings: pos.remaining_token_amount || pos.token_amount,
+      },
     });
 
-    if (result && result.confirmed) {
+    if (result) {
       // Set loading state
       const originalText = btn?.innerHTML;
       if (btn) {
@@ -1254,7 +1261,7 @@ export class PositionDetailsDialog {
           method: "POST",
           body: JSON.stringify({
             mint: pos.mint,
-            percentage: result.value,
+            percentage: result.percentage,
           }),
           priority: "high",
         });
@@ -1284,14 +1291,17 @@ export class PositionDetailsDialog {
     }
 
     // Pre-select 100% for close position
-    const result = await this.tradeDialog.open("sell", {
-      mint: pos.mint,
+    const result = await this.tradeDialog.open({
+      action: "sell",
       symbol: pos.symbol,
-      tokenAmount: pos.remaining_token_amount || pos.token_amount,
-      preselect: 100,
+      context: {
+        mint: pos.mint,
+        holdings: pos.remaining_token_amount || pos.token_amount,
+        preselect: 100,
+      },
     });
 
-    if (result && result.confirmed && result.value === 100) {
+    if (result && result.percentage === 100) {
       // Set loading state
       const originalText = btn?.innerHTML;
       if (btn) {

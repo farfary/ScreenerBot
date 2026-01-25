@@ -787,3 +787,84 @@ body.trade-action-dialog-open {
 [data-theme="light"] .trade-action-btn-cancel {
   background: var(--bg-card-hover, #f0f2f6);
 }
+
+/* Slippage Warning Dialog */
+.trade-slippage-warning-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  z-index: 10002;
+  animation: trade-overlay-fade-in 150ms ease;
+}
+
+.trade-slippage-warning {
+  width: min(380px, 90vw);
+  padding: 24px;
+  background: var(--bg-secondary, #161b22);
+  border: 1px solid rgb(239, 68, 68, 0.4);
+  border-radius: var(--radius-xl, 12px);
+  text-align: center;
+  animation: trade-dialog-slide-up 200ms ease;
+}
+
+.slippage-warning-icon {
+  font-size: 2.5rem;
+  margin-bottom: 12px;
+}
+
+.slippage-warning-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: #ef4444;
+  margin-bottom: 12px;
+}
+
+.slippage-warning-text {
+  font-size: 0.875rem;
+  color: var(--text-secondary, #8b949e);
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.slippage-warning-text strong {
+  color: #ef4444;
+}
+
+.slippage-warning-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.slippage-warning-btn {
+  flex: 1;
+  padding: 12px 16px;
+  border-radius: var(--radius-md, 6px);
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 1px solid transparent;
+}
+
+.slippage-warning-btn.cancel {
+  background: rgb(255, 255, 255, 0.05);
+  color: var(--text-primary, #e6edf3);
+  border-color: var(--border-color, #30363d);
+}
+
+.slippage-warning-btn.cancel:hover {
+  background: rgb(255, 255, 255, 0.1);
+}
+
+.slippage-warning-btn.confirm {
+  background: #ef4444;
+  color: #fff;
+}
+
+.slippage-warning-btn.confirm:hover {
+  background: #dc2626;
+}

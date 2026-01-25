@@ -695,7 +695,7 @@ function initCardHandlers() {
   const walletCard = document.getElementById("walletCard");
   if (walletCard) {
     walletCard.addEventListener("click", () => {
-      window.location.hash = "#wallet";
+      loadPage("wallet");
     });
     walletCard.style.cursor = "pointer";
   }
@@ -704,7 +704,7 @@ function initCardHandlers() {
   const positionsCard = document.getElementById("positionsCard");
   if (positionsCard) {
     positionsCard.addEventListener("click", () => {
-      window.location.hash = "#positions";
+      loadPage("positions");
     });
     positionsCard.style.cursor = "pointer";
   }
@@ -713,28 +713,28 @@ function initCardHandlers() {
   const tickerMonitoring = document.getElementById("tickerMonitoring");
   if (tickerMonitoring) {
     tickerMonitoring.addEventListener("click", () => {
-      window.location.hash = "#tokens";
+      loadPage("tokens");
     });
   }
 
   const tickerFiltering = document.getElementById("tickerFiltering");
   if (tickerFiltering) {
     tickerFiltering.addEventListener("click", () => {
-      window.location.hash = "#filtering";
+      loadPage("filtering");
     });
   }
 
   const tickerPnL = document.getElementById("tickerPnL");
   if (tickerPnL) {
     tickerPnL.addEventListener("click", () => {
-      window.location.hash = "#positions";
+      loadPage("positions");
     });
   }
 
   const tickerServices = document.getElementById("tickerServices");
   if (tickerServices) {
     tickerServices.addEventListener("click", () => {
-      window.location.hash = "#services";
+      loadPage("services");
     });
   }
 }

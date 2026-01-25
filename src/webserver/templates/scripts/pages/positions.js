@@ -457,6 +457,7 @@ function createLifecycle() {
               mint: mint,
               symbol: row.symbol || "?",
               context: {
+                mint: mint,
                 balance: walletBalance,
                 entrySize: row.entry_sol || row.sol_size,
                 entrySizes: entrySizes,
@@ -487,6 +488,7 @@ function createLifecycle() {
               mint: mint,
               symbol: row.symbol || "?",
               context: {
+                mint: mint,
                 holdings: row.token_amount,
               },
             });

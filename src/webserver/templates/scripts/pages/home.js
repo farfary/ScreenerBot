@@ -5,6 +5,7 @@ import * as Utils from "../core/utils.js";
 import { requestManager, createScopedFetcher } from "../core/request_manager.js";
 import { showBillboardRow, hideBillboardRow } from "../ui/billboard_row.js";
 import { playToggleOn, playToggleOff, playError } from "../core/sounds.js";
+import { loadPage } from "../core/router.js";
 
 function createLifecycle() {
   let poller = null;
@@ -420,13 +421,13 @@ function createLifecycle() {
     // Quick buy/sell buttons (navigate to tools page)
     if (quickBuyEl) {
       addTrackedListener(quickBuyEl, "click", () => {
-        window.location.hash = "#tools";
+        loadPage("tools");
       });
     }
 
     if (quickSellEl) {
       addTrackedListener(quickSellEl, "click", () => {
-        window.location.hash = "#tools";
+        loadPage("tools");
       });
     }
   }

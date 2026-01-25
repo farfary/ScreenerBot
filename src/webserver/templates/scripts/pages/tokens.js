@@ -2800,6 +2800,7 @@ function createLifecycle() {
               mint: mint,
               symbol: row.symbol || "?",
               context: {
+                mint: mint,
                 balance: walletBalance,
               },
             });
@@ -2840,6 +2841,7 @@ function createLifecycle() {
               mint: mint,
               symbol: row.symbol || "?",
               context: {
+                mint: mint,
                 balance: walletBalance,
                 entrySize: row.entry_sol || 0.005,
                 entrySizes: entrySizes,
@@ -2869,6 +2871,7 @@ function createLifecycle() {
               mint: mint,
               symbol: row.symbol || "?",
               context: {
+                mint: mint,
                 holdings: row.token_amount,
               },
             });
