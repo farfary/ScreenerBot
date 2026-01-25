@@ -10,6 +10,8 @@ import { TokenDetailsDialog } from "../ui/token_details_dialog.js";
 import * as Hints from "../core/hints.js";
 import { HintTrigger } from "../ui/hint_popover.js";
 import { showBillboardRow, hideBillboardRow } from "../ui/billboard_row.js";
+import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
+import { InputDialog } from "../ui/input_dialog.js";
 
 // Sub-tabs (views) configuration with hint references
 const TOKEN_VIEWS = [
@@ -1784,7 +1786,13 @@ function createLifecycle() {
   };
 
   const handleOhlcvDelete = async (mint) => {
-    if (!window.confirm(`Delete all OHLCV data for ${mint.slice(0, 8)}...?`)) return;
+    const result = await ConfirmationDialog.show({
+      title: "Delete OHLCV Data",
+      message: `Delete all OHLCV data for ${mint.slice(0, 8)}...?`,
+      confirmLabel: "Delete",
+      variant: "danger",
+    });
+    if (!result.confirmed) return;
 
     try {
       const response = await requestManager.fetch(`/api/ohlcv/${mint}/delete`, {
@@ -1807,14 +1815,22 @@ function createLifecycle() {
   };
 
   const handleOhlcvCleanup = async () => {
-    const hours = window.prompt("Delete inactive tokens older than (hours):", "24");
-    if (!hours) return;
+    const result = await InputDialog.show({
+      title: "Delete Inactive Tokens",
+      message: "Delete inactive tokens older than specified hours",
+      placeholder: "Hours...",
+      defaultValue: "24",
+      confirmLabel: "Delete",
+      type: "number",
+      validate: (value) => {
+        const num = parseInt(value, 10);
+        if (isNaN(num) || num < 1) return "Please enter a positive number";
+        return null;
+      },
+    });
+    if (!result) return;
 
-    const inactiveHours = parseInt(hours, 10);
-    if (isNaN(inactiveHours) || inactiveHours < 1) {
-      Utils.showToast("Invalid hours value", "error");
-      return;
-    }
+    const inactiveHours = parseInt(result.value, 10);
 
     try {
       const response = await requestManager.fetch("/api/ohlcv/cleanup", {

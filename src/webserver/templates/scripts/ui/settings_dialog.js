@@ -5,6 +5,7 @@
 import * as Utils from "../core/utils.js";
 import { createFocusTrap } from "../core/utils.js";
 import { getCurrentPage } from "../core/router.js";
+import { ConfirmationDialog } from "./confirmation_dialog.js";
 import { setInterval as setPollingInterval, Poller } from "../core/poller.js";
 import { enhanceAllSelects } from "./custom_select.js";
 import { setSoundsEnabled, playPanelOpen, playPanelClose, playTabSwitch } from "../core/sounds.js";
@@ -1518,11 +1519,14 @@ export class SettingsDialog {
           return;
         }
 
-        if (
-          !window.confirm(`Delete OHLCV data for tokens inactive for more than ${hours} hours?`)
-        ) {
-          return;
-        }
+        const confirmResult = await ConfirmationDialog.show({
+          title: "Delete OHLCV Data",
+          message: `Delete OHLCV data for tokens inactive for more than ${hours} hours?`,
+          confirmLabel: "Delete",
+          cancelLabel: "Cancel",
+          variant: "danger",
+        });
+        if (!confirmResult.confirmed) return;
 
         cleanupBtn.disabled = true;
         cleanupBtn.innerHTML = '<i class="icon-loader spin"></i> Cleaning...';
@@ -1553,14 +1557,15 @@ export class SettingsDialog {
     // Clear UI state button
     const clearUiBtn = content.querySelector("#clearUiStateBtn");
     if (clearUiBtn) {
-      clearUiBtn.addEventListener("click", () => {
-        if (
-          !window.confirm(
-            "Clear all saved UI preferences? This will reset table columns, filters, and view settings."
-          )
-        ) {
-          return;
-        }
+      clearUiBtn.addEventListener("click", async () => {
+        const confirmResult = await ConfirmationDialog.show({
+          title: "Clear UI State",
+          message: "Clear all saved UI preferences? This will reset table columns, filters, and view settings.",
+          confirmLabel: "Clear",
+          cancelLabel: "Cancel",
+          variant: "danger",
+        });
+        if (!confirmResult.confirmed) return;
 
         const keysToRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
@@ -1701,13 +1706,14 @@ export class SettingsDialog {
       const imported = JSON.parse(text);
 
       // Confirm import
-      if (
-        !window.confirm(
-          "Import this configuration? Current settings will be overwritten. Wallet credentials will be preserved."
-        )
-      ) {
-        return;
-      }
+      const confirmResult = await ConfirmationDialog.show({
+        title: "Import Configuration",
+        message: "Import this configuration? Current settings will be overwritten. Wallet credentials will be preserved.",
+        confirmLabel: "Import",
+        cancelLabel: "Cancel",
+        variant: "warning",
+      });
+      if (!confirmResult.confirmed) return;
 
       // Import each section separately to preserve wallet
       const sections = [
@@ -1752,13 +1758,14 @@ export class SettingsDialog {
    * Reset configuration to defaults
    */
   async _resetConfig() {
-    if (
-      !window.confirm(
-        "Reset all settings to defaults? Your wallet credentials will be preserved, but all other settings will be reset."
-      )
-    ) {
-      return;
-    }
+    const confirmResult = await ConfirmationDialog.show({
+      title: "Reset Configuration",
+      message: "Reset all settings to defaults? Your wallet credentials will be preserved, but all other settings will be reset.",
+      confirmLabel: "Reset",
+      cancelLabel: "Cancel",
+      variant: "danger",
+    });
+    if (!confirmResult.confirmed) return;
 
     try {
       const response = await fetch("/api/config/reset", { method: "POST" });
@@ -1827,13 +1834,14 @@ export class SettingsDialog {
     }
 
     const presetDisplayName = presetName.charAt(0).toUpperCase() + presetName.slice(1);
-    if (
-      !window.confirm(
-        `Apply ${presetDisplayName} trading preset? This will update your trader, filtering, and position settings.`
-      )
-    ) {
-      return;
-    }
+    const confirmResult = await ConfirmationDialog.show({
+      title: "Apply Trading Preset",
+      message: `Apply ${presetDisplayName} trading preset? This will update your trader, filtering, and position settings.`,
+      confirmLabel: "Apply",
+      cancelLabel: "Cancel",
+      variant: "warning",
+    });
+    if (!confirmResult.confirmed) return;
 
     try {
       // Apply each section
@@ -3011,12 +3019,14 @@ export class SettingsDialog {
     // Install Handler
     if (installBtn) {
       installBtn.addEventListener("click", async () => {
-        if (
-          !window.confirm(
-            "ScreenerBot will install the update and close. The installer will launch automatically. Continue?"
-          )
-        )
-          return;
+        const confirmResult = await ConfirmationDialog.show({
+          title: "Install Update",
+          message: "ScreenerBot will install the update and close. The installer will launch automatically. Continue?",
+          confirmLabel: "Install",
+          cancelLabel: "Cancel",
+          variant: "warning",
+        });
+        if (!confirmResult.confirmed) return;
 
         installBtn.disabled = true;
         const originalText = installBtn.innerHTML;

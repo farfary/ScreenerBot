@@ -4,6 +4,7 @@ import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
 import * as AppState from "../core/app_state.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
+import { InputDialog } from "../ui/input_dialog.js";
 import { requestManager } from "../core/request_manager.js";
 import { enhanceAllSelects } from "../ui/custom_select.js";
 
@@ -1818,9 +1819,20 @@ export function createLifecycle() {
       return;
     }
 
-    // eslint-disable-next-line no-undef
-    const newName = prompt("Enter new strategy name:", `${currentStrategy.name} (Copy)`);
-    if (!newName) return;
+    const result = await InputDialog.show({
+      title: "Duplicate Strategy",
+      message: "Enter name for the copied strategy",
+      placeholder: "Strategy name...",
+      defaultValue: `${currentStrategy.name} (Copy)`,
+      confirmLabel: "Save",
+      validate: (value) => {
+        if (!value || !value.trim()) return "Strategy name is required";
+        return null;
+      },
+      formatValue: (value) => value.trim(),
+    });
+    if (!result) return;
+    const newName = result.value;
     const newStrategy = { ...currentStrategy, id: null, name: newName };
     currentStrategy = newStrategy;
 

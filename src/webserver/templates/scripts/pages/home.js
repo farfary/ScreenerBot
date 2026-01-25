@@ -4,8 +4,8 @@ import { Poller } from "../core/poller.js";
 import * as Utils from "../core/utils.js";
 import { requestManager, createScopedFetcher } from "../core/request_manager.js";
 import { showBillboardRow, hideBillboardRow } from "../ui/billboard_row.js";
-import { playToggleOn, playToggleOff, playError } from "../core/sounds.js";
-import { loadPage } from "../core/router.js";
+import { playToggleOn, playToggleOff, playError, playSuccess } from "../core/sounds.js";
+import { TradeActionDialog } from "../ui/trade_action_dialog.js";
 
 function createLifecycle() {
   let poller = null;
@@ -13,6 +13,7 @@ function createLifecycle() {
   let currentPeriod = "today";
   let cachedData = null;
   let hasLoadedOnce = false;
+  let tradeDialog = null;
 
   // Event cleanup tracking
   const eventCleanups = [];
@@ -406,6 +407,85 @@ function createLifecycle() {
     });
   }
 
+  /**
+   * Show quick trade dialog using TradeActionDialog's quick mode
+   * This opens the trade dialog with a mint input step first
+   * @param {string} action - 'buy' or 'sell'
+   */
+  async function showQuickTradeDialog(action) {
+    // Initialize trade dialog if needed
+    if (!tradeDialog) {
+      tradeDialog = new TradeActionDialog();
+    }
+
+    // Build context - for buy, pre-fetch wallet balance
+    let context = {};
+    if (action === "buy") {
+      try {
+        const walletRes = await fetch("/api/wallet/balance");
+        if (walletRes.ok) {
+          const walletData = await walletRes.json();
+          context.balance = walletData.sol_balance || 0;
+        }
+      } catch {
+        context.balance = 0;
+      }
+    }
+
+    // Open trade dialog in quick mode (will prompt for mint address)
+    const result = await tradeDialog.open({
+      action,
+      mode: "quick",
+      symbol: null,
+      context,
+    });
+
+    if (!result) return;
+
+    // Get the mint from the dialog's context (set during quick mode flow)
+    const mint = tradeDialog.currentContext?.mint;
+    if (!mint) {
+      playError();
+      Utils.showToast("No token selected", "error");
+      return;
+    }
+
+    // Execute trade
+    try {
+      const endpoint =
+        action === "sell" ? "/api/trader/manual/sell" : "/api/trader/manual/buy";
+
+      const body =
+        action === "sell"
+          ? { mint, percentage: result.percentage }
+          : { mint, amount_sol: result.amount };
+
+      const response = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.error || `${action} failed`);
+      }
+
+      const symbol = tradeDialog.currentContext?.symbol || mint.slice(0, 6) + "...";
+      playSuccess();
+      Utils.showToast(
+        `${action === "sell" ? "Sell" : "Buy"} order submitted for ${symbol}`,
+        "success"
+      );
+
+      // Refresh dashboard data
+      fetchData();
+    } catch (error) {
+      playError();
+      Utils.showToast(error.message || `Failed to ${action}`, "error");
+    }
+  }
+
   // Setup auto trader toggle handler
   function setupAutoTraderControl() {
     const toggleEl = document.getElementById("autoTraderToggle");
@@ -418,16 +498,17 @@ function createLifecycle() {
       });
     }
 
-    // Quick buy/sell buttons (navigate to tools page)
+    // Quick buy button - open quick trade dialog
     if (quickBuyEl) {
       addTrackedListener(quickBuyEl, "click", () => {
-        loadPage("tools");
+        showQuickTradeDialog("buy");
       });
     }
 
+    // Quick sell button - open quick trade dialog
     if (quickSellEl) {
       addTrackedListener(quickSellEl, "click", () => {
-        loadPage("tools");
+        showQuickTradeDialog("sell");
       });
     }
   }
@@ -489,6 +570,13 @@ function createLifecycle() {
     dispose: () => {
       console.log("[Home] Disposing dashboard");
       scopedFetch = null;
+
+      // Clean up trade dialog
+      if (tradeDialog) {
+        tradeDialog.destroy();
+        tradeDialog = null;
+      }
+
       // Note: Don't reset hasLoadedOnce or cachedData here
       // Preserving them allows instant display on page revisit
 

@@ -85,6 +85,19 @@ export class TradeActionDialog {
     this.currentContext = null;
     this._selectedPreset = null;
 
+    // Quick trade mode state
+    this._quickMode = false;
+    this._quickStep = "mint"; // "mint" or "trade"
+    this._quickMintStepEl = null;
+    this._quickMintInputEl = null;
+    this._quickPasteBtnEl = null;
+    this._quickContinueBtnEl = null;
+    this._quickCancelBtnEl = null;
+    this._quickTokenPreviewEl = null;
+    this._quickErrorEl = null;
+    this._fetchedTokenData = null;
+    this._currentSymbol = null;
+
     this._overlayListener = this._handleOverlayClick.bind(this);
     this._closeListener = this._handleCloseClick.bind(this);
     this._cancelListener = this._handleCancelClick.bind(this);
@@ -93,6 +106,12 @@ export class TradeActionDialog {
     this._presetClickListener = this._handlePresetClick.bind(this);
     this._inputChangeListener = this._handleInputChange.bind(this);
     this._focusTrap = null;
+
+    // Quick trade mode bound listeners
+    this._quickPasteListener = this._handleQuickPaste.bind(this);
+    this._quickContinueListener = this._handleQuickContinue.bind(this);
+    this._quickMintInputListener = this._handleQuickMintInput.bind(this);
+    this._quoteRefreshListener = this._handleQuoteRefresh.bind(this);
 
     // Quote preview state
     this._quoteData = null;
@@ -214,8 +233,54 @@ export class TradeActionDialog {
             <span class="btn-loader"></span>
           </button>
         </footer>
+        
+        <!-- Quick Trade Mint Input Step -->
+        <div class="quick-trade-mint-step" data-visible="false">
+          <div class="quick-trade-mint-content">
+            <label class="quick-trade-mint-label">Enter Token Mint Address</label>
+            <div class="quick-trade-mint-input-wrapper">
+              <input type="text" class="quick-trade-mint-input" placeholder="Paste Solana mint address..." autocomplete="off" spellcheck="false" />
+              <button type="button" class="quick-trade-paste-btn" aria-label="Paste from clipboard">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+                  <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/>
+                </svg>
+              </button>
+            </div>
+            <div class="quick-trade-error" data-visible="false">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M12 8v4M12 16h.01"/>
+              </svg>
+              <span class="quick-trade-error-text"></span>
+            </div>
+            <div class="quick-trade-token-preview" data-visible="false">
+              <div class="quick-trade-token-loading">
+                <div class="quick-trade-spinner"></div>
+                <span>Fetching token info...</span>
+              </div>
+              <div class="quick-trade-token-info">
+                <div class="quick-trade-token-symbol"></div>
+                <div class="quick-trade-token-name"></div>
+                <div class="quick-trade-token-price"></div>
+              </div>
+            </div>
+          </div>
+          <div class="quick-trade-mint-footer">
+            <button type="button" class="trade-action-btn trade-action-btn-cancel quick-trade-cancel-btn">
+              Cancel
+            </button>
+            <button type="button" class="trade-action-btn trade-action-btn-confirm quick-trade-continue-btn" disabled>
+              <span class="btn-text">Continue</span>
+              <span class="btn-loader"></span>
+            </button>
+          </div>
+        </div>
       </div>
     `;
+
+    // Inject quick trade styles
+    this._injectQuickTradeStyles();
 
     document.body.appendChild(overlay);
 
@@ -248,25 +313,54 @@ export class TradeActionDialog {
     this.quoteSlippageEl = overlay.querySelector(".quote-slippage");
     this.quoteErrorTextEl = overlay.querySelector(".quote-error-text");
 
+    // Quick trade step elements
+    this._quickMintStepEl = overlay.querySelector(".quick-trade-mint-step");
+    this._quickMintInputEl = overlay.querySelector(".quick-trade-mint-input");
+    this._quickPasteBtnEl = overlay.querySelector(".quick-trade-paste-btn");
+    this._quickContinueBtnEl = overlay.querySelector(".quick-trade-continue-btn");
+    this._quickCancelBtnEl = overlay.querySelector(".quick-trade-cancel-btn");
+    this._quickTokenPreviewEl = overlay.querySelector(".quick-trade-token-preview");
+    this._quickErrorEl = overlay.querySelector(".quick-trade-error");
+    this._quickErrorTextEl = overlay.querySelector(".quick-trade-error-text");
+    this._quickTokenSymbolEl = overlay.querySelector(".quick-trade-token-symbol");
+    this._quickTokenNameEl = overlay.querySelector(".quick-trade-token-name");
+    this._quickTokenPriceEl = overlay.querySelector(".quick-trade-token-price");
+    this._quickTokenLoadingEl = overlay.querySelector(".quick-trade-token-loading");
+    this._quickTokenInfoEl = overlay.querySelector(".quick-trade-token-info");
+    this._tradeBodyEl = overlay.querySelector(".trade-action-body");
+    this._tradeFooterEl = overlay.querySelector(".trade-action-footer");
+
     on(overlay, "click", this._overlayListener);
     on(this.closeBtn, "click", this._closeListener);
     on(this.cancelBtn, "click", this._cancelListener);
     on(this.confirmBtn, "click", this._confirmListener);
     on(this.inputField, "input", this._inputChangeListener);
-    on(this.quoteRefreshBtn, "click", this._handleQuoteRefresh.bind(this));
+    on(this.quoteRefreshBtn, "click", this._quoteRefreshListener);
+
+    // Quick trade step listeners
+    on(this._quickPasteBtnEl, "click", this._quickPasteListener);
+    on(this._quickContinueBtnEl, "click", this._quickContinueListener);
+    on(this._quickCancelBtnEl, "click", this._cancelListener);
+    on(this._quickMintInputEl, "input", this._quickMintInputListener);
   }
 
   /**
    * Open the dialog and return a promise that resolves with the selected value or null
    * @param {Object} options - Dialog options
    * @param {string} options.action - 'buy' | 'add' | 'sell'
+   * @param {string} options.mode - 'normal' (default) or 'quick' (shows mint input first)
    * @param {string} options.symbol - Token symbol for display
    * @param {Object} options.context - Contextual data (balance, entrySize, entrySizes, holdings)
    * @returns {Promise<Object|null>} - Resolves with { amount: number } or { percentage: number } or null if cancelled
    */
-  async open({ action, symbol, context = {} }) {
+  async open({ action, mode = "normal", symbol, context = {} }) {
     if (!action || !ACTION_CONFIG[action]) {
       throw new Error(`Invalid action: ${action}`);
+    }
+
+    // Quick mode only supports buy and sell (not add)
+    if (mode === "quick" && action === "add") {
+      throw new Error("Quick mode is not supported for 'add' action");
     }
 
     // Guard against multiple simultaneous opens
@@ -284,6 +378,12 @@ export class TradeActionDialog {
     this.currentContext = context;
     this._selectedPreset = null;
     this._isLoading = false;
+    this._currentSymbol = symbol || null;
+
+    // Quick mode state
+    this._quickMode = mode === "quick";
+    this._quickStep = this._quickMode ? "mint" : "trade";
+    this._fetchedTokenData = null;
 
     // Reset quote state
     this._quoteData = null;
@@ -296,8 +396,12 @@ export class TradeActionDialog {
       this._resolveOpen = resolve;
     });
 
-    // Render content
-    this._render(action, symbol, context);
+    // Render based on mode
+    if (this._quickMode) {
+      this._renderQuickMintStep(action);
+    } else {
+      this._render(action, symbol, context);
+    }
 
     // Show dialog with animation
     this.root.classList.add("is-visible");
@@ -315,14 +419,20 @@ export class TradeActionDialog {
       if (!this._isOpen) {
         return;
       }
-      this.dialog?.focus();
 
-      // Auto-select default preset if exists
-      const defaultPreset = this.presetsContainer.querySelector(
-        ".trade-action-preset-btn[data-default='true']"
-      );
-      if (defaultPreset) {
-        defaultPreset.click();
+      if (this._quickMode) {
+        // Focus mint input for quick mode
+        this._quickMintInputEl?.focus();
+      } else {
+        this.dialog?.focus();
+
+        // Auto-select default preset if exists
+        const defaultPreset = this.presetsContainer.querySelector(
+          ".trade-action-preset-btn[data-default='true']"
+        );
+        if (defaultPreset) {
+          defaultPreset.click();
+        }
       }
     });
 
@@ -337,6 +447,23 @@ export class TradeActionDialog {
     // Clear quote state
     this._stopQuoteRefreshTimer();
     this._setQuoteState("idle");
+
+    // Reset quick mode state
+    this._quickMode = false;
+    this._quickStep = "mint";
+    this._fetchedTokenData = null;
+    if (this._quickMintStepEl) {
+      this._quickMintStepEl.setAttribute("data-visible", "false");
+      this._quickMintStepEl.classList.remove("slide-out");
+    }
+    if (this._tradeBodyEl) {
+      this._tradeBodyEl.style.display = "";
+      this._tradeBodyEl.classList.remove("slide-in");
+    }
+    if (this._tradeFooterEl) {
+      this._tradeFooterEl.style.display = "";
+      this._tradeFooterEl.classList.remove("slide-in");
+    }
 
     this.root.classList.remove("is-visible");
     this.root.setAttribute("aria-hidden", "true");
@@ -389,6 +516,13 @@ export class TradeActionDialog {
     off(this.cancelBtn, "click", this._cancelListener);
     off(this.confirmBtn, "click", this._confirmListener);
     off(this.inputField, "input", this._inputChangeListener);
+    off(this.quoteRefreshBtn, "click", this._quoteRefreshListener);
+
+    // Clean up quick trade mode listeners
+    off(this._quickPasteBtnEl, "click", this._quickPasteListener);
+    off(this._quickContinueBtnEl, "click", this._quickContinueListener);
+    off(this._quickCancelBtnEl, "click", this._cancelListener);
+    off(this._quickMintInputEl, "input", this._quickMintInputListener);
 
     if (this.root.parentNode) {
       this.root.parentNode.removeChild(this.root);
@@ -877,7 +1011,9 @@ export class TradeActionDialog {
    */
   async _verifyTokenBalance() {
     try {
-      const res = await fetch(`/api/positions/${encodeURIComponent(this.currentContext.mint)}/details`);
+      const res = await fetch(
+        `/api/positions/${encodeURIComponent(this.currentContext.mint)}/details`
+      );
       if (!res.ok) {
         return { ok: false, error: "Could not verify token balance" };
       }
@@ -934,10 +1070,22 @@ export class TradeActionDialog {
       this._handleCancelClick();
     }
 
-    if (event.key === "Enter" && !this.confirmBtn.disabled) {
+    if (event.key === "Enter") {
       event.preventDefault();
       event.stopPropagation();
-      this._handleConfirmClick();
+
+      // Handle Enter for quick mode mint step
+      if (this._quickMode && this._quickStep === "mint") {
+        if (!this._quickContinueBtnEl.disabled) {
+          this._handleQuickContinue();
+        }
+        return;
+      }
+
+      // Handle Enter for normal trade step
+      if (!this.confirmBtn.disabled) {
+        this._handleConfirmClick();
+      }
     }
   }
 
@@ -1080,5 +1228,489 @@ export class TradeActionDialog {
     e.preventDefault();
     e.stopPropagation();
     this._fetchQuote();
+  }
+
+  // ============================================
+  // Quick Trade Mode Methods
+  // ============================================
+
+  /**
+   * Validate if a string is a valid Solana mint address
+   * @param {string} value - The string to validate
+   * @returns {boolean}
+   */
+  _isValidMint(value) {
+    return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(value);
+  }
+
+  /**
+   * Render the quick trade mint input step
+   * @param {string} action - 'buy' or 'sell'
+   */
+  _renderQuickMintStep(action) {
+    const config = ACTION_CONFIG[action];
+
+    // Set action-specific class on dialog
+    this.dialog.className = `trade-action-dialog ${config.colorClass} quick-mode`;
+
+    // Update icon based on action
+    const iconSvg = this._getActionIcon(config.icon);
+    this.iconWrapper.innerHTML = iconSvg;
+
+    // Set title for quick mode
+    const quickTitle = action === "buy" ? "Quick Buy" : "Quick Sell";
+    this.titleEl.textContent = quickTitle;
+    this.subtitleEl.textContent = "Enter token mint address";
+
+    // Hide trade body/footer, show quick mint step
+    this._tradeBodyEl.style.display = "none";
+    this._tradeFooterEl.style.display = "none";
+    this._quickMintStepEl.setAttribute("data-visible", "true");
+
+    // Reset mint input state
+    this._quickMintInputEl.value = "";
+    this._quickContinueBtnEl.disabled = true;
+    this._quickErrorEl.setAttribute("data-visible", "false");
+    this._quickTokenPreviewEl.setAttribute("data-visible", "false");
+    this._quickTokenLoadingEl.style.display = "none";
+    this._quickTokenInfoEl.style.display = "none";
+  }
+
+  /**
+   * Handle paste button click in quick trade mode
+   */
+  async _handleQuickPaste() {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text) {
+        this._quickMintInputEl.value = text.trim();
+        this._handleQuickMintInput();
+      }
+    } catch {
+      // Clipboard access denied - show subtle feedback
+      this._quickPasteBtnEl.classList.add("error-flash");
+      setTimeout(() => this._quickPasteBtnEl.classList.remove("error-flash"), 300);
+    }
+  }
+
+  /**
+   * Handle mint input changes in quick trade mode
+   */
+  _handleQuickMintInput() {
+    const value = this._quickMintInputEl.value.trim();
+
+    // Hide error when typing
+    this._quickErrorEl.setAttribute("data-visible", "false");
+
+    if (!value) {
+      this._quickContinueBtnEl.disabled = true;
+      this._quickTokenPreviewEl.setAttribute("data-visible", "false");
+      this._fetchedTokenData = null;
+      return;
+    }
+
+    // Validate mint format
+    if (!this._isValidMint(value)) {
+      this._quickContinueBtnEl.disabled = true;
+      this._quickTokenPreviewEl.setAttribute("data-visible", "false");
+      this._fetchedTokenData = null;
+
+      // Only show error if they've typed enough characters
+      if (value.length >= 32) {
+        this._showQuickError("Invalid mint address format");
+      }
+      return;
+    }
+
+    // Valid format - fetch token info
+    this._fetchQuickTokenInfo(value);
+  }
+
+  /**
+   * Fetch token info for quick trade mode
+   * @param {string} mint - The mint address
+   */
+  async _fetchQuickTokenInfo(mint) {
+    // Show loading state
+    this._quickTokenPreviewEl.setAttribute("data-visible", "true");
+    this._quickTokenLoadingEl.style.display = "flex";
+    this._quickTokenInfoEl.style.display = "none";
+    this._quickContinueBtnEl.disabled = true;
+    this._fetchedTokenData = null;
+
+    try {
+      const response = await fetch(`/api/tokens/${encodeURIComponent(mint)}`);
+
+      if (!this._isOpen || this._quickMintInputEl.value.trim() !== mint) {
+        return; // Dialog closed or mint changed
+      }
+
+      if (!response.ok) {
+        throw new Error(response.status === 404 ? "Token not found" : "Failed to fetch token");
+      }
+
+      const data = await response.json();
+
+      if (!data.success || !data.data) {
+        throw new Error("Token not found in database");
+      }
+
+      const token = data.data;
+      this._fetchedTokenData = token;
+
+      // Update preview
+      this._quickTokenSymbolEl.textContent = token.symbol || "Unknown";
+      this._quickTokenNameEl.textContent = token.name || mint.slice(0, 8) + "...";
+
+      if (token.price_sol != null && token.price_sol > 0) {
+        const priceFormatted =
+          token.price_sol < 0.000001
+            ? token.price_sol.toExponential(4)
+            : token.price_sol.toFixed(9).replace(/\.?0+$/, "");
+        this._quickTokenPriceEl.textContent = `${priceFormatted} SOL`;
+        this._quickTokenPriceEl.style.display = "block";
+      } else {
+        this._quickTokenPriceEl.style.display = "none";
+      }
+
+      // Show token info, hide loading
+      this._quickTokenLoadingEl.style.display = "none";
+      this._quickTokenInfoEl.style.display = "flex";
+      this._quickContinueBtnEl.disabled = false;
+    } catch (err) {
+      if (!this._isOpen) return;
+
+      this._quickTokenPreviewEl.setAttribute("data-visible", "false");
+      this._showQuickError(err.message || "Failed to fetch token info");
+      this._fetchedTokenData = null;
+    }
+  }
+
+  /**
+   * Handle continue button click in quick trade mode
+   */
+  async _handleQuickContinue() {
+    if (!this._fetchedTokenData) return;
+
+    const mint = this._quickMintInputEl.value.trim();
+    const token = this._fetchedTokenData;
+
+    // For sell action, verify holdings exist
+    if (this.currentAction === "sell") {
+      this._quickContinueBtnEl.classList.add("loading");
+      this._quickContinueBtnEl.disabled = true;
+
+      try {
+        const response = await fetch(`/api/positions/${encodeURIComponent(mint)}/details`);
+
+        if (!this._isOpen) return;
+
+        if (!response.ok || response.status === 404) {
+          this._quickContinueBtnEl.classList.remove("loading");
+          this._showQuickError("No position found for this token");
+          return;
+        }
+
+        const data = await response.json();
+
+        if (!data.success || !data.data?.position?.summary) {
+          this._quickContinueBtnEl.classList.remove("loading");
+          this._showQuickError("No position found for this token");
+          return;
+        }
+
+        const pos = data.data.position.summary;
+        const holdings = pos.remaining_token_amount ?? pos.token_amount ?? 0;
+
+        if (holdings <= 0) {
+          this._quickContinueBtnEl.classList.remove("loading");
+          this._showQuickError("Position has no remaining tokens");
+          return;
+        }
+
+        // Update context with holdings
+        this.currentContext.holdings = holdings;
+        this.currentContext.mint = mint;
+
+        this._quickContinueBtnEl.classList.remove("loading");
+      } catch {
+        if (!this._isOpen) return;
+        this._quickContinueBtnEl.classList.remove("loading");
+        this._showQuickError("Failed to fetch position data");
+        return;
+      }
+    } else {
+      // For buy, just set the mint
+      this.currentContext.mint = mint;
+    }
+
+    // Update symbol
+    this._currentSymbol = token.symbol || "Unknown";
+
+    // Transition to trade step
+    this._transitionToTradeStep();
+  }
+
+  /**
+   * Transition from mint input step to trade step with animation
+   */
+  _transitionToTradeStep() {
+    this._quickStep = "trade";
+
+    // Animate out mint step
+    this._quickMintStepEl.classList.add("slide-out");
+
+    setTimeout(() => {
+      // Hide mint step
+      this._quickMintStepEl.setAttribute("data-visible", "false");
+      this._quickMintStepEl.classList.remove("slide-out");
+
+      // Render and show trade step
+      this._render(this.currentAction, this._currentSymbol, this.currentContext);
+
+      // Show trade body/footer with animation
+      this._tradeBodyEl.style.display = "";
+      this._tradeFooterEl.style.display = "";
+      this._tradeBodyEl.classList.add("slide-in");
+      this._tradeFooterEl.classList.add("slide-in");
+
+      // Update title back to normal
+      const config = ACTION_CONFIG[this.currentAction];
+      this.titleEl.textContent = config.title;
+      this.subtitleEl.textContent = config.subtitle;
+
+      setTimeout(() => {
+        this._tradeBodyEl.classList.remove("slide-in");
+        this._tradeFooterEl.classList.remove("slide-in");
+
+        // Focus and auto-select default preset
+        this.dialog?.focus();
+        const defaultPreset = this.presetsContainer.querySelector(
+          ".trade-action-preset-btn[data-default='true']"
+        );
+        if (defaultPreset) {
+          defaultPreset.click();
+        }
+      }, 200);
+    }, 150);
+  }
+
+  /**
+   * Show error message in quick trade mode
+   * @param {string} message - The error message
+   */
+  _showQuickError(message) {
+    this._quickErrorTextEl.textContent = message;
+    this._quickErrorEl.setAttribute("data-visible", "true");
+    this._quickContinueBtnEl.disabled = true;
+  }
+
+  /**
+   * Inject CSS styles for quick trade mode
+   */
+  _injectQuickTradeStyles() {
+    if (document.getElementById("quick-trade-styles")) return;
+
+    const style = document.createElement("style");
+    style.id = "quick-trade-styles";
+    style.textContent = `
+      /* Quick Trade Mint Step */
+      .quick-trade-mint-step {
+        display: none;
+        flex-direction: column;
+        padding: 1.5rem;
+        gap: 1rem;
+      }
+      .quick-trade-mint-step[data-visible="true"] {
+        display: flex;
+      }
+      .quick-trade-mint-step.slide-out {
+        animation: slideOutLeft 0.15s ease-out forwards;
+      }
+      
+      .quick-trade-mint-content {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+      }
+      
+      .quick-trade-mint-label {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--color-text-secondary);
+      }
+      
+      .quick-trade-mint-input-wrapper {
+        display: flex;
+        gap: 0.5rem;
+        align-items: stretch;
+      }
+      
+      .quick-trade-mint-input {
+        flex: 1;
+        padding: 0.875rem 1rem;
+        font-family: var(--font-mono);
+        font-size: 0.9375rem;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        color: var(--color-text-primary);
+        transition: border-color 0.15s, box-shadow 0.15s;
+      }
+      .quick-trade-mint-input:focus {
+        outline: none;
+        border-color: var(--color-primary);
+        box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+      }
+      .quick-trade-mint-input::placeholder {
+        color: var(--color-text-muted);
+      }
+      
+      .quick-trade-paste-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 44px;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        color: var(--color-text-secondary);
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .quick-trade-paste-btn:hover {
+        background: var(--color-surface-hover);
+        color: var(--color-text-primary);
+        border-color: var(--color-border-hover);
+      }
+      .quick-trade-paste-btn svg {
+        width: 18px;
+        height: 18px;
+      }
+      .quick-trade-paste-btn.error-flash {
+        background: rgba(239, 68, 68, 0.15);
+        border-color: var(--color-error);
+      }
+      
+      /* Quick Trade Error */
+      .quick-trade-error {
+        display: none;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.625rem 0.875rem;
+        font-size: 0.8125rem;
+        color: var(--color-error);
+        background: rgba(239, 68, 68, 0.1);
+        border-radius: var(--radius-sm);
+      }
+      .quick-trade-error[data-visible="true"] {
+        display: flex;
+      }
+      .quick-trade-error svg {
+        width: 16px;
+        height: 16px;
+        flex-shrink: 0;
+      }
+      
+      /* Quick Trade Token Preview */
+      .quick-trade-token-preview {
+        display: none;
+        padding: 1rem;
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+      }
+      .quick-trade-token-preview[data-visible="true"] {
+        display: block;
+      }
+      
+      .quick-trade-token-loading {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        color: var(--color-text-secondary);
+        font-size: 0.875rem;
+      }
+      
+      .quick-trade-spinner {
+        width: 18px;
+        height: 18px;
+        border: 2px solid var(--color-border);
+        border-top-color: var(--color-primary);
+        border-radius: 50%;
+        animation: spin 0.8s linear infinite;
+      }
+      
+      .quick-trade-token-info {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+      }
+      
+      .quick-trade-token-symbol {
+        font-size: 1.125rem;
+        font-weight: 600;
+        color: var(--color-text-primary);
+      }
+      
+      .quick-trade-token-name {
+        font-size: 0.8125rem;
+        color: var(--color-text-secondary);
+      }
+      
+      .quick-trade-token-price {
+        font-family: var(--font-mono);
+        font-size: 0.875rem;
+        color: var(--color-text-muted);
+        margin-top: 0.25rem;
+      }
+      
+      /* Quick Trade Footer */
+      .quick-trade-mint-footer {
+        display: flex;
+        gap: 0.75rem;
+        justify-content: flex-end;
+        padding-top: 0.5rem;
+        border-top: 1px solid var(--color-border);
+        margin-top: 0.5rem;
+      }
+      
+      /* Animations */
+      @keyframes slideOutLeft {
+        from {
+          opacity: 1;
+          transform: translateX(0);
+        }
+        to {
+          opacity: 0;
+          transform: translateX(-20px);
+        }
+      }
+      
+      .slide-in {
+        animation: slideInRight 0.2s ease-out forwards;
+      }
+      
+      @keyframes slideInRight {
+        from {
+          opacity: 0;
+          transform: translateX(20px);
+        }
+        to {
+          opacity: 1;
+          transform: translateX(0);
+        }
+      }
+      
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+      
+      /* Quick mode dialog adjustments */
+      .trade-action-dialog.quick-mode .trade-action-header {
+        border-bottom: none;
+      }
+    `;
+    document.head.appendChild(style);
   }
 }

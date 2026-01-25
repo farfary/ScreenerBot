@@ -73,6 +73,9 @@ class ContextMenuManager {
     this._boundHandleScroll = this._handleScroll.bind(this);
     this._boundHandleResize = this._handleResize.bind(this);
 
+    // Cached TradeActionDialog instance (lazy initialized)
+    this._tradeDialog = null;
+
     this._init();
   }
 
@@ -1251,10 +1254,20 @@ class ContextMenuManager {
   // Action Handlers
   // =========================================================================
 
+  /**
+   * Lazily initialize and return cached TradeActionDialog instance
+   */
+  async _ensureTradeDialog() {
+    if (!this._tradeDialog) {
+      const { TradeActionDialog } = await import("../ui/trade_action_dialog.js");
+      this._tradeDialog = new TradeActionDialog();
+    }
+    return this._tradeDialog;
+  }
+
   async _buyToken(context) {
     try {
-      const { TradeActionDialog } = await import("../ui/trade_action_dialog.js");
-      const dialog = new TradeActionDialog();
+      const dialog = await this._ensureTradeDialog();
 
       const balanceRes = await fetch("/api/wallet/balance");
       const balanceData = await balanceRes.json();
@@ -1293,8 +1306,7 @@ class ContextMenuManager {
 
   async _sellToken(context) {
     try {
-      const { TradeActionDialog } = await import("../ui/trade_action_dialog.js");
-      const dialog = new TradeActionDialog();
+      const dialog = await this._ensureTradeDialog();
 
       // Fetch token holdings from position for quote calculation
       let holdings = 0;
@@ -1347,8 +1359,7 @@ class ContextMenuManager {
 
   async _addToPosition(context) {
     try {
-      const { TradeActionDialog } = await import("../ui/trade_action_dialog.js");
-      const dialog = new TradeActionDialog();
+      const dialog = await this._ensureTradeDialog();
 
       const balanceRes = await fetch("/api/wallet/balance");
       const balanceData = await balanceRes.json();

@@ -5,6 +5,8 @@
 
 import { $, on } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
+import { ConfirmationDialog } from "./confirmation_dialog.js";
+import { InputDialog } from "./input_dialog.js";
 
 export class ToolFavorites {
   constructor(options) {
@@ -199,8 +201,15 @@ export class ToolFavorites {
     }
 
     // Prompt for label
-    const label = window.prompt("Enter a label for this favorite:", config.symbol || "");
-    if (label === null) return; // Cancelled
+    const result = await InputDialog.show({
+      title: "Add Favorite",
+      message: "Enter a label for this favorite",
+      placeholder: "Label (optional)...",
+      defaultValue: config.symbol || "",
+      confirmLabel: "Save",
+    });
+    if (!result) return; // Cancelled
+    const label = result.value;
 
     try {
       const response = await fetch("/api/tools/favorites", {
@@ -228,7 +237,13 @@ export class ToolFavorites {
   }
 
   async deleteFavorite(id) {
-    if (!window.confirm("Remove this favorite?")) return;
+    const result = await ConfirmationDialog.show({
+      title: "Remove Favorite",
+      message: "Remove this favorite?",
+      confirmLabel: "Remove",
+      variant: "warning",
+    });
+    if (!result.confirmed) return;
 
     try {
       const response = await fetch(`/api/tools/favorites/${id}`, {

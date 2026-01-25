@@ -12,6 +12,7 @@ import { DataTable } from "../ui/data_table.js";
 import { ToolFavorites } from "../ui/tool_favorites.js";
 import { enhanceAllSelects } from "../ui/custom_select.js";
 import { PoolSelector } from "../ui/pool_selector.js";
+import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 
 // =============================================================================
 // Constants
@@ -1635,7 +1636,13 @@ async function handleTaBlacklistClick(e) {
   const mint = btn.dataset.mint;
   const symbol = btn.dataset.symbol;
 
-  if (!window.confirm(`Blacklist ${symbol || mint}? This token will be excluded from trading.`)) {
+  const result = await ConfirmationDialog.show({
+    title: "Blacklist Token",
+    message: `Blacklist ${symbol || mint}? This token will be excluded from trading.`,
+    confirmLabel: "Blacklist",
+    variant: "warning",
+  });
+  if (!result.confirmed) {
     return;
   }
 

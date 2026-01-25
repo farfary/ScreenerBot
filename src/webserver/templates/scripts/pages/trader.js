@@ -1959,7 +1959,13 @@ function createLifecycle() {
     const forceStopBtn = $("#force-stop-btn");
     if (forceStopBtn) {
       addTrackedListener(forceStopBtn, "click", async () => {
-        if (!window.confirm("This will immediately halt ALL trading operations. Continue?")) return;
+        const result = await ConfirmationDialog.show({
+          title: "Force Stop Trading",
+          message: "This will immediately halt ALL trading operations. Continue?",
+          confirmLabel: "Stop Trading",
+          variant: "danger",
+        });
+        if (!result.confirmed) return;
 
         try {
           const res = await fetch("/api/trader/force-stop", {

@@ -12,6 +12,7 @@
  */
 
 import { $, create, show, hide, on, off } from "../core/dom.js";
+import { ConfirmationDialog } from "./confirmation_dialog.js";
 
 const SEARCH_DEBOUNCE_MS = 300;
 const MIN_QUERY_LENGTH = 2;
@@ -391,11 +392,13 @@ async function addToFavorites(token, btn) {
  */
 async function addToBlacklist(token, btn) {
   // Confirm before blacklisting
-  if (
-    !window.confirm(
-      `Blacklist ${token.symbol || token.mint}? This token will be excluded from trading.`
-    )
-  ) {
+  const result = await ConfirmationDialog.show({
+    title: "Blacklist Token",
+    message: `Blacklist ${token.symbol || token.mint}? This token will be excluded from trading.`,
+    confirmLabel: "Blacklist",
+    variant: "warning",
+  });
+  if (!result.confirmed) {
     return;
   }
 
