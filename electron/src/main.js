@@ -18,7 +18,7 @@ if (!gotTheLock) {
 
 // Configuration
 const CONFIG = {
-  port: 8080,
+  port: null, // Dynamic - set when backend reports ready
   host: '127.0.0.1',
   healthEndpoint: '/api/health',
   pollInterval: 1000,
@@ -34,6 +34,7 @@ let backendProcess = null;
 let isQuitting = false;
 let tray = null;
 let isExitDialogOpen = false; // Guard flag to prevent multiple exit dialogs
+let backendReadyResolve = null; // Promise resolver for SCREENERBOT_READY signal
 
 /**
  * Get the path to tray icon based on platform
@@ -253,31 +254,61 @@ function checkBackendHealth() {
 
 /**
  * Wait for the backend to be ready
+ * First waits for SCREENERBOT_READY signal (to get dynamic port), then health checks
  */
 async function waitForBackend() {
   const startTime = Date.now();
-  let checkCount = 0;
   
-  console.log('[Electron] Waiting for backend to be ready...');
+  console.log('[Electron] Waiting for backend to report ready (SCREENERBOT_READY signal)...');
+  
+  // Phase 1: Wait for SCREENERBOT_READY signal with port and token
+  // This Promise is resolved by the stdout handler in startBackend()
+  const readyPromise = new Promise((resolve) => {
+    backendReadyResolve = resolve;
+    
+    // Timeout after maxWaitTime
+    setTimeout(() => {
+      if (backendReadyResolve) {
+        console.error('[Electron] Timeout waiting for SCREENERBOT_READY signal');
+        resolve(false);
+        backendReadyResolve = null;
+      }
+    }, CONFIG.maxWaitTime);
+  });
+  
+  const gotReadySignal = await readyPromise;
+  
+  if (!gotReadySignal || !CONFIG.port) {
+    console.error('[Electron] Backend did not send SCREENERBOT_READY signal or port is missing');
+    return false;
+  }
+  
+  console.log(`[Electron] Got SCREENERBOT_READY signal, port=${CONFIG.port}, elapsed=${Date.now() - startTime}ms`);
+  
+  // Phase 2: Health check loop to verify backend is fully operational
+  let checkCount = 0;
+  const healthStartTime = Date.now();
+  
+  console.log('[Electron] Starting health checks...');
   
   while (Date.now() - startTime < CONFIG.maxWaitTime) {
     checkCount++;
     const isReady = await checkBackendHealth();
     
     if (isReady) {
-      console.log(`[Electron] Backend is ready after ${checkCount} checks (${Date.now() - startTime}ms)`);
+      console.log(`[Electron] Backend is ready after ${checkCount} health checks (${Date.now() - healthStartTime}ms)`);
       return true;
     }
     
     // Log progress every 10 checks
     if (checkCount % 10 === 0) {
-      console.log(`[Electron] Still waiting... (${checkCount} checks, ${Math.round((Date.now() - startTime) / 1000)}s)`);
+      console.log(`[Electron] Still waiting for health check... (${checkCount} checks, ${Math.round((Date.now() - healthStartTime) / 1000)}s)`);
     }
     
     await new Promise(resolve => setTimeout(resolve, CONFIG.pollInterval));
   }
   
-  console.error('[Electron] Backend failed to start within timeout');
+  console.error('[Electron] Backend health check failed within timeout');
   return false;
 }
 
@@ -297,7 +328,7 @@ function startBackend() {
 
   try {
     // Spawn the backend process
-    backendProcess = spawn(binaryPath, [], {
+    backendProcess = spawn(binaryPath, ['--gui'], {
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: false,
       env: {
@@ -311,6 +342,23 @@ function startBackend() {
       lines.forEach(line => {
         if (line.trim()) {
           console.log('[Backend]', line);
+          // Parse SCREENERBOT_READY message for port and token
+          if (line.startsWith('SCREENERBOT_READY:')) {
+            const parts = line.split(':');
+            if (parts.length >= 3) {
+              const port = parseInt(parts[1], 10);
+              const token = parts[2];
+              console.log(`[Electron] Backend ready on port ${port} with token ${token.substring(0, 8)}...`);
+              CONFIG.port = port;
+              global.SCREENERBOT_TOKEN = token;
+              
+              // Resolve the waitForBackend() Promise
+              if (backendReadyResolve) {
+                backendReadyResolve(true);
+                backendReadyResolve = null;
+              }
+            }
+          }
         }
       });
     });

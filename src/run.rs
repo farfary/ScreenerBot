@@ -47,6 +47,12 @@ pub async fn run_bot_with_lock(process_lock: ProcessLock) -> Result<(), String> 
 async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
     logger::info(LogTag::System, "ScreenerBot starting up...");
 
+    // 1. Set GUI mode if --gui flag is present (must be done early for webserver security)
+    if crate::arguments::is_gui_enabled() {
+        global::set_gui_mode(true);
+        logger::info(LogTag::System, "GUI mode enabled");
+    }
+
     // 2. Validate CLI arguments early (before any processing)
     if let Err(e) = crate::arguments::validate_port_argument() {
         logger::error(

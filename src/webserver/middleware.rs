@@ -49,6 +49,7 @@ pub async fn security_gate(request: Request, next: Next) -> Response {
     // Also allow initialization endpoints - needed before security token is injected
     // Page routes (non-API) are allowed - they return HTML with embedded token
     if path == "/"
+        || path == "/api/health"
         || path.starts_with("/assets/")
         || path.starts_with("/scripts/")
         || path.starts_with("/styles/")
