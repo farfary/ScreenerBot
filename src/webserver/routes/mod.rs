@@ -346,6 +346,7 @@ async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String>) -
         "pool_selector.js" => Some(templates::POOL_SELECTOR_UI),
         "exit_dialog.js" => Some(templates::EXIT_DIALOG_UI),
         "config_import_export_dialog.js" => Some(templates::CONFIG_IMPORT_EXPORT_DIALOG_UI),
+        "input_dialog.js" => Some(templates::INPUT_DIALOG_UI),
         _ => None,
     };
 
