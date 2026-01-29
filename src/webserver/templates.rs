@@ -137,6 +137,7 @@ pub const POOL_SELECTOR_UI: &str = include_str!("templates/scripts/ui/pool_selec
 pub const EXIT_DIALOG_UI: &str = include_str!("templates/scripts/ui/exit_dialog.js");
 pub const CONFIG_IMPORT_EXPORT_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/config_import_export_dialog.js");
+pub const INPUT_DIALOG_UI: &str = include_str!("templates/scripts/ui/input_dialog.js");
 
 pub const SERVICES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/services.js");
 pub const TRANSACTIONS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/transactions.js");
