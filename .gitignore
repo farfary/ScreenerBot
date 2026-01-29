@@ -60,3 +60,4 @@ repos/
 builds/
 .build.lock
 _trash/
+_setup/*
