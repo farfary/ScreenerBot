@@ -233,6 +233,7 @@ async fn get_page_content(axum::extract::Path(page): axum::extract::Path<String>
         "initialization" => templates::initialization_content(),
         "updates" => templates::updates_content(),
         "about" => templates::about_content(),
+        "ai" => templates::ai_content(),
         _ => {
             // Escape page name to prevent XSS
             let escaped_page = page
