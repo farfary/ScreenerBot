@@ -7,6 +7,7 @@ use axum::{
 use std::sync::Arc;
 
 pub mod actions;
+pub mod ai;
 pub mod auth;
 pub mod billboard;
 pub mod blacklist;
@@ -49,6 +50,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/filtering", axum::routing::get(filtering_page))
         .route("/wallets", axum::routing::get(wallets_page))
         .route("/tools", axum::routing::get(tools_page))
+        .route("/ai", axum::routing::get(ai_page))
         .route("/config", axum::routing::get(config_page))
         .route("/strategies", axum::routing::get(strategies_page))
         .route("/trader", axum::routing::get(trader_page))
@@ -144,6 +146,12 @@ async fn tools_page() -> Html<String> {
     Html(templates::base_template("Tools", "tools", &content))
 }
 
+/// AI page handler
+async fn ai_page() -> Html<String> {
+    let content = templates::ai_content();
+    Html(templates::base_template("AI", "ai", &content))
+}
+
 /// Initialization page handler
 async fn initialization_page() -> Html<String> {
     let content = templates::initialization_content();
@@ -202,6 +210,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .nest("/lockscreen", lockscreen::routes())
         .nest("/auth", auth::routes())
         .nest("/telegram", telegram::routes())
+        .nest("/ai", ai::routes())
         .merge(updates::routes())
         .route("/pages/:page", axum::routing::get(get_page_content))
 }
@@ -297,6 +306,7 @@ async fn get_page_script(axum::extract::Path(file): axum::extract::Path<String>)
         "trader.js" => Some(templates::TRADER_PAGE_SCRIPT),
         "wallets.js" => Some(templates::WALLETS_PAGE_SCRIPT),
         "tools.js" => Some(templates::TOOLS_PAGE_SCRIPT),
+        "ai.js" => Some(templates::AI_PAGE_SCRIPT),
         "updates.js" => Some(templates::UPDATES_PAGE_SCRIPT),
         "about.js" => Some(templates::ABOUT_PAGE_SCRIPT),
         "login.js" => Some(templates::LOGIN_PAGE_SCRIPT),

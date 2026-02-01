@@ -175,14 +175,25 @@ impl TelegramNotifier {
                 token_mint,
                 amount_sol,
                 entry_price,
-            } => formatters::msg_position_opened(
-                token_symbol,
-                token_mint,
-                *amount_sol,
-                *entry_price,
-                0.0, // tokens not provided in basic notification
-                "Unknown",
-            ),
+                ai_reasoning,
+            } => {
+                let should_include_ai = with_config(|c| c.telegram.include_ai_reasoning);
+                let reasoning = if should_include_ai {
+                    ai_reasoning
+                } else {
+                    &None
+                };
+
+                formatters::msg_position_opened(
+                    token_symbol,
+                    token_mint,
+                    *amount_sol,
+                    *entry_price,
+                    0.0, // tokens not provided in basic notification
+                    "Unknown",
+                    reasoning,
+                )
+            }
 
             NotificationType::PositionClosed {
                 token_symbol,
@@ -195,18 +206,29 @@ impl TelegramNotifier {
                 invested,
                 received,
                 duration_secs,
-            } => formatters::msg_position_closed(
-                token_symbol,
-                token_mint,
-                *pnl_sol,
-                *pnl_percent,
-                *entry_price,
-                *exit_price,
-                *invested,
-                *received,
-                *duration_secs,
-                exit_reason,
-            ),
+                ai_reasoning,
+            } => {
+                let should_include_ai = with_config(|c| c.telegram.include_ai_reasoning);
+                let reasoning = if should_include_ai {
+                    ai_reasoning
+                } else {
+                    &None
+                };
+
+                formatters::msg_position_closed(
+                    token_symbol,
+                    token_mint,
+                    *pnl_sol,
+                    *pnl_percent,
+                    *entry_price,
+                    *exit_price,
+                    *invested,
+                    *received,
+                    *duration_secs,
+                    exit_reason,
+                    reasoning,
+                )
+            }
 
             NotificationType::PartialExit {
                 token_symbol,

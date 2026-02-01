@@ -1,5 +1,6 @@
 use std::fmt;
 
+pub mod ai;
 pub mod dexscreener;
 pub mod geckoterminal;
 pub mod meta;
@@ -12,6 +13,7 @@ pub enum FilterSource {
     DexScreener,
     GeckoTerminal,
     Rugcheck,
+    Ai,
 }
 
 impl FilterSource {
@@ -21,12 +23,13 @@ impl FilterSource {
             FilterSource::DexScreener => "dexscreener",
             FilterSource::GeckoTerminal => "geckoterminal",
             FilterSource::Rugcheck => "rugcheck",
+            FilterSource::Ai => "ai",
         }
     }
 }
 
 /// Unified set of rejection reasons shared by all filtering sources.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum FilterRejectionReason {
     // Core/meta checks
     NoDecimalsInDatabase,
@@ -35,6 +38,13 @@ pub enum FilterRejectionReason {
     DexScreenerDataMissing,
     GeckoTerminalDataMissing,
     RugcheckDataMissing,
+
+    // AI filtering
+    AiRejected {
+        reason: String,
+        confidence: u8,
+        provider: String,
+    },
 
     // DexScreener
     DexScreenerEmptyName,
@@ -124,208 +134,352 @@ pub enum FilterRejectionReason {
 
 impl FilterRejectionReason {
     /// Describe the rejection reason using a machine friendly label.
-    pub fn label(&self) -> &'static str {
+    pub fn label(&self) -> String {
         match self {
-            FilterRejectionReason::NoDecimalsInDatabase => "no_decimals",
-            FilterRejectionReason::TokenTooNew => "token_too_new",
-            FilterRejectionReason::CooldownFiltered => "cooldown_filtered",
-            FilterRejectionReason::DexScreenerDataMissing => "dex_data_missing",
-            FilterRejectionReason::GeckoTerminalDataMissing => "gecko_data_missing",
-            FilterRejectionReason::RugcheckDataMissing => "rug_data_missing",
-            FilterRejectionReason::DexScreenerEmptyName => "dex_empty_name",
-            FilterRejectionReason::DexScreenerEmptySymbol => "dex_empty_symbol",
-            FilterRejectionReason::DexScreenerEmptyLogoUrl => "dex_empty_logo",
-            FilterRejectionReason::DexScreenerEmptyWebsiteUrl => "dex_empty_website",
-            FilterRejectionReason::DexScreenerInsufficientTransactions5Min => "dex_txn_5m",
-            FilterRejectionReason::DexScreenerInsufficientTransactions1H => "dex_txn_1h",
-            FilterRejectionReason::DexScreenerZeroLiquidity => "dex_zero_liq",
-            FilterRejectionReason::DexScreenerInsufficientLiquidity => "dex_liq_low",
-            FilterRejectionReason::DexScreenerLiquidityTooHigh => "dex_liq_high",
-            FilterRejectionReason::DexScreenerMarketCapTooLow => "dex_mcap_low",
-            FilterRejectionReason::DexScreenerMarketCapTooHigh => "dex_mcap_high",
-            FilterRejectionReason::DexScreenerVolumeTooLow => "dex_vol_low",
-            FilterRejectionReason::DexScreenerVolumeMissing => "dex_vol_missing",
-            FilterRejectionReason::DexScreenerFdvTooLow => "dex_fdv_low",
-            FilterRejectionReason::DexScreenerFdvTooHigh => "dex_fdv_high",
-            FilterRejectionReason::DexScreenerFdvMissing => "dex_fdv_missing",
-            FilterRejectionReason::DexScreenerVolume5mTooLow => "dex_vol5m_low",
-            FilterRejectionReason::DexScreenerVolume5mMissing => "dex_vol5m_missing",
-            FilterRejectionReason::DexScreenerVolume1hTooLow => "dex_vol1h_low",
-            FilterRejectionReason::DexScreenerVolume1hMissing => "dex_vol1h_missing",
-            FilterRejectionReason::DexScreenerVolume6hTooLow => "dex_vol6h_low",
-            FilterRejectionReason::DexScreenerVolume6hMissing => "dex_vol6h_missing",
-            FilterRejectionReason::DexScreenerPriceChange5mTooLow => "dex_price_change_5m_low",
-            FilterRejectionReason::DexScreenerPriceChange5mTooHigh => "dex_price_change_5m_high",
-            FilterRejectionReason::DexScreenerPriceChange5mMissing => "dex_price_change_5m_missing",
-            FilterRejectionReason::DexScreenerPriceChangeTooLow => "dex_price_change_low",
-            FilterRejectionReason::DexScreenerPriceChangeTooHigh => "dex_price_change_high",
-            FilterRejectionReason::DexScreenerPriceChangeMissing => "dex_price_change_missing",
-            FilterRejectionReason::DexScreenerPriceChange6hTooLow => "dex_price_change_6h_low",
-            FilterRejectionReason::DexScreenerPriceChange6hTooHigh => "dex_price_change_6h_high",
-            FilterRejectionReason::DexScreenerPriceChange6hMissing => "dex_price_change_6h_missing",
-            FilterRejectionReason::DexScreenerPriceChange24hTooLow => "dex_price_change_24h_low",
-            FilterRejectionReason::DexScreenerPriceChange24hTooHigh => "dex_price_change_24h_high",
-            FilterRejectionReason::DexScreenerPriceChange24hMissing => {
-                "dex_price_change_24h_missing"
+            FilterRejectionReason::NoDecimalsInDatabase => "no_decimals".to_string(),
+            FilterRejectionReason::TokenTooNew => "token_too_new".to_string(),
+            FilterRejectionReason::CooldownFiltered => "cooldown_filtered".to_string(),
+            FilterRejectionReason::DexScreenerDataMissing => "dex_data_missing".to_string(),
+            FilterRejectionReason::GeckoTerminalDataMissing => "gecko_data_missing".to_string(),
+            FilterRejectionReason::RugcheckDataMissing => "rug_data_missing".to_string(),
+            FilterRejectionReason::AiRejected { .. } => "ai_rejected".to_string(),
+            FilterRejectionReason::DexScreenerEmptyName => "dex_empty_name".to_string(),
+            FilterRejectionReason::DexScreenerEmptySymbol => "dex_empty_symbol".to_string(),
+            FilterRejectionReason::DexScreenerEmptyLogoUrl => "dex_empty_logo".to_string(),
+            FilterRejectionReason::DexScreenerEmptyWebsiteUrl => "dex_empty_website".to_string(),
+            FilterRejectionReason::DexScreenerInsufficientTransactions5Min => {
+                "dex_txn_5m".to_string()
             }
-            FilterRejectionReason::GeckoTerminalLiquidityMissing => "gecko_liq_missing",
-            FilterRejectionReason::GeckoTerminalLiquidityTooLow => "gecko_liq_low",
-            FilterRejectionReason::GeckoTerminalLiquidityTooHigh => "gecko_liq_high",
-            FilterRejectionReason::GeckoTerminalMarketCapMissing => "gecko_mcap_missing",
-            FilterRejectionReason::GeckoTerminalMarketCapTooLow => "gecko_mcap_low",
-            FilterRejectionReason::GeckoTerminalMarketCapTooHigh => "gecko_mcap_high",
-            FilterRejectionReason::GeckoTerminalVolume5mTooLow => "gecko_vol5m_low",
-            FilterRejectionReason::GeckoTerminalVolume5mMissing => "gecko_vol5m_missing",
-            FilterRejectionReason::GeckoTerminalVolume1hTooLow => "gecko_vol1h_low",
-            FilterRejectionReason::GeckoTerminalVolume1hMissing => "gecko_vol1h_missing",
-            FilterRejectionReason::GeckoTerminalVolume24hTooLow => "gecko_vol24h_low",
-            FilterRejectionReason::GeckoTerminalVolume24hMissing => "gecko_vol24h_missing",
-            FilterRejectionReason::GeckoTerminalPriceChange5mTooLow => "gecko_price_change_5m_low",
+            FilterRejectionReason::DexScreenerInsufficientTransactions1H => {
+                "dex_txn_1h".to_string()
+            }
+            FilterRejectionReason::DexScreenerZeroLiquidity => "dex_zero_liq".to_string(),
+            FilterRejectionReason::DexScreenerInsufficientLiquidity => "dex_liq_low".to_string(),
+            FilterRejectionReason::DexScreenerLiquidityTooHigh => "dex_liq_high".to_string(),
+            FilterRejectionReason::DexScreenerMarketCapTooLow => "dex_mcap_low".to_string(),
+            FilterRejectionReason::DexScreenerMarketCapTooHigh => "dex_mcap_high".to_string(),
+            FilterRejectionReason::DexScreenerVolumeTooLow => "dex_vol_low".to_string(),
+            FilterRejectionReason::DexScreenerVolumeMissing => "dex_vol_missing".to_string(),
+            FilterRejectionReason::DexScreenerFdvTooLow => "dex_fdv_low".to_string(),
+            FilterRejectionReason::DexScreenerFdvTooHigh => "dex_fdv_high".to_string(),
+            FilterRejectionReason::DexScreenerFdvMissing => "dex_fdv_missing".to_string(),
+            FilterRejectionReason::DexScreenerVolume5mTooLow => "dex_vol5m_low".to_string(),
+            FilterRejectionReason::DexScreenerVolume5mMissing => "dex_vol5m_missing".to_string(),
+            FilterRejectionReason::DexScreenerVolume1hTooLow => "dex_vol1h_low".to_string(),
+            FilterRejectionReason::DexScreenerVolume1hMissing => "dex_vol1h_missing".to_string(),
+            FilterRejectionReason::DexScreenerVolume6hTooLow => "dex_vol6h_low".to_string(),
+            FilterRejectionReason::DexScreenerVolume6hMissing => "dex_vol6h_missing".to_string(),
+            FilterRejectionReason::DexScreenerPriceChange5mTooLow => {
+                "dex_price_change_5m_low".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChange5mTooHigh => {
+                "dex_price_change_5m_high".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChange5mMissing => {
+                "dex_price_change_5m_missing".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChangeTooLow => {
+                "dex_price_change_low".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChangeTooHigh => {
+                "dex_price_change_high".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChangeMissing => {
+                "dex_price_change_missing".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChange6hTooLow => {
+                "dex_price_change_6h_low".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChange6hTooHigh => {
+                "dex_price_change_6h_high".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChange6hMissing => {
+                "dex_price_change_6h_missing".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChange24hTooLow => {
+                "dex_price_change_24h_low".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChange24hTooHigh => {
+                "dex_price_change_24h_high".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChange24hMissing => {
+                "dex_price_change_24h_missing".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalLiquidityMissing => "gecko_liq_missing".to_string(),
+            FilterRejectionReason::GeckoTerminalLiquidityTooLow => "gecko_liq_low".to_string(),
+            FilterRejectionReason::GeckoTerminalLiquidityTooHigh => "gecko_liq_high".to_string(),
+            FilterRejectionReason::GeckoTerminalMarketCapMissing => {
+                "gecko_mcap_missing".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalMarketCapTooLow => "gecko_mcap_low".to_string(),
+            FilterRejectionReason::GeckoTerminalMarketCapTooHigh => "gecko_mcap_high".to_string(),
+            FilterRejectionReason::GeckoTerminalVolume5mTooLow => "gecko_vol5m_low".to_string(),
+            FilterRejectionReason::GeckoTerminalVolume5mMissing => {
+                "gecko_vol5m_missing".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalVolume1hTooLow => "gecko_vol1h_low".to_string(),
+            FilterRejectionReason::GeckoTerminalVolume1hMissing => {
+                "gecko_vol1h_missing".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalVolume24hTooLow => "gecko_vol24h_low".to_string(),
+            FilterRejectionReason::GeckoTerminalVolume24hMissing => {
+                "gecko_vol24h_missing".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalPriceChange5mTooLow => {
+                "gecko_price_change_5m_low".to_string()
+            }
             FilterRejectionReason::GeckoTerminalPriceChange5mTooHigh => {
-                "gecko_price_change_5m_high"
+                "gecko_price_change_5m_high".to_string()
             }
             FilterRejectionReason::GeckoTerminalPriceChange5mMissing => {
-                "gecko_price_change_5m_missing"
+                "gecko_price_change_5m_missing".to_string()
             }
-            FilterRejectionReason::GeckoTerminalPriceChange1hTooLow => "gecko_price_change_1h_low",
+            FilterRejectionReason::GeckoTerminalPriceChange1hTooLow => {
+                "gecko_price_change_1h_low".to_string()
+            }
             FilterRejectionReason::GeckoTerminalPriceChange1hTooHigh => {
-                "gecko_price_change_1h_high"
+                "gecko_price_change_1h_high".to_string()
             }
             FilterRejectionReason::GeckoTerminalPriceChange1hMissing => {
-                "gecko_price_change_1h_missing"
+                "gecko_price_change_1h_missing".to_string()
             }
             FilterRejectionReason::GeckoTerminalPriceChange24hTooLow => {
-                "gecko_price_change_24h_low"
+                "gecko_price_change_24h_low".to_string()
             }
             FilterRejectionReason::GeckoTerminalPriceChange24hTooHigh => {
-                "gecko_price_change_24h_high"
+                "gecko_price_change_24h_high".to_string()
             }
             FilterRejectionReason::GeckoTerminalPriceChange24hMissing => {
-                "gecko_price_change_24h_missing"
+                "gecko_price_change_24h_missing".to_string()
             }
-            FilterRejectionReason::GeckoTerminalPoolCountTooLow => "gecko_pool_count_low",
-            FilterRejectionReason::GeckoTerminalPoolCountTooHigh => "gecko_pool_count_high",
-            FilterRejectionReason::GeckoTerminalPoolCountMissing => "gecko_pool_count_missing",
-            FilterRejectionReason::GeckoTerminalReserveTooLow => "gecko_reserve_low",
-            FilterRejectionReason::GeckoTerminalReserveMissing => "gecko_reserve_missing",
-            FilterRejectionReason::RugcheckRuggedToken => "rug_rugged",
-            FilterRejectionReason::RugcheckRiskScoreTooHigh => "rug_score",
-            FilterRejectionReason::RugcheckRiskLevelDanger => "rug_level_danger",
-            FilterRejectionReason::RugcheckMintAuthorityBlocked => "rug_mint_authority",
-            FilterRejectionReason::RugcheckFreezeAuthorityBlocked => "rug_freeze_authority",
-            FilterRejectionReason::RugcheckTopHolderTooHigh => "rug_top_holder",
-            FilterRejectionReason::RugcheckTop3HoldersTooHigh => "rug_top3_holders",
-            FilterRejectionReason::RugcheckNotEnoughHolders => "rug_min_holders",
-            FilterRejectionReason::RugcheckInsiderHolderCount => "rug_insider_count",
-            FilterRejectionReason::RugcheckInsiderTotalPct => "rug_insider_pct",
-            FilterRejectionReason::RugcheckCreatorBalanceTooHigh => "rug_creator_pct",
-            FilterRejectionReason::RugcheckTransferFeePresent => "rug_transfer_fee_present",
-            FilterRejectionReason::RugcheckTransferFeeTooHigh => "rug_transfer_fee_high",
-            FilterRejectionReason::RugcheckTransferFeeMissing => "rug_transfer_fee_missing",
-            FilterRejectionReason::RugcheckGraphInsidersTooHigh => "rug_graph_insiders",
-            FilterRejectionReason::RugcheckLpProvidersTooLow => "rug_lp_providers_low",
-            FilterRejectionReason::RugcheckLpProvidersMissing => "rug_lp_providers_missing",
-            FilterRejectionReason::RugcheckLpLockTooLow => "rug_lp_lock_low",
-            FilterRejectionReason::RugcheckLpLockMissing => "rug_lp_lock_missing",
+            FilterRejectionReason::GeckoTerminalPoolCountTooLow => {
+                "gecko_pool_count_low".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalPoolCountTooHigh => {
+                "gecko_pool_count_high".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalPoolCountMissing => {
+                "gecko_pool_count_missing".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalReserveTooLow => "gecko_reserve_low".to_string(),
+            FilterRejectionReason::GeckoTerminalReserveMissing => {
+                "gecko_reserve_missing".to_string()
+            }
+            FilterRejectionReason::RugcheckRuggedToken => "rug_rugged".to_string(),
+            FilterRejectionReason::RugcheckRiskScoreTooHigh => "rug_score".to_string(),
+            FilterRejectionReason::RugcheckRiskLevelDanger => "rug_level_danger".to_string(),
+            FilterRejectionReason::RugcheckMintAuthorityBlocked => "rug_mint_authority".to_string(),
+            FilterRejectionReason::RugcheckFreezeAuthorityBlocked => {
+                "rug_freeze_authority".to_string()
+            }
+            FilterRejectionReason::RugcheckTopHolderTooHigh => "rug_top_holder".to_string(),
+            FilterRejectionReason::RugcheckTop3HoldersTooHigh => "rug_top3_holders".to_string(),
+            FilterRejectionReason::RugcheckNotEnoughHolders => "rug_min_holders".to_string(),
+            FilterRejectionReason::RugcheckInsiderHolderCount => "rug_insider_count".to_string(),
+            FilterRejectionReason::RugcheckInsiderTotalPct => "rug_insider_pct".to_string(),
+            FilterRejectionReason::RugcheckCreatorBalanceTooHigh => "rug_creator_pct".to_string(),
+            FilterRejectionReason::RugcheckTransferFeePresent => {
+                "rug_transfer_fee_present".to_string()
+            }
+            FilterRejectionReason::RugcheckTransferFeeTooHigh => {
+                "rug_transfer_fee_high".to_string()
+            }
+            FilterRejectionReason::RugcheckTransferFeeMissing => {
+                "rug_transfer_fee_missing".to_string()
+            }
+            FilterRejectionReason::RugcheckGraphInsidersTooHigh => "rug_graph_insiders".to_string(),
+            FilterRejectionReason::RugcheckLpProvidersTooLow => "rug_lp_providers_low".to_string(),
+            FilterRejectionReason::RugcheckLpProvidersMissing => {
+                "rug_lp_providers_missing".to_string()
+            }
+            FilterRejectionReason::RugcheckLpLockTooLow => "rug_lp_lock_low".to_string(),
+            FilterRejectionReason::RugcheckLpLockMissing => "rug_lp_lock_missing".to_string(),
         }
     }
 
     /// Human-readable display label for UI
-    pub fn display_label(&self) -> &'static str {
+    pub fn display_label(&self) -> String {
         match self {
-            FilterRejectionReason::NoDecimalsInDatabase => "No decimals in database",
-            FilterRejectionReason::TokenTooNew => "Token too new",
-            FilterRejectionReason::CooldownFiltered => "Cooldown filtered",
-            FilterRejectionReason::DexScreenerDataMissing => "DexScreener data missing",
-            FilterRejectionReason::GeckoTerminalDataMissing => "GeckoTerminal data missing",
-            FilterRejectionReason::RugcheckDataMissing => "Rugcheck data missing",
-            FilterRejectionReason::DexScreenerEmptyName => "Empty name",
-            FilterRejectionReason::DexScreenerEmptySymbol => "Empty symbol",
-            FilterRejectionReason::DexScreenerEmptyLogoUrl => "Empty logo URL",
-            FilterRejectionReason::DexScreenerEmptyWebsiteUrl => "Empty website URL",
-            FilterRejectionReason::DexScreenerInsufficientTransactions5Min => "Low 5m transactions",
-            FilterRejectionReason::DexScreenerInsufficientTransactions1H => "Low 1h transactions",
-            FilterRejectionReason::DexScreenerZeroLiquidity => "Zero liquidity",
-            FilterRejectionReason::DexScreenerInsufficientLiquidity => "Liquidity too low",
-            FilterRejectionReason::DexScreenerLiquidityTooHigh => "Liquidity too high",
-            FilterRejectionReason::DexScreenerMarketCapTooLow => "Market cap too low",
-            FilterRejectionReason::DexScreenerMarketCapTooHigh => "Market cap too high",
-            FilterRejectionReason::DexScreenerVolumeTooLow => "Volume too low",
-            FilterRejectionReason::DexScreenerVolumeMissing => "Volume missing",
-            FilterRejectionReason::DexScreenerFdvTooLow => "FDV too low",
-            FilterRejectionReason::DexScreenerFdvTooHigh => "FDV too high",
-            FilterRejectionReason::DexScreenerFdvMissing => "FDV missing",
-            FilterRejectionReason::DexScreenerVolume5mTooLow => "5m volume too low",
-            FilterRejectionReason::DexScreenerVolume5mMissing => "5m volume missing",
-            FilterRejectionReason::DexScreenerVolume1hTooLow => "1h volume too low",
-            FilterRejectionReason::DexScreenerVolume1hMissing => "1h volume missing",
-            FilterRejectionReason::DexScreenerVolume6hTooLow => "6h volume too low",
-            FilterRejectionReason::DexScreenerVolume6hMissing => "6h volume missing",
-            FilterRejectionReason::DexScreenerPriceChange5mTooLow => "5m price change too low",
-            FilterRejectionReason::DexScreenerPriceChange5mTooHigh => "5m price change too high",
-            FilterRejectionReason::DexScreenerPriceChange5mMissing => "5m price change missing",
-            FilterRejectionReason::DexScreenerPriceChangeTooLow => "Price change too low",
-            FilterRejectionReason::DexScreenerPriceChangeTooHigh => "Price change too high",
-            FilterRejectionReason::DexScreenerPriceChangeMissing => "Price change missing",
-            FilterRejectionReason::DexScreenerPriceChange6hTooLow => "6h price change too low",
-            FilterRejectionReason::DexScreenerPriceChange6hTooHigh => "6h price change too high",
-            FilterRejectionReason::DexScreenerPriceChange6hMissing => "6h price change missing",
-            FilterRejectionReason::DexScreenerPriceChange24hTooLow => "24h price change too low",
-            FilterRejectionReason::DexScreenerPriceChange24hTooHigh => "24h price change too high",
-            FilterRejectionReason::DexScreenerPriceChange24hMissing => "24h price change missing",
-            FilterRejectionReason::GeckoTerminalLiquidityMissing => "Liquidity missing",
-            FilterRejectionReason::GeckoTerminalLiquidityTooLow => "Liquidity too low",
-            FilterRejectionReason::GeckoTerminalLiquidityTooHigh => "Liquidity too high",
-            FilterRejectionReason::GeckoTerminalMarketCapMissing => "Market cap missing",
-            FilterRejectionReason::GeckoTerminalMarketCapTooLow => "Market cap too low",
-            FilterRejectionReason::GeckoTerminalMarketCapTooHigh => "Market cap too high",
-            FilterRejectionReason::GeckoTerminalVolume5mTooLow => "5m volume too low",
-            FilterRejectionReason::GeckoTerminalVolume5mMissing => "5m volume missing",
-            FilterRejectionReason::GeckoTerminalVolume1hTooLow => "1h volume too low",
-            FilterRejectionReason::GeckoTerminalVolume1hMissing => "1h volume missing",
-            FilterRejectionReason::GeckoTerminalVolume24hTooLow => "24h volume too low",
-            FilterRejectionReason::GeckoTerminalVolume24hMissing => "24h volume missing",
-            FilterRejectionReason::GeckoTerminalPriceChange5mTooLow => "5m price change too low",
-            FilterRejectionReason::GeckoTerminalPriceChange5mTooHigh => "5m price change too high",
-            FilterRejectionReason::GeckoTerminalPriceChange5mMissing => "5m price change missing",
-            FilterRejectionReason::GeckoTerminalPriceChange1hTooLow => "1h price change too low",
-            FilterRejectionReason::GeckoTerminalPriceChange1hTooHigh => "1h price change too high",
-            FilterRejectionReason::GeckoTerminalPriceChange1hMissing => "1h price change missing",
-            FilterRejectionReason::GeckoTerminalPriceChange24hTooLow => "24h price change too low",
-            FilterRejectionReason::GeckoTerminalPriceChange24hTooHigh => {
-                "24h price change too high"
+            FilterRejectionReason::AiRejected {
+                reason,
+                confidence,
+                provider,
+            } => {
+                format!(
+                    "AI Rejected: {} ({}% conf, {})",
+                    reason, confidence, provider
+                )
             }
-            FilterRejectionReason::GeckoTerminalPriceChange24hMissing => "24h price change missing",
-            FilterRejectionReason::GeckoTerminalPoolCountTooLow => "Pool count too low",
-            FilterRejectionReason::GeckoTerminalPoolCountTooHigh => "Pool count too high",
-            FilterRejectionReason::GeckoTerminalPoolCountMissing => "Pool count missing",
-            FilterRejectionReason::GeckoTerminalReserveTooLow => "Reserve too low",
-            FilterRejectionReason::GeckoTerminalReserveMissing => "Reserve missing",
-            FilterRejectionReason::RugcheckRuggedToken => "Rugged token",
-            FilterRejectionReason::RugcheckRiskScoreTooHigh => "Risk score too high",
-            FilterRejectionReason::RugcheckRiskLevelDanger => "Danger risk level",
-            FilterRejectionReason::RugcheckMintAuthorityBlocked => "Mint authority present",
-            FilterRejectionReason::RugcheckFreezeAuthorityBlocked => "Freeze authority present",
-            FilterRejectionReason::RugcheckTopHolderTooHigh => "Top holder % too high",
-            FilterRejectionReason::RugcheckTop3HoldersTooHigh => "Top 3 holders % too high",
-            FilterRejectionReason::RugcheckNotEnoughHolders => "Not enough holders",
-            FilterRejectionReason::RugcheckInsiderHolderCount => "Too many insider holders",
-            FilterRejectionReason::RugcheckInsiderTotalPct => "Insider % too high",
-            FilterRejectionReason::RugcheckCreatorBalanceTooHigh => "Creator balance too high",
-            FilterRejectionReason::RugcheckTransferFeePresent => "Transfer fee present",
-            FilterRejectionReason::RugcheckTransferFeeTooHigh => "Transfer fee too high",
-            FilterRejectionReason::RugcheckTransferFeeMissing => "Transfer fee data missing",
-            FilterRejectionReason::RugcheckGraphInsidersTooHigh => "Graph insiders too high",
-            FilterRejectionReason::RugcheckLpProvidersTooLow => "LP providers too low",
-            FilterRejectionReason::RugcheckLpProvidersMissing => "LP providers missing",
-            FilterRejectionReason::RugcheckLpLockTooLow => "LP lock too low",
-            FilterRejectionReason::RugcheckLpLockMissing => "LP lock missing",
+            FilterRejectionReason::NoDecimalsInDatabase => "No decimals in database".to_string(),
+            FilterRejectionReason::TokenTooNew => "Token too new".to_string(),
+            FilterRejectionReason::CooldownFiltered => "Cooldown filtered".to_string(),
+            FilterRejectionReason::DexScreenerDataMissing => "DexScreener data missing".to_string(),
+            FilterRejectionReason::GeckoTerminalDataMissing => {
+                "GeckoTerminal data missing".to_string()
+            }
+            FilterRejectionReason::RugcheckDataMissing => "Rugcheck data missing".to_string(),
+            FilterRejectionReason::DexScreenerEmptyName => "Empty name".to_string(),
+            FilterRejectionReason::DexScreenerEmptySymbol => "Empty symbol".to_string(),
+            FilterRejectionReason::DexScreenerEmptyLogoUrl => "Empty logo URL".to_string(),
+            FilterRejectionReason::DexScreenerEmptyWebsiteUrl => "Empty website URL".to_string(),
+            FilterRejectionReason::DexScreenerInsufficientTransactions5Min => {
+                "Low 5m transactions".to_string()
+            }
+            FilterRejectionReason::DexScreenerInsufficientTransactions1H => {
+                "Low 1h transactions".to_string()
+            }
+            FilterRejectionReason::DexScreenerZeroLiquidity => "Zero liquidity".to_string(),
+            FilterRejectionReason::DexScreenerInsufficientLiquidity => {
+                "Liquidity too low".to_string()
+            }
+            FilterRejectionReason::DexScreenerLiquidityTooHigh => "Liquidity too high".to_string(),
+            FilterRejectionReason::DexScreenerMarketCapTooLow => "Market cap too low".to_string(),
+            FilterRejectionReason::DexScreenerMarketCapTooHigh => "Market cap too high".to_string(),
+            FilterRejectionReason::DexScreenerVolumeTooLow => "Volume too low".to_string(),
+            FilterRejectionReason::DexScreenerVolumeMissing => "Volume missing".to_string(),
+            FilterRejectionReason::DexScreenerFdvTooLow => "FDV too low".to_string(),
+            FilterRejectionReason::DexScreenerFdvTooHigh => "FDV too high".to_string(),
+            FilterRejectionReason::DexScreenerFdvMissing => "FDV missing".to_string(),
+            FilterRejectionReason::DexScreenerVolume5mTooLow => "5m volume too low".to_string(),
+            FilterRejectionReason::DexScreenerVolume5mMissing => "5m volume missing".to_string(),
+            FilterRejectionReason::DexScreenerVolume1hTooLow => "1h volume too low".to_string(),
+            FilterRejectionReason::DexScreenerVolume1hMissing => "1h volume missing".to_string(),
+            FilterRejectionReason::DexScreenerVolume6hTooLow => "6h volume too low".to_string(),
+            FilterRejectionReason::DexScreenerVolume6hMissing => "6h volume missing".to_string(),
+            FilterRejectionReason::DexScreenerPriceChange5mTooLow => {
+                "5m price change too low".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChange5mTooHigh => {
+                "5m price change too high".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChange5mMissing => {
+                "5m price change missing".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChangeTooLow => {
+                "Price change too low".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChangeTooHigh => {
+                "Price change too high".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChangeMissing => {
+                "Price change missing".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChange6hTooLow => {
+                "6h price change too low".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChange6hTooHigh => {
+                "6h price change too high".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChange6hMissing => {
+                "6h price change missing".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChange24hTooLow => {
+                "24h price change too low".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChange24hTooHigh => {
+                "24h price change too high".to_string()
+            }
+            FilterRejectionReason::DexScreenerPriceChange24hMissing => {
+                "24h price change missing".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalLiquidityMissing => "Liquidity missing".to_string(),
+            FilterRejectionReason::GeckoTerminalLiquidityTooLow => "Liquidity too low".to_string(),
+            FilterRejectionReason::GeckoTerminalLiquidityTooHigh => {
+                "Liquidity too high".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalMarketCapMissing => {
+                "Market cap missing".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalMarketCapTooLow => "Market cap too low".to_string(),
+            FilterRejectionReason::GeckoTerminalMarketCapTooHigh => {
+                "Market cap too high".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalVolume5mTooLow => "5m volume too low".to_string(),
+            FilterRejectionReason::GeckoTerminalVolume5mMissing => "5m volume missing".to_string(),
+            FilterRejectionReason::GeckoTerminalVolume1hTooLow => "1h volume too low".to_string(),
+            FilterRejectionReason::GeckoTerminalVolume1hMissing => "1h volume missing".to_string(),
+            FilterRejectionReason::GeckoTerminalVolume24hTooLow => "24h volume too low".to_string(),
+            FilterRejectionReason::GeckoTerminalVolume24hMissing => {
+                "24h volume missing".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalPriceChange5mTooLow => {
+                "5m price change too low".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalPriceChange5mTooHigh => {
+                "5m price change too high".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalPriceChange5mMissing => {
+                "5m price change missing".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalPriceChange1hTooLow => {
+                "1h price change too low".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalPriceChange1hTooHigh => {
+                "1h price change too high".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalPriceChange1hMissing => {
+                "1h price change missing".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalPriceChange24hTooLow => {
+                "24h price change too low".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalPriceChange24hTooHigh => {
+                "24h price change too high".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalPriceChange24hMissing => {
+                "24h price change missing".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalPoolCountTooLow => "Pool count too low".to_string(),
+            FilterRejectionReason::GeckoTerminalPoolCountTooHigh => {
+                "Pool count too high".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalPoolCountMissing => {
+                "Pool count missing".to_string()
+            }
+            FilterRejectionReason::GeckoTerminalReserveTooLow => "Reserve too low".to_string(),
+            FilterRejectionReason::GeckoTerminalReserveMissing => "Reserve missing".to_string(),
+            FilterRejectionReason::RugcheckRuggedToken => "Rugged token".to_string(),
+            FilterRejectionReason::RugcheckRiskScoreTooHigh => "Risk score too high".to_string(),
+            FilterRejectionReason::RugcheckRiskLevelDanger => "Danger risk level".to_string(),
+            FilterRejectionReason::RugcheckMintAuthorityBlocked => {
+                "Mint authority present".to_string()
+            }
+            FilterRejectionReason::RugcheckFreezeAuthorityBlocked => {
+                "Freeze authority present".to_string()
+            }
+            FilterRejectionReason::RugcheckTopHolderTooHigh => "Top holder % too high".to_string(),
+            FilterRejectionReason::RugcheckTop3HoldersTooHigh => {
+                "Top 3 holders % too high".to_string()
+            }
+            FilterRejectionReason::RugcheckNotEnoughHolders => "Not enough holders".to_string(),
+            FilterRejectionReason::RugcheckInsiderHolderCount => {
+                "Too many insider holders".to_string()
+            }
+            FilterRejectionReason::RugcheckInsiderTotalPct => "Insider % too high".to_string(),
+            FilterRejectionReason::RugcheckCreatorBalanceTooHigh => {
+                "Creator balance too high".to_string()
+            }
+            FilterRejectionReason::RugcheckTransferFeePresent => "Transfer fee present".to_string(),
+            FilterRejectionReason::RugcheckTransferFeeTooHigh => {
+                "Transfer fee too high".to_string()
+            }
+            FilterRejectionReason::RugcheckTransferFeeMissing => {
+                "Transfer fee data missing".to_string()
+            }
+            FilterRejectionReason::RugcheckGraphInsidersTooHigh => {
+                "Graph insiders too high".to_string()
+            }
+            FilterRejectionReason::RugcheckLpProvidersTooLow => "LP providers too low".to_string(),
+            FilterRejectionReason::RugcheckLpProvidersMissing => "LP providers missing".to_string(),
+            FilterRejectionReason::RugcheckLpLockTooLow => "LP lock too low".to_string(),
+            FilterRejectionReason::RugcheckLpLockMissing => "LP lock missing".to_string(),
         }
     }
 
     /// Map rejection reason to source category for UI summaries.
     pub fn source(&self) -> FilterSource {
         match self {
+            FilterRejectionReason::AiRejected { .. } => FilterSource::Ai,
             FilterRejectionReason::NoDecimalsInDatabase
             | FilterRejectionReason::TokenTooNew
             | FilterRejectionReason::CooldownFiltered

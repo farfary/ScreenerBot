@@ -37,6 +37,7 @@ pub enum TradeReason {
     TrailingStop,
     TimeOverride,
     StrategyExit,
+    AiExit, // AI-powered exit recommendation
     ManualExit,
     RiskManagement,
     Blacklisted,

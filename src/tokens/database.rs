@@ -1519,7 +1519,10 @@ impl TokenDatabase {
                     Ok(rows) => updated += rows,
                     Err(e) => {
                         // Log but continue - don't fail entire batch
-                        logger::warning(LogTag::Tokens, &format!("batch_clear_rejection_status error for {}: {}", mint, e));
+                        logger::warning(
+                            LogTag::Tokens,
+                            &format!("batch_clear_rejection_status error for {}: {}", mint, e),
+                        );
                     }
                 }
             }
@@ -1557,7 +1560,10 @@ impl TokenDatabase {
                 match stmt.execute(params![priority, mint]) {
                     Ok(rows) => updated += rows,
                     Err(e) => {
-                        logger::warning(LogTag::Tokens, &format!("batch_update_priority error for {}: {}", mint, e));
+                        logger::warning(
+                            LogTag::Tokens,
+                            &format!("batch_update_priority error for {}: {}", mint, e),
+                        );
                     }
                 }
             }
@@ -1604,7 +1610,10 @@ impl TokenDatabase {
                 match stmt.execute(params![reason, source, rejected_at, mint]) {
                     Ok(rows) => updated += rows,
                     Err(e) => {
-                        logger::warning(LogTag::Tokens, &format!("batch_update_rejection_status error for {}: {}", mint, e));
+                        logger::warning(
+                            LogTag::Tokens,
+                            &format!("batch_update_rejection_status error for {}: {}", mint, e),
+                        );
                     }
                 }
             }
@@ -1653,7 +1662,10 @@ impl TokenDatabase {
                 match stmt.execute(params![bucket_hour, reason, source, timestamp]) {
                     Ok(_) => updated += 1,
                     Err(e) => {
-                        logger::warning(LogTag::Tokens, &format!("batch_upsert_rejection_stats error: {}", e));
+                        logger::warning(
+                            LogTag::Tokens,
+                            &format!("batch_upsert_rejection_stats error: {}", e),
+                        );
                     }
                 }
             }

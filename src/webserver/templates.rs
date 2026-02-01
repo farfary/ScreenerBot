@@ -26,6 +26,7 @@ const STRATEGIES_PAGE_STYLES: &str = include_str!("templates/styles/pages/strate
 const TRADER_PAGE_STYLES: &str = include_str!("templates/styles/pages/trader.css");
 const WALLETS_PAGE_STYLES: &str = include_str!("templates/styles/pages/wallets.css");
 const TOOLS_PAGE_STYLES: &str = include_str!("templates/styles/pages/tools.css");
+const AI_PAGE_STYLES: &str = include_str!("templates/styles/pages/ai.css");
 const HOME_PAGE_STYLES: &str = include_str!("templates/styles/pages/home.css");
 const UPDATES_PAGE_STYLES: &str = include_str!("templates/styles/pages/updates.css");
 const SPLASH_PAGE_STYLES: &str = include_str!("templates/styles/pages/splash.css");
@@ -150,6 +151,7 @@ pub const STRATEGIES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/s
 pub const TRADER_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/trader.js");
 pub const WALLETS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/wallets.js");
 pub const TOOLS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/tools.js");
+pub const AI_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/ai.js");
 pub const HOME_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/home.js");
 pub const UPDATES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/updates.js");
 pub const ABOUT_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/about.js");
@@ -166,6 +168,7 @@ const STRATEGIES_PAGE: &str = include_str!("templates/pages/strategies.html");
 const TRADER_PAGE: &str = include_str!("templates/pages/trader.html");
 const WALLETS_PAGE: &str = include_str!("templates/pages/wallets.html");
 const TOOLS_PAGE: &str = include_str!("templates/pages/tools.html");
+const AI_PAGE: &str = include_str!("templates/pages/ai.html");
 const HOME_PAGE: &str = include_str!("templates/pages/home.html");
 const UPDATES_PAGE: &str = include_str!("templates/pages/updates.html");
 const ABOUT_PAGE: &str = include_str!("templates/pages/about.html");
@@ -281,6 +284,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         TRADER_PAGE_STYLES,
         WALLETS_PAGE_STYLES,
         TOOLS_PAGE_STYLES,
+        AI_PAGE_STYLES,
         HOME_PAGE_STYLES,
         UPDATES_PAGE_STYLES,
     ];
@@ -301,6 +305,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         ("trader", TRADER_PAGE_STYLES),
         ("wallets", WALLETS_PAGE_STYLES),
         ("tools", TOOLS_PAGE_STYLES),
+        ("ai", AI_PAGE_STYLES),
         ("home", HOME_PAGE_STYLES),
         ("updates", UPDATES_PAGE_STYLES),
     ] {
@@ -403,6 +408,10 @@ pub fn wallets_content() -> String {
 
 pub fn tools_content() -> String {
     render_page(TOOLS_PAGE)
+}
+
+pub fn ai_content() -> String {
+    render_page(AI_PAGE)
 }
 
 pub fn initialization_content() -> String {

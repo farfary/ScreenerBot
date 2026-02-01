@@ -176,6 +176,14 @@ config_struct! {
         })]
         notify_filtering_alerts: bool = true,
 
+        /// Include AI reasoning in position notifications
+        #[metadata(field_metadata! {
+            label: "Include AI Reasoning",
+            hint: "Show AI analysis reasoning in position opened/closed notifications",
+            category: "Notifications",
+        })]
+        include_ai_reasoning: bool = false,
+
         // === Thresholds Section ===
         /// Minimum trade amount (SOL) to trigger notification
         #[metadata(field_metadata! {

@@ -1,3 +1,4 @@
+pub mod ai_service;
 pub mod ata_cleanup_service;
 pub mod events_service;
 pub mod filtering_service;
@@ -20,6 +21,7 @@ pub mod pool_fetcher_service;
 // Centralized tokens service
 pub mod tokens_service;
 
+pub use ai_service::AiService;
 pub use ata_cleanup_service::AtaCleanupService;
 pub use events_service::EventsService;
 pub use filtering_service::FilteringService;

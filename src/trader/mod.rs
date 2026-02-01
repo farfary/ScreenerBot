@@ -25,6 +25,7 @@
 //! - `types`: Trader types
 
 pub mod actions;
+pub mod ai_analysis;
 pub mod config;
 mod constants;
 mod controller;

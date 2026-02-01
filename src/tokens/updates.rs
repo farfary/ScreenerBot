@@ -66,11 +66,7 @@ fn classify_market_error(failures: &[String]) -> &'static str {
 
 /// Record a market error and potentially mark as permanent failure
 /// Returns true if the token was marked as permanently failed
-fn handle_market_failure(
-    db: &TokenDatabase,
-    mint: &str,
-    failures: &[String],
-) -> bool {
+fn handle_market_failure(db: &TokenDatabase, mint: &str, failures: &[String]) -> bool {
     let error_type = classify_market_error(failures);
     let message = failures.join(" | ");
 

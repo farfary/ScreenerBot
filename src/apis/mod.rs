@@ -23,6 +23,7 @@ pub mod defillama;
 pub mod dexscreener;
 pub mod geckoterminal;
 pub mod jupiter;
+pub mod llm;
 pub mod rugcheck;
 
 // Re-exports for convenience

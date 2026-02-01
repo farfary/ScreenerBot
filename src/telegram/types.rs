@@ -28,6 +28,7 @@ pub enum NotificationType {
         token_mint: String,
         amount_sol: f64,
         entry_price: f64,
+        ai_reasoning: Option<String>,
     },
 
     /// Notification when a position is closed
@@ -42,6 +43,7 @@ pub enum NotificationType {
         invested: f64,
         received: f64,
         duration_secs: u64,
+        ai_reasoning: Option<String>,
     },
 
     /// Notification when a partial exit is executed
@@ -159,6 +161,24 @@ impl Notification {
             token_mint,
             amount_sol,
             entry_price,
+            ai_reasoning: None,
+        })
+    }
+
+    /// Create a position opened notification with AI reasoning
+    pub fn position_opened_with_ai(
+        token_symbol: String,
+        token_mint: String,
+        amount_sol: f64,
+        entry_price: f64,
+        ai_reasoning: Option<String>,
+    ) -> Self {
+        Self::new(NotificationType::PositionOpened {
+            token_symbol,
+            token_mint,
+            amount_sol,
+            entry_price,
+            ai_reasoning,
         })
     }
 
@@ -186,6 +206,36 @@ impl Notification {
             invested,
             received,
             duration_secs,
+            ai_reasoning: None,
+        })
+    }
+
+    /// Create a position closed notification with AI reasoning
+    pub fn position_closed_with_ai(
+        token_symbol: String,
+        token_mint: String,
+        pnl_sol: f64,
+        pnl_percent: f64,
+        exit_reason: String,
+        entry_price: f64,
+        exit_price: f64,
+        invested: f64,
+        received: f64,
+        duration_secs: u64,
+        ai_reasoning: Option<String>,
+    ) -> Self {
+        Self::new(NotificationType::PositionClosed {
+            token_symbol,
+            token_mint,
+            pnl_sol,
+            pnl_percent,
+            exit_reason,
+            entry_price,
+            exit_price,
+            invested,
+            received,
+            duration_secs,
+            ai_reasoning,
         })
     }
 

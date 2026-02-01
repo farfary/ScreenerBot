@@ -2,6 +2,7 @@
 
 use crate::config_struct;
 
+mod ai;
 mod connectivity;
 mod events;
 mod filtering;
@@ -22,6 +23,7 @@ mod trader;
 mod wallet;
 mod webserver;
 
+pub use ai::*;
 pub use connectivity::*;
 pub use events::*;
 pub use filtering::*;
@@ -111,5 +113,8 @@ config_struct! {
 
         /// Holder watch tool configuration
         holder_watch: HolderWatchConfig = HolderWatchConfig::default(),
+
+        /// AI integration configuration for filtering and trading
+        ai: AiConfig = AiConfig::default(),
     }
 }

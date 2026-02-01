@@ -1,6 +1,7 @@
 #![allow(warnings)]
 
 pub mod actions;
+pub mod ai;
 pub mod apis;
 pub mod arguments;
 pub mod ata_cleanup;

@@ -1,31 +1,33 @@
-//! Exit evaluation coordinator with priority-based checks
+//! Exit evaluation coordinator with priority-based checks and AI analysis
 //!
 //! Evaluates whether an exit should be made for a position by checking in priority order:
 //! 1. Blacklist (emergency - sync)
 //! 2. Risk limits (>90% loss - emergency)
-//! 3. Stop loss (high priority - fixed threshold from entry)
-//! 4. Trailing stop (high priority - from peak)
-//! 5. ROI target (normal priority)
-//! 6. Time override (normal priority)
-//! 7. Strategy exit (normal priority)
+//! 3. AI exit analysis (high priority - if enabled)
+//! 4. Stop loss (high priority - fixed threshold from entry)
+//! 5. Trailing stop (high priority - from peak)
+//! 6. ROI target (normal priority)
+//! 7. Time override (normal priority)
+//! 8. Strategy exit (normal priority)
 
 use crate::pools;
 use crate::positions::Position;
 use crate::trader::types::TradeDecision;
-use crate::trader::{evaluators, safety};
+use crate::trader::{ai_analysis, evaluators, safety};
 
 /// Evaluate exit opportunity for a position
 ///
 /// Checks exit conditions in priority order. First matching condition returns immediately.
 ///
-/// Priority order (matching current implementation + risk check):
+/// Priority order (matching current implementation + AI + risk check):
 /// 1. **Blacklist** (emergency - sync): Token blacklisted → immediate exit
 /// 2. **Risk limits** (emergency): >90% loss → emergency exit
-/// 3. **Stop loss** (high priority): Fixed threshold from entry price
-/// 4. **Trailing stop** (high priority): Price dropped from peak by threshold
-/// 5. **ROI target** (normal): Target profit reached
-/// 6. **Time override** (normal): Position held too long
-/// 7. **Strategy exit** (normal): Strategy signals exit
+/// 3. **AI exit analysis** (high priority): AI suggests exit → prioritized exit
+/// 4. **Stop loss** (high priority): Fixed threshold from entry price
+/// 5. **Trailing stop** (high priority): Price dropped from peak by threshold
+/// 6. **ROI target** (normal): Target profit reached
+/// 7. **Time override** (normal): Position held too long
+/// 8. **Strategy exit** (normal): Strategy signals exit
 ///
 /// Returns:
 /// - Ok(Some(TradeDecision)) if exit should be made
@@ -81,7 +83,104 @@ pub async fn evaluate_exit_for_position(
         return Ok(Some(decision));
     }
 
-    // Priority 3: Stop loss (high priority - fixed threshold from entry)
+    // Priority 3: AI exit analysis (high priority - if enabled)
+    if ai_analysis::should_analyze_exit() {
+        // Get token data for AI analysis
+        match crate::tokens::get_full_token_async(&fresh_position.mint).await {
+            Ok(Some(token)) => {
+                match ai_analysis::analyze_exit(&fresh_position, &token).await {
+                    Some(result) => {
+                        if result.action == ai_analysis::ExitAction::Exit {
+                            crate::logger::info(
+                                crate::logger::LogTag::Trader,
+                                &format!(
+                                    "AI suggests exit for {} (confidence: {}%, urgency: {:?}, reason: {})",
+                                    fresh_position.symbol,
+                                    result.confidence,
+                                    result.urgency,
+                                    result.reasoning
+                                ),
+                            );
+
+                            // Create exit decision
+                            let trade_decision = TradeDecision {
+                                position_id: fresh_position.id.map(|id| id.to_string()),
+                                mint: fresh_position.mint.clone(),
+                                action: crate::trader::types::TradeAction::Sell,
+                                reason: crate::trader::types::TradeReason::AiExit,
+                                strategy_id: Some("ai_exit".to_string()),
+                                timestamp: chrono::Utc::now(),
+                                priority: match result.urgency {
+                                    ai_analysis::ExitUrgency::Immediate => {
+                                        crate::trader::types::TradePriority::Emergency
+                                    }
+                                    ai_analysis::ExitUrgency::High => {
+                                        crate::trader::types::TradePriority::High
+                                    }
+                                    _ => crate::trader::types::TradePriority::Normal,
+                                },
+                                price_sol: Some(current_price),
+                                size_sol: None, // Let executor determine size
+                            };
+
+                            // Record AI exit signal event
+                            crate::events::record_trader_event(
+                                "exit_signal_ai",
+                                crate::events::Severity::Info,
+                                Some(&fresh_position.mint),
+                                None,
+                                serde_json::json!({
+                                    "exit_type": "ai_exit",
+                                    "mint": fresh_position.mint,
+                                    "symbol": fresh_position.symbol,
+                                    "current_price": current_price,
+                                    "confidence": result.confidence,
+                                    "urgency": format!("{:?}", result.urgency),
+                                    "reasoning": result.reasoning,
+                                    "provider": result.provider,
+                                }),
+                            )
+                            .await;
+
+                            return Ok(Some(trade_decision));
+                        } else if result.action == ai_analysis::ExitAction::Hold {
+                            crate::logger::debug(
+                                crate::logger::LogTag::Trader,
+                                &format!(
+                                    "AI suggests holding {} (confidence: {}%, reason: {})",
+                                    fresh_position.symbol, result.confidence, result.reasoning
+                                ),
+                            );
+                        }
+                    }
+                    None => {
+                        // AI analysis failed or is unavailable
+                        crate::logger::debug(
+                            crate::logger::LogTag::Trader,
+                            &format!("AI exit analysis unavailable for {}", fresh_position.symbol),
+                        );
+                    }
+                }
+            }
+            Ok(None) => {
+                crate::logger::debug(
+                    crate::logger::LogTag::Trader,
+                    &format!(
+                        "Token data not found for AI exit analysis: {}",
+                        fresh_position.mint
+                    ),
+                );
+            }
+            Err(e) => {
+                crate::logger::warning(
+                    crate::logger::LogTag::Trader,
+                    &format!("Failed to fetch token data for AI exit analysis: {}", e),
+                );
+            }
+        }
+    }
+
+    // Priority 4: Stop loss (high priority - fixed threshold from entry)
     match evaluators::exit_stop_loss::check_stop_loss(&fresh_position, current_price).await {
         Ok(Some(decision)) => {
             // Log already done in check_stop_loss with full context
@@ -117,7 +216,7 @@ pub async fn evaluate_exit_for_position(
         }
     }
 
-    // Priority 4: Trailing stop (high priority)
+    // Priority 5: Trailing stop (high priority)
     match evaluators::exit_trailing::check_trailing_stop(&fresh_position, current_price).await {
         Ok(Some(decision)) => {
             crate::logger::info(
@@ -154,7 +253,7 @@ pub async fn evaluate_exit_for_position(
         }
     }
 
-    // Priority 5: ROI target (normal priority)
+    // Priority 6: ROI target (normal priority)
     match evaluators::exit_roi::check_roi_exit(&fresh_position, current_price).await {
         Ok(Some(decision)) => {
             crate::logger::info(
@@ -191,7 +290,7 @@ pub async fn evaluate_exit_for_position(
         }
     }
 
-    // Priority 6: Time override (normal priority)
+    // Priority 7: Time override (normal priority)
     match evaluators::exit_time::check_time_override(&fresh_position, current_price).await {
         Ok(Some(decision)) => {
             crate::logger::info(
@@ -228,7 +327,7 @@ pub async fn evaluate_exit_for_position(
         }
     }
 
-    // Priority 7: Strategy exit (normal priority)
+    // Priority 8: Strategy exit (normal priority)
     match evaluators::StrategyEvaluator::check_exit_strategies(&fresh_position, current_price).await
     {
         Ok(Some(decision)) => {

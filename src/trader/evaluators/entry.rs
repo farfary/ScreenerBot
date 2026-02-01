@@ -1,4 +1,4 @@
-//! Entry evaluation logic with integrated safety checks
+//! Entry evaluation logic with integrated safety checks and AI analysis
 //!
 //! Evaluates whether an entry should be made for a token by checking:
 //! 1. Connectivity health
@@ -6,11 +6,12 @@
 //! 3. Existing position check
 //! 4. Re-entry cooldown
 //! 5. Blacklist status
-//! 6. Strategy signals
+//! 6. AI entry analysis (if enabled)
+//! 7. Strategy signals
 
 use crate::pools::PriceResult;
 use crate::trader::types::TradeDecision;
-use crate::trader::{evaluators, safety};
+use crate::trader::{ai_analysis, evaluators, safety};
 
 /// Evaluate entry opportunity for a token
 ///
@@ -20,6 +21,7 @@ use crate::trader::{evaluators, safety};
 /// - Existing position check (no duplicate entries)
 /// - Re-entry cooldown (prevents immediate re-entry after exit)
 /// - Blacklist check (token not blacklisted)
+/// - AI entry analysis (if enabled, checks AI recommendation)
 /// - Strategy evaluation (signals from configured strategies)
 ///
 /// Returns:
@@ -67,6 +69,56 @@ pub async fn evaluate_entry_for_token(
         return Ok(None); // Token is blacklisted
     }
 
-    // 6. Strategy evaluation - check configured entry strategies
+    // 6. AI entry analysis - check if AI recommends entry (if enabled)
+    if ai_analysis::should_analyze_entry() {
+        // Get token data for AI analysis
+        match crate::tokens::get_full_token_async(token_mint).await {
+            Ok(Some(token)) => {
+                match ai_analysis::analyze_entry(&token).await {
+                    Some(result) => {
+                        if !result.should_enter {
+                            crate::logger::info(
+                                crate::logger::LogTag::Trader,
+                                &format!(
+                                    "AI rejected entry for {} (confidence: {}%, reason: {})",
+                                    token.symbol, result.confidence, result.reasoning
+                                ),
+                            );
+                            return Ok(None); // AI rejected entry
+                        } else {
+                            crate::logger::info(
+                                crate::logger::LogTag::Trader,
+                                &format!(
+                                    "AI approved entry for {} (confidence: {}%, reason: {})",
+                                    token.symbol, result.confidence, result.reasoning
+                                ),
+                            );
+                        }
+                    }
+                    None => {
+                        // AI analysis failed or is disabled, continue with strategy checks
+                        crate::logger::debug(
+                            crate::logger::LogTag::Trader,
+                            &format!("AI entry analysis unavailable for {}", token_mint),
+                        );
+                    }
+                }
+            }
+            Ok(None) => {
+                crate::logger::debug(
+                    crate::logger::LogTag::Trader,
+                    &format!("Token data not found for AI analysis: {}", token_mint),
+                );
+            }
+            Err(e) => {
+                crate::logger::warning(
+                    crate::logger::LogTag::Trader,
+                    &format!("Failed to fetch token data for AI analysis: {}", e),
+                );
+            }
+        }
+    }
+
+    // 7. Strategy evaluation - check configured entry strategies
     evaluators::StrategyEvaluator::check_entry_strategies(token_mint, price_info).await
 }

@@ -1392,7 +1392,12 @@ async fn quote_preview_handler(
             }
         };
         let amount_lamports = (amount_sol * 1_000_000_000.0) as u64;
-        (SOL_MINT.to_string(), req.mint.clone(), amount_lamports, amount_sol)
+        (
+            SOL_MINT.to_string(),
+            req.mint.clone(),
+            amount_lamports,
+            amount_sol,
+        )
     } else {
         // SELL: Token → SOL
         let amount_tokens = match req.amount_tokens {
@@ -1408,7 +1413,12 @@ async fn quote_preview_handler(
         };
         // Convert token amount to smallest units based on decimals
         let amount_raw = (amount_tokens * 10f64.powi(token_decimals as i32)) as u64;
-        (req.mint.clone(), SOL_MINT.to_string(), amount_raw, amount_tokens)
+        (
+            req.mint.clone(),
+            SOL_MINT.to_string(),
+            amount_raw,
+            amount_tokens,
+        )
     };
 
     let quote_request = QuoteRequest {
@@ -1424,7 +1434,9 @@ async fn quote_preview_handler(
     match get_best_quote(quote_request).await {
         Ok(quote) => {
             // Format input/output based on direction
-            let (input_formatted, output_display, output_formatted, price_per_token) = if direction == "buy" {
+            let (input_formatted, output_display, output_formatted, price_per_token) = if direction
+                == "buy"
+            {
                 // BUY: input is SOL, output is tokens
                 let input_fmt = format!("{:.4} SOL", input_amount_display);
                 let output_tokens = quote.output_amount as f64 / 10f64.powi(token_decimals as i32);

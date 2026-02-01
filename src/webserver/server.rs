@@ -105,7 +105,7 @@ pub async fn start_server(
         // GUI mode: find available dynamic port, bind to localhost for security
         // This avoids conflicts with user's other services (like local dev servers on 8080)
         let dynamic_port = find_available_port().await?;
-        
+
         // Generate security token for GUI mode
         let token = global::generate_security_token();
         global::set_webserver_port(dynamic_port);

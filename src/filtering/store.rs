@@ -915,7 +915,10 @@ async fn build_stats(snapshot: &FilteringSnapshot) -> FilteringStatsSnapshot {
         Err(e) => {
             logger::warning(
                 LogTag::Filtering,
-                &format!("Failed to get database token count: {}, using snapshot count", e),
+                &format!(
+                    "Failed to get database token count: {}, using snapshot count",
+                    e
+                ),
             );
             snapshot.tokens.len() // Fallback to snapshot count
         }

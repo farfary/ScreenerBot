@@ -1,0 +1,343 @@
+<div class="page-table ai-page">
+  <div id="subTabsContainer" class="sub-tabs-container"></div>
+  <div id="ai-content">
+    <!-- Stats Tab -->
+    <div id="stats-tab" class="ai-tab-content" style="display: none">
+      <!-- AI Status Control -->
+      <div class="ai-status-bar" id="ai-status-bar">
+        <div class="status-bar-main">
+          <div class="status-bar-icon" id="ai-status-icon">
+            <i class="icon-bot"></i>
+          </div>
+          <div class="status-bar-info">
+            <span class="status-bar-title">AI Analysis Module</span>
+            <span class="status-bar-status" id="ai-status-text">Loading...</span>
+          </div>
+        </div>
+        <div class="status-bar-toggle">
+          <label class="ai-toggle-switch">
+            <input type="checkbox" id="stats-ai-toggle" disabled />
+            <span class="ai-toggle-track"></span>
+            <span class="ai-toggle-label" id="stats-toggle-label">OFF</span>
+          </label>
+        </div>
+      </div>
+
+      <!-- Key Metrics Section -->
+      <div class="stats-section stats-section-metrics">
+        <div class="section-header">
+          <h3><i class="icon-chart-bar"></i> Key Metrics</h3>
+        </div>
+        <div class="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-icon"><i class="icon-hash"></i></div>
+            <div class="metric-content">
+              <div class="metric-label">Total Evaluations</div>
+              <div class="metric-value" id="metric-total-evaluations">0</div>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-icon"><i class="icon-zap"></i></div>
+            <div class="metric-content">
+              <div class="metric-label">Cache Hit Rate</div>
+              <div class="metric-value" id="metric-cache-hit-rate">0%</div>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-icon"><i class="icon-timer"></i></div>
+            <div class="metric-content">
+              <div class="metric-label">Avg Latency</div>
+              <div class="metric-value" id="metric-avg-latency">0ms</div>
+            </div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-icon"><i class="icon-server"></i></div>
+            <div class="metric-content">
+              <div class="metric-label">Providers</div>
+              <div class="metric-value" id="metric-providers">0 / 10</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Recent Decisions Section -->
+      <div class="stats-section stats-section-decisions">
+        <div class="section-header">
+          <h3><i class="icon-list"></i> Recent Decisions</h3>
+          <span class="section-subtitle">Last 10 AI evaluations</span>
+        </div>
+        <div id="recent-decisions-container"></div>
+      </div>
+    </div>
+
+    <!-- Providers Tab -->
+    <div id="providers-tab" class="ai-tab-content" style="display: none">
+      <div class="providers-section">
+        <div class="section-header">
+          <h3><i class="icon-server"></i> AI Providers</h3>
+          <span class="section-subtitle">Configure and test AI providers</span>
+        </div>
+        <div id="providers-grid" class="providers-grid"></div>
+      </div>
+    </div>
+
+    <!-- Settings Tab -->
+    <div id="settings-tab" class="ai-tab-content" style="display: none">
+      <!-- Master Control Section -->
+      <div class="settings-section">
+        <div class="section-header">
+          <h3><i class="icon-toggle-right"></i> Master Control</h3>
+        </div>
+        <div class="settings-group">
+          <div class="setting-item">
+            <div class="setting-label">
+              <span>AI Enabled</span>
+              <small class="setting-hint">Enable or disable AI module globally</small>
+            </div>
+            <label class="setting-toggle">
+              <input type="checkbox" id="setting-enabled" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">
+              <span>Default Provider</span>
+              <small class="setting-hint">Primary AI provider to use for analysis</small>
+            </div>
+            <select id="setting-default-provider" class="setting-select">
+              <option value="">Select Provider...</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filtering Section -->
+      <div class="settings-section">
+        <div class="section-header">
+          <h3><i class="icon-filter"></i> Filtering</h3>
+        </div>
+        <div class="settings-group">
+          <div class="setting-item">
+            <div class="setting-label">
+              <span>Filtering Enabled</span>
+              <small class="setting-hint">Use AI to filter tokens before entry</small>
+            </div>
+            <label class="setting-toggle">
+              <input type="checkbox" id="setting-filtering-enabled" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">
+              <span>Min Confidence</span>
+              <small class="setting-hint">Minimum confidence score (0-100)</small>
+            </div>
+            <div class="setting-slider">
+              <input
+                type="range"
+                id="setting-min-confidence"
+                min="0"
+                max="100"
+                step="5"
+                value="70"
+              />
+              <span class="slider-value" id="slider-value-min-confidence">70</span>
+            </div>
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">
+              <span>Fallback to Pass</span>
+              <small class="setting-hint">Allow token entry if AI evaluation fails</small>
+            </div>
+            <label class="setting-toggle">
+              <input type="checkbox" id="setting-fallback-pass" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Trading Section -->
+      <div class="settings-section">
+        <div class="section-header">
+          <h3><i class="icon-trending-up"></i> Trading</h3>
+        </div>
+        <div class="settings-group">
+          <div class="setting-item">
+            <div class="setting-label">
+              <span>Entry Analysis</span>
+              <small class="setting-hint">Analyze tokens before entry</small>
+            </div>
+            <label class="setting-toggle">
+              <input type="checkbox" id="setting-entry-analysis" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">
+              <span>Exit Analysis</span>
+              <small class="setting-hint">Analyze positions before exit</small>
+            </div>
+            <label class="setting-toggle">
+              <input type="checkbox" id="setting-exit-analysis" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">
+              <span>Trailing Stop Analysis</span>
+              <small class="setting-hint">Analyze trailing stop triggers</small>
+            </div>
+            <label class="setting-toggle">
+              <input type="checkbox" id="setting-trailing-stop" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Auto Blacklist Section -->
+      <div class="settings-section">
+        <div class="section-header">
+          <h3><i class="icon-shield-off"></i> Auto Blacklist</h3>
+        </div>
+        <div class="settings-group">
+          <div class="setting-item">
+            <div class="setting-label">
+              <span>Auto Blacklist Enabled</span>
+              <small class="setting-hint">Automatically blacklist tokens with low AI scores</small>
+            </div>
+            <label class="setting-toggle">
+              <input type="checkbox" id="setting-auto-blacklist-enabled" />
+              <span class="toggle-track"></span>
+            </label>
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">
+              <span>Min Confidence for Blacklist</span>
+              <small class="setting-hint">Threshold for auto-blacklisting (0-100)</small>
+            </div>
+            <div class="setting-slider">
+              <input
+                type="range"
+                id="setting-blacklist-min-confidence"
+                min="0"
+                max="100"
+                step="5"
+                value="30"
+              />
+              <span class="slider-value" id="slider-value-blacklist-min-confidence">30</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Performance Section -->
+      <div class="settings-section">
+        <div class="section-header">
+          <h3><i class="icon-gauge"></i> Performance</h3>
+        </div>
+        <div class="settings-group">
+          <div class="setting-item">
+            <div class="setting-label">
+              <span>Cache TTL (seconds)</span>
+              <small class="setting-hint">How long to cache AI results</small>
+            </div>
+            <div class="setting-slider">
+              <input
+                type="range"
+                id="setting-cache-ttl"
+                min="60"
+                max="3600"
+                step="60"
+                value="300"
+              />
+              <span class="slider-value" id="slider-value-cache-ttl">300</span>
+            </div>
+          </div>
+          <div class="setting-item">
+            <div class="setting-label">
+              <span>Max Evaluations</span>
+              <small class="setting-hint">Maximum concurrent AI evaluations</small>
+            </div>
+            <div class="setting-slider">
+              <input
+                type="range"
+                id="setting-max-evaluations"
+                min="1"
+                max="20"
+                step="1"
+                value="5"
+              />
+              <span class="slider-value" id="slider-value-max-evaluations">5</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cache Controls -->
+      <div class="settings-section">
+        <div class="section-header">
+          <h3><i class="icon-database"></i> Cache Management</h3>
+        </div>
+        <div class="settings-group">
+          <div class="cache-stats">
+            <div class="cache-stat">
+              <span class="cache-stat-label">Cache Size:</span>
+              <span class="cache-stat-value" id="cache-size">0</span>
+            </div>
+            <div class="cache-stat">
+              <span class="cache-stat-label">Memory Usage:</span>
+              <span class="cache-stat-value" id="cache-memory">0 KB</span>
+            </div>
+          </div>
+          <button type="button" class="btn btn-secondary" id="clear-cache-btn">
+            <i class="icon-trash-2"></i> Clear Cache
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Testing Tab -->
+    <div id="testing-tab" class="ai-tab-content" style="display: none">
+      <div class="testing-section">
+        <div class="section-header">
+          <h3><i class="icon-flask"></i> AI Testing Playground</h3>
+          <span class="section-subtitle">Test AI analysis on any token</span>
+        </div>
+
+        <div class="testing-form">
+          <div class="form-group">
+            <label for="test-mint-address">Mint Address</label>
+            <input
+              type="text"
+              id="test-mint-address"
+              class="form-control"
+              placeholder="Enter Solana token mint address..."
+            />
+          </div>
+
+          <div class="form-group">
+            <label for="test-priority">Priority</label>
+            <select id="test-priority" class="form-control">
+              <option value="low">Low</option>
+              <option value="medium" selected>Medium</option>
+              <option value="high">High</option>
+            </select>
+          </div>
+
+          <button type="button" class="btn btn-primary" id="evaluate-btn">
+            <i class="icon-play"></i> Evaluate
+          </button>
+        </div>
+
+        <div id="testing-results" class="testing-results" style="display: none">
+          <div class="section-header">
+            <h4><i class="icon-file-text"></i> Results</h4>
+          </div>
+          <div id="testing-results-content"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

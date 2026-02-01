@@ -165,6 +165,23 @@ pub fn format_percent(value: f64) -> String {
     format!("{:.1}%", value)
 }
 
+/// Format AI reasoning block for notifications
+pub fn format_ai_reasoning(reasoning: &Option<String>) -> String {
+    match reasoning {
+        Some(r) if !r.is_empty() => {
+            let escaped = html_escape(r);
+            // Truncate if too long to avoid Telegram message limits
+            let truncated = if escaped.len() > 300 {
+                format!("{}...", &escaped[..300])
+            } else {
+                escaped
+            };
+            format!("\n\n🤖 <b>AI Analysis</b>\n<i>{}</i>", truncated)
+        }
+        _ => String::new(),
+    }
+}
+
 /// Format USD value
 pub fn format_usd(amount: f64) -> String {
     if amount.abs() < 0.01 {
@@ -198,7 +215,10 @@ pub fn msg_position_opened(
     entry_price: f64,
     tokens: f64,
     dex: &str,
+    ai_reasoning: &Option<String>,
 ) -> String {
+    let ai_section = format_ai_reasoning(ai_reasoning);
+
     format!(
         r#"🟢 <b>Position Opened</b>
 
@@ -207,13 +227,14 @@ pub fn msg_position_opened(
 💰 Size — <b>{} SOL</b>
 💎 Price — {} SOL
 🪙 Tokens — {}
-📍 DEX — {}"#,
+📍 DEX — {}{}"#,
         html_escape(symbol),
         format_mint_display(mint),
         format_sol(amount_sol),
         format_price(entry_price),
         format_tokens_f64(tokens),
         html_escape(dex),
+        ai_section,
     )
 }
 
@@ -229,6 +250,7 @@ pub fn msg_position_closed(
     received: f64,
     duration_secs: u64,
     reason: &str,
+    ai_reasoning: &Option<String>,
 ) -> String {
     let (header_emoji, result_text) = if pnl_sol >= 0.0 {
         if pnl_pct >= 100.0 {
@@ -244,6 +266,8 @@ pub fn msg_position_closed(
         ("🔴", "Loss")
     };
 
+    let ai_section = format_ai_reasoning(ai_reasoning);
+
     format!(
         r#"{} <b>Position Closed</b> — {}
 
@@ -254,7 +278,7 @@ pub fn msg_position_closed(
 💵 Invested — {} SOL
 💰 Received — {} SOL
 ⏱️ Duration — {}
-📋 Reason — {}"#,
+📋 Reason — {}{}"#,
         header_emoji,
         result_text,
         html_escape(symbol),
@@ -265,6 +289,7 @@ pub fn msg_position_closed(
         format_sol(received),
         format_duration(duration_secs),
         html_escape(reason),
+        ai_section,
     )
 }
 

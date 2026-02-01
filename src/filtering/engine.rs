@@ -343,15 +343,16 @@ pub async fn compute_snapshot(
                 }
             }
             Err(reason) => {
+                // Clone reason since it's used multiple times and no longer Copy
+                let reason_label = reason.label();
+                let reason_source = reason.source().as_str().to_string();
+
                 stats.record_rejection(reason);
                 rejected_mints.push(token.mint.clone());
                 let rejection_time = previous_reject_times
                     .get(token.mint.as_str())
                     .copied()
                     .unwrap_or_else(|| Utc::now().timestamp());
-
-                let reason_label = reason.label().to_string();
-                let reason_source = reason.source().as_str().to_string();
 
                 rejected_tokens.push(RejectedToken {
                     mint: token.mint.clone(),
@@ -630,6 +631,10 @@ async fn apply_all_filters(
         sources::rugcheck::evaluate(token, &config.rugcheck)?;
     }
 
+    // AI filtering runs LAST after all standard filters pass
+    // This ensures we only spend AI credits on tokens that already pass basic checks
+    sources::ai::evaluate(token).await?;
+
     Ok(())
 }
 
@@ -658,7 +663,7 @@ impl FilteringStats {
         let mut parts: Vec<(FilterRejectionReason, usize)> = self
             .rejection_counts
             .iter()
-            .map(|(k, v)| (*k, *v))
+            .map(|(k, v)| (k.clone(), *v))
             .collect();
         parts.sort_by(|a, b| b.1.cmp(&a.1));
 
