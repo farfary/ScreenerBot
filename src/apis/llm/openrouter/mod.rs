@@ -184,9 +184,12 @@ impl OpenRouterClient {
             .client
             .post(&url)
             .header("Authorization", format!("Bearer {}", self.api_key))
-            .header("Content-Type", "application/json");
+            .header("Content-Type", "application/json")
+            .header("User-Agent", "ScreenerBot/1.0 (https://screenerbot.io)")
+            .header("HTTP-Referer", self.site_url.as_deref().unwrap_or("https://screenerbot.io"))
+            .header("X-Title", self.site_name.as_deref().unwrap_or("ScreenerBot"));
 
-        // Add optional site identification headers
+        // Add optional site identification headers (override defaults)
         if let Some(ref site_url) = self.site_url {
             req_builder = req_builder.header("HTTP-Referer", site_url);
         }
