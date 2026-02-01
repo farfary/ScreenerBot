@@ -45,9 +45,10 @@ impl Service for AiService {
     }
 
     async fn initialize(&mut self) -> Result<(), String> {
-        // Initialize AI engine if not already done
-        let engine = AiEngine::new();
-        self.ai_engine = Some(Arc::new(engine));
+        // Get global AI engine instance (should be initialized already)
+        let engine = crate::ai::try_get_ai_engine()
+            .ok_or("AI engine not initialized - call init_ai_engine() first")?;
+        self.ai_engine = Some(engine);
         logger::info(LogTag::System, "AI service initialized");
         Ok(())
     }

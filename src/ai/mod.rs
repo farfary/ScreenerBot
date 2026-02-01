@@ -12,6 +12,6 @@ pub mod types;
 
 // Re-exports
 pub use cache::AiCache;
-pub use engine::AiEngine;
+pub use engine::{get_ai_engine, init_ai_engine, try_get_ai_engine, AiEngine};
 pub use schemas::{ExitSuggestion, FilterDecision, TradeDecision};
 pub use types::{AiDecision, AiError, EvaluationContext, EvaluationResult, Priority};

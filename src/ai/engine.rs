@@ -10,6 +10,31 @@ use crate::apis::llm::{get_llm_manager, ChatMessage, ChatRequest, LlmError, Prov
 use crate::config::with_config;
 use std::sync::Arc;
 use std::time::Instant;
+use tokio::sync::OnceCell;
+
+/// Global AI engine singleton
+static AI_ENGINE: OnceCell<Arc<AiEngine>> = OnceCell::const_new();
+
+/// Initialize the global AI engine
+pub async fn init_ai_engine() -> Result<(), String> {
+    let engine = AiEngine::new();
+    AI_ENGINE
+        .set(Arc::new(engine))
+        .map_err(|_| "AI engine already initialized".to_string())
+}
+
+/// Get the global AI engine
+pub fn get_ai_engine() -> Arc<AiEngine> {
+    AI_ENGINE
+        .get()
+        .expect("AI engine not initialized - call init_ai_engine() first")
+        .clone()
+}
+
+/// Try to get the global AI engine (non-panicking version)
+pub fn try_get_ai_engine() -> Option<Arc<AiEngine>> {
+    AI_ENGINE.get().cloned()
+}
 
 /// Main AI engine that orchestrates LLM calls, caching, and decision processing
 pub struct AiEngine {

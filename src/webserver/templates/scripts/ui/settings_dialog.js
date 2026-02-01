@@ -1560,7 +1560,8 @@ export class SettingsDialog {
       clearUiBtn.addEventListener("click", async () => {
         const confirmResult = await ConfirmationDialog.show({
           title: "Clear UI State",
-          message: "Clear all saved UI preferences? This will reset table columns, filters, and view settings.",
+          message:
+            "Clear all saved UI preferences? This will reset table columns, filters, and view settings.",
           confirmLabel: "Clear",
           cancelLabel: "Cancel",
           variant: "danger",
@@ -1708,7 +1709,8 @@ export class SettingsDialog {
       // Confirm import
       const confirmResult = await ConfirmationDialog.show({
         title: "Import Configuration",
-        message: "Import this configuration? Current settings will be overwritten. Wallet credentials will be preserved.",
+        message:
+          "Import this configuration? Current settings will be overwritten. Wallet credentials will be preserved.",
         confirmLabel: "Import",
         cancelLabel: "Cancel",
         variant: "warning",
@@ -1760,7 +1762,8 @@ export class SettingsDialog {
   async _resetConfig() {
     const confirmResult = await ConfirmationDialog.show({
       title: "Reset Configuration",
-      message: "Reset all settings to defaults? Your wallet credentials will be preserved, but all other settings will be reset.",
+      message:
+        "Reset all settings to defaults? Your wallet credentials will be preserved, but all other settings will be reset.",
       confirmLabel: "Reset",
       cancelLabel: "Cancel",
       variant: "danger",
@@ -3021,7 +3024,8 @@ export class SettingsDialog {
       installBtn.addEventListener("click", async () => {
         const confirmResult = await ConfirmationDialog.show({
           title: "Install Update",
-          message: "ScreenerBot will install the update and close. The installer will launch automatically. Continue?",
+          message:
+            "ScreenerBot will install the update and close. The installer will launch automatically. Continue?",
           confirmLabel: "Install",
           cancelLabel: "Cancel",
           variant: "warning",

@@ -29,8 +29,15 @@ pub async fn evaluate(token: &Token) -> Result<(), FilterRejectionReason> {
         return Ok(()); // AI filtering disabled, skip
     }
 
-    // Create AI engine instance
-    let ai_engine = AiEngine::new();
+    // Get global AI engine instance
+    let ai_engine = match crate::ai::try_get_ai_engine() {
+        Some(engine) => engine,
+        None => {
+            // AI is enabled but engine not initialized - this shouldn't happen
+            // but handle gracefully
+            return Ok(()); // Skip AI filtering
+        }
+    };
 
     // Build evaluation context with token data
     let context = EvaluationContext {

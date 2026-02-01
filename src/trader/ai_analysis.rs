@@ -66,8 +66,17 @@ pub async fn analyze_entry(token: &Token) -> Option<EntryAnalysisResult> {
     let (min_confidence, bypass_cache) =
         with_config(|cfg| (cfg.ai.filtering_min_confidence, cfg.ai.trading_bypass_cache));
 
-    // Create AI engine
-    let ai_engine = AiEngine::new();
+    // Get global AI engine
+    let ai_engine = match crate::ai::try_get_ai_engine() {
+        Some(engine) => engine,
+        None => {
+            crate::logger::warning(
+                crate::logger::LogTag::Trader,
+                "AI entry analysis requested but AI engine not initialized",
+            );
+            return None;
+        }
+    };
 
     // Build context with token data
     let context = EvaluationContext {
@@ -116,8 +125,17 @@ pub async fn analyze_exit(position: &Position, token: &Token) -> Option<ExitAnal
 
     let bypass_cache = with_config(|cfg| cfg.ai.trading_bypass_cache);
 
-    // Create AI engine
-    let ai_engine = AiEngine::new();
+    // Get global AI engine
+    let ai_engine = match crate::ai::try_get_ai_engine() {
+        Some(engine) => engine,
+        None => {
+            crate::logger::warning(
+                crate::logger::LogTag::Trader,
+                "AI exit analysis requested but AI engine not initialized",
+            );
+            return None;
+        }
+    };
 
     // Build context with position and token data
     let context = EvaluationContext {

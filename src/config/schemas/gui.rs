@@ -219,6 +219,13 @@ pub fn default_tabs() -> Vec<TabConfig> {
             order: 11,
             enabled: true,
         },
+        TabConfig {
+            id: "ai".into(),
+            label: "AI".into(),
+            icon: "icon-bot".into(),
+            order: 12,
+            enabled: true,
+        },
     ]
 }
 

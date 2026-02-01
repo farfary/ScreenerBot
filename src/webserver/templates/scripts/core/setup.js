@@ -455,7 +455,7 @@ class SetupControllerClass {
       // Remove verifying states
       walletCard?.classList.remove("verifying");
       rpcCard?.classList.remove("verifying");
-      
+
       this.showError(error.message);
       // Reset verification states
       if (walletStatus) {

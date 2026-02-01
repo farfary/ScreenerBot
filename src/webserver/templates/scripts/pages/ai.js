@@ -103,14 +103,17 @@ function createLifecycle() {
         }
       },
     });
-
-    TabBarManager.register("ai", tabBar);
   }
 
   /**
    * Switch to a tab
    */
   function switchTab(tabId) {
+    // Stop all pollers to prevent memory leaks
+    if (statusPoller) statusPoller.stop();
+    if (providersPoller) providersPoller.stop();
+    if (cachePoller) cachePoller.stop();
+
     // Hide all tabs
     const allTabs = $$(".ai-tab-content");
     allTabs.forEach((tab) => {
@@ -123,14 +126,17 @@ function createLifecycle() {
       selectedTab.style.display = "block";
     }
 
-    // Load data for the tab
+    // Load data for the tab and start appropriate poller
     if (tabId === "stats") {
       loadAiStatus();
+      if (statusPoller) statusPoller.start();
     } else if (tabId === "providers") {
       loadProviders();
+      if (providersPoller) providersPoller.start();
     } else if (tabId === "settings") {
       loadConfig();
       loadCacheStats();
+      if (cachePoller) cachePoller.start();
     }
   }
 
@@ -233,7 +239,8 @@ function createLifecycle() {
     if (!container) return;
 
     if (decisions.length === 0) {
-      container.innerHTML = '<div style="padding: 1rem; text-align: center; color: var(--text-muted);">No recent decisions</div>';
+      container.innerHTML =
+        '<div style="padding: 1rem; text-align: center; color: var(--text-muted);">No recent decisions</div>';
       return;
     }
 
@@ -437,6 +444,7 @@ function createLifecycle() {
     const apiKeyInput = $(`.provider-api-key[data-provider-id="${providerId}"]`);
     const modelInput = $(`.provider-model[data-provider-id="${providerId}"]`);
     const enableToggle = $(`.provider-enable-toggle[data-provider-id="${providerId}"]`);
+    const saveBtn = $(`.provider-save-btn[data-provider-id="${providerId}"]`);
 
     if (!apiKeyInput || !modelInput || !enableToggle) return;
 
@@ -445,6 +453,32 @@ function createLifecycle() {
       api_key: apiKeyInput.value.trim(),
       model: modelInput.value.trim(),
     };
+
+    // Validation
+    if (config.enabled && !config.api_key) {
+      Utils.showToast({
+        type: "warning",
+        title: "Missing API Key",
+        message: "Please enter an API key to enable this provider",
+      });
+      return;
+    }
+
+    if (config.enabled && !config.model) {
+      Utils.showToast({
+        type: "warning",
+        title: "Missing Model",
+        message: "Please enter a model name",
+      });
+      return;
+    }
+
+    // Show loading state
+    const originalHTML = saveBtn ? saveBtn.innerHTML : "";
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.innerHTML = '<i class="icon-loader"></i> Saving...';
+    }
 
     try {
       const response = await fetch(`/api/ai/providers/${providerId}`, {
@@ -477,6 +511,12 @@ function createLifecycle() {
         title: "Error",
         message: `Failed to save ${PROVIDER_NAMES[providerId]}`,
       });
+    } finally {
+      // Restore button state
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = originalHTML;
+      }
     }
   }
 
@@ -533,9 +573,14 @@ function createLifecycle() {
         method: "POST",
       });
 
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || errorData.message || `HTTP ${response.status}`);
+      }
+
       const result = await response.json();
 
-      if (response.ok && result.success) {
+      if (result.success) {
         statusContainer.innerHTML = `
           <div class="provider-status success">
             <i class="icon-check-circle"></i> Connection successful
@@ -547,7 +592,7 @@ function createLifecycle() {
           message: `${PROVIDER_NAMES[providerId]} is working correctly`,
         });
       } else {
-        throw new Error(result.error || "Test failed");
+        throw new Error(result.error || result.message || "Test failed");
       }
     } catch (error) {
       console.error(`[AI] Test failed for provider ${providerId}:`, error);
@@ -605,9 +650,10 @@ function createLifecycle() {
     const defaultProvider = $("#setting-default-provider");
     if (defaultProvider) {
       // Populate provider options
-      defaultProvider.innerHTML = '<option value="">Select Provider...</option>' +
+      defaultProvider.innerHTML =
+        '<option value="">Select Provider...</option>' +
         Object.keys(PROVIDER_NAMES)
-          .map(id => `<option value="${id}">${PROVIDER_NAMES[id]}</option>`)
+          .map((id) => `<option value="${id}">${PROVIDER_NAMES[id]}</option>`)
           .join("");
       defaultProvider.value = config.default_provider || "";
     }
@@ -639,7 +685,8 @@ function createLifecycle() {
 
     // Auto Blacklist
     const autoBlacklistEnabled = $("#setting-auto-blacklist-enabled");
-    if (autoBlacklistEnabled) autoBlacklistEnabled.checked = config.auto_blacklist?.enabled || false;
+    if (autoBlacklistEnabled)
+      autoBlacklistEnabled.checked = config.auto_blacklist?.enabled || false;
 
     const blacklistMinConfidence = $("#setting-blacklist-min-confidence");
     const blacklistMinConfidenceValue = $("#slider-value-blacklist-min-confidence");
@@ -793,7 +840,7 @@ function createLifecycle() {
       // Build nested object for API
       const config = {};
       const parts = field.split(".");
-      
+
       if (parts.length === 1) {
         config[field] = value;
       } else {
@@ -869,7 +916,8 @@ function createLifecycle() {
   async function clearCache() {
     const confirmed = await ConfirmationDialog.show({
       title: "Clear Cache",
-      message: "Are you sure you want to clear the AI cache? This will remove all cached evaluations.",
+      message:
+        "Are you sure you want to clear the AI cache? This will remove all cached evaluations.",
       confirmText: "Clear Cache",
       confirmClass: "btn-danger",
     });
@@ -986,16 +1034,27 @@ function createLifecycle() {
     const decisionClass = isPass ? "decision-pass" : "decision-reject";
     const confidence = Math.round(result.confidence * 100);
 
-    const factorsHtml = result.factors && result.factors.length > 0
-      ? `
+    const factorsHtml =
+      result.factors && result.factors.length > 0
+        ? `
         <div class="result-item">
           <div class="result-label">Factors</div>
           <div class="result-factors">
-            ${result.factors.map(f => `<span class="factor-badge">${f}</span>`).join("")}
+            ${result.factors
+              .map((f) => {
+                const impactClass =
+                  f.impact === "positive"
+                    ? "factor-positive"
+                    : f.impact === "negative"
+                      ? "factor-negative"
+                      : "factor-neutral";
+                return `<span class="factor-badge ${impactClass}">${f.name} (${Math.round(f.weight * 100)}%)</span>`;
+              })
+              .join("")}
           </div>
         </div>
       `
-      : "";
+        : "";
 
     resultsContent.innerHTML = `
       <div class="result-item">
@@ -1045,7 +1104,6 @@ function createLifecycle() {
 
       // Integrate with lifecycle for auto-cleanup
       if (tabBar) {
-        TabBarManager.register("ai", tabBar);
         ctx.manageTabBar(tabBar);
         tabBar.show();
       }
@@ -1118,12 +1176,16 @@ function createLifecycle() {
         )
       );
 
-      // Start pollers based on active tab
+      // Load initial data immediately and start appropriate poller
       if (state.currentTab === "stats") {
+        await loadAiStatus();
         statusPoller.start();
       } else if (state.currentTab === "providers") {
+        await loadProviders();
         providersPoller.start();
       } else if (state.currentTab === "settings") {
+        await loadConfig();
+        await loadCacheStats();
         cachePoller.start();
       }
     },
@@ -1156,4 +1218,4 @@ function createLifecycle() {
 }
 
 // Register the page
-registerPage("ai", createLifecycle());
+registerPage("ai", createLifecycle);

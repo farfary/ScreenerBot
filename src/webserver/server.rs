@@ -183,8 +183,13 @@ pub async fn start_server(
         &format!("Starting webserver on {}:{}", host, port),
     );
 
-    // Create application state
-    let state = Arc::new(AppState::new());
+    // Create application state with AI engine if enabled
+    let ai_engine = if crate::config::with_config(|cfg| cfg.ai.enabled) {
+        crate::ai::try_get_ai_engine()
+    } else {
+        None
+    };
+    let state = Arc::new(AppState::with_ai_engine(ai_engine));
 
     // Set global app state
     crate::webserver::state::set_global_app_state(Arc::clone(&state));

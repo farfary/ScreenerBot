@@ -168,7 +168,9 @@ export class ConfigExportDialog {
       const meta = SECTION_META[sectionId] || { label: sectionId, icon: "icon-settings", hint: "" };
       const isSelected = this.selectedSections.has(sectionId);
 
-      const item = create("label", { className: "config-section-item" + (isSelected ? " selected" : "") });
+      const item = create("label", {
+        className: "config-section-item" + (isSelected ? " selected" : ""),
+      });
       item.innerHTML = `
         <input type="checkbox" value="${sectionId}" ${isSelected ? "checked" : ""} />
         <div class="config-section-item-content">
@@ -579,10 +581,14 @@ export class ConfigImportDialog {
           </div>
         </label>
         ${errorMsg}
-        ${section.changes.length > 0 ? `<button type="button" class="config-import-toggle-changes" data-section="${section.name}">
+        ${
+          section.changes.length > 0
+            ? `<button type="button" class="config-import-toggle-changes" data-section="${section.name}">
           <i class="icon-chevron-down"></i> Show changes
         </button>
-        <div class="config-import-changes-list" id="changes-${section.name}" hidden></div>` : ""}
+        <div class="config-import-changes-list" id="changes-${section.name}" hidden></div>`
+            : ""
+        }
       `;
 
       // Checkbox handler

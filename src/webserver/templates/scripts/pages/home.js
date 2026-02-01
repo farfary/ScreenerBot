@@ -452,8 +452,7 @@ function createLifecycle() {
 
     // Execute trade
     try {
-      const endpoint =
-        action === "sell" ? "/api/trader/manual/sell" : "/api/trader/manual/buy";
+      const endpoint = action === "sell" ? "/api/trader/manual/sell" : "/api/trader/manual/buy";
 
       const body =
         action === "sell"
