@@ -1139,42 +1139,60 @@ export class SettingsDialog {
       e.preventDefault();
 
       const dropTarget = e.target.closest(".settings-nav-tab-item");
-      if (!dropTarget || !draggedTabId || dropTarget.dataset.tabId === draggedTabId) return;
+      if (!dropTarget || !draggedTabId || dropTarget.dataset.tabId === draggedTabId) {
+        // Clean up
+        list.querySelectorAll(".settings-nav-tab-item").forEach((el) => {
+          el.classList.remove("drag-over", "drag-over-top", "drag-over-bottom");
+        });
+        return;
+      }
 
       const tabs = getTabs();
+      
+      // Get current sorted order
       const sortedTabs = [...tabs].sort((a, b) => a.order - b.order);
+      const draggedIdx = sortedTabs.findIndex((t) => t.id === draggedTabId);
+      const dropIdx = sortedTabs.findIndex((t) => t.id === dropTarget.dataset.tabId);
 
-      const draggedIndex = sortedTabs.findIndex((t) => t.id === draggedTabId);
-      const dropIndex = sortedTabs.findIndex((t) => t.id === dropTarget.dataset.tabId);
+      if (draggedIdx === -1 || dropIdx === -1) return;
 
-      if (draggedIndex === -1 || dropIndex === -1) return;
-
-      // Calculate position based on mouse
+      // Calculate insert position based on mouse
       const rect = dropTarget.getBoundingClientRect();
-      const midY = rect.top + rect.height / 2;
-      const insertBefore = e.clientY < midY;
+      const insertBefore = e.clientY < rect.top + rect.height / 2;
 
-      // Remove dragged item and insert at new position
-      const [movedTab] = sortedTabs.splice(draggedIndex, 1);
-      let newIndex = dropIndex;
-      if (draggedIndex < dropIndex) {
-        newIndex = insertBefore ? dropIndex - 1 : dropIndex;
+      // Remove from old position
+      const [movedTab] = sortedTabs.splice(draggedIdx, 1);
+      
+      // Calculate new position (accounting for removal)
+      let insertIdx = dropIdx;
+      if (draggedIdx < dropIdx) {
+        // Dragging down - dropIdx shifted by 1 after removal
+        insertIdx = insertBefore ? dropIdx - 1 : dropIdx;
       } else {
-        newIndex = insertBefore ? dropIndex : dropIndex + 1;
+        // Dragging up
+        insertIdx = insertBefore ? dropIdx : dropIdx + 1;
       }
-      sortedTabs.splice(newIndex, 0, movedTab);
+      
+      // Clamp to valid range
+      insertIdx = Math.max(0, Math.min(insertIdx, sortedTabs.length));
+      
+      // Insert at new position
+      sortedTabs.splice(insertIdx, 0, movedTab);
 
-      // Update order values
+      // Update order values in original tabs array
       sortedTabs.forEach((tab, idx) => {
         const originalTab = tabs.find((t) => t.id === tab.id);
         if (originalTab) originalTab.order = idx;
       });
 
+      // Save and refresh
       setTabs(tabs);
       this._refreshNavigationList(content);
 
-      // Clean up
-      dropTarget.classList.remove("drag-over", "drag-over-top", "drag-over-bottom");
+      // Clean up drag states
+      list.querySelectorAll(".settings-nav-tab-item").forEach((el) => {
+        el.classList.remove("drag-over", "drag-over-top", "drag-over-bottom");
+      });
     });
 
     // Toggle handler
