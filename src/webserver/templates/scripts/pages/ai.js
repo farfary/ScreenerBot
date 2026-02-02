@@ -96,7 +96,8 @@ function createLifecycle() {
       container,
       tabs: SUB_TABS,
       defaultTab: DEFAULT_TAB,
-      onTabChange: (tabId) => {
+      onChange: (tabId) => {
+        console.log("[AI] Tab change to:", tabId);
         if (tabId !== state.currentTab) {
           state.currentTab = tabId;
           switchTab(tabId);
@@ -1087,17 +1088,10 @@ function createLifecycle() {
 
   return {
     /**
-     * Before mount - called before page HTML is inserted
+     * Init - called once when page is first loaded
      */
-    async beforeMount() {
-      console.log("[AI] Before mount");
-    },
-
-    /**
-     * Mount - called after HTML is inserted
-     */
-    async mounted(ctx) {
-      console.log("[AI] Mounted");
+    async init(ctx) {
+      console.log("[AI] Initializing");
 
       // Initialize sub-tabs
       initSubTabs();
@@ -1199,10 +1193,10 @@ function createLifecycle() {
     },
 
     /**
-     * Before unmount - cleanup
+     * Dispose - cleanup when page is destroyed
      */
-    async beforeUnmount() {
-      console.log("[AI] Before unmount");
+    async dispose() {
+      console.log("[AI] Disposing page");
 
       // Clean up event listeners
       eventCleanups.forEach((cleanup) => cleanup());
@@ -1218,4 +1212,4 @@ function createLifecycle() {
 }
 
 // Register the page
-registerPage("ai", createLifecycle);
+registerPage("ai", createLifecycle());
