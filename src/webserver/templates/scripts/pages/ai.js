@@ -227,7 +227,7 @@ function createLifecycle() {
 
     // Update status text
     if (statusText) {
-      statusText.textContent = enabled ? "AI Analysis Active" : "AI Analysis Disabled";
+      statusText.textContent = enabled ? "Assistant Active" : "Assistant Disabled";
     }
 
     // Update toggle
@@ -327,7 +327,7 @@ function createLifecycle() {
       Utils.showToast({
         type: "success",
         title: "AI Updated",
-        message: `AI analysis ${enabled ? "enabled" : "disabled"}`,
+        message: `Assistant ${enabled ? "enabled" : "disabled"}`,
       });
 
       // Reload status
@@ -555,7 +555,7 @@ function createLifecycle() {
               <input type="text" id="modal-model" class="form-control" 
                      placeholder="e.g., gpt-4, claude-3-opus..." value="${provider.model || ""}">
             </div>
-            <small class="form-help">The model to use for AI analysis requests</small>
+            <small class="form-help">The model to use for Assistant analysis requests</small>
           </div>
           
           <!-- Enable Checkbox -->
@@ -564,7 +564,7 @@ function createLifecycle() {
               <input type="checkbox" id="modal-enabled" ${provider.enabled ? "checked" : ""}>
               <span>Enable this provider</span>
             </label>
-            <small class="form-help">When enabled, this provider will be available for AI analysis</small>
+            <small class="form-help">When enabled, this provider will be available for Assistant analysis</small>
           </div>
           
           <!-- Test Connection Section -->
