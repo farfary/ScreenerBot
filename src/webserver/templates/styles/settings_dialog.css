@@ -850,27 +850,49 @@
   line-height: 1.5;
 }
 
+/* Section header with inline reset button */
+.settings-section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.settings-section-header-left {
+  flex: 1;
+}
+
+.settings-section-header .settings-section-title {
+  margin-bottom: 4px;
+}
+
+.settings-section-header .settings-section-hint {
+  margin: 0;
+}
+
 .settings-nav-tabs-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 10px;
-  padding: 10px;
-  max-height: 420px;
+  padding: 8px;
+  max-height: 380px;
   overflow-y: auto;
+  scroll-behavior: smooth;
 }
 
 .settings-nav-tab-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 8px 10px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  transition: all 0.2s ease;
+  transition: transform 0.15s ease, opacity 0.15s ease, background 0.15s ease, border-color 0.15s ease, margin 0.2s ease;
   cursor: grab;
   user-select: none;
 }
@@ -878,7 +900,6 @@
 .settings-nav-tab-item:hover {
   background: var(--bg-card-hover);
   border-color: var(--primary-alpha-30);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 .settings-nav-tab-item:active {
@@ -886,8 +907,11 @@
 }
 
 .settings-nav-tab-item.dragging {
-  opacity: 0.5;
-  transform: scale(0.98);
+  opacity: 0.4;
+  transform: scale(0.95);
+  background: var(--primary-alpha-10);
+  border-color: var(--primary-color);
+  z-index: 10;
 }
 
 .settings-nav-tab-item.drag-over {
@@ -895,11 +919,37 @@
 }
 
 .settings-nav-tab-item.drag-over-top {
-  box-shadow: 0 -3px 0 0 var(--primary-color);
+  margin-top: 40px;
+  position: relative;
+}
+
+.settings-nav-tab-item.drag-over-top::before {
+  content: '';
+  position: absolute;
+  top: -24px;
+  left: 0;
+  right: 0;
+  height: 36px;
+  background: var(--primary-alpha-10);
+  border: 2px dashed var(--primary-color);
+  border-radius: 8px;
 }
 
 .settings-nav-tab-item.drag-over-bottom {
-  box-shadow: 0 3px 0 0 var(--primary-color);
+  margin-bottom: 40px;
+  position: relative;
+}
+
+.settings-nav-tab-item.drag-over-bottom::after {
+  content: '';
+  position: absolute;
+  bottom: -24px;
+  left: 0;
+  right: 0;
+  height: 36px;
+  background: var(--primary-alpha-10);
+  border: 2px dashed var(--primary-color);
+  border-radius: 8px;
 }
 
 .settings-nav-tab-position {
@@ -1415,9 +1465,15 @@
 /* Config Management */
 .config-actions-row {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
   margin-bottom: 16px;
+}
+
+.config-actions-row .btn {
+  min-height: 36px;
+  padding: 8px 16px;
+  font-size: 0.8rem;
 }
 
 .config-info-box {

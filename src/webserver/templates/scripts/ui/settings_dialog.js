@@ -1000,40 +1000,26 @@ export class SettingsDialog {
 
     return `
       <div class="settings-section">
-        <h3 class="settings-section-title">
-          <i class="icon-layout-grid"></i>
-          Navigation Tabs
-        </h3>
-        <p class="settings-section-hint">Drag items to reorder. Toggle visibility with the switch. Home tab is always visible.</p>
+        <div class="settings-section-header">
+          <div class="settings-section-header-left">
+            <h3 class="settings-section-title">
+              <i class="icon-layout-grid"></i>
+              Navigation Tabs
+            </h3>
+            <p class="settings-section-hint">Drag items to reorder. Toggle visibility with the switch.</p>
+          </div>
+          <button class="btn btn-secondary btn-sm" id="resetNavTabs">
+            <i class="icon-rotate-ccw"></i>
+            Reset
+          </button>
+        </div>
         <div class="settings-nav-tabs-list" id="navTabsList">
           ${tabItems}
         </div>
-      </div>
-
-      <div class="settings-section">
-        <h3 class="settings-section-title">
-          <i class="icon-settings-2"></i>
-          Actions
-        </h3>
-        <div class="settings-group">
-          <div class="settings-field">
-            <div class="settings-field-info">
-              <label>Reset Navigation</label>
-              <span class="settings-field-hint">Restore default tab order and visibility settings</span>
-            </div>
-            <div class="settings-field-control">
-              <button class="settings-update-btn" id="resetNavTabs">
-                <i class="icon-rotate-ccw"></i>
-                <span>Reset to Defaults</span>
-              </button>
-            </div>
-          </div>
+        <div class="settings-nav-tabs-note">
+          <i class="icon-info"></i>
+          <span>Changes apply after saving. Refresh the page to see updates in the navigation bar.</span>
         </div>
-      </div>
-
-      <div class="settings-nav-tabs-note">
-        <i class="icon-info"></i>
-        <span>Changes apply after saving. Refresh the page to see updates in the navigation bar.</span>
       </div>
     `;
   }
@@ -1103,6 +1089,17 @@ export class SettingsDialog {
 
       const item = e.target.closest(".settings-nav-tab-item");
       if (!item || item === draggedItem) return;
+
+      // Auto-scroll when near edges
+      const listRect = list.getBoundingClientRect();
+      const scrollZone = 50;
+      const scrollSpeed = 8;
+      
+      if (e.clientY < listRect.top + scrollZone) {
+        list.scrollTop -= scrollSpeed;
+      } else if (e.clientY > listRect.bottom - scrollZone) {
+        list.scrollTop += scrollSpeed;
+      }
 
       // Calculate position for visual feedback
       const rect = item.getBoundingClientRect();
@@ -1460,73 +1457,6 @@ export class SettingsDialog {
               <span class="config-info-label">Config Location</span>
               <span class="config-info-value" id="configPathDisplay">Loading...</span>
             </div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Trading Presets Section -->
-      <div class="settings-section">
-        <h3 class="settings-section-title">
-          <i class="icon-zap"></i>
-          Quick Trading Presets
-        </h3>
-        <p class="settings-section-description">
-          Apply pre-configured trading profiles. Each preset adjusts position limits, trade sizes, and risk parameters.
-        </p>
-        
-        <div class="presets-grid">
-          <div class="preset-card" data-preset="conservative">
-            <div class="preset-icon preset-icon-conservative">
-              <i class="icon-shield"></i>
-            </div>
-            <div class="preset-info">
-              <h4 class="preset-title">Conservative</h4>
-              <ul class="preset-details">
-                <li>Max 2 positions</li>
-                <li>0.005 SOL trades</li>
-                <li>15% ROI target</li>
-                <li>Strict filtering</li>
-              </ul>
-            </div>
-            <button class="btn btn-sm btn-outline preset-apply-btn" data-preset="conservative">
-              Apply
-            </button>
-          </div>
-          
-          <div class="preset-card" data-preset="moderate">
-            <div class="preset-icon preset-icon-moderate">
-              <i class="icon-activity"></i>
-            </div>
-            <div class="preset-info">
-              <h4 class="preset-title">Moderate</h4>
-              <ul class="preset-details">
-                <li>Max 5 positions</li>
-                <li>0.01 SOL trades</li>
-                <li>20% ROI target</li>
-                <li>Balanced filtering</li>
-              </ul>
-            </div>
-            <button class="btn btn-sm btn-outline preset-apply-btn" data-preset="moderate">
-              Apply
-            </button>
-          </div>
-          
-          <div class="preset-card" data-preset="aggressive">
-            <div class="preset-icon preset-icon-aggressive">
-              <i class="icon-trending-up"></i>
-            </div>
-            <div class="preset-info">
-              <h4 class="preset-title">Aggressive</h4>
-              <ul class="preset-details">
-                <li>Max 10 positions</li>
-                <li>0.02 SOL trades</li>
-                <li>30% ROI target</li>
-                <li>Relaxed filtering</li>
-              </ul>
-            </div>
-            <button class="btn btn-sm btn-outline preset-apply-btn" data-preset="aggressive">
-              Apply
-            </button>
           </div>
         </div>
       </div>
