@@ -1,8 +1,51 @@
 <div class="page-table ai-page">
-  <div id="subTabsContainer" class="sub-tabs-container"></div>
-  <div id="ai-content">
-    <!-- Stats Tab -->
-    <div id="stats-tab" class="ai-tab-content" style="display: none">
+  <div class="ai-layout">
+    <!-- Sidebar Navigation -->
+    <nav class="ai-sidebar">
+      <div class="ai-sidebar-header">
+        <span class="ai-sidebar-title">AI Analysis</span>
+      </div>
+      <ul class="ai-sidebar-nav">
+        <li class="ai-nav-item active" data-tab="stats">
+          <span class="ai-nav-icon">📊</span>
+          <span class="ai-nav-label">Overview</span>
+        </li>
+        <li class="ai-nav-item" data-tab="providers">
+          <span class="ai-nav-icon">🤖</span>
+          <span class="ai-nav-label">Providers</span>
+        </li>
+        <li class="ai-nav-item" data-tab="settings">
+          <span class="ai-nav-icon">⚙️</span>
+          <span class="ai-nav-label">Settings</span>
+        </li>
+        <li class="ai-nav-item" data-tab="instructions">
+          <span class="ai-nav-icon">📝</span>
+          <span class="ai-nav-label">Instructions</span>
+        </li>
+        <li class="ai-nav-item" data-tab="testing">
+          <span class="ai-nav-icon">🧪</span>
+          <span class="ai-nav-label">Testing</span>
+        </li>
+        <li class="ai-nav-item" data-tab="history">
+          <span class="ai-nav-icon">📜</span>
+          <span class="ai-nav-label">History</span>
+        </li>
+      </ul>
+      
+      <!-- Sidebar Footer with Status -->
+      <div class="ai-sidebar-footer">
+        <div class="ai-status-indicator">
+          <span class="status-dot"></span>
+          <span class="status-text">Ready</span>
+        </div>
+      </div>
+    </nav>
+    
+    <!-- Main Content Panel -->
+    <main class="ai-main-panel">
+      <div id="ai-content">
+    <!-- Stats Panel -->
+    <div id="stats-panel" class="ai-panel-content active">
       <!-- AI Status Control -->
       <div class="ai-status-bar" id="ai-status-bar">
         <div class="status-bar-main">
@@ -70,8 +113,8 @@
       </div>
     </div>
 
-    <!-- Providers Tab -->
-    <div id="providers-tab" class="ai-tab-content" style="display: none">
+    <!-- Providers Panel -->
+    <div id="providers-panel" class="ai-panel-content">
       <div class="providers-section">
         <div class="section-header">
           <h3><i class="icon-server"></i> AI Providers</h3>
@@ -81,8 +124,8 @@
       </div>
     </div>
 
-    <!-- Settings Tab -->
-    <div id="settings-tab" class="ai-tab-content" style="display: none">
+    <!-- Settings Panel -->
+    <div id="settings-panel" class="ai-panel-content">
       <!-- Master Control Section -->
       <div class="settings-section">
         <div class="section-header">
@@ -298,8 +341,8 @@
       </div>
     </div>
 
-    <!-- Testing Tab -->
-    <div id="testing-tab" class="ai-tab-content" style="display: none">
+    <!-- Testing Panel -->
+    <div id="testing-panel" class="ai-panel-content">
       <div class="testing-section">
         <div class="section-header">
           <h3><i class="icon-flask"></i> AI Testing Playground</h3>
@@ -340,8 +383,8 @@
       </div>
     </div>
 
-    <!-- Instructions Tab -->
-    <div id="instructions-tab" class="ai-tab-content" style="display: none">
+    <!-- Instructions Panel -->
+    <div id="instructions-panel" class="ai-panel-content">
       <div class="instructions-section">
         <div class="section-header">
           <h3><i class="icon-edit"></i> Custom Instructions</h3>
@@ -361,8 +404,8 @@
       </div>
     </div>
 
-    <!-- History Tab -->
-    <div id="history-tab" class="ai-tab-content" style="display: none">
+    <!-- History Panel -->
+    <div id="history-panel" class="ai-panel-content">
       <div class="history-section">
         <div class="section-header">
           <h3><i class="icon-clock"></i> Decision History</h3>
@@ -371,5 +414,7 @@
         <div id="history-list" class="history-list"></div>
       </div>
     </div>
+      </div>
+    </main>
   </div>
 </div>

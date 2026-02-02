@@ -2,19 +2,8 @@ import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { $, $$ } from "../core/dom.js";
 import * as Utils from "../core/utils.js";
-import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { playToggleOn, playError } from "../core/sounds.js";
-
-// Sub-tabs configuration
-const SUB_TABS = [
-  { id: "stats", label: '<i class="icon-chart-bar"></i> Stats' },
-  { id: "providers", label: '<i class="icon-server"></i> Providers' },
-  { id: "instructions", label: '<i class="icon-edit"></i> Instructions' },
-  { id: "settings", label: '<i class="icon-settings"></i> Settings' },
-  { id: "testing", label: '<i class="icon-flask"></i> Testing' },
-  { id: "history", label: '<i class="icon-clock"></i> History' },
-];
 
 // Constants
 const DEFAULT_TAB = "stats";
@@ -35,7 +24,6 @@ const PROVIDER_NAMES = {
 
 function createLifecycle() {
   // Component references
-  let tabBar = null;
   let statusPoller = null;
   let providersPoller = null;
   let cachePoller = null;
@@ -96,23 +84,33 @@ function createLifecycle() {
   // ============================================================================
 
   /**
-   * Initialize sub-tabs
+   * Initialize sidebar navigation
    */
   function initSubTabs() {
-    const container = $("#subTabsContainer");
-    if (!container) return;
-
-    tabBar = new TabBar({
-      container,
-      tabs: SUB_TABS,
-      defaultTab: DEFAULT_TAB,
-      onChange: (tabId) => {
-        console.log("[AI] Tab change to:", tabId);
-        if (tabId !== state.currentTab) {
+    // Setup sidebar navigation click handlers
+    const navItems = $$(".ai-nav-item");
+    
+    navItems.forEach((item) => {
+      addTrackedListener(item, "click", () => {
+        const tabId = item.dataset.tab;
+        if (tabId && tabId !== state.currentTab) {
+          console.log("[AI] Sidebar navigation to:", tabId);
           state.currentTab = tabId;
+          updateSidebarNavigation(tabId);
           switchTab(tabId);
         }
-      },
+      });
+    });
+  }
+
+  /**
+   * Update sidebar navigation active state
+   */
+  function updateSidebarNavigation(activeTab) {
+    const navItems = $$(".ai-nav-item");
+    navItems.forEach((item) => {
+      const isActive = item.dataset.tab === activeTab;
+      item.classList.toggle("active", isActive);
     });
   }
 
@@ -125,17 +123,20 @@ function createLifecycle() {
     if (providersPoller) providersPoller.stop();
     if (cachePoller) cachePoller.stop();
 
-    // Hide all tabs
-    const allTabs = $$(".ai-tab-content");
-    allTabs.forEach((tab) => {
-      tab.style.display = "none";
+    // Hide all panels
+    const allPanels = $$(".ai-panel-content");
+    allPanels.forEach((panel) => {
+      panel.classList.remove("active");
     });
 
-    // Show the selected tab
-    const selectedTab = $(`#${tabId}-tab`);
-    if (selectedTab) {
-      selectedTab.style.display = "block";
+    // Show the selected panel
+    const selectedPanel = $(`#${tabId}-panel`);
+    if (selectedPanel) {
+      selectedPanel.classList.add("active");
     }
+
+    // Update sidebar status indicator
+    updateSidebarStatus(tabId);
 
     // Load data for the tab and start appropriate poller
     if (tabId === "stats") {
@@ -153,6 +154,30 @@ function createLifecycle() {
       loadTemplates();
     } else if (tabId === "history") {
       loadHistory(1);
+    }
+  }
+
+  /**
+   * Update sidebar status indicator based on AI state
+   */
+  function updateSidebarStatus() {
+    const indicator = $(".ai-status-indicator");
+    const statusText = $(".ai-status-indicator .status-text");
+    
+    if (!indicator || !statusText) return;
+
+    // Update status based on AI state
+    if (state.aiStatus) {
+      if (state.aiStatus.enabled) {
+        indicator.classList.remove("error");
+        statusText.textContent = "Active";
+      } else {
+        indicator.classList.add("error");
+        statusText.textContent = "Disabled";
+      }
+    } else {
+      indicator.classList.remove("error");
+      statusText.textContent = "Ready";
     }
   }
 
@@ -174,6 +199,7 @@ function createLifecycle() {
       updateStatusBar(data);
       updateMetrics(data);
       updateRecentDecisions(data.recent_decisions || []);
+      updateSidebarStatus(); // Update sidebar status indicator
     } catch (error) {
       console.error("[AI] Failed to load AI status:", error);
       Utils.showToast({
@@ -1995,25 +2021,16 @@ function createLifecycle() {
     /**
      * Init - called once when page is first loaded
      */
-    async init(ctx) {
+    async init(_ctx) {
       console.log("[AI] Initializing");
 
-      // Initialize sub-tabs
+      // Initialize sidebar navigation
       initSubTabs();
 
-      // Integrate with lifecycle for auto-cleanup
-      if (tabBar) {
-        ctx.manageTabBar(tabBar);
-        tabBar.show();
-      }
+      // Set initial active state
+      updateSidebarNavigation(DEFAULT_TAB);
 
-      // Sync state with tab bar's restored state
-      const activeTab = tabBar ? tabBar.getActiveTab() : DEFAULT_TAB;
-      if (activeTab) {
-        state.currentTab = activeTab;
-      }
-
-      // Show the active tab content
+      // Show the initial tab content
       switchTab(state.currentTab);
 
       // Setup event handlers
@@ -2034,12 +2051,6 @@ function createLifecycle() {
      */
     async activate(ctx) {
       console.log("[AI] Activating page");
-
-      // Re-register tab bar
-      if (tabBar) {
-        ctx.manageTabBar(tabBar);
-        tabBar.show({ force: true });
-      }
 
       // Create pollers
       statusPoller = ctx.managePoller(
@@ -2106,12 +2117,6 @@ function createLifecycle() {
       // Clean up event listeners
       eventCleanups.forEach((cleanup) => cleanup());
       eventCleanups.length = 0;
-
-      // Cleanup tab bar
-      if (tabBar) {
-        TabBarManager.unregister("ai");
-        tabBar = null;
-      }
     },
 
     // Expose API for external access
