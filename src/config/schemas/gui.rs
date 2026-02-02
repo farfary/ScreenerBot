@@ -143,9 +143,9 @@ pub fn default_tabs() -> Vec<TabConfig> {
             enabled: true,
         },
         TabConfig {
-            id: "tools".into(),
-            label: "Tools".into(),
-            icon: "icon-wrench".into(),
+            id: "ai".into(),
+            label: "Assistant".into(),
+            icon: "icon-bot-message-square".into(),
             order: 1,
             enabled: true,
         },
@@ -171,23 +171,23 @@ pub fn default_tabs() -> Vec<TabConfig> {
             enabled: true,
         },
         TabConfig {
-            id: "wallets".into(),
-            label: "Wallets".into(),
-            icon: "icon-wallet".into(),
-            order: 5,
-            enabled: true,
-        },
-        TabConfig {
             id: "trader".into(),
             label: "Auto Trader".into(),
             icon: "icon-bot".into(),
-            order: 6,
+            order: 5,
             enabled: true,
         },
         TabConfig {
             id: "strategies".into(),
             label: "Strategies".into(),
             icon: "icon-target".into(),
+            order: 6,
+            enabled: true,
+        },
+        TabConfig {
+            id: "wallets".into(),
+            label: "Wallets".into(),
+            icon: "icon-wallet".into(),
             order: 7,
             enabled: true,
         },
@@ -199,16 +199,16 @@ pub fn default_tabs() -> Vec<TabConfig> {
             enabled: true,
         },
         TabConfig {
-            id: "services".into(),
-            label: "Services".into(),
-            icon: "icon-server".into(),
+            id: "tools".into(),
+            label: "Tools".into(),
+            icon: "icon-wrench".into(),
             order: 9,
             enabled: true,
         },
         TabConfig {
-            id: "config".into(),
-            label: "Config".into(),
-            icon: "icon-settings".into(),
+            id: "services".into(),
+            label: "Services".into(),
+            icon: "icon-server".into(),
             order: 10,
             enabled: true,
         },
@@ -220,9 +220,9 @@ pub fn default_tabs() -> Vec<TabConfig> {
             enabled: true,
         },
         TabConfig {
-            id: "ai".into(),
-            label: "Assistant".into(),
-            icon: "icon-bot".into(),
+            id: "config".into(),
+            label: "Config".into(),
+            icon: "icon-settings".into(),
             order: 12,
             enabled: true,
         },
@@ -231,6 +231,7 @@ pub fn default_tabs() -> Vec<TabConfig> {
 
 /// Ensures all default tabs exist in the provided tabs list.
 /// Also handles migration from old tab IDs (e.g., "wallet" -> "wallets").
+/// Forces icons and labels from defaults - only order and enabled are user-configurable.
 /// Returns the merged list with missing tabs added and old IDs migrated.
 pub fn ensure_all_tabs_present(mut tabs: Vec<TabConfig>) -> Vec<TabConfig> {
     let defaults = default_tabs();
@@ -239,7 +240,18 @@ pub fn ensure_all_tabs_present(mut tabs: Vec<TabConfig>) -> Vec<TabConfig> {
     for tab in &mut tabs {
         if tab.id == "wallet" {
             tab.id = "wallets".into();
-            tab.label = "Wallets".into();
+        }
+    }
+
+    // Create a map of default tabs for quick lookup
+    let default_map: std::collections::HashMap<String, &TabConfig> =
+        defaults.iter().map(|t| (t.id.clone(), t)).collect();
+
+    // Force icons and labels from defaults for existing tabs
+    for tab in &mut tabs {
+        if let Some(default_tab) = default_map.get(&tab.id) {
+            tab.icon = default_tab.icon.clone();
+            tab.label = default_tab.label.clone();
         }
     }
 

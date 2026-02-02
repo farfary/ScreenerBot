@@ -330,7 +330,7 @@ export class SettingsDialog {
   _getDefaultTabs() {
     return [
       { id: "home", label: "Home", icon: "icon-house", order: 0, enabled: true },
-      { id: "tools", label: "Tools", icon: "icon-wrench", order: 1, enabled: true },
+      { id: "ai", label: "Assistant", icon: "icon-bot-message-square", order: 1, enabled: true },
       {
         id: "positions",
         label: "Positions",
@@ -340,14 +340,14 @@ export class SettingsDialog {
       },
       { id: "tokens", label: "Tokens", icon: "icon-coins", order: 3, enabled: true },
       { id: "filtering", label: "Filtering", icon: "icon-list-filter", order: 4, enabled: true },
-      { id: "wallets", label: "Wallets", icon: "icon-wallet", order: 5, enabled: true },
-      { id: "trader", label: "Auto Trader", icon: "icon-bot", order: 6, enabled: true },
-      { id: "strategies", label: "Strategies", icon: "icon-target", order: 7, enabled: true },
+      { id: "trader", label: "Auto Trader", icon: "icon-bot", order: 5, enabled: true },
+      { id: "strategies", label: "Strategies", icon: "icon-target", order: 6, enabled: true },
+      { id: "wallets", label: "Wallets", icon: "icon-wallet", order: 7, enabled: true },
       { id: "transactions", label: "Transactions", icon: "icon-activity", order: 8, enabled: true },
-      { id: "services", label: "Services", icon: "icon-server", order: 9, enabled: true },
-      { id: "config", label: "Config", icon: "icon-settings", order: 10, enabled: true },
+      { id: "tools", label: "Tools", icon: "icon-wrench", order: 9, enabled: true },
+      { id: "services", label: "Services", icon: "icon-server", order: 10, enabled: true },
       { id: "events", label: "Events", icon: "icon-radio-tower", order: 11, enabled: true },
-      { id: "ai", label: "Assistant", icon: "icon-bot", order: 12, enabled: true },
+      { id: "config", label: "Config", icon: "icon-settings", order: 12, enabled: true },
     ];
   }
 
