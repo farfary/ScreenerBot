@@ -84,9 +84,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 10px 14px;
+  height: 40px;
+  padding: 8px 12px;
+  margin-bottom: 4px;
   border: none;
-  border-bottom: 1px solid var(--config-border-subtle);
+  border-radius: var(--radius-md);
   background: transparent;
   color: var(--text-primary);
   font-size: 0.875rem;
@@ -94,22 +96,17 @@
   text-align: left;
   transition:
     background 0.2s ease,
-    color 0.2s ease,
-    transform 0.15s ease;
+    color 0.2s ease;
 }
 
-.config-section-item:last-child {
-  border-bottom: none;
-}
 
 .config-section-item:hover {
   background: var(--config-accent-light);
-  transform: translateX(2px);
 }
 
 .config-section-item.active {
-  background: linear-gradient(135deg, var(--config-accent-medium), var(--config-accent-light));
-  border-left: 4px solid var(--config-accent);
+  background: var(--primary-alpha-10);
+  border-left: 2px solid var(--config-accent);
   padding-left: 10px;
   font-weight: 600;
 }
