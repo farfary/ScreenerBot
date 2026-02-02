@@ -147,10 +147,10 @@ async fn tools_page() -> Html<String> {
     Html(templates::base_template("Tools", "tools", &content))
 }
 
-/// AI page handler
+/// Assistant page handler
 async fn ai_page() -> Html<String> {
     let content = templates::ai_content();
-    Html(templates::base_template("AI", "ai", &content))
+    Html(templates::base_template("Assistant", "ai", &content))
 }
 
 /// Initialization page handler

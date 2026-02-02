@@ -326,7 +326,7 @@ function createLifecycle() {
       playToggleOn();
       Utils.showToast({
         type: "success",
-        title: "AI Updated",
+        title: "Assistant Updated",
         message: `Assistant ${enabled ? "enabled" : "disabled"}`,
       });
 
@@ -1002,7 +1002,7 @@ function createLifecycle() {
       Utils.showToast({
         type: "success",
         title: "Settings Updated",
-        message: "AI configuration saved",
+        message: "Assistant configuration saved",
       });
 
       // Reload config
@@ -1073,7 +1073,7 @@ function createLifecycle() {
       Utils.showToast({
         type: "success",
         title: "Cache Cleared",
-        message: "AI cache has been cleared successfully",
+        message: "Assistant cache has been cleared successfully",
       });
 
       // Reload cache stats
@@ -2257,7 +2257,7 @@ function createLifecycle() {
               await loadAiStatus();
             }
           },
-          { label: "AI Status", intervalMs: 5000 }
+          { label: "Assistant Status", intervalMs: 5000 }
         )
       );
 
@@ -2268,7 +2268,7 @@ function createLifecycle() {
               await loadProviders();
             }
           },
-          { label: "AI Providers", intervalMs: 10000 }
+          { label: "Assistant Providers", intervalMs: 10000 }
         )
       );
 
