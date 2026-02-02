@@ -339,5 +339,37 @@
         </div>
       </div>
     </div>
+
+    <!-- Instructions Tab -->
+    <div id="instructions-tab" class="ai-tab-content" style="display: none">
+      <div class="instructions-section">
+        <div class="section-header">
+          <h3><i class="icon-edit"></i> Custom Instructions</h3>
+          <button type="button" class="btn btn-primary btn-small" onclick="window.aiPage.createInstruction()">
+            <i class="icon-plus"></i> New Instruction
+          </button>
+        </div>
+        <div id="instructions-list" class="instructions-list"></div>
+      </div>
+
+      <div class="templates-section">
+        <div class="section-header">
+          <h3><i class="icon-bookmark"></i> Built-in Templates</h3>
+          <span class="section-subtitle">Pre-made instructions you can customize</span>
+        </div>
+        <div id="templates-list" class="templates-grid"></div>
+      </div>
+    </div>
+
+    <!-- History Tab -->
+    <div id="history-tab" class="ai-tab-content" style="display: none">
+      <div class="history-section">
+        <div class="section-header">
+          <h3><i class="icon-clock"></i> Decision History</h3>
+          <span class="section-subtitle">Recent AI evaluations</span>
+        </div>
+        <div id="history-list" class="history-list"></div>
+      </div>
+    </div>
   </div>
 </div>

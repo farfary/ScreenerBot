@@ -10,8 +10,10 @@ import { playToggleOn, playError } from "../core/sounds.js";
 const SUB_TABS = [
   { id: "stats", label: '<i class="icon-chart-bar"></i> Stats' },
   { id: "providers", label: '<i class="icon-server"></i> Providers' },
+  { id: "instructions", label: '<i class="icon-edit"></i> Instructions' },
   { id: "settings", label: '<i class="icon-settings"></i> Settings' },
   { id: "testing", label: '<i class="icon-flask"></i> Testing' },
+  { id: "history", label: '<i class="icon-clock"></i> History' },
 ];
 
 // Constants
@@ -48,7 +50,13 @@ function createLifecycle() {
     providers: [],
     config: null,
     cacheStats: null,
+    templates: [],
+    historyPage: 1,
+    historyTotal: 0,
   };
+
+  // Store API functions for external access
+  const api = {};
 
   // ============================================================================
   // Helper Functions
@@ -138,6 +146,11 @@ function createLifecycle() {
       loadConfig();
       loadCacheStats();
       if (cachePoller) cachePoller.start();
+    } else if (tabId === "instructions") {
+      loadInstructions();
+      loadTemplates();
+    } else if (tabId === "history") {
+      loadHistory(1);
     }
   }
 
@@ -1083,6 +1096,393 @@ function createLifecycle() {
   }
 
   // ============================================================================
+  // Instructions Tab
+  // ============================================================================
+
+  /**
+   * Load instructions list
+   */
+  async function loadInstructions() {
+    try {
+      const response = await fetch("/api/ai/instructions");
+      if (!response.ok) throw new Error("Failed to load instructions");
+      const data = await response.json();
+      renderInstructionsList(data.instructions || []);
+    } catch (error) {
+      console.error("[AI] Error loading instructions:", error);
+      const container = $("#instructions-list");
+      if (container) {
+        container.innerHTML = '<div class="empty-state">Failed to load instructions</div>';
+      }
+    }
+  }
+
+  /**
+   * Load templates
+   */
+  async function loadTemplates() {
+    try {
+      const response = await fetch("/api/ai/templates");
+      if (!response.ok) throw new Error("Failed to load templates");
+      const data = await response.json();
+      state.templates = data.templates || [];
+      renderTemplatesList(data.templates || []);
+    } catch (error) {
+      console.error("[AI] Error loading templates:", error);
+    }
+  }
+
+  /**
+   * Render instructions list
+   */
+  function renderInstructionsList(instructions) {
+    const container = $("#instructions-list");
+    if (!container) return;
+
+    if (instructions.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <i class="icon-edit"></i>
+          <p>No custom instructions yet</p>
+          <small>Create instructions to customize AI behavior</small>
+        </div>`;
+      return;
+    }
+
+    container.innerHTML = instructions
+      .map(
+        (inst) => `
+      <div class="instruction-card ${inst.enabled ? "" : "disabled"}" data-id="${inst.id}">
+        <div class="instruction-header">
+          <span class="instruction-priority">#${inst.priority}</span>
+          <span class="instruction-name">${Utils.escapeHtml(inst.name)}</span>
+          <span class="instruction-category badge badge-${inst.category}">${inst.category}</span>
+        </div>
+        <div class="instruction-content">${Utils.escapeHtml(inst.content.substring(0, 150))}${inst.content.length > 150 ? "..." : ""}</div>
+        <div class="instruction-actions">
+          <label class="toggle-small">
+            <input type="checkbox" ${inst.enabled ? "checked" : ""} onchange="window.aiPage.toggleInstruction(${inst.id}, this.checked)">
+            <span class="toggle-track"></span>
+          </label>
+          <button class="btn-icon" onclick="window.aiPage.editInstruction(${inst.id})" title="Edit">
+            <i class="icon-edit"></i>
+          </button>
+          <button class="btn-icon btn-danger" onclick="window.aiPage.deleteInstruction(${inst.id})" title="Delete">
+            <i class="icon-trash"></i>
+          </button>
+        </div>
+      </div>
+    `
+      )
+      .join("");
+  }
+
+  /**
+   * Render templates
+   */
+  function renderTemplatesList(templates) {
+    const container = $("#templates-list");
+    if (!container) return;
+
+    container.innerHTML = templates
+      .map(
+        (t) => `
+      <div class="template-card" data-id="${t.id}">
+        <div class="template-header">
+          <span class="template-name">${Utils.escapeHtml(t.name)}</span>
+          <span class="template-category badge">${t.category}</span>
+        </div>
+        <div class="template-tags">${t.tags.map((tag) => `<span class="tag">${tag}</span>`).join("")}</div>
+        <button class="btn btn-small" onclick="window.aiPage.useTemplate('${t.id}')">
+          <i class="icon-plus"></i> Use Template
+        </button>
+      </div>
+    `
+      )
+      .join("");
+  }
+
+  /**
+   * Create instruction (with modal)
+   */
+  async function createInstruction() {
+    // Show modal with form
+    const modal = document.createElement("div");
+    modal.className = "modal-overlay";
+    modal.innerHTML = `
+      <div class="modal instruction-modal">
+        <div class="modal-header">
+          <h3>Create Instruction</h3>
+          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Name</label>
+            <input type="text" id="inst-name" placeholder="e.g., Liquidity Guard">
+          </div>
+          <div class="form-group">
+            <label>Category</label>
+            <select id="inst-category">
+              <option value="filtering">Filtering</option>
+              <option value="trading">Trading</option>
+              <option value="analysis">Analysis</option>
+              <option value="general">General</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Content</label>
+            <textarea id="inst-content" rows="6" placeholder="Enter your instruction..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+          <button class="btn btn-primary" onclick="window.aiPage.saveNewInstruction()">Create</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+
+  /**
+   * Save new instruction
+   */
+  async function saveNewInstruction() {
+    const name = $("#inst-name")?.value;
+    const category = $("#inst-category")?.value || "general";
+    const content = $("#inst-content")?.value;
+
+    if (!name || !content) {
+      Utils.showToast({
+        type: "warning",
+        title: "Missing Fields",
+        message: "Name and content are required",
+      });
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/ai/instructions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, category, content }),
+      });
+
+      if (!response.ok) throw new Error("Failed to create instruction");
+
+      document.querySelector(".modal-overlay")?.remove();
+      await loadInstructions();
+      Utils.showToast({
+        type: "success",
+        title: "Created",
+        message: "Instruction created successfully",
+      });
+    } catch (error) {
+      console.error("[AI] Error creating instruction:", error);
+      Utils.showToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to create instruction",
+      });
+    }
+  }
+
+  /**
+   * Toggle instruction enabled state
+   */
+  async function toggleInstruction(id, enabled) {
+    try {
+      await fetch(`/api/ai/instructions/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+    } catch (error) {
+      console.error("[AI] Error toggling instruction:", error);
+    }
+  }
+
+  /**
+   * Edit instruction
+   */
+  async function editInstruction(id) {
+    // TODO: Implement edit functionality
+    Utils.showToast({
+      type: "info",
+      title: "Coming Soon",
+      message: "Edit functionality will be implemented soon",
+    });
+  }
+
+  /**
+   * Delete instruction
+   */
+  async function deleteInstruction(id) {
+    const confirmed = await ConfirmationDialog.show({
+      title: "Delete Instruction",
+      message: "Are you sure you want to delete this instruction?",
+      confirmText: "Delete",
+      cancelText: "Cancel",
+      type: "danger",
+    });
+
+    if (!confirmed) return;
+
+    try {
+      await fetch(`/api/ai/instructions/${id}`, { method: "DELETE" });
+      await loadInstructions();
+      Utils.showToast({
+        type: "success",
+        title: "Deleted",
+        message: "Instruction deleted successfully",
+      });
+    } catch (error) {
+      console.error("[AI] Error deleting instruction:", error);
+      Utils.showToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to delete instruction",
+      });
+    }
+  }
+
+  /**
+   * Use template to create instruction
+   */
+  async function useTemplate(templateId) {
+    const template = state.templates.find((t) => t.id === templateId);
+    if (!template) return;
+
+    try {
+      await fetch("/api/ai/instructions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: template.name,
+          category: template.category,
+          content: template.content,
+        }),
+      });
+      await loadInstructions();
+      Utils.showToast({
+        type: "success",
+        title: "Created",
+        message: `Instruction created from template: ${template.name}`,
+      });
+    } catch (error) {
+      console.error("[AI] Error using template:", error);
+      Utils.showToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to create instruction from template",
+      });
+    }
+  }
+
+  // ============================================================================
+  // History Tab
+  // ============================================================================
+
+  /**
+   * Load history
+   */
+  async function loadHistory(page = 1) {
+    try {
+      const response = await fetch(`/api/ai/history?page=${page}&per_page=20`);
+      if (!response.ok) throw new Error("Failed to load history");
+      const data = await response.json();
+      state.historyPage = page;
+      state.historyTotal = data.total;
+      renderHistoryList(data.decisions || [], data.total, page);
+    } catch (error) {
+      console.error("[AI] Error loading history:", error);
+      const container = $("#history-list");
+      if (container) {
+        container.innerHTML = '<div class="empty-state">Failed to load history</div>';
+      }
+    }
+  }
+
+  /**
+   * Render history list
+   */
+  function renderHistoryList(decisions, total, page) {
+    const container = $("#history-list");
+    if (!container) return;
+
+    if (decisions.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <i class="icon-clock"></i>
+          <p>No AI decisions yet</p>
+          <small>Decisions will appear here as AI evaluates tokens</small>
+        </div>`;
+      return;
+    }
+
+    const rows = decisions
+      .map(
+        (d) => `
+      <tr class="decision-row ${d.decision}">
+        <td class="decision-time">${new Date(d.created_at).toLocaleString()}</td>
+        <td class="decision-token">
+          <span class="token-symbol">${Utils.escapeHtml(d.symbol || "Unknown")}</span>
+          <span class="token-mint" title="${d.mint}">${d.mint.slice(0, 8)}...</span>
+        </td>
+        <td class="decision-result">
+          <span class="badge badge-${d.decision === "pass" ? "success" : "danger"}">${d.decision}</span>
+        </td>
+        <td class="decision-confidence">${d.confidence}%</td>
+        <td class="decision-provider">${d.provider}</td>
+        <td class="decision-latency">${d.latency_ms.toFixed(0)}ms</td>
+        <td class="decision-cached">${d.cached ? '<i class="icon-zap" title="Cached"></i>' : "-"}</td>
+      </tr>
+    `
+      )
+      .join("");
+
+    container.innerHTML = `
+      <table class="history-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Token</th>
+            <th>Decision</th>
+            <th>Confidence</th>
+            <th>Provider</th>
+            <th>Latency</th>
+            <th>Cached</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+      ${
+        total > 20
+          ? `
+        <div class="pagination">
+          <button class="btn btn-small" ${page <= 1 ? "disabled" : ""} onclick="window.aiPage.loadHistory(${page - 1})">Previous</button>
+          <span>Page ${page} of ${Math.ceil(total / 20)}</span>
+          <button class="btn btn-small" ${page >= Math.ceil(total / 20) ? "disabled" : ""} onclick="window.aiPage.loadHistory(${page + 1})">Next</button>
+        </div>
+      `
+          : ""
+      }
+    `;
+  }
+
+  // ============================================================================
+  // API Export for inline event handlers
+  // ============================================================================
+
+  // Assign functions to API object for external access
+  api.createInstruction = createInstruction;
+  api.saveNewInstruction = saveNewInstruction;
+  api.toggleInstruction = toggleInstruction;
+  api.editInstruction = editInstruction;
+  api.deleteInstruction = deleteInstruction;
+  api.useTemplate = useTemplate;
+  api.loadHistory = loadHistory;
+
+  // ============================================================================
   // Lifecycle Hooks
   // ============================================================================
 
@@ -1208,8 +1608,17 @@ function createLifecycle() {
         tabBar = null;
       }
     },
+
+    // Expose API for external access
+    api,
   };
 }
 
+// Create lifecycle instance
+const lifecycle = createLifecycle();
+
+// Expose API functions globally for inline event handlers
+window.aiPage = lifecycle.api;
+
 // Register the page
-registerPage("ai", createLifecycle());
+registerPage("ai", lifecycle);
