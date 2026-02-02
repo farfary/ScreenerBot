@@ -347,7 +347,7 @@ export class SettingsDialog {
       { id: "services", label: "Services", icon: "icon-server", order: 9, enabled: true },
       { id: "config", label: "Config", icon: "icon-settings", order: 10, enabled: true },
       { id: "events", label: "Events", icon: "icon-radio-tower", order: 11, enabled: true },
-      { id: "ai", label: "Assistant", icon: "icon-sparkles", order: 12, enabled: true },
+      { id: "ai", label: "Assistant", icon: "icon-bot", order: 12, enabled: true },
     ];
   }
 
