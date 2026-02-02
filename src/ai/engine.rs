@@ -1,4 +1,5 @@
 use crate::ai::cache::AiCache;
+use crate::ai::db::{record_decision, with_ai_db, DecisionRecord};
 use crate::ai::prompts::{
     get_entry_analysis_prompt, get_exit_analysis_prompt, get_filter_prompt, PromptBuilder,
 };
@@ -116,6 +117,9 @@ impl AiEngine {
         if !bypass_cache || priority != Priority::High {
             self.cache.insert(&context.mint, decision.clone());
         }
+
+        // Record decision in history
+        self.record_decision_history(&context.mint, None, &decision, false);
 
         Ok(EvaluationResult {
             decision,
@@ -297,6 +301,9 @@ impl AiEngine {
             self.cache.insert(&context.mint, decision.clone());
         }
 
+        // Record decision in history
+        self.record_decision_history(&context.mint, None, &decision, false);
+
         Ok(EvaluationResult {
             decision,
             cached: false,
@@ -355,6 +362,9 @@ impl AiEngine {
         // Convert to AiDecision
         let decision =
             self.convert_trade_decision(trade_decision, response, latency_ms, provider)?;
+
+        // Record decision in history
+        self.record_decision_history(&context.mint, None, &decision, false);
 
         Ok(EvaluationResult {
             decision,
@@ -424,6 +434,47 @@ impl AiEngine {
     /// Clear the cache
     pub fn clear_cache(&self) {
         self.cache.clear();
+    }
+
+    /// Record a decision in history database
+    fn record_decision_history(
+        &self,
+        mint: &str,
+        symbol: Option<&str>,
+        decision: &AiDecision,
+        cached: bool,
+    ) {
+        let risk_level = match decision.risk_level {
+            RiskLevel::Low => "low",
+            RiskLevel::Medium => "medium",
+            RiskLevel::High => "high",
+            RiskLevel::Critical => "critical",
+        };
+
+        let record = DecisionRecord {
+            id: 0, // Will be set by database
+            mint: mint.to_string(),
+            symbol: symbol.map(|s| s.to_string()),
+            decision: decision.decision.clone(),
+            confidence: decision.confidence,
+            reasoning: Some(decision.reasoning.clone()),
+            risk_level: Some(risk_level.to_string()),
+            provider: decision.provider.clone(),
+            model: Some(decision.model.clone()),
+            tokens_used: decision.tokens_used,
+            latency_ms: decision.latency_ms,
+            cached,
+            created_at: String::new(), // Will be set by database
+        };
+
+        // Record in background to not block the response
+        if let Err(e) = with_ai_db(|db| record_decision(db, &record)) {
+            // Log but don't fail the operation
+            crate::logger::debug(
+                crate::logger::LogTag::Filtering,
+                &format!("Failed to record AI decision in history: {}", e),
+            );
+        }
     }
 }
 

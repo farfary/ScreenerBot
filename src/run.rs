@@ -255,6 +255,15 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
         let ai_enabled = crate::config::with_config(|cfg| cfg.ai.enabled);
         if ai_enabled {
             logger::info(LogTag::System, "Initializing AI engine...");
+
+            // Initialize AI database first
+            if let Err(e) = crate::ai::init_ai_database() {
+                logger::warning(
+                    LogTag::System,
+                    &format!("Failed to initialize AI database: {} - AI history will not be recorded", e),
+                );
+            }
+
             crate::ai::init_ai_engine()
                 .await
                 .map_err(|e| format!("Failed to initialize AI engine: {}", e))?;
