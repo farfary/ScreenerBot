@@ -853,27 +853,67 @@
 .settings-nav-tabs-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 8px;
+  border-radius: 10px;
+  padding: 10px;
+  max-height: 420px;
+  overflow-y: auto;
 }
 
 .settings-nav-tab-item {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 10px;
+  padding: 10px 12px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
-  transition: all 0.15s ease;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  cursor: grab;
+  user-select: none;
 }
 
 .settings-nav-tab-item:hover {
   background: var(--bg-card-hover);
-  border-color: var(--text-secondary);
+  border-color: var(--primary-alpha-30);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.settings-nav-tab-item:active {
+  cursor: grabbing;
+}
+
+.settings-nav-tab-item.dragging {
+  opacity: 0.5;
+  transform: scale(0.98);
+}
+
+.settings-nav-tab-item.drag-over {
+  border-color: var(--primary-color);
+}
+
+.settings-nav-tab-item.drag-over-top {
+  box-shadow: 0 -3px 0 0 var(--primary-color);
+}
+
+.settings-nav-tab-item.drag-over-bottom {
+  box-shadow: 0 3px 0 0 var(--primary-color);
+}
+
+.settings-nav-tab-position {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  background: var(--bg-secondary);
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  flex-shrink: 0;
 }
 
 .settings-nav-tab-handle {
@@ -882,98 +922,97 @@
   justify-content: center;
   width: 20px;
   color: var(--text-secondary);
-  opacity: 0.4;
-  cursor: grab;
+  opacity: 0.3;
+  transition: opacity 0.15s ease;
 }
 
-.settings-nav-tab-handle:hover {
-  opacity: 1;
+.settings-nav-tab-item:hover .settings-nav-tab-handle {
+  opacity: 0.8;
+}
+
+.settings-nav-tab-handle i {
+  font-size: 1rem;
+  line-height: 1;
 }
 
 .settings-nav-tab-icon {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   background: var(--primary-alpha-10);
-  border-radius: 6px;
+  border-radius: 8px;
   color: var(--primary-color);
-  font-size: 0.9rem;
   flex-shrink: 0;
+}
+
+.settings-nav-tab-icon i {
+  font-size: 1rem;
+  line-height: 1;
 }
 
 .settings-nav-tab-info {
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: 2px;
   min-width: 0;
 }
 
 .settings-nav-tab-label {
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--text-primary);
 }
 
-.settings-nav-tab-id {
-  font-size: 0.7rem;
-  color: var(--text-secondary);
-  opacity: 0.7;
-}
-
-.settings-nav-tab-actions {
-  display: flex;
-  gap: 3px;
-}
-
-.settings-nav-tab-btn {
+.settings-nav-tab-status {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 26px;
-  height: 26px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  color: var(--text-secondary);
-  font-size: 0.85rem;
-  cursor: pointer;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
   transition: all 0.15s ease;
 }
 
-.settings-nav-tab-btn:hover:not(:disabled) {
-  background: var(--bg-card-hover);
-  border-color: var(--text-secondary);
-  color: var(--text-primary);
+.settings-nav-tab-status.enabled {
+  color: var(--success-color);
+  opacity: 0.8;
 }
 
-.settings-nav-tab-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
+.settings-nav-tab-status.disabled {
+  color: var(--text-secondary);
+  opacity: 0.4;
+}
+
+.settings-nav-tab-status i {
+  font-size: 0.875rem;
+  line-height: 1;
 }
 
 .settings-nav-tab-toggle {
-  margin-left: 8px;
+  margin-left: 4px;
 }
 
 .settings-nav-tabs-note {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-  padding: 8px 12px;
+  gap: 10px;
+  margin-top: 16px;
+  padding: 10px 14px;
   background: var(--primary-alpha-10);
   border: 1px solid var(--primary-alpha-20);
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 0.8rem;
   color: var(--primary-color);
 }
 
 .settings-nav-tabs-note i {
-  font-size: 0.9rem;
+  font-size: 1rem;
+  line-height: 1;
   opacity: 0.8;
+  flex-shrink: 0;
 }
 
 /* =============================================================================

@@ -970,8 +970,12 @@ export class SettingsDialog {
     const tabItems = sortedTabs
       .map(
         (tab, index) => `
-        <div class="settings-nav-tab-item" data-tab-id="${tab.id}" data-order="${tab.order}">
-          <div class="settings-nav-tab-handle">
+        <div class="settings-nav-tab-item" 
+             data-tab-id="${tab.id}" 
+             data-order="${tab.order}"
+             draggable="true">
+          <div class="settings-nav-tab-position">${index + 1}</div>
+          <div class="settings-nav-tab-handle" title="Drag to reorder">
             <i class="icon-grip-vertical"></i>
           </div>
           <div class="settings-nav-tab-icon">
@@ -979,15 +983,9 @@ export class SettingsDialog {
           </div>
           <div class="settings-nav-tab-info">
             <span class="settings-nav-tab-label">${tab.label}</span>
-            <span class="settings-nav-tab-id">${tab.id}</span>
           </div>
-          <div class="settings-nav-tab-actions">
-            <button class="settings-nav-tab-btn settings-nav-tab-up" ${index === 0 ? "disabled" : ""} title="Move up">
-              <i class="icon-chevron-up"></i>
-            </button>
-            <button class="settings-nav-tab-btn settings-nav-tab-down" ${index === sortedTabs.length - 1 ? "disabled" : ""} title="Move down">
-              <i class="icon-chevron-down"></i>
-            </button>
+          <div class="settings-nav-tab-status ${tab.enabled ? "enabled" : "disabled"}">
+            ${tab.enabled ? '<i class="icon-eye"></i>' : '<i class="icon-eye-off"></i>'}
           </div>
           <div class="settings-nav-tab-toggle">
             <label class="settings-toggle">
@@ -1002,25 +1000,31 @@ export class SettingsDialog {
 
     return `
       <div class="settings-section">
-        <h3 class="settings-section-title">Navigation Tabs</h3>
-        <p class="settings-section-hint">Reorder and toggle visibility of navigation tabs. Home tab cannot be disabled.</p>
+        <h3 class="settings-section-title">
+          <i class="icon-layout-grid"></i>
+          Navigation Tabs
+        </h3>
+        <p class="settings-section-hint">Drag items to reorder. Toggle visibility with the switch. Home tab is always visible.</p>
         <div class="settings-nav-tabs-list" id="navTabsList">
           ${tabItems}
         </div>
       </div>
 
       <div class="settings-section">
-        <h3 class="settings-section-title">Actions</h3>
+        <h3 class="settings-section-title">
+          <i class="icon-settings-2"></i>
+          Actions
+        </h3>
         <div class="settings-group">
           <div class="settings-field">
             <div class="settings-field-info">
-              <label>Reset to Defaults</label>
-              <span class="settings-field-hint">Restore default tab order and visibility</span>
+              <label>Reset Navigation</label>
+              <span class="settings-field-hint">Restore default tab order and visibility settings</span>
             </div>
             <div class="settings-field-control">
               <button class="settings-update-btn" id="resetNavTabs">
                 <i class="icon-rotate-ccw"></i>
-                <span>Reset</span>
+                <span>Reset to Defaults</span>
               </button>
             </div>
           </div>
@@ -1029,7 +1033,7 @@ export class SettingsDialog {
 
       <div class="settings-nav-tabs-note">
         <i class="icon-info"></i>
-        <span>Changes require a page refresh to take effect in the navigation bar.</span>
+        <span>Changes apply after saving. Refresh the page to see updates in the navigation bar.</span>
       </div>
     `;
   }
@@ -1053,26 +1057,124 @@ export class SettingsDialog {
       this._checkForChanges();
     };
 
-    // Move up handler
-    list.addEventListener("click", (e) => {
-      const upBtn = e.target.closest(".settings-nav-tab-up");
-      if (upBtn && !upBtn.disabled) {
-        const item = upBtn.closest(".settings-nav-tab-item");
-        const tabId = item.dataset.tabId;
-        this._moveTab(tabId, -1);
-        this._refreshNavigationList(content);
+    // Drag and drop state
+    let draggedItem = null;
+    let draggedTabId = null;
+
+    // Drag start
+    list.addEventListener("dragstart", (e) => {
+      const item = e.target.closest(".settings-nav-tab-item");
+      if (!item) return;
+
+      draggedItem = item;
+      draggedTabId = item.dataset.tabId;
+      item.classList.add("dragging");
+
+      // Set drag image and data
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", draggedTabId);
+
+      // Delay adding drag class for smooth animation
+      requestAnimationFrame(() => {
+        item.style.opacity = "0.5";
+      });
+    });
+
+    // Drag end
+    list.addEventListener("dragend", (e) => {
+      const item = e.target.closest(".settings-nav-tab-item");
+      if (item) {
+        item.classList.remove("dragging");
+        item.style.opacity = "";
+      }
+      draggedItem = null;
+      draggedTabId = null;
+
+      // Remove all drag-over states
+      list.querySelectorAll(".settings-nav-tab-item").forEach((el) => {
+        el.classList.remove("drag-over", "drag-over-top", "drag-over-bottom");
+      });
+    });
+
+    // Drag over
+    list.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+
+      const item = e.target.closest(".settings-nav-tab-item");
+      if (!item || item === draggedItem) return;
+
+      // Calculate position for visual feedback
+      const rect = item.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+
+      // Remove previous indicators
+      list.querySelectorAll(".settings-nav-tab-item").forEach((el) => {
+        if (el !== item) {
+          el.classList.remove("drag-over", "drag-over-top", "drag-over-bottom");
+        }
+      });
+
+      // Add indicator based on mouse position
+      item.classList.add("drag-over");
+      if (e.clientY < midY) {
+        item.classList.add("drag-over-top");
+        item.classList.remove("drag-over-bottom");
+      } else {
+        item.classList.add("drag-over-bottom");
+        item.classList.remove("drag-over-top");
       }
     });
 
-    // Move down handler
-    list.addEventListener("click", (e) => {
-      const downBtn = e.target.closest(".settings-nav-tab-down");
-      if (downBtn && !downBtn.disabled) {
-        const item = downBtn.closest(".settings-nav-tab-item");
-        const tabId = item.dataset.tabId;
-        this._moveTab(tabId, 1);
-        this._refreshNavigationList(content);
+    // Drag leave
+    list.addEventListener("dragleave", (e) => {
+      const item = e.target.closest(".settings-nav-tab-item");
+      if (item && !item.contains(e.relatedTarget)) {
+        item.classList.remove("drag-over", "drag-over-top", "drag-over-bottom");
       }
+    });
+
+    // Drop
+    list.addEventListener("drop", (e) => {
+      e.preventDefault();
+
+      const dropTarget = e.target.closest(".settings-nav-tab-item");
+      if (!dropTarget || !draggedTabId || dropTarget.dataset.tabId === draggedTabId) return;
+
+      const tabs = getTabs();
+      const sortedTabs = [...tabs].sort((a, b) => a.order - b.order);
+
+      const draggedIndex = sortedTabs.findIndex((t) => t.id === draggedTabId);
+      const dropIndex = sortedTabs.findIndex((t) => t.id === dropTarget.dataset.tabId);
+
+      if (draggedIndex === -1 || dropIndex === -1) return;
+
+      // Calculate position based on mouse
+      const rect = dropTarget.getBoundingClientRect();
+      const midY = rect.top + rect.height / 2;
+      const insertBefore = e.clientY < midY;
+
+      // Remove dragged item and insert at new position
+      const [movedTab] = sortedTabs.splice(draggedIndex, 1);
+      let newIndex = dropIndex;
+      if (draggedIndex < dropIndex) {
+        newIndex = insertBefore ? dropIndex - 1 : dropIndex;
+      } else {
+        newIndex = insertBefore ? dropIndex : dropIndex + 1;
+      }
+      sortedTabs.splice(newIndex, 0, movedTab);
+
+      // Update order values
+      sortedTabs.forEach((tab, idx) => {
+        const originalTab = tabs.find((t) => t.id === tab.id);
+        if (originalTab) originalTab.order = idx;
+      });
+
+      setTabs(tabs);
+      this._refreshNavigationList(content);
+
+      // Clean up
+      dropTarget.classList.remove("drag-over", "drag-over-top", "drag-over-bottom");
     });
 
     // Toggle handler
@@ -1085,6 +1187,14 @@ export class SettingsDialog {
           const tab = tabs.find((t) => t.id === tabId);
           if (tab) {
             tab.enabled = e.target.checked;
+            // Update status icon
+            const statusEl = item.querySelector(".settings-nav-tab-status");
+            if (statusEl) {
+              statusEl.className = `settings-nav-tab-status ${tab.enabled ? "enabled" : "disabled"}`;
+              statusEl.innerHTML = tab.enabled
+                ? '<i class="icon-eye"></i>'
+                : '<i class="icon-eye-off"></i>';
+            }
             setTabs(tabs);
           }
         }
@@ -1145,8 +1255,12 @@ export class SettingsDialog {
     const tabItems = sortedTabs
       .map(
         (tab, index) => `
-        <div class="settings-nav-tab-item" data-tab-id="${tab.id}" data-order="${tab.order}">
-          <div class="settings-nav-tab-handle">
+        <div class="settings-nav-tab-item" 
+             data-tab-id="${tab.id}" 
+             data-order="${tab.order}"
+             draggable="true">
+          <div class="settings-nav-tab-position">${index + 1}</div>
+          <div class="settings-nav-tab-handle" title="Drag to reorder">
             <i class="icon-grip-vertical"></i>
           </div>
           <div class="settings-nav-tab-icon">
@@ -1154,15 +1268,9 @@ export class SettingsDialog {
           </div>
           <div class="settings-nav-tab-info">
             <span class="settings-nav-tab-label">${tab.label}</span>
-            <span class="settings-nav-tab-id">${tab.id}</span>
           </div>
-          <div class="settings-nav-tab-actions">
-            <button class="settings-nav-tab-btn settings-nav-tab-up" ${index === 0 ? "disabled" : ""} title="Move up">
-              <i class="icon-chevron-up"></i>
-            </button>
-            <button class="settings-nav-tab-btn settings-nav-tab-down" ${index === sortedTabs.length - 1 ? "disabled" : ""} title="Move down">
-              <i class="icon-chevron-down"></i>
-            </button>
+          <div class="settings-nav-tab-status ${tab.enabled ? "enabled" : "disabled"}">
+            ${tab.enabled ? '<i class="icon-eye"></i>' : '<i class="icon-eye-off"></i>'}
           </div>
           <div class="settings-nav-tab-toggle">
             <label class="settings-toggle">
