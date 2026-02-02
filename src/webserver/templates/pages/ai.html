@@ -126,204 +126,236 @@
 
     <!-- Settings Panel -->
     <div id="settings-panel" class="ai-panel-content">
-      <!-- Master Control Section -->
-      <div class="settings-section">
-        <div class="section-header">
-          <h3><i class="icon-toggle-right"></i> Master Control</h3>
+      <!-- Master Settings Card -->
+      <div class="settings-card">
+        <div class="settings-card-header">
+          <h3 class="settings-card-title">Master Settings</h3>
+          <p class="settings-card-description">Core AI module configuration</p>
         </div>
-        <div class="settings-group">
+        <div class="settings-card-body">
           <div class="setting-item">
-            <div class="setting-label">
-              <span>AI Enabled</span>
-              <small class="setting-hint">Enable or disable AI module globally</small>
+            <div class="setting-info">
+              <label class="setting-label" for="setting-enabled">AI Analysis Module</label>
+              <span class="setting-description">Enable intelligent token analysis using LLM providers</span>
             </div>
-            <label class="setting-toggle">
-              <input type="checkbox" id="setting-enabled" />
-              <span class="toggle-track"></span>
-            </label>
-          </div>
-          <div class="setting-item">
-            <div class="setting-label">
-              <span>Default Provider</span>
-              <small class="setting-hint">Primary AI provider to use for analysis</small>
-            </div>
-            <select id="setting-default-provider" class="setting-select">
-              <option value="">Select Provider...</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <!-- Filtering Section -->
-      <div class="settings-section">
-        <div class="section-header">
-          <h3><i class="icon-filter"></i> Filtering</h3>
-        </div>
-        <div class="settings-group">
-          <div class="setting-item">
-            <div class="setting-label">
-              <span>Filtering Enabled</span>
-              <small class="setting-hint">Use AI to filter tokens before entry</small>
-            </div>
-            <label class="setting-toggle">
-              <input type="checkbox" id="setting-filtering-enabled" />
-              <span class="toggle-track"></span>
-            </label>
-          </div>
-          <div class="setting-item">
-            <div class="setting-label">
-              <span>Min Confidence</span>
-              <small class="setting-hint">Minimum confidence score (0-100)</small>
-            </div>
-            <div class="setting-slider">
-              <input
-                type="range"
-                id="setting-min-confidence"
-                min="0"
-                max="100"
-                step="5"
-                value="70"
-              />
-              <span class="slider-value" id="slider-value-min-confidence">70</span>
+            <div class="setting-control">
+              <label class="toggle-switch">
+                <input type="checkbox" id="setting-enabled" />
+                <span class="toggle-slider"></span>
+              </label>
             </div>
           </div>
           <div class="setting-item">
-            <div class="setting-label">
-              <span>Fallback to Pass</span>
-              <small class="setting-hint">Allow token entry if AI evaluation fails</small>
+            <div class="setting-info">
+              <label class="setting-label" for="setting-default-provider">Default Provider</label>
+              <span class="setting-description">Primary AI provider to use for token analysis</span>
             </div>
-            <label class="setting-toggle">
-              <input type="checkbox" id="setting-fallback-pass" />
-              <span class="toggle-track"></span>
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <!-- Trading Section -->
-      <div class="settings-section">
-        <div class="section-header">
-          <h3><i class="icon-trending-up"></i> Trading</h3>
-        </div>
-        <div class="settings-group">
-          <div class="setting-item">
-            <div class="setting-label">
-              <span>Entry Analysis</span>
-              <small class="setting-hint">Analyze tokens before entry</small>
-            </div>
-            <label class="setting-toggle">
-              <input type="checkbox" id="setting-entry-analysis" />
-              <span class="toggle-track"></span>
-            </label>
-          </div>
-          <div class="setting-item">
-            <div class="setting-label">
-              <span>Exit Analysis</span>
-              <small class="setting-hint">Analyze positions before exit</small>
-            </div>
-            <label class="setting-toggle">
-              <input type="checkbox" id="setting-exit-analysis" />
-              <span class="toggle-track"></span>
-            </label>
-          </div>
-          <div class="setting-item">
-            <div class="setting-label">
-              <span>Trailing Stop Analysis</span>
-              <small class="setting-hint">Analyze trailing stop triggers</small>
-            </div>
-            <label class="setting-toggle">
-              <input type="checkbox" id="setting-trailing-stop" />
-              <span class="toggle-track"></span>
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <!-- Auto Blacklist Section -->
-      <div class="settings-section">
-        <div class="section-header">
-          <h3><i class="icon-shield-off"></i> Auto Blacklist</h3>
-        </div>
-        <div class="settings-group">
-          <div class="setting-item">
-            <div class="setting-label">
-              <span>Auto Blacklist Enabled</span>
-              <small class="setting-hint">Automatically blacklist tokens with low AI scores</small>
-            </div>
-            <label class="setting-toggle">
-              <input type="checkbox" id="setting-auto-blacklist-enabled" />
-              <span class="toggle-track"></span>
-            </label>
-          </div>
-          <div class="setting-item">
-            <div class="setting-label">
-              <span>Min Confidence for Blacklist</span>
-              <small class="setting-hint">Threshold for auto-blacklisting (0-100)</small>
-            </div>
-            <div class="setting-slider">
-              <input
-                type="range"
-                id="setting-blacklist-min-confidence"
-                min="0"
-                max="100"
-                step="5"
-                value="30"
-              />
-              <span class="slider-value" id="slider-value-blacklist-min-confidence">30</span>
+            <div class="setting-control">
+              <div class="custom-select">
+                <select id="setting-default-provider">
+                  <option value="">Select Provider...</option>
+                </select>
+              </div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Performance Section -->
-      <div class="settings-section">
-        <div class="section-header">
-          <h3><i class="icon-gauge"></i> Performance</h3>
+      <!-- Filtering Card -->
+      <div class="settings-card">
+        <div class="settings-card-header">
+          <h3 class="settings-card-title">Filtering</h3>
+          <p class="settings-card-description">AI-powered token filtering before entry decisions</p>
         </div>
-        <div class="settings-group">
+        <div class="settings-card-body">
           <div class="setting-item">
-            <div class="setting-label">
-              <span>Cache TTL (seconds)</span>
-              <small class="setting-hint">How long to cache AI results</small>
+            <div class="setting-info">
+              <label class="setting-label" for="setting-filtering-enabled">AI Token Filtering</label>
+              <span class="setting-description">Evaluate tokens with AI before allowing entry trades</span>
             </div>
-            <div class="setting-slider">
-              <input
-                type="range"
-                id="setting-cache-ttl"
-                min="60"
-                max="3600"
-                step="60"
-                value="300"
-              />
-              <span class="slider-value" id="slider-value-cache-ttl">300</span>
+            <div class="setting-control">
+              <label class="toggle-switch">
+                <input type="checkbox" id="setting-filtering-enabled" />
+                <span class="toggle-slider"></span>
+              </label>
             </div>
           </div>
           <div class="setting-item">
-            <div class="setting-label">
-              <span>Max Evaluations</span>
-              <small class="setting-hint">Maximum concurrent AI evaluations</small>
+            <div class="setting-info">
+              <label class="setting-label" for="setting-min-confidence">Minimum Confidence</label>
+              <span class="setting-description">Tokens must score at least this confidence level to pass (0-100)</span>
             </div>
-            <div class="setting-slider">
-              <input
-                type="range"
-                id="setting-max-evaluations"
-                min="1"
-                max="20"
-                step="1"
-                value="5"
-              />
-              <span class="slider-value" id="slider-value-max-evaluations">5</span>
+            <div class="setting-control">
+              <div class="range-slider">
+                <input
+                  type="range"
+                  id="setting-min-confidence"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value="70"
+                />
+                <span class="range-value" id="slider-value-min-confidence">70</span>
+              </div>
+            </div>
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <label class="setting-label" for="setting-fallback-pass">Fallback to Pass</label>
+              <span class="setting-description">Allow token entry if AI evaluation fails or times out</span>
+            </div>
+            <div class="setting-control">
+              <label class="toggle-switch">
+                <input type="checkbox" id="setting-fallback-pass" />
+                <span class="toggle-slider"></span>
+              </label>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Cache Controls -->
-      <div class="settings-section">
-        <div class="section-header">
-          <h3><i class="icon-database"></i> Cache Management</h3>
+      <!-- Trading Card -->
+      <div class="settings-card">
+        <div class="settings-card-header">
+          <h3 class="settings-card-title">Trading</h3>
+          <p class="settings-card-description">AI analysis during trading operations</p>
         </div>
-        <div class="settings-group">
+        <div class="settings-card-body">
+          <div class="setting-item">
+            <div class="setting-info">
+              <label class="setting-label" for="setting-entry-analysis">Entry Analysis</label>
+              <span class="setting-description">Run AI analysis before opening positions</span>
+            </div>
+            <div class="setting-control">
+              <label class="toggle-switch">
+                <input type="checkbox" id="setting-entry-analysis" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <label class="setting-label" for="setting-exit-analysis">Exit Analysis</label>
+              <span class="setting-description">Run AI analysis before closing positions</span>
+            </div>
+            <div class="setting-control">
+              <label class="toggle-switch">
+                <input type="checkbox" id="setting-exit-analysis" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <label class="setting-label" for="setting-trailing-stop">Trailing Stop Analysis</label>
+              <span class="setting-description">Run AI analysis when trailing stops are triggered</span>
+            </div>
+            <div class="setting-control">
+              <label class="toggle-switch">
+                <input type="checkbox" id="setting-trailing-stop" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Auto Blacklist Card -->
+      <div class="settings-card">
+        <div class="settings-card-header">
+          <h3 class="settings-card-title">Auto Blacklist</h3>
+          <p class="settings-card-description">Automatically block tokens based on AI scores</p>
+        </div>
+        <div class="settings-card-body">
+          <div class="setting-item">
+            <div class="setting-info">
+              <label class="setting-label" for="setting-auto-blacklist-enabled">Auto Blacklist</label>
+              <span class="setting-description">Automatically blacklist tokens with very low AI scores</span>
+            </div>
+            <div class="setting-control">
+              <label class="toggle-switch">
+                <input type="checkbox" id="setting-auto-blacklist-enabled" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <label class="setting-label" for="setting-blacklist-min-confidence">Blacklist Threshold</label>
+              <span class="setting-description">Tokens scoring below this level will be auto-blacklisted (0-100)</span>
+            </div>
+            <div class="setting-control">
+              <div class="range-slider">
+                <input
+                  type="range"
+                  id="setting-blacklist-min-confidence"
+                  min="0"
+                  max="100"
+                  step="5"
+                  value="30"
+                />
+                <span class="range-value" id="slider-value-blacklist-min-confidence">30</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Performance Card -->
+      <div class="settings-card">
+        <div class="settings-card-header">
+          <h3 class="settings-card-title">Performance</h3>
+          <p class="settings-card-description">Caching and concurrency settings</p>
+        </div>
+        <div class="settings-card-body">
+          <div class="setting-item">
+            <div class="setting-info">
+              <label class="setting-label" for="setting-cache-ttl">Cache TTL</label>
+              <span class="setting-description">How long to cache AI results (60-3600 seconds)</span>
+            </div>
+            <div class="setting-control">
+              <div class="range-slider">
+                <input
+                  type="range"
+                  id="setting-cache-ttl"
+                  min="60"
+                  max="3600"
+                  step="60"
+                  value="300"
+                />
+                <span class="range-value" id="slider-value-cache-ttl">300</span>
+              </div>
+            </div>
+          </div>
+          <div class="setting-item">
+            <div class="setting-info">
+              <label class="setting-label" for="setting-max-evaluations">Max Evaluations</label>
+              <span class="setting-description">Maximum concurrent AI evaluations allowed (1-20)</span>
+            </div>
+            <div class="setting-control">
+              <div class="range-slider">
+                <input
+                  type="range"
+                  id="setting-max-evaluations"
+                  min="1"
+                  max="20"
+                  step="1"
+                  value="5"
+                />
+                <span class="range-value" id="slider-value-max-evaluations">5</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Cache Management Card -->
+      <div class="settings-card">
+        <div class="settings-card-header">
+          <h3 class="settings-card-title">Cache Management</h3>
+          <p class="settings-card-description">View and clear cached AI evaluations</p>
+        </div>
+        <div class="settings-card-body">
           <div class="cache-stats">
             <div class="cache-stat">
               <span class="cache-stat-label">Cache Size:</span>
