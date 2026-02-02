@@ -381,20 +381,6 @@ function createLifecycle() {
     const container = $("#providers-list");
     if (!container) return;
 
-    // Provider icons/emojis
-    const providerIcons = {
-      openai: "🟢",
-      anthropic: "🟠",
-      groq: "⚡",
-      deepseek: "🔵",
-      google: "💎",
-      ollama: "🦙",
-      together: "🤝",
-      openrouter: "🚀",
-      fireworks: "🎆",
-      custom: "🤖",
-    };
-
     // Get default provider from config
     const defaultProvider = state.config?.default_provider || "";
 
@@ -412,7 +398,6 @@ function createLifecycle() {
 
         const isDefault = providerId === defaultProvider;
         const isConfigured = provider.enabled && provider.api_key && provider.model;
-        const icon = providerIcons[providerId] || "🤖";
         const name = PROVIDER_NAMES[providerId];
 
         return `
@@ -421,7 +406,7 @@ function createLifecycle() {
           
           <div class="provider-info">
             <div class="provider-name">
-              <span class="provider-icon">${icon}</span>
+              <span class="provider-icon"><div class="provider-icon-dot"></div></span>
               ${name}
             </div>
             <div class="provider-model">${provider.model || "Not configured"}</div>
