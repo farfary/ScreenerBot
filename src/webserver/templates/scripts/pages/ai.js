@@ -89,7 +89,7 @@ function createLifecycle() {
   function initSubTabs() {
     // Setup sidebar navigation click handlers
     const navItems = $$(".ai-nav-item");
-    
+
     navItems.forEach((item) => {
       addTrackedListener(item, "click", () => {
         const tabId = item.dataset.tab;
@@ -163,7 +163,7 @@ function createLifecycle() {
   function updateSidebarStatus() {
     const indicator = $(".ai-status-indicator");
     const statusText = $(".ai-status-indicator .status-text");
-    
+
     if (!indicator || !statusText) return;
 
     // Update status based on AI state
@@ -375,242 +375,118 @@ function createLifecycle() {
   }
 
   /**
-   * Render provider cards
+   * Render provider list view
    */
   function renderProviders(providers) {
-    const grid = $("#providers-grid");
-    if (!grid) return;
+    const container = $("#providers-list");
+    if (!container) return;
+
+    // Provider icons/emojis
+    const providerIcons = {
+      openai: "🟢",
+      anthropic: "🟠",
+      groq: "⚡",
+      deepseek: "🔵",
+      google: "💎",
+      ollama: "🦙",
+      together: "🤝",
+      openrouter: "🚀",
+      fireworks: "🎆",
+      custom: "🤖",
+    };
+
+    // Get default provider from config
+    const defaultProvider = state.config?.default_provider || "";
 
     // Get all provider IDs
     const allProviderIds = Object.keys(PROVIDER_NAMES);
 
-    grid.innerHTML = allProviderIds
-      .map((id) => {
-        const provider = providers.find((p) => p.id === id) || {
-          id,
+    container.innerHTML = allProviderIds
+      .map((providerId) => {
+        const provider = providers.find((p) => p.id === providerId) || {
+          id: providerId,
           enabled: false,
           api_key: "",
           model: "",
         };
 
-        const name = PROVIDER_NAMES[id];
-        const enabled = provider.enabled || false;
-        const hasApiKey = provider.api_key && provider.api_key.length > 0;
-        const disabledClass = !enabled ? "disabled" : "";
+        const isDefault = providerId === defaultProvider;
+        const isConfigured = provider.enabled && provider.api_key && provider.model;
+        const icon = providerIcons[providerId] || "🤖";
+        const name = PROVIDER_NAMES[providerId];
 
         return `
-        <div class="provider-card ${disabledClass}" data-provider-id="${id}">
-          <div class="provider-header">
-            <span class="provider-name">${name}</span>
-            <div class="provider-toggle">
-              <label>
-                <input type="checkbox" ${enabled ? "checked" : ""} 
-                       data-provider-id="${id}" class="provider-enable-toggle" />
-                Enable
-              </label>
+        <div class="provider-item ${isDefault ? "is-default" : ""}" data-provider="${providerId}">
+          <div class="provider-radio" onclick="window.aiPage.setDefaultProvider('${providerId}')" title="Set as default"></div>
+          
+          <div class="provider-info">
+            <div class="provider-name">
+              <span class="provider-icon">${icon}</span>
+              ${name}
             </div>
+            <div class="provider-model">${provider.model || "Not configured"}</div>
           </div>
-          <div class="provider-body">
-            <div class="provider-field">
-              <label>API Key</label>
-              <input type="password" 
-                     placeholder="Enter API key..." 
-                     value="${provider.api_key || ""}"
-                     data-provider-id="${id}"
-                     class="provider-api-key" />
-            </div>
-            <div class="provider-field">
-              <label>Model</label>
-              <input type="text" 
-                     placeholder="e.g., gpt-4, claude-3-opus..." 
-                     value="${provider.model || ""}"
-                     data-provider-id="${id}"
-                     class="provider-model" />
-            </div>
-            <div class="provider-actions">
-              <button type="button" class="btn btn-sm btn-secondary provider-test-btn" 
-                      data-provider-id="${id}"
-                      ${!hasApiKey ? "disabled" : ""}>
-                <i class="icon-zap"></i> Test
-              </button>
-              <button type="button" class="btn btn-sm btn-primary provider-save-btn" 
-                      data-provider-id="${id}">
-                <i class="icon-save"></i> Save
-              </button>
-            </div>
-            <div class="provider-status-container" data-provider-id="${id}"></div>
+          
+          <div class="provider-status">
+            ${isConfigured ? '<span class="status-badge configured">Configured ✓</span>' : '<span class="status-badge not-configured">Not Set Up</span>'}
+            ${isDefault ? '<span class="status-badge default">Default</span>' : ""}
+          </div>
+          
+          <div class="provider-actions">
+            ${isConfigured ? `<button class="provider-btn test-btn" onclick="window.aiPage.testProviderFromList('${providerId}')">Test</button>` : ""}
+            <button class="provider-btn ${isConfigured ? "" : "primary"}" onclick="window.aiPage.configureProvider('${providerId}')">
+              ${isConfigured ? "Edit" : "Configure"}
+            </button>
           </div>
         </div>
       `;
       })
       .join("");
-
-    // Attach event handlers
-    setupProviderHandlers();
   }
 
   /**
-   * Setup provider event handlers
+   * Set default provider
    */
-  function setupProviderHandlers() {
-    // Enable/disable toggles
-    $$(".provider-enable-toggle").forEach((toggle) => {
-      addTrackedListener(toggle, "change", async (e) => {
-        const providerId = e.target.dataset.providerId;
-        const enabled = e.target.checked;
-        await updateProviderField(providerId, "enabled", enabled);
-      });
-    });
-
-    // Test buttons
-    $$(".provider-test-btn").forEach((btn) => {
-      addTrackedListener(btn, "click", async (e) => {
-        const providerId = e.currentTarget.dataset.providerId;
-        await testProvider(providerId);
-      });
-    });
-
-    // Save buttons
-    $$(".provider-save-btn").forEach((btn) => {
-      addTrackedListener(btn, "click", async (e) => {
-        const providerId = e.currentTarget.dataset.providerId;
-        await saveProvider(providerId);
-      });
-    });
-  }
-
-  /**
-   * Save provider configuration
-   */
-  async function saveProvider(providerId) {
-    const apiKeyInput = $(`.provider-api-key[data-provider-id="${providerId}"]`);
-    const modelInput = $(`.provider-model[data-provider-id="${providerId}"]`);
-    const enableToggle = $(`.provider-enable-toggle[data-provider-id="${providerId}"]`);
-    const saveBtn = $(`.provider-save-btn[data-provider-id="${providerId}"]`);
-
-    if (!apiKeyInput || !modelInput || !enableToggle) return;
-
-    const config = {
-      enabled: enableToggle.checked,
-      api_key: apiKeyInput.value.trim(),
-      model: modelInput.value.trim(),
-    };
-
-    // Validation
-    if (config.enabled && !config.api_key) {
-      Utils.showToast({
-        type: "warning",
-        title: "Missing API Key",
-        message: "Please enter an API key to enable this provider",
-      });
-      return;
-    }
-
-    if (config.enabled && !config.model) {
-      Utils.showToast({
-        type: "warning",
-        title: "Missing Model",
-        message: "Please enter a model name",
-      });
-      return;
-    }
-
-    // Show loading state
-    const originalHTML = saveBtn ? saveBtn.innerHTML : "";
-    if (saveBtn) {
-      saveBtn.disabled = true;
-      saveBtn.innerHTML = '<i class="icon-loader"></i> Saving...';
-    }
-
+  async function setDefaultProvider(providerId) {
     try {
-      const response = await fetch(`/api/ai/providers/${providerId}`, {
+      const response = await fetch("/api/ai/config", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(config),
+        body: JSON.stringify({ default_provider: providerId }),
       });
 
-      if (!response.ok) throw new Error("Failed to save provider");
+      if (!response.ok) throw new Error("Failed to set default provider");
 
       Utils.showToast({
         type: "success",
-        title: "Provider Saved",
-        message: `${PROVIDER_NAMES[providerId]} configuration saved`,
+        title: "Default Provider Set",
+        message: `${PROVIDER_NAMES[providerId]} is now the default provider`,
       });
 
-      // Update card state
-      const card = $(`.provider-card[data-provider-id="${providerId}"]`);
-      if (card) {
-        if (config.enabled) {
-          card.classList.remove("disabled");
-        } else {
-          card.classList.add("disabled");
-        }
-      }
+      // Reload config and providers to update UI
+      await loadConfig();
+      await loadProviders();
     } catch (error) {
-      console.error(`[AI] Failed to save provider ${providerId}:`, error);
+      console.error("[AI] Error setting default provider:", error);
       Utils.showToast({
         type: "error",
         title: "Error",
-        message: `Failed to save ${PROVIDER_NAMES[providerId]}`,
-      });
-    } finally {
-      // Restore button state
-      if (saveBtn) {
-        saveBtn.disabled = false;
-        saveBtn.innerHTML = originalHTML;
-      }
-    }
-  }
-
-  /**
-   * Update a single provider field
-   */
-  async function updateProviderField(providerId, field, value) {
-    try {
-      const response = await fetch(`/api/ai/providers/${providerId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ [field]: value }),
-      });
-
-      if (!response.ok) throw new Error("Failed to update provider");
-
-      // Update card state for enabled toggle
-      if (field === "enabled") {
-        const card = $(`.provider-card[data-provider-id="${providerId}"]`);
-        if (card) {
-          if (value) {
-            card.classList.remove("disabled");
-          } else {
-            card.classList.add("disabled");
-          }
-        }
-      }
-    } catch (error) {
-      console.error(`[AI] Failed to update provider ${providerId}:`, error);
-      Utils.showToast({
-        type: "error",
-        title: "Error",
-        message: `Failed to update ${PROVIDER_NAMES[providerId]}`,
+        message: "Failed to set default provider",
       });
     }
   }
 
   /**
-   * Test provider connection
+   * Test provider from list view
    */
-  async function testProvider(providerId) {
-    const btn = $(`.provider-test-btn[data-provider-id="${providerId}"]`);
-    const statusContainer = $(`.provider-status-container[data-provider-id="${providerId}"]`);
-
-    if (!btn || !statusContainer) return;
-
-    // Show loading state
-    btn.disabled = true;
-    btn.innerHTML = '<i class="icon-loader"></i> Testing...';
-    statusContainer.innerHTML = "";
-
+  async function testProviderFromList(providerId) {
     try {
+      Utils.showToast({
+        type: "info",
+        title: "Testing Provider",
+        message: `Testing ${PROVIDER_NAMES[providerId]}...`,
+      });
+
       const response = await fetch(`/api/ai/providers/${providerId}/test`, {
         method: "POST",
       });
@@ -623,36 +499,129 @@ function createLifecycle() {
       const result = await response.json();
 
       if (result.success) {
-        statusContainer.innerHTML = `
-          <div class="provider-status success">
-            <i class="icon-check-circle"></i> Connection successful
-          </div>
-        `;
         Utils.showToast({
           type: "success",
-          title: "Test Successful",
+          title: "Connection Successful",
           message: `${PROVIDER_NAMES[providerId]} is working correctly`,
         });
       } else {
-        throw new Error(result.error || result.message || "Test failed");
+        throw new Error(result.error || "Test failed");
       }
     } catch (error) {
-      console.error(`[AI] Test failed for provider ${providerId}:`, error);
-      statusContainer.innerHTML = `
-        <div class="provider-status error">
-          <i class="icon-x-circle"></i> ${error.message}
-        </div>
-      `;
+      console.error(`[AI] Provider test failed for ${providerId}:`, error);
       Utils.showToast({
         type: "error",
         title: "Test Failed",
         message: error.message,
       });
-    } finally {
-      // Restore button state
-      btn.disabled = false;
-      btn.innerHTML = '<i class="icon-zap"></i> Test';
     }
+  }
+
+  /**
+   * Open provider configuration modal
+   */
+  function configureProvider(providerId) {
+    const provider = state.providers.find((p) => p.id === providerId) || {
+      id: providerId,
+      enabled: false,
+      api_key: "",
+      model: "",
+    };
+
+    const name = PROVIDER_NAMES[providerId];
+
+    // Create and show modal
+    const modal = document.createElement("div");
+    modal.className = "modal-overlay";
+    modal.innerHTML = `
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3>${name} Configuration</h3>
+          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label for="modal-api-key">API Key</label>
+            <input type="password" id="modal-api-key" class="form-control" 
+                   placeholder="Enter API key..." value="${provider.api_key || ""}">
+          </div>
+          <div class="form-group">
+            <label for="modal-model">Model</label>
+            <input type="text" id="modal-model" class="form-control" 
+                   placeholder="e.g., gpt-4, claude-3-opus..." value="${provider.model || ""}">
+          </div>
+          <div class="form-group">
+            <label>
+              <input type="checkbox" id="modal-enabled" ${provider.enabled ? "checked" : ""}>
+              Enable this provider
+            </label>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+          <button class="btn btn-primary" id="modal-save-btn">Save Configuration</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // Add save handler
+    const saveBtn = modal.querySelector("#modal-save-btn");
+    saveBtn.addEventListener("click", async () => {
+      const apiKey = modal.querySelector("#modal-api-key").value.trim();
+      const model = modal.querySelector("#modal-model").value.trim();
+      const enabled = modal.querySelector("#modal-enabled").checked;
+
+      if (enabled && !apiKey) {
+        Utils.showToast({
+          type: "warning",
+          title: "Missing API Key",
+          message: "Please enter an API key to enable this provider",
+        });
+        return;
+      }
+
+      if (enabled && !model) {
+        Utils.showToast({
+          type: "warning",
+          title: "Missing Model",
+          message: "Please enter a model name",
+        });
+        return;
+      }
+
+      try {
+        saveBtn.disabled = true;
+        saveBtn.textContent = "Saving...";
+
+        const response = await fetch(`/api/ai/providers/${providerId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled, api_key: apiKey, model }),
+        });
+
+        if (!response.ok) throw new Error("Failed to save provider");
+
+        Utils.showToast({
+          type: "success",
+          title: "Provider Saved",
+          message: `${name} configuration saved`,
+        });
+
+        modal.remove();
+        await loadProviders();
+      } catch (error) {
+        console.error(`[AI] Failed to save provider ${providerId}:`, error);
+        Utils.showToast({
+          type: "error",
+          title: "Error",
+          message: "Failed to save provider configuration",
+        });
+        saveBtn.disabled = false;
+        saveBtn.textContent = "Save Configuration";
+      }
+    });
   }
 
   // ============================================================================
@@ -2000,6 +1969,9 @@ function createLifecycle() {
   // ============================================================================
 
   // Assign functions to API object for external access
+  api.setDefaultProvider = setDefaultProvider;
+  api.testProviderFromList = testProviderFromList;
+  api.configureProvider = configureProvider;
   api.createInstruction = createInstruction;
   api.saveNewInstruction = saveNewInstruction;
   api.toggleInstruction = toggleInstruction;

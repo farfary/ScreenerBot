@@ -113,11 +113,11 @@
         var isElectron = window.location.search.includes("electron=1") ||
                          navigator.userAgent.includes("Electron");
         var needsInit = {{NEEDS_INITIALIZATION}};
-        
+
         if (isElectron) {
           document.documentElement.classList.add("electron-mode");
         }
-        
+
         // Add initialization-mode immediately if setup is required
         // This prevents dashboard from flashing before onboarding/setup screens appear
         if (needsInit) {
@@ -129,7 +129,7 @@
       .electron-mode #splashScreen {
         display: none !important;
       }
-      
+
       /* Hide dashboard elements during initialization mode */
       /* This prevents dashboard from showing through during splash/onboarding/setup */
       body.initialization-mode .modern-header,
@@ -689,8 +689,7 @@
 
         // Execute trade
         try {
-          const endpoint =
-            action === "sell" ? "/api/trader/manual/sell" : "/api/trader/manual/buy";
+          const endpoint = action === "sell" ? "/api/trader/manual/sell" : "/api/trader/manual/buy";
 
           const body =
             action === "sell"
@@ -708,8 +707,7 @@
             throw new Error(error.error || `${action} failed`);
           }
 
-          const symbol =
-            globalTradeDialog.currentContext?.symbol || mint.slice(0, 6) + "...";
+          const symbol = globalTradeDialog.currentContext?.symbol || mint.slice(0, 6) + "...";
           playSuccess();
           showToast(
             `${action === "sell" ? "Sell" : "Buy"} order submitted for ${symbol}`,
