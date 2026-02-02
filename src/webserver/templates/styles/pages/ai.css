@@ -643,7 +643,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  border-radius: 8px;
+  border-radius: 50%;
   overflow: hidden;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
