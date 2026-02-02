@@ -1,5 +1,39 @@
 /* AI Page Styles */
 
+/* ===== BUTTON HEIGHT FIX (match dashboard standard) ===== */
+.ai-page .btn,
+.ai-layout .btn,
+.modal-footer .btn {
+  padding: 0.5rem 1rem;
+  min-height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.ai-page .btn i,
+.ai-layout .btn i,
+.modal-footer .btn i {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.ai-page .btn-sm,
+.ai-layout .btn-sm,
+.modal-footer .btn-sm {
+  padding: 0.375rem 0.75rem;
+  min-height: 32px;
+  font-size: 0.8125rem;
+}
+
+.ai-page .btn-sm i,
+.ai-layout .btn-sm i,
+.modal-footer .btn-sm i {
+  font-size: 14px;
+  line-height: 1;
+}
+
 /* ===== AI SIDEBAR LAYOUT ===== */
 .ai-layout {
   display: flex;
@@ -8,8 +42,8 @@
 }
 
 .ai-sidebar {
-  width: 240px;
-  min-width: 240px;
+  width: 280px;
+  min-width: 280px;
   background: var(--card-bg);
   border-inline-end: 1px solid var(--border-color);
   display: flex;
@@ -38,7 +72,8 @@
   border-radius: var(--radius-md);
   background: var(--primary-alpha-10);
   color: var(--primary-color);
-  font-size: 1rem;
+  font-size: 18px;
+  line-height: 1;
 }
 
 .sidebar-brand span {
@@ -52,15 +87,17 @@
 /* Sidebar Navigation */
 .ai-sidebar-nav {
   list-style: none;
-  padding: var(--spacing-sm);
+  padding: var(--spacing-sm) 0;
   margin: 0;
   flex: 1;
   overflow-y: auto;
   scrollbar-gutter: stable;
+  overscroll-behavior: contain;
 }
 
 .ai-sidebar-nav li {
   margin-bottom: 2px;
+  padding: 0 var(--spacing-sm);
 }
 
 /* Navigation Item Button */
@@ -69,7 +106,7 @@
   align-items: center;
   gap: var(--spacing-sm);
   width: 100%;
-  padding: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-sm);
   margin: 0;
   border: none;
   border-radius: var(--radius-md);
@@ -124,7 +161,6 @@
   border-radius: var(--radius-md);
   background: var(--bg-secondary);
   color: var(--text-secondary);
-  font-size: 0.95rem;
   transition: all 0.15s ease;
   flex-shrink: 0;
 }
@@ -135,8 +171,8 @@
 }
 
 .nav-item-icon i {
-  width: 18px;
-  height: 18px;
+  font-size: 18px;
+  line-height: 1;
 }
 
 .ai-nav-label {
@@ -146,15 +182,15 @@
 }
 
 .ai-sidebar-footer {
-  padding: 16px;
+  padding: var(--spacing-md);
   border-top: 1px solid var(--border-color);
 }
 
 .ai-status-indicator {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
+  gap: var(--spacing-sm);
+  font-size: 0.75rem;
   color: var(--text-secondary);
 }
 
@@ -173,7 +209,7 @@
 .ai-main-panel {
   flex: 1;
   overflow-y: auto;
-  padding: 24px 32px;
+  padding: var(--spacing-lg) var(--spacing-xl);
   background: var(--bg-primary);
 }
 
@@ -536,9 +572,10 @@
 .provider-item {
   display: flex;
   align-items: center;
-  padding: 16px 20px;
+  padding: 14px 20px;
+  gap: 16px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-  transition: background 0.15s ease;
+  transition: all 0.15s ease;
 }
 
 .provider-item:last-child {
@@ -550,26 +587,39 @@
 }
 
 .provider-item.is-default {
-  background: rgba(59, 130, 246, 0.08);
+  background: rgba(59, 130, 246, 0.06);
 }
 
-/* Provider Selection Radio */
-.provider-radio {
-  width: 20px;
-  height: 20px;
-  border: 2px solid var(--border-color);
-  border-radius: 50%;
-  margin-inline-end: 16px;
+.provider-item.is-configured {
+  border-left: 3px solid var(--success, #22c55e);
+}
+
+/* Provider Selection Area */
+.provider-select {
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 32px;
+  height: 32px;
   cursor: pointer;
+  flex-shrink: 0;
+}
+
+.provider-radio {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border-color);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   transition: all 0.15s ease;
   flex-shrink: 0;
 }
 
-.provider-radio:hover {
+.provider-select:hover .provider-radio {
   border-color: var(--primary, #3b82f6);
+  background: var(--primary-alpha-10);
 }
 
 .provider-item.is-default .provider-radio {
@@ -579,10 +629,42 @@
 
 .provider-item.is-default .provider-radio::after {
   content: "";
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
   background: white;
   border-radius: 50%;
+}
+
+/* Provider Logo */
+.provider-logo {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+}
+
+.provider-logo img {
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+}
+
+.provider-logo-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
 }
 
 /* Provider Info */
@@ -592,61 +674,53 @@
 }
 
 .provider-name {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.provider-icon {
-  width: 20px;
-  height: 20px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.provider-icon-dot {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  flex-shrink: 0;
 }
 
 .provider-model {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-secondary);
   margin-top: 2px;
   font-family: var(--font-mono, monospace);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Provider Status Badge */
 .provider-status {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-inline-start: 20px;
+  gap: 8px;
+  flex-shrink: 0;
 }
 
 .status-badge {
-  padding: 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
   border-radius: 4px;
   font-size: 11px;
   font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
+  letter-spacing: 0.2px;
+}
+
+.status-badge i {
+  font-size: 12px;
+  line-height: 1;
 }
 
 .status-badge.configured {
-  background: rgba(34, 197, 94, 0.15);
+  background: rgba(34, 197, 94, 0.12);
   color: var(--success, #22c55e);
 }
 
 .status-badge.not-configured {
-  background: rgba(251, 191, 36, 0.15);
-  color: var(--warning, #fbbf24);
+  background: rgba(100, 116, 139, 0.15);
+  color: var(--text-muted);
 }
 
 .status-badge.default {
@@ -658,11 +732,15 @@
 .provider-actions {
   display: flex;
   gap: 8px;
-  margin-inline-start: 16px;
+  flex-shrink: 0;
 }
 
 .provider-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   padding: 6px 12px;
+  min-height: 32px;
   font-size: 12px;
   font-weight: 500;
   border: 1px solid var(--border-color);
@@ -673,10 +751,15 @@
   transition: all 0.15s ease;
 }
 
+.provider-btn i {
+  font-size: 14px;
+  line-height: 1;
+}
+
 .provider-btn:hover {
-  background: rgb(255, 255, 255, 0.02);
+  background: rgba(255, 255, 255, 0.04);
   color: var(--text-primary);
-  border-color: var(--border-color);
+  border-color: var(--primary-alpha-30);
 }
 
 .provider-btn.primary {
@@ -709,51 +792,6 @@
   to {
     transform: rotate(360deg);
   }
-}
-
-/* Provider Brand Colors */
-.provider-item[data-provider="openai"] .provider-icon-dot {
-  background: #10a37f;
-}
-
-.provider-item[data-provider="anthropic"] .provider-icon-dot {
-  background: #d97706;
-}
-
-.provider-item[data-provider="groq"] .provider-icon-dot {
-  background: #ef4444;
-}
-
-.provider-item[data-provider="deepseek"] .provider-icon-dot {
-  background: #3b82f6;
-}
-
-.provider-item[data-provider="google"] .provider-icon-dot {
-  background: #8b5cf6;
-}
-
-.provider-item[data-provider="ollama"] .provider-icon-dot {
-  background: #fff;
-}
-
-.provider-item[data-provider="together"] .provider-icon-dot {
-  background: #06b6d4;
-}
-
-.provider-item[data-provider="openrouter"] .provider-icon-dot {
-  background: #f97316;
-}
-
-.provider-item[data-provider="mistral"] .provider-icon-dot {
-  background: #3b82f6;
-}
-
-.provider-item[data-provider="fireworks"] .provider-icon-dot {
-  background: #f43f5e;
-}
-
-.provider-item[data-provider="custom"] .provider-icon-dot {
-  background: #6b7280;
 }
 
 /* ============================================================================
@@ -1091,7 +1129,7 @@
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: var(--spacing-xs);
 }
 
 .form-group label {
@@ -1101,13 +1139,14 @@
 }
 
 .form-control {
-  padding: 0.65rem;
+  padding: var(--input-padding-y, 8px) var(--input-padding-x, 12px);
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: var(--input-border-radius, 6px);
   color: var(--text-primary);
-  font-size: 0.9rem;
+  font-size: var(--input-font-size, 0.875rem);
   font-family: var(--font-mono);
+  transition: border-color 0.2s ease;
 }
 
 .form-control:focus {
@@ -1765,8 +1804,235 @@
   justify-content: center;
   z-index: 1000;
   backdrop-filter: blur(4px);
+  padding: var(--spacing-lg);
 }
 
+/* Standard Modal Dialog (matches wallets.css pattern) */
+.modal-dialog {
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-xl);
+  box-shadow: 0 20px 40px var(--shadow-lg);
+  overflow: hidden;
+}
+
+.modal-dialog.modal-sm {
+  max-width: 400px;
+}
+
+.modal-dialog.modal-lg {
+  max-width: 640px;
+}
+
+/* Provider Config Modal - improved layout */
+.provider-config-modal {
+  max-width: 520px;
+}
+
+.provider-config-modal .modal-header {
+  gap: var(--spacing-md);
+}
+
+.provider-config-modal .modal-header h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.provider-config-modal .provider-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--primary-alpha-10);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.provider-config-modal .provider-icon i {
+  font-size: 18px;
+  line-height: 1;
+  color: var(--primary-color);
+}
+
+/* API Key Input with visibility toggle */
+.api-key-input-wrapper {
+  position: relative;
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.api-key-input-wrapper input {
+  flex: 1;
+  padding-inline-end: 40px;
+}
+
+.api-key-toggle {
+  position: absolute;
+  inset-inline-end: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+}
+
+.api-key-toggle:hover {
+  color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
+.api-key-toggle i {
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* Test Connection Section */
+.test-connection-section {
+  margin-top: var(--spacing-md);
+  padding: var(--spacing-md);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+}
+
+.test-connection-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacing-sm);
+}
+
+.test-connection-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.test-connection-result {
+  display: none;
+  margin-top: var(--spacing-sm);
+  padding: var(--spacing-sm);
+  border-radius: var(--radius-sm);
+  font-size: 0.8rem;
+}
+
+.test-connection-result.visible {
+  display: block;
+}
+
+.test-connection-result.success {
+  background: var(--success-alpha-10);
+  border: 1px solid var(--success-alpha-30);
+  color: var(--success-color);
+}
+
+.test-connection-result.error {
+  background: var(--danger-alpha-10);
+  border: 1px solid var(--danger-alpha-30);
+  color: var(--danger-color);
+}
+
+.test-result-details {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--spacing-xs) var(--spacing-sm);
+  margin-top: var(--spacing-xs);
+  font-size: 0.75rem;
+}
+
+.test-result-details dt {
+  color: var(--text-muted);
+}
+
+.test-result-details dd {
+  font-family: var(--font-mono);
+  margin: 0;
+}
+
+/* Model Selection Section */
+.model-section {
+  margin-top: var(--spacing-md);
+}
+
+.model-input-wrapper {
+  display: flex;
+  gap: var(--spacing-xs);
+}
+
+.model-input-wrapper input {
+  flex: 1;
+}
+
+.btn-fetch-models {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.model-suggestions {
+  display: none;
+  margin-top: var(--spacing-xs);
+  padding: var(--spacing-xs);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.model-suggestions.visible {
+  display: block;
+}
+
+.model-suggestion {
+  padding: var(--spacing-xs) var(--spacing-sm);
+  font-size: 0.8rem;
+  cursor: pointer;
+  border-radius: var(--radius-xs);
+  transition: background 0.15s ease;
+}
+
+.model-suggestion:hover {
+  background: var(--hover-bg);
+}
+
+.model-suggestion.selected {
+  background: var(--primary-alpha-10);
+  color: var(--primary-color);
+}
+
+/* Modal Footer with split buttons */
+.modal-footer-split {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-footer-split .footer-left {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+.modal-footer-split .footer-right {
+  display: flex;
+  gap: var(--spacing-sm);
+}
+
+/* Instruction Modal - wider for content editing */
 .instruction-modal {
   background: var(--bg-primary);
   border-radius: 12px;
@@ -1786,50 +2052,66 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1rem 1.25rem;
+  padding: var(--spacing-md) var(--spacing-lg);
   border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
 }
 
 .modal-header h3 {
   margin: 0;
-  font-size: 1.1rem;
+  font-size: 1rem;
+  font-weight: 600;
   color: var(--text-primary);
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--spacing-sm);
+}
+
+.modal-header h3 i {
+  font-size: 1.1rem;
+  color: var(--primary-color);
 }
 
 .modal-close {
   background: none;
   border: none;
-  font-size: 1.5rem;
   cursor: pointer;
   color: var(--text-muted);
-  transition: color 0.2s ease;
+  transition: all 0.15s ease;
   padding: 0;
   width: 32px;
   height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: var(--radius-sm);
+  flex-shrink: 0;
 }
 
 .modal-close:hover {
   color: var(--text-primary);
+  background: var(--hover-bg);
+}
+
+.modal-close i {
+  font-size: 20px;
+  line-height: 1;
 }
 
 .modal-body {
-  padding: 1.25rem;
+  padding: var(--spacing-lg);
   overflow-y: auto;
   flex: 1;
+  min-height: 0;
 }
 
 .modal-footer {
   display: flex;
   justify-content: flex-end;
-  gap: 0.5rem;
-  padding: 1rem 1.25rem;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md) var(--spacing-lg);
   border-top: 1px solid var(--border-color);
+  background: var(--bg-secondary);
 }
 
 .modal-body .form-group {
@@ -1856,16 +2138,43 @@
   font-weight: 400;
 }
 
+/* Form Help Text (consistent with other pages) */
+.form-help {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+/* Checkbox Group Pattern (from tools.css) */
+.checkbox-group {
+  flex-flow: row wrap;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+}
+
+.checkbox-group > label {
+  flex: 0 0 auto;
+}
+
+.checkbox-group > small,
+.checkbox-group > .form-help {
+  flex: 1 1 100%;
+  margin-top: 0;
+}
+
 .modal-body .form-group input,
 .modal-body .form-group select,
 .modal-body .form-group textarea {
   width: 100%;
-  padding: 0.5rem 0.75rem;
+  padding: var(--input-padding-y, 8px) var(--input-padding-x, 12px);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--input-border-radius, 6px);
   background: var(--bg-secondary);
   color: var(--text-primary);
-  font-size: 0.9rem;
+  font-size: var(--input-font-size, 0.875rem);
   transition: border-color 0.2s ease;
 }
 

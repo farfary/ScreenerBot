@@ -23,7 +23,7 @@ config_struct! {
         /// Default AI provider to use
         #[metadata(field_metadata! {
             label: "Default Provider",
-            hint: "Primary AI provider to use (openai, anthropic, groq, deepseek, gemini, ollama, together, openrouter, mistral, fireworks)",
+            hint: "Primary AI provider to use (openai, anthropic, groq, deepseek, gemini, ollama, together, openrouter, mistral)",
             placeholder: "openai",
             category: "Master Control",
         })]
@@ -263,14 +263,6 @@ config_struct! {
             category: "Providers",
         })]
         mistral: AiProviderConfig = AiProviderConfig::default(),
-
-        /// Fireworks AI configuration
-        #[metadata(field_metadata! {
-            label: "Fireworks",
-            hint: "Fireworks AI API configuration (fast inference platform)",
-            category: "Providers",
-        })]
-        fireworks: AiProviderConfig = AiProviderConfig::default(),
     }
 }
 

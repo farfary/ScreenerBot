@@ -314,7 +314,6 @@ async fn get_ai_status(State(state): State<Arc<AppState>>) -> Response {
         ("together", "Together AI", &config.providers.together),
         ("openrouter", "OpenRouter", &config.providers.openrouter),
         ("mistral", "Mistral AI", &config.providers.mistral),
-        ("fireworks", "Fireworks AI", &config.providers.fireworks),
     ];
 
     for (id, name, provider_cfg) in provider_checks {
@@ -383,7 +382,6 @@ async fn list_providers(State(_state): State<Arc<AppState>>) -> Response {
         ("together", "Together AI", &config.providers.together),
         ("openrouter", "OpenRouter", &config.providers.openrouter),
         ("mistral", "Mistral AI", &config.providers.mistral),
-        ("fireworks", "Fireworks AI", &config.providers.fireworks),
     ];
 
     for (id, name, provider_cfg) in provider_checks {
@@ -468,7 +466,6 @@ async fn test_provider(
             Provider::Together => &cfg.ai.providers.together,
             Provider::OpenRouter => &cfg.ai.providers.openrouter,
             Provider::Mistral => &cfg.ai.providers.mistral,
-            Provider::Fireworks => &cfg.ai.providers.fireworks,
             Provider::Ollama => {
                 return cfg.ai.providers.ollama.model.clone();
             }
@@ -487,9 +484,6 @@ async fn test_provider(
                 Provider::Together => "meta-llama/Llama-3-70b-chat-hf".to_string(),
                 Provider::OpenRouter => "openai/gpt-4".to_string(),
                 Provider::Mistral => "mistral-large-latest".to_string(),
-                Provider::Fireworks => {
-                    "accounts/fireworks/models/llama-v3-70b-instruct".to_string()
-                }
                 Provider::Ollama => "llama3.2".to_string(),
             }
         }
@@ -865,10 +859,7 @@ async fn list_instructions(State(_state): State<Arc<AppState>>) -> Response {
 }
 
 /// GET /api/ai/instructions/:id - Get single instruction
-async fn get_instruction(
-    State(_state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-) -> Response {
+async fn get_instruction(State(_state): State<Arc<AppState>>, Path(id): Path<i64>) -> Response {
     match db::with_ai_db(|conn| db::get_instruction(conn, id)) {
         Ok(Some(i)) => success_response(InstructionResponse {
             id: i.id,
@@ -1000,10 +991,7 @@ async fn update_instruction(
 }
 
 /// DELETE /api/ai/instructions/:id - Delete instruction
-async fn delete_instruction(
-    State(_state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-) -> Response {
+async fn delete_instruction(State(_state): State<Arc<AppState>>, Path(id): Path<i64>) -> Response {
     match db::with_ai_db(|conn| db::delete_instruction(conn, id)) {
         Ok(()) => {
             logger::info(LogTag::Api, &format!("Deleted AI instruction: {}", id));
@@ -1130,10 +1118,7 @@ async fn list_history(
 }
 
 /// GET /api/ai/history/:id - Get single decision details
-async fn get_history_detail(
-    State(_state): State<Arc<AppState>>,
-    Path(id): Path<i64>,
-) -> Response {
+async fn get_history_detail(State(_state): State<Arc<AppState>>, Path(id): Path<i64>) -> Response {
     match db::with_ai_db(|conn| db::get_decision(conn, id)) {
         Ok(Some(d)) => success_response(DecisionHistoryResponse {
             id: d.id,

@@ -139,7 +139,6 @@ impl AiEngine {
                 Provider::Together => &cfg.ai.providers.together,
                 Provider::OpenRouter => &cfg.ai.providers.openrouter,
                 Provider::Mistral => &cfg.ai.providers.mistral,
-                Provider::Fireworks => &cfg.ai.providers.fireworks,
                 Provider::Ollama => {
                     return cfg.ai.providers.ollama.model.clone();
                 }
@@ -159,9 +158,6 @@ impl AiEngine {
                     Provider::Together => "meta-llama/Llama-3-70b-chat-hf".to_string(),
                     Provider::OpenRouter => "openai/gpt-4".to_string(),
                     Provider::Mistral => "mistral-large-latest".to_string(),
-                    Provider::Fireworks => {
-                        "accounts/fireworks/models/llama-v3-70b-instruct".to_string()
-                    }
                 }
             }
         })

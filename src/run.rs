@@ -260,7 +260,10 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
             if let Err(e) = crate::ai::init_ai_database() {
                 logger::warning(
                     LogTag::System,
-                    &format!("Failed to initialize AI database: {} - AI history will not be recorded", e),
+                    &format!(
+                        "Failed to initialize AI database: {} - AI history will not be recorded",
+                        e
+                    ),
                 );
             }
 
@@ -720,28 +723,6 @@ async fn initialize_llm_providers() -> Result<(), String> {
                     logger::warning(
                         LogTag::System,
                         &format!("Failed to initialize Mistral: {}", e),
-                    );
-                }
-            }
-        }
-
-        // Fireworks
-        if cfg.ai.providers.fireworks.enabled && !cfg.ai.providers.fireworks.api_key.is_empty() {
-            use crate::apis::llm::fireworks::FireworksClient;
-            let model = get_model(&cfg.ai.providers.fireworks.model);
-            match FireworksClient::new(
-                cfg.ai.providers.fireworks.api_key.clone(),
-                model,
-                cfg.ai.providers.fireworks.enabled,
-            ) {
-                Ok(client) => {
-                    llm_manager.set_fireworks(std::sync::Arc::new(client));
-                    enabled_providers.push("Fireworks");
-                }
-                Err(e) => {
-                    logger::warning(
-                        LogTag::System,
-                        &format!("Failed to initialize Fireworks: {}", e),
                     );
                 }
             }

@@ -12,6 +12,7 @@ Unified interface for multiple LLM providers with raw HTTP, rate limiting, and s
 ### Core Types (types.rs)
 
 **Message Types:**
+
 - `ChatMessage` - Role + content with builder methods
 - `MessageRole` - System, User, Assistant
 - `ChatRequest` - Model, messages, temperature, max_tokens, response_format
@@ -20,6 +21,7 @@ Unified interface for multiple LLM providers with raw HTTP, rate limiting, and s
 - `ResponseFormat` - JSON mode support
 
 **Error Types:**
+
 - `LlmError` - Comprehensive error enum covering:
   - RateLimited, Timeout, InvalidResponse
   - AuthError, NetworkError, ParseError
@@ -28,6 +30,7 @@ Unified interface for multiple LLM providers with raw HTTP, rate limiting, and s
 ### Provider Interface (mod.rs)
 
 **Provider Enum:**
+
 ```rust
 pub enum Provider {
     OpenAi, Anthropic, Groq, DeepSeek, Gemini,
@@ -36,6 +39,7 @@ pub enum Provider {
 ```
 
 **LlmClient Trait:**
+
 ```rust
 #[async_trait]
 pub trait LlmClient: Send + Sync {
@@ -48,6 +52,7 @@ pub trait LlmClient: Send + Sync {
 ```
 
 **LlmManager:**
+
 - Holds all provider clients as `Option<Arc<dyn LlmClient>>`
 - `get_client(provider)` - Get specific provider
 - `enabled_providers()` - List active providers
@@ -55,6 +60,7 @@ pub trait LlmClient: Send + Sync {
 - Setter methods for each provider
 
 **Global Singleton:**
+
 ```rust
 init_llm_manager(manager) // Initialize once at startup
 get_llm_manager()         // Get global instance
@@ -63,6 +69,7 @@ get_llm_manager()         // Get global instance
 ## Usage Patterns
 
 ### Basic Request
+
 ```rust
 let request = ChatRequest::new(
     "gpt-4",
@@ -72,6 +79,7 @@ let response = manager.call(Provider::OpenAi, request).await?;
 ```
 
 ### With Options
+
 ```rust
 let request = ChatRequest::new(model, messages)
     .with_temperature(0.7)
@@ -80,6 +88,7 @@ let request = ChatRequest::new(model, messages)
 ```
 
 ### Convenience Helpers
+
 ```rust
 let req = simple_request("gpt-4", "Hello!");
 let req = system_user_request("gpt-4", "You are...", "User message");
@@ -94,6 +103,7 @@ let req = system_user_request("gpt-4", "You are...", "User message");
 ## Next Steps
 
 Individual provider implementations will go in subdirectories:
+
 - `src/apis/llm/openai/` - OpenAI client
 - `src/apis/llm/anthropic/` - Anthropic client
 - `src/apis/llm/groq/` - Groq client

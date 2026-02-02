@@ -10,12 +10,10 @@
 /// - Together AI
 /// - OpenRouter (Multi-provider gateway)
 /// - Mistral AI
-/// - Fireworks AI
 ///
 /// All providers use raw HTTP via reqwest with shared rate limiting and stats.
 pub mod anthropic;
 pub mod deepseek;
-pub mod fireworks;
 pub mod gemini;
 pub mod groq;
 pub mod mistral;
@@ -52,7 +50,6 @@ pub enum Provider {
     Together,
     OpenRouter,
     Mistral,
-    Fireworks,
 }
 
 impl Provider {
@@ -68,7 +65,6 @@ impl Provider {
             Provider::Together => "together",
             Provider::OpenRouter => "openrouter",
             Provider::Mistral => "mistral",
-            Provider::Fireworks => "fireworks",
         }
     }
 
@@ -84,7 +80,6 @@ impl Provider {
             "together" => Some(Provider::Together),
             "openrouter" => Some(Provider::OpenRouter),
             "mistral" => Some(Provider::Mistral),
-            "fireworks" => Some(Provider::Fireworks),
             _ => None,
         }
     }
@@ -101,7 +96,6 @@ impl Provider {
             Provider::Together,
             Provider::OpenRouter,
             Provider::Mistral,
-            Provider::Fireworks,
         ]
     }
 }
@@ -151,7 +145,6 @@ pub struct LlmManager {
     together: Option<Arc<dyn LlmClient>>,
     openrouter: Option<Arc<dyn LlmClient>>,
     mistral: Option<Arc<dyn LlmClient>>,
-    fireworks: Option<Arc<dyn LlmClient>>,
 }
 
 impl LlmManager {
@@ -167,7 +160,6 @@ impl LlmManager {
             together: None,
             openrouter: None,
             mistral: None,
-            fireworks: None,
         }
     }
 
@@ -183,7 +175,6 @@ impl LlmManager {
             Provider::Together => self.together.clone(),
             Provider::OpenRouter => self.openrouter.clone(),
             Provider::Mistral => self.mistral.clone(),
-            Provider::Fireworks => self.fireworks.clone(),
         }
     }
 
@@ -234,11 +225,6 @@ impl LlmManager {
         if let Some(client) = &self.mistral {
             if client.is_enabled() {
                 providers.push(Provider::Mistral);
-            }
-        }
-        if let Some(client) = &self.fireworks {
-            if client.is_enabled() {
-                providers.push(Provider::Fireworks);
             }
         }
 
@@ -303,11 +289,6 @@ impl LlmManager {
     /// Set Mistral client
     pub fn set_mistral(&mut self, client: Arc<dyn LlmClient>) {
         self.mistral = Some(client);
-    }
-
-    /// Set Fireworks client
-    pub fn set_fireworks(&mut self, client: Arc<dyn LlmClient>) {
-        self.fireworks = Some(client);
     }
 }
 

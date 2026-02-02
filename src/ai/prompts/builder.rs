@@ -66,23 +66,21 @@ impl PromptBuilder {
 
     /// Get enabled user instructions sorted by priority
     fn get_user_instructions() -> Option<String> {
-        with_ai_db(|db| {
-            match list_instructions(db) {
-                Ok(instructions) => {
-                    let enabled: Vec<_> = instructions.into_iter().filter(|i| i.enabled).collect();
-                    if enabled.is_empty() {
-                        return Ok(None);
-                    }
-
-                    let formatted: Vec<String> = enabled
-                        .iter()
-                        .map(|i| format!("[{}] {}: {}", i.category.to_uppercase(), i.name, i.content))
-                        .collect();
-
-                    Ok(Some(formatted.join("\n\n")))
+        with_ai_db(|db| match list_instructions(db) {
+            Ok(instructions) => {
+                let enabled: Vec<_> = instructions.into_iter().filter(|i| i.enabled).collect();
+                if enabled.is_empty() {
+                    return Ok(None);
                 }
-                Err(_) => Ok(None),
+
+                let formatted: Vec<String> = enabled
+                    .iter()
+                    .map(|i| format!("[{}] {}: {}", i.category.to_uppercase(), i.name, i.content))
+                    .collect();
+
+                Ok(Some(formatted.join("\n\n")))
             }
+            Err(_) => Ok(None),
         })
         .ok()
         .flatten()
