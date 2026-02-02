@@ -210,11 +210,13 @@
   flex: 1;
   overflow-y: auto;
   padding: var(--spacing-lg) var(--spacing-xl);
+  padding-bottom: calc(var(--spacing-xl) * 2);
   background: var(--bg-primary);
 }
 
 .ai-panel-content {
   display: none;
+  padding-bottom: var(--spacing-xl);
 }
 
 .ai-panel-content.active {
