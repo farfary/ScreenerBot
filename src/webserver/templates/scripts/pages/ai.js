@@ -977,6 +977,38 @@ function createLifecycle() {
   }
 
   /**
+   * Setup instruction button handlers
+   */
+  function setupInstructionHandlers() {
+    // New instruction button in header
+    const newInstructionBtn = $("#new-instruction-btn");
+    if (newInstructionBtn) {
+      addTrackedListener(newInstructionBtn, "click", () => {
+        createInstruction();
+      });
+    }
+
+    // Empty state add button
+    const emptyAddBtn = $("#empty-add-instruction-btn");
+    if (emptyAddBtn) {
+      addTrackedListener(emptyAddBtn, "click", () => {
+        createInstruction();
+      });
+    }
+
+    // Templates toggle
+    const templatesToggleBtn = $("#templates-toggle-btn");
+    if (templatesToggleBtn) {
+      addTrackedListener(templatesToggleBtn, "click", () => {
+        const section = document.querySelector(".templates-section");
+        if (section) {
+          section.classList.toggle("collapsed");
+        }
+      });
+    }
+  }
+
+  /**
    * Test AI evaluation on a mint
    */
   async function testEvaluate() {
@@ -1232,16 +1264,6 @@ function createLifecycle() {
   }
 
   /**
-   * Toggle templates section
-   */
-  function toggleTemplates() {
-    const section = $(".templates-section");
-    if (section) {
-      section.classList.toggle("collapsed");
-    }
-  }
-
-  /**
    * Show instruction menu (edit, duplicate, delete)
    */
   function showInstructionMenu(event, id) {
@@ -1299,25 +1321,6 @@ function createLifecycle() {
       general: '<i class="icon-info"></i> General',
     };
     return labels[category] || category;
-  }
-
-  /**
-   * Format timestamp
-   */
-  function formatTimestamp(timestamp) {
-    if (!timestamp) return "";
-    const date = new Date(timestamp);
-    const now = new Date();
-    const diffMs = now - date;
-    const diffMins = Math.floor(diffMs / 60000);
-    const diffHours = Math.floor(diffMs / 3600000);
-    const diffDays = Math.floor(diffMs / 86400000);
-
-    if (diffMins < 1) return "just now";
-    if (diffMins < 60) return `${diffMins}m ago`;
-    if (diffHours < 24) return `${diffHours}h ago`;
-    if (diffDays < 7) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
   }
 
   /**
@@ -2101,6 +2104,7 @@ function createLifecycle() {
       // Setup event handlers
       setupSettingsHandlers();
       setupTestingHandlers();
+      setupInstructionHandlers();
 
       // Setup stats toggle
       const statsToggle = $("#stats-ai-toggle");
@@ -2192,16 +2196,9 @@ function createLifecycle() {
 // Create lifecycle instance
 const lifecycle = createLifecycle();
 
-// Expose API functions globally for inline event handlers
+// Expose API functions globally for dynamically-rendered inline event handlers
+// (used in provider cards, instruction cards, modals, etc.)
 window.aiPage = lifecycle.api;
-
-// Expose toggleTemplates for inline handler
-window.toggleTemplates = () => {
-  const section = document.querySelector(".templates-section");
-  if (section) {
-    section.classList.toggle("collapsed");
-  }
-};
 
 // Register the page
 registerPage("ai", lifecycle);

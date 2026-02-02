@@ -58,11 +58,11 @@
               </div>
             </div>
             <div class="status-bar-toggle">
-              <label class="ai-toggle-switch">
-                <input type="checkbox" id="stats-ai-toggle" disabled />
-                <span class="ai-toggle-track"></span>
-                <span class="ai-toggle-label" id="stats-toggle-label">OFF</span>
+              <label class="toggle-switch">
+                <input type="checkbox" id="stats-ai-toggle" disabled>
+                <span class="toggle-slider"></span>
               </label>
+              <span id="stats-toggle-label" class="toggle-status-label">OFF</span>
             </div>
           </div>
 
@@ -463,11 +463,7 @@
                 Add custom prompts that are injected into AI evaluations
               </p>
             </div>
-            <button
-              type="button"
-              class="btn btn-primary"
-              onclick="window.aiPage.createInstruction()"
-            >
+            <button type="button" class="btn btn-primary" id="new-instruction-btn">
               <i class="icon-plus"></i> New Instruction
             </button>
           </div>
@@ -506,11 +502,7 @@
               <div class="empty-state" id="no-instructions">
                 <span class="empty-icon">📝</span>
                 <p class="empty-text">No custom instructions yet</p>
-                <button
-                  type="button"
-                  class="btn btn-secondary"
-                  onclick="window.aiPage.createInstruction()"
-                >
+                <button type="button" class="btn btn-secondary" id="empty-add-instruction-btn">
                   Add Your First Instruction
                 </button>
               </div>
@@ -519,7 +511,7 @@
 
           <!-- Templates Section (Collapsible) -->
           <div class="templates-section">
-            <div class="templates-header" onclick="window.toggleTemplates()">
+            <div class="templates-header" id="templates-toggle-btn">
               <div class="templates-title">
                 <span class="templates-icon">📚</span>
                 <span>Instruction Templates</span>
