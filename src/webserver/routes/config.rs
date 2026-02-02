@@ -14,6 +14,7 @@ use std::sync::Arc;
 
 use crate::config;
 use crate::config::metadata::collect_config_metadata;
+use crate::config::schemas::{default_tabs, TabConfig};
 use crate::webserver::state::AppState;
 use crate::webserver::utils::{error_response, success_response};
 
@@ -72,6 +73,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/config/monitoring", get(get_monitoring_config))
         .route("/config/ohlcv", get(get_ohlcv_config))
         .route("/config/gui", get(get_gui_config))
+        .route("/config/gui/defaults", get(get_gui_defaults))
         .route("/config/telegram", get(get_telegram_config))
         .route("/config/metadata", get(get_config_metadata))
         // PATCH endpoints - Partial updates (use JSON with only fields to update)
@@ -285,6 +287,32 @@ async fn get_gui_config() -> Response {
     });
 
     success_response(data)
+}
+
+/// Response type for GUI defaults endpoint
+#[derive(Debug, Serialize)]
+struct GuiDefaultsData {
+    tabs: Vec<TabConfig>,
+}
+
+#[derive(Debug, Serialize)]
+struct GuiDefaultsResponse {
+    success: bool,
+    data: GuiDefaultsData,
+    timestamp: String,
+}
+
+/// GET /api/config/gui/defaults - Get default GUI configuration (for reset operations)
+async fn get_gui_defaults() -> Response {
+    let response = GuiDefaultsResponse {
+        success: true,
+        data: GuiDefaultsData {
+            tabs: default_tabs(),
+        },
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    };
+
+    success_response(response)
 }
 
 /// GET /api/config/telegram - Get Telegram configuration

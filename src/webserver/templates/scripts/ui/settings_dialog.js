@@ -347,7 +347,27 @@ export class SettingsDialog {
       { id: "services", label: "Services", icon: "icon-server", order: 9, enabled: true },
       { id: "config", label: "Config", icon: "icon-settings", order: 10, enabled: true },
       { id: "events", label: "Events", icon: "icon-radio-tower", order: 11, enabled: true },
+      { id: "ai", label: "AI", icon: "icon-sparkles", order: 12, enabled: true },
     ];
+  }
+
+  /**
+   * Fetch default tab configuration from backend (single source of truth)
+   * Falls back to local defaults on failure
+   */
+  async _fetchDefaultTabs() {
+    try {
+      const response = await fetch("/api/config/gui/defaults");
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data?.tabs) {
+          return result.data.tabs;
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to fetch default tabs from API, using local fallback", e);
+    }
+    return this._getDefaultTabs();
   }
 
   /**
@@ -1074,8 +1094,10 @@ export class SettingsDialog {
     // Reset button handler
     const resetBtn = content.querySelector("#resetNavTabs");
     if (resetBtn) {
-      resetBtn.addEventListener("click", () => {
-        this.settings.dashboard.navigation.tabs = this._getDefaultTabs();
+      resetBtn.addEventListener("click", async () => {
+        // Fetch defaults from backend (single source of truth)
+        const defaultTabs = await this._fetchDefaultTabs();
+        this.settings.dashboard.navigation.tabs = defaultTabs;
         this._checkForChanges();
         this._refreshNavigationList(content);
         Utils.showToast({
