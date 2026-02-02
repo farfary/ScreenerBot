@@ -3,15 +3,16 @@
 //! Endpoints for AI analysis, provider management, and testing.
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::Response,
-    routing::{get, patch, post},
+    routing::{delete, get, patch, post},
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use crate::ai::db;
 use crate::ai::engine::AiEngine;
 use crate::ai::types::{EvaluationContext, Priority};
 use crate::apis::llm::{try_get_llm_manager, ChatMessage, ChatRequest, Provider};
@@ -40,6 +41,18 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/cache/stats", get(get_cache_stats))
         // Testing
         .route("/test/evaluate", post(test_evaluate))
+        // Instructions
+        .route("/instructions", get(list_instructions))
+        .route("/instructions", post(create_instruction))
+        .route("/instructions/:id", get(get_instruction))
+        .route("/instructions/:id", patch(update_instruction))
+        .route("/instructions/:id", delete(delete_instruction))
+        .route("/instructions/reorder", post(reorder_instructions))
+        // Templates
+        .route("/templates", get(list_templates))
+        // History
+        .route("/history", get(list_history))
+        .route("/history/:id", get(get_history_detail))
 }
 
 // ============================================================================
@@ -150,6 +163,63 @@ pub struct FactorResponse {
     pub weight: u8,
 }
 
+#[derive(Debug, Serialize)]
+pub struct InstructionResponse {
+    pub id: i64,
+    pub name: String,
+    pub content: String,
+    pub category: String,
+    pub priority: i32,
+    pub enabled: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct InstructionsListResponse {
+    pub instructions: Vec<InstructionResponse>,
+    pub total: usize,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TemplateResponse {
+    pub id: String,
+    pub name: String,
+    pub category: String,
+    pub content: String,
+    pub tags: Vec<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct TemplatesListResponse {
+    pub templates: Vec<TemplateResponse>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DecisionHistoryResponse {
+    pub id: i64,
+    pub mint: String,
+    pub symbol: Option<String>,
+    pub decision: String,
+    pub confidence: u8,
+    pub reasoning: Option<String>,
+    pub risk_level: Option<String>,
+    pub provider: String,
+    pub model: Option<String>,
+    pub tokens_used: u32,
+    pub latency_ms: f64,
+    pub cached: bool,
+    pub created_at: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct HistoryListResponse {
+    pub decisions: Vec<DecisionHistoryResponse>,
+    pub total: usize,
+    pub page: usize,
+    pub per_page: usize,
+}
+
 // ============================================================================
 // REQUEST TYPES
 // ============================================================================
@@ -186,6 +256,34 @@ pub struct UpdateAiConfigRequest {
 pub struct TestEvaluateRequest {
     pub mint: String,
     pub priority: Option<String>, // "high", "medium", "low"
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateInstructionRequest {
+    pub name: String,
+    pub content: String,
+    pub category: Option<String>, // defaults to "general"
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateInstructionRequest {
+    pub name: Option<String>,
+    pub content: Option<String>,
+    pub category: Option<String>,
+    pub priority: Option<i32>,
+    pub enabled: Option<bool>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ReorderInstructionsRequest {
+    pub ids: Vec<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HistoryQuery {
+    pub page: Option<usize>,
+    pub per_page: Option<usize>,
+    pub mint: Option<String>,
 }
 
 // ============================================================================
@@ -726,5 +824,343 @@ async fn test_evaluate(
                 None,
             )
         }
+    }
+}
+
+// ============================================================================
+// INSTRUCTIONS HANDLERS
+// ============================================================================
+
+/// GET /api/ai/instructions - List all instructions
+async fn list_instructions(State(_state): State<Arc<AppState>>) -> Response {
+    match db::with_ai_db(|conn| db::list_instructions(conn)) {
+        Ok(instructions) => {
+            let total = instructions.len();
+            let instructions: Vec<InstructionResponse> = instructions
+                .into_iter()
+                .map(|i| InstructionResponse {
+                    id: i.id,
+                    name: i.name,
+                    content: i.content,
+                    category: i.category,
+                    priority: i.priority,
+                    enabled: i.enabled,
+                    created_at: i.created_at,
+                    updated_at: i.updated_at,
+                })
+                .collect();
+
+            success_response(InstructionsListResponse {
+                instructions,
+                total,
+            })
+        }
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to list instructions: {}", e),
+            None,
+        ),
+    }
+}
+
+/// GET /api/ai/instructions/:id - Get single instruction
+async fn get_instruction(
+    State(_state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> Response {
+    match db::with_ai_db(|conn| db::get_instruction(conn, id)) {
+        Ok(Some(i)) => success_response(InstructionResponse {
+            id: i.id,
+            name: i.name,
+            content: i.content,
+            category: i.category,
+            priority: i.priority,
+            enabled: i.enabled,
+            created_at: i.created_at,
+            updated_at: i.updated_at,
+        }),
+        Ok(None) => error_response(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            &format!("Instruction {} not found", id),
+            None,
+        ),
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to get instruction: {}", e),
+            None,
+        ),
+    }
+}
+
+/// POST /api/ai/instructions - Create new instruction
+async fn create_instruction(
+    State(_state): State<Arc<AppState>>,
+    Json(req): Json<CreateInstructionRequest>,
+) -> Response {
+    let category = req.category.unwrap_or_else(|| "general".to_string());
+
+    match db::with_ai_db(|conn| db::create_instruction(conn, &req.name, &req.content, &category)) {
+        Ok(id) => {
+            logger::info(
+                LogTag::Api,
+                &format!("Created AI instruction: {} ({})", req.name, category),
+            );
+
+            // Fetch the created instruction
+            match db::with_ai_db(|conn| db::get_instruction(conn, id)) {
+                Ok(Some(instruction)) => success_response(InstructionResponse {
+                    id: instruction.id,
+                    name: instruction.name,
+                    content: instruction.content,
+                    category: instruction.category,
+                    priority: instruction.priority,
+                    enabled: instruction.enabled,
+                    created_at: instruction.created_at,
+                    updated_at: instruction.updated_at,
+                }),
+                Ok(None) => error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "DB_ERROR",
+                    "Failed to retrieve created instruction",
+                    None,
+                ),
+                Err(e) => error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "DB_ERROR",
+                    &format!("Failed to retrieve created instruction: {}", e),
+                    None,
+                ),
+            }
+        }
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to create instruction: {}", e),
+            None,
+        ),
+    }
+}
+
+/// PATCH /api/ai/instructions/:id - Update instruction
+async fn update_instruction(
+    State(_state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+    Json(req): Json<UpdateInstructionRequest>,
+) -> Response {
+    match db::with_ai_db(|conn| {
+        db::update_instruction(
+            conn,
+            id,
+            req.name.as_deref(),
+            req.content.as_deref(),
+            req.category.as_deref(),
+            req.priority,
+            req.enabled,
+        )
+    }) {
+        Ok(()) => {
+            logger::info(LogTag::Api, &format!("Updated AI instruction: {}", id));
+
+            // Fetch the updated instruction
+            match db::with_ai_db(|conn| db::get_instruction(conn, id)) {
+                Ok(Some(instruction)) => success_response(InstructionResponse {
+                    id: instruction.id,
+                    name: instruction.name,
+                    content: instruction.content,
+                    category: instruction.category,
+                    priority: instruction.priority,
+                    enabled: instruction.enabled,
+                    created_at: instruction.created_at,
+                    updated_at: instruction.updated_at,
+                }),
+                Ok(None) => error_response(
+                    StatusCode::NOT_FOUND,
+                    "NOT_FOUND",
+                    &format!("Instruction {} not found", id),
+                    None,
+                ),
+                Err(e) => error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "DB_ERROR",
+                    &format!("Failed to retrieve updated instruction: {}", e),
+                    None,
+                ),
+            }
+        }
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to update instruction: {}", e),
+            None,
+        ),
+    }
+}
+
+/// DELETE /api/ai/instructions/:id - Delete instruction
+async fn delete_instruction(
+    State(_state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> Response {
+    match db::with_ai_db(|conn| db::delete_instruction(conn, id)) {
+        Ok(()) => {
+            logger::info(LogTag::Api, &format!("Deleted AI instruction: {}", id));
+            success_response(serde_json::json!({
+                "message": "Instruction deleted successfully"
+            }))
+        }
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to delete instruction: {}", e),
+            None,
+        ),
+    }
+}
+
+/// POST /api/ai/instructions/reorder - Reorder instructions
+async fn reorder_instructions(
+    State(_state): State<Arc<AppState>>,
+    Json(req): Json<ReorderInstructionsRequest>,
+) -> Response {
+    match db::with_ai_db(|conn| db::reorder_instructions(conn, &req.ids)) {
+        Ok(()) => {
+            logger::info(
+                LogTag::Api,
+                &format!("Reordered {} AI instructions", req.ids.len()),
+            );
+            success_response(serde_json::json!({
+                "message": "Instructions reordered successfully"
+            }))
+        }
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to reorder instructions: {}", e),
+            None,
+        ),
+    }
+}
+
+// ============================================================================
+// TEMPLATES HANDLERS
+// ============================================================================
+
+/// GET /api/ai/templates - List built-in templates
+async fn list_templates(State(_state): State<Arc<AppState>>) -> Response {
+    let templates = db::get_builtin_templates();
+    let templates: Vec<TemplateResponse> = templates
+        .into_iter()
+        .map(|t| TemplateResponse {
+            id: t.id.to_string(),
+            name: t.name.to_string(),
+            category: t.category.to_string(),
+            content: t.content.to_string(),
+            tags: t.tags.iter().map(|s| s.to_string()).collect(),
+        })
+        .collect();
+
+    success_response(TemplatesListResponse { templates })
+}
+
+// ============================================================================
+// HISTORY HANDLERS
+// ============================================================================
+
+/// GET /api/ai/history - List decision history with pagination
+async fn list_history(
+    State(_state): State<Arc<AppState>>,
+    Query(query): Query<HistoryQuery>,
+) -> Response {
+    let page = query.page.unwrap_or(1).max(1);
+    let per_page = query.per_page.unwrap_or(50).clamp(1, 100);
+
+    // Calculate offset
+    let offset = (page - 1) * per_page;
+
+    // Fetch decisions based on whether mint filter is provided
+    let result = if let Some(mint) = query.mint {
+        // For specific mint, use list_decisions_for_mint
+        db::with_ai_db(|conn| db::list_decisions_for_mint(conn, &mint, per_page))
+    } else {
+        // For all decisions, use list_decisions with pagination
+        db::with_ai_db(|conn| db::list_decisions(conn, per_page, offset))
+    };
+
+    match result {
+        Ok(decisions) => {
+            // Get total count (simplified - in production, you'd want a separate count query)
+            let total = decisions.len();
+
+            let decisions: Vec<DecisionHistoryResponse> = decisions
+                .into_iter()
+                .map(|d| DecisionHistoryResponse {
+                    id: d.id,
+                    mint: d.mint,
+                    symbol: d.symbol,
+                    decision: d.decision,
+                    confidence: d.confidence,
+                    reasoning: d.reasoning,
+                    risk_level: d.risk_level,
+                    provider: d.provider,
+                    model: d.model,
+                    tokens_used: d.tokens_used,
+                    latency_ms: d.latency_ms,
+                    cached: d.cached,
+                    created_at: d.created_at,
+                })
+                .collect();
+
+            success_response(HistoryListResponse {
+                decisions,
+                total,
+                page,
+                per_page,
+            })
+        }
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to list decision history: {}", e),
+            None,
+        ),
+    }
+}
+
+/// GET /api/ai/history/:id - Get single decision details
+async fn get_history_detail(
+    State(_state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> Response {
+    match db::with_ai_db(|conn| db::get_decision(conn, id)) {
+        Ok(Some(d)) => success_response(DecisionHistoryResponse {
+            id: d.id,
+            mint: d.mint,
+            symbol: d.symbol,
+            decision: d.decision,
+            confidence: d.confidence,
+            reasoning: d.reasoning,
+            risk_level: d.risk_level,
+            provider: d.provider,
+            model: d.model,
+            tokens_used: d.tokens_used,
+            latency_ms: d.latency_ms,
+            cached: d.cached,
+            created_at: d.created_at,
+        }),
+        Ok(None) => error_response(
+            StatusCode::NOT_FOUND,
+            "NOT_FOUND",
+            &format!("Decision {} not found", id),
+            None,
+        ),
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to get decision: {}", e),
+            None,
+        ),
     }
 }

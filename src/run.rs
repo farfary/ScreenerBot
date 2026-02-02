@@ -259,7 +259,7 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
                 .await
                 .map_err(|e| format!("Failed to initialize AI engine: {}", e))?;
             logger::info(LogTag::System, "AI engine initialized successfully");
-            
+
             // Initialize LLM manager with configured providers
             initialize_llm_providers().await?;
         }
@@ -504,10 +504,10 @@ async fn wait_for_initialization_or_shutdown() -> Result<(), String> {
 async fn initialize_llm_providers() -> Result<(), String> {
     use crate::apis::llm::{init_llm_manager, LlmManager};
     use crate::config::with_config;
-    
+
     let mut llm_manager = LlmManager::new();
     let mut enabled_providers = Vec::new();
-    
+
     // Helper to get model option
     let get_model = |model_str: &str| -> Option<String> {
         if model_str.is_empty() || model_str == "auto" {
@@ -516,7 +516,7 @@ async fn initialize_llm_providers() -> Result<(), String> {
             Some(model_str.to_string())
         }
     };
-    
+
     with_config(|cfg| {
         // OpenRouter (has extra parameters for site_url and site_name)
         if cfg.ai.providers.openrouter.enabled && !cfg.ai.providers.openrouter.api_key.is_empty() {
@@ -534,11 +534,14 @@ async fn initialize_llm_providers() -> Result<(), String> {
                     enabled_providers.push("OpenRouter");
                 }
                 Err(e) => {
-                    logger::warning(LogTag::System, &format!("Failed to initialize OpenRouter: {}", e));
+                    logger::warning(
+                        LogTag::System,
+                        &format!("Failed to initialize OpenRouter: {}", e),
+                    );
                 }
             }
         }
-        
+
         // OpenAI
         if cfg.ai.providers.openai.enabled && !cfg.ai.providers.openai.api_key.is_empty() {
             use crate::apis::llm::openai::OpenAiClient;
@@ -553,11 +556,14 @@ async fn initialize_llm_providers() -> Result<(), String> {
                     enabled_providers.push("OpenAI");
                 }
                 Err(e) => {
-                    logger::warning(LogTag::System, &format!("Failed to initialize OpenAI: {}", e));
+                    logger::warning(
+                        LogTag::System,
+                        &format!("Failed to initialize OpenAI: {}", e),
+                    );
                 }
             }
         }
-        
+
         // Anthropic
         if cfg.ai.providers.anthropic.enabled && !cfg.ai.providers.anthropic.api_key.is_empty() {
             use crate::apis::llm::anthropic::AnthropicClient;
@@ -572,11 +578,14 @@ async fn initialize_llm_providers() -> Result<(), String> {
                     enabled_providers.push("Anthropic");
                 }
                 Err(e) => {
-                    logger::warning(LogTag::System, &format!("Failed to initialize Anthropic: {}", e));
+                    logger::warning(
+                        LogTag::System,
+                        &format!("Failed to initialize Anthropic: {}", e),
+                    );
                 }
             }
         }
-        
+
         // Groq
         if cfg.ai.providers.groq.enabled && !cfg.ai.providers.groq.api_key.is_empty() {
             use crate::apis::llm::groq::GroqClient;
@@ -595,7 +604,7 @@ async fn initialize_llm_providers() -> Result<(), String> {
                 }
             }
         }
-        
+
         // DeepSeek
         if cfg.ai.providers.deepseek.enabled && !cfg.ai.providers.deepseek.api_key.is_empty() {
             use crate::apis::llm::deepseek::DeepSeekClient;
@@ -610,11 +619,14 @@ async fn initialize_llm_providers() -> Result<(), String> {
                     enabled_providers.push("DeepSeek");
                 }
                 Err(e) => {
-                    logger::warning(LogTag::System, &format!("Failed to initialize DeepSeek: {}", e));
+                    logger::warning(
+                        LogTag::System,
+                        &format!("Failed to initialize DeepSeek: {}", e),
+                    );
                 }
             }
         }
-        
+
         // Gemini
         if cfg.ai.providers.gemini.enabled && !cfg.ai.providers.gemini.api_key.is_empty() {
             use crate::apis::llm::gemini::GeminiClient;
@@ -629,11 +641,14 @@ async fn initialize_llm_providers() -> Result<(), String> {
                     enabled_providers.push("Gemini");
                 }
                 Err(e) => {
-                    logger::warning(LogTag::System, &format!("Failed to initialize Gemini: {}", e));
+                    logger::warning(
+                        LogTag::System,
+                        &format!("Failed to initialize Gemini: {}", e),
+                    );
                 }
             }
         }
-        
+
         // Ollama (no API key, uses base_url instead)
         if cfg.ai.providers.ollama.enabled {
             use crate::apis::llm::ollama::OllamaClient;
@@ -643,21 +658,20 @@ async fn initialize_llm_providers() -> Result<(), String> {
                 None
             };
             let model = get_model(&cfg.ai.providers.ollama.model);
-            match OllamaClient::new(
-                base_url,
-                model,
-                cfg.ai.providers.ollama.enabled,
-            ) {
+            match OllamaClient::new(base_url, model, cfg.ai.providers.ollama.enabled) {
                 Ok(client) => {
                     llm_manager.set_ollama(std::sync::Arc::new(client));
                     enabled_providers.push("Ollama");
                 }
                 Err(e) => {
-                    logger::warning(LogTag::System, &format!("Failed to initialize Ollama: {}", e));
+                    logger::warning(
+                        LogTag::System,
+                        &format!("Failed to initialize Ollama: {}", e),
+                    );
                 }
             }
         }
-        
+
         // Together
         if cfg.ai.providers.together.enabled && !cfg.ai.providers.together.api_key.is_empty() {
             use crate::apis::llm::together::TogetherClient;
@@ -672,11 +686,14 @@ async fn initialize_llm_providers() -> Result<(), String> {
                     enabled_providers.push("Together");
                 }
                 Err(e) => {
-                    logger::warning(LogTag::System, &format!("Failed to initialize Together: {}", e));
+                    logger::warning(
+                        LogTag::System,
+                        &format!("Failed to initialize Together: {}", e),
+                    );
                 }
             }
         }
-        
+
         // Mistral
         if cfg.ai.providers.mistral.enabled && !cfg.ai.providers.mistral.api_key.is_empty() {
             use crate::apis::llm::mistral::MistralClient;
@@ -691,11 +708,14 @@ async fn initialize_llm_providers() -> Result<(), String> {
                     enabled_providers.push("Mistral");
                 }
                 Err(e) => {
-                    logger::warning(LogTag::System, &format!("Failed to initialize Mistral: {}", e));
+                    logger::warning(
+                        LogTag::System,
+                        &format!("Failed to initialize Mistral: {}", e),
+                    );
                 }
             }
         }
-        
+
         // Fireworks
         if cfg.ai.providers.fireworks.enabled && !cfg.ai.providers.fireworks.api_key.is_empty() {
             use crate::apis::llm::fireworks::FireworksClient;
@@ -710,18 +730,24 @@ async fn initialize_llm_providers() -> Result<(), String> {
                     enabled_providers.push("Fireworks");
                 }
                 Err(e) => {
-                    logger::warning(LogTag::System, &format!("Failed to initialize Fireworks: {}", e));
+                    logger::warning(
+                        LogTag::System,
+                        &format!("Failed to initialize Fireworks: {}", e),
+                    );
                 }
             }
         }
     });
-    
+
     init_llm_manager(llm_manager)
         .await
         .map_err(|e| format!("Failed to initialize LLM manager: {}", e))?;
-    
+
     if enabled_providers.is_empty() {
-        logger::info(LogTag::System, "LLM manager initialized (no providers enabled)");
+        logger::info(
+            LogTag::System,
+            "LLM manager initialized (no providers enabled)",
+        );
     } else {
         logger::info(
             LogTag::System,
@@ -732,6 +758,6 @@ async fn initialize_llm_providers() -> Result<(), String> {
             ),
         );
     }
-    
+
     Ok(())
 }
