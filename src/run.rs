@@ -251,21 +251,22 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
             .await
             .map_err(|e| format!("Failed to sync actions from database: {}", e))?;
 
-        // 8.5. Initialize AI engine and LLM manager (if enabled)
+        // 8.5. Initialize AI database (always) and AI engine (if enabled)
+        // Database is always initialized so dashboard can view/edit instructions
+        if let Err(e) = crate::ai::init_ai_database() {
+            logger::warning(
+                LogTag::System,
+                &format!(
+                    "Failed to initialize AI database: {} - AI instructions and history will not be available",
+                    e
+                ),
+            );
+        }
+
+        // Initialize AI engine only if enabled
         let ai_enabled = crate::config::with_config(|cfg| cfg.ai.enabled);
         if ai_enabled {
             logger::info(LogTag::System, "Initializing AI engine...");
-
-            // Initialize AI database first
-            if let Err(e) = crate::ai::init_ai_database() {
-                logger::warning(
-                    LogTag::System,
-                    &format!(
-                        "Failed to initialize AI database: {} - AI history will not be recorded",
-                        e
-                    ),
-                );
-            }
 
             crate::ai::init_ai_engine()
                 .await
