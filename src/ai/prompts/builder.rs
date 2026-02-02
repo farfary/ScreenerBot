@@ -1,3 +1,4 @@
+use crate::ai::db::{list_instructions, with_ai_db};
 use crate::ai::types::EvaluationContext;
 
 /// Dynamic prompt builder that formats token data into prompts
@@ -7,6 +8,15 @@ impl PromptBuilder {
     /// Build a user prompt from evaluation context
     pub fn build_user_prompt(context: &EvaluationContext) -> String {
         let mut prompt = format!("Token: {}\n\n", context.mint);
+
+        // Add user instructions at the beginning
+        if let Some(instructions) = Self::get_user_instructions() {
+            if !instructions.is_empty() {
+                prompt.push_str("=== User Instructions ===\n");
+                prompt.push_str(&instructions);
+                prompt.push_str("\n\n");
+            }
+        }
 
         // Add DexScreener data
         if let Some(ref data) = context.dexscreener_data {
@@ -52,6 +62,30 @@ impl PromptBuilder {
 
         prompt.push_str("Analyze this data and provide your decision.");
         prompt
+    }
+
+    /// Get enabled user instructions sorted by priority
+    fn get_user_instructions() -> Option<String> {
+        with_ai_db(|db| {
+            match list_instructions(db) {
+                Ok(instructions) => {
+                    let enabled: Vec<_> = instructions.into_iter().filter(|i| i.enabled).collect();
+                    if enabled.is_empty() {
+                        return Ok(None);
+                    }
+
+                    let formatted: Vec<String> = enabled
+                        .iter()
+                        .map(|i| format!("[{}] {}: {}", i.category.to_uppercase(), i.name, i.content))
+                        .collect();
+
+                    Ok(Some(formatted.join("\n\n")))
+                }
+                Err(_) => Ok(None),
+            }
+        })
+        .ok()
+        .flatten()
     }
 
     /// Build a compact user prompt with minimal data
