@@ -53,6 +53,8 @@ function createLifecycle() {
     templates: [],
     historyPage: 1,
     historyTotal: 0,
+    instructions: [], // Store instructions for drag-drop
+    draggedItem: null, // Track dragged instruction
   };
 
   // Store API functions for external access
@@ -1107,7 +1109,8 @@ function createLifecycle() {
       const response = await fetch("/api/ai/instructions");
       if (!response.ok) throw new Error("Failed to load instructions");
       const data = await response.json();
-      renderInstructionsList(data.instructions || []);
+      state.instructions = data.instructions || [];
+      renderInstructionsList(state.instructions);
     } catch (error) {
       console.error("[AI] Error loading instructions:", error);
       const container = $("#instructions-list");
@@ -1152,18 +1155,34 @@ function createLifecycle() {
     container.innerHTML = instructions
       .map(
         (inst) => `
-      <div class="instruction-card ${inst.enabled ? "" : "disabled"}" data-id="${inst.id}">
+      <div class="instruction-card ${inst.enabled ? "" : "disabled"}" 
+           data-id="${inst.id}" 
+           draggable="true">
         <div class="instruction-header">
+          <span class="drag-handle" title="Drag to reorder"><i class="icon-menu"></i></span>
           <span class="instruction-priority">#${inst.priority}</span>
           <span class="instruction-name">${Utils.escapeHtml(inst.name)}</span>
-          <span class="instruction-category badge badge-${inst.category}">${inst.category}</span>
+          <span class="instruction-category badge-${inst.category}">${getCategoryLabel(inst.category)}</span>
         </div>
-        <div class="instruction-content">${Utils.escapeHtml(inst.content.substring(0, 150))}${inst.content.length > 150 ? "..." : ""}</div>
+        <div class="instruction-content" onclick="window.aiPage.toggleInstructionExpanded(${inst.id})">
+          ${Utils.escapeHtml(inst.content.substring(0, 150))}${inst.content.length > 150 ? "..." : ""}
+        </div>
+        <div class="instruction-full-content" style="display: none;">
+          ${Utils.escapeHtml(inst.content)}
+        </div>
+        <div class="instruction-meta">
+          <small class="instruction-timestamp">
+            ${inst.created_at ? `Created ${formatTimestamp(inst.created_at)}` : ""}
+          </small>
+        </div>
         <div class="instruction-actions">
           <label class="toggle-small">
             <input type="checkbox" ${inst.enabled ? "checked" : ""} onchange="window.aiPage.toggleInstruction(${inst.id}, this.checked)">
             <span class="toggle-track"></span>
           </label>
+          <button class="btn-icon" onclick="window.aiPage.duplicateInstruction(${inst.id})" title="Duplicate">
+            <i class="icon-copy"></i>
+          </button>
           <button class="btn-icon" onclick="window.aiPage.editInstruction(${inst.id})" title="Edit">
             <i class="icon-edit"></i>
           </button>
@@ -1175,6 +1194,160 @@ function createLifecycle() {
     `
       )
       .join("");
+
+    // Setup drag and drop
+    setupDragAndDrop();
+  }
+
+  /**
+   * Get category label with icon
+   */
+  function getCategoryLabel(category) {
+    const labels = {
+      filtering: '<i class="icon-filter"></i> Filtering',
+      trading: '<i class="icon-trending-up"></i> Trading',
+      analysis: '<i class="icon-bar-chart"></i> Analysis',
+      general: '<i class="icon-info"></i> General',
+    };
+    return labels[category] || category;
+  }
+
+  /**
+   * Format timestamp
+   */
+  function formatTimestamp(timestamp) {
+    if (!timestamp) return "";
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMs / 3600000);
+    const diffDays = Math.floor(diffMs / 86400000);
+
+    if (diffMins < 1) return "just now";
+    if (diffMins < 60) return `${diffMins}m ago`;
+    if (diffHours < 24) return `${diffHours}h ago`;
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  }
+
+  /**
+   * Toggle instruction expanded state
+   */
+  function toggleInstructionExpanded(id) {
+    const card = document.querySelector(`.instruction-card[data-id="${id}"]`);
+    if (!card) return;
+
+    const shortContent = card.querySelector(".instruction-content");
+    const fullContent = card.querySelector(".instruction-full-content");
+
+    if (fullContent.style.display === "none") {
+      shortContent.style.display = "none";
+      fullContent.style.display = "block";
+      card.classList.add("instruction-expanded");
+    } else {
+      shortContent.style.display = "block";
+      fullContent.style.display = "none";
+      card.classList.remove("instruction-expanded");
+    }
+  }
+
+  /**
+   * Setup drag and drop for instructions
+   */
+  function setupDragAndDrop() {
+    const cards = $$(".instruction-card");
+
+    cards.forEach((card) => {
+      // Drag start
+      card.addEventListener("dragstart", (e) => {
+        state.draggedItem = card;
+        card.classList.add("dragging");
+        e.dataTransfer.effectAllowed = "move";
+      });
+
+      // Drag end
+      card.addEventListener("dragend", () => {
+        card.classList.remove("dragging");
+        state.draggedItem = null;
+        // Remove all drag-over classes
+        cards.forEach((c) => c.classList.remove("drag-over"));
+      });
+
+      // Drag over
+      card.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        if (state.draggedItem === card) return;
+        card.classList.add("drag-over");
+      });
+
+      // Drag leave
+      card.addEventListener("dragleave", () => {
+        card.classList.remove("drag-over");
+      });
+
+      // Drop
+      card.addEventListener("drop", async (e) => {
+        e.preventDefault();
+        card.classList.remove("drag-over");
+
+        if (!state.draggedItem || state.draggedItem === card) return;
+
+        // Get all card IDs in current order
+        const container = $("#instructions-list");
+        const allCards = Array.from(container.querySelectorAll(".instruction-card"));
+        const draggedIndex = allCards.indexOf(state.draggedItem);
+        const targetIndex = allCards.indexOf(card);
+
+        // Reorder in DOM
+        if (draggedIndex < targetIndex) {
+          card.after(state.draggedItem);
+        } else {
+          card.before(state.draggedItem);
+        }
+
+        // Get new order
+        const newOrder = Array.from(container.querySelectorAll(".instruction-card")).map((c) =>
+          parseInt(c.dataset.id)
+        );
+
+        // Save new order to backend
+        await reorderInstructions(newOrder);
+      });
+    });
+  }
+
+  /**
+   * Save instruction order to backend
+   */
+  async function reorderInstructions(order) {
+    try {
+      const response = await fetch("/api/ai/instructions/reorder", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ order }),
+      });
+
+      if (!response.ok) throw new Error("Failed to reorder instructions");
+
+      Utils.showToast({
+        type: "success",
+        title: "Reordered",
+        message: "Instructions reordered successfully",
+      });
+
+      // Reload to get updated priorities
+      await loadInstructions();
+    } catch (error) {
+      console.error("[AI] Error reordering instructions:", error);
+      Utils.showToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to reorder instructions",
+      });
+      // Reload to restore original order
+      await loadInstructions();
+    }
   }
 
   /**
@@ -1190,16 +1363,132 @@ function createLifecycle() {
       <div class="template-card" data-id="${t.id}">
         <div class="template-header">
           <span class="template-name">${Utils.escapeHtml(t.name)}</span>
-          <span class="template-category badge">${t.category}</span>
+          <span class="template-category badge-${t.category}">${getCategoryLabel(t.category)}</span>
         </div>
         <div class="template-tags">${t.tags.map((tag) => `<span class="tag">${tag}</span>`).join("")}</div>
-        <button class="btn btn-small" onclick="window.aiPage.useTemplate('${t.id}')">
-          <i class="icon-plus"></i> Use Template
-        </button>
+        <div class="template-actions">
+          <button class="btn btn-small btn-secondary" onclick="window.aiPage.previewTemplate('${t.id}')">
+            <i class="icon-eye"></i> Preview
+          </button>
+          <button class="btn btn-small btn-primary" onclick="window.aiPage.customizeTemplate('${t.id}')">
+            <i class="icon-edit"></i> Customize & Add
+          </button>
+        </div>
       </div>
     `
       )
       .join("");
+  }
+
+  /**
+   * Preview template content
+   */
+  function previewTemplate(templateId) {
+    const template = state.templates.find((t) => t.id === templateId);
+    if (!template) return;
+
+    const modal = document.createElement("div");
+    modal.className = "modal-overlay";
+    modal.innerHTML = `
+      <div class="modal instruction-modal template-preview-modal">
+        <div class="modal-header">
+          <h3><i class="icon-eye"></i> Template Preview: ${Utils.escapeHtml(template.name)}</h3>
+          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="template-preview-info">
+            <div class="preview-meta">
+              <span class="template-category badge-${template.category}">${getCategoryLabel(template.category)}</span>
+              <div class="template-tags">${template.tags.map((tag) => `<span class="tag">${tag}</span>`).join("")}</div>
+            </div>
+          </div>
+          <div class="template-preview-content">
+            <h4>Content:</h4>
+            <pre class="template-content-display">${Utils.escapeHtml(template.content)}</pre>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Close</button>
+          <button class="btn btn-primary" onclick="window.aiPage.customizeTemplate('${template.id}'); this.closest('.modal-overlay').remove();">
+            <i class="icon-edit"></i> Customize & Add
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+
+  /**
+   * Customize template before adding
+   */
+  function customizeTemplate(templateId) {
+    const template = state.templates.find((t) => t.id === templateId);
+    if (!template) return;
+
+    // Show modal pre-filled with template data
+    const modal = document.createElement("div");
+    modal.className = "modal-overlay";
+    modal.innerHTML = `
+      <div class="modal instruction-modal">
+        <div class="modal-header">
+          <h3><i class="icon-edit"></i> Customize Template</h3>
+          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Name</label>
+            <input type="text" id="inst-name" value="${Utils.escapeHtml(template.name)}" placeholder="e.g., Liquidity Guard">
+          </div>
+          <div class="form-group">
+            <label>Category</label>
+            <select id="inst-category">
+              <option value="filtering" ${template.category === "filtering" ? "selected" : ""}>Filtering</option>
+              <option value="trading" ${template.category === "trading" ? "selected" : ""}>Trading</option>
+              <option value="analysis" ${template.category === "analysis" ? "selected" : ""}>Analysis</option>
+              <option value="general" ${template.category === "general" ? "selected" : ""}>General</option>
+            </select>
+            <small class="form-hint">${getCategoryHint(template.category)}</small>
+          </div>
+          <div class="form-group">
+            <label>Content</label>
+            <textarea id="inst-content" rows="12" class="instruction-editor" placeholder="Enter your instruction...">${Utils.escapeHtml(template.content)}</textarea>
+            <div class="char-count">
+              <span id="char-counter">${template.content.length}</span> characters
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+          <button class="btn btn-primary" onclick="window.aiPage.saveNewInstruction()">
+            <i class="icon-plus"></i> Create
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+
+    // Add character counter
+    const textarea = $("#inst-content");
+    const counter = $("#char-counter");
+    if (textarea && counter) {
+      textarea.addEventListener("input", () => {
+        counter.textContent = textarea.value.length;
+      });
+    }
+  }
+
+  /**
+   * Get category hint text
+   */
+  function getCategoryHint(category) {
+    const hints = {
+      filtering:
+        "Instructions for token filtering decisions - helps AI determine which tokens to skip",
+      trading: "Instructions for entry/exit analysis - guides AI on trading decisions",
+      analysis: "General market analysis guidelines - shapes how AI analyzes market conditions",
+      general: "Other instructions - miscellaneous AI behavior customizations",
+    };
+    return hints[category] || "";
   }
 
   /**
@@ -1212,7 +1501,7 @@ function createLifecycle() {
     modal.innerHTML = `
       <div class="modal instruction-modal">
         <div class="modal-header">
-          <h3>Create Instruction</h3>
+          <h3><i class="icon-plus"></i> Create Instruction</h3>
           <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
         </div>
         <div class="modal-body">
@@ -1228,19 +1517,43 @@ function createLifecycle() {
               <option value="analysis">Analysis</option>
               <option value="general">General</option>
             </select>
+            <small class="form-hint" id="category-hint">Instructions for token filtering decisions</small>
           </div>
           <div class="form-group">
             <label>Content</label>
-            <textarea id="inst-content" rows="6" placeholder="Enter your instruction..."></textarea>
+            <textarea id="inst-content" rows="12" class="instruction-editor" placeholder="Enter your instruction..."></textarea>
+            <div class="char-count">
+              <span id="char-counter">0</span> characters
+            </div>
           </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
-          <button class="btn btn-primary" onclick="window.aiPage.saveNewInstruction()">Create</button>
+          <button class="btn btn-primary" onclick="window.aiPage.saveNewInstruction()">
+            <i class="icon-plus"></i> Create
+          </button>
         </div>
       </div>
     `;
     document.body.appendChild(modal);
+
+    // Setup category hint updater
+    const categorySelect = $("#inst-category");
+    const hintEl = $("#category-hint");
+    if (categorySelect && hintEl) {
+      categorySelect.addEventListener("change", () => {
+        hintEl.textContent = getCategoryHint(categorySelect.value);
+      });
+    }
+
+    // Setup character counter
+    const textarea = $("#inst-content");
+    const counter = $("#char-counter");
+    if (textarea && counter) {
+      textarea.addEventListener("input", () => {
+        counter.textContent = textarea.value.length;
+      });
+    }
   }
 
   /**
@@ -1305,12 +1618,159 @@ function createLifecycle() {
    * Edit instruction
    */
   async function editInstruction(id) {
-    // TODO: Implement edit functionality
-    Utils.showToast({
-      type: "info",
-      title: "Coming Soon",
-      message: "Edit functionality will be implemented soon",
-    });
+    try {
+      // Fetch instruction data
+      const response = await fetch(`/api/ai/instructions/${id}`);
+      if (!response.ok) throw new Error("Failed to load instruction");
+      const data = await response.json();
+      const inst = data.instruction;
+
+      // Show modal pre-filled with data
+      const modal = document.createElement("div");
+      modal.className = "modal-overlay";
+      modal.innerHTML = `
+        <div class="modal instruction-modal instruction-edit-modal">
+          <div class="modal-header">
+            <h3><i class="icon-edit"></i> Edit Instruction</h3>
+            <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+          </div>
+          <div class="modal-body">
+            <div class="form-group">
+              <label>Name</label>
+              <input type="text" id="edit-inst-name" value="${Utils.escapeHtml(inst.name)}" placeholder="e.g., Liquidity Guard">
+            </div>
+            <div class="form-group">
+              <label>Category</label>
+              <select id="edit-inst-category">
+                <option value="filtering" ${inst.category === "filtering" ? "selected" : ""}>Filtering</option>
+                <option value="trading" ${inst.category === "trading" ? "selected" : ""}>Trading</option>
+                <option value="analysis" ${inst.category === "analysis" ? "selected" : ""}>Analysis</option>
+                <option value="general" ${inst.category === "general" ? "selected" : ""}>General</option>
+              </select>
+              <small class="form-hint" id="edit-category-hint">${getCategoryHint(inst.category)}</small>
+            </div>
+            <div class="form-group">
+              <label>Content</label>
+              <textarea id="edit-inst-content" rows="12" class="instruction-editor" placeholder="Enter your instruction...">${Utils.escapeHtml(inst.content)}</textarea>
+              <div class="char-count">
+                <span id="edit-char-counter">${inst.content.length}</span> characters
+              </div>
+            </div>
+            <div class="instruction-preview-section">
+              <h4><i class="icon-eye"></i> Preview</h4>
+              <div class="instruction-preview">
+                <div class="preview-header">
+                  <span class="preview-name">${Utils.escapeHtml(inst.name)}</span>
+                  <span class="preview-category badge-${inst.category}">${getCategoryLabel(inst.category)}</span>
+                </div>
+                <div class="preview-content">${Utils.escapeHtml(inst.content)}</div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+            <button class="btn btn-primary" onclick="window.aiPage.saveEditedInstruction(${id})">
+              <i class="icon-save"></i> Save Changes
+            </button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
+      // Setup live preview updater
+      const nameInput = $("#edit-inst-name");
+      const categorySelect = $("#edit-inst-category");
+      const contentTextarea = $("#edit-inst-content");
+      const previewName = modal.querySelector(".preview-name");
+      const previewCategory = modal.querySelector(".preview-category");
+      const previewContent = modal.querySelector(".preview-content");
+      const hintEl = $("#edit-category-hint");
+      const counter = $("#edit-char-counter");
+
+      function updatePreview() {
+        if (nameInput && previewName) {
+          previewName.textContent = nameInput.value || "Untitled";
+        }
+        if (categorySelect && previewCategory) {
+          const cat = categorySelect.value;
+          previewCategory.className = `preview-category badge-${cat}`;
+          previewCategory.innerHTML = getCategoryLabel(cat);
+        }
+        if (contentTextarea && previewContent) {
+          previewContent.textContent = contentTextarea.value;
+        }
+      }
+
+      if (nameInput) {
+        nameInput.addEventListener("input", updatePreview);
+      }
+      if (categorySelect) {
+        categorySelect.addEventListener("change", () => {
+          updatePreview();
+          if (hintEl) {
+            hintEl.textContent = getCategoryHint(categorySelect.value);
+          }
+        });
+      }
+      if (contentTextarea) {
+        contentTextarea.addEventListener("input", () => {
+          updatePreview();
+          if (counter) {
+            counter.textContent = contentTextarea.value.length;
+          }
+        });
+      }
+    } catch (error) {
+      console.error("[AI] Error loading instruction for edit:", error);
+      Utils.showToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to load instruction data",
+      });
+    }
+  }
+
+  /**
+   * Save edited instruction
+   */
+  async function saveEditedInstruction(id) {
+    const name = $("#edit-inst-name")?.value;
+    const category = $("#edit-inst-category")?.value || "general";
+    const content = $("#edit-inst-content")?.value;
+
+    if (!name || !content) {
+      Utils.showToast({
+        type: "warning",
+        title: "Missing Fields",
+        message: "Name and content are required",
+      });
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/ai/instructions/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, category, content }),
+      });
+
+      if (!response.ok) throw new Error("Failed to update instruction");
+
+      document.querySelector(".modal-overlay")?.remove();
+      await loadInstructions();
+      Utils.showToast({
+        type: "success",
+        title: "Updated",
+        message: "Instruction updated successfully",
+      });
+    } catch (error) {
+      console.error("[AI] Error updating instruction:", error);
+      Utils.showToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to update instruction",
+      });
+    }
   }
 
   /**
@@ -1341,6 +1801,48 @@ function createLifecycle() {
         type: "error",
         title: "Error",
         message: "Failed to delete instruction",
+      });
+    }
+  }
+
+  /**
+   * Duplicate instruction
+   */
+  async function duplicateInstruction(id) {
+    try {
+      // Fetch the instruction to duplicate
+      const response = await fetch(`/api/ai/instructions/${id}`);
+      if (!response.ok) throw new Error("Failed to load instruction");
+      const data = await response.json();
+      const inst = data.instruction;
+
+      // Create a copy with modified name
+      const copyName = `${inst.name} (Copy)`;
+
+      const createResponse = await fetch("/api/ai/instructions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: copyName,
+          category: inst.category,
+          content: inst.content,
+        }),
+      });
+
+      if (!createResponse.ok) throw new Error("Failed to duplicate instruction");
+
+      await loadInstructions();
+      Utils.showToast({
+        type: "success",
+        title: "Duplicated",
+        message: "Instruction duplicated successfully",
+      });
+    } catch (error) {
+      console.error("[AI] Error duplicating instruction:", error);
+      Utils.showToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to duplicate instruction",
       });
     }
   }
@@ -1478,8 +1980,13 @@ function createLifecycle() {
   api.saveNewInstruction = saveNewInstruction;
   api.toggleInstruction = toggleInstruction;
   api.editInstruction = editInstruction;
+  api.saveEditedInstruction = saveEditedInstruction;
   api.deleteInstruction = deleteInstruction;
+  api.duplicateInstruction = duplicateInstruction;
+  api.toggleInstructionExpanded = toggleInstructionExpanded;
   api.useTemplate = useTemplate;
+  api.previewTemplate = previewTemplate;
+  api.customizeTemplate = customizeTemplate;
   api.loadHistory = loadHistory;
 
   // ============================================================================
