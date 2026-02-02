@@ -127,16 +127,13 @@
 
 
 
-/* Active State - Modern Gradient Highlight */
+/* Active State - Subtle Background Only */
 .ai-nav-item.active {
-  background: var(--primary-alpha-10);
-  border-left: 2px solid var(--primary-color);
-  padding-left: 10px;
+  background: var(--primary-alpha-20);
 }
 
 .ai-nav-item.active .nav-item-icon {
-  background: var(--primary-color);
-  color: #fff;
+  color: var(--primary-color);
 }
 
 .ai-nav-item.active .ai-nav-label {
@@ -159,14 +156,13 @@
   width: 24px;
   height: 24px;
   border-radius: 4px;
-  background: var(--bg-secondary);
+  background: transparent;
   color: var(--text-secondary);
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: color 0.15s ease;
   flex-shrink: 0;
 }
 
 .ai-nav-item:hover .nav-item-icon {
-  background: var(--primary-alpha-10);
   color: var(--primary-color);
 }
 
@@ -1354,14 +1350,15 @@
 .instruction-item {
   display: flex;
   align-items: center;
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--border-color-subtle);
+  padding: 10px 16px;
+  border-bottom: 1px solid rgb(128, 128, 128, 0.1);
   transition: background 0.15s ease;
   cursor: grab;
+  min-height: 40px;
 }
 
 .instruction-item:last-child {
-  border-bottom: none;
+  border-bottom: 1px solid rgb(128, 128, 128, 0.1);
 }
 
 .instruction-item:hover {
@@ -1380,14 +1377,17 @@
 
 .instruction-drag-handle {
   color: var(--text-muted);
-  margin-inline-end: 12px;
+  margin-inline-end: 10px;
   cursor: grab;
-  font-size: 18px;
+  font-size: 16px;
+  line-height: 1;
   user-select: none;
-  transition: color 0.15s ease;
+  opacity: 0.4;
+  transition: opacity 0.15s ease, color 0.15s ease;
 }
 
 .instruction-item:hover .instruction-drag-handle {
+  opacity: 0.7;
   color: var(--text-secondary);
 }
 
@@ -1401,27 +1401,35 @@
 }
 
 .instruction-name {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--text-primary);
-  margin-bottom: 2px;
+  margin-bottom: 3px;
   display: flex;
   align-items: center;
   gap: 8px;
+  line-height: 1.3;
 }
 
 .instruction-meta {
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.3;
 }
 
 .instruction-meta .category-tag {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
   padding: 2px 6px;
   background: var(--bg-tertiary);
-  border-radius: 4px;
-  margin-inline-end: 8px;
+  border-radius: var(--radius-xs);
   text-transform: capitalize;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
 }
 
 .instruction-meta .category-tag.filtering {
@@ -1444,21 +1452,29 @@
   color: var(--info);
 }
 
+.instruction-meta .priority-text {
+  opacity: 0.7;
+  font-size: 10px;
+}
+
 .instruction-actions {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  margin-inline-start: auto;
+  padding-inline-start: 12px;
 }
 
 /* Instruction toggle (smaller than settings toggle) */
 .instruction-toggle {
-  width: 36px;
-  height: 20px;
+  width: 34px;
+  height: 18px;
+  flex-shrink: 0;
 }
 
 .instruction-toggle .toggle-slider::before {
-  height: 14px;
-  width: 14px;
+  height: 12px;
+  width: 12px;
 }
 
 .instruction-toggle input:checked + .toggle-slider::before {
@@ -1466,18 +1482,20 @@
 }
 
 .instruction-menu-btn {
-  width: 28px;
-  height: 28px;
-  display: flex;
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
   border: none;
   background: transparent;
   color: var(--text-secondary);
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
-  font-size: 16px;
+  font-size: 14px;
+  line-height: 1;
   transition: all 0.15s ease;
+  flex-shrink: 0;
 }
 
 .instruction-menu-btn:hover {

@@ -22,7 +22,7 @@
   z-index: 10001; /* Must be above all dialogs (settings, token details, etc. use 10000) */
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 8px;
   pointer-events: none;
   transition: right 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   max-width: 340px;
@@ -41,9 +41,8 @@
   background: linear-gradient(135deg, rgb(18, 24, 39, 0.95) 0%, rgb(24, 32, 52, 0.92) 100%);
   backdrop-filter: blur(24px) saturate(180%);
   border: 1px solid rgb(255, 255, 255, 0.1);
-  border-left: 3px solid var(--toast-accent);
   border-radius: 12px;
-  padding: 16px 18px;
+  padding: 12px 14px;
   box-shadow:
     0 8px 32px rgb(0, 0, 0, 0.4),
     0 0 0 1px rgb(255, 255, 255, 0.06) inset,
@@ -61,18 +60,7 @@
   will-change: transform, opacity;
 }
 
-/* Accent glow effect */
-.toast::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 3px;
-  height: 100%;
-  background: linear-gradient(180deg, var(--toast-accent) 0%, transparent 100%);
-  opacity: 0.6;
-  filter: blur(4px);
-}
+/* Accent glow effect - removed for minimal design */
 
 .toast--visible {
   opacity: 1;
@@ -143,23 +131,23 @@
 .toast__header {
   display: flex;
   align-items: flex-start;
-  gap: 12px;
-  margin-bottom: 10px;
+  gap: 10px;
+  margin-bottom: 6px;
 }
 
 .toast__icon {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: 24px;
+  height: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 14px;
   color: var(--toast-accent);
   font-weight: 700;
   line-height: 1;
   background: rgb(var(--toast-accent-rgb), 0.12);
-  border-radius: 8px;
+  border-radius: 6px;
   position: relative;
   overflow: hidden;
 }
@@ -267,7 +255,7 @@
    ============================================ */
 
 .toast__message {
-  margin: 10px 0 0 44px;
+  margin: 8px 0 0 34px;
   font-size: 13px;
   color: rgb(255, 255, 255, 0.78);
   line-height: 1.6;
@@ -280,7 +268,7 @@
    ============================================ */
 
 .toast__progress {
-  margin: 14px 0 0;
+  margin: 8px 0 0;
   height: 4px;
   background: rgb(255, 255, 255, 0.08);
   border-radius: 3px;

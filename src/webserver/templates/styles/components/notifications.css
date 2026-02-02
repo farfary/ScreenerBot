@@ -410,8 +410,8 @@ body.notification-drawer-open {
   background: var(--bg-card);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  padding: 10px 12px;
-  margin-bottom: 6px;
+  padding: 8px 10px;
+  margin-bottom: 4px;
   cursor: pointer;
   transition: all 0.15s ease;
   overflow: hidden;
@@ -426,41 +426,7 @@ body.notification-drawer-open {
   border-color: var(--primary-color);
 }
 
-/* Status indicator - thin left border */
-.notification-item::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 3px;
-  background: var(--primary-color);
-  opacity: 0;
-  transition: opacity 0.15s ease;
-}
-
-.notification-item:hover::before {
-  opacity: 1;
-}
-
-/* Status variants */
-.notification-item.in-progress::before {
-  background: var(--warning-color);
-  opacity: 1;
-}
-
-.notification-item.completed::before {
-  background: var(--success-color);
-}
-
-.notification-item.failed::before {
-  background: var(--error-color);
-  opacity: 1;
-}
-
-.notification-item.cancelled::before {
-  background: var(--text-muted);
-}
+/* Status indicator - removed for minimal design */
 
 /* Unread indicator */
 .notification-item.unread {

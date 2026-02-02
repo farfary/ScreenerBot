@@ -192,7 +192,7 @@
   position: relative;
   display: flex;
   align-items: center;
-  padding: 8px 16px; /* Increased horizontal padding */
+  padding: 10px 20px; /* Optimized for better spacing */
   background: transparent;
   border-radius: 0;
   border: none;
@@ -345,7 +345,7 @@
 .bot-card {
   position: relative;
   overflow: hidden;
-  border-radius: 8px;
+  border-radius: 6px; /* Tighter border radius */
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -442,13 +442,13 @@
 }
 
 .bot-card[data-status="stopped"] {
-  box-shadow: 0 0 0 1px rgb(239, 68, 68, 0.2);
+  box-shadow: 0 0 0 1px rgb(239, 68, 68, 0.25); /* Slightly more visible */
 }
 
 .bot-card[data-status="stopped"]:hover {
   box-shadow:
-    0 0 0 1px rgb(239, 68, 68, 0.3),
-    0 0 15px rgb(239, 68, 68, 0.1);
+    0 0 0 1px rgb(239, 68, 68, 0.35),
+    0 0 15px rgb(239, 68, 68, 0.12);
 }
 
 /* Quick Actions */
@@ -743,14 +743,47 @@
    RESPONSIVE BREAKPOINTS
    ============================================================================ */
 
-/* Desktop (>= 1200px): All features visible with good spacing */
-@media (width >= 1200px) {
+/* Large Desktop (>= 1600px): Maximum spacing and clarity */
+@media (width >= 1600px) {
+  .header-row-1 {
+    gap: 48px;
+    padding: 0 40px;
+  }
+
+  .header-card {
+    padding: 12px 24px;
+  }
+
+  .header-actions {
+    gap: 20px;
+    padding-left: 40px;
+  }
+}
+
+/* Desktop (1200px - 1599px): All features visible with good spacing */
+@media (width >= 1200px) and (width <= 1599px) {
   .header-row-1 {
     gap: 36px;
   }
 
   .header-card {
-    padding-left: 28px;
+    padding: 10px 20px;
+  }
+
+  .header-actions {
+    gap: 16px;
+    padding-left: 32px;
+  }
+}
+
+/* Medium Desktop (>= 1440px): Enhanced spacing for common desktop resolution */
+@media (width >= 1440px) and (width <= 1599px) {
+  .header-row-1 {
+    gap: 40px;
+  }
+
+  .header-card {
+    padding: 11px 22px;
   }
 }
 
@@ -758,11 +791,11 @@
 @media (width >= 768px) and (width <= 1199px) {
   .header-row-1 {
     gap: 24px;
-    padding: 10px 16px;
+    padding: 0 20px;
   }
 
   .header-card {
-    padding-left: 20px;
+    padding: 8px 16px;
   }
 
   .card-value {
@@ -774,8 +807,8 @@
   }
 
   .header-actions {
-    gap: 8px;
-    padding-left: 20px;
+    gap: 12px;
+    padding-left: 24px;
   }
 }
 

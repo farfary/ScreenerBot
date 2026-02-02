@@ -105,10 +105,9 @@
 }
 
 .config-section-item.active {
-  background: var(--primary-alpha-10);
-  border-left: 2px solid var(--config-accent);
-  padding-left: 10px;
+  background: var(--primary-alpha-20);
   font-weight: 600;
+  color: var(--primary-color);
 }
 
 .config-section-item.search-match:not(.active) {
@@ -125,13 +124,16 @@
 
 .config-section-label span.icon {
   font-size: 1.1rem;
-  opacity: 0.85;
-  transition: opacity 0.2s ease;
+  color: var(--text-secondary);
+  transition: color 0.2s ease;
 }
 
-.config-section-item:hover .config-section-label span.icon,
+.config-section-item:hover .config-section-label span.icon {
+  color: var(--primary-color);
+}
+
 .config-section-item.active .config-section-label span.icon {
-  opacity: 1;
+  color: var(--primary-color);
 }
 
 .config-section-meta {

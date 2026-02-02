@@ -1321,7 +1321,7 @@ function createLifecycle() {
           <div class="instruction-name">${Utils.escapeHtml(inst.name)}</div>
           <div class="instruction-meta">
             <span class="category-tag ${inst.category || "general"}">${inst.category || "general"}</span>
-            Priority: ${index + 1}
+            <span class="priority-text">Priority: ${index + 1}</span>
           </div>
         </div>
         <div class="instruction-actions">
