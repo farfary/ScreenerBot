@@ -170,12 +170,12 @@
 
 .trader-toggle-track {
   position: relative;
-  width: 48px;
-  height: 26px;
+  width: 40px;
+  height: 22px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 13px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 11px;
+  transition: all 0.2s ease;
 }
 
 .trader-toggle-track::before {
@@ -183,12 +183,12 @@
   position: absolute;
   top: 3px;
   left: 3px;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   background: var(--text-muted);
   border-radius: 50%;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.2);
 }
 
 .trader-toggle-switch input:checked + .trader-toggle-track {
@@ -197,7 +197,7 @@
 }
 
 .trader-toggle-switch input:checked + .trader-toggle-track::before {
-  left: calc(100% - 21px);
+  left: calc(100% - 19px);
   background: #fff;
 }
 
@@ -570,20 +570,20 @@
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: 11px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: all 0.2s ease;
 }
 
 .control-toggle .toggle-track::before {
   content: "";
   position: absolute;
-  top: 2px;
-  left: 2px;
+  top: 3px;
+  left: 3px;
   width: 16px;
   height: 16px;
   background: var(--text-muted);
   border-radius: 50%;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.15);
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.2);
 }
 
 .control-toggle input:checked + .toggle-track {
@@ -592,7 +592,7 @@
 }
 
 .control-toggle input:checked + .toggle-track::before {
-  left: calc(100% - 18px);
+  left: calc(100% - 19px);
   background: #fff;
 }
 
