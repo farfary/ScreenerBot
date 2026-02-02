@@ -69,6 +69,17 @@ pub const LOGO_SVG: &str = include_str!("assets/logo.svg");
 pub const LOGO_PNG: &[u8] = include_bytes!("assets/logo.png");
 pub const LIGHTWEIGHT_CHARTS_JS: &[u8] = include_bytes!("assets/lightweight-charts.js");
 
+// AI Provider logos
+pub const PROVIDER_OPENAI: &[u8] = include_bytes!("assets/providers/openai.png");
+pub const PROVIDER_ANTHROPIC: &[u8] = include_bytes!("assets/providers/anthropic.png");
+pub const PROVIDER_GROQ: &[u8] = include_bytes!("assets/providers/groq.png");
+pub const PROVIDER_DEEPSEEK: &[u8] = include_bytes!("assets/providers/deepseek.png");
+pub const PROVIDER_GEMINI: &[u8] = include_bytes!("assets/providers/gemini.png");
+pub const PROVIDER_OLLAMA: &[u8] = include_bytes!("assets/providers/ollama.png");
+pub const PROVIDER_TOGETHER: &[u8] = include_bytes!("assets/providers/together.png");
+pub const PROVIDER_OPENROUTER: &[u8] = include_bytes!("assets/providers/openrouter.png");
+pub const PROVIDER_MISTRAL: &[u8] = include_bytes!("assets/providers/mistral.png");
+
 // Lucide icon font
 const LUCIDE_ICON_CSS: &str = include_str!("assets/lucide-font/lucide.css");
 pub const LUCIDE_FONT_WOFF2: &[u8] = include_bytes!("assets/lucide-font/lucide.woff2");

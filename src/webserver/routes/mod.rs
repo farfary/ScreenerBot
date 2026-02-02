@@ -62,6 +62,7 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/scripts/ui/:file", axum::routing::get(get_ui_script))
         .route("/assets/:file", axum::routing::get(get_asset))
         .route("/assets/fonts/:file", axum::routing::get(get_font))
+        .route("/assets/providers/:file", axum::routing::get(get_provider_logo))
         .nest("/api", api_routes())
         .with_state(state)
 }
@@ -397,6 +398,33 @@ async fn get_asset(axum::extract::Path(file): axum::extract::Path<String>) -> Re
         )
             .into_response(),
         _ => (StatusCode::NOT_FOUND, "Asset not found").into_response(),
+    }
+}
+
+/// Serve AI provider logos
+async fn get_provider_logo(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
+    let content_type = [(http_header::CONTENT_TYPE, "image/png")];
+    match file.as_str() {
+        "openai.png" => (StatusCode::OK, content_type, templates::PROVIDER_OPENAI).into_response(),
+        "anthropic.png" => {
+            (StatusCode::OK, content_type, templates::PROVIDER_ANTHROPIC).into_response()
+        }
+        "groq.png" => (StatusCode::OK, content_type, templates::PROVIDER_GROQ).into_response(),
+        "deepseek.png" => {
+            (StatusCode::OK, content_type, templates::PROVIDER_DEEPSEEK).into_response()
+        }
+        "gemini.png" => (StatusCode::OK, content_type, templates::PROVIDER_GEMINI).into_response(),
+        "ollama.png" => (StatusCode::OK, content_type, templates::PROVIDER_OLLAMA).into_response(),
+        "together.png" => {
+            (StatusCode::OK, content_type, templates::PROVIDER_TOGETHER).into_response()
+        }
+        "openrouter.png" => {
+            (StatusCode::OK, content_type, templates::PROVIDER_OPENROUTER).into_response()
+        }
+        "mistral.png" => {
+            (StatusCode::OK, content_type, templates::PROVIDER_MISTRAL).into_response()
+        }
+        _ => (StatusCode::NOT_FOUND, "Provider logo not found").into_response(),
     }
 }
 
