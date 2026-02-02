@@ -173,6 +173,11 @@ pub fn get_tools_db_path() -> PathBuf {
     get_data_directory().join("tools.db")
 }
 
+/// Returns the AI database path
+pub fn get_ai_db_path() -> PathBuf {
+    get_data_directory().join("ai.db")
+}
+
 // =============================================================================
 // CACHE AND DATA FILE PATHS
 // =============================================================================
