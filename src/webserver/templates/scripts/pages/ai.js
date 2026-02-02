@@ -1137,53 +1137,40 @@ function createLifecycle() {
     const container = $("#instructions-list");
     if (!container) return;
 
-    if (instructions.length === 0) {
+    if (!instructions || instructions.length === 0) {
       container.innerHTML = `
-        <div class="empty-state">
-          <i class="icon-edit"></i>
-          <p>No custom instructions yet</p>
-          <small>Create instructions to customize AI behavior</small>
-        </div>`;
+        <div class="empty-state" id="no-instructions">
+          <span class="empty-icon">📝</span>
+          <p class="empty-text">No custom instructions yet</p>
+          <button class="btn btn-secondary" onclick="window.aiPage.createInstruction()">Add Your First Instruction</button>
+        </div>
+      `;
       return;
     }
 
     container.innerHTML = instructions
       .map(
-        (inst) => `
-      <div class="instruction-card ${inst.enabled ? "" : "disabled"}" 
+        (inst, index) => `
+      <div class="instruction-item" 
            data-id="${inst.id}" 
+           data-category="${inst.category || "general"}"
+           data-active="${inst.enabled}"
            draggable="true">
-        <div class="instruction-header">
-          <span class="drag-handle" title="Drag to reorder"><i class="icon-menu"></i></span>
-          <span class="instruction-priority">#${inst.priority}</span>
-          <span class="instruction-name">${Utils.escapeHtml(inst.name)}</span>
-          <span class="instruction-category badge-${inst.category}">${getCategoryLabel(inst.category)}</span>
-        </div>
-        <div class="instruction-content" onclick="window.aiPage.toggleInstructionExpanded(${inst.id})">
-          ${Utils.escapeHtml(inst.content.substring(0, 150))}${inst.content.length > 150 ? "..." : ""}
-        </div>
-        <div class="instruction-full-content" style="display: none;">
-          ${Utils.escapeHtml(inst.content)}
-        </div>
-        <div class="instruction-meta">
-          <small class="instruction-timestamp">
-            ${inst.created_at ? `Created ${formatTimestamp(inst.created_at)}` : ""}
-          </small>
+        <span class="instruction-drag-handle">≡</span>
+        <div class="instruction-info">
+          <div class="instruction-name">${Utils.escapeHtml(inst.name)}</div>
+          <div class="instruction-meta">
+            <span class="category-tag ${inst.category || "general"}">${inst.category || "general"}</span>
+            Priority: ${index + 1}
+          </div>
         </div>
         <div class="instruction-actions">
-          <label class="toggle-small">
-            <input type="checkbox" ${inst.enabled ? "checked" : ""} onchange="window.aiPage.toggleInstruction(${inst.id}, this.checked)">
-            <span class="toggle-track"></span>
+          <label class="toggle-switch instruction-toggle">
+            <input type="checkbox" ${inst.enabled ? "checked" : ""} 
+                   onchange="window.aiPage.toggleInstruction('${inst.id}', this.checked)">
+            <span class="toggle-slider"></span>
           </label>
-          <button class="btn-icon" onclick="window.aiPage.duplicateInstruction(${inst.id})" title="Duplicate">
-            <i class="icon-copy"></i>
-          </button>
-          <button class="btn-icon" onclick="window.aiPage.editInstruction(${inst.id})" title="Edit">
-            <i class="icon-edit"></i>
-          </button>
-          <button class="btn-icon btn-danger" onclick="window.aiPage.deleteInstruction(${inst.id})" title="Delete">
-            <i class="icon-trash"></i>
-          </button>
+          <button class="instruction-menu-btn" onclick="window.aiPage.showInstructionMenu(event, '${inst.id}')">⋮</button>
         </div>
       </div>
     `
@@ -1192,6 +1179,113 @@ function createLifecycle() {
 
     // Setup drag and drop
     setupDragAndDrop();
+
+    // Setup filters
+    setupInstructionFilters();
+  }
+
+  /**
+   * Setup instruction filters
+   */
+  function setupInstructionFilters() {
+    const searchInput = $("#instructions-search");
+    const categoryFilter = $("#instructions-category-filter");
+    const statusFilter = $("#instructions-status-filter");
+
+    // Remove old listeners by replacing elements (simple approach)
+    if (searchInput && !searchInput.dataset.filtered) {
+      searchInput.dataset.filtered = "true";
+      searchInput.addEventListener("input", Utils.debounce(filterInstructions, 300));
+    }
+    if (categoryFilter && !categoryFilter.dataset.filtered) {
+      categoryFilter.dataset.filtered = "true";
+      categoryFilter.addEventListener("change", filterInstructions);
+    }
+    if (statusFilter && !statusFilter.dataset.filtered) {
+      statusFilter.dataset.filtered = "true";
+      statusFilter.addEventListener("change", filterInstructions);
+    }
+  }
+
+  /**
+   * Filter instructions based on search and filters
+   */
+  function filterInstructions() {
+    const search = ($("#instructions-search")?.value || "").toLowerCase();
+    const category = $("#instructions-category-filter")?.value || "all";
+    const status = $("#instructions-status-filter")?.value || "all";
+
+    $$(".instruction-item").forEach((item) => {
+      const name = (item.querySelector(".instruction-name")?.textContent || "").toLowerCase();
+      const itemCategory = item.dataset.category || "";
+      const isActive = item.dataset.active === "true";
+
+      let visible = true;
+
+      if (search && !name.includes(search)) visible = false;
+      if (category !== "all" && itemCategory !== category) visible = false;
+      if (status === "active" && !isActive) visible = false;
+      if (status === "inactive" && isActive) visible = false;
+
+      item.style.display = visible ? "" : "none";
+    });
+  }
+
+  /**
+   * Toggle templates section
+   */
+  function toggleTemplates() {
+    const section = $(".templates-section");
+    if (section) {
+      section.classList.toggle("collapsed");
+    }
+  }
+
+  /**
+   * Show instruction menu (edit, duplicate, delete)
+   */
+  function showInstructionMenu(event, id) {
+    event.stopPropagation();
+
+    // Create a simple context menu
+    const existingMenu = $(".instruction-context-menu");
+    if (existingMenu) {
+      existingMenu.remove();
+    }
+
+    const menu = document.createElement("div");
+    menu.className = "instruction-context-menu";
+    menu.style.position = "fixed";
+    menu.style.zIndex = "10000";
+    menu.innerHTML = `
+      <div class="context-menu-item" onclick="window.aiPage.editInstruction('${id}'); this.parentElement.remove();">
+        <i class="icon-edit"></i> Edit
+      </div>
+      <div class="context-menu-item" onclick="window.aiPage.duplicateInstruction('${id}'); this.parentElement.remove();">
+        <i class="icon-copy"></i> Duplicate
+      </div>
+      <div class="context-menu-item danger" onclick="window.aiPage.deleteInstruction('${id}'); this.parentElement.remove();">
+        <i class="icon-trash"></i> Delete
+      </div>
+    `;
+
+    // Position menu near the button
+    const rect = event.target.getBoundingClientRect();
+    menu.style.top = `${rect.bottom + 5}px`;
+    menu.style.left = `${rect.left - 120}px`;
+
+    document.body.appendChild(menu);
+
+    // Close menu on outside click
+    setTimeout(() => {
+      const closeMenu = (e) => {
+        if (!menu.contains(e.target)) {
+          menu.remove();
+          document.removeEventListener("click", closeMenu);
+        }
+      };
+      document.addEventListener("click", closeMenu);
+    }, 10);
   }
 
   /**
@@ -1251,59 +1345,59 @@ function createLifecycle() {
    * Setup drag and drop for instructions
    */
   function setupDragAndDrop() {
-    const cards = $$(".instruction-card");
+    const items = $$(".instruction-item");
 
-    cards.forEach((card) => {
+    items.forEach((item) => {
       // Drag start
-      card.addEventListener("dragstart", (e) => {
-        state.draggedItem = card;
-        card.classList.add("dragging");
+      item.addEventListener("dragstart", (e) => {
+        state.draggedItem = item;
+        item.classList.add("dragging");
         e.dataTransfer.effectAllowed = "move";
       });
 
       // Drag end
-      card.addEventListener("dragend", () => {
-        card.classList.remove("dragging");
+      item.addEventListener("dragend", () => {
+        item.classList.remove("dragging");
         state.draggedItem = null;
         // Remove all drag-over classes
-        cards.forEach((c) => c.classList.remove("drag-over"));
+        items.forEach((i) => i.classList.remove("drag-over"));
       });
 
       // Drag over
-      card.addEventListener("dragover", (e) => {
+      item.addEventListener("dragover", (e) => {
         e.preventDefault();
-        if (state.draggedItem === card) return;
-        card.classList.add("drag-over");
+        if (state.draggedItem === item) return;
+        item.classList.add("drag-over");
       });
 
       // Drag leave
-      card.addEventListener("dragleave", () => {
-        card.classList.remove("drag-over");
+      item.addEventListener("dragleave", () => {
+        item.classList.remove("drag-over");
       });
 
       // Drop
-      card.addEventListener("drop", async (e) => {
+      item.addEventListener("drop", async (e) => {
         e.preventDefault();
-        card.classList.remove("drag-over");
+        item.classList.remove("drag-over");
 
-        if (!state.draggedItem || state.draggedItem === card) return;
+        if (!state.draggedItem || state.draggedItem === item) return;
 
-        // Get all card IDs in current order
+        // Get all items in current order
         const container = $("#instructions-list");
-        const allCards = Array.from(container.querySelectorAll(".instruction-card"));
-        const draggedIndex = allCards.indexOf(state.draggedItem);
-        const targetIndex = allCards.indexOf(card);
+        const allItems = Array.from(container.querySelectorAll(".instruction-item"));
+        const draggedIndex = allItems.indexOf(state.draggedItem);
+        const targetIndex = allItems.indexOf(item);
 
         // Reorder in DOM
         if (draggedIndex < targetIndex) {
-          card.after(state.draggedItem);
+          item.after(state.draggedItem);
         } else {
-          card.before(state.draggedItem);
+          item.before(state.draggedItem);
         }
 
         // Get new order
-        const newOrder = Array.from(container.querySelectorAll(".instruction-card")).map((c) =>
-          parseInt(c.dataset.id)
+        const newOrder = Array.from(container.querySelectorAll(".instruction-item")).map((i) =>
+          parseInt(i.dataset.id)
         );
 
         // Save new order to backend
@@ -1352,23 +1446,21 @@ function createLifecycle() {
     const container = $("#templates-list");
     if (!container) return;
 
+    if (!templates || templates.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <p class="empty-text">No templates available</p>
+        </div>
+      `;
+      return;
+    }
+
     container.innerHTML = templates
       .map(
         (t) => `
-      <div class="template-card" data-id="${t.id}">
-        <div class="template-header">
-          <span class="template-name">${Utils.escapeHtml(t.name)}</span>
-          <span class="template-category badge-${t.category}">${getCategoryLabel(t.category)}</span>
-        </div>
-        <div class="template-tags">${t.tags.map((tag) => `<span class="tag">${tag}</span>`).join("")}</div>
-        <div class="template-actions">
-          <button class="btn btn-small btn-secondary" onclick="window.aiPage.previewTemplate('${t.id}')">
-            <i class="icon-eye"></i> Preview
-          </button>
-          <button class="btn btn-small btn-primary" onclick="window.aiPage.customizeTemplate('${t.id}')">
-            <i class="icon-edit"></i> Customize & Add
-          </button>
-        </div>
+      <div class="template-card" data-id="${t.id}" onclick="window.aiPage.customizeTemplate('${t.id}')">
+        <div class="template-name">${Utils.escapeHtml(t.name)}</div>
+        <div class="template-description">${Utils.escapeHtml(t.description || t.content.substring(0, 100) + "...")}</div>
       </div>
     `
       )
@@ -1980,6 +2072,7 @@ function createLifecycle() {
   api.deleteInstruction = deleteInstruction;
   api.duplicateInstruction = duplicateInstruction;
   api.toggleInstructionExpanded = toggleInstructionExpanded;
+  api.showInstructionMenu = showInstructionMenu;
   api.useTemplate = useTemplate;
   api.previewTemplate = previewTemplate;
   api.customizeTemplate = customizeTemplate;
@@ -2101,6 +2194,14 @@ const lifecycle = createLifecycle();
 
 // Expose API functions globally for inline event handlers
 window.aiPage = lifecycle.api;
+
+// Expose toggleTemplates for inline handler
+window.toggleTemplates = () => {
+  const section = document.querySelector(".templates-section");
+  if (section) {
+    section.classList.toggle("collapsed");
+  }
+};
 
 // Register the page
 registerPage("ai", lifecycle);

@@ -1247,329 +1247,376 @@
    Instructions Tab Styles
    ============================================================================ */
 
-.instructions-section {
+/* Toolbar with Filters and Search */
+.instructions-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.filter-group {
+  display: flex;
+  gap: 12px;
+}
+
+.filter-select {
+  padding: 8px 32px 8px 12px;
+  font-size: 13px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--ai-card-radius);
-  padding: var(--ai-card-padding);
-  margin-bottom: 1rem;
+  border-radius: 6px;
+  color: var(--text-primary);
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  transition: border-color 0.15s ease;
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.search-box {
+  position: relative;
+  flex: 1;
+  max-width: 300px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 8px 36px 8px 12px;
+  font-size: 13px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  transition: border-color 0.15s ease;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-icon {
+  position: absolute;
+  inset-inline-end: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Instructions List Container */
+.instructions-list-container {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 24px;
 }
 
 .instructions-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
+  min-height: 200px;
 }
 
-.instruction-card {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: 8px;
-  padding: 1rem;
-  transition: all 0.2s ease;
-  cursor: move;
-}
-
-.instruction-card:hover {
-  border-color: var(--primary-alpha-40);
-  box-shadow: var(--ai-card-shadow);
-}
-
-.instruction-card.disabled {
-  opacity: 0.6;
-}
-
-.instruction-card.dragging {
-  opacity: 0.5;
-  border-color: var(--primary);
-  box-shadow: 0 4px 12px var(--shadow-lg);
-}
-
-.instruction-card.drag-over {
-  border-color: var(--primary);
-  background: var(--primary-alpha-5);
-  transform: translateY(-2px);
-}
-
-.instruction-card.instruction-expanded {
-  background: var(--bg-secondary);
-}
-
-.instruction-header {
+.instruction-item {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.5rem;
-}
-
-.drag-handle {
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-color-subtle);
+  transition: background 0.15s ease;
   cursor: grab;
+}
+
+.instruction-item:last-child {
+  border-bottom: none;
+}
+
+.instruction-item:hover {
+  background: var(--bg-hover);
+}
+
+.instruction-item.dragging {
+  opacity: 0.5;
+  background: var(--primary-alpha-10);
+}
+
+.instruction-item.drag-over {
+  border-color: var(--primary);
+  background: var(--primary-alpha-5);
+}
+
+.instruction-drag-handle {
   color: var(--text-muted);
-  font-size: 1rem;
-  padding: 0.25rem;
-  transition: color 0.2s ease;
+  margin-inline-end: 12px;
+  cursor: grab;
+  font-size: 18px;
+  user-select: none;
+  transition: color 0.15s ease;
 }
 
-.drag-handle:hover {
-  color: var(--text-primary);
+.instruction-item:hover .instruction-drag-handle {
+  color: var(--text-secondary);
 }
 
-.drag-handle:active {
+.instruction-drag-handle:active {
   cursor: grabbing;
 }
 
-.instruction-priority {
-  font-size: 0.75rem;
-  color: var(--text-muted);
-  font-weight: 500;
-  font-family: var(--font-mono);
+.instruction-info {
+  flex: 1;
+  min-width: 0;
 }
 
 .instruction-name {
-  font-weight: 600;
-  flex: 1;
+  font-size: 14px;
+  font-weight: 500;
   color: var(--text-primary);
-}
-
-.instruction-category {
-  font-size: 0.7rem;
-  padding: 0.25rem 0.6rem;
-  border-radius: 4px;
-  background: var(--bg-tertiary);
-  display: inline-flex;
+  margin-bottom: 2px;
+  display: flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 8px;
 }
 
-.instruction-category.badge-filtering {
+.instruction-meta {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.instruction-meta .category-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  background: var(--bg-tertiary);
+  border-radius: 4px;
+  margin-inline-end: 8px;
+  text-transform: capitalize;
+}
+
+.instruction-meta .category-tag.filtering {
   background: var(--primary-alpha-15);
   color: var(--primary);
 }
 
-.instruction-category.badge-trading {
+.instruction-meta .category-tag.trading {
   background: var(--success-alpha-15);
   color: var(--success);
 }
 
-.instruction-category.badge-analysis {
+.instruction-meta .category-tag.analysis {
   background: var(--warning-alpha-15);
   color: var(--warning);
 }
 
-.instruction-category.badge-general {
+.instruction-meta .category-tag.general {
   background: var(--info-alpha-15);
   color: var(--info);
-}
-
-.instruction-content {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  line-height: 1.5;
-  margin-bottom: 0.75rem;
-  cursor: pointer;
-  padding: 0.5rem;
-  border-radius: 4px;
-  transition: background 0.2s ease;
-}
-
-.instruction-content:hover {
-  background: var(--bg-secondary);
-}
-
-.instruction-full-content {
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  line-height: 1.6;
-  margin-bottom: 0.75rem;
-  padding: 0.75rem;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  white-space: pre-wrap;
-  font-family: var(--font-mono);
-  max-height: 400px;
-  overflow-y: auto;
-}
-
-.instruction-meta {
-  margin-bottom: 0.5rem;
-}
-
-.instruction-timestamp {
-  font-size: 0.75rem;
-  color: var(--text-muted);
 }
 
 .instruction-actions {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  justify-content: flex-end;
+  gap: 8px;
 }
 
-.toggle-small {
-  display: flex;
-  align-items: center;
-  cursor: pointer;
-}
-
-.toggle-small input[type="checkbox"] {
-  position: absolute;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.toggle-small .toggle-track {
-  position: relative;
-  width: 38px;
+/* Instruction toggle (smaller than settings toggle) */
+.instruction-toggle {
+  width: 36px;
   height: 20px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 10px;
-  transition: all 0.25s ease;
 }
 
-.toggle-small .toggle-track::before {
-  content: "";
-  position: absolute;
-  top: 2px;
-  inset-inline-start: 2px;
-  width: 14px;
+.instruction-toggle .toggle-slider::before {
   height: 14px;
-  background: var(--text-muted);
-  border-radius: 50%;
-  transition: all 0.25s ease;
+  width: 14px;
 }
 
-.toggle-small input:checked + .toggle-track {
-  background: var(--success-alpha-20);
-  border-color: var(--success);
+.instruction-toggle input:checked + .toggle-slider::before {
+  transform: translateX(16px);
 }
 
-.toggle-small input:checked + .toggle-track::before {
-  background: var(--success);
-  transform: translateX(18px);
-}
-
-.btn-icon {
+.instruction-menu-btn {
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 4px;
   cursor: pointer;
-  transition: all 0.2s ease;
-  color: var(--text-muted);
+  font-size: 16px;
+  transition: all 0.15s ease;
 }
 
-.btn-icon:hover {
-  background: var(--primary-alpha-10);
-  border-color: var(--primary);
-  color: var(--primary);
+.instruction-menu-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
 }
 
-.btn-icon.btn-danger:hover {
-  background: var(--danger-alpha-10);
-  border-color: var(--danger);
-  color: var(--danger);
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
 }
 
-/* Templates */
+.empty-icon {
+  font-size: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.empty-text {
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+/* Templates Section (Collapsible) */
 .templates-section {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: var(--ai-card-radius);
-  padding: var(--ai-card-padding);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.templates-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.templates-header:hover {
+  background: var(--bg-hover);
+}
+
+.templates-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.templates-icon {
+  font-size: 18px;
+}
+
+.templates-toggle {
+  color: var(--text-secondary);
+  transition: transform 0.2s ease;
+}
+
+.templates-section.collapsed .templates-toggle {
+  transform: rotate(-90deg);
+}
+
+.templates-body {
+  border-top: 1px solid var(--border-color);
+  padding: 16px 20px;
+  transition: all 0.2s ease;
+}
+
+.templates-section.collapsed .templates-body {
+  display: none;
+}
+
+.templates-description {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-bottom: 16px;
 }
 
 .templates-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 12px;
 }
 
 .template-card {
-  background: var(--bg-tertiary);
+  background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  padding: 1rem;
-  transition: all 0.2s ease;
+  padding: 14px;
+  transition: all 0.15s ease;
+  cursor: pointer;
 }
 
 .template-card:hover {
-  border-color: var(--primary-alpha-40);
-  box-shadow: var(--ai-card-shadow);
-}
-
-.template-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.5rem;
+  border-color: var(--primary);
+  background: var(--primary-alpha-5);
 }
 
 .template-name {
-  font-weight: 600;
+  font-weight: 500;
   color: var(--text-primary);
+  margin-bottom: 4px;
+  font-size: 14px;
 }
 
-.template-category {
-  font-size: 0.7rem;
-  padding: 0.25rem 0.6rem;
-  border-radius: 4px;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.25rem;
+.template-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
 }
 
-.template-category.badge-filtering {
-  background: var(--primary-alpha-15);
-  color: var(--primary);
-}
-
-.template-category.badge-trading {
-  background: var(--success-alpha-15);
-  color: var(--success);
-}
-
-.template-category.badge-analysis {
-  background: var(--warning-alpha-15);
-  color: var(--warning);
-}
-
-.template-category.badge-general {
-  background: var(--info-alpha-15);
-  color: var(--info);
-}
-
-.template-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25rem;
-  margin-bottom: 0.75rem;
-}
-
-.template-tags .tag {
-  font-size: 0.65rem;
-  padding: 0.125rem 0.375rem;
+/* Instruction Context Menu */
+.instruction-context-menu {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 3px;
-  color: var(--text-muted);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  min-width: 150px;
 }
 
-.template-actions {
+.context-menu-item {
   display: flex;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 13px;
+  transition: background 0.15s ease;
 }
 
-.template-actions .btn {
-  flex: 1;
+.context-menu-item:hover {
+  background: var(--bg-hover);
 }
+
+.context-menu-item.danger {
+  color: var(--danger);
+}
+
+.context-menu-item.danger:hover {
+  background: var(--danger-alpha-10);
+}
+
+.context-menu-item i {
+  font-size: 14px;
+}
+
+/* ============================================================================
+   History Tab Styles
+   ============================================================================ */
 
 /* Template Preview Modal */
 .template-preview-modal {

@@ -456,26 +456,82 @@
 
         <!-- Instructions Panel -->
         <div id="instructions-panel" class="ai-panel-content">
-          <div class="instructions-section">
-            <div class="section-header">
-              <h3><i class="icon-edit"></i> Custom Instructions</h3>
-              <button
-                type="button"
-                class="btn btn-primary btn-small"
-                onclick="window.aiPage.createInstruction()"
-              >
-                <i class="icon-plus"></i> New Instruction
-              </button>
+          <div class="ai-panel-header">
+            <div class="panel-header-content">
+              <h2 class="ai-panel-title">Custom Instructions</h2>
+              <p class="ai-panel-description">
+                Add custom prompts that are injected into AI evaluations
+              </p>
             </div>
-            <div id="instructions-list" class="instructions-list"></div>
+            <button
+              type="button"
+              class="btn btn-primary"
+              onclick="window.aiPage.createInstruction()"
+            >
+              <i class="icon-plus"></i> New Instruction
+            </button>
           </div>
 
-          <div class="templates-section">
-            <div class="section-header">
-              <h3><i class="icon-bookmark"></i> Built-in Templates</h3>
-              <span class="section-subtitle">Pre-made instructions you can customize</span>
+          <!-- Filters and Search -->
+          <div class="instructions-toolbar">
+            <div class="filter-group">
+              <select id="instructions-category-filter" class="filter-select">
+                <option value="all">All Categories</option>
+                <option value="filtering">Filtering</option>
+                <option value="trading">Trading</option>
+                <option value="analysis">Analysis</option>
+                <option value="general">General</option>
+              </select>
+              <select id="instructions-status-filter" class="filter-select">
+                <option value="all">All Status</option>
+                <option value="active">Active Only</option>
+                <option value="inactive">Inactive Only</option>
+              </select>
             </div>
-            <div id="templates-list" class="templates-grid"></div>
+            <div class="search-box">
+              <input
+                type="text"
+                id="instructions-search"
+                placeholder="Search instructions..."
+                class="search-input"
+              />
+              <span class="search-icon">🔍</span>
+            </div>
+          </div>
+
+          <!-- Instructions List -->
+          <div class="instructions-list-container">
+            <div class="instructions-list" id="instructions-list">
+              <!-- Rendered by JavaScript -->
+              <div class="empty-state" id="no-instructions">
+                <span class="empty-icon">📝</span>
+                <p class="empty-text">No custom instructions yet</p>
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  onclick="window.aiPage.createInstruction()"
+                >
+                  Add Your First Instruction
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Templates Section (Collapsible) -->
+          <div class="templates-section">
+            <div class="templates-header" onclick="window.toggleTemplates()">
+              <div class="templates-title">
+                <span class="templates-icon">📚</span>
+                <span>Instruction Templates</span>
+              </div>
+              <span class="templates-toggle" id="templates-toggle">▼</span>
+            </div>
+            <div class="templates-body" id="templates-body">
+              <p class="templates-description">Pre-built instruction templates you can add</p>
+              <div class="templates-grid" id="templates-list">
+                <!-- Rendered by JavaScript -->
+              </div>
+            </div>
           </div>
         </div>
 
