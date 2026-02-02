@@ -907,7 +907,7 @@
 }
 
 .settings-nav-tab-item.dragging {
-  opacity: 0.4;
+  opacity: 0.3;
   transform: scale(0.95);
   background: var(--primary-alpha-10);
   border-color: var(--primary-color);
@@ -918,38 +918,28 @@
   border-color: var(--primary-color);
 }
 
-.settings-nav-tab-item.drag-over-top {
-  margin-top: 40px;
-  position: relative;
-}
-
 .settings-nav-tab-item.drag-over-top::before {
   content: '';
   position: absolute;
-  top: -24px;
+  top: -2px;
   left: 0;
   right: 0;
-  height: 36px;
-  background: var(--primary-alpha-10);
-  border: 2px dashed var(--primary-color);
-  border-radius: 8px;
-}
-
-.settings-nav-tab-item.drag-over-bottom {
-  margin-bottom: 40px;
-  position: relative;
+  height: 3px;
+  background: var(--primary-color);
+  border-radius: 2px;
+  box-shadow: 0 0 8px var(--primary-color);
 }
 
 .settings-nav-tab-item.drag-over-bottom::after {
   content: '';
   position: absolute;
-  bottom: -24px;
+  bottom: -2px;
   left: 0;
   right: 0;
-  height: 36px;
-  background: var(--primary-alpha-10);
-  border: 2px dashed var(--primary-color);
-  border-radius: 8px;
+  height: 3px;
+  background: var(--primary-color);
+  border-radius: 2px;
+  box-shadow: 0 0 8px var(--primary-color);
 }
 
 .settings-nav-tab-position {
