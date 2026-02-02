@@ -1622,8 +1622,7 @@ function createLifecycle() {
       // Fetch instruction data
       const response = await fetch(`/api/ai/instructions/${id}`);
       if (!response.ok) throw new Error("Failed to load instruction");
-      const data = await response.json();
-      const inst = data.instruction;
+      const inst = await response.json();
 
       // Show modal pre-filled with data
       const modal = document.createElement("div");
@@ -1813,8 +1812,7 @@ function createLifecycle() {
       // Fetch the instruction to duplicate
       const response = await fetch(`/api/ai/instructions/${id}`);
       if (!response.ok) throw new Error("Failed to load instruction");
-      const data = await response.json();
-      const inst = data.instruction;
+      const inst = await response.json();
 
       // Create a copy with modified name
       const copyName = `${inst.name} (Copy)`;
