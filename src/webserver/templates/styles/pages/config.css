@@ -73,7 +73,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 4px 0;
+  padding: 8px var(--spacing-sm);
   scrollbar-gutter: stable both-edges;
   overscroll-behavior: contain;
 }
