@@ -2400,7 +2400,8 @@ function createLifecycle() {
     }
     
     // Track if this is a session change (requires full re-render)
-    const isSessionChange = state.chat.currentSession?.id !== session.id;
+    // state.chat.currentSession is the ID (number), not the object
+    const isSessionChange = state.chat.currentSession !== session.id;
     
     try {
       const url = `/api/ai/chat/sessions/${session.id}`;
@@ -2414,10 +2415,15 @@ function createLifecycle() {
       const data = await response.json();
       const newMessages = data.messages || [];
       
-      // Skip update if message count unchanged (optimization)
+      // Skip update if message count unchanged and last message ID matches (optimization)
       if (!forceRender && !isSessionChange && 
           state.chat.messages.length === newMessages.length) {
-        return;
+        // Also check last message ID to be sure
+        const lastOld = state.chat.messages[state.chat.messages.length - 1];
+        const lastNew = newMessages[newMessages.length - 1];
+        if (lastOld?.id === lastNew?.id) {
+          return;
+        }
       }
       
       state.chat.messages = newMessages;
@@ -2492,29 +2498,39 @@ function createLifecycle() {
         }),
       });
 
-      if (!response.ok) throw new Error("Failed to send message");
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("[AI Chat] API error:", response.status, errorData);
+        throw new Error(errorData.error?.message || `API error: ${response.status}`);
+      }
 
       const data = await response.json();
+      console.log("[AI Chat] Response:", data);
 
       // Hide typing indicator
       hideTypingIndicator();
 
-      // Add assistant message to UI
-      if (data.response) {
+      // Check for error in response
+      if (data.error) {
+        throw new Error(data.error.message || "Unknown error");
+      }
+
+      // Add assistant message to UI - API returns ChatResponse directly (not wrapped in .response)
+      if (data.content !== undefined) {
         const assistantMessage = {
           role: "assistant",
-          content: data.response.content || "",
-          tool_calls: data.response.tool_calls || [],
+          content: data.content || "",
+          tool_calls: data.tool_calls || [],
           timestamp: new Date().toISOString(),
         };
         state.chat.messages.push(assistantMessage);
         renderMessages();
       }
 
-      // Check if there's a pending confirmation
-      if (data.pending_confirmation) {
-        state.chat.pendingConfirmation = data.pending_confirmation;
-        showToolConfirmation(data.pending_confirmation);
+      // Check if there are pending confirmations (plural - API returns array)
+      if (data.pending_confirmations && data.pending_confirmations.length > 0) {
+        state.chat.pendingConfirmation = data.pending_confirmations[0];
+        showToolConfirmation(data.pending_confirmations[0]);
       }
 
       // Reload sessions to update last message time
@@ -2746,28 +2762,65 @@ function createLifecycle() {
     }
   }
 
+  // Track previous sessions state for comparison
+  let _prevSessionsJson = "";
+
   /**
-   * Render sessions list
+   * Render sessions list - with incremental update to avoid flicker
    */
   function renderSessions() {
     const container = $("#chat-sessions-list");
     if (!container) return;
 
     if (state.chat.sessions.length === 0) {
-      container.innerHTML = `
-        <div class="empty-state">
-          <i class="icon-message-square"></i>
-          <p>No chat sessions yet</p>
-          <button class="btn btn-small" onclick="window.aiPage.createSession()">
-            <i class="icon-plus"></i>
-            New Chat
-          </button>
-        </div>
-      `;
+      if (!container.querySelector(".empty-state")) {
+        container.innerHTML = `
+          <div class="empty-state">
+            <i class="icon-message-square"></i>
+            <p>No chat sessions yet</p>
+            <button class="btn btn-small" onclick="window.aiPage.createSession()">
+              <i class="icon-plus"></i>
+              New Chat
+            </button>
+          </div>
+        `;
+      }
+      _prevSessionsJson = "";
       return;
     }
 
-    container.innerHTML = state.chat.sessions
+    // Create a fingerprint of current state to detect changes
+    const currentJson = JSON.stringify(
+      state.chat.sessions.map(s => ({
+        id: s.id,
+        title: s.title,
+        message_count: s.message_count,
+        updated_at: s.updated_at
+      }))
+    ) + "|" + state.chat.currentSession;
+
+    // Skip if nothing changed
+    if (currentJson === _prevSessionsJson) {
+      return;
+    }
+    _prevSessionsJson = currentJson;
+
+    // Remove empty state if present
+    const emptyState = container.querySelector(".empty-state");
+    if (emptyState) emptyState.remove();
+
+    // Update existing items or add new ones
+    const existingItems = container.querySelectorAll(".session-item");
+    const existingIds = new Set();
+    
+    existingItems.forEach(item => {
+      const onclick = item.getAttribute("onclick") || "";
+      const match = onclick.match(/selectSession\(['"]?(\d+)['"]?\)/);
+      if (match) existingIds.add(parseInt(match[1], 10));
+    });
+
+    // Build new content
+    const newHtml = state.chat.sessions
       .map((session) => {
         const isActive = session.id === state.chat.currentSession;
         const lastMessageTime = session.updated_at
@@ -2780,6 +2833,7 @@ function createLifecycle() {
 
         return `
         <div class="session-item ${isActive ? "active" : ""}" 
+             data-session-id="${session.id}"
              onclick="window.aiPage.selectSession('${session.id}')">
           <div class="session-info">
             <div class="session-title">${Utils.escapeHtml(session.title || "New Chat")}</div>
@@ -2802,6 +2856,8 @@ function createLifecycle() {
       `;
       })
       .join("");
+
+    container.innerHTML = newHtml;
   }
 
   /**
