@@ -524,12 +524,12 @@ function createLifecycle() {
     const provider = state.providers.find((p) => p.id === providerId) || {
       id: providerId,
       enabled: false,
-      api_key: "",
+      has_api_key: false,
       model: "",
     };
 
     const name = PROVIDER_NAMES[providerId];
-    const hasApiKey = !!provider.api_key;
+    const hasApiKey = provider.has_api_key || false;
 
     // Create and show modal
     const modal = document.createElement("div");
@@ -548,16 +548,19 @@ function createLifecycle() {
         <div class="modal-body">
           <!-- API Key Section -->
           <div class="form-group">
-            <label for="modal-api-key">API Key</label>
+            <label for="modal-api-key">
+              API Key
+              ${hasApiKey ? '<span class="key-status key-saved"><i class="icon-check-circle"></i> Key saved</span>' : '<span class="key-status key-missing"><i class="icon-alert-circle"></i> No key set</span>'}
+            </label>
             <div class="api-key-input-wrapper">
               <input type="password" id="modal-api-key" class="form-control" 
-                     placeholder="${hasApiKey ? "••••••••••••••••" : "Enter API key..."}" 
-                     value="${provider.api_key || ""}">
+                     placeholder="${hasApiKey ? "Enter new key to update..." : "Enter API key..."}" 
+                     value="">
               <button type="button" class="api-key-toggle" id="toggle-api-key" title="Show/Hide">
                 <i class="icon-eye"></i>
               </button>
             </div>
-            <small class="form-help">Your API key is stored securely and never shared</small>
+            <small class="form-help">${hasApiKey ? "Leave empty to keep current key, or enter a new key to update" : "Your API key is stored securely and never shared"}</small>
           </div>
           
           <!-- Model Section -->
@@ -624,12 +627,14 @@ function createLifecycle() {
     const testResult = modal.querySelector("#test-result");
     const testMessage = testResult.querySelector(".test-result-message");
     const testDetails = testResult.querySelector(".test-result-details");
+    const hasExistingKey = provider.has_api_key || false;
 
     testBtn.addEventListener("click", async () => {
       const apiKey = apiKeyInput.value.trim();
       const model = modal.querySelector("#modal-model").value.trim();
 
-      if (!apiKey) {
+      // Allow testing with existing key if no new key entered
+      if (!apiKey && !hasExistingKey) {
         Utils.showToast({
           type: "warning",
           title: "Missing API Key",
@@ -644,18 +649,20 @@ function createLifecycle() {
       testResult.className = "test-connection-result";
 
       try {
-        // Save config first (needed for test to work)
-        const saveRes = await fetch(`/api/ai/providers/${providerId}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ 
-            enabled: true, 
-            api_key: apiKey, 
-            model: model || getDefaultModel(providerId)
-          }),
-        });
+        // Only save new key if entered, otherwise test with existing
+        if (apiKey) {
+          const saveRes = await fetch(`/api/ai/providers/${providerId}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ 
+              enabled: true, 
+              api_key: apiKey, 
+              model: model || getDefaultModel(providerId)
+            }),
+          });
 
-        if (!saveRes.ok) throw new Error("Failed to save config for testing");
+          if (!saveRes.ok) throw new Error("Failed to save config for testing");
+        }
 
         // Now test the provider
         const response = await fetch(`/api/ai/providers/${providerId}/test`, {
@@ -694,8 +701,10 @@ function createLifecycle() {
       const apiKey = modal.querySelector("#modal-api-key").value.trim();
       const model = modal.querySelector("#modal-model").value.trim();
       const enabled = modal.querySelector("#modal-enabled").checked;
+      const hasExistingKey = provider.has_api_key || false;
 
-      if (enabled && !apiKey) {
+      // Only require new API key if enabling and no existing key
+      if (enabled && !apiKey && !hasExistingKey) {
         Utils.showToast({
           type: "warning",
           title: "Missing API Key",
@@ -717,10 +726,16 @@ function createLifecycle() {
         saveBtn.disabled = true;
         saveBtn.innerHTML = '<i class="icon-loader spin"></i> Saving...';
 
+        // Only include api_key if user entered a new one
+        const payload = { enabled, model };
+        if (apiKey) {
+          payload.api_key = apiKey;
+        }
+
         const response = await fetch(`/api/ai/providers/${providerId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ enabled, api_key: apiKey, model }),
+          body: JSON.stringify(payload),
         });
 
         if (!response.ok) throw new Error("Failed to save provider");
@@ -2273,12 +2288,14 @@ function createLifecycle() {
    * Select a chat session
    */
   async function selectSession(sessionId) {
-    state.chat.currentSession = sessionId;
+    // Normalize sessionId to number (may come as string from onclick)
+    const numericId = typeof sessionId === 'string' ? parseInt(sessionId, 10) : sessionId;
+    state.chat.currentSession = numericId;
     
     // Find the session in our state
-    const session = state.chat.sessions.find((s) => s.id === sessionId);
+    const session = state.chat.sessions.find((s) => s.id === numericId);
     if (!session) {
-      console.error("[AI Chat] Session not found:", sessionId);
+      console.error("[AI Chat] Session not found:", numericId);
       return;
     }
 
@@ -2287,8 +2304,8 @@ function createLifecycle() {
     updateChatHeader(session);
     showChatInterface();
     
-    // Load messages (async)
-    await loadMessages(session);
+    // Load messages (async) - force render since we're changing sessions
+    await loadMessages(session, true);
   }
 
   /**
@@ -2376,32 +2393,45 @@ function createLifecycle() {
   /**
    * Load messages for a session
    */
-  async function loadMessages(session) {
+  async function loadMessages(session, forceRender = false) {
     if (!session || !session.id) {
       console.error("[AI Chat] loadMessages called with invalid session:", session);
       return;
     }
     
+    // Track if this is a session change (requires full re-render)
+    const isSessionChange = state.chat.currentSession?.id !== session.id;
+    
     try {
       const url = `/api/ai/chat/sessions/${session.id}`;
-      console.log("[AI Chat] Fetching messages from:", url);
       
       const response = await fetch(url);
-      console.log("[AI Chat] Response status:", response.status, response.ok);
       
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: Failed to load session messages`);
       }
       
       const data = await response.json();
-      console.log("[AI Chat] Loaded messages:", data.messages?.length || 0);
+      const newMessages = data.messages || [];
       
-      state.chat.messages = data.messages || [];
-      renderMessages();
+      // Skip update if message count unchanged (optimization)
+      if (!forceRender && !isSessionChange && 
+          state.chat.messages.length === newMessages.length) {
+        return;
+      }
+      
+      state.chat.messages = newMessages;
+      
+      // Use force render for session changes, incremental for polling updates
+      if (isSessionChange || forceRender) {
+        renderMessagesForce();
+      } else {
+        renderMessages();
+      }
     } catch (error) {
       console.error("[AI Chat] Error loading messages:", error.message || error);
       state.chat.messages = [];
-      renderMessages();
+      renderMessagesForce();
     }
   }
 
@@ -2775,9 +2805,66 @@ function createLifecycle() {
   }
 
   /**
-   * Render messages
+   * Render messages - incremental update to avoid full re-render
    */
   function renderMessages() {
+    const container = $("#chat-messages");
+    if (!container) return;
+
+    // Handle empty state
+    if (state.chat.messages.length === 0) {
+      if (!container.querySelector(".chat-empty-state")) {
+        container.innerHTML = `
+          <div class="chat-empty-state">
+            <i class="icon-bot-message-square"></i>
+            <h3>Start a Conversation</h3>
+            <p>Ask anything about your portfolio, tokens, or have me execute actions.</p>
+          </div>
+        `;
+      }
+      return;
+    }
+
+    // Remove empty state if present
+    const emptyState = container.querySelector(".chat-empty-state");
+    if (emptyState) {
+      emptyState.remove();
+    }
+
+    // Get existing message elements
+    const existingMessages = container.querySelectorAll(".message");
+    const existingCount = existingMessages.length;
+    const newCount = state.chat.messages.length;
+
+    // Only add new messages (incremental update)
+    if (newCount > existingCount) {
+      const fragment = document.createDocumentFragment();
+      for (let i = existingCount; i < newCount; i++) {
+        const msgEl = document.createElement("div");
+        msgEl.innerHTML = renderMessage(state.chat.messages[i]);
+        fragment.appendChild(msgEl.firstElementChild);
+      }
+      container.appendChild(fragment);
+      
+      // Setup handlers only for new messages
+      setupToolExpandHandlers();
+      scrollToBottom();
+    } else if (newCount === 0 && existingCount > 0) {
+      // Session changed - full re-render needed
+      container.innerHTML = "";
+    } else if (newCount < existingCount) {
+      // Messages were removed (session changed) - full re-render
+      container.innerHTML = state.chat.messages.map((msg) => renderMessage(msg)).join("");
+      setupToolExpandHandlers();
+      scrollToBottom();
+    }
+    // If counts match, no update needed (messages are the same)
+  }
+  
+  /**
+   * Force full re-render of messages (used when session changes)
+   */
+  function renderMessagesForce() {
     const container = $("#chat-messages");
     if (!container) return;
 
@@ -2793,10 +2880,7 @@ function createLifecycle() {
     }
 
     container.innerHTML = state.chat.messages.map((msg) => renderMessage(msg)).join("");
-    
-    // Setup tool expand handlers
     setupToolExpandHandlers();
-    
     scrollToBottom();
   }
 

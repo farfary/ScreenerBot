@@ -1858,6 +1858,32 @@
   color: var(--primary-color);
 }
 
+/* API Key status indicators */
+.key-status {
+  font-size: 11px;
+  font-weight: 500;
+  margin-inline-start: 8px;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.key-status i {
+  font-size: 12px;
+}
+
+.key-status.key-saved {
+  color: var(--success-color);
+  background: var(--success-color-alpha-10);
+}
+
+.key-status.key-missing {
+  color: var(--warning-color);
+  background: var(--warning-color-alpha-10);
+}
+
 /* API Key Input with visibility toggle */
 .api-key-input-wrapper {
   position: relative;
