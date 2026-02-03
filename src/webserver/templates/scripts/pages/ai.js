@@ -2212,7 +2212,8 @@ function createLifecycle() {
       if (!response.ok) throw new Error("Failed to load chat sessions");
 
       const data = await response.json();
-      state.chat.sessions = data.sessions || [];
+      // API returns array directly, not {sessions: [...]}
+      state.chat.sessions = Array.isArray(data) ? data : (data.sessions || []);
       
       renderSessions();
       
@@ -2225,7 +2226,7 @@ function createLifecycle() {
           (s) => s.id === state.chat.currentSession
         );
         if (currentSession) {
-          loadMessages(currentSession);
+          await loadMessages(currentSession);
         }
       }
     } catch (error) {
@@ -2281,13 +2282,13 @@ function createLifecycle() {
       return;
     }
 
-    // Load messages
-    loadMessages(session);
-    
-    // Update UI
+    // Update UI first for responsiveness
     renderSessions();
     updateChatHeader(session);
     showChatInterface();
+    
+    // Load messages (async)
+    await loadMessages(session);
   }
 
   /**
@@ -2375,9 +2376,33 @@ function createLifecycle() {
   /**
    * Load messages for a session
    */
-  function loadMessages(session) {
-    state.chat.messages = session.messages || [];
-    renderMessages();
+  async function loadMessages(session) {
+    if (!session || !session.id) {
+      console.error("[AI Chat] loadMessages called with invalid session:", session);
+      return;
+    }
+    
+    try {
+      const url = `/api/ai/chat/sessions/${session.id}`;
+      console.log("[AI Chat] Fetching messages from:", url);
+      
+      const response = await fetch(url);
+      console.log("[AI Chat] Response status:", response.status, response.ok);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: Failed to load session messages`);
+      }
+      
+      const data = await response.json();
+      console.log("[AI Chat] Loaded messages:", data.messages?.length || 0);
+      
+      state.chat.messages = data.messages || [];
+      renderMessages();
+    } catch (error) {
+      console.error("[AI Chat] Error loading messages:", error.message || error);
+      state.chat.messages = [];
+      renderMessages();
+    }
   }
 
   /**
@@ -2787,10 +2812,20 @@ function createLifecycle() {
         })
       : "";
 
+    // Parse tool_calls if it's a JSON string
+    let parsedToolCalls = msg.tool_calls;
+    if (typeof parsedToolCalls === "string") {
+      try {
+        parsedToolCalls = JSON.parse(parsedToolCalls);
+      } catch (e) {
+        parsedToolCalls = null;
+      }
+    }
+    
     // Render tool calls if present
     const toolCallsHtml =
-      msg.tool_calls && msg.tool_calls.length > 0
-        ? msg.tool_calls.map((tool) => renderToolCall(tool)).join("")
+      parsedToolCalls && Array.isArray(parsedToolCalls) && parsedToolCalls.length > 0
+        ? parsedToolCalls.map((tool) => renderToolCall(tool)).join("")
         : "";
 
     return `
@@ -2815,7 +2850,9 @@ function createLifecycle() {
    * Render a tool call
    */
   function renderToolCall(tool) {
-    const statusClass = tool.status || "pending";
+    // Normalize status to lowercase for class names
+    const statusRaw = tool.status || "pending";
+    const statusClass = statusRaw.toLowerCase();
     const statusText =
       statusClass === "executed"
         ? "Executed"
@@ -2823,14 +2860,19 @@ function createLifecycle() {
         ? "Failed"
         : statusClass === "denied"
         ? "Denied"
+        : statusClass === "pendingconfirmation"
+        ? "Awaiting Confirmation"
         : "Pending";
+
+    // Tool name could be in 'name' or 'tool_name' field
+    const toolName = tool.tool_name || tool.name || "Unknown Tool";
 
     return `
       <div class="tool-call ${statusClass}">
         <div class="tool-call-header">
           <div class="tool-call-title">
             <i class="icon-wrench"></i>
-            ${Utils.escapeHtml(tool.name || "Unknown Tool")}
+            ${Utils.escapeHtml(toolName)}
           </div>
           <span class="tool-call-status ${statusClass}">${statusText}</span>
           <button class="tool-call-expand" data-tool-id="${tool.id || Math.random()}" type="button">
