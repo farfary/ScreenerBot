@@ -186,6 +186,90 @@ config_struct! {
             category: "Providers",
         })]
         providers: AiProvidersConfig = AiProvidersConfig::default(),
+
+        // === Chat Section ===
+        /// Enable AI chat interface
+        #[metadata(field_metadata! {
+            label: "Chat Enabled",
+            hint: "Enable AI chat interface for interactive conversations",
+            category: "Chat",
+        })]
+        chat_enabled: bool = false,
+
+        /// Maximum number of messages to keep in chat session
+        #[metadata(field_metadata! {
+            label: "Max Session Messages",
+            hint: "Maximum messages per chat session before auto-summarization",
+            min: 10,
+            max: 500,
+            step: 10,
+            unit: "messages",
+            category: "Chat",
+        })]
+        chat_max_session_messages: u32 = 100,
+
+        /// Auto-summarize long conversations
+        #[metadata(field_metadata! {
+            label: "Auto Summarize",
+            hint: "Automatically summarize and compress long conversations to save context",
+            category: "Chat",
+        })]
+        chat_auto_summarize: bool = true,
+
+        // === Tool Permissions Section ===
+        /// Tool permission for analysis operations
+        #[metadata(field_metadata! {
+            label: "Analysis Tools",
+            hint: "Permission level for AI analysis tools (allow, ask_user, deny)",
+            placeholder: "allow",
+            category: "Tool Permissions",
+        })]
+        tool_permissions_analysis: String = "allow".to_string(),
+
+        /// Tool permission for portfolio operations
+        #[metadata(field_metadata! {
+            label: "Portfolio Tools",
+            hint: "Permission level for AI portfolio tools (allow, ask_user, deny)",
+            placeholder: "allow",
+            category: "Tool Permissions",
+        })]
+        tool_permissions_portfolio: String = "allow".to_string(),
+
+        /// Tool permission for trading operations
+        #[metadata(field_metadata! {
+            label: "Trading Tools",
+            hint: "Permission level for AI trading tools (allow, ask_user, deny)",
+            placeholder: "ask_user",
+            category: "Tool Permissions",
+        })]
+        tool_permissions_trading: String = "ask_user".to_string(),
+
+        /// Tool permission for config operations
+        #[metadata(field_metadata! {
+            label: "Config Tools",
+            hint: "Permission level for AI config modification tools (allow, ask_user, deny)",
+            placeholder: "ask_user",
+            category: "Tool Permissions",
+        })]
+        tool_permissions_config: String = "ask_user".to_string(),
+
+        /// Tool permission for system operations
+        #[metadata(field_metadata! {
+            label: "System Tools",
+            hint: "Permission level for AI system tools (allow, ask_user, deny)",
+            placeholder: "allow",
+            category: "Tool Permissions",
+        })]
+        tool_permissions_system: String = "allow".to_string(),
+
+        // === Event Triggers Section ===
+        /// Enable AI event triggers
+        #[metadata(field_metadata! {
+            label: "Event Triggers Enabled",
+            hint: "Allow AI to trigger actions based on events (disabled by default for safety)",
+            category: "Event Triggers",
+        })]
+        event_triggers_enabled: bool = false,
     }
 }
 

@@ -263,6 +263,17 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
             );
         }
 
+        // Initialize AI chat database (always, for chat history persistence)
+        if let Err(e) = crate::ai::init_chat_db() {
+            logger::warning(
+                LogTag::System,
+                &format!(
+                    "Failed to initialize AI chat database: {} - Chat history will not be available",
+                    e
+                ),
+            );
+        }
+
         // Initialize AI engine only if enabled
         let ai_enabled = crate::config::with_config(|cfg| cfg.ai.enabled);
         if ai_enabled {
@@ -272,6 +283,12 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
                 .await
                 .map_err(|e| format!("Failed to initialize AI engine: {}", e))?;
             logger::info(LogTag::System, "AI engine initialized successfully");
+
+            // Initialize AI chat engine
+            crate::ai::init_chat_engine()
+                .await
+                .map_err(|e| format!("Failed to initialize AI chat engine: {}", e))?;
+            logger::info(LogTag::System, "AI chat engine initialized successfully");
 
             // Initialize LLM manager with configured providers
             initialize_llm_providers().await?;

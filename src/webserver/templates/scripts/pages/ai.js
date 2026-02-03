@@ -26,6 +26,7 @@ function createLifecycle() {
   let statusPoller = null;
   let providersPoller = null;
   let cachePoller = null;
+  let chatPoller = null;
 
   // Event cleanup tracking
   const eventCleanups = [];
@@ -42,6 +43,13 @@ function createLifecycle() {
     historyTotal: 0,
     instructions: [], // Store instructions for drag-drop
     draggedItem: null, // Track dragged instruction
+    chat: {
+      sessions: [],
+      currentSession: null,
+      messages: [],
+      isLoading: false,
+      pendingConfirmation: null,
+    },
   };
 
   // Store API functions for external access
@@ -121,6 +129,7 @@ function createLifecycle() {
     if (statusPoller) statusPoller.stop();
     if (providersPoller) providersPoller.stop();
     if (cachePoller) cachePoller.stop();
+    if (chatPoller) chatPoller.stop();
 
     // Hide all panels
     const allPanels = $$(".ai-panel-content");
@@ -153,6 +162,9 @@ function createLifecycle() {
       loadTemplates();
     } else if (tabId === "history") {
       loadHistory(1);
+    } else if (tabId === "chat") {
+      loadSessions();
+      if (chatPoller) chatPoller.start();
     }
   }
 
@@ -1611,7 +1623,7 @@ function createLifecycle() {
       <div class="modal instruction-modal template-preview-modal">
         <div class="modal-header">
           <h3><i class="icon-eye"></i> Template Preview: ${Utils.escapeHtml(template.name)}</h3>
-          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
         </div>
         <div class="modal-body">
           <div class="template-preview-info">
@@ -1650,7 +1662,7 @@ function createLifecycle() {
       <div class="modal instruction-modal">
         <div class="modal-header">
           <h3><i class="icon-edit"></i> Customize Template</h3>
-          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
         </div>
         <div class="modal-body">
           <div class="form-group">
@@ -1720,7 +1732,7 @@ function createLifecycle() {
       <div class="modal instruction-modal">
         <div class="modal-header">
           <h3><i class="icon-plus"></i> Create Instruction</h3>
-          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
+          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
         </div>
         <div class="modal-body">
           <div class="form-group">
@@ -2188,6 +2200,785 @@ function createLifecycle() {
   }
 
   // ============================================================================
+  // Chat Tab
+  // ============================================================================
+
+  /**
+   * Load chat sessions
+   */
+  async function loadSessions() {
+    try {
+      const response = await fetch("/api/ai/chat/sessions");
+      if (!response.ok) throw new Error("Failed to load chat sessions");
+
+      const data = await response.json();
+      state.chat.sessions = data.sessions || [];
+      
+      renderSessions();
+      
+      // If no session selected but sessions exist, select the first one
+      if (!state.chat.currentSession && state.chat.sessions.length > 0) {
+        await selectSession(state.chat.sessions[0].id);
+      } else if (state.chat.currentSession) {
+        // Reload current session to get updated data
+        const currentSession = state.chat.sessions.find(
+          (s) => s.id === state.chat.currentSession
+        );
+        if (currentSession) {
+          loadMessages(currentSession);
+        }
+      }
+    } catch (error) {
+      console.error("[AI Chat] Error loading sessions:", error);
+      Utils.showToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to load chat sessions",
+      });
+    }
+  }
+
+  /**
+   * Create a new chat session
+   */
+  async function createSession() {
+    try {
+      const response = await fetch("/api/ai/chat/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+
+      if (!response.ok) throw new Error("Failed to create session");
+
+      const data = await response.json();
+      playToggleOn();
+      
+      // Reload sessions and select the new one
+      await loadSessions();
+      await selectSession(data.session_id);
+    } catch (error) {
+      console.error("[AI Chat] Error creating session:", error);
+      playError();
+      Utils.showToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to create chat session",
+      });
+    }
+  }
+
+  /**
+   * Select a chat session
+   */
+  async function selectSession(sessionId) {
+    state.chat.currentSession = sessionId;
+    
+    // Find the session in our state
+    const session = state.chat.sessions.find((s) => s.id === sessionId);
+    if (!session) {
+      console.error("[AI Chat] Session not found:", sessionId);
+      return;
+    }
+
+    // Load messages
+    loadMessages(session);
+    
+    // Update UI
+    renderSessions();
+    updateChatHeader(session);
+    showChatInterface();
+  }
+
+  /**
+   * Delete a chat session
+   */
+  async function deleteSession(sessionId) {
+    try {
+      // Show confirmation dialog
+      const confirmed = await ConfirmationDialog.show({
+        title: "Delete Chat Session",
+        message: "Are you sure you want to delete this chat session? This action cannot be undone.",
+        confirmText: "Delete",
+        cancelText: "Cancel",
+        type: "danger",
+      });
+
+      if (!confirmed) return;
+
+      const response = await fetch(`/api/ai/chat/sessions/${sessionId}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) throw new Error("Failed to delete session");
+
+      playToggleOn();
+      
+      // If we deleted the current session, clear it
+      if (state.chat.currentSession === sessionId) {
+        state.chat.currentSession = null;
+        state.chat.messages = [];
+      }
+      
+      // Reload sessions
+      await loadSessions();
+      
+      Utils.showToast({
+        type: "success",
+        title: "Success",
+        message: "Chat session deleted",
+      });
+    } catch (error) {
+      console.error("[AI Chat] Error deleting session:", error);
+      playError();
+      Utils.showToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to delete chat session",
+      });
+    }
+  }
+
+  /**
+   * Summarize a chat session
+   */
+  async function summarizeSession(sessionId) {
+    try {
+      const response = await fetch(`/api/ai/chat/sessions/${sessionId}/summarize`, {
+        method: "POST",
+      });
+
+      if (!response.ok) throw new Error("Failed to summarize session");
+
+      const data = await response.json();
+      playToggleOn();
+      
+      // Reload sessions to get updated title
+      await loadSessions();
+      
+      Utils.showToast({
+        type: "success",
+        title: "Success",
+        message: `Session summarized: ${data.summary}`,
+      });
+    } catch (error) {
+      console.error("[AI Chat] Error summarizing session:", error);
+      playError();
+      Utils.showToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to summarize session",
+      });
+    }
+  }
+
+  /**
+   * Load messages for a session
+   */
+  function loadMessages(session) {
+    state.chat.messages = session.messages || [];
+    renderMessages();
+  }
+
+  /**
+   * Send a message
+   */
+  async function sendMessage() {
+    const input = $("#chat-input");
+    if (!input) return;
+
+    const message = input.value.trim();
+    if (!message) return;
+
+    if (!state.chat.currentSession) {
+      Utils.showToast({
+        type: "error",
+        title: "Error",
+        message: "No chat session selected",
+      });
+      return;
+    }
+
+    // Clear input and disable
+    input.value = "";
+    input.disabled = true;
+    state.chat.isLoading = true;
+    
+    // Update send button to loading state
+    const sendBtn = $("#send-btn");
+    if (sendBtn) {
+      const icon = sendBtn.querySelector("i");
+      if (icon) {
+        icon.className = "icon-loader";
+        icon.style.animation = "spin 1s linear infinite";
+      }
+    }
+    updateSendButton();
+
+    // Add user message to UI
+    const userMessage = {
+      role: "user",
+      content: message,
+      timestamp: new Date().toISOString(),
+    };
+    state.chat.messages.push(userMessage);
+    renderMessages();
+
+    // Show typing indicator
+    showTypingIndicator();
+
+    try {
+      const response = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: state.chat.currentSession,
+          message,
+        }),
+      });
+
+      if (!response.ok) throw new Error("Failed to send message");
+
+      const data = await response.json();
+
+      // Hide typing indicator
+      hideTypingIndicator();
+
+      // Add assistant message to UI
+      if (data.response) {
+        const assistantMessage = {
+          role: "assistant",
+          content: data.response.content || "",
+          tool_calls: data.response.tool_calls || [],
+          timestamp: new Date().toISOString(),
+        };
+        state.chat.messages.push(assistantMessage);
+        renderMessages();
+      }
+
+      // Check if there's a pending confirmation
+      if (data.pending_confirmation) {
+        state.chat.pendingConfirmation = data.pending_confirmation;
+        showToolConfirmation(data.pending_confirmation);
+      }
+
+      // Reload sessions to update last message time
+      await loadSessions();
+    } catch (error) {
+      console.error("[AI Chat] Error sending message:", error);
+      playError();
+      hideTypingIndicator();
+      Utils.showToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to send message",
+      });
+    } finally {
+      input.disabled = false;
+      state.chat.isLoading = false;
+      
+      // Restore send button icon
+      const sendBtn = $("#send-btn");
+      if (sendBtn) {
+        const icon = sendBtn.querySelector("i");
+        if (icon) {
+          icon.className = "icon-send";
+          icon.style.animation = "";
+        }
+      }
+      updateSendButton();
+      input.focus();
+    }
+  }
+
+  /**
+   * Confirm or deny a tool execution
+   */
+  async function confirmTool(approved) {
+    const confirmation = state.chat.pendingConfirmation;
+    if (!confirmation) return;
+
+    const confirmationId = confirmation.id;
+
+    // Hide modal
+    hideToolConfirmation();
+
+    try {
+      const response = await fetch(`/api/ai/chat/confirm/${confirmationId}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ approved }),
+      });
+
+      if (!response.ok) throw new Error("Failed to confirm tool");
+
+      const data = await response.json();
+
+      if (approved) {
+        playToggleOn();
+        Utils.showToast({
+          type: "success",
+          title: "Success",
+          message: "Tool executed successfully",
+        });
+
+        // Add result message to UI
+        if (data.result) {
+          const assistantMessage = {
+            role: "assistant",
+            content: data.result.content || "",
+            tool_calls: data.result.tool_calls || [],
+            timestamp: new Date().toISOString(),
+          };
+          state.chat.messages.push(assistantMessage);
+          renderMessages();
+        }
+      } else {
+        Utils.showToast({
+          type: "info",
+          title: "Cancelled",
+          message: "Tool execution cancelled",
+        });
+
+        // Add cancellation message
+        const assistantMessage = {
+          role: "assistant",
+          content: "Tool execution was cancelled.",
+          timestamp: new Date().toISOString(),
+        };
+        state.chat.messages.push(assistantMessage);
+        renderMessages();
+      }
+
+      // Clear pending confirmation
+      state.chat.pendingConfirmation = null;
+
+      // Reload sessions
+      await loadSessions();
+    } catch (error) {
+      console.error("[AI Chat] Error confirming tool:", error);
+      playError();
+      Utils.showToast({
+        type: "error",
+        title: "Error",
+        message: "Failed to confirm tool execution",
+      });
+    }
+  }
+
+  /**
+   * Show typing indicator
+   */
+  function showTypingIndicator() {
+    const messagesContainer = $("#chat-messages");
+    if (!messagesContainer) return;
+
+    const existing = $(".typing-indicator");
+    if (existing) return; // Already showing
+
+    const indicator = document.createElement("div");
+    indicator.className = "typing-indicator";
+    indicator.innerHTML = `
+      <div class="message-avatar">
+        <i class="icon-bot"></i>
+      </div>
+      <div class="typing-dots">
+        <span class="typing-dot"></span>
+        <span class="typing-dot"></span>
+        <span class="typing-dot"></span>
+      </div>
+    `;
+    messagesContainer.appendChild(indicator);
+    scrollToBottom();
+  }
+
+  /**
+   * Hide typing indicator
+   */
+  function hideTypingIndicator() {
+    const indicator = $(".typing-indicator");
+    if (indicator) {
+      indicator.remove();
+    }
+  }
+
+  /**
+   * Scroll chat to bottom
+   */
+  function scrollToBottom() {
+    const messagesContainer = $("#chat-messages");
+    if (messagesContainer) {
+      messagesContainer.scrollTo({
+        top: messagesContainer.scrollHeight,
+        behavior: "smooth",
+      });
+    }
+  }
+
+  /**
+   * Show tool confirmation modal
+   */
+  function showToolConfirmation(confirmation) {
+    const modal = $("#tool-confirmation-modal");
+    if (!modal) return;
+
+    // Update modal content
+    const toolName = $("#tool-name");
+    const toolDescription = $("#tool-description");
+    const toolInput = $("#tool-input");
+
+    if (toolName) toolName.textContent = confirmation.tool_name || "Unknown Tool";
+    if (toolDescription) {
+      toolDescription.textContent =
+        confirmation.description || "This tool requires your approval to execute.";
+    }
+    if (toolInput) {
+      toolInput.textContent = JSON.stringify(confirmation.input || {}, null, 2);
+    }
+
+    // Show modal
+    modal.style.display = "flex";
+  }
+
+  /**
+   * Hide tool confirmation modal
+   */
+  function hideToolConfirmation() {
+    const modal = $("#tool-confirmation-modal");
+    if (modal) {
+      modal.style.display = "none";
+    }
+  }
+
+  /**
+   * Handle input change
+   */
+  function handleInputChange() {
+    const input = $("#chat-input");
+    if (!input) return;
+
+    // Auto-resize textarea
+    input.style.height = "auto";
+    input.style.height = `${Math.min(input.scrollHeight, 120)}px`;
+
+    // Update send button state
+    updateSendButton();
+  }
+
+  /**
+   * Update send button state
+   */
+  function updateSendButton() {
+    const sendBtn = $("#send-btn");
+    const input = $("#chat-input");
+    
+    if (!sendBtn || !input) return;
+
+    const hasText = input.value.trim().length > 0;
+    const canSend = hasText && !state.chat.isLoading;
+    
+    sendBtn.disabled = !canSend;
+    sendBtn.setAttribute("aria-label", canSend ? "Send message" : "Type a message to send");
+  }
+
+  /**
+   * Handle keyboard input
+   */
+  function handleKeydown(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  }
+
+  /**
+   * Render sessions list
+   */
+  function renderSessions() {
+    const container = $("#chat-sessions-list");
+    if (!container) return;
+
+    if (state.chat.sessions.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <i class="icon-message-square"></i>
+          <p>No chat sessions yet</p>
+          <button class="btn btn-small" onclick="window.aiPage.createSession()">
+            <i class="icon-plus"></i>
+            New Chat
+          </button>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = state.chat.sessions
+      .map((session) => {
+        const isActive = session.id === state.chat.currentSession;
+        const lastMessageTime = session.updated_at
+          ? new Date(session.updated_at).toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit",
+            })
+          : "";
+        const messageCount = session.message_count || 0;
+
+        return `
+        <div class="session-item ${isActive ? "active" : ""}" 
+             onclick="window.aiPage.selectSession('${session.id}')">
+          <div class="session-info">
+            <div class="session-title">${Utils.escapeHtml(session.title || "New Chat")}</div>
+            <div class="session-meta">
+              <span class="session-time">${lastMessageTime}</span>
+              <span class="session-count">${messageCount} messages</span>
+            </div>
+          </div>
+          ${
+            isActive
+              ? `
+          <button class="session-delete" 
+                  onclick="event.stopPropagation(); window.aiPage.deleteSession('${session.id}')">
+            <i class="icon-trash-2"></i>
+          </button>
+          `
+              : ""
+          }
+        </div>
+      `;
+      })
+      .join("");
+  }
+
+  /**
+   * Render messages
+   */
+  function renderMessages() {
+    const container = $("#chat-messages");
+    if (!container) return;
+
+    if (state.chat.messages.length === 0) {
+      container.innerHTML = `
+        <div class="chat-empty-state">
+          <i class="icon-bot-message-square"></i>
+          <h3>Start a Conversation</h3>
+          <p>Ask anything about your portfolio, tokens, or have me execute actions.</p>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = state.chat.messages.map((msg) => renderMessage(msg)).join("");
+    
+    // Setup tool expand handlers
+    setupToolExpandHandlers();
+    
+    scrollToBottom();
+  }
+
+  /**
+   * Render a single message
+   */
+  function renderMessage(msg) {
+    const isUser = msg.role === "user";
+    const timestamp = msg.timestamp
+      ? new Date(msg.timestamp).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        })
+      : "";
+
+    // Render tool calls if present
+    const toolCallsHtml =
+      msg.tool_calls && msg.tool_calls.length > 0
+        ? msg.tool_calls.map((tool) => renderToolCall(tool)).join("")
+        : "";
+
+    return `
+      <div class="message ${isUser ? "user" : "assistant"}">
+        <div class="message-avatar">
+          <i class="icon-${isUser ? "user" : "bot"}"></i>
+        </div>
+        <div class="message-content">
+          ${toolCallsHtml}
+          ${
+            msg.content
+              ? `<div class="message-bubble">${Utils.escapeHtml(msg.content)}</div>`
+              : ""
+          }
+          <div class="message-meta">${timestamp}</div>
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Render a tool call
+   */
+  function renderToolCall(tool) {
+    const statusClass = tool.status || "pending";
+    const statusText =
+      statusClass === "executed"
+        ? "Executed"
+        : statusClass === "failed"
+        ? "Failed"
+        : statusClass === "denied"
+        ? "Denied"
+        : "Pending";
+
+    return `
+      <div class="tool-call ${statusClass}">
+        <div class="tool-call-header">
+          <div class="tool-call-title">
+            <i class="icon-wrench"></i>
+            ${Utils.escapeHtml(tool.name || "Unknown Tool")}
+          </div>
+          <span class="tool-call-status ${statusClass}">${statusText}</span>
+          <button class="tool-call-expand" data-tool-id="${tool.id || Math.random()}" type="button">
+            <i class="icon-chevron-down"></i>
+          </button>
+        </div>
+        <div class="tool-call-body" style="display: none;">
+          <div class="tool-call-section">
+            <div class="tool-call-label">Input:</div>
+            <div class="tool-call-input">
+              <pre class="tool-call-code">${JSON.stringify(tool.input || {}, null, 2)}</pre>
+            </div>
+          </div>
+          ${
+            tool.output
+              ? `
+          <div class="tool-call-section">
+            <div class="tool-call-label">Output:</div>
+            <div class="tool-call-output">
+              <pre class="tool-call-code">${JSON.stringify(tool.output, null, 2)}</pre>
+            </div>
+          </div>
+          `
+              : ""
+          }
+          ${
+            tool.error
+              ? `
+          <div class="tool-call-section">
+            <div class="tool-call-label">Error:</div>
+            <div class="tool-call-error">
+              <pre class="tool-call-code">${Utils.escapeHtml(tool.error)}</pre>
+            </div>
+          </div>
+          `
+              : ""
+          }
+        </div>
+      </div>
+    `;
+  }
+
+  /**
+   * Setup tool expand handlers
+   */
+  function setupToolExpandHandlers() {
+    const expandButtons = $$(".tool-call-expand");
+    expandButtons.forEach((btn) => {
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        const toolCall = btn.closest(".tool-call");
+        const body = toolCall.querySelector(".tool-call-body");
+        
+        if (body.style.display === "none") {
+          body.style.display = "block";
+          btn.classList.add("expanded");
+        } else {
+          body.style.display = "none";
+          btn.classList.remove("expanded");
+        }
+      };
+    });
+  }
+
+  /**
+   * Update chat header
+   */
+  function updateChatHeader(session) {
+    const title = $("#chat-title");
+    const summarizeBtn = $("#summarize-btn");
+    const deleteBtn = $("#delete-session-btn");
+
+    if (title) {
+      title.textContent = session.title || "New Chat";
+    }
+
+    if (summarizeBtn) {
+      summarizeBtn.onclick = () => summarizeSession(session.id);
+    }
+
+    if (deleteBtn) {
+      deleteBtn.onclick = () => deleteSession(session.id);
+    }
+  }
+
+  /**
+   * Show chat interface (hide empty state)
+   */
+  function showChatInterface() {
+    const emptyState = $("#chat-empty-state");
+    const chatInterface = $("#chat-interface");
+
+    if (emptyState) emptyState.style.display = "none";
+    if (chatInterface) chatInterface.style.display = "flex";
+  }
+
+  /**
+   * Setup chat event handlers
+   */
+  function setupChatHandlers() {
+    // New session button
+    const newSessionBtn = $(".new-session-btn");
+    if (newSessionBtn) {
+      addTrackedListener(newSessionBtn, "click", createSession);
+    }
+
+    // Send button
+    const sendBtn = $("#send-btn");
+    if (sendBtn) {
+      addTrackedListener(sendBtn, "click", sendMessage);
+    }
+
+    // Chat input
+    const chatInput = $("#chat-input");
+    if (chatInput) {
+      addTrackedListener(chatInput, "input", handleInputChange);
+      addTrackedListener(chatInput, "keydown", handleKeydown);
+    }
+
+    // Tool confirmation buttons
+    const confirmBtn = $("#confirm-tool");
+    const denyBtn = $("#deny-tool");
+    const closeBtn = $("#tool-modal-close");
+
+    if (confirmBtn) {
+      addTrackedListener(confirmBtn, "click", () => confirmTool(true));
+    }
+
+    if (denyBtn) {
+      addTrackedListener(denyBtn, "click", () => confirmTool(false));
+    }
+
+    if (closeBtn) {
+      addTrackedListener(closeBtn, "click", hideToolConfirmation);
+    }
+
+    // Modal overlay click to close
+    const modal = $("#tool-confirmation-modal");
+    if (modal) {
+      addTrackedListener(modal, "click", (e) => {
+        if (e.target === modal) {
+          hideToolConfirmation();
+        }
+      });
+    }
+  }
+
+  // ============================================================================
   // API Export for inline event handlers
   // ============================================================================
 
@@ -2208,6 +2999,10 @@ function createLifecycle() {
   api.previewTemplate = previewTemplate;
   api.customizeTemplate = customizeTemplate;
   api.loadHistory = loadHistory;
+  api.createSession = createSession;
+  api.selectSession = selectSession;
+  api.deleteSession = deleteSession;
+  api.summarizeSession = summarizeSession;
 
   // ============================================================================
   // Lifecycle Hooks
@@ -2233,6 +3028,7 @@ function createLifecycle() {
       setupSettingsHandlers();
       setupTestingHandlers();
       setupInstructionHandlers();
+      setupChatHandlers();
 
       // Setup stats toggle
       const statsToggle = $("#stats-ai-toggle");
@@ -2283,6 +3079,17 @@ function createLifecycle() {
         )
       );
 
+      chatPoller = ctx.managePoller(
+        new Poller(
+          async () => {
+            if (state.currentTab === "chat") {
+              await loadSessions();
+            }
+          },
+          { label: "Chat Sessions", intervalMs: 3000 }
+        )
+      );
+
       // Load initial data immediately and start appropriate poller
       if (state.currentTab === "stats") {
         await loadAiStatus();
@@ -2294,6 +3101,9 @@ function createLifecycle() {
         await loadConfig();
         await loadCacheStats();
         cachePoller.start();
+      } else if (state.currentTab === "chat") {
+        await loadSessions();
+        chatPoller.start();
       }
     },
 

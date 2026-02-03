@@ -26,6 +26,7 @@ const SECTION_ICONS = {
   ohlcv: "icon-clock",
   summary: "icon-file-text",
   telegram: "icon-send",
+  ai: "icon-bot-message-square",
 };
 
 const SECTION_LABEL_OVERRIDES = {
@@ -43,6 +44,7 @@ const SECTION_LABEL_OVERRIDES = {
   ohlcv: "OHLCV",
   summary: "Summary",
   telegram: "Telegram",
+  ai: "Assistant",
 };
 
 const SECTION_DISPLAY_ORDER = [
@@ -54,6 +56,7 @@ const SECTION_DISPLAY_ORDER = [
   "tokens",
   "sol_price",
   "telegram",
+  "ai",
   "events",
   "webserver",
   "services",

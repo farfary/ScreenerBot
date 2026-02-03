@@ -1,6 +1,6 @@
 //! AI Module API Routes
 //!
-//! Endpoints for AI analysis, provider management, and testing.
+//! Endpoints for AI analysis, provider management, chat, and testing.
 
 use axum::{
     extract::{Path, Query, State},
@@ -12,9 +12,16 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
+use crate::ai::chat_db;
 use crate::ai::db;
 use crate::ai::engine::AiEngine;
+use crate::ai::permissions::ToolPermissions;
+use crate::ai::tools::ToolDefinition;
 use crate::ai::types::{EvaluationContext, Priority};
+use crate::ai::{
+    get_chat_engine, try_get_chat_engine, ChatContext, ChatRequest as ChatEngineRequest,
+    ChatResponse as ChatEngineResponse, ChatSession,
+};
 use crate::apis::llm::{try_get_llm_manager, ChatMessage, ChatRequest, Provider};
 use crate::config::{update_config_section, with_config};
 use crate::logger::{self, LogTag};
@@ -53,6 +60,21 @@ pub fn routes() -> Router<Arc<AppState>> {
         // History
         .route("/history", get(list_history))
         .route("/history/:id", get(get_history_detail))
+        // Chat Routes
+        .route("/chat", post(send_chat_message))
+        .route("/chat/sessions", get(list_chat_sessions))
+        .route("/chat/sessions", post(create_chat_session))
+        .route("/chat/sessions/:id", get(get_chat_session))
+        .route("/chat/sessions/:id", delete(delete_chat_session))
+        .route("/chat/sessions/:id/summarize", post(summarize_chat_session))
+        .route(
+            "/chat/confirm/:confirmation_id",
+            post(confirm_tool_execution),
+        )
+        // Tools & Permissions
+        .route("/tools", get(list_tools))
+        .route("/permissions", get(get_permissions))
+        .route("/permissions", patch(update_permissions))
 }
 
 // ============================================================================
@@ -284,6 +306,38 @@ pub struct HistoryQuery {
     pub page: Option<usize>,
     pub per_page: Option<usize>,
     pub mint: Option<String>,
+}
+
+// ============================================================================
+// CHAT REQUEST/RESPONSE TYPES
+// ============================================================================
+
+#[derive(Debug, Deserialize)]
+pub struct SendChatMessageRequest {
+    pub session_id: i64,
+    pub message: String,
+    pub context: Option<ChatContext>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateChatSessionRequest {
+    pub title: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct CreateChatSessionResponse {
+    pub session_id: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct GetChatSessionResponse {
+    pub session: ChatSession,
+    pub messages: Vec<chat_db::ChatMessage>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ConfirmToolExecutionRequest {
+    pub approved: bool,
 }
 
 // ============================================================================
@@ -1148,4 +1202,521 @@ async fn get_history_detail(State(_state): State<Arc<AppState>>, Path(id): Path<
             None,
         ),
     }
+}
+
+// ============================================================================
+// CHAT HANDLERS
+// ============================================================================
+
+/// POST /api/ai/chat - Send a message to AI chat
+async fn send_chat_message(
+    State(_state): State<Arc<AppState>>,
+    Json(req): Json<SendChatMessageRequest>,
+) -> Response {
+    // Validate message
+    if req.message.trim().is_empty() {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "INVALID_MESSAGE",
+            "Message cannot be empty",
+            None,
+        );
+    }
+    
+    if req.message.len() > 10000 {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "MESSAGE_TOO_LONG",
+            "Message exceeds maximum length of 10,000 characters",
+            None,
+        );
+    }
+    
+    // Validate session exists
+    let pool = match chat_db::get_chat_pool() {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "CHAT_DB_NOT_INITIALIZED",
+                "Chat database not initialized",
+                None,
+            )
+        }
+    };
+    
+    match chat_db::get_session(&pool, req.session_id) {
+        Ok(Some(_)) => {
+            // Session exists, continue
+        }
+        Ok(None) => {
+            return error_response(
+                StatusCode::NOT_FOUND,
+                "SESSION_NOT_FOUND",
+                &format!("Chat session {} not found", req.session_id),
+                None,
+            )
+        }
+        Err(e) => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                &format!("Failed to validate session: {}", e),
+                None,
+            )
+        }
+    }
+
+    // Get chat engine
+    let engine = match try_get_chat_engine() {
+        Some(e) => e,
+        None => {
+            return error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "CHAT_NOT_INITIALIZED",
+                "Chat engine not initialized",
+                None,
+            )
+        }
+    };
+
+    // Create chat request
+    let chat_request = ChatEngineRequest {
+        session_id: req.session_id,
+        message: req.message,
+        context: req.context,
+    };
+
+    // Process message
+    match engine.process_message(chat_request).await {
+        Ok(response) => {
+            logger::info(
+                LogTag::Api,
+                &format!(
+                    "Chat message processed for session {} (message {})",
+                    req.session_id, response.message_id
+                ),
+            );
+            success_response(response)
+        }
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "CHAT_ERROR",
+            &format!("Failed to process chat message: {}", e),
+            None,
+        ),
+    }
+}
+
+/// GET /api/ai/chat/sessions - List all chat sessions
+async fn list_chat_sessions(State(_state): State<Arc<AppState>>) -> Response {
+    let pool = match chat_db::get_chat_pool() {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "CHAT_DB_NOT_INITIALIZED",
+                "Chat database not initialized",
+                None,
+            )
+        }
+    };
+
+    match chat_db::get_sessions(&pool) {
+        Ok(sessions) => success_response(sessions),
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to list chat sessions: {}", e),
+            None,
+        ),
+    }
+}
+
+/// POST /api/ai/chat/sessions - Create new chat session
+async fn create_chat_session(
+    State(_state): State<Arc<AppState>>,
+    Json(req): Json<CreateChatSessionRequest>,
+) -> Response {
+    let pool = match chat_db::get_chat_pool() {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "CHAT_DB_NOT_INITIALIZED",
+                "Chat database not initialized",
+                None,
+            )
+        }
+    };
+
+    let title = req.title.unwrap_or_else(|| {
+        let now = chrono::Utc::now();
+        format!("Chat {}", now.format("%Y-%m-%d %H:%M"))
+    });
+
+    match chat_db::create_session(&pool, &title) {
+        Ok(session_id) => {
+            logger::info(
+                LogTag::Api,
+                &format!("Created chat session: {}", session_id),
+            );
+            success_response(CreateChatSessionResponse { session_id })
+        }
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to create chat session: {}", e),
+            None,
+        ),
+    }
+}
+
+/// GET /api/ai/chat/sessions/:id - Get session with messages
+async fn get_chat_session(State(_state): State<Arc<AppState>>, Path(id): Path<i64>) -> Response {
+    let pool = match chat_db::get_chat_pool() {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "CHAT_DB_NOT_INITIALIZED",
+                "Chat database not initialized",
+                None,
+            )
+        }
+    };
+
+    // Get session
+    let session = match chat_db::get_session(&pool, id) {
+        Ok(Some(s)) => s,
+        Ok(None) => {
+            return error_response(
+                StatusCode::NOT_FOUND,
+                "NOT_FOUND",
+                &format!("Chat session {} not found", id),
+                None,
+            )
+        }
+        Err(e) => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                &format!("Failed to get chat session: {}", e),
+                None,
+            )
+        }
+    };
+
+    // Get messages
+    match chat_db::get_messages(&pool, id) {
+        Ok(messages) => success_response(GetChatSessionResponse { session, messages }),
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to get chat messages: {}", e),
+            None,
+        ),
+    }
+}
+
+/// DELETE /api/ai/chat/sessions/:id - Delete session
+async fn delete_chat_session(State(_state): State<Arc<AppState>>, Path(id): Path<i64>) -> Response {
+    let pool = match chat_db::get_chat_pool() {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "CHAT_DB_NOT_INITIALIZED",
+                "Chat database not initialized",
+                None,
+            )
+        }
+    };
+
+    match chat_db::delete_session(&pool, id) {
+        Ok(()) => {
+            logger::info(LogTag::Api, &format!("Deleted chat session: {}", id));
+            success_response(serde_json::json!({
+                "message": "Chat session deleted successfully"
+            }))
+        }
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to delete chat session: {}", e),
+            None,
+        ),
+    }
+}
+
+/// POST /api/ai/chat/sessions/:id/summarize - Summarize session
+async fn summarize_chat_session(
+    State(_state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> Response {
+    let pool = match chat_db::get_chat_pool() {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "CHAT_DB_NOT_INITIALIZED",
+                "Chat database not initialized",
+                None,
+            )
+        }
+    };
+
+    // Get messages for this session
+    let messages = match chat_db::get_messages(&pool, id) {
+        Ok(m) => m,
+        Err(e) => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                &format!("Failed to get messages: {}", e),
+                None,
+            )
+        }
+    };
+
+    if messages.is_empty() {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "EMPTY_SESSION",
+            "Cannot summarize empty chat session",
+            None,
+        );
+    }
+
+    // Build conversation text
+    let conversation: Vec<String> = messages
+        .iter()
+        .map(|m| format!("{}: {}", m.role, m.content))
+        .collect();
+    let conversation_text = conversation.join("\n");
+
+    // Ask LLM to summarize
+    let llm_manager = match try_get_llm_manager() {
+        Some(m) => m,
+        None => {
+            return error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "LLM_NOT_CONFIGURED",
+                "LLM manager not initialized",
+                None,
+            )
+        }
+    };
+
+    let provider_name = with_config(|cfg| cfg.ai.default_provider.clone());
+    let provider = match Provider::from_str(&provider_name) {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "INVALID_PROVIDER",
+                &format!("Invalid provider: {}", provider_name),
+                None,
+            )
+        }
+    };
+
+    // Get the model for the configured provider
+    let model = get_model_for_provider(provider);
+
+    let request = ChatRequest::new(
+        model,
+        vec![
+            ChatMessage::system(
+                "You are a helpful assistant that creates concise summaries of chat conversations."
+                    .to_string(),
+            ),
+            ChatMessage::user(format!(
+                "Please provide a brief 1-2 sentence summary of this conversation:\n\n{}",
+                conversation_text
+            )),
+        ],
+    )
+    .with_temperature(0.5)
+    .with_max_tokens(150);
+
+    match llm_manager.call(provider, request).await {
+        Ok(response) => {
+            let summary = response.content.trim().to_string();
+
+            // Save summary to session
+            if let Err(e) = chat_db::update_session_summary(&pool, id, &summary) {
+                return error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "DB_ERROR",
+                    &format!("Failed to save summary: {}", e),
+                    None,
+                );
+            }
+
+            logger::info(LogTag::Api, &format!("Summarized chat session: {}", id));
+            success_response(serde_json::json!({
+                "summary": summary
+            }))
+        }
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "LLM_ERROR",
+            &format!("Failed to generate summary: {}", e),
+            None,
+        ),
+    }
+}
+
+/// POST /api/ai/chat/confirm/:confirmation_id - Confirm/deny tool execution
+async fn confirm_tool_execution(
+    State(_state): State<Arc<AppState>>,
+    Path(confirmation_id): Path<String>,
+    Json(req): Json<ConfirmToolExecutionRequest>,
+) -> Response {
+    // Get chat engine
+    let engine = match try_get_chat_engine() {
+        Some(e) => e,
+        None => {
+            return error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "CHAT_NOT_INITIALIZED",
+                "Chat engine not initialized",
+                None,
+            )
+        }
+    };
+
+    // Process confirmation
+    match engine
+        .process_confirmation(&confirmation_id, req.approved)
+        .await
+    {
+        Ok(response) => {
+            logger::info(
+                LogTag::Api,
+                &format!(
+                    "Tool execution confirmation processed: {} (approved: {})",
+                    confirmation_id, req.approved
+                ),
+            );
+            success_response(response)
+        }
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "CHAT_ERROR",
+            &format!("Failed to process confirmation: {}", e),
+            None,
+        ),
+    }
+}
+
+// ============================================================================
+// TOOLS & PERMISSIONS HANDLERS
+// ============================================================================
+
+/// GET /api/ai/tools - List available tools
+async fn list_tools(State(_state): State<Arc<AppState>>) -> Response {
+    // Get chat engine to access tool registry
+    let engine = match try_get_chat_engine() {
+        Some(e) => e,
+        None => {
+            return error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "CHAT_NOT_INITIALIZED",
+                "Chat engine not initialized",
+                None,
+            )
+        }
+    };
+
+    // Use the tool registry from the engine (we'll need to expose this method)
+    // For now, create a temporary registry
+    let registry = crate::ai::create_tool_registry();
+    let tools = registry.list_definitions();
+
+    success_response(tools)
+}
+
+/// GET /api/ai/permissions - Get tool permissions
+async fn get_permissions(State(_state): State<Arc<AppState>>) -> Response {
+    let permissions = with_config(|cfg| ToolPermissions {
+        analysis: crate::ai::PermissionLevel::from_str(&cfg.ai.tool_permissions_analysis),
+        portfolio: crate::ai::PermissionLevel::from_str(&cfg.ai.tool_permissions_portfolio),
+        trading: crate::ai::PermissionLevel::from_str(&cfg.ai.tool_permissions_trading),
+        config: crate::ai::PermissionLevel::from_str(&cfg.ai.tool_permissions_config),
+        system: crate::ai::PermissionLevel::from_str(&cfg.ai.tool_permissions_system),
+    });
+
+    success_response(permissions)
+}
+
+/// PATCH /api/ai/permissions - Update permissions
+async fn update_permissions(
+    State(_state): State<Arc<AppState>>,
+    Json(req): Json<ToolPermissions>,
+) -> Response {
+    match update_config_section(
+        |cfg| {
+            cfg.ai.tool_permissions_analysis = req.analysis.to_str().to_string();
+            cfg.ai.tool_permissions_portfolio = req.portfolio.to_str().to_string();
+            cfg.ai.tool_permissions_trading = req.trading.to_str().to_string();
+            cfg.ai.tool_permissions_config = req.config.to_str().to_string();
+            cfg.ai.tool_permissions_system = req.system.to_str().to_string();
+        },
+        true,
+    ) {
+        Ok(()) => {
+            logger::info(LogTag::Api, "Updated AI tool permissions");
+            success_response(serde_json::json!({
+                "message": "Tool permissions updated successfully"
+            }))
+        }
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "CONFIG_ERROR",
+            &format!("Failed to update permissions: {}", e),
+            None,
+        ),
+    }
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/// Get the appropriate model for a provider from config
+fn get_model_for_provider(provider: Provider) -> String {
+    with_config(|cfg| {
+        let provider_config = match provider {
+            Provider::OpenAi => &cfg.ai.providers.openai,
+            Provider::Anthropic => &cfg.ai.providers.anthropic,
+            Provider::Groq => &cfg.ai.providers.groq,
+            Provider::DeepSeek => &cfg.ai.providers.deepseek,
+            Provider::Gemini => &cfg.ai.providers.gemini,
+            Provider::Together => &cfg.ai.providers.together,
+            Provider::OpenRouter => &cfg.ai.providers.openrouter,
+            Provider::Mistral => &cfg.ai.providers.mistral,
+            Provider::Ollama => {
+                return cfg.ai.providers.ollama.model.clone();
+            }
+        };
+
+        if !provider_config.model.is_empty() {
+            provider_config.model.clone()
+        } else {
+            // Default models for each provider
+            match provider {
+                Provider::OpenAi => "gpt-4".to_string(),
+                Provider::Anthropic => "claude-3-5-sonnet-20241022".to_string(),
+                Provider::Groq => "llama-3.1-70b-versatile".to_string(),
+                Provider::DeepSeek => "deepseek-chat".to_string(),
+                Provider::Gemini => "gemini-pro".to_string(),
+                Provider::Ollama => "llama3.2".to_string(),
+                Provider::Together => "meta-llama/Llama-3-70b-chat-hf".to_string(),
+                Provider::OpenRouter => "openai/gpt-4".to_string(),
+                Provider::Mistral => "mistral-large-latest".to_string(),
+            }
+        }
+    })
 }

@@ -88,7 +88,7 @@ pub use metadata::{
 };
 
 pub use schemas::{
-    Config, DashboardConfig, EventsConfig, FilteringConfig, GuiConfig, InterfaceConfig,
+    AiConfig, Config, DashboardConfig, EventsConfig, FilteringConfig, GuiConfig, InterfaceConfig,
     LockscreenConfig, MonitoringConfig, OhlcvConfig, PositionsConfig, RpcConfig, ServicesConfig,
     SolPriceConfig, StartupConfig, SwapsConfig, TelegramConfig, TimeUnit, TokensConfig,
     TraderConfig, WebserverConfig,

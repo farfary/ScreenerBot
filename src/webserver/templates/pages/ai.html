@@ -10,7 +10,13 @@
       </div>
       <ul class="ai-sidebar-nav">
         <li>
-          <button class="ai-nav-item active" type="button" data-tab="stats">
+          <button class="ai-nav-item active" type="button" data-tab="chat">
+            <span class="nav-item-icon"><i class="icon-message-square"></i></span>
+            <span class="ai-nav-label">Chat</span>
+          </button>
+        </li>
+        <li>
+          <button class="ai-nav-item" type="button" data-tab="stats">
             <span class="nav-item-icon"><i class="icon-chart-bar"></i></span>
             <span class="ai-nav-label">Overview</span>
           </button>
@@ -59,8 +65,113 @@
     <!-- Main Content Panel -->
     <main class="ai-main-panel">
       <div id="ai-content">
+        <!-- Chat Panel -->
+        <div id="chat-panel" class="ai-panel-content active">
+          <div class="chat-container">
+            <!-- Sessions sidebar (left) -->
+            <div class="chat-sessions-sidebar">
+              <div class="sessions-header">
+                <h3>Sessions</h3>
+                <button
+                  class="new-session-btn"
+                  type="button"
+                  title="New Chat"
+                  aria-label="Create new chat session"
+                >
+                  <i class="icon-plus"></i>
+                </button>
+              </div>
+              <div class="sessions-list" id="chat-sessions-list">
+                <!-- Sessions populated dynamically -->
+              </div>
+            </div>
+
+            <!-- Chat main area -->
+            <div class="chat-main">
+              <div class="chat-header">
+                <span class="chat-title" id="chat-title">New Chat</span>
+                <div class="chat-actions">
+                  <button
+                    class="chat-action-btn"
+                    type="button"
+                    id="summarize-btn"
+                    title="Summarize"
+                    aria-label="Summarize conversation"
+                  >
+                    <i class="icon-file-text"></i>
+                  </button>
+                  <button
+                    class="chat-action-btn"
+                    type="button"
+                    id="delete-session-btn"
+                    title="Delete"
+                    aria-label="Delete session"
+                  >
+                    <i class="icon-trash"></i>
+                  </button>
+                </div>
+              </div>
+
+              <div class="chat-messages" id="chat-messages" aria-live="polite" aria-atomic="false">
+                <!-- Messages appear here -->
+                <div class="chat-empty-state">
+                  <i class="icon-bot-message-square"></i>
+                  <h3>Start a Conversation</h3>
+                  <p>Ask anything about your portfolio, tokens, or have me execute actions.</p>
+                </div>
+              </div>
+
+              <!-- Tool confirmation modal (hidden by default) -->
+              <div class="modal-overlay" id="tool-confirmation-modal" style="display: none">
+                <div class="modal-dialog modal-sm">
+                  <div class="modal-header">
+                    <h3>
+                      <i class="icon-alert-triangle"></i>
+                      Confirm Tool Execution
+                    </h3>
+                    <button class="modal-close" type="button" id="tool-modal-close">
+                      <i class="icon-x"></i>
+                    </button>
+                  </div>
+                  <div class="modal-body">
+                    <p><strong id="tool-name">Tool Name</strong></p>
+                    <p id="tool-description">This tool requires your approval to execute.</p>
+                    <div class="tool-call-section">
+                      <div class="tool-call-label">Input:</div>
+                      <pre id="tool-input" class="tool-call-code">{}</pre>
+                    </div>
+                  </div>
+                  <div class="modal-footer">
+                    <button class="btn btn-secondary" type="button" id="deny-tool">Deny</button>
+                    <button class="btn btn-primary" type="button" id="confirm-tool">Allow</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Input area -->
+              <div class="chat-input-area">
+                <div class="chat-context" id="chat-context">
+                  <!-- Optional context badges -->
+                </div>
+                <div class="chat-input-container">
+                  <textarea id="chat-input" placeholder="Ask me anything..." rows="1"></textarea>
+                  <button
+                    class="send-btn"
+                    type="button"
+                    id="send-btn"
+                    disabled
+                    aria-label="Send message"
+                  >
+                    <i class="icon-send"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- Stats Panel -->
-        <div id="stats-panel" class="ai-panel-content active">
+        <div id="stats-panel" class="ai-panel-content">
           <!-- AI Status Control -->
           <div class="ai-status-bar" id="ai-status-bar">
             <div class="status-bar-main">
@@ -74,7 +185,7 @@
             </div>
             <div class="status-bar-toggle">
               <label class="toggle">
-                <input type="checkbox" id="stats-ai-toggle" disabled>
+                <input type="checkbox" id="stats-ai-toggle" disabled />
                 <span class="toggle-track"></span>
               </label>
               <span id="stats-toggle-label" class="toggle-status-label">OFF</span>
@@ -138,6 +249,7 @@
           </div>
 
           <div class="providers-list-container">
+            <!-- NOTE: Provider logos are loaded dynamically. Alt text is set via JS for proper provider names. -->
             <div class="providers-list" id="providers-list">
               <!-- Dynamically rendered by JavaScript -->
             </div>
@@ -262,7 +374,9 @@
               <div class="setting-item">
                 <div class="setting-info">
                   <label class="setting-label" for="setting-entry-analysis">Entry Analysis</label>
-                  <span class="setting-description">Run Assistant analysis before opening positions</span>
+                  <span class="setting-description"
+                    >Run Assistant analysis before opening positions</span
+                  >
                 </div>
                 <div class="setting-control">
                   <label class="toggle">
@@ -274,7 +388,9 @@
               <div class="setting-item">
                 <div class="setting-info">
                   <label class="setting-label" for="setting-exit-analysis">Exit Analysis</label>
-                  <span class="setting-description">Run Assistant analysis before closing positions</span>
+                  <span class="setting-description"
+                    >Run Assistant analysis before closing positions</span
+                  >
                 </div>
                 <div class="setting-control">
                   <label class="toggle">
@@ -306,7 +422,9 @@
           <div class="settings-card">
             <div class="settings-card-header">
               <h3 class="settings-card-title">Auto Blacklist</h3>
-              <p class="settings-card-description">Automatically block tokens based on Assistant scores</p>
+              <p class="settings-card-description">
+                Automatically block tokens based on Assistant scores
+              </p>
             </div>
             <div class="settings-card-body">
               <div class="setting-item">

@@ -300,6 +300,7 @@ pub fn collect_config_metadata() -> ConfigMetadata {
     map.insert("ohlcv", super::OhlcvConfig::field_metadata());
     map.insert("webserver", super::WebserverConfig::field_metadata());
     map.insert("telegram", super::TelegramConfig::field_metadata());
+    map.insert("ai", super::AiConfig::field_metadata());
 
     for section in map.values_mut() {
         section.retain(|_, field| !field.hidden.unwrap_or(false));

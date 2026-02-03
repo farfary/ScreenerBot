@@ -62,7 +62,10 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/scripts/ui/:file", axum::routing::get(get_ui_script))
         .route("/assets/:file", axum::routing::get(get_asset))
         .route("/assets/fonts/:file", axum::routing::get(get_font))
-        .route("/assets/providers/:file", axum::routing::get(get_provider_logo))
+        .route(
+            "/assets/providers/:file",
+            axum::routing::get(get_provider_logo),
+        )
         .nest("/api", api_routes())
         .with_state(state)
 }

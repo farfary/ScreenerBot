@@ -43,6 +43,7 @@ pub struct FullConfigResponse {
     pub ohlcv: config::OhlcvConfig,
     pub gui: config::GuiConfig,
     pub telegram: config::TelegramConfig,
+    pub ai: config::AiConfig,
     pub timestamp: String,
 }
 
@@ -75,6 +76,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/config/gui", get(get_gui_config))
         .route("/config/gui/defaults", get(get_gui_defaults))
         .route("/config/telegram", get(get_telegram_config))
+        .route("/config/ai", get(get_ai_config))
         .route("/config/metadata", get(get_config_metadata))
         // PATCH endpoints - Partial updates (use JSON with only fields to update)
         .route(
@@ -123,6 +125,7 @@ pub fn routes() -> Router<Arc<AppState>> {
             "/config/telegram",
             patch(patch_any_config::<config::TelegramConfig>),
         )
+        .route("/config/ai", patch(patch_any_config::<config::AiConfig>))
         // Import/Export endpoints
         .route("/config/export", post(export_config))
         .route("/config/import/preview", post(import_config_preview))
@@ -153,6 +156,7 @@ async fn get_full_config() -> Response {
         ohlcv: cfg.ohlcv.clone(),
         gui: cfg.gui.clone(),
         telegram: cfg.telegram.clone(),
+        ai: cfg.ai.clone(),
         timestamp: chrono::Utc::now().to_rfc3339(),
     });
 
@@ -325,6 +329,16 @@ async fn get_telegram_config() -> Response {
     success_response(data)
 }
 
+/// GET /api/config/ai - Get AI configuration
+async fn get_ai_config() -> Response {
+    let data = config::with_config(|cfg| ConfigResponse {
+        data: cfg.ai.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    });
+
+    success_response(data)
+}
+
 /// GET /api/config/metadata - Get configuration metadata for UI rendering
 async fn get_config_metadata() -> Response {
     let response = ConfigMetadataResponse {
@@ -368,6 +382,7 @@ where
             "OhlcvConfig" => serde_json::to_value(&cfg.ohlcv).ok(),
             "GuiConfig" => serde_json::to_value(&cfg.gui).ok(),
             "TelegramConfig" => serde_json::to_value(&cfg.telegram).ok(),
+            "AiConfig" => serde_json::to_value(&cfg.ai).ok(),
             _ => None,
         });
 
@@ -514,6 +529,16 @@ where
                 config::update_config_section(
                     |cfg| {
                         cfg.telegram = new_config;
+                    },
+                    true,
+                )?;
+            }
+            "AiConfig" => {
+                let new_config: config::AiConfig = serde_json::from_value(section_json)
+                    .map_err(|e| format!("Invalid AiConfig: {}", e))?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.ai = new_config;
                     },
                     true,
                 )?;
@@ -710,6 +735,7 @@ const CONFIG_SECTIONS: &[&str] = &[
     "ohlcv",
     "gui",
     "telegram",
+    "ai",
 ];
 
 /// Sensitive fields that should be sanitized on export (path format: "section.nested.field")
@@ -728,6 +754,19 @@ const SENSITIVE_FIELDS: &[(&str, &[&str])] = &[
             "auth_password_hash",
             "auth_password_salt",
             "auth_totp_secret",
+        ],
+    ),
+    (
+        "ai",
+        &[
+            "openai.api_key",
+            "anthropic.api_key",
+            "groq.api_key",
+            "deepseek.api_key",
+            "gemini.api_key",
+            "together.api_key",
+            "openrouter.api_key",
+            "mistral.api_key",
         ],
     ),
 ];
