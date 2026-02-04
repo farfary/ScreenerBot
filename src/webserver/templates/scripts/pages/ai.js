@@ -2587,13 +2587,6 @@ function createLifecycle() {
         };
         state.chat.messages.push(assistantMessage);
         renderMessages();
-        
-        // Success feedback on send button
-        const sendBtn = $("#send-btn");
-        if (sendBtn) {
-          sendBtn.classList.add("send-success");
-          setTimeout(() => sendBtn.classList.remove("send-success"), 400);
-        }
       }
 
       // Check if there are pending confirmations (plural - API returns array)
