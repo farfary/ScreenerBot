@@ -153,17 +153,43 @@
                 <div class="chat-context" id="chat-context">
                   <!-- Optional context badges -->
                 </div>
-                <div class="chat-input-container">
-                  <textarea id="chat-input" placeholder="Ask me anything..." rows="1"></textarea>
-                  <button
-                    class="send-btn"
-                    type="button"
-                    id="send-btn"
-                    disabled
-                    aria-label="Send message"
-                  >
-                    <i class="icon-send"></i>
-                  </button>
+                <div class="chat-input-container" id="chat-input-container">
+                  <div class="chat-input-wrapper">
+                    <textarea 
+                      id="chat-input" 
+                      placeholder="Message Assistant..." 
+                      rows="1"
+                      aria-label="Message input"
+                    ></textarea>
+                    <div class="input-hint" id="input-hint">
+                      <kbd>⌘</kbd><kbd>↵</kbd> to send
+                    </div>
+                  </div>
+                  <div class="chat-input-actions">
+                    <button
+                      class="cancel-btn"
+                      type="button"
+                      id="cancel-btn"
+                      aria-label="Cancel request"
+                      title="Cancel (Esc)"
+                    >
+                      <i class="icon-x"></i>
+                    </button>
+                    <button
+                      class="send-btn"
+                      type="button"
+                      id="send-btn"
+                      disabled
+                      aria-label="Send message"
+                      title="Send message"
+                    >
+                      <i class="icon-send"></i>
+                    </button>
+                  </div>
+                </div>
+                <div class="chat-input-footer">
+                  <span class="input-status" id="input-status"></span>
+                  <span class="char-count" id="char-count"></span>
                 </div>
               </div>
             </div>

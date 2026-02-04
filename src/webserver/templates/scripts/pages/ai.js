@@ -2446,6 +2446,39 @@ function createLifecycle() {
     }
   }
 
+  // AbortController for cancellable requests
+  let currentAbortController = null;
+  
+  /**
+   * Cancel the current request
+   */
+  function cancelRequest() {
+    if (currentAbortController) {
+      currentAbortController.abort();
+      currentAbortController = null;
+      
+      const input = $("#chat-input");
+      if (input) {
+        input.disabled = false;
+        input.focus();
+      }
+      
+      state.chat.isLoading = false;
+      hideTypingIndicator();
+      updateSendButton();
+      updateInputStatus("Request cancelled", "");
+      
+      // Clear status after 2 seconds
+      setTimeout(() => updateInputStatus(""), 2000);
+      
+      Utils.showToast({
+        type: "info",
+        title: "Cancelled",
+        message: "Request cancelled",
+      });
+    }
+  }
+
   /**
    * Send a message
    */
@@ -2455,6 +2488,16 @@ function createLifecycle() {
 
     const message = input.value.trim();
     if (!message) return;
+    
+    // Check character limit
+    if (message.length > 4000) {
+      Utils.showToast({
+        type: "error",
+        title: "Message too long",
+        message: "Please shorten your message to under 4,000 characters",
+      });
+      return;
+    }
 
     if (!state.chat.currentSession) {
       Utils.showToast({
@@ -2464,22 +2507,26 @@ function createLifecycle() {
       });
       return;
     }
+    
+    // Cancel any previous request
+    if (currentAbortController) {
+      currentAbortController.abort();
+    }
+    
+    // Create new abort controller
+    currentAbortController = new AbortController();
+    const signal = currentAbortController.signal;
 
     // Clear input and disable
     input.value = "";
+    input.style.height = "auto";
     input.disabled = true;
     state.chat.isLoading = true;
     
-    // Update send button to loading state
-    const sendBtn = $("#send-btn");
-    if (sendBtn) {
-      const icon = sendBtn.querySelector("i");
-      if (icon) {
-        icon.className = "icon-loader";
-        icon.style.animation = "spin 1s linear infinite";
-      }
-    }
+    // Update UI
     updateSendButton();
+    updateCharCount();
+    updateInputStatus('<span class="typing-dots"><span></span><span></span><span></span></span> Thinking...', "sending");
 
     // Add user message to UI
     const userMessage = {
@@ -2506,7 +2553,11 @@ function createLifecycle() {
           session_id: state.chat.currentSession,
           message,
         }),
+        signal, // Add abort signal
       });
+
+      // Check if aborted
+      if (signal.aborted) return;
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -2517,8 +2568,9 @@ function createLifecycle() {
       const data = await response.json();
       console.log("[AI Chat] Response:", data);
 
-      // Hide typing indicator
+      // Hide typing indicator and status
       hideTypingIndicator();
+      updateInputStatus("");
 
       // Check for error in response
       if (data.error) {
@@ -2535,6 +2587,13 @@ function createLifecycle() {
         };
         state.chat.messages.push(assistantMessage);
         renderMessages();
+        
+        // Success feedback on send button
+        const sendBtn = $("#send-btn");
+        if (sendBtn) {
+          sendBtn.classList.add("send-success");
+          setTimeout(() => sendBtn.classList.remove("send-success"), 400);
+        }
       }
 
       // Check if there are pending confirmations (plural - API returns array)
@@ -2546,27 +2605,37 @@ function createLifecycle() {
       // Reload sessions to update last message time
       await loadSessions();
     } catch (error) {
+      // Don't show error for aborted requests
+      if (error.name === "AbortError") {
+        console.log("[AI Chat] Request aborted");
+        return;
+      }
+      
       console.error("[AI Chat] Error sending message:", error);
       playError();
       hideTypingIndicator();
+      
+      // Show error in input area briefly
+      const container = $("#chat-input-container");
+      if (container) {
+        container.classList.add("has-error");
+        setTimeout(() => container.classList.remove("has-error"), 400);
+      }
+      
+      updateInputStatus(`<i class="icon-alert-circle"></i> ${error.message || "Failed to send"}`, "error");
+      
+      // Clear error status after 5 seconds
+      setTimeout(() => updateInputStatus(""), 5000);
+      
       Utils.showToast({
         type: "error",
         title: "Error",
-        message: "Failed to send message",
+        message: error.message || "Failed to send message",
       });
     } finally {
+      currentAbortController = null;
       input.disabled = false;
       state.chat.isLoading = false;
-      
-      // Restore send button icon
-      const sendBtn = $("#send-btn");
-      if (sendBtn) {
-        const icon = sendBtn.querySelector("i");
-        if (icon) {
-          icon.className = "icon-send";
-          icon.style.animation = "";
-        }
-      }
       updateSendButton();
       input.focus();
     }
@@ -2730,6 +2799,23 @@ function createLifecycle() {
       modal.style.display = "none";
     }
   }
+  
+  /**
+   * Update keyboard hint based on OS
+   */
+  function updateKeyboardHint() {
+    const hint = $("#input-hint");
+    if (!hint) return;
+    
+    const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0 ||
+                  navigator.userAgent.toUpperCase().indexOf("MAC") >= 0;
+    
+    if (isMac) {
+      hint.innerHTML = '<kbd>⌘</kbd><kbd>↵</kbd> to send';
+    } else {
+      hint.innerHTML = '<kbd>Ctrl</kbd><kbd>↵</kbd> to send';
+    }
+  }
 
   /**
    * Handle input change
@@ -2740,10 +2826,54 @@ function createLifecycle() {
 
     // Auto-resize textarea
     input.style.height = "auto";
-    input.style.height = `${Math.min(input.scrollHeight, 120)}px`;
+    input.style.height = `${Math.min(input.scrollHeight, 180)}px`;
 
     // Update send button state
     updateSendButton();
+    
+    // Update character counter
+    updateCharCount();
+  }
+  
+  /**
+   * Update character count display
+   */
+  function updateCharCount() {
+    const input = $("#chat-input");
+    const counter = $("#char-count");
+    if (!input || !counter) return;
+    
+    const len = input.value.length;
+    const MAX_CHARS = 4000;
+    const WARN_THRESHOLD = 3500;
+    
+    if (len === 0) {
+      counter.textContent = "";
+      counter.className = "char-count";
+    } else if (len > MAX_CHARS) {
+      counter.textContent = `${len.toLocaleString()} / ${MAX_CHARS.toLocaleString()}`;
+      counter.className = "char-count danger";
+    } else if (len > WARN_THRESHOLD) {
+      counter.textContent = `${len.toLocaleString()} / ${MAX_CHARS.toLocaleString()}`;
+      counter.className = "char-count warning";
+    } else if (len > 100) {
+      counter.textContent = len.toLocaleString();
+      counter.className = "char-count";
+    } else {
+      counter.textContent = "";
+      counter.className = "char-count";
+    }
+  }
+  
+  /**
+   * Update input status display
+   */
+  function updateInputStatus(status, type = "") {
+    const statusEl = $("#input-status");
+    if (!statusEl) return;
+    
+    statusEl.className = `input-status${type ? ` status-${type}` : ""}`;
+    statusEl.innerHTML = status;
   }
 
   /**
@@ -2751,24 +2881,61 @@ function createLifecycle() {
    */
   function updateSendButton() {
     const sendBtn = $("#send-btn");
+    const cancelBtn = $("#cancel-btn");
     const input = $("#chat-input");
+    const container = $("#chat-input-container");
     
     if (!sendBtn || !input) return;
 
     const hasText = input.value.trim().length > 0;
-    const canSend = hasText && !state.chat.isLoading;
+    const maxChars = 4000;
+    const isOverLimit = input.value.length > maxChars;
+    const canSend = hasText && !state.chat.isLoading && !isOverLimit;
     
     sendBtn.disabled = !canSend;
     sendBtn.setAttribute("aria-label", canSend ? "Send message" : "Type a message to send");
+    
+    // Toggle loading class on send button
+    sendBtn.classList.toggle("is-loading", state.chat.isLoading);
+    
+    // Show/hide cancel button
+    if (cancelBtn) {
+      cancelBtn.classList.toggle("visible", state.chat.isLoading);
+    }
+    
+    // Update container state
+    if (container) {
+      container.classList.toggle("is-sending", state.chat.isLoading);
+    }
   }
 
   /**
-   * Handle keyboard input
+   * Handle keyboard input with enhanced shortcuts
    */
   function handleKeydown(e) {
+    // Enter without Shift - send message
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
+      return;
+    }
+    
+    // Cmd/Ctrl + Enter - always send (even with Shift)
+    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+      e.preventDefault();
+      sendMessage();
+      return;
+    }
+    
+    // Escape - cancel if loading, otherwise blur
+    if (e.key === "Escape") {
+      if (state.chat.isLoading) {
+        e.preventDefault();
+        cancelRequest();
+      } else {
+        e.target.blur();
+      }
+      return;
     }
   }
 
@@ -3134,6 +3301,12 @@ function createLifecycle() {
     if (sendBtn) {
       addTrackedListener(sendBtn, "click", sendMessage);
     }
+    
+    // Cancel button
+    const cancelBtn = $("#cancel-btn");
+    if (cancelBtn) {
+      addTrackedListener(cancelBtn, "click", cancelRequest);
+    }
 
     // Chat input
     const chatInput = $("#chat-input");
@@ -3195,6 +3368,7 @@ function createLifecycle() {
   api.selectSession = selectSession;
   api.deleteSession = deleteSession;
   api.summarizeSession = summarizeSession;
+  api.cancelRequest = cancelRequest;
 
   // ============================================================================
   // Lifecycle Hooks
@@ -3221,6 +3395,9 @@ function createLifecycle() {
       setupTestingHandlers();
       setupInstructionHandlers();
       setupChatHandlers();
+      
+      // Update keyboard hint based on OS
+      updateKeyboardHint();
 
       // Setup stats toggle
       const statsToggle = $("#stats-ai-toggle");
