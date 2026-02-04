@@ -373,6 +373,11 @@ function createLifecycle() {
 
       const data = await response.json();
       state.providers = data.providers || [];
+      
+      // Store default_provider from API response for use in rendering
+      if (data.default_provider) {
+        state.defaultProvider = data.default_provider;
+      }
 
       renderProviders(state.providers);
     } catch (error) {
@@ -392,8 +397,8 @@ function createLifecycle() {
     const container = $("#providers-list");
     if (!container) return;
 
-    // Get default provider from config
-    const defaultProvider = state.config?.default_provider || "";
+    // Get default provider from state (loaded from API) or fallback to config
+    const defaultProvider = state.defaultProvider || state.config?.default_provider || "";
 
     // Get all provider IDs
     const allProviderIds = Object.keys(PROVIDER_NAMES);
@@ -2487,6 +2492,11 @@ function createLifecycle() {
 
     // Show typing indicator
     showTypingIndicator();
+
+    console.log("[AI Chat] Sending message:", {
+      session_id: state.chat.currentSession,
+      message: message.substring(0, 50) + (message.length > 50 ? "..." : ""),
+    });
 
     try {
       const response = await fetch("/api/ai/chat", {
