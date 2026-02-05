@@ -393,22 +393,8 @@
    SCROLLBAR STYLING
    ============================================ */
 
-.search-dialog-body::-webkit-scrollbar {
-  width: 6px;
-}
-
-.search-dialog-body::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.search-dialog-body::-webkit-scrollbar-thumb {
-  background: rgb(255, 255, 255, 0.15);
-  border-radius: 3px;
-}
-
-.search-dialog-body::-webkit-scrollbar-thumb:hover {
-  background: rgb(255, 255, 255, 0.25);
-}
+/* Search dialog uses global scrollbar-dialog pattern */
+/* Note: Inherits from global scrollbar system in scrollbar.css */
 
 /* ============================================
    RESPONSIVE

@@ -1,0 +1,560 @@
+/* =============================================================================
+   SCROLLBAR SYSTEM
+   Centralized scrollbar styling for consistent cross-browser experience
+   ============================================================================= */
+
+/* =============================================================================
+   CSS Custom Properties for Scrollbars
+   ============================================================================= */
+
+:root {
+  /* Scrollbar Dimensions */
+  --scrollbar-width: 8px;
+  --scrollbar-width-thin: 6px;
+  --scrollbar-width-ultra-thin: 4px;
+  --scrollbar-radius: 4px;
+  --scrollbar-radius-sm: 3px;
+  --scrollbar-radius-lg: 6px;
+
+  /* Scrollbar Colors - Light Mode */
+  --scrollbar-thumb: var(--border-color);
+  --scrollbar-thumb-hover: var(--text-muted);
+  --scrollbar-thumb-active: var(--text-secondary);
+  --scrollbar-track: transparent;
+  --scrollbar-corner: transparent;
+
+  /* Scrollbar Behavior */
+  --scrollbar-gutter: stable;
+}
+
+[data-theme="dark"] {
+  /* Scrollbar Colors - Dark Mode */
+  --scrollbar-thumb: var(--border-color);
+  --scrollbar-thumb-hover: var(--text-muted);
+  --scrollbar-thumb-active: var(--text-secondary);
+  --scrollbar-track: transparent;
+  --scrollbar-corner: transparent;
+}
+
+/* =============================================================================
+   Global Scrollbar Styling
+   Applied to all scrollable elements by default
+   ============================================================================= */
+
+/* Firefox - Standard scrollbar properties */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+/* WebKit/Blink (Chrome, Safari, Edge, Electron) */
+*::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+  height: var(--scrollbar-width);
+}
+
+*::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+  border-radius: var(--scrollbar-radius);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--scrollbar-radius);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  transition: background-color 0.15s ease;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-thumb:active {
+  background: var(--scrollbar-thumb-active);
+  background-clip: padding-box;
+}
+
+*::-webkit-scrollbar-corner {
+  background: var(--scrollbar-corner);
+}
+
+/* IE/Edge Legacy (non-Chromium) */
+* {
+  -ms-overflow-style: -ms-autohiding-scrollbar;
+}
+
+/* =============================================================================
+   Scrollbar Visibility Utilities
+   ============================================================================= */
+
+/* Hide scrollbar completely while maintaining scroll functionality */
+.scrollbar-hidden,
+.no-scrollbar {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.scrollbar-hidden::-webkit-scrollbar,
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Auto-hide scrollbar (show only on hover/scroll) */
+.scrollbar-auto {
+  scrollbar-width: thin;
+}
+
+.scrollbar-auto::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+  height: var(--scrollbar-width);
+}
+
+.scrollbar-auto::-webkit-scrollbar-thumb {
+  background: transparent;
+  transition: background-color 0.2s ease;
+}
+
+.scrollbar-auto:hover::-webkit-scrollbar-thumb,
+.scrollbar-auto:focus-within::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  background-clip: padding-box;
+}
+
+/* Always visible scrollbar */
+.scrollbar-visible {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+.scrollbar-visible::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+  height: var(--scrollbar-width);
+}
+
+.scrollbar-visible::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  background-clip: padding-box;
+}
+
+/* =============================================================================
+   Scrollbar Size Variants
+   ============================================================================= */
+
+/* Thin scrollbar (6px) */
+.scrollbar-thin {
+  scrollbar-width: thin;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: var(--scrollbar-width-thin);
+  height: var(--scrollbar-width-thin);
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  border-width: 1px;
+}
+
+/* Ultra-thin scrollbar (4px) - for compact areas */
+.scrollbar-ultra-thin {
+  scrollbar-width: thin;
+}
+
+.scrollbar-ultra-thin::-webkit-scrollbar {
+  width: var(--scrollbar-width-ultra-thin);
+  height: var(--scrollbar-width-ultra-thin);
+}
+
+.scrollbar-ultra-thin::-webkit-scrollbar-thumb {
+  border-width: 0;
+  border-radius: var(--scrollbar-radius-sm);
+}
+
+/* Wide scrollbar (12px) - for Windows/accessibility */
+.scrollbar-wide {
+  scrollbar-width: auto;
+}
+
+.scrollbar-wide::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+.scrollbar-wide::-webkit-scrollbar-thumb {
+  border-width: 3px;
+}
+
+/* =============================================================================
+   Scrollbar Gutter Control
+   Prevents layout shift when scrollbar appears/disappears
+   ============================================================================= */
+
+/* Stable gutter - reserves space for scrollbar */
+.scrollbar-stable {
+  scrollbar-gutter: stable;
+}
+
+/* Stable gutter on both edges */
+.scrollbar-stable-both {
+  scrollbar-gutter: stable both-edges;
+}
+
+/* No gutter - content reflows when scrollbar appears */
+.scrollbar-no-gutter {
+  scrollbar-gutter: auto;
+}
+
+/* =============================================================================
+   Scroll Behavior & Touch Optimization
+   ============================================================================= */
+
+/* Smooth scrolling */
+.scroll-smooth {
+  scroll-behavior: smooth;
+}
+
+/* Instant scrolling (for programmatic control) */
+.scroll-instant {
+  scroll-behavior: auto;
+}
+
+/* Touch-optimized scrolling (iOS momentum) */
+.scroll-touch {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Contain overscroll (prevent bounce/chaining) */
+.overscroll-contain {
+  overscroll-behavior: contain;
+}
+
+/* No overscroll effects */
+.overscroll-none {
+  overscroll-behavior: none;
+}
+
+/* Combined touch optimization */
+.scroll-optimized {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scroll-behavior: smooth;
+}
+
+/* =============================================================================
+   Scroll Snap Utilities
+   ============================================================================= */
+
+/* Horizontal snap container */
+.scroll-snap-x {
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Vertical snap container */
+.scroll-snap-y {
+  scroll-snap-type: y mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Snap to start */
+.snap-start {
+  scroll-snap-align: start;
+}
+
+/* Snap to center */
+.snap-center {
+  scroll-snap-align: center;
+}
+
+/* Snap to end */
+.snap-end {
+  scroll-snap-align: end;
+}
+
+/* =============================================================================
+   Component-Specific Scrollbar Patterns
+   Reusable patterns for common UI components
+   ============================================================================= */
+
+/* Sidebar pattern - thin, stable gutter */
+.scrollbar-sidebar {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+
+.scrollbar-sidebar::-webkit-scrollbar {
+  width: var(--scrollbar-width-thin);
+}
+
+.scrollbar-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-sidebar::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--scrollbar-radius-sm);
+}
+
+.scrollbar-sidebar::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* Dialog/Modal pattern - visible, contained */
+.scrollbar-dialog {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+
+.scrollbar-dialog::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+}
+
+.scrollbar-dialog::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+
+.scrollbar-dialog::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--scrollbar-radius);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.scrollbar-dialog::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  background-clip: padding-box;
+}
+
+/* Table pattern - both axes, with corner */
+.scrollbar-table {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+.scrollbar-table::-webkit-scrollbar {
+  width: var(--scrollbar-width-thin);
+  height: var(--scrollbar-width-thin);
+}
+
+.scrollbar-table::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-table::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--scrollbar-radius-sm);
+}
+
+.scrollbar-table::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+.scrollbar-table::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* Dropdown/Menu pattern - compact, hidden track */
+.scrollbar-dropdown {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+}
+
+.scrollbar-dropdown::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+}
+
+.scrollbar-dropdown::-webkit-scrollbar-track {
+  background: transparent;
+  margin: 4px 0;
+}
+
+.scrollbar-dropdown::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--scrollbar-radius);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+.scrollbar-dropdown::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+  background-clip: padding-box;
+}
+
+/* Chat/Messages pattern - smooth, optimized */
+.scrollbar-chat {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
+}
+
+.scrollbar-chat::-webkit-scrollbar {
+  width: var(--scrollbar-width);
+}
+
+.scrollbar-chat::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-chat::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--scrollbar-radius);
+}
+
+.scrollbar-chat::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+/* Code/Terminal pattern - monospace feel */
+.scrollbar-code {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+}
+
+.scrollbar-code::-webkit-scrollbar {
+  width: var(--scrollbar-width-thin);
+  height: var(--scrollbar-width-thin);
+}
+
+.scrollbar-code::-webkit-scrollbar-track {
+  background: var(--bg-primary);
+}
+
+.scrollbar-code::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 2px;
+}
+
+.scrollbar-code::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover);
+}
+
+.scrollbar-code::-webkit-scrollbar-corner {
+  background: var(--bg-primary);
+}
+
+/* =============================================================================
+   Horizontal Scroll Patterns
+   ============================================================================= */
+
+/* Horizontal tabs/nav - hidden scrollbar */
+.scrollbar-tabs {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.scrollbar-tabs::-webkit-scrollbar {
+  display: none;
+}
+
+/* Horizontal carousel - subtle scrollbar */
+.scrollbar-carousel {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
+  -webkit-overflow-scrolling: touch;
+}
+
+.scrollbar-carousel::-webkit-scrollbar {
+  height: var(--scrollbar-width-ultra-thin);
+}
+
+.scrollbar-carousel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-carousel::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: var(--scrollbar-radius-sm);
+}
+
+/* =============================================================================
+   Accessibility & High Contrast
+   ============================================================================= */
+
+/* High contrast mode - more visible scrollbars */
+@media (prefers-contrast: high) {
+  :root {
+    --scrollbar-thumb: var(--text-secondary);
+    --scrollbar-thumb-hover: var(--text-primary);
+    --scrollbar-track: var(--border-color);
+  }
+
+  *::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+}
+
+/* Reduced motion - disable smooth scrolling */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  .scroll-smooth {
+    scroll-behavior: auto !important;
+  }
+}
+
+/* =============================================================================
+   Focus Indicators for Keyboard Navigation
+   ============================================================================= */
+
+/* Focus ring on scrollable containers */
+.scrollbar-focusable:focus-visible {
+  outline: 2px solid var(--primary-color);
+  outline-offset: -2px;
+}
+
+/* =============================================================================
+   Print Styles
+   ============================================================================= */
+
+@media print {
+  * {
+    overflow: visible !important;
+  }
+
+  *::-webkit-scrollbar {
+    display: none !important;
+  }
+}
+
+/* =============================================================================
+   Element-Specific Hidden Scrollbars
+   Navigation elements that need horizontal scroll without visible scrollbar
+   ============================================================================= */
+
+/* Navigation tabs - hidden scrollbar for clean appearance */
+.tabs,
+.sub-tabs-container,
+.dialog-tabs,
+.notification-tabs,
+.header-row-2,
+.filtering-info-bar,
+.billboard-cat-tokens,
+.billboard-row-tokens,
+.toast-container {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.tabs::-webkit-scrollbar,
+.sub-tabs-container::-webkit-scrollbar,
+.dialog-tabs::-webkit-scrollbar,
+.notification-tabs::-webkit-scrollbar,
+.header-row-2::-webkit-scrollbar,
+.filtering-info-bar::-webkit-scrollbar,
+.billboard-cat-tokens::-webkit-scrollbar,
+.billboard-row-tokens::-webkit-scrollbar,
+.toast-container::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}

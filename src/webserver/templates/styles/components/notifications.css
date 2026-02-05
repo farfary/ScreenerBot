@@ -249,14 +249,11 @@ body.notification-drawer-open {
   border-bottom: 1px solid var(--border-color);
   background: var(--bg-secondary);
   overflow-x: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
   flex-shrink: 0;
+  -webkit-overflow-scrolling: touch;
 }
 
-.notification-tabs::-webkit-scrollbar {
-  display: none;
-}
+/* Hidden scrollbar - uses global scrollbar-hidden pattern */
 
 .notification-tab {
   display: inline-flex;
@@ -381,25 +378,11 @@ body.notification-drawer-open {
   overflow-y: auto;
   padding: 8px 12px;
   scroll-behavior: smooth;
+  overscroll-behavior: contain;
 }
 
-/* Custom scrollbar */
-.notification-list::-webkit-scrollbar {
-  width: 4px;
-}
-
-.notification-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.notification-list::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 2px;
-}
-
-.notification-list::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
-}
+/* Scrollbar styling - inherits from global scrollbar system */
+/* Note: Uses global thin scrollbar pattern from scrollbar.css */
 
 /* -----------------------------------------------------------------------------
    Compact Notification Item

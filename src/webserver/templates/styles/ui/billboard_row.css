@@ -99,15 +99,12 @@
   gap: 6px;
   overflow: hidden auto;
   scroll-behavior: smooth;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
   padding: 2px 0;
   flex: 1;
+  -webkit-overflow-scrolling: touch;
 }
 
-.billboard-row-tokens::-webkit-scrollbar {
-  display: none;
-}
+/* Hidden scrollbar - uses global scrollbar-hidden pattern */
 
 /* ============================================
    SCROLL ARROWS

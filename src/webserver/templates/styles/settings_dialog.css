@@ -65,27 +65,7 @@
 }
 
 /* Custom Scrollbar for Settings */
-.settings-nav::-webkit-scrollbar,
-.settings-content::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.settings-nav::-webkit-scrollbar-track,
-.settings-content::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.settings-nav::-webkit-scrollbar-thumb,
-.settings-content::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 3px;
-}
-
-.settings-nav::-webkit-scrollbar-thumb:hover,
-.settings-content::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
-}
+/* Note: Uses global scrollbar-sidebar and scrollbar-dialog patterns from scrollbar.css */
 
 /* =============================================================================
    HEADER - Desktop App Style with Streamlined Actions

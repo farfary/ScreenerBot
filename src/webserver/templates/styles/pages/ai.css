@@ -2425,26 +2425,10 @@
   flex: 1;
   overflow-y: auto;
   padding: var(--spacing-sm);
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
+  overscroll-behavior: contain;
 }
 
-.sessions-list::-webkit-scrollbar {
-  width: 6px;
-}
-
-.sessions-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.sessions-list::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 3px;
-}
-
-.sessions-list::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
-}
+/* Scrollbar styling - inherits from global scrollbar-sidebar pattern */
 
 .session-item {
   padding: var(--spacing-sm) var(--spacing-md);
@@ -2669,26 +2653,11 @@
   display: flex;
   flex-direction: column;
   gap: var(--spacing-lg);
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
+  scroll-behavior: smooth;
+  overscroll-behavior: contain;
 }
 
-.chat-messages::-webkit-scrollbar {
-  width: 8px;
-}
-
-.chat-messages::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.chat-messages::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 4px;
-}
-
-.chat-messages::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
-}
+/* Scrollbar styling - inherits from global scrollbar-chat pattern */
 
 /* Empty State */
 .chat-empty-state {
@@ -3372,25 +3341,12 @@
   max-height: 180px;
   line-height: 1.5;
   padding: 6px 0;
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
 }
 
-#chat-input::-webkit-scrollbar {
-  width: 4px;
-}
-
-#chat-input::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-#chat-input::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 2px;
-}
+/* Scrollbar styling - inherits from global ultra-thin scrollbar */
 
 #chat-input::placeholder {
   color: var(--text-muted);

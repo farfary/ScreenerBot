@@ -167,34 +167,8 @@ body.dt-column-resizing .data-table col {
   min-height: 0; /* Critical for flex scrolling */
 }
 
-/* Custom scrollbar styling for dark theme */
-.data-table-scroll-container::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.data-table-scroll-container::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.data-table-scroll-container::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 3px;
-}
-
-.data-table-scroll-container::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
-}
-
-.data-table-scroll-container::-webkit-scrollbar-corner {
-  background: transparent;
-}
-
-/* Firefox scrollbar styling */
-.data-table-scroll-container {
-  scrollbar-width: thin;
-  scrollbar-color: var(--border-color) transparent;
-}
+/* Scrollbar styling - uses global scrollbar-table pattern */
+/* Note: Inherits from global scrollbar system in scrollbar.css */
 
 .data-table-blocking-state {
   position: absolute;

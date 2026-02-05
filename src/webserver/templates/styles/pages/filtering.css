@@ -62,12 +62,10 @@
   align-items: center;
   gap: var(--spacing-lg);
   overflow-x: auto;
-  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
 
-.filtering-info-bar::-webkit-scrollbar {
-  display: none;
-}
+/* Hidden scrollbar - uses global scrollbar-hidden pattern */
 
 .filtering-info-bar .info-item {
   display: flex;
@@ -1621,27 +1619,11 @@
   min-height: 0;
   overflow: hidden auto;
   padding: 4px;
-  scrollbar-width: thin;
   scrollbar-gutter: stable;
   overscroll-behavior: contain;
 }
 
-.explorer-tree::-webkit-scrollbar {
-  width: 5px;
-}
-
-.explorer-tree::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.explorer-tree::-webkit-scrollbar-thumb {
-  background-color: var(--border-color);
-  border-radius: 3px;
-}
-
-.explorer-tree::-webkit-scrollbar-thumb:hover {
-  background-color: var(--text-muted);
-}
+/* Scrollbar styling - inherits from global scrollbar-sidebar pattern */
 
 .tree-category {
   margin-bottom: 1px;
@@ -2039,22 +2021,7 @@
   overscroll-behavior: contain;
 }
 
-.explorer-table-wrapper::-webkit-scrollbar {
-  width: 6px;
-}
-
-.explorer-table-wrapper::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.explorer-table-wrapper::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 3px;
-}
-
-.explorer-table-wrapper::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
-}
+/* Scrollbar styling - inherits from global scrollbar system */
 
 /* Compact table styling */
 .reasons-table {

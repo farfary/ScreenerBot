@@ -511,14 +511,9 @@
 
     /* Smooth scrolling on iOS */
     -webkit-overflow-scrolling: touch;
-
-    /* Hide scrollbar but keep functionality */
-    scrollbar-width: none;
   }
 
-  .toast-container::-webkit-scrollbar {
-    display: none;
-  }
+  /* Hidden scrollbar - uses global scrollbar-hidden pattern */
 
   .toast-container.drawer-open {
     right: 12px; /* Keep toasts visible on mobile, drawer is fullscreen */

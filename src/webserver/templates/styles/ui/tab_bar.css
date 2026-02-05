@@ -47,6 +47,7 @@
    Main Tabs (First Row)
    ============================================================================ */
 
+/* Tabs use hidden scrollbar pattern - horizontal scroll without visible scrollbar */
 .tabs {
   background: var(--tab-bar-bg-primary);
   padding: 0 4px;
@@ -54,22 +55,7 @@
   display: flex;
   overflow-x: auto;
   flex: 0 0 auto;
-  scrollbar-width: none; /* Hide scrollbar Firefox */
-  -ms-overflow-style: none; /* Hide scrollbar IE/Edge */
-}
-
-/* Hide scrollbar on webkit browsers */
-.tabs::-webkit-scrollbar {
-  display: none;
-}
-
-.tabs::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.tabs::-webkit-scrollbar-thumb {
-  background: var(--tab-bar-border-color);
-  border-radius: 2px;
+  -webkit-overflow-scrolling: touch;
 }
 
 .tab {
@@ -108,6 +94,7 @@
    Sub-Tabs Container (Second Row)
    ============================================================================ */
 
+/* Sub-tabs also use hidden scrollbar pattern */
 .sub-tabs-container {
   background: var(--tab-bar-bg-secondary);
   border-bottom: 1px solid var(--tab-bar-border-color);
@@ -116,19 +103,13 @@
   gap: 2px;
   overflow-x: auto;
   flex: 0 0 auto;
-  scrollbar-width: none; /* Hide scrollbar Firefox */
-  -ms-overflow-style: none; /* Hide scrollbar IE/Edge */
   min-height: 0; /* No minimum height needed */
   position: relative;
+  -webkit-overflow-scrolling: touch;
 }
 
 .sub-tabs-container[data-ui="tab-bar"] {
   display: flex; /* Show when managed by TabBar */
-}
-
-/* Hide scrollbar on webkit browsers */
-.sub-tabs-container::-webkit-scrollbar {
-  display: none;
 }
 
 /* ============================================================================

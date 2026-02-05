@@ -292,27 +292,8 @@
   background: var(--bg-primary);
 }
 
-/* Scrollbar styling for dropdown */
-.cs-dropdown::-webkit-scrollbar {
-  width: 8px;
-}
-
-.cs-dropdown::-webkit-scrollbar-track {
-  background: transparent;
-  margin: 4px 0;
-}
-
-.cs-dropdown::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 4px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-
-.cs-dropdown::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
-  background-clip: padding-box;
-}
+/* Scrollbar styling - inherits from global scrollbar-dropdown pattern */
+/* Note: Uses global scrollbar system in scrollbar.css */
 
 /* Size variants */
 .custom-select.cs-sm {

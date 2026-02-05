@@ -523,13 +523,10 @@
   border-bottom: 1px solid var(--border-color);
   flex-shrink: 0;
   overflow-x: auto;
-  /* Hide scrollbar for cleaner look */
-  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
 
-.dialog-tabs::-webkit-scrollbar {
-  display: none;
-}
+/* Hidden scrollbar - uses global scrollbar-hidden pattern */
 
 .tab-button {
   display: flex;
@@ -4554,26 +4551,8 @@
    SCROLLBAR
    ============================================================================= */
 
-.token-details-dialog .tab-content::-webkit-scrollbar,
-.overview-left::-webkit-scrollbar {
-  width: 6px;
-}
-
-.token-details-dialog .tab-content::-webkit-scrollbar-track,
-.overview-left::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.token-details-dialog .tab-content::-webkit-scrollbar-thumb,
-.overview-left::-webkit-scrollbar-thumb {
-  background: var(--border-color);
-  border-radius: 3px;
-}
-
-.token-details-dialog .tab-content::-webkit-scrollbar-thumb:hover,
-.overview-left::-webkit-scrollbar-thumb:hover {
-  background: var(--text-muted);
-}
+/* Token details dialog uses global scrollbar-dialog pattern */
+/* Note: Inherits from global scrollbar system in scrollbar.css */
 
 /* =============================================================================
    RESPONSIVE

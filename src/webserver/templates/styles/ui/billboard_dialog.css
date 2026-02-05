@@ -274,21 +274,18 @@
   align-items: center;
 }
 
-/* Tokens container - horizontal scroll */
+/* Tokens container - horizontal scroll with hidden scrollbar */
 .billboard-cat-tokens {
   display: flex;
   gap: var(--spacing-md, 16px);
   overflow: auto hidden;
   scroll-behavior: smooth;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
   padding: var(--spacing-sm, 8px);
   flex: 1;
+  -webkit-overflow-scrolling: touch;
 }
 
-.billboard-cat-tokens::-webkit-scrollbar {
-  display: none;
-}
+/* Hidden scrollbar - uses global scrollbar-hidden pattern */
 
 /* Scroll arrows */
 .billboard-cat-arrow {
