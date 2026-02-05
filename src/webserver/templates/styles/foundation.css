@@ -284,6 +284,9 @@
   --danger-alpha-20: rgb(248, 81, 73, 0.2);
   --danger-alpha-30: rgb(248, 81, 73, 0.3);
 
+  /* Form Control Overrides */
+  --select-arrow: var(--select-arrow-dark);
+
   /* Solana Brand Colors */
   --solana-purple: #9945ff;
   --solana-green: #14f195;

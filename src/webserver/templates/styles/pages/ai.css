@@ -1305,24 +1305,13 @@
   gap: 12px;
 }
 
-.filter-select {
+/* AI-specific filter-select overrides - base in notifications.css */
+.ai-page .filter-select {
   padding: 8px 32px 8px 12px;
   font-size: 13px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
   border-radius: 6px;
-  color: var(--text-primary);
-  cursor: pointer;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%239ca3af' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10l-5 5z'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
+  background-image: var(--select-arrow);
   background-position: right 10px center;
-  transition: border-color 0.15s ease;
-}
-
-.filter-select:focus {
-  outline: none;
-  border-color: var(--primary);
 }
 
 .search-box {
