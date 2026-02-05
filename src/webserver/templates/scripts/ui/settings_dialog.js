@@ -1094,7 +1094,7 @@ export class SettingsDialog {
       const listRect = list.getBoundingClientRect();
       const scrollZone = 50;
       const scrollSpeed = 8;
-      
+
       if (e.clientY < listRect.top + scrollZone) {
         list.scrollTop -= scrollSpeed;
       } else if (e.clientY > listRect.bottom - scrollZone) {
@@ -1145,7 +1145,7 @@ export class SettingsDialog {
       }
 
       const tabs = getTabs();
-      
+
       // Get current sorted order
       const sortedTabs = [...tabs].sort((a, b) => a.order - b.order);
       const draggedIdx = sortedTabs.findIndex((t) => t.id === draggedTabId);
@@ -1159,7 +1159,7 @@ export class SettingsDialog {
 
       // Remove from old position
       const [movedTab] = sortedTabs.splice(draggedIdx, 1);
-      
+
       // Calculate new position (accounting for removal)
       let insertIdx = dropIdx;
       if (draggedIdx < dropIdx) {
@@ -1169,10 +1169,10 @@ export class SettingsDialog {
         // Dragging up
         insertIdx = insertBefore ? dropIdx : dropIdx + 1;
       }
-      
+
       // Clamp to valid range
       insertIdx = Math.max(0, Math.min(insertIdx, sortedTabs.length));
-      
+
       // Insert at new position
       sortedTabs.splice(insertIdx, 0, movedTab);
 

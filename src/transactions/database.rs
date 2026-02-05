@@ -130,24 +130,24 @@ CREATE TABLE IF NOT EXISTS processed_transactions (
     wallet_address TEXT NOT NULL,
     transaction_type TEXT NOT NULL, -- Serialized TransactionType enum
     direction TEXT NOT NULL, -- 'Incoming', 'Outgoing', 'Internal', 'Unknown'
-    
+
     -- Balance change data (calculated fresh, not cached)
     sol_balance_change TEXT, -- JSON blob of SolBalanceChange
     token_balance_changes TEXT, -- JSON array of TokenBalanceChange
-    
+
     -- Swap analysis data (calculated fresh, not cached)
     token_swap_info TEXT, -- JSON blob of TokenSwapInfo
     swap_pnl_info TEXT, -- JSON blob of SwapPnLInfo
-    
+
     -- ATA operations data (calculated fresh, not cached)
     ata_operations TEXT, -- JSON array of AtaOperation
-    
+
     -- Token transfers data (calculated fresh, not cached)
     token_transfers TEXT, -- JSON array of TokenTransfer
-    
+
     -- Instruction analysis data (calculated fresh, not cached)
     instruction_info TEXT, -- JSON array of InstructionInfo
-    
+
     -- Analysis metadata
     analysis_duration_ms INTEGER,
     cached_analysis TEXT, -- JSON blob of CachedAnalysis
@@ -155,11 +155,11 @@ CREATE TABLE IF NOT EXISTS processed_transactions (
     -- Commonly queried scalar fields
     fee_sol REAL NOT NULL DEFAULT 0,
     sol_delta REAL,
-    
+
     -- Processing timestamps
     processed_at TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-    
+
     FOREIGN KEY (signature) REFERENCES raw_transactions(signature) ON DELETE CASCADE
 );
 "#;
@@ -842,8 +842,8 @@ impl TransactionDatabase {
 
         conn
             .execute(
-                r#"INSERT OR REPLACE INTO raw_transactions 
-               (signature, wallet_address, slot, block_time, timestamp, status, success, error_message, 
+                r#"INSERT OR REPLACE INTO raw_transactions
+               (signature, wallet_address, slot, block_time, timestamp, status, success, error_message,
                 fee_lamports, compute_units_consumed, instructions_count, accounts_count, raw_transaction_data, updated_at)
                VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, datetime('now'))"#,
                 params![
@@ -973,7 +973,7 @@ impl TransactionDatabase {
 
         // Join raw_transactions with processed_transactions to get full data
         let result = conn.query_row(
-            r#"SELECT 
+            r#"SELECT
                 r.signature, r.slot, r.block_time, r.timestamp, r.status, r.success, r.error_message,
                 r.fee_lamports, r.compute_units_consumed, r.instructions_count, r.accounts_count,
                 r.raw_transaction_data,
@@ -1036,7 +1036,7 @@ impl TransactionDatabase {
                     .as_ref()
                     .and_then(|json| serde_json::from_str(json).ok())
                     .unwrap_or_default();
-                
+
                 // Use sol_delta from the dedicated column (index 24) for the aggregate change
                 let sol_delta: f64 = row.get::<_, Option<f64>>(24)?.unwrap_or(0.0);
 
@@ -1124,10 +1124,10 @@ impl TransactionDatabase {
                     token_symbol: None,
                     token_decimals: None,
                 };
-                
+
                 // Populate log_messages and instructions from raw_transaction_data
                 tx.populate_from_raw_data();
-                
+
                 Ok(tx)
             },
         );
@@ -1448,10 +1448,10 @@ impl TransactionDatabase {
 
         // Build SQL query with filters
         let mut query = String::from(
-            "SELECT 
-                r.signature, r.timestamp, r.slot, r.status, r.success, 
+            "SELECT
+                r.signature, r.timestamp, r.slot, r.status, r.success,
                 r.fee_lamports, r.instructions_count,
-                p.transaction_type, p.direction, p.token_swap_info, 
+                p.transaction_type, p.direction, p.token_swap_info,
                 p.token_transfers, p.ata_operations,
                 p.fee_sol, p.sol_delta
             FROM raw_transactions r
