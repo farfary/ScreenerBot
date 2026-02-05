@@ -1550,22 +1550,11 @@
   font-size: 0.9rem;
 }
 
+/* .btn-icon.small migrated to .btn-icon.btn-icon-sm in components.css */
 .btn-icon.small {
   width: 24px;
   height: 24px;
   font-size: 0.8rem;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--text-secondary);
-  border-radius: var(--radius-sm);
-  transition: all 0.2s;
-}
-
-.btn-icon.small:hover {
-  background: var(--bg-card-hover);
-  color: var(--text-primary);
 }
 
 /* Explorer Tree View - Desktop App Style (matches config page pattern) */

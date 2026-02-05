@@ -2420,29 +2420,7 @@
   flex-shrink: 0;
 }
 
-/* Button Icon (for toggle visibility) */
-.btn-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  background: var(--bg-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  color: var(--text-secondary);
-  font-size: 0.9rem;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  flex-shrink: 0;
-}
-
-.btn-icon:hover {
-  background: var(--bg-card-hover);
-  border-color: var(--text-secondary);
-  color: var(--text-primary);
-}
+/* .btn-icon is now in components.css */
 
 /* =============================================================================
    TELEGRAM AUTHENTICATION (Password + TOTP 2FA)
