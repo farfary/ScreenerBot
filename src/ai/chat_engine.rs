@@ -173,20 +173,23 @@ impl ConfirmationManager {
         };
 
         let mut pending = self.pending.write().await;
-        
+
         // Cleanup expired confirmations (older than 10 minutes)
         let timeout = std::time::Duration::from_secs(600);
         pending.retain(|_, v| v.created_at.elapsed() < timeout);
-        
+
         // Limit max pending confirmations per session (prevent DoS)
-        let session_count = pending.values().filter(|v| v.session_id == session_id).count();
+        let session_count = pending
+            .values()
+            .filter(|v| v.session_id == session_id)
+            .count();
         if session_count >= 10 {
             logger::warning(
                 LogTag::Api,
                 &format!("Session {} has too many pending confirmations", session_id),
             );
         }
-        
+
         pending.insert(confirmation_id.clone(), state);
 
         confirmation_id
@@ -195,12 +198,12 @@ impl ConfirmationManager {
     async fn get_confirmation(&self, confirmation_id: &str) -> Option<ConfirmationState> {
         let pending = self.pending.read().await;
         let state = pending.get(confirmation_id)?;
-        
+
         // Check if confirmation has expired (10 minutes)
         if state.created_at.elapsed() > std::time::Duration::from_secs(600) {
             return None;
         }
-        
+
         Some(state.clone())
     }
 
@@ -897,7 +900,12 @@ impl ChatEngine {
 
         // Execute the tool with timeout (30 seconds)
         let execution_timeout = tokio::time::Duration::from_secs(30);
-        let result = match tokio::time::timeout(execution_timeout, tool.execute(tool_call.arguments.clone())).await {
+        let result = match tokio::time::timeout(
+            execution_timeout,
+            tool.execute(tool_call.arguments.clone()),
+        )
+        .await
+        {
             Ok(r) => r,
             Err(_) => {
                 logger::error(

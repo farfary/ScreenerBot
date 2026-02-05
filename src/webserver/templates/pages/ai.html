@@ -81,6 +81,15 @@
                   <i class="icon-plus"></i>
                 </button>
               </div>
+              <div class="sessions-search">
+                <i class="icon-search"></i>
+                <input
+                  type="text"
+                  id="sessions-search-input"
+                  placeholder="Search chats..."
+                  aria-label="Search chat sessions"
+                />
+              </div>
               <div class="sessions-list" id="chat-sessions-list">
                 <!-- Sessions populated dynamically -->
               </div>
@@ -114,10 +123,65 @@
 
               <div class="chat-messages" id="chat-messages" aria-live="polite" aria-atomic="false">
                 <!-- Messages appear here -->
-                <div class="chat-empty-state">
-                  <i class="icon-bot-message-square"></i>
-                  <h3>Start a Conversation</h3>
-                  <p>Ask anything about your portfolio, tokens, or have me execute actions.</p>
+                <div class="chat-empty-state" id="chat-empty-state">
+                  <div class="empty-state-icon">
+                    <i class="icon-bot-message-square"></i>
+                  </div>
+                  <h3>How can I help you today?</h3>
+                  <p class="empty-state-subtitle">
+                    Ask anything about your portfolio, analyze tokens, or execute trading actions.
+                  </p>
+
+                  <div class="quick-prompts">
+                    <button
+                      class="quick-prompt"
+                      type="button"
+                      data-prompt="What's my current wallet balance and open positions?"
+                    >
+                      <i class="icon-wallet"></i>
+                      <span>Check my balance</span>
+                    </button>
+                    <button
+                      class="quick-prompt"
+                      type="button"
+                      data-prompt="Analyze the security and risks of this token: "
+                    >
+                      <i class="icon-shield-check"></i>
+                      <span>Security check</span>
+                    </button>
+                    <button
+                      class="quick-prompt"
+                      type="button"
+                      data-prompt="Show me my open positions with current P&amp;L"
+                    >
+                      <i class="icon-trending-up"></i>
+                      <span>View positions</span>
+                    </button>
+                    <button
+                      class="quick-prompt"
+                      type="button"
+                      data-prompt="What tokens are passing the filter criteria right now?"
+                    >
+                      <i class="icon-list-filter"></i>
+                      <span>Filtered tokens</span>
+                    </button>
+                    <button
+                      class="quick-prompt"
+                      type="button"
+                      data-prompt="Help me configure my trading entry and exit settings"
+                    >
+                      <i class="icon-settings"></i>
+                      <span>Configure trading</span>
+                    </button>
+                    <button
+                      class="quick-prompt"
+                      type="button"
+                      data-prompt="What's the current market status and any notable opportunities?"
+                    >
+                      <i class="icon-activity"></i>
+                      <span>Market overview</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -155,15 +219,13 @@
                 </div>
                 <div class="chat-input-container" id="chat-input-container">
                   <div class="chat-input-wrapper">
-                    <textarea 
-                      id="chat-input" 
-                      placeholder="Message Assistant..." 
+                    <textarea
+                      id="chat-input"
+                      placeholder="Message Assistant..."
                       rows="1"
                       aria-label="Message input"
                     ></textarea>
-                    <div class="input-hint" id="input-hint">
-                      <kbd>⌘</kbd><kbd>↵</kbd> to send
-                    </div>
+                    <div class="input-hint" id="input-hint"><kbd>⌘</kbd><kbd>↵</kbd> to send</div>
                   </div>
                   <div class="chat-input-actions">
                     <button

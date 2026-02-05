@@ -68,6 +68,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/chat/sessions/:id", delete(delete_chat_session))
         .route("/chat/sessions/:id/summarize", post(summarize_chat_session))
         .route(
+            "/chat/sessions/:id/generate-title",
+            post(generate_session_title),
+        )
+        .route(
             "/chat/confirm/:confirmation_id",
             post(confirm_tool_execution),
         )
@@ -1222,7 +1226,7 @@ async fn send_chat_message(
             None,
         );
     }
-    
+
     if req.message.len() > 10000 {
         return error_response(
             StatusCode::BAD_REQUEST,
@@ -1231,7 +1235,7 @@ async fn send_chat_message(
             None,
         );
     }
-    
+
     // Validate session exists
     let pool = match chat_db::get_chat_pool() {
         Some(p) => p,
@@ -1244,7 +1248,7 @@ async fn send_chat_message(
             )
         }
     };
-    
+
     match chat_db::get_session(&pool, req.session_id) {
         Ok(Some(_)) => {
             // Session exists, continue
@@ -1566,6 +1570,174 @@ async fn summarize_chat_session(
             None,
         ),
     }
+}
+
+/// POST /api/ai/chat/sessions/:id/generate-title - Generate AI title for session
+async fn generate_session_title(
+    State(_state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> Response {
+    let pool = match chat_db::get_chat_pool() {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "CHAT_DB_NOT_INITIALIZED",
+                "Chat database not initialized",
+                None,
+            )
+        }
+    };
+
+    // Get messages for this session
+    let messages = match chat_db::get_messages(&pool, id) {
+        Ok(m) => m,
+        Err(e) => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                &format!("Failed to get messages: {}", e),
+                None,
+            )
+        }
+    };
+
+    if messages.is_empty() {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "EMPTY_SESSION",
+            "Cannot generate title for empty chat session",
+            None,
+        );
+    }
+
+    // Get the first 2-3 messages (user + assistant exchanges)
+    let mut first_user_msg = String::new();
+    let mut first_assistant_msg = String::new();
+
+    for msg in messages.iter().take(5) {
+        if msg.role == "user" && first_user_msg.is_empty() {
+            first_user_msg = msg.content.clone();
+        } else if msg.role == "assistant"
+            && first_assistant_msg.is_empty()
+            && !first_user_msg.is_empty()
+        {
+            first_assistant_msg = msg.content.clone();
+            break; // We have enough context
+        }
+    }
+
+    if first_user_msg.is_empty() {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "NO_USER_MESSAGE",
+            "No user messages found in session",
+            None,
+        );
+    }
+
+    // Build the title generation prompt
+    let assistant_part = if !first_assistant_msg.is_empty() {
+        format!("\nAssistant: {}", first_assistant_msg)
+    } else {
+        String::new()
+    };
+
+    let prompt = format!(
+        "Generate a short, descriptive title (3-8 words) for this conversation. Output only the title, no quotes or formatting.\n\nUser: {}{}
+
+Rules:
+- Keep it concise (3-8 words max)
+- Focus on the main topic or intent
+- Match the language of the conversation
+- If it's a generic greeting, use something like \"Quick Chat\" or \"General Question\"",
+        first_user_msg, assistant_part
+    );
+
+    // Call LLM to generate title
+    let llm_manager = match try_get_llm_manager() {
+        Some(m) => m,
+        None => {
+            return error_response(
+                StatusCode::SERVICE_UNAVAILABLE,
+                "LLM_NOT_CONFIGURED",
+                "LLM manager not initialized",
+                None,
+            )
+        }
+    };
+
+    let provider_name = with_config(|cfg| cfg.ai.default_provider.clone());
+    let provider = match Provider::from_str(&provider_name) {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "INVALID_PROVIDER",
+                &format!("Invalid provider: {}", provider_name),
+                None,
+            )
+        }
+    };
+
+    // Get the model for the configured provider
+    let model = get_model_for_provider(provider);
+
+    let request = ChatRequest::new(model, vec![ChatMessage::user(prompt)])
+        .with_temperature(0.7)
+        .with_max_tokens(50);
+
+    let title = match llm_manager.call(provider, request).await {
+        Ok(response) => {
+            let raw_title = response.content.trim();
+
+            // Remove quotes if present
+            let cleaned_title = raw_title.trim_matches('"').trim_matches('\'').trim();
+
+            // Ensure title is within 50 characters
+            if cleaned_title.len() > 50 {
+                cleaned_title.chars().take(47).collect::<String>() + "..."
+            } else {
+                cleaned_title.to_string()
+            }
+        }
+        Err(e) => {
+            logger::warning(
+                LogTag::Api,
+                &format!("Failed to generate title with LLM: {}", e),
+            );
+            // Fallback: use first few words of user message
+            let words: Vec<&str> = first_user_msg.split_whitespace().take(5).collect();
+            let fallback = words.join(" ");
+            if fallback.len() > 50 {
+                fallback.chars().take(47).collect::<String>() + "..."
+            } else {
+                fallback
+            }
+        }
+    };
+
+    // Update session title in database
+    if let Err(e) = chat_db::update_session_title(&pool, id, &title) {
+        return error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to update session title: {}", e),
+            None,
+        );
+    }
+
+    logger::info(
+        LogTag::Api,
+        &format!("Generated title for session {}: {}", id, title),
+    );
+
+    #[derive(Serialize)]
+    pub struct GenerateTitleResponse {
+        pub title: String,
+    }
+
+    success_response(GenerateTitleResponse { title })
 }
 
 /// POST /api/ai/chat/confirm/:confirmation_id - Confirm/deny tool execution

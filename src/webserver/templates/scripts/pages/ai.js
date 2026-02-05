@@ -373,7 +373,7 @@ function createLifecycle() {
 
       const data = await response.json();
       state.providers = data.providers || [];
-      
+
       // Store default_provider from API response for use in rendering
       if (data.default_provider) {
         state.defaultProvider = data.default_provider;
@@ -659,10 +659,10 @@ function createLifecycle() {
           const saveRes = await fetch(`/api/ai/providers/${providerId}`, {
             method: "PATCH",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-              enabled: true, 
-              api_key: apiKey, 
-              model: model || getDefaultModel(providerId)
+            body: JSON.stringify({
+              enabled: true,
+              api_key: apiKey,
+              model: model || getDefaultModel(providerId),
             }),
           });
 
@@ -2233,18 +2233,16 @@ function createLifecycle() {
 
       const data = await response.json();
       // API returns array directly, not {sessions: [...]}
-      state.chat.sessions = Array.isArray(data) ? data : (data.sessions || []);
-      
+      state.chat.sessions = Array.isArray(data) ? data : data.sessions || [];
+
       renderSessions();
-      
+
       // If no session selected but sessions exist, select the first one
       if (!state.chat.currentSession && state.chat.sessions.length > 0) {
         await selectSession(state.chat.sessions[0].id);
       } else if (state.chat.currentSession) {
         // Reload current session to get updated data
-        const currentSession = state.chat.sessions.find(
-          (s) => s.id === state.chat.currentSession
-        );
+        const currentSession = state.chat.sessions.find((s) => s.id === state.chat.currentSession);
         if (currentSession) {
           await loadMessages(currentSession);
         }
@@ -2274,7 +2272,7 @@ function createLifecycle() {
 
       const data = await response.json();
       playToggleOn();
-      
+
       // Reload sessions and select the new one
       await loadSessions();
       await selectSession(data.session_id);
@@ -2294,9 +2292,9 @@ function createLifecycle() {
    */
   async function selectSession(sessionId) {
     // Normalize sessionId to number (may come as string from onclick)
-    const numericId = typeof sessionId === 'string' ? parseInt(sessionId, 10) : sessionId;
+    const numericId = typeof sessionId === "string" ? parseInt(sessionId, 10) : sessionId;
     state.chat.currentSession = numericId;
-    
+
     // Find the session in our state
     const session = state.chat.sessions.find((s) => s.id === numericId);
     if (!session) {
@@ -2308,7 +2306,7 @@ function createLifecycle() {
     renderSessions();
     updateChatHeader(session);
     showChatInterface();
-    
+
     // Load messages (async) - force render since we're changing sessions
     await loadMessages(session, true);
   }
@@ -2336,16 +2334,16 @@ function createLifecycle() {
       if (!response.ok) throw new Error("Failed to delete session");
 
       playToggleOn();
-      
+
       // If we deleted the current session, clear it
       if (state.chat.currentSession === sessionId) {
         state.chat.currentSession = null;
         state.chat.messages = [];
       }
-      
+
       // Reload sessions
       await loadSessions();
-      
+
       Utils.showToast({
         type: "success",
         title: "Success",
@@ -2375,10 +2373,10 @@ function createLifecycle() {
 
       const data = await response.json();
       playToggleOn();
-      
+
       // Reload sessions to get updated title
       await loadSessions();
-      
+
       Utils.showToast({
         type: "success",
         title: "Success",
@@ -2396,6 +2394,36 @@ function createLifecycle() {
   }
 
   /**
+   * Generate AI title for session (called after first message exchange)
+   */
+  async function generateSessionTitle(sessionId) {
+    try {
+      const response = await fetch(`/api/ai/chat/sessions/${sessionId}/generate-title`, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        console.warn("[AI Chat] Failed to generate title:", response.status);
+        return;
+      }
+
+      const data = await response.json();
+      if (data.title) {
+        // Update the session in our state
+        const session = state.chat.sessions.find((s) => s.id === sessionId);
+        if (session) {
+          session.title = data.title;
+          renderSessions();
+          updateChatHeader(session);
+        }
+      }
+    } catch (error) {
+      // Silently fail - title generation is not critical
+      console.warn("[AI Chat] Error generating title:", error);
+    }
+  }
+
+  /**
    * Load messages for a session
    */
   async function loadMessages(session, forceRender = false) {
@@ -2403,26 +2431,25 @@ function createLifecycle() {
       console.error("[AI Chat] loadMessages called with invalid session:", session);
       return;
     }
-    
+
     // Track if this is a session change (requires full re-render)
     // state.chat.currentSession is the ID (number), not the object
     const isSessionChange = state.chat.currentSession !== session.id;
-    
+
     try {
       const url = `/api/ai/chat/sessions/${session.id}`;
-      
+
       const response = await fetch(url);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: Failed to load session messages`);
       }
-      
+
       const data = await response.json();
       const newMessages = data.messages || [];
-      
+
       // Skip update if message count unchanged and last message ID matches (optimization)
-      if (!forceRender && !isSessionChange && 
-          state.chat.messages.length === newMessages.length) {
+      if (!forceRender && !isSessionChange && state.chat.messages.length === newMessages.length) {
         // Also check last message ID to be sure
         const lastOld = state.chat.messages[state.chat.messages.length - 1];
         const lastNew = newMessages[newMessages.length - 1];
@@ -2430,9 +2457,9 @@ function createLifecycle() {
           return;
         }
       }
-      
+
       state.chat.messages = newMessages;
-      
+
       // Use force render for session changes, incremental for polling updates
       if (isSessionChange || forceRender) {
         renderMessagesForce();
@@ -2448,7 +2475,7 @@ function createLifecycle() {
 
   // AbortController for cancellable requests
   let currentAbortController = null;
-  
+
   /**
    * Cancel the current request
    */
@@ -2456,21 +2483,21 @@ function createLifecycle() {
     if (currentAbortController) {
       currentAbortController.abort();
       currentAbortController = null;
-      
+
       const input = $("#chat-input");
       if (input) {
         input.disabled = false;
         input.focus();
       }
-      
+
       state.chat.isLoading = false;
       hideTypingIndicator();
       updateSendButton();
       updateInputStatus("Request cancelled", "");
-      
+
       // Clear status after 2 seconds
       setTimeout(() => updateInputStatus(""), 2000);
-      
+
       Utils.showToast({
         type: "info",
         title: "Cancelled",
@@ -2488,7 +2515,7 @@ function createLifecycle() {
 
     const message = input.value.trim();
     if (!message) return;
-    
+
     // Check character limit
     if (message.length > 4000) {
       Utils.showToast({
@@ -2499,20 +2526,36 @@ function createLifecycle() {
       return;
     }
 
+    // Auto-create session if none exists
     if (!state.chat.currentSession) {
-      Utils.showToast({
-        type: "error",
-        title: "Error",
-        message: "No chat session selected",
-      });
-      return;
+      try {
+        const response = await fetch("/api/ai/chat/sessions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        if (!response.ok) throw new Error("Failed to create session");
+        const data = await response.json();
+        state.chat.currentSession = data.session_id;
+        await loadSessions();
+        renderSessions();
+        showChatInterface();
+      } catch (error) {
+        console.error("[AI Chat] Error auto-creating session:", error);
+        Utils.showToast({
+          type: "error",
+          title: "Error",
+          message: "Failed to start chat session",
+        });
+        return;
+      }
     }
-    
+
     // Cancel any previous request
     if (currentAbortController) {
       currentAbortController.abort();
     }
-    
+
     // Create new abort controller
     currentAbortController = new AbortController();
     const signal = currentAbortController.signal;
@@ -2522,11 +2565,14 @@ function createLifecycle() {
     input.style.height = "auto";
     input.disabled = true;
     state.chat.isLoading = true;
-    
+
     // Update UI
     updateSendButton();
     updateCharCount();
-    updateInputStatus('<span class="typing-dots"><span></span><span></span><span></span></span> Thinking...', "sending");
+    updateInputStatus(
+      '<span class="typing-dots"><span></span><span></span><span></span></span> Thinking...',
+      "sending"
+    );
 
     // Add user message to UI
     const userMessage = {
@@ -2597,29 +2643,37 @@ function createLifecycle() {
 
       // Reload sessions to update last message time
       await loadSessions();
+
+      // Generate AI title after first message exchange (2 messages = 1 user + 1 assistant)
+      if (state.chat.messages.length === 2) {
+        generateSessionTitle(state.chat.currentSession);
+      }
     } catch (error) {
       // Don't show error for aborted requests
       if (error.name === "AbortError") {
         console.log("[AI Chat] Request aborted");
         return;
       }
-      
+
       console.error("[AI Chat] Error sending message:", error);
       playError();
       hideTypingIndicator();
-      
+
       // Show error in input area briefly
       const container = $("#chat-input-container");
       if (container) {
         container.classList.add("has-error");
         setTimeout(() => container.classList.remove("has-error"), 400);
       }
-      
-      updateInputStatus(`<i class="icon-alert-circle"></i> ${error.message || "Failed to send"}`, "error");
-      
+
+      updateInputStatus(
+        `<i class="icon-alert-circle"></i> ${error.message || "Failed to send"}`,
+        "error"
+      );
+
       // Clear error status after 5 seconds
       setTimeout(() => updateInputStatus(""), 5000);
-      
+
       Utils.showToast({
         type: "error",
         title: "Error",
@@ -2631,6 +2685,130 @@ function createLifecycle() {
       state.chat.isLoading = false;
       updateSendButton();
       input.focus();
+    }
+  }
+
+  /**
+   * Regenerate the last assistant response
+   */
+  async function regenerateLastMessage() {
+    // Find the last user message
+    const lastUserIndex = state.chat.messages.map((m) => m.role).lastIndexOf("user");
+
+    if (lastUserIndex === -1) {
+      Utils.showToast({
+        type: "error",
+        title: "Error",
+        message: "No message to regenerate",
+      });
+      return;
+    }
+
+    const lastUserMessage = state.chat.messages[lastUserIndex].content;
+
+    // Remove all messages after the last user message
+    state.chat.messages = state.chat.messages.slice(0, lastUserIndex + 1);
+
+    // Cancel any pending request
+    if (currentAbortController) {
+      currentAbortController.abort();
+    }
+
+    // Create new abort controller
+    currentAbortController = new AbortController();
+    const signal = currentAbortController.signal;
+
+    // Re-render messages (removes assistant response)
+    renderMessages();
+
+    // Show typing indicator
+    showTypingIndicator();
+    state.chat.isLoading = true;
+    updateSendButton();
+    updateInputStatus(
+      '<span class="typing-dots"><span></span><span></span><span></span></span> Regenerating...',
+      "sending"
+    );
+
+    console.log("[AI Chat] Regenerating response for:", lastUserMessage.substring(0, 50));
+
+    try {
+      const response = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          session_id: state.chat.currentSession,
+          message: lastUserMessage,
+        }),
+        signal,
+      });
+
+      // Check if aborted
+      if (signal.aborted) return;
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error?.message || `API error: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log("[AI Chat] Regenerated response:", data);
+
+      hideTypingIndicator();
+      updateInputStatus("");
+
+      if (data.error) {
+        throw new Error(data.error.message || "Unknown error");
+      }
+
+      // Add new assistant message
+      if (data.content !== undefined) {
+        const assistantMessage = {
+          role: "assistant",
+          content: data.content || "",
+          tool_calls: data.tool_calls || [],
+          timestamp: new Date().toISOString(),
+        };
+        state.chat.messages.push(assistantMessage);
+        renderMessages();
+      }
+
+      // Check for pending confirmations
+      if (data.pending_confirmations && data.pending_confirmations.length > 0) {
+        state.chat.pendingConfirmation = data.pending_confirmations[0];
+        showToolConfirmation(data.pending_confirmations[0]);
+      }
+
+      Utils.showToast({
+        type: "success",
+        title: "Regenerated",
+        message: "Response regenerated successfully",
+      });
+    } catch (error) {
+      // Don't show error for aborted requests
+      if (error.name === "AbortError") {
+        console.log("[AI Chat] Regenerate request aborted");
+        return;
+      }
+
+      console.error("[AI Chat] Error regenerating:", error);
+      playError();
+      hideTypingIndicator();
+      updateInputStatus(
+        `<i class="icon-alert-circle"></i> ${error.message || "Failed to regenerate"}`,
+        "error"
+      );
+      setTimeout(() => updateInputStatus(""), 5000);
+
+      Utils.showToast({
+        type: "error",
+        title: "Error",
+        message: error.message || "Failed to regenerate response",
+      });
+    } finally {
+      currentAbortController = null;
+      state.chat.isLoading = false;
+      updateSendButton();
     }
   }
 
@@ -2792,21 +2970,22 @@ function createLifecycle() {
       modal.style.display = "none";
     }
   }
-  
+
   /**
    * Update keyboard hint based on OS
    */
   function updateKeyboardHint() {
     const hint = $("#input-hint");
     if (!hint) return;
-    
-    const isMac = navigator.platform.toUpperCase().indexOf("MAC") >= 0 ||
-                  navigator.userAgent.toUpperCase().indexOf("MAC") >= 0;
-    
+
+    const isMac =
+      navigator.platform.toUpperCase().indexOf("MAC") >= 0 ||
+      navigator.userAgent.toUpperCase().indexOf("MAC") >= 0;
+
     if (isMac) {
-      hint.innerHTML = '<kbd>⌘</kbd><kbd>↵</kbd> to send';
+      hint.innerHTML = "<kbd>⌘</kbd><kbd>↵</kbd> to send";
     } else {
-      hint.innerHTML = '<kbd>Ctrl</kbd><kbd>↵</kbd> to send';
+      hint.innerHTML = "<kbd>Ctrl</kbd><kbd>↵</kbd> to send";
     }
   }
 
@@ -2823,11 +3002,11 @@ function createLifecycle() {
 
     // Update send button state
     updateSendButton();
-    
+
     // Update character counter
     updateCharCount();
   }
-  
+
   /**
    * Update character count display
    */
@@ -2835,11 +3014,11 @@ function createLifecycle() {
     const input = $("#chat-input");
     const counter = $("#char-count");
     if (!input || !counter) return;
-    
+
     const len = input.value.length;
     const MAX_CHARS = 4000;
     const WARN_THRESHOLD = 3500;
-    
+
     if (len === 0) {
       counter.textContent = "";
       counter.className = "char-count";
@@ -2857,14 +3036,14 @@ function createLifecycle() {
       counter.className = "char-count";
     }
   }
-  
+
   /**
    * Update input status display
    */
   function updateInputStatus(status, type = "") {
     const statusEl = $("#input-status");
     if (!statusEl) return;
-    
+
     statusEl.className = `input-status${type ? ` status-${type}` : ""}`;
     statusEl.innerHTML = status;
   }
@@ -2877,25 +3056,25 @@ function createLifecycle() {
     const cancelBtn = $("#cancel-btn");
     const input = $("#chat-input");
     const container = $("#chat-input-container");
-    
+
     if (!sendBtn || !input) return;
 
     const hasText = input.value.trim().length > 0;
     const maxChars = 4000;
     const isOverLimit = input.value.length > maxChars;
     const canSend = hasText && !state.chat.isLoading && !isOverLimit;
-    
+
     sendBtn.disabled = !canSend;
     sendBtn.setAttribute("aria-label", canSend ? "Send message" : "Type a message to send");
-    
+
     // Toggle loading class on send button
     sendBtn.classList.toggle("is-loading", state.chat.isLoading);
-    
+
     // Show/hide cancel button
     if (cancelBtn) {
       cancelBtn.classList.toggle("visible", state.chat.isLoading);
     }
-    
+
     // Update container state
     if (container) {
       container.classList.toggle("is-sending", state.chat.isLoading);
@@ -2912,14 +3091,14 @@ function createLifecycle() {
       sendMessage();
       return;
     }
-    
+
     // Cmd/Ctrl + Enter - always send (even with Shift)
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
       e.preventDefault();
       sendMessage();
       return;
     }
-    
+
     // Escape - cancel if loading, otherwise blur
     if (e.key === "Escape") {
       if (state.chat.isLoading) {
@@ -2936,38 +3115,101 @@ function createLifecycle() {
   let _prevSessionsJson = "";
 
   /**
-   * Render sessions list - with incremental update to avoid flicker
+   * Group sessions by date
+   */
+  function groupSessionsByDate(sessions) {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const weekAgo = new Date(today);
+    weekAgo.setDate(weekAgo.getDate() - 7);
+
+    const groups = {
+      Today: [],
+      Yesterday: [],
+      "Previous 7 Days": [],
+      Older: [],
+    };
+
+    for (const session of sessions) {
+      const date = new Date(session.updated_at || session.created_at);
+      if (date >= today) {
+        groups["Today"].push(session);
+      } else if (date >= yesterday) {
+        groups["Yesterday"].push(session);
+      } else if (date >= weekAgo) {
+        groups["Previous 7 Days"].push(session);
+      } else {
+        groups["Older"].push(session);
+      }
+    }
+
+    return groups;
+  }
+
+  /**
+   * Render sessions list - with date grouping and search
    */
   function renderSessions() {
     const container = $("#chat-sessions-list");
     if (!container) return;
 
-    if (state.chat.sessions.length === 0) {
-      if (!container.querySelector(".empty-state")) {
-        container.innerHTML = `
-          <div class="empty-state">
-            <i class="icon-message-square"></i>
-            <p>No chat sessions yet</p>
-            <button class="btn btn-small" onclick="window.aiPage.createSession()">
-              <i class="icon-plus"></i>
-              New Chat
-            </button>
-          </div>
-        `;
-      }
+    const searchInput = $("#sessions-search-input");
+    const searchQuery = searchInput?.value?.toLowerCase().trim() || "";
+
+    // Filter sessions by search
+    let sessions = [...state.chat.sessions];
+    if (searchQuery) {
+      sessions = sessions.filter(
+        (s) =>
+          (s.title || "").toLowerCase().includes(searchQuery) ||
+          (s.summary || "").toLowerCase().includes(searchQuery)
+      );
+    }
+
+    // Sort by updated_at descending
+    sessions.sort((a, b) => {
+      const dateA = new Date(a.updated_at || a.created_at);
+      const dateB = new Date(b.updated_at || b.created_at);
+      return dateB - dateA;
+    });
+
+    if (sessions.length === 0) {
+      container.innerHTML = `
+        <div class="sessions-empty">
+          <i class="icon-message-square"></i>
+          <p>${searchQuery ? "No matching chats" : "No chat sessions yet"}</p>
+          ${
+            !searchQuery
+              ? `
+          <button class="btn btn-sm" onclick="window.aiPage.createSession()">
+            <i class="icon-plus"></i>
+            New Chat
+          </button>
+          `
+              : ""
+          }
+        </div>
+      `;
       _prevSessionsJson = "";
       return;
     }
 
     // Create a fingerprint of current state to detect changes
-    const currentJson = JSON.stringify(
-      state.chat.sessions.map(s => ({
-        id: s.id,
-        title: s.title,
-        message_count: s.message_count,
-        updated_at: s.updated_at
-      }))
-    ) + "|" + state.chat.currentSession;
+    const currentJson =
+      JSON.stringify(
+        sessions.map((s) => ({
+          id: s.id,
+          title: s.title,
+          message_count: s.message_count,
+          updated_at: s.updated_at,
+        }))
+      ) +
+      "|" +
+      state.chat.currentSession +
+      "|" +
+      searchQuery;
 
     // Skip if nothing changed
     if (currentJson === _prevSessionsJson) {
@@ -2975,59 +3217,46 @@ function createLifecycle() {
     }
     _prevSessionsJson = currentJson;
 
-    // Remove empty state if present
-    const emptyState = container.querySelector(".empty-state");
-    if (emptyState) emptyState.remove();
+    // Group sessions by date
+    const groups = groupSessionsByDate(sessions);
 
-    // Update existing items or add new ones
-    const existingItems = container.querySelectorAll(".session-item");
-    const existingIds = new Set();
-    
-    existingItems.forEach(item => {
-      const onclick = item.getAttribute("onclick") || "";
-      const match = onclick.match(/selectSession\(['"]?(\d+)['"]?\)/);
-      if (match) existingIds.add(parseInt(match[1], 10));
-    });
+    let html = "";
+    for (const [groupName, groupSessions] of Object.entries(groups)) {
+      if (groupSessions.length === 0) continue;
 
-    // Build new content
-    const newHtml = state.chat.sessions
-      .map((session) => {
+      html += `<div class="sessions-group">`;
+      html += `<div class="sessions-group-header">${groupName}</div>`;
+
+      for (const session of groupSessions) {
         const isActive = session.id === state.chat.currentSession;
-        const lastMessageTime = session.updated_at
-          ? new Date(session.updated_at).toLocaleTimeString([], {
-              hour: "2-digit",
-              minute: "2-digit",
-            })
-          : "";
-        const messageCount = session.message_count || 0;
+        const title = Utils.escapeHtml(session.title || "New Chat");
+        const preview = session.summary ? Utils.escapeHtml(session.summary.substring(0, 60)) : "";
 
-        return `
-        <div class="session-item ${isActive ? "active" : ""}" 
-             data-session-id="${session.id}"
-             onclick="window.aiPage.selectSession('${session.id}')">
-          <div class="session-info">
-            <div class="session-title">${Utils.escapeHtml(session.title || "New Chat")}</div>
-            <div class="session-meta">
-              <span class="session-time">${lastMessageTime}</span>
-              <span class="session-count">${messageCount} messages</span>
+        html += `
+          <div class="session-item ${isActive ? "active" : ""}" 
+               data-session-id="${session.id}"
+               onclick="window.aiPage.selectSession('${session.id}')">
+            <div class="session-info">
+              <div class="session-title">${title}</div>
+              ${preview ? `<div class="session-preview">${preview}${session.summary.length > 60 ? "..." : ""}</div>` : ""}
             </div>
+            ${
+              isActive
+                ? `
+            <button class="session-delete" 
+                    onclick="event.stopPropagation(); window.aiPage.deleteSession('${session.id}')">
+              <i class="icon-trash-2"></i>
+            </button>
+            `
+                : ""
+            }
           </div>
-          ${
-            isActive
-              ? `
-          <button class="session-delete" 
-                  onclick="event.stopPropagation(); window.aiPage.deleteSession('${session.id}')">
-            <i class="icon-trash-2"></i>
-          </button>
-          `
-              : ""
-          }
-        </div>
-      `;
-      })
-      .join("");
+        `;
+      }
+      html += `</div>`;
+    }
 
-    container.innerHTML = newHtml;
+    container.innerHTML = html;
   }
 
   /**
@@ -3037,24 +3266,22 @@ function createLifecycle() {
     const container = $("#chat-messages");
     if (!container) return;
 
-    // Handle empty state
+    // Handle empty state - show/hide the existing HTML element
+    const emptyState = container.querySelector(".chat-empty-state");
+
     if (state.chat.messages.length === 0) {
-      if (!container.querySelector(".chat-empty-state")) {
-        container.innerHTML = `
-          <div class="chat-empty-state">
-            <i class="icon-bot-message-square"></i>
-            <h3>Start a Conversation</h3>
-            <p>Ask anything about your portfolio, tokens, or have me execute actions.</p>
-          </div>
-        `;
+      // Show empty state
+      if (emptyState) {
+        emptyState.style.display = "flex";
       }
+      // Clear any message elements but keep empty state
+      container.querySelectorAll(".message").forEach((el) => el.remove());
       return;
     }
 
-    // Remove empty state if present
-    const emptyState = container.querySelector(".chat-empty-state");
+    // Hide empty state if present
     if (emptyState) {
-      emptyState.remove();
+      emptyState.style.display = "none";
     }
 
     // Get existing message elements
@@ -3071,7 +3298,7 @@ function createLifecycle() {
         fragment.appendChild(msgEl.firstElementChild);
       }
       container.appendChild(fragment);
-      
+
       // Setup handlers only for new messages
       setupToolExpandHandlers();
       scrollToBottom();
@@ -3086,7 +3313,7 @@ function createLifecycle() {
     }
     // If counts match, no update needed (messages are the same)
   }
-  
+
   /**
    * Force full re-render of messages (used when session changes)
    */
@@ -3094,18 +3321,27 @@ function createLifecycle() {
     const container = $("#chat-messages");
     if (!container) return;
 
+    // Get the original empty state element from HTML
+    const emptyState = container.querySelector(".chat-empty-state");
+
     if (state.chat.messages.length === 0) {
-      container.innerHTML = `
-        <div class="chat-empty-state">
-          <i class="icon-bot-message-square"></i>
-          <h3>Start a Conversation</h3>
-          <p>Ask anything about your portfolio, tokens, or have me execute actions.</p>
-        </div>
-      `;
+      // Clear messages but keep empty state
+      container.querySelectorAll(".message").forEach((el) => el.remove());
+      if (emptyState) {
+        emptyState.style.display = "flex";
+      }
       return;
     }
 
-    container.innerHTML = state.chat.messages.map((msg) => renderMessage(msg)).join("");
+    // Hide empty state and render messages
+    if (emptyState) {
+      emptyState.style.display = "none";
+    }
+
+    // Remove existing messages and render fresh
+    container.querySelectorAll(".message").forEach((el) => el.remove());
+    const messagesHtml = state.chat.messages.map((msg) => renderMessage(msg)).join("");
+    container.insertAdjacentHTML("beforeend", messagesHtml);
     setupToolExpandHandlers();
     scrollToBottom();
   }
@@ -3131,12 +3367,33 @@ function createLifecycle() {
         parsedToolCalls = null;
       }
     }
-    
+
     // Render tool calls if present
     const toolCallsHtml =
       parsedToolCalls && Array.isArray(parsedToolCalls) && parsedToolCalls.length > 0
         ? parsedToolCalls.map((tool) => renderToolCall(tool)).join("")
         : "";
+
+    // Message actions (copy, regenerate)
+    const escapedContent = msg.content ? msg.content.replace(/"/g, "&quot;") : "";
+    const actionsHtml = msg.content
+      ? `
+      <div class="message-actions">
+        <button class="message-action-btn" title="Copy" data-action="copy" data-content="${Utils.escapeHtml(escapedContent)}">
+          <i class="icon-copy"></i>
+        </button>
+        ${
+          !isUser
+            ? `
+          <button class="message-action-btn" title="Regenerate" data-action="regenerate">
+            <i class="icon-refresh-cw"></i>
+          </button>
+        `
+            : ""
+        }
+      </div>
+    `
+      : "";
 
     return `
       <div class="message ${isUser ? "user" : "assistant"}">
@@ -3147,7 +3404,7 @@ function createLifecycle() {
           ${toolCallsHtml}
           ${
             msg.content
-              ? `<div class="message-bubble">${Utils.escapeHtml(msg.content)}</div>`
+              ? `<div class="message-bubble">${Utils.escapeHtml(msg.content)}${actionsHtml}</div>`
               : ""
           }
           <div class="message-meta">${timestamp}</div>
@@ -3167,12 +3424,12 @@ function createLifecycle() {
       statusClass === "executed"
         ? "Executed"
         : statusClass === "failed"
-        ? "Failed"
-        : statusClass === "denied"
-        ? "Denied"
-        : statusClass === "pendingconfirmation"
-        ? "Awaiting Confirmation"
-        : "Pending";
+          ? "Failed"
+          : statusClass === "denied"
+            ? "Denied"
+            : statusClass === "pendingconfirmation"
+              ? "Awaiting Confirmation"
+              : "Pending";
 
     // Tool name could be in 'name' or 'tool_name' field
     const toolName = tool.tool_name || tool.name || "Unknown Tool";
@@ -3235,7 +3492,7 @@ function createLifecycle() {
         e.stopPropagation();
         const toolCall = btn.closest(".tool-call");
         const body = toolCall.querySelector(".tool-call-body");
-        
+
         if (body.style.display === "none") {
           body.style.display = "block";
           btn.classList.add("expanded");
@@ -3289,12 +3546,20 @@ function createLifecycle() {
       addTrackedListener(newSessionBtn, "click", createSession);
     }
 
+    // Sessions search input
+    const searchInput = $("#sessions-search-input");
+    if (searchInput) {
+      addTrackedListener(searchInput, "input", () => {
+        renderSessions();
+      });
+    }
+
     // Send button
     const sendBtn = $("#send-btn");
     if (sendBtn) {
       addTrackedListener(sendBtn, "click", sendMessage);
     }
-    
+
     // Cancel button
     const cancelBtn = $("#cancel-btn");
     if (cancelBtn) {
@@ -3334,6 +3599,67 @@ function createLifecycle() {
         }
       });
     }
+
+    // Quick prompt buttons
+    const quickPrompts = document.querySelectorAll(".quick-prompt");
+    quickPrompts.forEach((button) => {
+      addTrackedListener(button, "click", () => {
+        const prompt = button.getAttribute("data-prompt");
+        if (prompt) {
+          const chatInput = $("#chat-input");
+          if (chatInput) {
+            chatInput.value = prompt;
+            chatInput.focus();
+            // Dispatch input event to update send button state
+            chatInput.dispatchEvent(new Event("input", { bubbles: true }));
+            // Auto-send if prompt doesn't end with a colon (indicating more input needed)
+            if (!prompt.trim().endsWith(":")) {
+              sendMessage();
+            }
+          }
+        }
+      });
+    });
+
+    // Message action buttons (copy, regenerate)
+    const messagesContainer = $("#chat-messages");
+    if (messagesContainer) {
+      addTrackedListener(messagesContainer, "click", (e) => {
+        const actionBtn = e.target.closest(".message-action-btn");
+        if (!actionBtn) return;
+
+        const action = actionBtn.dataset.action;
+
+        if (action === "copy") {
+          const content = actionBtn.dataset.content;
+          navigator.clipboard
+            .writeText(content)
+            .then(() => {
+              // Show visual feedback
+              const icon = actionBtn.querySelector("i");
+              const originalClass = icon.className;
+              icon.className = "icon-check";
+              setTimeout(() => {
+                icon.className = originalClass;
+              }, 1500);
+              Utils.showToast({
+                type: "success",
+                title: "Copied",
+                message: "Message copied to clipboard",
+              });
+            })
+            .catch(() => {
+              Utils.showToast({
+                type: "error",
+                title: "Error",
+                message: "Failed to copy message",
+              });
+            });
+        } else if (action === "regenerate") {
+          regenerateLastMessage();
+        }
+      });
+    }
   }
 
   // ============================================================================
@@ -3361,6 +3687,7 @@ function createLifecycle() {
   api.selectSession = selectSession;
   api.deleteSession = deleteSession;
   api.summarizeSession = summarizeSession;
+  api.generateSessionTitle = generateSessionTitle;
   api.cancelRequest = cancelRequest;
 
   // ============================================================================
@@ -3388,7 +3715,7 @@ function createLifecycle() {
       setupTestingHandlers();
       setupInstructionHandlers();
       setupChatHandlers();
-      
+
       // Update keyboard hint based on OS
       updateKeyboardHint();
 
