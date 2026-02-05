@@ -178,6 +178,11 @@ pub fn get_ai_db_path() -> PathBuf {
     get_data_directory().join("ai.db")
 }
 
+/// Returns the AI chat database path
+pub fn get_ai_chat_db_path() -> PathBuf {
+    get_data_directory().join("ai_chat.db")
+}
+
 // =============================================================================
 // CACHE AND DATA FILE PATHS
 // =============================================================================

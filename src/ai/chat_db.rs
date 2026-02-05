@@ -63,7 +63,7 @@ pub struct ToolExecution {
 
 /// Initialize chat database with connection pooling
 pub fn init_chat_db() -> Result<Pool<SqliteConnectionManager>, String> {
-    let db_path = std::path::PathBuf::from("data/ai_chat.db");
+    let db_path = crate::paths::get_ai_chat_db_path();
     let db_path_str = db_path.to_string_lossy().to_string();
 
     // Ensure data directory exists
