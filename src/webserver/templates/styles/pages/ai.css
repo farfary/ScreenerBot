@@ -2034,6 +2034,124 @@
   gap: var(--spacing-sm);
 }
 
+/* Assistant Modal Specific Styles */
+.Assistant-modal .Assistant-auth-status {
+  margin-bottom: var(--spacing-md);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.Assistant-auth-status .auth-success {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--success-color);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.Assistant-auth-status .auth-success i {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.Assistant-auth-status .auth-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--text-muted);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.Assistant-auth-status .auth-info i {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.Assistant-auth-status .auth-error {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--danger-color);
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.Assistant-auth-status .auth-error i {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.Assistant-auth-status .loading-spinner {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+.Assistant-auth-status .loading-spinner i {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.Assistant-device-flow {
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+}
+
+.device-flow-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.device-flow-header i {
+  font-size: 18px;
+  line-height: 1;
+  color: var(--primary-color);
+}
+
+.device-flow-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+  align-items: center;
+  text-align: center;
+}
+
+.device-flow-body p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.user-code {
+  font-family: var(--font-mono);
+  font-size: 1.5rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  color: var(--primary-color);
+  background: var(--primary-alpha-10);
+  padding: var(--spacing-md) var(--spacing-lg);
+  border-radius: var(--radius-md);
+  border: 2px dashed var(--primary-alpha-30);
+  user-select: all;
+  cursor: text;
+}
+
+.device-flow-body .help-text {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: calc(var(--spacing-sm) * -1);
+}
+
 /* Instruction Modal - wider for content editing */
 .instruction-modal {
   background: var(--bg-primary);

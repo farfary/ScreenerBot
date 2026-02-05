@@ -13,6 +13,7 @@
 ///
 /// All providers use raw HTTP via reqwest with shared rate limiting and stats.
 pub mod anthropic;
+pub mod Assistant;
 pub mod deepseek;
 pub mod gemini;
 pub mod groq;
@@ -50,6 +51,7 @@ pub enum Provider {
     Together,
     OpenRouter,
     Mistral,
+    Assistant,
 }
 
 impl Provider {
@@ -65,6 +67,7 @@ impl Provider {
             Provider::Together => "together",
             Provider::OpenRouter => "openrouter",
             Provider::Mistral => "mistral",
+            Provider::Assistant => "Assistant",
         }
     }
 
@@ -80,6 +83,7 @@ impl Provider {
             "together" => Some(Provider::Together),
             "openrouter" => Some(Provider::OpenRouter),
             "mistral" => Some(Provider::Mistral),
+            "Assistant" => Some(Provider::Assistant),
             _ => None,
         }
     }
@@ -96,6 +100,7 @@ impl Provider {
             Provider::Together,
             Provider::OpenRouter,
             Provider::Mistral,
+            Provider::Assistant,
         ]
     }
 }
@@ -145,6 +150,7 @@ pub struct LlmManager {
     together: Option<Arc<dyn LlmClient>>,
     openrouter: Option<Arc<dyn LlmClient>>,
     mistral: Option<Arc<dyn LlmClient>>,
+    Assistant: Option<Arc<dyn LlmClient>>,
 }
 
 impl LlmManager {
@@ -160,6 +166,7 @@ impl LlmManager {
             together: None,
             openrouter: None,
             mistral: None,
+            Assistant: None,
         }
     }
 
@@ -175,6 +182,7 @@ impl LlmManager {
             Provider::Together => self.together.clone(),
             Provider::OpenRouter => self.openrouter.clone(),
             Provider::Mistral => self.mistral.clone(),
+            Provider::Assistant => self.Assistant.clone(),
         }
     }
 
@@ -225,6 +233,11 @@ impl LlmManager {
         if let Some(client) = &self.mistral {
             if client.is_enabled() {
                 providers.push(Provider::Mistral);
+            }
+        }
+        if let Some(client) = &self.Assistant {
+            if client.is_enabled() {
+                providers.push(Provider::Assistant);
             }
         }
 
@@ -289,6 +302,11 @@ impl LlmManager {
     /// Set Mistral client
     pub fn set_mistral(&mut self, client: Arc<dyn LlmClient>) {
         self.mistral = Some(client);
+    }
+
+    /// Set Assistant client
+    pub fn set_Assistant(&mut self, client: Arc<dyn LlmClient>) {
+        self.Assistant = Some(client);
     }
 }
 

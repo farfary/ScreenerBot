@@ -22,11 +22,22 @@ use crate::ai::{
     get_chat_engine, try_get_chat_engine, ChatContext, ChatRequest as ChatEngineRequest,
     ChatResponse as ChatEngineResponse, ChatSession,
 };
+use crate::apis::llm::Assistant;
 use crate::apis::llm::{try_get_llm_manager, ChatMessage, ChatRequest, Provider};
 use crate::config::{update_config_section, with_config};
 use crate::logger::{self, LogTag};
 use crate::webserver::state::AppState;
 use crate::webserver::utils::{error_response, success_response};
+use std::sync::RwLock;
+
+// ============================================================================
+// DEVICE CODE STORAGE
+// ============================================================================
+
+/// In-memory storage for device code during OAuth flow
+/// This is stored globally so the poll endpoint can access the device_code
+static DEVICE_CODE_STORAGE: once_cell::sync::Lazy<RwLock<Option<String>>> =
+    once_cell::sync::Lazy::new(|| RwLock::new(None));
 
 // ============================================================================
 // ROUTES
@@ -79,6 +90,12 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/tools", get(list_tools))
         .route("/permissions", get(get_permissions))
         .route("/permissions", patch(update_permissions))
+        // Assistant Authentication
+        .route("/Assistant/auth/status", get(Assistant_auth_status))
+        .route("/Assistant/auth/start", post(Assistant_auth_start))
+        .route("/Assistant/auth/poll", post(Assistant_auth_poll))
+        .route("/Assistant/auth/logout", post(Assistant_auth_logout))
+        .route("/Assistant/auth/test", post(Assistant_auth_test))
 }
 
 // ============================================================================
@@ -395,6 +412,16 @@ async fn get_ai_status(State(state): State<Arc<AppState>>) -> Response {
         rate_limit_per_minute: config.providers.ollama.rate_limit_per_minute,
     });
 
+    // Add Assistant (OAuth-based, no API key)
+    providers.push(ProviderStatus {
+        id: "Assistant".to_string(),
+        name: "an LLM provider".to_string(),
+        enabled: config.providers.Assistant.enabled,
+        has_api_key: crate::apis::llm::Assistant::is_authenticated(),
+        model: config.providers.Assistant.model.clone(),
+        rate_limit_per_minute: config.providers.Assistant.rate_limit_per_minute,
+    });
+
     let response = AiStatusResponse {
         enabled: config.enabled,
         filtering_enabled: config.filtering_enabled,
@@ -463,6 +490,16 @@ async fn list_providers(State(_state): State<Arc<AppState>>) -> Response {
         rate_limit_per_minute: config.providers.ollama.rate_limit_per_minute,
     });
 
+    // Assistant - OAuth based (no API key)
+    providers.push(ProviderStatus {
+        id: "Assistant".to_string(),
+        name: "an LLM provider".to_string(),
+        enabled: config.providers.Assistant.enabled,
+        has_api_key: crate::apis::llm::Assistant::is_authenticated(),
+        model: config.providers.Assistant.model.clone(),
+        rate_limit_per_minute: config.providers.Assistant.rate_limit_per_minute,
+    });
+
     success_response(ProvidersListResponse {
         providers,
         default_provider: config.default_provider,
@@ -524,6 +561,7 @@ async fn test_provider(
             Provider::Together => &cfg.ai.providers.together,
             Provider::OpenRouter => &cfg.ai.providers.openrouter,
             Provider::Mistral => &cfg.ai.providers.mistral,
+            Provider::Assistant => &cfg.ai.providers.Assistant,
             Provider::Ollama => {
                 return cfg.ai.providers.ollama.model.clone();
             }
@@ -542,6 +580,7 @@ async fn test_provider(
                 Provider::Together => "meta-llama/Llama-3-70b-chat-hf".to_string(),
                 Provider::OpenRouter => "openai/gpt-4".to_string(),
                 Provider::Mistral => "mistral-large-latest".to_string(),
+                Provider::Assistant => "gpt-4o".to_string(),
                 Provider::Ollama => "llama3.2".to_string(),
             }
         }
@@ -1854,6 +1893,283 @@ async fn update_permissions(
 }
 
 // ============================================================================
+// Assistant AUTHENTICATION ROUTES
+// ============================================================================
+
+// Response Types
+
+#[derive(Debug, Serialize)]
+pub struct AssistantAuthStatusResponse {
+    pub authenticated: bool,
+    pub has_github_token: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AssistantAuthStartResponse {
+    pub user_code: String,
+    pub verification_uri: String,
+    pub device_code: String,
+    pub expires_in: u64,
+    pub interval: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AssistantAuthPollRequest {
+    pub device_code: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AssistantAuthPollResponse {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pending: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AssistantAuthLogoutResponse {
+    pub success: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AssistantAuthTestResponse {
+    pub success: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+// Route Handlers
+
+/// GET /api/ai/Assistant/auth/status - Check authentication status
+async fn Assistant_auth_status(State(_state): State<Arc<AppState>>) -> Response {
+    let has_github_token = Assistant::load_github_token().is_some();
+    let has_valid_Assistant_token = Assistant::load_Assistant_token().is_some();
+
+    // Authenticated if we have a valid Assistant token or a GitHub token that can be exchanged
+    let authenticated = has_valid_Assistant_token || has_github_token;
+
+    logger::debug(
+        LogTag::Api,
+        &format!(
+            "[Assistant] Auth status: authenticated={}, has_github_token={}, has_Assistant_token={}",
+            authenticated, has_github_token, has_valid_Assistant_token
+        ),
+    );
+
+    success_response(AssistantAuthStatusResponse {
+        authenticated,
+        has_github_token,
+    })
+}
+
+/// POST /api/ai/Assistant/auth/start - Start OAuth device flow
+async fn Assistant_auth_start(State(_state): State<Arc<AppState>>) -> Response {
+    logger::info(LogTag::Api, "[Assistant] Starting OAuth device flow");
+
+    match Assistant::request_device_code().await {
+        Ok(device_code_response) => {
+            // Store device code for polling
+            if let Ok(mut storage) = DEVICE_CODE_STORAGE.write() {
+                *storage = Some(device_code_response.device_code.clone());
+            }
+
+            logger::info(
+                LogTag::Api,
+                &format!(
+                    "[Assistant] Device code obtained. User code: {}",
+                    device_code_response.user_code
+                ),
+            );
+
+            success_response(AssistantAuthStartResponse {
+                user_code: device_code_response.user_code,
+                verification_uri: device_code_response.verification_uri,
+                device_code: device_code_response.device_code,
+                expires_in: device_code_response.expires_in,
+                interval: device_code_response.interval,
+            })
+        }
+        Err(e) => {
+            logger::error(
+                LogTag::Api,
+                &format!("[Assistant] Failed to start OAuth flow: {}", e),
+            );
+            error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "OAUTH_START_FAILED",
+                &e,
+                None,
+            )
+        }
+    }
+}
+
+/// POST /api/ai/Assistant/auth/poll - Poll for OAuth authorization
+async fn Assistant_auth_poll(
+    State(_state): State<Arc<AppState>>,
+    Json(req): Json<AssistantAuthPollRequest>,
+) -> Response {
+    logger::debug(LogTag::Api, "[Assistant] Polling for OAuth authorization");
+
+    match Assistant::poll_for_access_token(&req.device_code).await {
+        Ok(Some(access_token)) => {
+            logger::info(LogTag::Api, "[Assistant] User authorized! Got access token");
+
+            // Save GitHub token
+            if let Err(e) = Assistant::save_github_token(&access_token) {
+                logger::error(
+                    LogTag::Api,
+                    &format!("[Assistant] Failed to save GitHub token: {}", e),
+                );
+                return error_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "TOKEN_SAVE_FAILED",
+                    &e,
+                    None,
+                );
+            }
+
+            // Exchange for Assistant token
+            match Assistant::exchange_for_Assistant_token(&access_token).await {
+                Ok(Assistant_token) => {
+                    // Save Assistant token
+                    if let Err(e) = Assistant::save_Assistant_token(&Assistant_token) {
+                        logger::error(
+                            LogTag::Api,
+                            &format!("[Assistant] Failed to save Assistant token: {}", e),
+                        );
+                        return error_response(
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            "TOKEN_SAVE_FAILED",
+                            &e,
+                            None,
+                        );
+                    }
+
+                    // Clear stored device code
+                    if let Ok(mut storage) = DEVICE_CODE_STORAGE.write() {
+                        *storage = None;
+                    }
+
+                    logger::info(
+                        LogTag::Api,
+                        "[Assistant] OAuth flow complete! Assistant token saved",
+                    );
+
+                    success_response(AssistantAuthPollResponse {
+                        success: true,
+                        pending: None,
+                        error: None,
+                    })
+                }
+                Err(e) => {
+                    logger::error(
+                        LogTag::Api,
+                        &format!("[Assistant] Failed to exchange for Assistant token: {}", e),
+                    );
+                    error_response(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "TOKEN_EXCHANGE_FAILED",
+                        &e,
+                        None,
+                    )
+                }
+            }
+        }
+        Ok(None) => {
+            // Still pending
+            logger::debug(LogTag::Api, "[Assistant] Authorization still pending");
+            success_response(AssistantAuthPollResponse {
+                success: false,
+                pending: Some(true),
+                error: None,
+            })
+        }
+        Err(e) => {
+            logger::error(LogTag::Api, &format!("[Assistant] OAuth poll error: {}", e));
+            success_response(AssistantAuthPollResponse {
+                success: false,
+                pending: None,
+                error: Some(e),
+            })
+        }
+    }
+}
+
+/// POST /api/ai/Assistant/auth/logout - Remove saved tokens
+async fn Assistant_auth_logout(State(_state): State<Arc<AppState>>) -> Response {
+    logger::info(LogTag::Api, "[Assistant] Logging out - removing tokens");
+
+    let github_path = Assistant::get_github_token_path();
+    let Assistant_path = Assistant::get_Assistant_token_path();
+
+    // Remove GitHub token file
+    if github_path.exists() {
+        if let Err(e) = std::fs::remove_file(&github_path) {
+            logger::error(
+                LogTag::Api,
+                &format!("[Assistant] Failed to remove GitHub token file: {}", e),
+            );
+        } else {
+            logger::info(LogTag::Api, "[Assistant] Removed GitHub token file");
+        }
+    }
+
+    // Remove Assistant token file
+    if Assistant_path.exists() {
+        if let Err(e) = std::fs::remove_file(&Assistant_path) {
+            logger::error(
+                LogTag::Api,
+                &format!("[Assistant] Failed to remove Assistant token file: {}", e),
+            );
+        } else {
+            logger::info(LogTag::Api, "[Assistant] Removed Assistant token file");
+        }
+    }
+
+    // Clear stored device code
+    if let Ok(mut storage) = DEVICE_CODE_STORAGE.write() {
+        *storage = None;
+    }
+
+    logger::info(LogTag::Api, "[Assistant] Logout complete");
+
+    success_response(AssistantAuthLogoutResponse { success: true })
+}
+
+/// POST /api/ai/Assistant/auth/test - Test if authentication works
+async fn Assistant_auth_test(State(_state): State<Arc<AppState>>) -> Response {
+    logger::info(LogTag::Api, "[Assistant] Testing authentication");
+
+    match Assistant::get_valid_Assistant_token().await {
+        Ok(token) => {
+            logger::info(
+                LogTag::Api,
+                &format!(
+                    "[Assistant] Authentication test successful. API base: {}",
+                    token.api_base
+                ),
+            );
+            success_response(AssistantAuthTestResponse {
+                success: true,
+                error: None,
+            })
+        }
+        Err(e) => {
+            logger::error(
+                LogTag::Api,
+                &format!("[Assistant] Authentication test failed: {}", e),
+            );
+            success_response(AssistantAuthTestResponse {
+                success: false,
+                error: Some(e),
+            })
+        }
+    }
+}
+
+// ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
 
@@ -1869,6 +2185,7 @@ fn get_model_for_provider(provider: Provider) -> String {
             Provider::Together => &cfg.ai.providers.together,
             Provider::OpenRouter => &cfg.ai.providers.openrouter,
             Provider::Mistral => &cfg.ai.providers.mistral,
+            Provider::Assistant => &cfg.ai.providers.Assistant,
             Provider::Ollama => {
                 return cfg.ai.providers.ollama.model.clone();
             }
@@ -1888,6 +2205,7 @@ fn get_model_for_provider(provider: Provider) -> String {
                 Provider::Together => "meta-llama/Llama-3-70b-chat-hf".to_string(),
                 Provider::OpenRouter => "openai/gpt-4".to_string(),
                 Provider::Mistral => "mistral-large-latest".to_string(),
+                Provider::Assistant => "gpt-4o".to_string(),
             }
         }
     })

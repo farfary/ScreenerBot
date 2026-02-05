@@ -745,6 +745,19 @@ async fn initialize_llm_providers() -> Result<(), String> {
                 }
             }
         }
+
+        // Assistant (no API key needed, uses OAuth tokens)
+        if cfg.ai.providers.Assistant.enabled {
+            use crate::apis::llm::Assistant::AssistantClient;
+            let model = get_model(&cfg.ai.providers.Assistant.model);
+            let client = AssistantClient::new(model, cfg.ai.providers.Assistant.enabled);
+            llm_manager.set_Assistant(std::sync::Arc::new(client));
+            if AssistantClient::is_authenticated() {
+                enabled_providers.push("Assistant (authenticated)");
+            } else {
+                enabled_providers.push("Assistant (not authenticated)");
+            }
+        }
     });
 
     init_llm_manager(llm_manager)
