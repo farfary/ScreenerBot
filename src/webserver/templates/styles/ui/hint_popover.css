@@ -89,25 +89,23 @@
 }
 
 /* =============================================================================
-   Hint Popover Container
+   Hint Popover Container - Uses centralized floating.css variables
    ============================================================================= */
 
 .hint-popover {
   position: fixed;
-  z-index: 10001;
+  z-index: var(--z-hint-popover);
   width: max-content;
   max-width: 360px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  box-shadow:
-    0 10px 40px -10px var(--shadow-lg),
-    0 0 0 1px rgb(255, 255, 255, 0.03);
+  background: var(--floating-bg);
+  border: 1px solid var(--floating-border);
+  border-radius: var(--floating-panel-radius);
+  box-shadow: var(--shadow-floating-lg);
   opacity: 0;
   transform: scale(0.95) translateY(4px);
   transition:
-    opacity 0.2s ease-out,
-    transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    opacity var(--floating-duration) var(--floating-easing-out),
+    transform var(--floating-duration) var(--floating-easing-bounce);
   pointer-events: none;
 }
 
@@ -125,8 +123,8 @@
   position: absolute;
   width: 12px;
   height: 12px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
+  background: var(--floating-bg);
+  border: 1px solid var(--floating-border);
   transform: rotate(45deg);
   z-index: -1;
 }
@@ -376,13 +374,11 @@
    ============================================================================= */
 
 [data-theme="dark"] .hint-popover {
-  box-shadow:
-    0 10px 40px -10px rgb(0, 0, 0, 0.6),
-    0 0 0 1px rgb(255, 255, 255, 0.05);
+  box-shadow: var(--shadow-floating-lg);
 }
 
 [data-theme="dark"] .hint-popover__arrow {
-  background: var(--bg-secondary);
+  background: var(--floating-bg);
 }
 
 [data-theme="dark"] .hint-popover__content code {
@@ -394,9 +390,7 @@
    ============================================================================= */
 
 [data-theme="light"] .hint-popover {
-  box-shadow:
-    0 10px 40px -10px rgb(0, 0, 0, 0.15),
-    0 0 0 1px rgb(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-floating-md);
 }
 
 [data-theme="light"] .hint-trigger {

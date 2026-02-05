@@ -92,40 +92,38 @@
   color: var(--primary-color);
 }
 
-/* Dropdown container - Portal mode */
+/* Dropdown container - Uses global floating system */
 .cs-dropdown {
   position: absolute;
   top: 100%;
   left: 0;
   right: 0;
-  z-index: 1000;
+  z-index: var(--z-select);
   margin-top: 6px;
-  max-height: 320px;
+  max-height: var(--floating-panel-max-height);
   overflow: hidden auto;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: var(--radius-lg);
-  box-shadow:
-    0 12px 48px -12px rgb(0, 0, 0, 0.5),
-    0 8px 24px -4px rgb(0, 0, 0, 0.3);
-  backdrop-filter: blur(12px);
-  backdrop-filter: blur(12px);
+  background: var(--floating-bg);
+  border: 1px solid var(--floating-border);
+  border-radius: var(--floating-panel-radius);
+  box-shadow: var(--shadow-floating-lg);
+  backdrop-filter: var(--floating-blur-md);
+  -webkit-backdrop-filter: var(--floating-blur-md);
   opacity: 0;
   visibility: hidden;
   transform: translateY(-8px) scale(0.98);
   transform-origin: top center;
   transition:
-    opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-    visibility 0.2s;
+    opacity var(--floating-duration) var(--floating-easing),
+    transform var(--floating-duration) var(--floating-easing),
+    visibility var(--floating-duration);
 }
 
 [data-theme="dark"] .cs-dropdown {
-  background: rgb(22, 27, 34, 0.92);
+  background: var(--floating-bg-blur);
 }
 
 [data-theme="light"] .cs-dropdown {
-  background: rgb(255, 255, 255, 0.95);
+  background: rgba(255, 255, 255, 0.95);
 }
 
 .custom-select.open .cs-dropdown {
@@ -194,19 +192,19 @@
 /* Portal mode - dropdown appended to body with fixed positioning */
 .cs-dropdown.cs-portal {
   position: fixed;
-  z-index: 100000;
+  z-index: var(--z-select-portal);
   margin-top: 0;
   opacity: 1;
   visibility: visible;
   transform: translateY(0) scale(1);
 }
 
-/* Option items */
+/* Option items - Uses floating item pattern */
 .cs-option {
   position: relative;
   display: flex;
   align-items: center;
-  padding: 10px 14px;
+  padding: var(--floating-item-padding);
   padding-right: 36px;
   color: var(--text-primary);
   font-size: 0.8125rem;
@@ -214,7 +212,7 @@
   cursor: pointer;
   transition: all 0.15s ease;
   margin: 2px 4px;
-  border-radius: var(--radius-md);
+  border-radius: var(--floating-item-radius);
 }
 
 .cs-option:first-child {
@@ -226,7 +224,7 @@
 }
 
 .cs-option:hover {
-  background: var(--bg-card-hover);
+  background: var(--floating-item-hover-bg);
   color: var(--primary-color);
 }
 

@@ -1,5 +1,6 @@
 /* =============================================================================
    Notification Panel - Compact, Modern, Minimal Design
+   Uses centralized floating.css variables
    Professional trading dashboard notification system
    ============================================================================= */
 
@@ -10,7 +11,7 @@
 .notification-drawer {
   position: fixed;
   inset: 0;
-  z-index: 2000;
+  z-index: var(--z-notification-panel);
   display: flex;
   justify-content: flex-end;
   pointer-events: none;
@@ -30,10 +31,10 @@ body.notification-drawer-open {
 /* Backdrop */
 .notification-drawer__backdrop {
   flex: 1 1 auto;
-  background: rgb(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
+  background: var(--floating-overlay-bg);
+  backdrop-filter: var(--floating-blur-sm);
   opacity: 0;
-  transition: opacity 0.2s ease-out;
+  transition: opacity var(--floating-duration) ease-out;
 }
 
 .notification-drawer[data-state="open"] .notification-drawer__backdrop {

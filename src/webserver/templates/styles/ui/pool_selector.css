@@ -1,5 +1,6 @@
 /**
  * Pool Selector Dialog Styles
+ * Uses centralized floating.css variables
  *
  * Overlay dialog for selecting a pool for a token.
  * Matches the dark theme and glassmorphic design of other dialogs.
@@ -12,18 +13,18 @@
 .pool-selector-overlay {
   position: fixed;
   inset: 0;
-  background: rgb(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  background: var(--floating-overlay-bg);
+  backdrop-filter: var(--floating-blur-sm);
   display: flex;
   justify-content: center;
   align-items: flex-start;
   padding-top: 12vh;
-  z-index: 10005;
+  z-index: var(--z-pool-selector-overlay);
   opacity: 0;
   visibility: hidden;
   transition:
-    opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-    visibility 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    opacity var(--floating-duration) var(--floating-easing),
+    visibility var(--floating-duration) var(--floating-easing);
 }
 
 .pool-selector-overlay.visible {
@@ -39,18 +40,16 @@
   width: 100%;
   max-width: 520px;
   max-height: 70vh;
-  background: rgb(18, 24, 39, 0.98);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgb(255, 255, 255, 0.1);
-  border-radius: var(--radius-xl, 12px);
-  box-shadow:
-    0 20px 60px rgb(0, 0, 0, 0.5),
-    0 0 0 1px rgb(255, 255, 255, 0.05) inset;
+  background: var(--floating-bg-blur);
+  backdrop-filter: var(--floating-blur-lg);
+  border: 1px solid var(--floating-border);
+  border-radius: var(--floating-panel-radius);
+  box-shadow: var(--shadow-floating-lg);
   overflow: hidden;
   transform: translateY(-10px) scale(0.98);
   transition:
-    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transform var(--floating-duration) var(--floating-easing),
+    opacity var(--floating-duration) var(--floating-easing);
   display: flex;
   flex-direction: column;
 }

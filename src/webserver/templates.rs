@@ -8,6 +8,7 @@ use crate::{arguments, version};
 const BASE_TEMPLATE: &str = include_str!("templates/base.html");
 const FOUNDATION_STYLES: &str = include_str!("templates/styles/foundation.css");
 const SCROLLBAR_STYLES: &str = include_str!("templates/styles/base/scrollbar.css");
+const FLOATING_STYLES: &str = include_str!("templates/styles/base/floating.css");
 const LAYOUT_STYLES: &str = include_str!("templates/styles/layout.css");
 const COMPONENT_STYLES: &str = include_str!("templates/styles/components.css");
 const HEADER_STYLES: &str = include_str!("templates/styles/header.css");
@@ -244,6 +245,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
     let mut combined_styles = vec![
         FOUNDATION_STYLES,
         SCROLLBAR_STYLES, // Global scrollbar system - must be early to set defaults
+        FLOATING_STYLES,  // Global floating UI system (dropdowns, popovers, dialogs)
         &lucide_css,
         LAYOUT_STYLES,
         HEADER_STYLES,

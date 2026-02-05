@@ -149,17 +149,35 @@
   --radius-lg: 8px;
   --radius-xl: 12px;
 
-  /* Z-Index Scale - Layering hierarchy */
+  /* Z-Index Scale - Layering hierarchy
+     Note: Full z-index system defined in floating.css with additional layers
+     These are the primary layers used throughout the app */
   --z-header: 1000;
-  --z-dropdown: 9999;
+  --z-dropdown: 1000;
+  --z-select: 1000;
+  --z-tooltip: 1500;
+  --z-popover: 2000;
+  --z-notification-panel: 9000;
   --z-dialog: 10000;
-  --z-status-bar: 10001;
-  --z-toast: 10002;
-  --z-setup: 10005; /* Setup screen above all UI elements */
-  --z-onboarding: 10005; /* Onboarding slides above all UI elements */
-  --z-exit-dialog: 10010;
-  --z-splash: 99999;
+  --z-dialog-overlay: 9999;
+  --z-trade-dialog: 10001;
+  --z-hint-popover: 10001;
+  --z-confirmation: 10002;
+  --z-confirmation-dialog: 10003;
+  --z-search-dialog: 10004;
+  --z-context-menu-overlay: 10005;
+  --z-context-menu: 10006;
+  --z-billboard-dialog: 10005;
+  --z-pool-selector-overlay: 10005;
+  --z-pool-selector: 10005;
+  --z-toast: 10010;
+  --z-status-bar: 10100;
+  --z-exit-dialog: 10100;
+  --z-setup: 50000;
+  --z-onboarding: 50000;
+  --z-splash: 99000;
   --z-lockscreen: 100000; /* Highest - security lockscreen above everything */
+  --z-select-portal: 100000; /* Custom select portal mode */
 
   /* Typography System */
   --font-sans: -apple-system, blinkmacsystemfont, "Segoe UI", roboto, sans-serif;

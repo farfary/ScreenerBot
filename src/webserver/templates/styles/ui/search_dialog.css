@@ -1,5 +1,6 @@
 /**
  * Search Dialog Styles
+ * Uses centralized floating.css variables
  *
  * Global token search modal with glassmorphic design
  * matching confirmation dialog and toast patterns.
@@ -12,15 +13,15 @@
 .search-dialog-overlay {
   position: fixed;
   inset: 0;
-  background: rgb(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
+  background: var(--floating-overlay-bg);
+  backdrop-filter: var(--floating-blur-sm);
   display: none;
   justify-content: center;
   align-items: flex-start;
   padding-top: 12vh;
-  z-index: 10004; /* Above confirmation dialogs */
+  z-index: var(--z-search-dialog);
   opacity: 0;
-  transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity var(--floating-duration) var(--floating-easing);
 }
 
 .search-dialog-overlay.visible {
@@ -35,18 +36,16 @@
 .search-dialog {
   width: 100%;
   max-width: 580px;
-  background: rgb(18, 24, 39, 0.98);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgb(255, 255, 255, 0.1);
-  border-radius: var(--radius-xl, 12px);
-  box-shadow:
-    0 20px 60px rgb(0, 0, 0, 0.5),
-    0 0 0 1px rgb(255, 255, 255, 0.05) inset;
+  background: var(--floating-bg-blur);
+  backdrop-filter: var(--floating-blur-lg);
+  border: 1px solid var(--floating-border);
+  border-radius: var(--floating-panel-radius);
+  box-shadow: var(--shadow-floating-lg);
   overflow: hidden;
   transform: translateY(-10px) scale(0.98);
   transition:
-    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-    opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transform var(--floating-duration) var(--floating-easing),
+    opacity var(--floating-duration) var(--floating-easing);
 }
 
 .search-dialog-overlay.visible .search-dialog {
