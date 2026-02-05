@@ -150,8 +150,8 @@
   --radius-xl: 12px;
 
   /* Z-Index Scale - Layering hierarchy
-     Note: Full z-index system defined in floating.css with additional layers
-     These are the primary layers used throughout the app */
+     Full z-index system is defined in base/floating.css
+     These are aliases for backward compatibility */
   --z-header: 1000;
   --z-dropdown: 1000;
   --z-select: 1000;

@@ -268,7 +268,7 @@
 }
 
 .cs-option.selected.focused {
-  background: var(--primary-alpha-15);
+  background: var(--primary-alpha-20);
 }
 
 /* Disabled option */

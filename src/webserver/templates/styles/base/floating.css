@@ -10,7 +10,9 @@
 :root {
   /* ==========================================================================
      Z-Index Hierarchy (organized layers)
+     Complete z-index system for all floating UI
      ========================================================================== */
+  --z-header: 1000;
   --z-dropdown: 1000;
   --z-select: 1000;
   --z-tooltip: 1500;
@@ -26,14 +28,21 @@
   --z-context-menu-overlay: 10005;
   --z-context-menu: 10006;
   --z-billboard-dialog: 10005;
+  --z-pool-selector-overlay: 10005;
   --z-pool-selector: 10005;
   --z-toast: 10010;
   --z-status-bar: 10100;
+  --z-exit-dialog: 10100;
   --z-setup: 50000;
   --z-onboarding: 50000;
   --z-splash: 99000;
   --z-lockscreen: 100000;
   --z-select-portal: 100000; /* Custom select portal mode */
+
+  /* ==========================================================================
+     Overlay Background
+     ========================================================================== */
+  --floating-overlay-bg: rgba(0, 0, 0, 0.6);
 
   /* ==========================================================================
      Floating Panel Backgrounds
@@ -95,6 +104,7 @@
 
 /* Dark Theme Overrides */
 [data-theme="dark"] {
+  --floating-overlay-bg: rgba(0, 0, 0, 0.7);
   --floating-bg-blur: rgba(22, 27, 34, 0.92);
   --shadow-floating-sm: 0 4px 16px rgba(0, 0, 0, 0.3);
   --shadow-floating-md: 0 8px 32px rgba(0, 0, 0, 0.4),
