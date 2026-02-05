@@ -751,9 +751,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Smooth transitions and effects</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="settingAnimations" ${iface.enable_animations !== false ? "checked" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -764,9 +764,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Reduce padding for more content</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="settingCompact" ${iface.compact_mode ? "checked" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -799,9 +799,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Live metrics ticker in header</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="settingTicker" ${iface.show_ticker_bar !== false ? "checked" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -827,9 +827,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Expand config categories by default</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="settingAutoExpand" ${iface.auto_expand_categories ? "checked" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -840,9 +840,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Display help icons explaining dashboard features</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="settingShowHints" ${iface.show_hints !== false ? "checked" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -853,9 +853,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Display featured tokens row on Home and Tokens pages</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="settingShowBillboard" ${iface.show_billboard !== false ? "checked" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -871,9 +871,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Subtle audio feedback for button clicks and actions</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="settingSoundsEnabled" ${iface.sounds_enabled !== false ? "checked" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -988,9 +988,9 @@ export class SettingsDialog {
             ${tab.enabled ? '<i class="icon-eye"></i>' : '<i class="icon-eye-off"></i>'}
           </div>
           <div class="settings-nav-tab-toggle">
-            <label class="settings-toggle">
+            <label class="toggle">
               <input type="checkbox" ${tab.enabled ? "checked" : ""} ${tab.id === "home" ? "disabled" : ""}>
-              <span class="settings-toggle-slider"></span>
+              <span class="toggle-track"></span>
             </label>
           </div>
         </div>
@@ -1288,9 +1288,9 @@ export class SettingsDialog {
             ${tab.enabled ? '<i class="icon-eye"></i>' : '<i class="icon-eye-off"></i>'}
           </div>
           <div class="settings-nav-tab-toggle">
-            <label class="settings-toggle">
+            <label class="toggle">
               <input type="checkbox" ${tab.enabled ? "checked" : ""} ${tab.id === "home" ? "disabled" : ""}>
-              <span class="settings-toggle-slider"></span>
+              <span class="toggle-track"></span>
             </label>
           </div>
         </div>
@@ -1318,9 +1318,9 @@ export class SettingsDialog {
               <span class="settings-field-badge">Coming Soon</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="settingAutoStart" ${startup.auto_start_trader ? "checked" : ""} disabled>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -1347,9 +1347,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Display notifications for background events</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="settingBgNotifications" ${startup.show_background_notifications !== false ? "checked" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -1366,9 +1366,9 @@ export class SettingsDialog {
               <span class="settings-field-badge">Coming Soon</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="settingCheckUpdates" ${startup.check_updates_on_startup ? "checked" : ""} disabled>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -2026,9 +2026,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Protect your dashboard with password authentication</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="securityEnableLockscreen" ${isEnabled ? "checked" : ""} ${!hasPassword ? "disabled" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -2086,9 +2086,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Automatically lock when you switch to another application</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="securityLockOnBlur" ${lockOnBlur ? "checked" : ""} ${!hasPassword ? "disabled" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -3790,9 +3790,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Enable Telegram bot integration</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="tgEnabled" ${settings.enabled ? "checked" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -3970,9 +3970,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Notify when a new position is opened</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="tgNotifyOpened" ${settings.notifications?.position_opened !== false ? "checked" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -3983,9 +3983,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Notify when a position is closed</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="tgNotifyClosed" ${settings.notifications?.position_closed !== false ? "checked" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -3996,9 +3996,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Notify on partial position exits</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="tgNotifyPartial" ${settings.notifications?.partial_exit !== false ? "checked" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -4009,9 +4009,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Notify when DCA orders are executed</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="tgNotifyDca" ${settings.notifications?.dca_executed !== false ? "checked" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -4022,9 +4022,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Notify on errors and failures</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="tgNotifyError" ${settings.notifications?.errors !== false ? "checked" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -4035,9 +4035,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Notify when bot starts or stops</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="tgNotifyStartup" ${settings.notifications?.startup_shutdown !== false ? "checked" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -4048,9 +4048,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Notify when new tokens pass filtering criteria</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="tgNotifyFiltering" ${settings.notifications?.filtering_alerts !== false ? "checked" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -4061,9 +4061,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Notify on significant trades for watched tokens</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="tgNotifyTradeAlerts" ${settings.notifications?.trade_alerts !== false ? "checked" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -4074,9 +4074,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Receive daily trading activity and P&L summary</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="tgNotifyDailySummary" ${settings.notifications?.daily_summary === true ? "checked" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -4100,9 +4100,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Allow controlling the bot via Telegram commands</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="tgCommandsEnabled" ${settings.commands_enabled !== false ? "checked" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -4113,9 +4113,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">When sessions expire, require 2FA code to reactivate. Uses lockscreen 2FA.</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="tgRequire2fa" ${settings.commands_require_2fa !== false ? "checked" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -4126,9 +4126,9 @@ export class SettingsDialog {
               <span class="settings-field-hint">Show action buttons in notification messages</span>
             </div>
             <div class="settings-field-control">
-              <label class="settings-toggle">
+              <label class="toggle">
                 <input type="checkbox" id="tgInlineActions" ${settings.inline_actions !== false ? "checked" : ""}>
-                <span class="settings-toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>

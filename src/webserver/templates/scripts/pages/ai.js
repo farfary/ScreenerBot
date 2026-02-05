@@ -1357,10 +1357,10 @@ function createLifecycle() {
           </div>
         </div>
         <div class="instruction-actions">
-          <label class="toggle-switch instruction-toggle">
+          <label class="toggle toggle-sm instruction-toggle">
             <input type="checkbox" ${inst.enabled ? "checked" : ""} 
                    onchange="window.aiPage.toggleInstruction('${inst.id}', this.checked)">
-            <span class="toggle-slider"></span>
+            <span class="toggle-track"></span>
           </label>
           <button class="instruction-menu-btn" onclick="window.aiPage.showInstructionMenu(event, '${inst.id}')">⋮</button>
         </div>

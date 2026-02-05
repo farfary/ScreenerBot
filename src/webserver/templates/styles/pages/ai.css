@@ -1495,20 +1495,9 @@
   padding-inline-start: 12px;
 }
 
-/* Instruction toggle (smaller than settings toggle) */
+/* Instruction toggle - uses centralized .toggle-sm from form_controls.css */
 .instruction-toggle {
-  width: 34px;
-  height: 18px;
   flex-shrink: 0;
-}
-
-.instruction-toggle .toggle-slider::before {
-  height: 12px;
-  width: 12px;
-}
-
-.instruction-toggle input:checked + .toggle-slider::before {
-  transform: translateX(16px);
 }
 
 .instruction-menu-btn {

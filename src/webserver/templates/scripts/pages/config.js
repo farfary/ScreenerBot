@@ -1487,9 +1487,9 @@ async function renderTelegramAuthSection(container) {
           </div>
           <div class="telegram-auth-row telegram-auth-actions">
             <div class="telegram-auth-toggle">
-              <label class="toggle-switch">
+              <label class="toggle">
                 <input type="checkbox" id="telegram-require-2fa-toggle" ${commandsRequire2fa ? "checked" : ""} ${!totpConfigured ? "disabled" : ""}>
-                <span class="toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
               <span>Require 2FA for commands</span>
             </div>

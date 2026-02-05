@@ -312,9 +312,9 @@ function renderWalletCleanupTool(container, actionsContainer) {
         <div class="section-content">
           <div class="auto-cleanup-row">
             <div class="auto-cleanup-info">
-              <label class="toggle-switch">
+              <label class="toggle">
                 <input type="checkbox" id="auto-cleanup-toggle" ${autoCleanupEnabled ? "checked" : ""}>
-                <span class="toggle-slider"></span>
+                <span class="toggle-track"></span>
               </label>
               <div class="auto-cleanup-text">
                 <span class="auto-cleanup-label">Auto Cleanup</span>
@@ -1178,9 +1178,9 @@ function renderHolderWatchContent(container, actionsContainer, config) {
           <div class="hw-form-row">
             <div class="hw-form-group hw-toggle-group">
               <label for="hw-enabled">Enable Holder Watching</label>
-              <label class="toggle-switch">
+              <label class="toggle">
                 <input type="checkbox" id="hw-enabled" ${config.enabled ? "checked" : ""}>
-                <span class="slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>
@@ -1203,16 +1203,16 @@ function renderHolderWatchContent(container, actionsContainer, config) {
           <div class="hw-form-row hw-two-cols">
             <div class="hw-form-group hw-toggle-group">
               <label for="hw-notify-new">Notify on New Holders</label>
-              <label class="toggle-switch">
+              <label class="toggle">
                 <input type="checkbox" id="hw-notify-new" ${config.notify_new_holders ? "checked" : ""}>
-                <span class="slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
             <div class="hw-form-group hw-toggle-group">
               <label for="hw-notify-drop">Notify on Holder Drop</label>
-              <label class="toggle-switch">
+              <label class="toggle">
                 <input type="checkbox" id="hw-notify-drop" ${config.notify_holder_drop ? "checked" : ""}>
-                <span class="slider"></span>
+                <span class="toggle-track"></span>
               </label>
             </div>
           </div>

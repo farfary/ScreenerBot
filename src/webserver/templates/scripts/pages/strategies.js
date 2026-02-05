@@ -1277,9 +1277,9 @@ export function createLifecycle() {
         return `<input id="${id}" ${data} type="number" value="${value}" ${min} ${max} ${step} placeholder="0">`;
       }
       case "boolean":
-        return `<label class="toggle-switch">
+        return `<label class="toggle">
           <input id="${id}" ${data} type="checkbox" ${value ? "checked" : ""}>
-          <span class="toggle-slider"></span>
+          <span class="toggle-track"></span>
         </label>`;
       case "enum": {
         const options = spec.options || spec.values || [];

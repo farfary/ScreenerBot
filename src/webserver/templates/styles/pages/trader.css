@@ -1339,55 +1339,8 @@
   color: var(--primary);
 }
 
-.toggle-switch {
-  position: relative;
-  width: 44px;
-  height: 24px;
-  flex-shrink: 0;
-}
-
-.toggle-switch input[type="checkbox"] {
-  opacity: 0;
-  width: 0;
-  height: 0;
-  position: absolute;
-}
-
-.toggle-slider {
-  position: absolute;
-  cursor: pointer;
-  inset: 0;
-  background: var(--background-secondary);
-  transition: 0.3s;
-  border-radius: 28px;
-  border: 2px solid var(--border-color);
-}
-
-.toggle-slider::before {
-  position: absolute;
-  content: "";
-  height: 16px;
-  width: 16px;
-  left: 2px;
-  bottom: 2px;
-  background: white;
-  transition: 0.3s;
-  border-radius: 50%;
-  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.2);
-}
-
-.toggle-switch input:checked + .toggle-slider {
-  background: var(--primary);
-  border-color: var(--primary);
-}
-
-.toggle-switch input:checked + .toggle-slider::before {
-  transform: translateX(20px);
-}
-
-.toggle-switch input:focus-visible + .toggle-slider {
-  box-shadow: 0 0 0 3px var(--primary-alpha-20);
-}
+/* Toggle switch - Now uses centralized .toggle from form_controls.css */
+/* Migrated: Use <label class="toggle"><input type="checkbox"><span class="toggle-track"></span></label> */
 
 .toggle-description {
   margin: 0.5rem 0 0;
