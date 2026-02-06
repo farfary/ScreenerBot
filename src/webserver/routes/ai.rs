@@ -50,6 +50,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/stats", get(get_ai_stats))
         // Provider Management
         .route("/providers", get(list_providers))
+        .route("/providers/:provider", patch(update_provider))
         .route("/providers/:provider/test", post(test_provider))
         // Configuration
         .route("/config", get(get_ai_config))
@@ -320,6 +321,14 @@ pub struct UpdateInstructionRequest {
 #[derive(Debug, Deserialize)]
 pub struct ReorderInstructionsRequest {
     pub ids: Vec<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UpdateProviderRequest {
+    pub enabled: Option<bool>,
+    pub api_key: Option<String>,
+    pub model: Option<String>,
+    pub rate_limit_per_minute: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -638,6 +647,204 @@ async fn test_provider(
                 None,
             )
         }
+    }
+}
+
+/// PATCH /api/ai/providers/:provider - Update a specific provider's configuration
+async fn update_provider(
+    State(_state): State<Arc<AppState>>,
+    Path(provider_name): Path<String>,
+    Json(req): Json<UpdateProviderRequest>,
+) -> Response {
+    // Parse provider
+    let provider = match Provider::from_str(&provider_name) {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "INVALID_PROVIDER",
+                &format!("Unknown provider: {}", provider_name),
+                None,
+            );
+        }
+    };
+
+    match update_config_section(
+        |cfg| {
+            // Get a mutable reference to the provider config
+            match provider {
+                Provider::OpenAi => {
+                    if let Some(enabled) = req.enabled {
+                        cfg.ai.providers.openai.enabled = enabled;
+                    }
+                    if let Some(ref api_key) = req.api_key {
+                        if !api_key.is_empty() {
+                            cfg.ai.providers.openai.api_key = api_key.clone();
+                        }
+                    }
+                    if let Some(ref model) = req.model {
+                        cfg.ai.providers.openai.model = model.clone();
+                    }
+                    if let Some(rate_limit) = req.rate_limit_per_minute {
+                        cfg.ai.providers.openai.rate_limit_per_minute = rate_limit;
+                    }
+                }
+                Provider::Anthropic => {
+                    if let Some(enabled) = req.enabled {
+                        cfg.ai.providers.anthropic.enabled = enabled;
+                    }
+                    if let Some(ref api_key) = req.api_key {
+                        if !api_key.is_empty() {
+                            cfg.ai.providers.anthropic.api_key = api_key.clone();
+                        }
+                    }
+                    if let Some(ref model) = req.model {
+                        cfg.ai.providers.anthropic.model = model.clone();
+                    }
+                    if let Some(rate_limit) = req.rate_limit_per_minute {
+                        cfg.ai.providers.anthropic.rate_limit_per_minute = rate_limit;
+                    }
+                }
+                Provider::Groq => {
+                    if let Some(enabled) = req.enabled {
+                        cfg.ai.providers.groq.enabled = enabled;
+                    }
+                    if let Some(ref api_key) = req.api_key {
+                        if !api_key.is_empty() {
+                            cfg.ai.providers.groq.api_key = api_key.clone();
+                        }
+                    }
+                    if let Some(ref model) = req.model {
+                        cfg.ai.providers.groq.model = model.clone();
+                    }
+                    if let Some(rate_limit) = req.rate_limit_per_minute {
+                        cfg.ai.providers.groq.rate_limit_per_minute = rate_limit;
+                    }
+                }
+                Provider::DeepSeek => {
+                    if let Some(enabled) = req.enabled {
+                        cfg.ai.providers.deepseek.enabled = enabled;
+                    }
+                    if let Some(ref api_key) = req.api_key {
+                        if !api_key.is_empty() {
+                            cfg.ai.providers.deepseek.api_key = api_key.clone();
+                        }
+                    }
+                    if let Some(ref model) = req.model {
+                        cfg.ai.providers.deepseek.model = model.clone();
+                    }
+                    if let Some(rate_limit) = req.rate_limit_per_minute {
+                        cfg.ai.providers.deepseek.rate_limit_per_minute = rate_limit;
+                    }
+                }
+                Provider::Gemini => {
+                    if let Some(enabled) = req.enabled {
+                        cfg.ai.providers.gemini.enabled = enabled;
+                    }
+                    if let Some(ref api_key) = req.api_key {
+                        if !api_key.is_empty() {
+                            cfg.ai.providers.gemini.api_key = api_key.clone();
+                        }
+                    }
+                    if let Some(ref model) = req.model {
+                        cfg.ai.providers.gemini.model = model.clone();
+                    }
+                    if let Some(rate_limit) = req.rate_limit_per_minute {
+                        cfg.ai.providers.gemini.rate_limit_per_minute = rate_limit;
+                    }
+                }
+                Provider::Together => {
+                    if let Some(enabled) = req.enabled {
+                        cfg.ai.providers.together.enabled = enabled;
+                    }
+                    if let Some(ref api_key) = req.api_key {
+                        if !api_key.is_empty() {
+                            cfg.ai.providers.together.api_key = api_key.clone();
+                        }
+                    }
+                    if let Some(ref model) = req.model {
+                        cfg.ai.providers.together.model = model.clone();
+                    }
+                    if let Some(rate_limit) = req.rate_limit_per_minute {
+                        cfg.ai.providers.together.rate_limit_per_minute = rate_limit;
+                    }
+                }
+                Provider::OpenRouter => {
+                    if let Some(enabled) = req.enabled {
+                        cfg.ai.providers.openrouter.enabled = enabled;
+                    }
+                    if let Some(ref api_key) = req.api_key {
+                        if !api_key.is_empty() {
+                            cfg.ai.providers.openrouter.api_key = api_key.clone();
+                        }
+                    }
+                    if let Some(ref model) = req.model {
+                        cfg.ai.providers.openrouter.model = model.clone();
+                    }
+                    if let Some(rate_limit) = req.rate_limit_per_minute {
+                        cfg.ai.providers.openrouter.rate_limit_per_minute = rate_limit;
+                    }
+                }
+                Provider::Mistral => {
+                    if let Some(enabled) = req.enabled {
+                        cfg.ai.providers.mistral.enabled = enabled;
+                    }
+                    if let Some(ref api_key) = req.api_key {
+                        if !api_key.is_empty() {
+                            cfg.ai.providers.mistral.api_key = api_key.clone();
+                        }
+                    }
+                    if let Some(ref model) = req.model {
+                        cfg.ai.providers.mistral.model = model.clone();
+                    }
+                    if let Some(rate_limit) = req.rate_limit_per_minute {
+                        cfg.ai.providers.mistral.rate_limit_per_minute = rate_limit;
+                    }
+                }
+                Provider::Assistant => {
+                    // Assistant doesn't use API key - it uses OAuth
+                    if let Some(enabled) = req.enabled {
+                        cfg.ai.providers.Assistant.enabled = enabled;
+                    }
+                    if let Some(ref model) = req.model {
+                        cfg.ai.providers.Assistant.model = model.clone();
+                    }
+                    if let Some(rate_limit) = req.rate_limit_per_minute {
+                        cfg.ai.providers.Assistant.rate_limit_per_minute = rate_limit;
+                    }
+                }
+                Provider::Ollama => {
+                    if let Some(enabled) = req.enabled {
+                        cfg.ai.providers.ollama.enabled = enabled;
+                    }
+                    if let Some(ref model) = req.model {
+                        cfg.ai.providers.ollama.model = model.clone();
+                    }
+                    if let Some(rate_limit) = req.rate_limit_per_minute {
+                        cfg.ai.providers.ollama.rate_limit_per_minute = rate_limit;
+                    }
+                    // Ollama can also have a base_url but we're not updating it here
+                }
+            }
+        },
+        true, // save_to_disk
+    ) {
+        Ok(_) => {
+            logger::info(
+                LogTag::Api,
+                &format!("Updated AI provider '{}' configuration", provider_name),
+            );
+            success_response(serde_json::json!({
+                "provider": provider_name,
+                "updated": true
+            }))
+        }
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "CONFIG_UPDATE_FAILED",
+            &format!("Failed to update provider config: {}", e),
+            None,
+        ),
     }
 }
 
