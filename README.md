@@ -14,6 +14,9 @@
   <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Desktop-Electron-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron Desktop"></a>
   <a href="https://screenerbot.io/docs"><img src="https://img.shields.io/badge/Docs-screenerbot.io-blue?style=flat-square" alt="Documentation"></a>
   <a href="https://t.me/screenerbotio"><img src="https://img.shields.io/badge/Community-Telegram-26A5E4?style=flat-square&logo=telegram&logoColor=white" alt="Telegram"></a>
+  <a href="https://github.com/screenerbotio/ScreenerBot"><img src="https://img.shields.io/github/stars/screenerbotio/ScreenerBot?style=flat-square" alt="GitHub Stars"></a>
+  <a href="https://screenerbot.io/download"><img src="https://img.shields.io/badge/Download-Latest-orange?style=flat-square" alt="Download"></a>
+  <a href="https://x.com/screenerbotio"><img src="https://img.shields.io/badge/X-Follow-000000?style=flat-square&logo=x&logoColor=white" alt="X Follow"></a>
 </p>
 
 <p align="center">
@@ -23,7 +26,8 @@
 
 <p align="center">
   <a href="https://screenerbot.io">Website</a> |
-  <a href="https://screenerbot.io/docs">Documentation</a>
+  <a href="https://screenerbot.io/docs">Documentation</a> |
+  <a href="https://screenerbot.io/download">Download</a>
 </p>
 
 ---
@@ -396,6 +400,18 @@ Native desktop application built with **Electron** - the proven framework behind
 
 ---
 
+## Quick Install (VPS/Linux)
+
+Run ScreenerBot 24/7 on a Linux VPS with a single command:
+
+```bash
+curl -fsSL https://screenerbot.io/install.sh | bash
+```
+
+> See the [VPS Installation Guide](https://screenerbot.io/docs/getting-started/installation/vps) for detailed setup instructions including system requirements and management.
+
+---
+
 ## Building from Source
 
 ### Prerequisites
@@ -466,6 +482,21 @@ src/
 
 ---
 
+## Links & Resources
+
+| Resource | Link |
+|----------|------|
+| 🌐 **Website** | [screenerbot.io](https://screenerbot.io) |
+| 📚 **Documentation** | [screenerbot.io/docs](https://screenerbot.io/docs) |
+| ⬇️ **Download** | [screenerbot.io/download](https://screenerbot.io/download) |
+| 📢 **Telegram Channel** | [t.me/screenerbotio](https://t.me/screenerbotio) |
+| 💬 **Telegram Group** | [t.me/screenerbotio_talk](https://t.me/screenerbotio_talk) |
+| 🆘 **Telegram Support** | [t.me/screenerbotio_support](https://t.me/screenerbotio_support) |
+| 𝕏 **X (Twitter)** | [x.com/screenerbotio](https://x.com/screenerbotio) |
+| 📦 **Docs & Installer** | [github.com/screenerbotio/docs](https://github.com/screenerbotio/docs) |
+
+---
+
 ## Contributing
 
 Contributions welcome:
@@ -483,7 +514,8 @@ Contributions welcome:
 ## Community
 
 <p align="center">
-  <a href="https://t.me/screenerbotio"><img src="https://img.shields.io/badge/Telegram-Join%20Chat-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram"></a>
+  <a href="https://t.me/screenerbotio"><img src="https://img.shields.io/badge/Telegram-Channel-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Channel"></a>
+  <a href="https://t.me/screenerbotio_talk"><img src="https://img.shields.io/badge/Telegram-Community-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Community"></a>
   <a href="https://x.com/screenerbotio"><img src="https://img.shields.io/badge/X-Follow-000000?style=for-the-badge&logo=x&logoColor=white" alt="X (Twitter)"></a>
   <a href="https://screenerbot.io"><img src="https://img.shields.io/badge/Website-screenerbot.io-9945FF?style=for-the-badge" alt="Website"></a>
 </p>
