@@ -19,8 +19,10 @@ use std::time::Instant;
 
 const COINGECKO_BASE_URL: &str = "https://api.coingecko.com/api/v3";
 
-/// API key for CoinGecko demo tier
-const COINGECKO_API_KEY: &str = "COINGECKO_KEY_REMOVED";
+/// API key for CoinGecko demo tier (get free key at coingecko.com)
+fn get_coingecko_api_key() -> String {
+    std::env::var("COINGECKO_API_KEY").unwrap_or_default()
+}
 
 /// Request timeout - CoinGecko can be slow with large datasets, 20s recommended
 const TIMEOUT_SECS: u64 = 20;
@@ -70,7 +72,7 @@ impl CoinGeckoClient {
             .client()
             .get(&url)
             .header("Accept", "application/json")
-            .header("x-cg-demo-api-key", COINGECKO_API_KEY)
+            .header("x-cg-demo-api-key", get_coingecko_api_key())
             .send()
             .await
             .map_err(|e| {
