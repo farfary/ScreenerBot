@@ -37,13 +37,13 @@
 </p>
 
 <p align="center">
-  <a href="https://solscan.io/account/2Nr5M6TngMUPZRyW6yeN4GxLg53JwQSr5XTEMeeoTkMd">
+  <a href="https://solscan.io/account/">
     <img src="https://img.shields.io/badge/Donate-SOL-9945FF?style=for-the-badge&logo=solana&logoColor=white" alt="Donate SOL">
   </a>
 </p>
 
 <p align="center">
-  <code>2Nr5M6TngMUPZRyW6yeN4GxLg53JwQSr5XTEMeeoTkMd</code>
+  <code></code>
 </p>
 
 ---
