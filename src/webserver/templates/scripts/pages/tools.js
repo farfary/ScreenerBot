@@ -5189,19 +5189,10 @@ function selectTool(toolId) {
   const iconEl = $("#tool-icon");
   const titleEl = $("#tool-title");
   const descEl = $("#tool-description");
-  const statusEl = $("#tool-status");
 
   if (iconEl) iconEl.innerHTML = `<i class="${definition.icon}"></i>`;
   if (titleEl) titleEl.textContent = definition.title;
   if (descEl) descEl.textContent = definition.description;
-
-  // Update status badge based on tool's current status
-  if (statusEl) {
-    const navItem = $(`.nav-item[data-tool="${toolId}"]`);
-    const status = navItem?.dataset.status || "ready";
-    statusEl.className = `tool-status ${status}`;
-    statusEl.textContent = getStatusLabel(status);
-  }
 
   // Render tool content
   const contentEl = $("#tools-content");
@@ -5248,11 +5239,7 @@ function updateToolStatus(toolId, status, tooltip = null) {
 
   // Update header if this is the current tool
   if (currentTool === toolId) {
-    const statusEl = $("#tool-status");
-    if (statusEl) {
-      statusEl.className = `tool-status ${status}`;
-      statusEl.textContent = getStatusLabel(status);
-    }
+    // Status tracked in nav item only
   }
 }
 

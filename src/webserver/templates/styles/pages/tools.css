@@ -399,37 +399,6 @@
   color: var(--text-primary);
 }
 
-.tool-status {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 0.65rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.tool-status.ready {
-  background: var(--success-alpha-10);
-  color: var(--success-color);
-}
-
-.tool-status.running {
-  background: var(--warning-alpha-10);
-  color: var(--warning-color);
-}
-
-.tool-status.error {
-  background: var(--danger-alpha-10);
-  color: var(--error-color);
-}
-
-.tool-status.coming {
-  background: var(--bg-secondary);
-  color: var(--text-muted);
-}
-
 .tool-info p {
   margin: 0;
   font-size: 0.85rem;
