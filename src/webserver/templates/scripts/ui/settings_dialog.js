@@ -3271,24 +3271,41 @@ export class SettingsDialog {
           <img src="/assets/logo.svg" alt="ScreenerBot" />
         </div>
         <h2 class="settings-about-name">ScreenerBot</h2>
-        <p class="settings-about-tagline">Advanced Solana Trading Automation</p>
+        <p class="settings-about-tagline">Native Solana Trading Engine</p>
         <div class="settings-about-version">
           <span>v${version}</span>
         </div>
 
         <div class="settings-about-links">
-          <button class="settings-about-link" data-external-url="https://github.com/farfary/ScreenerBot">
+          <button class="settings-about-link" data-external-url="https://github.com/screenerbotio/ScreenerBot">
             <i class="icon-github"></i>
             <span>GitHub</span>
           </button>
-          <button class="settings-about-link" data-external-url="https://docs.screenerbot.app">
+          <button class="settings-about-link" data-external-url="https://screenerbot.io/docs">
             <i class="icon-book-open"></i>
             <span>Documentation</span>
           </button>
-          <button class="settings-about-link" data-external-url="https://discord.gg/screenerbot">
+          <button class="settings-about-link" data-external-url="https://t.me/screenerbotio">
             <i class="icon-message-circle"></i>
-            <span>Discord</span>
+            <span>Telegram</span>
           </button>
+          <button class="settings-about-link" data-external-url="https://screenerbot.io">
+            <i class="icon-globe"></i>
+            <span>Website</span>
+          </button>
+        </div>
+
+        <div class="settings-about-separator"></div>
+
+        <div class="settings-about-path-card" style="text-align: center; cursor: pointer;" onclick="navigator.clipboard.writeText('')">
+          <div class="settings-about-path-icon">
+            <i class="icon-heart" style="color: #9945FF;"></i>
+          </div>
+          <div class="settings-about-path-details">
+            <p class="settings-about-path-label">Support Development — Donate SOL</p>
+            <p class="settings-about-path-value" style="font-size: 11px; word-break: break-all;"></p>
+            <p class="settings-about-path-hint">Click to copy address</p>
+          </div>
         </div>
 
         <div class="settings-about-path-card">
@@ -3314,7 +3331,7 @@ export class SettingsDialog {
 
         <div class="settings-about-credits">
           <p>Built with <i class="icon-heart" style="color: #ef4444;"></i> for Solana traders</p>
-          <p class="settings-about-copyright">© 2025 ScreenerBot. All rights reserved.</p>
+          <p class="settings-about-copyright">© ${new Date().getFullYear()} ScreenerBot. All rights reserved.</p>
         </div>
       </div>
     `;
