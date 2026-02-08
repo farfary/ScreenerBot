@@ -42,6 +42,7 @@ logs/
 # IDE/Editor folders
 .vscode/
 .idea/
+.Assistant/
 
 # Development tools (keep local, not tracked)
 .playwright-mcp/
@@ -53,11 +54,33 @@ public/
 node_modules/
 .venv/
 
-# Submodules removed - now separate repos
-repos/
-
 # Build artifacts and temporary files
 builds/
 .build.lock
 _trash/
 _setup/*
+
+# Private development files (not part of source)
+build.sh
+build-windows.bat
+build-cleanup.sh
+run.sh
+run.bat
+run-dev.bat
+scripts/
+vless/
+control-panel/
+docs/
+Bot/
+_backup/
+
+# Assistant/agent instructions (private)
+.github/
+Assistant-session-*.md
+.folderinfo
+
+# Lint/format configs (development only)
+.htmlvalidate.json
+.prettierrc.json
+.stylelintrc.json
+BUILD.md
