@@ -63,6 +63,7 @@ const BILLBOARD_DIALOG_STYLES: &str = include_str!("templates/styles/ui/billboar
 const BILLBOARD_ROW_STYLES: &str = include_str!("templates/styles/ui/billboard_row.css");
 const POOL_SELECTOR_STYLES: &str = include_str!("templates/styles/ui/pool_selector.css");
 const EXIT_DIALOG_STYLES: &str = include_str!("templates/styles/ui/exit_dialog.css");
+const GLOBAL_CHAT_STYLES: &str = include_str!("templates/styles/components/global_chat.css");
 const CONFIG_IMPORT_EXPORT_DIALOG_STYLES: &str =
     include_str!("templates/styles/config_import_export_dialog.css");
 
@@ -115,6 +116,8 @@ pub const CORE_STATUS_BAR: &str = include_str!("templates/scripts/core/status_ba
 pub const CORE_HINTS: &str = include_str!("templates/scripts/core/hints.js");
 pub const CORE_LOCKSCREEN: &str = include_str!("templates/scripts/core/lockscreen.js");
 pub const CORE_SOUNDS: &str = include_str!("templates/scripts/core/sounds.js");
+pub const CORE_GLOBAL_CHAT: &str = include_str!("templates/scripts/core/global_chat.js");
+pub const CORE_CHAT_WIDGET: &str = include_str!("templates/scripts/core/chat_widget.js");
 
 const THEME_SCRIPTS: &str = include_str!("templates/scripts/theme.js");
 
@@ -276,6 +279,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         BILLBOARD_ROW_STYLES,
         POOL_SELECTOR_STYLES,
         EXIT_DIALOG_STYLES,
+        GLOBAL_CHAT_STYLES,
         CONFIG_IMPORT_EXPORT_DIALOG_STYLES,
         // Splash, onboarding, and setup screens (always included for proper transitions)
         SPLASH_PAGE_STYLES,

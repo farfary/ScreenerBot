@@ -279,6 +279,8 @@ async fn get_core_script(axum::extract::Path(file): axum::extract::Path<String>)
         "hints.js" => Some(templates::CORE_HINTS),
         "lockscreen.js" => Some(templates::CORE_LOCKSCREEN),
         "sounds.js" => Some(templates::CORE_SOUNDS),
+        "global_chat.js" => Some(templates::CORE_GLOBAL_CHAT),
+        "chat_widget.js" => Some(templates::CORE_CHAT_WIDGET),
         _ => None,
     };
 

@@ -1,0 +1,239 @@
+/* ==========================================================================
+   Global Chat - Floating button & dialog overlay
+   ========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   Floating Action Button
+   --------------------------------------------------------------------------- */
+.global-chat-btn {
+  position: fixed;
+  bottom: 80px;
+  right: 20px;
+  z-index: 9999;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-accent, #6c5ce7);
+  color: #fff;
+  font-size: 20px;
+  box-shadow: 0 4px 20px rgba(108, 92, 231, 0.35),
+    0 2px 8px rgba(0, 0, 0, 0.2);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.3s ease, opacity 0.25s ease;
+  animation: gchat-entrance 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+.global-chat-btn:hover {
+  transform: scale(1.12);
+  box-shadow: 0 6px 28px rgba(108, 92, 231, 0.45),
+    0 3px 12px rgba(0, 0, 0, 0.25);
+}
+
+.global-chat-btn:active {
+  transform: scale(0.92);
+  transition-duration: 0.1s;
+}
+
+.global-chat-btn.is-open {
+  transform: scale(0) rotate(90deg);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Pulse ring behind button */
+.global-chat-btn::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: var(--color-accent, #6c5ce7);
+  opacity: 0;
+  animation: gchat-pulse 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.global-chat-btn:hover::before {
+  animation: none;
+  opacity: 0;
+}
+
+@keyframes gchat-entrance {
+  0% {
+    transform: scale(0) rotate(-180deg);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+}
+
+@keyframes gchat-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.35);
+    opacity: 0.15;
+  }
+}
+
+/* Hide button on AI page (chat already visible) */
+[data-page="ai"] ~ .global-chat-btn,
+.global-chat-btn.hidden {
+  display: none !important;
+}
+
+/* ---------------------------------------------------------------------------
+   Dialog Overlay
+   --------------------------------------------------------------------------- */
+.global-chat-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog, 10000);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+}
+
+.global-chat-overlay.is-open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.global-chat-overlay-bg {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* ---------------------------------------------------------------------------
+   Dialog Panel
+   --------------------------------------------------------------------------- */
+.global-chat-dialog {
+  position: relative;
+  z-index: 1;
+  width: min(92vw, 920px);
+  height: min(88vh, 760px);
+  border-radius: 16px;
+  overflow: hidden;
+  background: var(--color-bg-secondary, #1a1a2e);
+  border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5),
+    0 8px 32px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  transform: scale(0.9) translateY(20px);
+  opacity: 0;
+  transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1),
+    opacity 0.3s ease;
+}
+
+.global-chat-overlay.is-open .global-chat-dialog {
+  transform: scale(1) translateY(0);
+  opacity: 1;
+}
+
+/* Dialog header */
+.global-chat-dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
+  background: var(--color-bg-tertiary, rgba(255, 255, 255, 0.03));
+  flex-shrink: 0;
+}
+
+.global-chat-dialog-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary, #e0e0e0);
+}
+
+.global-chat-dialog-title i {
+  font-size: 16px;
+  color: var(--color-accent, #6c5ce7);
+}
+
+.global-chat-dialog-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary, #a0a0a0);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+  font-size: 16px;
+}
+
+.global-chat-dialog-close:hover {
+  background: var(--color-bg-hover, rgba(255, 255, 255, 0.08));
+  color: var(--color-text-primary, #e0e0e0);
+}
+
+/* Chat widget area inside dialog */
+.global-chat-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Make the chat-container fill the dialog body */
+.global-chat-body .chat-container {
+  height: 100%;
+}
+
+.global-chat-body .chat-main {
+  height: 100%;
+}
+
+/* ---------------------------------------------------------------------------
+   ChatWidget overrides for textarea (class-based instead of #chat-input)
+   --------------------------------------------------------------------------- */
+.cw-chat-input {
+  width: 100%;
+  min-height: 40px;
+  max-height: 180px;
+  padding: 10px 14px;
+  border: none;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: var(--color-text-primary, #e0e0e0);
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.cw-chat-input::placeholder {
+  color: var(--color-text-tertiary, #666);
+}
+
+.cw-chat-input:focus {
+  outline: none;
+}
+
+/* No-sidebar variant (for compact mode) */
+.cw-no-sidebar .chat-sessions-sidebar {
+  display: none;
+}
