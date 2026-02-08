@@ -67,9 +67,11 @@ build-cleanup.sh
 run.sh
 run.bat
 run-dev.bat
+publish.sh
 scripts/
 vless/
 control-panel/
+_public-legacy/
 docs/
 Bot/
 _backup/
