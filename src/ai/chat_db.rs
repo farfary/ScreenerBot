@@ -362,21 +362,28 @@ pub fn add_message(
         .map_err(|e| format!("Failed to get connection: {}", e))?;
     let now = chrono::Utc::now().to_rfc3339();
 
-    conn.execute(
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+
+    tx.execute(
         "INSERT INTO chat_messages (session_id, role, content, tool_calls, created_at) 
          VALUES (?1, ?2, ?3, ?4, ?5)",
         params![session_id, role, content, tool_calls, &now],
     )
     .map_err(|e| format!("Failed to insert message: {}", e))?;
 
-    let message_id = conn.last_insert_rowid();
+    let message_id = tx.last_insert_rowid();
 
-    // Update session timestamp in same connection for atomicity
-    conn.execute(
+    // Update session timestamp atomically with message insert
+    tx.execute(
         "UPDATE chat_sessions SET updated_at = ?1 WHERE id = ?2",
         params![&now, session_id],
     )
     .map_err(|e| format!("Failed to update session timestamp: {}", e))?;
+
+    tx.commit()
+        .map_err(|e| format!("Failed to commit message transaction: {}", e))?;
 
     Ok(message_id)
 }

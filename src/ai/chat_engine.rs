@@ -184,10 +184,15 @@ impl ConfirmationManager {
             .filter(|v| v.session_id == session_id)
             .count();
         if session_count >= 10 {
-            logger::warning(
-                LogTag::Api,
-                &format!("Session {} has too many pending confirmations", session_id),
-            );
+            // Evict oldest confirmation for this session to prevent unbounded growth
+            if let Some(oldest_key) = pending
+                .iter()
+                .filter(|(_, v)| v.session_id == session_id)
+                .min_by_key(|(_, v)| v.created_at)
+                .map(|(k, _)| k.clone())
+            {
+                pending.remove(&oldest_key);
+            }
         }
 
         pending.insert(confirmation_id.clone(), state);
@@ -196,11 +201,12 @@ impl ConfirmationManager {
     }
 
     async fn get_confirmation(&self, confirmation_id: &str) -> Option<ConfirmationState> {
-        let pending = self.pending.read().await;
+        let mut pending = self.pending.write().await;
         let state = pending.get(confirmation_id)?;
 
         // Check if confirmation has expired (10 minutes)
         if state.created_at.elapsed() > std::time::Duration::from_secs(600) {
+            pending.remove(confirmation_id);
             return None;
         }
 
@@ -484,7 +490,8 @@ impl ChatEngine {
 
     /// Build system prompt with tool definitions
     fn build_system_prompt(&self, context: &Option<ChatContext>) -> String {
-        let mut prompt = String::from(
+        let mut prompt = String::with_capacity(8192);
+        prompt.push_str(
             "You are an AI assistant for ScreenerBot, a Solana trading bot. \
              You help users analyze tokens, manage positions, and configure the bot.\n\n",
         );
@@ -668,10 +675,15 @@ impl ChatEngine {
             .with_temperature(0.7)
             .with_max_tokens(2000);
 
-        llm_manager
-            .call(provider, request)
-            .await
-            .map_err(|e| AiError::LlmError(format!("LLM call failed: {}", e)))
+        match tokio::time::timeout(
+            tokio::time::Duration::from_secs(60),
+            llm_manager.call(provider, request),
+        )
+        .await
+        {
+            Ok(result) => result.map_err(|e| AiError::LlmError(format!("LLM call failed: {}", e))),
+            Err(_) => Err(AiError::LlmError("LLM call timed out after 60 seconds".to_string())),
+        }
     }
 
     /// Get the appropriate model for a provider
@@ -935,7 +947,7 @@ impl ChatEngine {
             pool,
             message_id,
             &tool_call.name,
-            &serde_json::to_string(&tool_call.arguments).unwrap_or_default(),
+            &serde_json::to_string(&tool_call.arguments).unwrap_or_else(|_| "{}".to_string()),
             &output_json,
             status,
         ) {
