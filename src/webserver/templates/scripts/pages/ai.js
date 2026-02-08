@@ -148,9 +148,6 @@ function createLifecycle() {
       selectedPanel.classList.add("active");
     }
 
-    // Update sidebar status indicator
-    updateSidebarStatus(tabId);
-
     // Load data for the tab and start appropriate poller
     if (tabId === "stats") {
       loadAiStatus();
@@ -173,30 +170,6 @@ function createLifecycle() {
     }
   }
 
-  /**
-   * Update sidebar status indicator based on AI state
-   */
-  function updateSidebarStatus() {
-    const indicator = $(".ai-status-indicator");
-    const statusText = $(".ai-status-indicator .status-text");
-
-    if (!indicator || !statusText) return;
-
-    // Update status based on AI state
-    if (state.aiStatus) {
-      if (state.aiStatus.enabled) {
-        indicator.classList.remove("error");
-        statusText.textContent = "Active";
-      } else {
-        indicator.classList.add("error");
-        statusText.textContent = "Disabled";
-      }
-    } else {
-      indicator.classList.remove("error");
-      statusText.textContent = "Ready";
-    }
-  }
-
   // ============================================================================
   // Stats Tab
   // ============================================================================
@@ -215,7 +188,6 @@ function createLifecycle() {
       updateStatusBar(data);
       updateMetrics(data);
       updateRecentDecisions(data.recent_decisions || []);
-      updateSidebarStatus(); // Update sidebar status indicator
     } catch (error) {
       console.error("[AI] Failed to load AI status:", error);
       Utils.showToast({
