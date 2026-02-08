@@ -61,6 +61,18 @@
 
 ---
 
+<p align="center">
+  <strong>How We're Funded</strong>
+</p>
+
+<p align="center">
+  ScreenerBot uses Jupiter's referral program to earn a small fee on swaps.<br>
+  This helps fund development while keeping the software free and open source.<br>
+  You can disable or replace the referral account in the swap configuration.
+</p>
+
+---
+
 ## Why Rust?
 
 ScreenerBot is written in **Rust** - the same language Solana itself is built with. This isn't a coincidence:
@@ -398,7 +410,7 @@ Native desktop application built with **Electron** - the proven framework behind
 ### Build Options
 
 ```bash
-git clone https://github.com/farfary/ScreenerBot.git
+git clone https://github.com/screenerbotio/ScreenerBot.git
 cd ScreenerBot
 
 # Headless mode (server only)
