@@ -292,9 +292,9 @@ function createLifecycle() {
             <i class="icon-${icon}"></i>
           </div>
           <div class="decision-content">
-            <div class="decision-mint">${decision.mint}</div>
+            <div class="decision-mint">${Utils.escapeHtml(decision.mint)}</div>
             <div class="decision-details">
-              ${decision.risk_level || "N/A"} risk · ${decision.latency_ms || 0}ms
+              ${Utils.escapeHtml(decision.risk_level || "N/A")} risk · ${decision.latency_ms || 0}ms
             </div>
           </div>
           <div class="decision-confidence">${confidence}%</div>
@@ -706,9 +706,9 @@ function createLifecycle() {
           testResult.className = "test-connection-result visible success";
           testMessage.innerHTML = '<i class="icon-check-circle"></i> Connection successful!';
           testDetails.innerHTML = `
-            <dt>Model:</dt><dd>${data.model || "N/A"}</dd>
+            <dt>Model:</dt><dd>${Utils.escapeHtml(String(data.model || "N/A"))}</dd>
             <dt>Latency:</dt><dd>${Math.round(data.latency_ms || 0)}ms</dd>
-            <dt>Tokens:</dt><dd>${data.tokens_used || 0}</dd>
+            <dt>Tokens:</dt><dd>${parseInt(data.tokens_used) || 0}</dd>
           `;
           playToggleOn();
         } else {
@@ -1745,7 +1745,7 @@ function createLifecycle() {
                     : f.impact === "negative"
                       ? "factor-negative"
                       : "factor-neutral";
-                return `<span class="factor-badge ${impactClass}">${f.name} (${Math.round(f.weight * 100)}%)</span>`;
+                return `<span class="factor-badge ${impactClass}">${Utils.escapeHtml(f.name)} (${Math.round(f.weight * 100)}%)</span>`;
               })
               .join("")}
           </div>
@@ -1756,7 +1756,7 @@ function createLifecycle() {
     resultsContent.innerHTML = `
       <div class="result-item">
         <div class="result-label">Decision</div>
-        <div class="result-value ${decisionClass}">${result.decision.toUpperCase()}</div>
+        <div class="result-value ${decisionClass}">${Utils.escapeHtml(result.decision.toUpperCase())}</div>
       </div>
       <div class="result-item">
         <div class="result-label">Confidence</div>
@@ -1764,7 +1764,7 @@ function createLifecycle() {
       </div>
       <div class="result-item">
         <div class="result-label">Risk Level</div>
-        <div class="result-value">${result.risk_level || "N/A"}</div>
+        <div class="result-value">${Utils.escapeHtml(result.risk_level || "N/A")}</div>
       </div>
       <div class="result-item">
         <div class="result-label">Latency</div>
@@ -1773,7 +1773,7 @@ function createLifecycle() {
       ${factorsHtml}
       <div class="result-item">
         <div class="result-label">Reasoning</div>
-        <div class="result-reasoning">${result.reasoning || "No reasoning provided"}</div>
+        <div class="result-reasoning">${Utils.escapeHtml(result.reasoning || "No reasoning provided")}</div>
       </div>
     `;
   }
@@ -3032,7 +3032,7 @@ function createLifecycle() {
         return;
       }
     } else if (scheduleType === "daily") {
-      if (!/^\d{1,2}:\d{2}$/.test(scheduleValue)) {
+      if (!/^([01]?\d|2[0-3]):[0-5]\d$/.test(scheduleValue)) {
         Utils.showToast("Daily schedule must be in HH:MM format", "error");
         return;
       }
@@ -3096,7 +3096,7 @@ function createLifecycle() {
   }
 
   async function runAutomationTask(id) {
-    const triggerBtn = document.querySelector(`.automation-task-item[data-id="${id}"] .btn-icon.success`);
+    const triggerBtn = document.querySelector(`.automation-task-item[data-id="${id}"] .btn-sm.btn-secondary`);
     if (triggerBtn) { triggerBtn.disabled = true; triggerBtn.style.opacity = "0.5"; }
     try {
       const response = await fetch(`/api/ai/automation/${id}/run`, {

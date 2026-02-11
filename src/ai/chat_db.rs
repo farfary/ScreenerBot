@@ -386,8 +386,13 @@ pub fn cleanup_hidden_sessions(
 
     let cutoff = (chrono::Utc::now() - chrono::Duration::days(older_than_days)).to_rfc3339();
 
+    // Use transaction to ensure both deletes happen atomically
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| format!("Failed to start transaction: {}", e))?;
+
     // Delete messages from old hidden sessions first
-    conn.execute(
+    tx.execute(
         "DELETE FROM chat_messages WHERE session_id IN (
             SELECT id FROM chat_sessions WHERE is_hidden = 1 AND created_at < ?1
         )",
@@ -396,12 +401,15 @@ pub fn cleanup_hidden_sessions(
     .map_err(|e| format!("Failed to delete hidden session messages: {}", e))?;
 
     // Delete the hidden sessions
-    let deleted = conn
+    let deleted = tx
         .execute(
             "DELETE FROM chat_sessions WHERE is_hidden = 1 AND created_at < ?1",
             params![cutoff],
         )
         .map_err(|e| format!("Failed to delete hidden sessions: {}", e))?;
+
+    tx.commit()
+        .map_err(|e| format!("Failed to commit transaction: {}", e))?;
 
     Ok(deleted)
 }

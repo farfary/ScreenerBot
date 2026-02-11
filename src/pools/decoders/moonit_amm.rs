@@ -264,6 +264,15 @@ impl MoonitAmmDecoder {
 
         // Additional candidate formulas (instrumentation for calibration):
         let sold_tokens = (curve_info.curve_position as f64) / (10_f64).powi(token_decimals as i32);
+        
+        if !price_sol_basic.is_finite() || price_sol_basic <= 0.0 {
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("Moonit AMM: Invalid basic price calculated: {}", price_sol_basic),
+            );
+            return None;
+        }
+        
         let price_sol_avg_sold = if sold_tokens > 0.0 {
             sol_reserves / sold_tokens
         } else {

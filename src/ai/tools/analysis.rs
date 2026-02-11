@@ -6,6 +6,15 @@ use super::{Tool, ToolCategory, ToolDefinition, ToolResult};
 use crate::tokens;
 
 // ============================================================================
+// Helper: Mint address validation
+// ============================================================================
+
+/// Validate Solana address format (base58, 32-44 characters)
+fn is_valid_solana_address(addr: &str) -> bool {
+    addr.len() >= 32 && addr.len() <= 44 && addr.chars().all(|c| c.is_ascii_alphanumeric())
+}
+
+// ============================================================================
 // AnalyzeTokenTool - Comprehensive token analysis
 // ============================================================================
 
@@ -69,6 +78,11 @@ impl Tool for AnalyzeTokenTool {
             Ok(p) => p,
             Err(e) => return ToolResult::error(format!("Invalid parameters: {}", e)),
         };
+
+        // Validate mint address format
+        if !is_valid_solana_address(&params.mint_address) {
+            return ToolResult::error("Invalid mint address format".to_string());
+        }
 
         // Get token data from database
         let token = match tokens::get_full_token_async(&params.mint_address).await {

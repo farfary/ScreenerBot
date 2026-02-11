@@ -354,6 +354,15 @@ impl ChatEngine {
                 tool_results_text
             )));
 
+            // Trim messages if getting too long (keep first system message + last 20)
+            if messages.len() > 50 {
+                let system_msg = messages[0].clone();
+                let keep_last = messages.split_off(messages.len() - 20);
+                messages.clear();
+                messages.push(system_msg);
+                messages.extend(keep_last);
+            }
+
             iteration += 1;
         };
 
@@ -404,6 +413,7 @@ impl ChatEngine {
         &self,
         confirmation_id: &str,
         approved: bool,
+        session_id: Option<i64>,
     ) -> Result<ChatResponse, AiError> {
         // Get confirmation state
         let state = self
@@ -414,10 +424,26 @@ impl ChatEngine {
                 AiError::ValidationError("Confirmation not found or expired".to_string())
             })?;
 
+        // Validate session_id if provided
+        if let Some(sid) = session_id {
+            if state.session_id != sid {
+                return Err(AiError::ValidationError(
+                    "Confirmation does not belong to this session".to_string(),
+                ));
+            }
+        }
+
         // Remove confirmation from pending
         self.confirmation_manager
             .remove_confirmation(confirmation_id)
             .await;
+
+        // Bounds check before accessing tool_calls
+        if state.current_index >= state.tool_calls.len() {
+            return Err(AiError::ValidationError(
+                "Invalid confirmation state: index out of bounds".to_string(),
+            ));
+        }
 
         if !approved {
             // User denied the tool call
@@ -452,7 +478,40 @@ impl ChatEngine {
             &format!("Tool {} executed after approval", tool_call.name),
         );
 
-        // Return continuation message
+        // Check if there are more tools to confirm
+        let has_more_tools = state.current_index + 1 < state.tool_calls.len();
+        
+        if has_more_tools {
+            // Update state with incremented index and re-insert
+            let mut updated_state = state.clone();
+            updated_state.current_index += 1;
+            
+            let new_confirmation_id = uuid::Uuid::new_v4().to_string();
+            let mut pending = self.confirmation_manager.pending.write().await;
+            pending.insert(new_confirmation_id.clone(), updated_state);
+            
+            // Get tool definition for description
+            let next_tool = &state.tool_calls[state.current_index + 1];
+            let description = self.tool_registry.get(&next_tool.name)
+                .map(|t| t.definition().description.clone())
+                .unwrap_or_else(|| "No description available".to_string());
+            
+            // Return with next pending confirmation
+            return Ok(ChatResponse {
+                message_id: state.message_id,
+                content: format!("Tool {} executed. Waiting for next confirmation.", tool_call.name),
+                tool_calls: vec![result.clone()],
+                pending_confirmations: vec![PendingConfirmation {
+                    confirmation_id: new_confirmation_id,
+                    tool_name: next_tool.name.clone(),
+                    description,
+                    input: next_tool.arguments.clone(),
+                }],
+                is_complete: false,
+            });
+        }
+
+        // Return continuation message (all tools processed)
         Ok(ChatResponse {
             message_id: state.message_id,
             content: format!("Tool {} executed successfully.", tool_call.name),

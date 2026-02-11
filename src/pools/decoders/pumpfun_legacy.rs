@@ -195,10 +195,29 @@ impl PumpFunLegacyDecoder {
             &format!("Token {} decimals: {}", token_mint, token_decimals),
         );
 
+        if token_decimals > 18 {
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("PumpFun bonding curve {} token decimals too large: {}", pool_account, token_decimals),
+            );
+            return None;
+        }
+
         // Calculate price: SOL per token
         // Formula: price = virtual_sol_reserves / virtual_token_reserves (in human-readable units)
         let token_amount = virtual_token_reserves as f64 / 10_f64.powi(token_decimals as i32);
         let sol_amount = virtual_sol_reserves as f64 / 10_f64.powi(SOL_DECIMALS as i32);
+
+        if token_amount <= 0.0 || !token_amount.is_finite() {
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!(
+                    "PumpFun bonding curve {} token amount invalid: {}",
+                    pool_account, token_amount
+                ),
+            );
+            return None;
+        }
 
         if token_amount == 0.0 {
             logger::error(
@@ -212,6 +231,17 @@ impl PumpFunLegacyDecoder {
         }
 
         let price_sol = sol_amount / token_amount;
+
+        if !price_sol.is_finite() || price_sol <= 0.0 {
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!(
+                    "PumpFun bonding curve {} price invalid: {}",
+                    pool_account, price_sol
+                ),
+            );
+            return None;
+        }
 
         logger::debug(
             LogTag::PoolDecoder,

@@ -1,6 +1,9 @@
 use crate::ai::db::{list_instructions, with_ai_db};
 use crate::ai::types::EvaluationContext;
 
+/// Maximum total length for all user instructions combined
+const MAX_INSTRUCTION_CONTENT_LENGTH: usize = 5000;
+
 /// Dynamic prompt builder that formats token data into prompts
 pub struct PromptBuilder;
 
@@ -75,10 +78,29 @@ impl PromptBuilder {
 
                 let formatted: Vec<String> = enabled
                     .iter()
-                    .map(|i| format!("[{}] {}: {}", i.category.to_uppercase(), i.name, i.content))
+                    .map(|i| {
+                        // Sanitize content: strip lines starting with "SYSTEM:" or "==="
+                        let sanitized = i.content
+                            .lines()
+                            .filter(|line| {
+                                let trimmed = line.trim();
+                                !trimmed.starts_with("SYSTEM:") && !trimmed.starts_with("===")
+                            })
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        format!("[{}] {}: {}", i.category.to_uppercase(), i.name, sanitized)
+                    })
                     .collect();
 
-                Ok(Some(formatted.join("\n\n")))
+                let mut combined = formatted.join("\n\n");
+                
+                // Limit total instruction content length
+                if combined.len() > MAX_INSTRUCTION_CONTENT_LENGTH {
+                    combined.truncate(MAX_INSTRUCTION_CONTENT_LENGTH);
+                    combined.push_str("\n\n[WARNING: Instructions truncated due to length limit]");
+                }
+
+                Ok(Some(combined))
             }
             Err(_) => Ok(None),
         })

@@ -402,6 +402,11 @@ impl PriceCalculator {
     fn calculate_confidence(price_result: &PriceResult, bundle: &PoolAccountBundle) -> f32 {
         let mut confidence = 1.0f32;
 
+        // Check for invalid reserves first
+        if !price_result.sol_reserves.is_finite() {
+            confidence = 0.0;
+        }
+
         // Reduce confidence based on age
         let age_seconds = bundle.last_updated.elapsed().as_secs();
         if age_seconds > 10 {

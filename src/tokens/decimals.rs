@@ -327,6 +327,15 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
 
 /// Manually cache a decimals value (used when fetched from other sources)
 pub fn cache(mint: &str, decimals: u8) {
+    // Validate decimals is within reasonable bounds (SOL tokens use max 18 decimals)
+    if decimals > 18 {
+        crate::logger::warning(
+            crate::logger::LogTag::Tokens,
+            &format!("Ignoring invalid decimals {} for mint {} (max 18)", decimals, mint),
+        );
+        return;
+    }
+    
     if let Ok(mut w) = DECIMALS_CACHE.write() {
         w.insert(mint.to_string(), decimals);
     }
@@ -417,6 +426,16 @@ async fn persist_to_db(mint: &str, decimals: u8) -> Result<(), String> {
 
 fn fetch_lock_for(mint: &str) -> Arc<AsyncMutex<()>> {
     let mut map = FETCH_LOCKS.lock().expect("decimals fetch locks poisoned");
+    
+    // Periodic cleanup to prevent unbounded growth
+    if map.len() > 10000 {
+        crate::logger::warning(
+            crate::logger::LogTag::Tokens,
+            &format!("Decimals fetch lock map has {} entries, clearing to prevent memory leak", map.len()),
+        );
+        map.clear();
+    }
+    
     Arc::clone(
         map.entry(mint.to_string())
             .or_insert_with(|| Arc::new(AsyncMutex::new(()))),

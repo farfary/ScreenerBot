@@ -385,6 +385,7 @@ pub struct GetChatSessionResponse {
 #[derive(Debug, Deserialize)]
 pub struct ConfirmToolExecutionRequest {
     pub approved: bool,
+    pub session_id: Option<i64>,
 }
 
 // ============================================================================
@@ -915,7 +916,7 @@ async fn update_ai_config(
                 cfg.ai.filtering_enabled = filtering_enabled;
             }
             if let Some(min_conf) = req.filtering_min_confidence {
-                if min_conf <= 100 {
+                if min_conf >= 0 && min_conf <= 100 {
                     cfg.ai.filtering_min_confidence = min_conf;
                 }
             }
@@ -945,7 +946,7 @@ async fn update_ai_config(
                 cfg.ai.auto_blacklist_enabled = auto_blacklist;
             }
             if let Some(min_conf) = req.auto_blacklist_min_confidence {
-                if min_conf <= 100 {
+                if min_conf >= 0 && min_conf <= 100 {
                     cfg.ai.auto_blacklist_min_confidence = min_conf;
                 }
             }
@@ -1391,8 +1392,8 @@ async fn list_history(
 
     // Fetch decisions based on whether mint filter is provided
     let result = if let Some(mint) = query.mint {
-        // For specific mint, use list_decisions_for_mint
-        db::with_ai_db(|conn| db::list_decisions_for_mint(conn, &mint, per_page))
+        // For specific mint, use list_decisions_for_mint_paginated with offset
+        db::with_ai_db(|conn| db::list_decisions_for_mint_paginated(conn, &mint, per_page, offset))
     } else {
         // For all decisions, use list_decisions with pagination
         db::with_ai_db(|conn| db::list_decisions(conn, per_page, offset))
@@ -2024,9 +2025,9 @@ async fn confirm_tool_execution(
         }
     };
 
-    // Process confirmation
+    // Process confirmation with optional session_id validation
     match engine
-        .process_confirmation(&confirmation_id, req.approved)
+        .process_confirmation(&confirmation_id, req.approved, req.session_id)
         .await
     {
         Ok(response) => {

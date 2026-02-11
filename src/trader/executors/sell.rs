@@ -25,7 +25,8 @@ pub async fn execute_sell(decision: &TradeDecision) -> Result<TradeResult, Strin
     );
 
     // Extract exit percentage from decision.size_sol (default to 100% if not specified)
-    let exit_percentage = decision.size_sol.unwrap_or(100.0);
+    // Clamp to valid range [1.0, 100.0] to prevent invalid values
+    let exit_percentage = decision.size_sol.unwrap_or(100.0).clamp(1.0, 100.0);
 
     // Determine exit type based on configuration and reason
     let partial_exit_enabled = with_config(|cfg| cfg.positions.partial_exit_enabled);

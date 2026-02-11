@@ -446,12 +446,24 @@ pub fn update_task(
     // Recalculate next_run_at if schedule changed
     if schedule_type.is_some() || schedule_value.is_some() {
         if let Ok(Some(task)) = get_task(pool, id) {
-            if let Ok(next) = calculate_next_run(&task.schedule_type, &task.schedule_value, None) {
-                conn.execute(
-                    "UPDATE ai_scheduled_tasks SET next_run_at = ? WHERE id = ?",
-                    params![&next, id],
-                )
-                .map_err(|e| format!("Failed to update next_run_at: {}", e))?;
+            match calculate_next_run(&task.schedule_type, &task.schedule_value, None) {
+                Ok(next) => {
+                    conn.execute(
+                        "UPDATE ai_scheduled_tasks SET next_run_at = ? WHERE id = ?",
+                        params![&next, id],
+                    )
+                    .map_err(|e| format!("Failed to update next_run_at: {}", e))?;
+                }
+                Err(e) => {
+                    // Log warning but keep task - next_run_at stays at old value
+                    crate::logger::warning(
+                        crate::logger::LogTag::Api,
+                        &format!(
+                            "Failed to calculate next_run_at for task {}: {} - keeping old schedule",
+                            id, e
+                        ),
+                    );
+                }
             }
         }
     }
@@ -642,6 +654,8 @@ pub fn calculate_next_run(
         }
         "daily" => {
             // schedule_value format: "HH:MM"
+            // NOTE: All times are treated as UTC. No timezone conversion is performed.
+            // Users should specify times in UTC format.
             let parts: Vec<&str> = schedule_value.split(':').collect();
             if parts.len() != 2 {
                 return Err(format!("Invalid daily schedule format: {}", schedule_value));

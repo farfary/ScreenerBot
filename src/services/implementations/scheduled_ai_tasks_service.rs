@@ -377,6 +377,10 @@ async fn execute_chat_request(request: ChatRequest) -> Result<crate::ai::ChatRes
     let engine = crate::ai::try_get_chat_engine()
         .ok_or_else(|| "Chat engine not initialized".to_string())?;
 
+    // NOTE: catch_unwind has limitations with async code. It can catch panics in synchronous
+    // code within the async block, but may not catch all async panics depending on executor state.
+    // This provides best-effort panic recovery. For more robust handling, ensure the chat engine
+    // itself handles errors gracefully rather than panicking.
     match std::panic::AssertUnwindSafe(engine.process_message(request))
         .catch_unwind()
         .await

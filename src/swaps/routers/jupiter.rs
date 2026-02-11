@@ -24,6 +24,7 @@ const JUPITER_API_BASE: &str = "https://api.jup.ag";
 /// Default Jupiter API key used when user hasn't configured their own
 /// User can set their own key in config for higher rate limits (portal.jup.ag)
 /// This does NOT affect fee collection — fees use platformFeeBps + feeAccount
+/// NOTE: This placeholder will cause API failures if config is not set - this is intentional
 const DEFAULT_JUPITER_API_KEY: &str = "YOUR_JUPITER_API_KEY";
 
 /// Get the Jupiter API key (from config or default)
@@ -209,10 +210,11 @@ impl SwapRouter for JupiterRouter {
     }
 
     async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote, ScreenerBotError> {
-        let slippage_bps = (request.slippage_pct * 100.0) as u16;
+        let slippage_bps = ((request.slippage_pct * 100.0).round() as u16).max(1);
 
         // Check if either token is Token2022 - Jupiter cannot collect fees on Token2022
         // Error 0x177e (6014) = IncorrectTokenProgramID when trying to collect fees
+        // TODO: Monitor Jupiter API updates for Token2022 fee support in the future
         let input_is_token_2022 = is_token_2022(&request.input_mint).await;
         let output_is_token_2022 = is_token_2022(&request.output_mint).await;
         let skip_fees = input_is_token_2022 || output_is_token_2022;
@@ -342,6 +344,8 @@ impl SwapRouter for JupiterRouter {
             })?;
 
         // Check if either token is Token2022 - Jupiter cannot collect fees on Token2022
+        // Skip fee account for Token2022 tokens to avoid IncorrectTokenProgramID error
+        // TODO: Optimize by passing Token2022 status from quote to avoid duplicate RPC calls
         let input_is_token_2022 = is_token_2022(&quote.input_mint).await;
         let output_is_token_2022 = is_token_2022(&quote.output_mint).await;
         let skip_fees = input_is_token_2022 || output_is_token_2022;

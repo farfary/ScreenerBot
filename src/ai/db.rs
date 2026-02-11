@@ -487,6 +487,49 @@ pub fn list_decisions_for_mint(
     Ok(decisions)
 }
 
+/// List decisions for a specific mint with pagination support
+pub fn list_decisions_for_mint_paginated(
+    db: &Connection,
+    mint: &str,
+    limit: usize,
+    offset: usize,
+) -> Result<Vec<DecisionRecord>, String> {
+    let mut stmt = db
+        .prepare(
+            "SELECT id, mint, symbol, decision, confidence, reasoning, risk_level, 
+                    provider, model, tokens_used, latency_ms, cached, created_at 
+             FROM ai_decision_history 
+             WHERE mint = ?1 
+             ORDER BY created_at DESC 
+             LIMIT ?2 OFFSET ?3",
+        )
+        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+
+    let decisions = stmt
+        .query_map(params![mint, limit, offset], |row| {
+            Ok(DecisionRecord {
+                id: row.get(0)?,
+                mint: row.get(1)?,
+                symbol: row.get(2)?,
+                decision: row.get(3)?,
+                confidence: row.get(4)?,
+                reasoning: row.get(5)?,
+                risk_level: row.get(6)?,
+                provider: row.get(7)?,
+                model: row.get(8)?,
+                tokens_used: row.get(9)?,
+                latency_ms: row.get(10)?,
+                cached: row.get::<_, i32>(11)? != 0,
+                created_at: row.get(12)?,
+            })
+        })
+        .map_err(|e| format!("Failed to query decisions for mint: {}", e))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("Failed to collect decisions: {}", e))?;
+
+    Ok(decisions)
+}
+
 /// Clear old decision records (older than specified days)
 pub fn clear_old_decisions(db: &Connection, days: i64) -> Result<usize, String> {
     let cutoff = chrono::Utc::now() - chrono::Duration::days(days);

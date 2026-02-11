@@ -111,9 +111,8 @@ impl PoolAccountBundle {
         self.last_updated = Instant::now();
         self.accounts.insert(account_data.pubkey, account_data);
 
-        // Reset calculation requested flag when fresh account data is added
-        // This allows for new calculations when accounts are refreshed
-        self.calculation_requested = false;
+        // Don't reset calculation_requested flag here - let the calculator manage this flag
+        // Resetting it here can cause premature recalculation before all accounts are updated
     }
 
     /// Check if bundle is complete (has all required accounts)
@@ -273,18 +272,30 @@ impl AccountFetcher {
 
                         // Process pending accounts if any
                         if !pending_accounts.is_empty() {
-                            Self::process_pending_accounts(
-                                &pool_directory,
-                                &account_bundles,
-                                &account_last_fetch,
-                                &mut pending_accounts,
-                                &mut account_failure_tracker,
-                                &mut pool_failure_tracker,
-                                &operations,
-                                &errors,
-                                &accounts_fetched,
-                                &rpc_batches,
-                            ).await;
+                            // Add timeout to prevent hanging on slow RPC responses
+                            match tokio::time::timeout(
+                                Duration::from_secs(30),
+                                Self::process_pending_accounts(
+                                    &pool_directory,
+                                    &account_bundles,
+                                    &account_last_fetch,
+                                    &mut pending_accounts,
+                                    &mut account_failure_tracker,
+                                    &mut pool_failure_tracker,
+                                    &operations,
+                                    &errors,
+                                    &accounts_fetched,
+                                    &rpc_batches,
+                                )
+                            ).await {
+                                Ok(_) => {},
+                                Err(_) => {
+                                    logger::warning(
+                                        LogTag::PoolFetcher,
+                                        "Account processing timed out after 30 seconds",
+                                    );
+                                }
+                            }
                         }
                     }
                 }
@@ -429,12 +440,12 @@ impl AccountFetcher {
                     logger::warning(
                         LogTag::PoolFetcher,
                         &format!(
-                            "Failed to check blacklist for account {}: {} - skipping as precaution",
+                            "Failed to check blacklist for account {}: {} - keeping in pending for retry",
                             account_str, e
                         ),
                     );
-                    // FAIL-CLOSED: Remove from pending if blacklist check fails
-                    pending_accounts.remove(&account);
+                    // FAIL-OPEN: Keep in pending if blacklist check fails - will retry on next cycle
+                    // This prevents losing track of accounts due to transient DB errors
                 }
             }
         }

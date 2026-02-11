@@ -177,9 +177,24 @@ impl PoolDecoder for MeteoraDlmmDecoder {
         // Calculate price using DLMM theoretical price (more accurate than vault balances)
         let price_sol = Self::calculate_dlmm_price(&dlmm_info, &token_mint)?;
 
+        if sol_decimals > 18 || token_decimals > 18 {
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("Meteora DLMM: Decimals too large: sol={}, token={}", sol_decimals, token_decimals),
+            );
+            return None;
+        }
         // Convert reserves to human-readable format for display
         let sol_reserves_display = (sol_balance as f64) / (10_f64).powi(sol_decimals as i32);
         let token_reserves_display = (token_balance as f64) / (10_f64).powi(token_decimals as i32);
+
+        if !price_sol.is_finite() || price_sol <= 0.0 {
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("Meteora DLMM: Invalid price calculated: {}", price_sol),
+            );
+            return None;
+        }
 
         logger::debug(
             LogTag::PoolDecoder,

@@ -66,7 +66,7 @@ impl AiEngine {
         }
 
         // Check cache first
-        if let Some(cached_decision) = self.cache.get(&context.mint, priority) {
+        if let Some(cached_decision) = self.cache.get(&context.mint, "filter", priority) {
             return Ok(EvaluationResult {
                 decision: cached_decision,
                 cached: true,
@@ -115,7 +115,7 @@ impl AiEngine {
 
         // Cache the result (unless bypass cache is enabled for high priority)
         if !bypass_cache || priority != Priority::High {
-            self.cache.insert(&context.mint, decision.clone());
+            self.cache.insert(&context.mint, "filter", decision.clone());
         }
 
         // Record decision in history
@@ -246,7 +246,7 @@ impl AiEngine {
 
         // Check cache first (unless high priority)
         if priority != Priority::High {
-            if let Some(cached_decision) = self.cache.get(&context.mint, priority) {
+            if let Some(cached_decision) = self.cache.get(&context.mint, "entry", priority) {
                 return Ok(EvaluationResult {
                     decision: cached_decision,
                     cached: true,
@@ -296,7 +296,7 @@ impl AiEngine {
         // Cache the result (unless bypass cache is enabled for high priority)
         let bypass_cache = with_config(|cfg| cfg.ai.trading_bypass_cache);
         if !bypass_cache || priority != Priority::High {
-            self.cache.insert(&context.mint, decision.clone());
+            self.cache.insert(&context.mint, "entry", decision.clone());
         }
 
         // Record decision in history

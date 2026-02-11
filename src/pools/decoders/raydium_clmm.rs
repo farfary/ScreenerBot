@@ -174,9 +174,24 @@ impl PoolDecoder for RaydiumClmmDecoder {
             (1.0 / raw_price) * (10_f64).powi((token_decimals as i32) - (sol_decimals as i32))
         };
 
+        if sol_decimals > 18 || token_decimals > 18 {
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("Raydium CLMM: Decimals too large: sol={}, token={}", sol_decimals, token_decimals),
+            );
+            return None;
+        }
         // Convert reserves to human-readable format for display
         let sol_reserves = (sol_balance as f64) / (10_f64).powi(sol_decimals as i32);
         let token_reserves = (token_balance as f64) / (10_f64).powi(token_decimals as i32);
+
+        if !price_sol.is_finite() || price_sol <= 0.0 {
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("Raydium CLMM: Invalid price calculated: {}", price_sol),
+            );
+            return None;
+        }
 
         logger::verbose(
             LogTag::PoolDecoder,

@@ -111,6 +111,13 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
         if sol_reserve_raw == 0 || token_reserve_raw == 0 {
             return None;
         }
+        if token_decimals > 18 {
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("Raydium Legacy AMM: Token decimals too large: {}", token_decimals),
+            );
+            return None;
+        }
         let sol_adjusted = (sol_reserve_raw as f64) / (10f64).powi(SOL_DECIMALS as i32);
         let token_adjusted = (token_reserve_raw as f64) / (10f64).powi(token_decimals as i32);
         if token_adjusted <= 0.0 {

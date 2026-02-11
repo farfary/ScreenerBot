@@ -167,6 +167,14 @@ impl PoolDecoder for MeteoraDammDecoder {
             ),
         );
 
+        if sol_decimals > 18 || token_decimals > 18 {
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("Meteora DAMM: Decimals too large: sol={}, token={}", sol_decimals, token_decimals),
+            );
+            return None;
+        }
+
         // Diagnostic instrumentation for low-liquidity Meteora DAMM pools.
         // Goal: identify any hidden adjustment fields (virtual reserves, multipliers) that
         // could explain large divergence (>150%) vs external reference when raw SOL < 1.

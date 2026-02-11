@@ -152,6 +152,13 @@ impl PoolDecoder for FluxbeamAmmDecoder {
 
         // FluxBeam uses standard AMM constant product formula for pricing
         // Calculate price: price = sol_reserve / token_reserve (adjusted for decimals)
+        if sol_decimals > 18 || token_decimals > 18 {
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("FluxBeam: Decimals too large: sol={}, token={}", sol_decimals, token_decimals),
+            );
+            return None;
+        }
         let sol_adjusted = (sol_balance as f64) / (10_f64).powi(sol_decimals as i32);
         let token_adjusted = (token_balance as f64) / (10_f64).powi(token_decimals as i32);
 

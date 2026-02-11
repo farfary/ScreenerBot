@@ -8,6 +8,15 @@ use crate::positions;
 use crate::trader::manual;
 
 // ============================================================================
+// Helper: Mint address validation
+// ============================================================================
+
+/// Validate Solana address format (base58, 32-44 characters)
+fn is_valid_solana_address(addr: &str) -> bool {
+    addr.len() >= 32 && addr.len() <= 44 && addr.chars().all(|c| c.is_ascii_alphanumeric())
+}
+
+// ============================================================================
 // BuyTokenTool - Execute buy order
 // ============================================================================
 
@@ -69,6 +78,11 @@ impl Tool for BuyTokenTool {
             Ok(p) => p,
             Err(e) => return ToolResult::error(format!("Invalid parameters: {}", e)),
         };
+
+        // Validate mint address format
+        if !is_valid_solana_address(&params.mint_address) {
+            return ToolResult::error("Invalid mint address format".to_string());
+        }
 
         // Validate amount
         if params.amount_sol <= 0.0 {

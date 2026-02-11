@@ -134,9 +134,24 @@ impl PoolDecoder for MeteoraDbcDecoder {
         let sol_balance = read_token_account_amount(&sol_vault.data)?;
         let token_balance = read_token_account_amount(&token_vault.data)?;
 
+        if sol_decimals > 18 || token_decimals > 18 {
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("Meteora DBC: Decimals too large: sol={}, token={}", sol_decimals, token_decimals),
+            );
+            return None;
+        }
         // Convert raw balances to decimal amounts for liquidity display
         let sol = (sol_balance as f64) / (10f64).powi(sol_decimals as i32);
         let tok = (token_balance as f64) / (10f64).powi(token_decimals as i32);
+
+        if !price_per_token.is_finite() || price_per_token <= 0.0 {
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("Meteora DBC: Invalid price calculated: {}", price_per_token),
+            );
+            return None;
+        }
 
         let mut pr = PriceResult::new(
             token_mint.clone(),

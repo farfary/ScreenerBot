@@ -974,6 +974,10 @@ pub async fn partial_close_position(
         .or(position.token_amount)
         .ok_or_else(|| "Position has no token amount".to_string())?;
 
+    // NOTE: No wallet balance verification here to avoid RPC latency during critical exit.
+    // The swap executor will fail gracefully if balance is insufficient.
+    // Consider adding periodic wallet balance reconciliation in monitoring service.
+
     // Calculate partial exit amount
     let exit_amount = calculate_partial_amount(remaining_amount, exit_percentage);
 

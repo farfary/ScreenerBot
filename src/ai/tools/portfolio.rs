@@ -143,7 +143,7 @@ impl Tool for GetPositionTool {
 
         let position = match positions::get_position_by_id(params.position_id).await {
             Some(p) => p,
-            None => return ToolResult::error(format!("Position {} not found", params.position_id)),
+            None => return ToolResult::error("Position not found".to_string()),
         };
 
         let pnl = positions::calculate_position_pnl_safe(&position, position.current_price).await;

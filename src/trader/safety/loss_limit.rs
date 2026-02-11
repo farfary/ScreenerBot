@@ -166,18 +166,25 @@ fn check_and_reset_period_if_needed() {
 
         if Utc::now() >= period_end {
             let was_limited = state.is_limited;
-            state.period_start = Utc::now();
-            state.cumulative_loss_sol = 0.0;
-
+            
+            // Reset is_limited first to minimize race window with readers
             if auto_resume {
                 state.is_limited = false;
                 state.limited_at = None;
-                if was_limited {
-                    logger::info(
-                        LogTag::Trader,
-                        "Loss limit period reset - auto-resumed entries",
-                    );
-                }
+            }
+            
+            // Then reset period data
+            state.period_start = Utc::now();
+            state.cumulative_loss_sol = 0.0;
+
+            // NOTE: Race window between write() release and next read() is negligible.
+            // All state changes happen atomically within single write lock scope.
+            
+            if auto_resume && was_limited {
+                logger::info(
+                    LogTag::Trader,
+                    "Loss limit period reset - auto-resumed entries",
+                );
             } else if was_limited {
                 logger::info(
                     LogTag::Trader,

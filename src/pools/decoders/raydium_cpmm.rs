@@ -322,6 +322,13 @@ impl RaydiumCpmmDecoder {
         }
 
         // Calculate price: price = sol_reserve / token_reserve (adjusted for decimals)
+        if sol_decimals > 18 || token_decimals > 18 {
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("Raydium CPMM: Decimals too large: sol={}, token={}", sol_decimals, token_decimals),
+            );
+            return None;
+        }
         let sol_adjusted = (sol_reserve as f64) / (10_f64).powi(sol_decimals as i32);
         let token_adjusted = (token_reserve as f64) / (10_f64).powi(token_decimals as i32);
 

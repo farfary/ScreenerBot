@@ -46,7 +46,9 @@ pub fn get_price(mint: &str) -> Option<PriceResult> {
 pub fn update_price(price: PriceResult) {
     let mint = price.mint.clone();
 
-    // Update cache
+    // Update cache first - this is intentionally separate from history update below.
+    // Race condition: PRICE_CACHE and PRICE_HISTORY can briefly be out of sync, but this is
+    // acceptable because cache is for latest-price queries while history is for trends.
     PRICE_CACHE.insert(mint.clone(), price.clone());
 
     // Queue for database storage (async, non-blocking)
@@ -60,7 +62,9 @@ pub fn update_price(price: PriceResult) {
         }
     });
 
-    // Update history with gap detection - DashMap is thread-safe, no RwLock needed
+    // Update history with gap detection - DashMap is thread-safe
+    // Safety: get_mut() holds a per-shard lock for this key's entry, ensuring atomicity
+    // of the cleanup + add_price sequence. No other thread can modify this entry concurrently.
     if let Some(mut history) = PRICE_HISTORY.get_mut(&mint) {
         let removed_count = history.cleanup_gapped_data();
         if removed_count > 0 {
@@ -243,13 +247,16 @@ async fn load_historical_data_into_cache() {
                         PriceHistory::new(mint.clone(), PRICE_HISTORY_MAX_ENTRIES);
                     let prices_count = historical_prices.len();
 
-                    // Add all historical prices
+                    // Add all historical prices and cache the latest
+                    let mut latest_price = None;
                     for price in historical_prices {
                         new_history.add_price(price.clone());
-                        // Also populate the price cache with the latest price
-                        if new_history.prices.len() == prices_count {
-                            PRICE_CACHE.insert(mint.clone(), price);
-                        }
+                        latest_price = Some(price); // Track the last one
+                    }
+
+                    // Insert the latest price into cache
+                    if let Some(price) = latest_price {
+                        PRICE_CACHE.insert(mint.clone(), price);
                     }
 
                     PRICE_HISTORY.insert(mint.clone(), new_history);

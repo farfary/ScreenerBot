@@ -247,6 +247,13 @@ impl PumpFunAmmDecoder {
         let sol_decimals = SOL_DECIMALS;
 
         // Adjust for decimals
+        if token_decimals > 18 || sol_decimals > 18 {
+            logger::error(
+                LogTag::PoolDecoder,
+                &format!("PumpFun AMM: Decimals too large: sol={}, token={}", sol_decimals, token_decimals),
+            );
+            return None;
+        }
         let token_adjusted = (token_reserve as f64) / (10_f64).powi(token_decimals as i32);
         let sol_adjusted = (sol_reserve as f64) / (10_f64).powi(sol_decimals as i32);
 

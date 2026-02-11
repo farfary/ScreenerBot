@@ -191,6 +191,9 @@ fn update_trader_config(key: &str, value: serde_json::Value) -> Result<String, S
         }
         "max_open_positions" => {
             let val = value.as_u64().ok_or("Value must be a number")?;
+            if val < 1 || val > 100 {
+                return Err("max_open_positions must be between 1 and 100".to_string());
+            }
             crate::config::update_config_section(
                 |cfg| {
                     cfg.trader.max_open_positions = val as usize;
@@ -201,6 +204,9 @@ fn update_trader_config(key: &str, value: serde_json::Value) -> Result<String, S
         }
         "trade_size_sol" => {
             let val = value.as_f64().ok_or("Value must be a number")?;
+            if val < 0.001 || val > 100.0 {
+                return Err("trade_size_sol must be between 0.001 and 100.0".to_string());
+            }
             crate::config::update_config_section(
                 |cfg| {
                     cfg.trader.trade_size_sol = val;

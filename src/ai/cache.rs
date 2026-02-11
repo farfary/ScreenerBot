@@ -23,15 +23,17 @@ impl AiCache {
     }
 
     /// Get cached decision if fresh and priority allows
-    pub fn get(&self, mint: &str, priority: Priority) -> Option<AiDecision> {
+    pub fn get(&self, mint: &str, evaluation_type: &str, priority: Priority) -> Option<AiDecision> {
         // HIGH priority always bypasses cache
         if priority == Priority::High {
             return None;
         }
 
-        let entry = self.cache.get(mint)?;
+        let cache_key = format!("{}:{}", evaluation_type, mint);
+        let entry = self.cache.get(&cache_key)?;
         if entry.cached_at.elapsed() > self.ttl {
-            self.cache.remove(mint);
+            drop(entry); // Release read lock before removing
+            self.cache.remove(&cache_key);
             return None;
         }
 
@@ -39,9 +41,10 @@ impl AiCache {
     }
 
     /// Insert decision into cache
-    pub fn insert(&self, mint: &str, decision: AiDecision) {
+    pub fn insert(&self, mint: &str, evaluation_type: &str, decision: AiDecision) {
+        let cache_key = format!("{}:{}", evaluation_type, mint);
         self.cache.insert(
-            mint.to_string(),
+            cache_key,
             CachedEntry {
                 decision,
                 cached_at: Instant::now(),
