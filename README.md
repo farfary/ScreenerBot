@@ -408,6 +408,19 @@ Access via `with_config(|cfg| cfg.trader.max_open_positions)`. Hot-reload with `
 
 All data cached locally in SQLite databases.
 
+### RPC Provider
+
+A premium Solana RPC endpoint is **required** for reliable trading. ScreenerBot auto-detects your provider and applies optimal rate limits.
+
+| Provider | Compatibility | Notes |
+| -------- | ------------- | ----- |
+| **[Helius](https://www.helius.dev/solana-rpc-nodes)** | ⭐ **Recommended** | Most compatible and tested. Solana-native APIs, DAS, staked connections. Free tier: 100k req/day. |
+| [QuickNode](https://www.quicknode.com) | ✅ Supported | Fast global network. Good alternative. |
+| [Triton](https://triton.one) | ✅ Supported | Ultra-low latency, gRPC support. |
+| [Alchemy](https://www.alchemy.com) | ✅ Supported | Developer-friendly, generous free tier. |
+
+> **Tip:** Configure 2-3 endpoints from different providers for automatic failover. See the [Best RPC Providers Guide](https://screenerbot.io/blog/best-rpc-providers) for detailed comparisons.
+
 ---
 
 ## Desktop Application

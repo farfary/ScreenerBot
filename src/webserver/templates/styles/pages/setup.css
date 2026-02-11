@@ -511,6 +511,34 @@
   border-radius: 2px;
 }
 
+/* Helius recommended chip — orange accent */
+.setup-provider-chip--recommended {
+  border-color: rgb(234 138 46 / 0.5);
+  background: rgb(234 138 46 / 0.08);
+  order: -1;
+}
+
+.setup-provider-chip--recommended:hover {
+  border-color: rgb(234 138 46 / 0.8);
+  background: rgb(234 138 46 / 0.12);
+  box-shadow: 0 0 12px rgb(234 138 46 / 0.15);
+}
+
+.setup-provider-chip--recommended .provider-name {
+  color: #ea8a2e;
+  font-weight: 600;
+}
+
+.setup-provider-chip--recommended:hover .provider-name {
+  color: #f0a050;
+}
+
+.provider-tag--recommended {
+  color: #ea8a2e !important;
+  background: rgb(234 138 46 / 0.2) !important;
+  font-weight: 700 !important;
+}
+
 /* ===== Step 2: Verification ===== */
 
 /* Hero section with animated visual */
