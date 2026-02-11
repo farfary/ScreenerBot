@@ -1777,7 +1777,7 @@
 
 /* Provider Config Modal - improved layout */
 .provider-config-modal {
-  max-width: 520px;
+  max-width: 600px;
 }
 
 .provider-config-modal .modal-header {
@@ -2122,20 +2122,19 @@
   margin-top: calc(var(--spacing-sm) * -1);
 }
 
-/* Instruction Modal - wider for content editing */
+/* Instruction Modal - 2/3 viewport for comfortable editing */
 .instruction-modal {
   background: var(--bg-primary);
   border-radius: 12px;
-  width: 90%;
-  max-width: 700px;
+  width: 66vw;
+  max-width: 900px;
+  min-width: 400px;
+  height: 66vh;
   max-height: 90vh;
+  min-height: 400px;
   box-shadow: 0 20px 60px rgb(0, 0, 0, 0.3);
   display: flex;
   flex-direction: column;
-}
-
-.instruction-edit-modal {
-  max-width: 900px;
 }
 
 .modal-header {
@@ -2193,6 +2192,8 @@
   overflow-y: auto;
   flex: 1;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .modal-footer {
@@ -2210,6 +2211,19 @@
 
 .modal-body .form-group:last-child {
   margin-bottom: 0;
+}
+
+/* Content form-group with textarea should expand to fill available space */
+.modal-body .form-group:has(.instruction-editor) {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.modal-body .form-group:has(.instruction-editor) .instruction-editor {
+  flex: 1;
+  resize: vertical;
 }
 
 .modal-body .form-group label {
@@ -2284,6 +2298,7 @@
 
 .instruction-editor {
   min-height: 250px;
+  flex: 1;
   background: var(--bg-tertiary);
   font-size: 0.85rem;
 }
@@ -3686,7 +3701,12 @@
   }
 
   .instruction-modal {
+    width: 95vw;
     max-width: 100%;
+    height: auto;
+    max-height: 90vh;
+    min-width: 0;
+    min-height: 0;
   }
 
   /* Chat responsive */
@@ -4213,8 +4233,10 @@
 
 /* Automation Modal */
 .automation-modal {
-  width: 560px;
-  max-width: 90vw;
+  width: 66vw;
+  max-width: 800px;
+  min-width: 400px;
+  max-height: 80vh;
 }
 
 .modal-runs-list {

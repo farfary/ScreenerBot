@@ -2379,7 +2379,7 @@ function createLifecycle() {
       const modal = document.createElement("div");
       modal.className = "modal-overlay";
       modal.innerHTML = `
-        <div class="modal instruction-modal instruction-edit-modal">
+        <div class="modal instruction-modal">
           <div class="modal-header">
             <h3><i class="icon-edit"></i> Edit Instruction</h3>
             <button class="modal-close" onclick="this.closest('.modal-overlay').remove()">×</button>
@@ -3097,7 +3097,7 @@ function createLifecycle() {
       await loadAutomationTasks();
       await loadAutomationStats();
     } catch (error) {
-      Utils.showToast(error.message, "error");
+      Utils.showToast({ type: "error", title: "Error", message: error.message });
       await loadAutomationTasks();
     }
   }
@@ -3191,6 +3191,22 @@ function createLifecycle() {
               <input type="number" id="edit-auto-timeout" value="${task.timeout_seconds || 120}" min="30" max="600">
             </div>
           </div>
+          <div class="form-group">
+            <div class="checkbox-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="edit-auto-notify-telegram" ${task.notify_telegram !== false ? "checked" : ""}>
+                <span>Notify via Telegram</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="edit-auto-notify-success" ${task.notify_on_success !== false ? "checked" : ""}>
+                <span>Notify on success</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="edit-auto-notify-failure" ${task.notify_on_failure !== false ? "checked" : ""}>
+                <span>Notify on failure</span>
+              </label>
+            </div>
+          </div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
@@ -3210,6 +3226,9 @@ function createLifecycle() {
     const scheduleValue = $("#edit-auto-schedule-value")?.value?.trim();
     const toolPermissions = $("#edit-auto-tool-permissions")?.value;
     const timeout = parseInt($("#edit-auto-timeout")?.value) || 120;
+    const notifyTelegram = $("#edit-auto-notify-telegram")?.checked ?? true;
+    const notifySuccess = $("#edit-auto-notify-success")?.checked ?? true;
+    const notifyFailure = $("#edit-auto-notify-failure")?.checked ?? true;
 
     if (!name || !instruction || !scheduleValue) {
       Utils.showToast({ type: "error", title: "Validation", message: "Please fill in all required fields" });
@@ -3227,6 +3246,9 @@ function createLifecycle() {
           schedule_value: scheduleValue,
           tool_permissions: toolPermissions,
           timeout_seconds: timeout,
+          notify_telegram: notifyTelegram,
+          notify_on_success: notifySuccess,
+          notify_on_failure: notifyFailure,
         }),
       });
       if (!response.ok) throw new Error("Failed to update task");
@@ -3295,7 +3317,7 @@ function createLifecycle() {
       `;
       document.body.appendChild(modal);
     } catch (error) {
-      Utils.showToast(error.message, "error");
+      Utils.showToast({ type: "error", title: "Error", message: error.message });
     }
   }
 
@@ -3380,7 +3402,7 @@ function createLifecycle() {
       `;
       document.body.appendChild(modal);
     } catch (error) {
-      Utils.showToast(error.message, "error");
+      Utils.showToast({ type: "error", title: "Error", message: error.message });
     }
   }
 
