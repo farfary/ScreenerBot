@@ -465,11 +465,18 @@ pub fn delete_task(pool: &Pool<SqliteConnectionManager>, id: i64) -> Result<(), 
         .get()
         .map_err(|e| format!("Failed to get connection: {}", e))?;
 
-    conn.execute("DELETE FROM ai_task_runs WHERE task_id = ?1", params![id])
-        .map_err(|e| format!("Failed to delete task runs: {}", e))?;
-
-    conn.execute("DELETE FROM ai_scheduled_tasks WHERE id = ?1", params![id])
-        .map_err(|e| format!("Failed to delete task: {}", e))?;
+    conn.execute_batch("BEGIN TRANSACTION")
+        .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+    if let Err(e) = conn.execute("DELETE FROM ai_task_runs WHERE task_id = ?1", params![id]) {
+        let _ = conn.execute_batch("ROLLBACK");
+        return Err(format!("Failed to delete task runs: {}", e));
+    }
+    if let Err(e) = conn.execute("DELETE FROM ai_scheduled_tasks WHERE id = ?1", params![id]) {
+        let _ = conn.execute_batch("ROLLBACK");
+        return Err(format!("Failed to delete task: {}", e));
+    }
+    conn.execute_batch("COMMIT")
+        .map_err(|e| format!("Failed to commit transaction: {}", e))?;
 
     Ok(())
 }
@@ -627,6 +634,9 @@ pub fn calculate_next_run(
             let seconds: u64 = schedule_value
                 .parse()
                 .map_err(|e| format!("Invalid interval value '{}': {}", schedule_value, e))?;
+            if seconds < 60 {
+                return Err(format!("Interval must be at least 60 seconds, got {}", seconds));
+            }
             let next = now + chrono::Duration::seconds(seconds as i64);
             Ok(next.to_rfc3339())
         }
@@ -704,9 +714,8 @@ pub fn calculate_next_run(
                 }
             }
 
-            // Fallback: next week
-            let next = now + chrono::Duration::days(7);
-            Ok(next.to_rfc3339())
+            // Should not be reachable if target_weekdays is non-empty
+            Err("Could not calculate next weekly run time".to_string())
         }
         _ => Err(format!("Unknown schedule type: {}", schedule_type)),
     }

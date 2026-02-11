@@ -10,6 +10,7 @@ use crate::events::{record_scheduled_task_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
+use futures::FutureExt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use tokio::sync::Notify;
@@ -97,6 +98,25 @@ async fn scheduler_worker(
 
     // Wait a bit for other services to be ready
     tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+
+    // Clean up old hidden sessions on startup (older than 7 days)
+    if let Some(pool) = chat_db::get_chat_pool() {
+        match chat_db::cleanup_hidden_sessions(&pool, 7) {
+            Ok(count) if count > 0 => {
+                logger::info(
+                    LogTag::System,
+                    &format!("Cleaned up {} old hidden AI sessions", count),
+                );
+            }
+            Err(e) => {
+                logger::warning(
+                    LogTag::System,
+                    &format!("Failed to clean up hidden sessions: {}", e),
+                );
+            }
+            _ => {}
+        }
+    }
 
     loop {
         let (enabled, interval_secs, default_timeout) = with_config(|cfg| {
@@ -213,12 +233,11 @@ async fn execute_scheduled_task(
         tool_mode,
     };
 
-    // Execute with timeout
-    let result = tokio::time::timeout(
-        tokio::time::Duration::from_secs(timeout_secs),
-        execute_chat_request(request),
-    )
-    .await;
+    // Execute with timeout — select! drops (cancels) the losing branch
+    let result: Result<Result<crate::ai::ChatResponse, String>, ()> = tokio::select! {
+        res = execute_chat_request(request) => Ok(res),
+        _ = tokio::time::sleep(tokio::time::Duration::from_secs(timeout_secs)) => Err(()),
+    };
 
     let duration_ms = start_time.elapsed().as_secs_f64() * 1000.0;
 
@@ -358,10 +377,13 @@ async fn execute_chat_request(request: ChatRequest) -> Result<crate::ai::ChatRes
     let engine = crate::ai::try_get_chat_engine()
         .ok_or_else(|| "Chat engine not initialized".to_string())?;
 
-    engine
-        .process_message(request)
+    match std::panic::AssertUnwindSafe(engine.process_message(request))
+        .catch_unwind()
         .await
-        .map_err(|e| format!("Chat engine error: {}", e))
+    {
+        Ok(result) => result.map_err(|e| format!("Chat engine error: {}", e)),
+        Err(_) => Err("Chat engine panicked during execution".to_string()),
+    }
 }
 
 async fn send_task_notification(
@@ -417,7 +439,11 @@ async fn send_task_notification(
     };
 
     // Send via the proper async notification channel
-    crate::telegram::notifier::send_notification(notification).await;
+    crate::telegram::notifier::queue_notification(notification);
+    logger::debug(
+        LogTag::System,
+        &format!("Queued Telegram notification for task '{}'", task.name),
+    );
 }
 
 /// Public function for triggering task execution from API

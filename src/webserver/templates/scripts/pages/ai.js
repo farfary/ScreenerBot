@@ -2915,8 +2915,10 @@ function createLifecycle() {
   }
 
   async function createAutomationTask() {
+    // Remove any existing automation modal
+    document.querySelectorAll(".modal-overlay.automation-modal-overlay").forEach(m => m.remove());
     const modal = document.createElement("div");
-    modal.className = "modal-overlay";
+    modal.className = "modal-overlay automation-modal-overlay";
     modal.innerHTML = `
       <div class="modal automation-modal">
         <div class="modal-header">
@@ -3022,6 +3024,25 @@ function createLifecycle() {
       return;
     }
 
+    // Validate schedule value format
+    if (scheduleType === "interval") {
+      const secs = parseInt(scheduleValue);
+      if (isNaN(secs) || secs < 60) {
+        Utils.showToast("Interval must be at least 60 seconds", "error");
+        return;
+      }
+    } else if (scheduleType === "daily") {
+      if (!/^\d{1,2}:\d{2}$/.test(scheduleValue)) {
+        Utils.showToast("Daily schedule must be in HH:MM format", "error");
+        return;
+      }
+    } else if (scheduleType === "weekly") {
+      if (!/^[a-z,]+(:\d{1,2}:\d{2})?$/i.test(scheduleValue)) {
+        Utils.showToast("Weekly schedule must be in format: mon,wed,fri:09:00", "error");
+        return;
+      }
+    }
+
     try {
       const response = await fetch("/api/ai/automation", {
         method: "POST",
@@ -3055,12 +3076,17 @@ function createLifecycle() {
 
   async function toggleAutomationTask(id, enabled) {
     try {
+      const btn = document.querySelector(`.automation-task-item[data-id="${id}"] .toggle input`);
+      if (btn) btn.disabled = true;
       const response = await fetch(`/api/ai/automation/${id}/toggle`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled }),
       });
-      if (!response.ok) throw new Error("Failed to toggle task");
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to toggle task");
+      }
       await loadAutomationTasks();
       await loadAutomationStats();
     } catch (error) {
@@ -3070,15 +3096,22 @@ function createLifecycle() {
   }
 
   async function runAutomationTask(id) {
+    const triggerBtn = document.querySelector(`.automation-task-item[data-id="${id}"] .btn-icon.success`);
+    if (triggerBtn) { triggerBtn.disabled = true; triggerBtn.style.opacity = "0.5"; }
     try {
       const response = await fetch(`/api/ai/automation/${id}/run`, {
         method: "POST",
       });
-      if (!response.ok) throw new Error("Failed to trigger task");
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to trigger task");
+      }
       Utils.showToast("Task triggered", "success");
       setTimeout(() => loadAutomationRuns(), 2000);
     } catch (error) {
       Utils.showToast(error.message, "error");
+    } finally {
+      if (triggerBtn) { triggerBtn.disabled = false; triggerBtn.style.opacity = ""; }
     }
   }
 
@@ -3106,8 +3139,9 @@ function createLifecycle() {
     const task = state.automationTasks.find(t => t.id === id);
     if (!task) return;
 
+    document.querySelectorAll(".modal-overlay.automation-modal-overlay").forEach(m => m.remove());
     const modal = document.createElement("div");
-    modal.className = "modal-overlay";
+    modal.className = "modal-overlay automation-modal-overlay";
     modal.innerHTML = `
       <div class="modal automation-modal">
         <div class="modal-header">
@@ -3198,16 +3232,19 @@ function createLifecycle() {
   }
 
   async function viewAutomationRun(runId) {
+    // Remove any existing modal first
+    document.querySelectorAll(".modal-overlay.automation-modal-overlay").forEach(m => m.remove());
     try {
       const response = await fetch(`/api/ai/automation/runs/${runId}`);
       if (!response.ok) throw new Error("Failed to load run details");
       const data = await response.json();
       const run = data.run;
       const taskName = state.automationTasks.find(t => t.id === run.task_id)?.name || `Task #${run.task_id}`;
-      const toolCalls = run.tool_calls ? JSON.parse(run.tool_calls) : [];
+      let toolCalls = [];
+      try { toolCalls = run.tool_calls ? JSON.parse(run.tool_calls) : []; } catch { /* malformed JSON */ }
 
       const modal = document.createElement("div");
-      modal.className = "modal-overlay";
+      modal.className = "modal-overlay automation-modal-overlay";
       modal.innerHTML = `
         <div class="modal automation-modal">
           <div class="modal-header">
@@ -3220,8 +3257,8 @@ function createLifecycle() {
               <div class="run-detail-item"><span class="run-detail-label">Status</span><span class="run-detail-value status-${run.status}">${Utils.escapeHtml(run.status)}</span></div>
               <div class="run-detail-item"><span class="run-detail-label">Started</span><span class="run-detail-value">${run.started_at ? new Date(run.started_at).toLocaleString() : "—"}</span></div>
               <div class="run-detail-item"><span class="run-detail-label">Duration</span><span class="run-detail-value">${run.duration_ms ? (run.duration_ms / 1000).toFixed(1) + "s" : "—"}</span></div>
-              ${run.provider ? `<div class="run-detail-item"><span class="run-detail-label">Provider</span><span class="run-detail-value">${run.provider}</span></div>` : ""}
-              ${run.tokens_used ? `<div class="run-detail-item"><span class="run-detail-label">Tokens</span><span class="run-detail-value">${run.tokens_used}</span></div>` : ""}
+              ${run.provider ? `<div class="run-detail-item"><span class="run-detail-label">Provider</span><span class="run-detail-value">${Utils.escapeHtml(String(run.provider))}</span></div>` : ""}
+              ${run.tokens_used ? `<div class="run-detail-item"><span class="run-detail-label">Tokens</span><span class="run-detail-value">${Utils.escapeHtml(String(run.tokens_used))}</span></div>` : ""}
             </div>
             ${run.error_message ? `<div class="run-error-box"><i class="icon-alert-triangle"></i> ${Utils.escapeHtml(run.error_message)}</div>` : ""}
             ${toolCalls.length > 0 ? `
@@ -3291,6 +3328,7 @@ function createLifecycle() {
   }
 
   async function viewAutomationTaskRuns(id) {
+    document.querySelectorAll(".modal-overlay.automation-modal-overlay").forEach(m => m.remove());
     try {
       const response = await fetch(`/api/ai/automation/${id}/runs`);
       if (!response.ok) throw new Error("Failed to load runs");
@@ -3299,7 +3337,7 @@ function createLifecycle() {
       const runs = data.runs || [];
 
       const modal = document.createElement("div");
-      modal.className = "modal-overlay";
+      modal.className = "modal-overlay automation-modal-overlay";
       modal.innerHTML = `
         <div class="modal automation-modal">
           <div class="modal-header">
@@ -3318,7 +3356,7 @@ function createLifecycle() {
                     <div class="automation-run-item ${statusClass}" onclick="window.aiPage.viewAutomationRun(${run.id}); this.closest('.modal-overlay').remove();">
                       <i class="${statusIcon} run-status-icon"></i>
                       <div class="run-info">
-                        <span class="run-task-name">${Utils.escapeHtml(run.status)}</span>
+                        <span class="run-task-name">${Utils.escapeHtml(task?.name || `Task #${run.task_id}`)}</span>
                         <span class="run-time">${time}</span>
                       </div>
                       <span class="run-duration">${duration}</span>
@@ -3484,7 +3522,7 @@ function createLifecycle() {
       automationPoller = ctx.managePoller(
         new Poller(
           async () => {
-            if (state.currentTab === "automation") {
+            if (state.currentTab === "automation" && !document.hidden) {
               await loadAutomationTasks();
               await loadAutomationRuns();
               await loadAutomationStats();

@@ -2586,29 +2586,26 @@ async fn create_automation_task(Json(req): Json<CreateAutomationTaskRequest>) ->
         Some(&req.priority),
     ) {
         Ok(id) => {
-            // Update optional fields
-            if req.instruction_ids.is_some()
-                || req.max_retries.is_some()
-                || req.timeout_seconds.is_some()
-                || !req.notify_telegram
-                || !req.notify_on_success
-                || !req.notify_on_failure
-            {
-                let _ = crate::ai::scheduled_db::update_task(
-                    &pool,
-                    id,
-                    None,
-                    None,
-                    req.instruction_ids.as_ref().map(|s| Some(s.as_str())),
-                    None,
-                    None,
-                    None,
-                    None,
-                    Some(req.notify_telegram),
-                    Some(req.notify_on_success),
-                    Some(req.notify_on_failure),
-                    req.max_retries,
-                    req.timeout_seconds,
+            // Update optional fields that aren't part of create_task
+            if let Err(e) = crate::ai::scheduled_db::update_task(
+                &pool,
+                id,
+                None,
+                None,
+                req.instruction_ids.as_ref().map(|s| Some(s.as_str())),
+                None,
+                None,
+                None,
+                None,
+                Some(req.notify_telegram),
+                Some(req.notify_on_success),
+                Some(req.notify_on_failure),
+                req.max_retries,
+                req.timeout_seconds,
+            ) {
+                crate::logger::warning(
+                    crate::logger::LogTag::System,
+                    &format!("Failed to update optional fields for task {}: {}", id, e),
                 );
             }
 
@@ -2681,6 +2678,30 @@ async fn update_automation_task(
         }
     }
 
+    // Validate tool_permissions if provided
+    if let Some(tp) = &req.tool_permissions {
+        if !["full", "readonly"].contains(&tp.as_str()) {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "INVALID_TOOL_PERMISSIONS",
+                "tool_permissions must be 'full' or 'readonly'",
+                None,
+            );
+        }
+    }
+
+    // Validate priority if provided
+    if let Some(p) = &req.priority {
+        if !["low", "medium", "high"].contains(&p.as_str()) {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "INVALID_PRIORITY",
+                "priority must be 'low', 'medium', or 'high'",
+                None,
+            );
+        }
+    }
+
     match crate::ai::scheduled_db::update_task(
         &pool,
         id,
@@ -2723,6 +2744,19 @@ async fn delete_automation_task(Path(id): Path<i64>) -> Response {
             )
         }
     };
+
+    // Check if task has a running execution
+    match crate::ai::scheduled_db::list_runs_for_task(&pool, id, 1) {
+        Ok(runs) if !runs.is_empty() && runs[0].status == "running" => {
+            return error_response(
+                StatusCode::CONFLICT,
+                "TASK_RUNNING",
+                "Cannot delete task while it is running",
+                None,
+            );
+        }
+        _ => {}
+    }
 
     match crate::ai::scheduled_db::delete_task(&pool, id) {
         Ok(_) => success_response(serde_json::json!({ "deleted": true })),
@@ -2794,6 +2828,29 @@ async fn run_automation_task(Path(id): Path<i64>) -> Response {
             )
         }
     };
+
+    // Don't allow running disabled tasks
+    if !task.enabled {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "TASK_DISABLED",
+            "Cannot run a disabled task",
+            None,
+        );
+    }
+
+    // Check if task is already running
+    match crate::ai::scheduled_db::list_runs_for_task(&pool, id, 1) {
+        Ok(runs) if !runs.is_empty() && runs[0].status == "running" => {
+            return error_response(
+                StatusCode::CONFLICT,
+                "TASK_RUNNING",
+                "Task is already running",
+                None,
+            );
+        }
+        _ => {}
+    }
 
     // Execute in background
     tokio::spawn(async move {

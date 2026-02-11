@@ -285,7 +285,7 @@ pub fn get_session(
                     s.created_at, s.updated_at 
              FROM chat_sessions s 
              LEFT JOIN chat_messages m ON s.id = m.session_id 
-             WHERE s.id = ?1 
+             WHERE s.id = ?1 AND s.is_hidden = 0
              GROUP BY s.id",
         )
         .map_err(|e| format!("Failed to prepare statement: {}", e))?;
@@ -373,6 +373,37 @@ pub fn delete_session(pool: &Pool<SqliteConnectionManager>, id: i64) -> Result<(
         .map_err(|e| format!("Failed to delete session: {}", e))?;
 
     Ok(())
+}
+
+/// Delete hidden sessions older than the specified number of days
+pub fn cleanup_hidden_sessions(
+    pool: &Pool<SqliteConnectionManager>,
+    older_than_days: i64,
+) -> Result<usize, String> {
+    let conn = pool
+        .get()
+        .map_err(|e| format!("Failed to get connection: {}", e))?;
+
+    let cutoff = (chrono::Utc::now() - chrono::Duration::days(older_than_days)).to_rfc3339();
+
+    // Delete messages from old hidden sessions first
+    conn.execute(
+        "DELETE FROM chat_messages WHERE session_id IN (
+            SELECT id FROM chat_sessions WHERE is_hidden = 1 AND created_at < ?1
+        )",
+        params![cutoff],
+    )
+    .map_err(|e| format!("Failed to delete hidden session messages: {}", e))?;
+
+    // Delete the hidden sessions
+    let deleted = conn
+        .execute(
+            "DELETE FROM chat_sessions WHERE is_hidden = 1 AND created_at < ?1",
+            params![cutoff],
+        )
+        .map_err(|e| format!("Failed to delete hidden sessions: {}", e))?;
+
+    Ok(deleted)
 }
 
 // =============================================================================
