@@ -85,5 +85,4 @@ Assistant-session-*.md
 .htmlvalidate.json
 .prettierrc.json
 .stylelintrc.json
-BUILD.md
 eslint.config.js
