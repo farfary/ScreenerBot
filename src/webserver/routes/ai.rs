@@ -637,8 +637,8 @@ async fn test_provider(
                 ),
             );
 
-            let preview = if response.content.len() > 100 {
-                format!("{}...", &response.content[..100])
+            let preview = if response.content.chars().count() > 100 {
+                format!("{}...", response.content.chars().take(100).collect::<String>())
             } else {
                 response.content.clone()
             };
@@ -1402,7 +1402,13 @@ async fn list_history(
     match result {
         Ok(decisions) => {
             // Get total count (simplified - in production, you'd want a separate count query)
-            let total = decisions.len();
+            let total = if decisions.len() == per_page {
+                // Page is full, there are likely more results
+                (page * per_page) + 1
+            } else {
+                // Last page
+                ((page - 1) * per_page) + decisions.len()
+            };
 
             let decisions: Vec<DecisionHistoryResponse> = decisions
                 .into_iter()
@@ -2190,7 +2196,7 @@ pub struct CreateAutomationTaskRequest {
 }
 
 fn default_read_only() -> String {
-    "read_only".to_string()
+    "readonly".to_string()
 }
 fn default_low() -> String {
     "low".to_string()

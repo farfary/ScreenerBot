@@ -716,7 +716,7 @@ function createLifecycle() {
         }
       } catch (error) {
         testResult.className = "test-connection-result visible error";
-        testMessage.innerHTML = `<i class="icon-x-circle"></i> ${error.message}`;
+        testMessage.innerHTML = `<i class="icon-x-circle"></i> ${Utils.escapeHtml(String(error.message))}`;
         testDetails.innerHTML = "";
         playError();
       } finally {
@@ -1049,9 +1049,9 @@ function createLifecycle() {
             <i class="icon-check-circle"></i> Connection successful!
           </span>
           <dl class="test-result-details">
-            <dt>Model:</dt><dd>${data.model || "N/A"}</dd>
+            <dt>Model:</dt><dd>${Utils.escapeHtml(String(data.model || "N/A"))}</dd>
             <dt>Latency:</dt><dd>${Math.round(data.latency_ms || 0)}ms</dd>
-            <dt>Tokens:</dt><dd>${data.tokens_used || 0}</dd>
+            <dt>Tokens:</dt><dd>${parseInt(data.tokens_used) || 0}</dd>
           </dl>
         `;
         playToggleOn();
@@ -1063,7 +1063,7 @@ function createLifecycle() {
       testResult.className = "test-connection-result visible error";
       testResult.innerHTML = `
         <span class="test-result-message">
-          <i class="icon-x-circle"></i> ${error.message}
+          <i class="icon-x-circle"></i> ${Utils.escapeHtml(String(error.message))}
         </span>
       `;
       playError();
@@ -2348,13 +2348,20 @@ function createLifecycle() {
    */
   async function toggleInstruction(id, enabled) {
     try {
-      await fetch(`/api/ai/instructions/${id}`, {
+      const response = await fetch(`/api/ai/instructions/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled }),
       });
+      if (!response.ok) {
+        throw new Error("Failed to toggle instruction");
+      }
     } catch (error) {
       console.error("[AI] Error toggling instruction:", error);
+      // Revert the checkbox on failure
+      const checkbox = document.querySelector(`.instruction-item[data-id="${id}"] .toggle input`);
+      if (checkbox) checkbox.checked = !enabled;
+      Utils.showToast({ type: "error", title: "Error", message: "Failed to toggle instruction" });
     }
   }
 
@@ -3020,7 +3027,7 @@ function createLifecycle() {
     const notifyFailure = $("#auto-notify-failure")?.checked ?? true;
 
     if (!name || !instruction || !scheduleValue) {
-      Utils.showToast("Please fill in all required fields", "error");
+      Utils.showToast({ type: "error", title: "Validation", message: "Please fill in all required fields" });
       return;
     }
 
@@ -3028,17 +3035,17 @@ function createLifecycle() {
     if (scheduleType === "interval") {
       const secs = parseInt(scheduleValue);
       if (isNaN(secs) || secs < 60) {
-        Utils.showToast("Interval must be at least 60 seconds", "error");
+        Utils.showToast({ type: "error", title: "Validation", message: "Interval must be at least 60 seconds" });
         return;
       }
     } else if (scheduleType === "daily") {
       if (!/^([01]?\d|2[0-3]):[0-5]\d$/.test(scheduleValue)) {
-        Utils.showToast("Daily schedule must be in HH:MM format", "error");
+        Utils.showToast({ type: "error", title: "Validation", message: "Daily schedule must be in HH:MM format" });
         return;
       }
     } else if (scheduleType === "weekly") {
       if (!/^[a-z,]+(:\d{1,2}:\d{2})?$/i.test(scheduleValue)) {
-        Utils.showToast("Weekly schedule must be in format: mon,wed,fri:09:00", "error");
+        Utils.showToast({ type: "error", title: "Validation", message: "Weekly schedule must be in format: mon,wed,fri:09:00" });
         return;
       }
     }
@@ -3066,11 +3073,11 @@ function createLifecycle() {
       }
 
       document.querySelector(".modal-overlay")?.remove();
-      Utils.showToast("Task created successfully", "success");
+      Utils.showToast({ type: "success", title: "Success", message: "Task created successfully" });
       await loadAutomationTasks();
       await loadAutomationStats();
     } catch (error) {
-      Utils.showToast(error.message, "error");
+      Utils.showToast({ type: "error", title: "Error", message: error.message });
     }
   }
 
@@ -3106,10 +3113,10 @@ function createLifecycle() {
         const err = await response.json().catch(() => ({}));
         throw new Error(err.error || "Failed to trigger task");
       }
-      Utils.showToast("Task triggered", "success");
+      Utils.showToast({ type: "success", title: "Success", message: "Task triggered" });
       setTimeout(() => loadAutomationRuns(), 2000);
     } catch (error) {
-      Utils.showToast(error.message, "error");
+      Utils.showToast({ type: "error", title: "Error", message: error.message });
     } finally {
       if (triggerBtn) { triggerBtn.disabled = false; triggerBtn.style.opacity = ""; }
     }
@@ -3127,11 +3134,11 @@ function createLifecycle() {
     try {
       const response = await fetch(`/api/ai/automation/${id}`, { method: "DELETE" });
       if (!response.ok) throw new Error("Failed to delete task");
-      Utils.showToast("Task deleted", "success");
+      Utils.showToast({ type: "success", title: "Success", message: "Task deleted" });
       await loadAutomationTasks();
       await loadAutomationStats();
     } catch (error) {
-      Utils.showToast(error.message, "error");
+      Utils.showToast({ type: "error", title: "Error", message: error.message });
     }
   }
 
@@ -3205,7 +3212,7 @@ function createLifecycle() {
     const timeout = parseInt($("#edit-auto-timeout")?.value) || 120;
 
     if (!name || !instruction || !scheduleValue) {
-      Utils.showToast("Please fill in all required fields", "error");
+      Utils.showToast({ type: "error", title: "Validation", message: "Please fill in all required fields" });
       return;
     }
 
@@ -3224,10 +3231,10 @@ function createLifecycle() {
       });
       if (!response.ok) throw new Error("Failed to update task");
       document.querySelector(".modal-overlay")?.remove();
-      Utils.showToast("Task updated", "success");
+      Utils.showToast({ type: "success", title: "Success", message: "Task updated" });
       await loadAutomationTasks();
     } catch (error) {
-      Utils.showToast(error.message, "error");
+      Utils.showToast({ type: "error", title: "Error", message: error.message });
     }
   }
 

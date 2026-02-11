@@ -98,7 +98,10 @@ impl Tool for GetStatusTool {
             services: service_statuses,
         };
 
-        ToolResult::success(serde_json::to_value(status).unwrap())
+        match serde_json::to_value(status) {
+            Ok(v) => ToolResult::success(v),
+            Err(e) => ToolResult::error(format!("Serialization error: {}", e)),
+        }
     }
 }
 

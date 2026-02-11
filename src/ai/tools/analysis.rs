@@ -128,7 +128,10 @@ impl Tool for AnalyzeTokenTool {
             },
         };
 
-        ToolResult::success(serde_json::to_value(analysis).unwrap())
+        match serde_json::to_value(analysis) {
+            Ok(v) => ToolResult::success(v),
+            Err(e) => ToolResult::error(format!("Serialization error: {}", e)),
+        }
     }
 }
 
@@ -217,7 +220,10 @@ impl Tool for GetMarketDataTool {
             dex: Some(format!("{:?}", token.data_source)),
         };
 
-        ToolResult::success(serde_json::to_value(market_data).unwrap())
+        match serde_json::to_value(market_data) {
+            Ok(v) => ToolResult::success(v),
+            Err(e) => ToolResult::error(format!("Serialization error: {}", e)),
+        }
     }
 }
 
@@ -317,6 +323,9 @@ impl Tool for CheckSecurityTool {
             total_supply: token.supply.as_ref().and_then(|s| s.parse::<f64>().ok()),
         };
 
-        ToolResult::success(serde_json::to_value(security_data).unwrap())
+        match serde_json::to_value(security_data) {
+            Ok(v) => ToolResult::success(v),
+            Err(e) => ToolResult::error(format!("Serialization error: {}", e)),
+        }
     }
 }

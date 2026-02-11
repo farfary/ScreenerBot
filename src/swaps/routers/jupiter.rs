@@ -297,7 +297,13 @@ impl SwapRouter for JupiterRouter {
         let price_impact = quote_response
             .price_impact_pct
             .parse::<f64>()
-            .unwrap_or(0.0);
+            .unwrap_or_else(|_| {
+                logger::warning(
+                    LogTag::Swap,
+                    &format!("Jupiter: Failed to parse price_impact_pct '{}', defaulting to 0.0", quote_response.price_impact_pct),
+                );
+                0.0
+            });
 
         let route_plan = Self::build_route_plan(&quote_response.route_plan);
 

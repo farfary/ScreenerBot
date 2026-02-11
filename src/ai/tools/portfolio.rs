@@ -179,7 +179,10 @@ impl Tool for GetPositionTool {
             total_fees_sol: Some(total_fees),
         };
 
-        ToolResult::success(serde_json::to_value(details).unwrap())
+        match serde_json::to_value(details) {
+            Ok(v) => ToolResult::success(v),
+            Err(e) => ToolResult::error(format!("Serialization error: {}", e)),
+        }
     }
 }
 
@@ -227,7 +230,10 @@ impl Tool for GetBalanceTool {
             wallet_address,
         };
 
-        ToolResult::success(serde_json::to_value(info).unwrap())
+        match serde_json::to_value(info) {
+            Ok(v) => ToolResult::success(v),
+            Err(e) => ToolResult::error(format!("Serialization error: {}", e)),
+        }
     }
 }
 
@@ -329,6 +335,9 @@ impl Tool for GetPnLTool {
             open_positions: open_positions.len(),
         };
 
-        ToolResult::success(serde_json::to_value(pnl_stats).unwrap())
+        match serde_json::to_value(pnl_stats) {
+            Ok(v) => ToolResult::success(v),
+            Err(e) => ToolResult::error(format!("Serialization error: {}", e)),
+        }
     }
 }

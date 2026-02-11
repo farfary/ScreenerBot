@@ -134,7 +134,10 @@ impl Tool for BuyTokenTool {
         };
 
         if response.success {
-            ToolResult::success(serde_json::to_value(response).unwrap())
+            match serde_json::to_value(response) {
+                Ok(v) => ToolResult::success(v),
+                Err(e) => ToolResult::error(format!("Serialization error: {}", e)),
+            }
         } else {
             ToolResult::error(response.message)
         }
@@ -239,7 +242,10 @@ impl Tool for SellTokenTool {
         };
 
         if response.success {
-            ToolResult::success(serde_json::to_value(response).unwrap())
+            match serde_json::to_value(response) {
+                Ok(v) => ToolResult::success(v),
+                Err(e) => ToolResult::error(format!("Serialization error: {}", e)),
+            }
         } else {
             ToolResult::error(response.message)
         }
@@ -325,7 +331,10 @@ impl Tool for ClosePositionTool {
         };
 
         if response.success {
-            ToolResult::success(serde_json::to_value(response).unwrap())
+            match serde_json::to_value(response) {
+                Ok(v) => ToolResult::success(v),
+                Err(e) => ToolResult::error(format!("Serialization error: {}", e)),
+            }
         } else {
             ToolResult::error(response.message)
         }
