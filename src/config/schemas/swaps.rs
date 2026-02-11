@@ -85,13 +85,6 @@ config_struct! {
             category: "Routing",
         })]
         default_swap_mode: String = "ExactIn".to_string(),
-        #[metadata(field_metadata! {
-            label: "API Key",
-            hint: "Jupiter API key from portal.jup.ag (free tier: 600 req/min)",
-            impact: "medium",
-            category: "API",
-        })]
-        api_key: String = String::new(),
     }
 }
 
