@@ -3120,7 +3120,7 @@
 
 .tool-call-status.denied,
 .tool-call-status.failed {
-  background: var(--error-alpha-20);
+  background: var(--danger-alpha-20);
   color: var(--error);
 }
 

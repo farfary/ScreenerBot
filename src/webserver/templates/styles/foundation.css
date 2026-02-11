@@ -128,6 +128,16 @@
   --danger-alpha-10: rgb(239, 68, 68, 0.1);
   --danger-alpha-20: rgb(239, 68, 68, 0.2);
   --danger-alpha-30: rgb(239, 68, 68, 0.3);
+  --primary-alpha-15: rgb(21, 101, 192, 0.15);
+  --primary-alpha-40: rgb(21, 101, 192, 0.4);
+  --success-alpha-15: rgb(16, 185, 129, 0.15);
+  --success-alpha-40: rgb(16, 185, 129, 0.4);
+  --warning-alpha-15: rgb(245, 158, 11, 0.15);
+  --danger-alpha-15: rgb(239, 68, 68, 0.15);
+  --danger-alpha-40: rgb(239, 68, 68, 0.4);
+  --info-color: #3b82f6;
+  --info-alpha-10: rgb(59, 130, 246, 0.1);
+  --info-alpha-15: rgb(59, 130, 246, 0.15);
 
   /* Solana Brand Colors */
   --solana-purple: #9945ff;

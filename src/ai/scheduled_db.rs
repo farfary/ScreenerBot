@@ -514,7 +514,12 @@ pub fn get_due_tasks(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<Schedul
         .map_err(|e| format!("Failed to get connection: {}", e))?;
     let now = chrono::Utc::now().to_rfc3339();
 
-    let mut stmt = conn
+    // Use a transaction to atomically select and mark tasks as picked up
+    let tx = conn
+        .unchecked_transaction()
+        .map_err(|e| format!("Failed to start transaction: {}", e))?;
+
+    let mut stmt = tx
         .prepare(
             "SELECT id, name, instruction, instruction_ids, schedule_type, schedule_value,
                     tool_permissions, priority, notify_telegram, notify_on_success, notify_on_failure,
@@ -554,6 +559,22 @@ pub fn get_due_tasks(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<Schedul
         .map_err(|e| format!("Failed to query due tasks: {}", e))?
         .collect::<Result<Vec<_>, _>>()
         .map_err(|e| format!("Failed to collect due tasks: {}", e))?;
+
+    // Mark picked-up tasks so another cycle won't grab them
+    let task_ids: Vec<i64> = tasks.iter().map(|t| t.id).collect();
+    for task_id in &task_ids {
+        tx.execute(
+            "UPDATE ai_scheduled_tasks SET next_run_at = NULL WHERE id = ?1",
+            params![task_id],
+        )
+        .map_err(|e| format!("Failed to mark task as picked: {}", e))?;
+    }
+
+    // Need to drop the statement before committing
+    drop(stmt);
+
+    tx.commit()
+        .map_err(|e| format!("Failed to commit transaction: {}", e))?;
 
     Ok(tasks)
 }
@@ -763,6 +784,9 @@ pub fn list_runs_for_task(
         .get()
         .map_err(|e| format!("Failed to get connection: {}", e))?;
 
+    // Clamp limit to reasonable bounds
+    let limit = limit.min(100).max(1);
+
     let mut stmt = conn
         .prepare(
             "SELECT id, task_id, status, started_at, completed_at, duration_ms,
@@ -807,6 +831,9 @@ pub fn list_recent_runs(
     let conn = pool
         .get()
         .map_err(|e| format!("Failed to get connection: {}", e))?;
+
+    // Clamp limit to reasonable bounds
+    let limit = limit.min(100).max(1);
 
     let mut stmt = conn
         .prepare(

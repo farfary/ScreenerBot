@@ -440,7 +440,7 @@ Sizes from version 0.1.110 builds (all platforms, both architectures):
 
 ### Build Artifact Directory
 
-During compilation, the `target/` directory can grow to **1-2 GB** due to intermediate build artifacts, cached dependencies, and incremental compilation data. This is normal for Rust projects with many dependencies.
+During compilation, the `target/` directory can grow to **25 GB or more** due to intermediate build artifacts, cached dependencies, incremental compilation data, and multiple build profiles (debug + release). This is normal for large Rust projects with many dependencies like the Solana SDK.
 
 ```bash
 # Check target directory size

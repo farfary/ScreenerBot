@@ -99,11 +99,10 @@ async fn scheduler_worker(
     tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
 
     loop {
-        let (enabled, interval_secs, _max_concurrent, default_timeout) = with_config(|cfg| {
+        let (enabled, interval_secs, default_timeout) = with_config(|cfg| {
             (
                 cfg.ai.enabled && cfg.ai.scheduled_tasks_enabled,
                 cfg.ai.scheduled_tasks_check_interval_seconds,
-                cfg.ai.scheduled_tasks_max_concurrent,
                 cfg.ai.scheduled_tasks_default_timeout_seconds,
             )
         });
@@ -169,6 +168,13 @@ async fn scheduler_worker(
                 // Continue loop
             }
         }
+    }
+}
+
+fn safe_truncate(s: &str, max_chars: usize) -> &str {
+    match s.char_indices().nth(max_chars) {
+        Some((idx, _)) => &s[..idx],
+        None => s,
     }
 }
 
@@ -250,11 +256,7 @@ async fn execute_scheduled_task(
             }
 
             // Record successful task completion event
-            let preview = if response.content.len() > 200 {
-                &response.content[..200]
-            } else {
-                &response.content
-            };
+            let preview = safe_truncate(&response.content, 200);
             record_scheduled_task_event(
                 &format!("Task '{}' completed", task.name),
                 preview,
@@ -267,7 +269,7 @@ async fn execute_scheduled_task(
             let error_msg = format!("{}", e);
 
             // Record failed run
-            let _ = scheduled_db::record_run_complete(
+            if let Err(e) = scheduled_db::record_run_complete(
                 pool,
                 run_id,
                 "failed",
@@ -278,10 +280,20 @@ async fn execute_scheduled_task(
                 None,
                 Some(&error_msg),
                 duration_ms,
-            );
+            ) {
+                logger::warning(
+                    LogTag::System,
+                    &format!("Failed to record run completion: {}", e),
+                );
+            }
 
             // Update task counters
-            let _ = scheduled_db::update_task_after_run(pool, task.id, false);
+            if let Err(e) = scheduled_db::update_task_after_run(pool, task.id, false) {
+                logger::warning(
+                    LogTag::System,
+                    &format!("Failed to update task after run: {}", e),
+                );
+            }
 
             // Send Telegram notification if configured
             if task.notify_telegram && task.notify_on_failure {
@@ -301,7 +313,7 @@ async fn execute_scheduled_task(
             // Timeout
             let error_msg = format!("Task timed out after {}s", timeout_secs);
 
-            let _ = scheduled_db::record_run_complete(
+            if let Err(e) = scheduled_db::record_run_complete(
                 pool,
                 run_id,
                 "timeout",
@@ -312,9 +324,19 @@ async fn execute_scheduled_task(
                 None,
                 Some(&error_msg),
                 duration_ms,
-            );
+            ) {
+                logger::warning(
+                    LogTag::System,
+                    &format!("Failed to record run completion: {}", e),
+                );
+            }
 
-            let _ = scheduled_db::update_task_after_run(pool, task.id, false);
+            if let Err(e) = scheduled_db::update_task_after_run(pool, task.id, false) {
+                logger::warning(
+                    LogTag::System,
+                    &format!("Failed to update task after run: {}", e),
+                );
+            }
 
             if task.notify_telegram && task.notify_on_failure {
                 send_task_notification(task, false, "", Some(&error_msg)).await;
@@ -359,7 +381,7 @@ async fn send_task_notification(
 
     // Truncate response for Telegram (max ~4000 chars)
     let summary = if response.len() > 500 {
-        format!("{}...", &response[..500])
+        format!("{}...", safe_truncate(response, 500))
     } else {
         response.to_string()
     };

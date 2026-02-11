@@ -885,6 +885,26 @@ impl ChatEngine {
 
             let definition = tool.definition();
 
+            // In headless read-only mode, explicitly deny known trading tools regardless of confirmation flag
+            if headless && matches!(tool_mode, ToolMode::ReadOnly) {
+                let trading_tools = [
+                    "buy_token",
+                    "sell_token",
+                    "close_position",
+                    "update_config",
+                    "force_stop",
+                ];
+                if trading_tools.contains(&tool_call.name.as_str()) {
+                    results.push(ToolCallInfo {
+                        tool_name: tool_call.name.clone(),
+                        input: tool_call.arguments.clone(),
+                        output: Some(serde_json::json!({"error": "This tool is not allowed in read-only automation mode"})),
+                        status: ToolCallStatus::Denied,
+                    });
+                    continue;
+                }
+            }
+
             // Check if confirmation is required
             if definition.requires_confirmation {
                 if headless {

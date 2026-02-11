@@ -2534,6 +2534,26 @@ async fn create_automation_task(Json(req): Json<CreateAutomationTaskRequest>) ->
         }
     };
 
+    // Validate name is not empty
+    if req.name.trim().is_empty() {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "INVALID_NAME",
+            "Task name cannot be empty",
+            None,
+        );
+    }
+
+    // Validate instruction is not empty
+    if req.instruction.trim().is_empty() {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "INVALID_INSTRUCTION",
+            "Task instruction cannot be empty",
+            None,
+        );
+    }
+
     // Validate schedule type
     if !["interval", "daily", "weekly"].contains(&req.schedule_type.as_str()) {
         return error_response(
@@ -2779,17 +2799,24 @@ async fn run_automation_task(Path(id): Path<i64>) -> Response {
     tokio::spawn(async move {
         let pool = match crate::ai::chat_db::get_chat_pool() {
             Some(p) => p,
-            None => return,
+            None => {
+                crate::logger::warning(
+                    crate::logger::LogTag::System,
+                    "Failed to get DB pool for manual task execution",
+                );
+                return;
+            }
         };
         let timeout = if task.timeout_seconds > 0 {
             task.timeout_seconds as u64
         } else {
             120
         };
-        // Use the service's execute function
-        let _ = crate::services::implementations::scheduled_ai_tasks_service::execute_scheduled_task_public(
+        if let Err(e) = crate::services::implementations::scheduled_ai_tasks_service::execute_scheduled_task_public(
             &pool, &task, timeout
-        ).await;
+        ).await {
+            crate::logger::warning(crate::logger::LogTag::System, &format!("Manual task execution failed for '{}': {}", task.name, e));
+        }
     });
 
     success_response(serde_json::json!({ "triggered": true, "task_id": id }))

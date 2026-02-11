@@ -3217,7 +3217,7 @@ function createLifecycle() {
           <div class="modal-body">
             <div class="run-detail-grid">
               <div class="run-detail-item"><span class="run-detail-label">Task</span><span class="run-detail-value">${Utils.escapeHtml(taskName)}</span></div>
-              <div class="run-detail-item"><span class="run-detail-label">Status</span><span class="run-detail-value status-${run.status}">${run.status}</span></div>
+              <div class="run-detail-item"><span class="run-detail-label">Status</span><span class="run-detail-value status-${run.status}">${Utils.escapeHtml(run.status)}</span></div>
               <div class="run-detail-item"><span class="run-detail-label">Started</span><span class="run-detail-value">${run.started_at ? new Date(run.started_at).toLocaleString() : "—"}</span></div>
               <div class="run-detail-item"><span class="run-detail-label">Duration</span><span class="run-detail-value">${run.duration_ms ? (run.duration_ms / 1000).toFixed(1) + "s" : "—"}</span></div>
               ${run.provider ? `<div class="run-detail-item"><span class="run-detail-label">Provider</span><span class="run-detail-value">${run.provider}</span></div>` : ""}
@@ -3318,7 +3318,7 @@ function createLifecycle() {
                     <div class="automation-run-item ${statusClass}" onclick="window.aiPage.viewAutomationRun(${run.id}); this.closest('.modal-overlay').remove();">
                       <i class="${statusIcon} run-status-icon"></i>
                       <div class="run-info">
-                        <span class="run-task-name">${run.status}</span>
+                        <span class="run-task-name">${Utils.escapeHtml(run.status)}</span>
                         <span class="run-time">${time}</span>
                       </div>
                       <span class="run-duration">${duration}</span>
