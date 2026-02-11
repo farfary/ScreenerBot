@@ -19,9 +19,14 @@ use std::time::Instant;
 /// Jupiter API base URL (NEW - migrated from lite-api.jup.ag)
 const JUPITER_API_BASE: &str = "https://api.jup.ag";
 
-/// Jupiter API key for rate limiting and referral program
-/// HARDCODED - not user-configurable (this is our revenue source)
-const JUPITER_API_KEY: &str = "YOUR_JUPITER_API_KEY";
+/// Default API key used when no custom key is configured
+const DEFAULT_JUPITER_API_KEY: &str = "YOUR_JUPITER_API_KEY";
+
+/// Get the Jupiter API key (from config or default)
+fn get_api_key() -> String {
+    let key = with_config(|cfg| cfg.swaps.jupiter.api_key.clone());
+    if key.is_empty() { DEFAULT_JUPITER_API_KEY.to_string() } else { key }
+}
 
 /// HARDCODED REFERRAL FEE: 0.5% (50 basis points)
 /// This fee is MANDATORY and CANNOT be changed by users
@@ -243,7 +248,7 @@ impl SwapRouter for JupiterRouter {
         let response = self
             .client
             .get(&url)
-            .header("x-api-key", JUPITER_API_KEY)
+            .header("x-api-key", get_api_key())
             .query(&quote_req)
             .send()
             .await
@@ -376,7 +381,7 @@ impl SwapRouter for JupiterRouter {
         let response = self
             .client
             .post(&url)
-            .header("x-api-key", JUPITER_API_KEY)
+            .header("x-api-key", get_api_key())
             .header("Content-Type", "application/json")
             .json(&swap_req)
             .send()
