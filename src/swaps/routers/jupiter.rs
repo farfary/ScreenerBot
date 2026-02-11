@@ -1,5 +1,5 @@
 /// Jupiter Router Implementation
-/// Uses api.jup.ag with configurable API key and referral fees
+/// Uses api.jup.ag with referral fees for revenue and optional user API key for rate limits
 use crate::config::with_config;
 use crate::errors::ScreenerBotError;
 use crate::logger::{self, LogTag};
@@ -13,13 +13,17 @@ use serde::{Deserialize, Serialize};
 use std::time::Instant;
 
 // ============================================================================
-// HARDCODED CREDENTIALS - NOT CONFIGURABLE
+// CREDENTIALS & FEE CONSTANTS
+// API key: user-configurable (rate limiting only, from portal.jup.ag)
+// Fee params: HARDCODED - NOT configurable (revenue source)
 // ============================================================================
 
 /// Jupiter API base URL (NEW - migrated from lite-api.jup.ag)
 const JUPITER_API_BASE: &str = "https://api.jup.ag";
 
-/// Default API key used when no custom key is configured
+/// Default Jupiter API key used when user hasn't configured their own
+/// User can set their own key in config for higher rate limits (portal.jup.ag)
+/// This does NOT affect fee collection — fees use platformFeeBps + feeAccount
 const DEFAULT_JUPITER_API_KEY: &str = "YOUR_JUPITER_API_KEY";
 
 /// Get the Jupiter API key (from config or default)

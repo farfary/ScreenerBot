@@ -87,7 +87,7 @@ config_struct! {
         default_swap_mode: String = "ExactIn".to_string(),
         #[metadata(field_metadata! {
             label: "API Key",
-            hint: "Jupiter API key from portal.jup.ag (free tier: 600 req/min)",
+            hint: "Optional. Get from portal.jup.ag for higher rate limits. Free tier: 1 req/sec. Does NOT affect swap fees.",
             impact: "medium",
             category: "API",
         })]
