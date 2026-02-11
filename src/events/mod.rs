@@ -50,9 +50,9 @@ use db::EventsDatabase;
 pub use maintenance::{
     get_events_summary, record_api_event, record_connectivity_event, record_filtering_event,
     record_ohlcv_event, record_pool_event, record_position_event, record_position_event_flexible,
-    record_rpc_event, record_security_event, record_swap_event, record_system_event,
-    record_token_event, record_trader_event, record_transaction_event, record_wallet_event,
-    search_events, start_maintenance_task,
+    record_rpc_event, record_scheduled_task_event, record_security_event, record_swap_event,
+    record_system_event, record_token_event, record_trader_event, record_transaction_event,
+    record_wallet_event, search_events, start_maintenance_task,
 };
 use once_cell::sync::{Lazy, OnceCell};
 use std::collections::VecDeque;

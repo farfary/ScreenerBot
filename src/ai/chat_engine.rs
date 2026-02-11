@@ -78,6 +78,12 @@ pub struct ChatRequest {
     pub session_id: i64,
     pub message: String,
     pub context: Option<ChatContext>,
+    /// When true, auto-approve tool calls (for scheduled tasks)
+    #[serde(default)]
+    pub headless: bool,
+    /// Tool permission mode for headless execution
+    #[serde(default)]
+    pub tool_mode: ToolMode,
 }
 
 /// Optional context for chat
@@ -113,6 +119,16 @@ pub enum ToolCallStatus {
     PendingConfirmation,
     Denied,
     Failed,
+}
+
+/// Tool execution mode for headless/scheduled runs
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub enum ToolMode {
+    /// Only allow read-only tools (analysis, portfolio, system info)
+    #[default]
+    ReadOnly,
+    /// Allow all tools including trading (auto-approve confirmations)
+    Full,
 }
 
 /// Pending confirmation for a tool call
@@ -301,7 +317,14 @@ impl ChatEngine {
 
             // Execute tools
             let (results, pending) = self
-                .execute_tools(tool_calls, request.session_id, user_message_id, &pool)
+                .execute_tools(
+                    tool_calls,
+                    request.session_id,
+                    user_message_id,
+                    &pool,
+                    request.headless,
+                    &request.tool_mode,
+                )
                 .await;
 
             // If there are pending confirmations, return early
@@ -682,7 +705,9 @@ impl ChatEngine {
         .await
         {
             Ok(result) => result.map_err(|e| AiError::LlmError(format!("LLM call failed: {}", e))),
-            Err(_) => Err(AiError::LlmError("LLM call timed out after 60 seconds".to_string())),
+            Err(_) => Err(AiError::LlmError(
+                "LLM call timed out after 60 seconds".to_string(),
+            )),
         }
     }
 
@@ -837,6 +862,8 @@ impl ChatEngine {
         session_id: i64,
         message_id: i64,
         pool: &Pool<SqliteConnectionManager>,
+        headless: bool,
+        tool_mode: &ToolMode,
     ) -> (Vec<ToolCallInfo>, Vec<PendingConfirmation>) {
         let mut results = Vec::new();
         let mut pending_confirmations = Vec::new();
@@ -860,29 +887,48 @@ impl ChatEngine {
 
             // Check if confirmation is required
             if definition.requires_confirmation {
-                // Create pending confirmation for THIS tool only
-                let single_tool_call = vec![tool_call.clone()];
-                let confirmation_id = self
-                    .confirmation_manager
-                    .create_confirmation(session_id, message_id, single_tool_call)
-                    .await;
+                if headless {
+                    // In headless mode, check tool_mode
+                    match tool_mode {
+                        ToolMode::ReadOnly => {
+                            // Skip trading tools in read-only mode
+                            results.push(ToolCallInfo {
+                                tool_name: tool_call.name.clone(),
+                                input: tool_call.arguments.clone(),
+                                output: Some(serde_json::json!({"error": "Trading tools are not allowed in scheduled task read-only mode"})),
+                                status: ToolCallStatus::Denied,
+                            });
+                            continue;
+                        }
+                        ToolMode::Full => {
+                            // Auto-approve in full mode - execute directly
+                        }
+                    }
+                } else {
+                    // Normal mode - create pending confirmation
+                    let single_tool_call = vec![tool_call.clone()];
+                    let confirmation_id = self
+                        .confirmation_manager
+                        .create_confirmation(session_id, message_id, single_tool_call)
+                        .await;
 
-                pending_confirmations.push(PendingConfirmation {
-                    confirmation_id,
-                    tool_name: tool_call.name.clone(),
-                    description: definition.description.clone(),
-                    input: tool_call.arguments.clone(),
-                });
+                    pending_confirmations.push(PendingConfirmation {
+                        confirmation_id,
+                        tool_name: tool_call.name.clone(),
+                        description: definition.description.clone(),
+                        input: tool_call.arguments.clone(),
+                    });
 
-                results.push(ToolCallInfo {
-                    tool_name: tool_call.name.clone(),
-                    input: tool_call.arguments.clone(),
-                    output: None,
-                    status: ToolCallStatus::PendingConfirmation,
-                });
+                    results.push(ToolCallInfo {
+                        tool_name: tool_call.name.clone(),
+                        input: tool_call.arguments.clone(),
+                        output: None,
+                        status: ToolCallStatus::PendingConfirmation,
+                    });
 
-                // Stop processing more tools - wait for confirmation
-                break;
+                    // Stop processing more tools - wait for confirmation
+                    break;
+                }
             }
 
             // Execute tool directly

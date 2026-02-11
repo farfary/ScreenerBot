@@ -40,6 +40,12 @@
           </button>
         </li>
         <li>
+          <button class="ai-nav-item" type="button" data-tab="automation">
+            <span class="nav-item-icon"><i class="icon-zap"></i></span>
+            <span class="ai-nav-label">Automation</span>
+          </button>
+        </li>
+        <li>
           <button class="ai-nav-item" type="button" data-tab="testing">
             <span class="nav-item-icon"><i class="icon-flask-conical"></i></span>
             <span class="ai-nav-label">Testing</span>
@@ -547,6 +553,68 @@
               <div class="templates-grid" id="templates-list">
                 <!-- Rendered by JavaScript -->
               </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Automation Panel -->
+        <div id="automation-panel" class="ai-panel-content">
+          <div class="ai-panel-header">
+            <div class="panel-header-content">
+              <h2 class="ai-panel-title">Automation</h2>
+              <p class="ai-panel-description">
+                Schedule AI tasks to run automatically on intervals or at specific times
+              </p>
+            </div>
+            <button type="button" class="btn btn-primary" id="new-automation-btn">
+              <i class="icon-plus"></i> New Task
+            </button>
+          </div>
+
+          <!-- Automation Stats Summary -->
+          <div class="automation-stats" id="automation-stats">
+            <div class="automation-stat-card">
+              <div class="stat-value" id="auto-stat-total">0</div>
+              <div class="stat-label">Total Tasks</div>
+            </div>
+            <div class="automation-stat-card">
+              <div class="stat-value" id="auto-stat-active">0</div>
+              <div class="stat-label">Active</div>
+            </div>
+            <div class="automation-stat-card">
+              <div class="stat-value" id="auto-stat-runs">0</div>
+              <div class="stat-label">Total Runs</div>
+            </div>
+            <div class="automation-stat-card">
+              <div class="stat-value" id="auto-stat-success-rate">—</div>
+              <div class="stat-label">Success Rate</div>
+            </div>
+          </div>
+
+          <!-- Task List -->
+          <div class="automation-list-container">
+            <div class="automation-list" id="automation-list">
+              <div class="empty-state" id="no-automation-tasks">
+                <i class="empty-icon icon-zap"></i>
+                <p class="empty-text">No scheduled tasks yet</p>
+                <p class="empty-state-subtitle">Create your first automated AI task to get started</p>
+                <button type="button" class="btn btn-secondary" id="empty-add-automation-btn">
+                  Create Your First Task
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Runs Timeline -->
+          <div class="automation-runs-section">
+            <div class="automation-runs-header">
+              <h3 class="automation-runs-title">
+                <i class="icon-clock"></i> Recent Runs
+              </h3>
+              <span class="automation-runs-count" id="auto-runs-count"></span>
+            </div>
+            <div class="automation-runs-list" id="automation-runs-list">
+              <!-- Rendered by JavaScript -->
             </div>
           </div>
         </div>

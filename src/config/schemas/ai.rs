@@ -270,6 +270,52 @@ config_struct! {
             category: "Event Triggers",
         })]
         event_triggers_enabled: bool = false,
+
+        // ── Automation (Scheduled Tasks) ─────────────────────────
+
+        /// Enable scheduled AI tasks
+        #[metadata(field_metadata! {
+            label: "Scheduled Tasks",
+            hint: "Enable automated AI tasks that run on a schedule",
+            category: "Automation",
+            impact: "moderate",
+        })]
+        scheduled_tasks_enabled: bool = false,
+
+        /// How often to check for due tasks (seconds)
+        #[metadata(field_metadata! {
+            label: "Check Interval",
+            hint: "How often the scheduler checks for tasks that need to run",
+            min: 10,
+            max: 300,
+            step: 5,
+            unit: "seconds",
+            category: "Automation",
+        })]
+        scheduled_tasks_check_interval_seconds: u64 = 30,
+
+        /// Maximum concurrent task executions
+        #[metadata(field_metadata! {
+            label: "Max Concurrent Tasks",
+            hint: "Maximum number of scheduled tasks that can run simultaneously",
+            min: 1,
+            max: 5,
+            step: 1,
+            category: "Automation",
+        })]
+        scheduled_tasks_max_concurrent: u32 = 1,
+
+        /// Default timeout for task execution (seconds)
+        #[metadata(field_metadata! {
+            label: "Default Timeout",
+            hint: "Maximum time a scheduled task can run before being stopped",
+            min: 30,
+            max: 600,
+            step: 30,
+            unit: "seconds",
+            category: "Automation",
+        })]
+        scheduled_tasks_default_timeout_seconds: u64 = 120,
     }
 }
 

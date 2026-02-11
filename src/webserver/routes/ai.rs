@@ -97,6 +97,23 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/Assistant/auth/poll", post(Assistant_auth_poll))
         .route("/Assistant/auth/logout", post(Assistant_auth_logout))
         .route("/Assistant/auth/test", post(Assistant_auth_test))
+        // Automation routes
+        .route(
+            "/automation",
+            get(list_automation_tasks).post(create_automation_task),
+        )
+        .route("/automation/runs", get(get_automation_recent_runs))
+        .route("/automation/stats", get(get_automation_stats_handler))
+        .route(
+            "/automation/:id",
+            get(get_automation_task)
+                .patch(update_automation_task)
+                .delete(delete_automation_task),
+        )
+        .route("/automation/:id/toggle", post(toggle_automation_task))
+        .route("/automation/:id/run", post(run_automation_task))
+        .route("/automation/:id/runs", get(get_automation_task_runs))
+        .route("/automation/runs/:id", get(get_automation_run_detail))
 }
 
 // ============================================================================
@@ -1535,6 +1552,8 @@ async fn send_chat_message(
         session_id: req.session_id,
         message: req.message,
         context: req.context,
+        headless: false,
+        tool_mode: Default::default(),
     };
 
     // Process message
@@ -2146,6 +2165,60 @@ pub struct AssistantAuthTestResponse {
     pub error: Option<String>,
 }
 
+// ─── Automation Types ────────────────────────────────────────────────
+
+#[derive(Deserialize)]
+pub struct CreateAutomationTaskRequest {
+    pub name: String,
+    pub instruction: String,
+    pub schedule_type: String,
+    pub schedule_value: String,
+    #[serde(default = "default_read_only")]
+    pub tool_permissions: String,
+    #[serde(default = "default_low")]
+    pub priority: String,
+    #[serde(default = "default_true")]
+    pub notify_telegram: bool,
+    #[serde(default = "default_true")]
+    pub notify_on_success: bool,
+    #[serde(default = "default_true")]
+    pub notify_on_failure: bool,
+    pub max_retries: Option<i32>,
+    pub timeout_seconds: Option<i64>,
+    pub instruction_ids: Option<String>,
+}
+
+fn default_read_only() -> String {
+    "read_only".to_string()
+}
+fn default_low() -> String {
+    "low".to_string()
+}
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Deserialize)]
+pub struct UpdateAutomationTaskRequest {
+    pub name: Option<String>,
+    pub instruction: Option<String>,
+    pub schedule_type: Option<String>,
+    pub schedule_value: Option<String>,
+    pub tool_permissions: Option<String>,
+    pub priority: Option<String>,
+    pub notify_telegram: Option<bool>,
+    pub notify_on_success: Option<bool>,
+    pub notify_on_failure: Option<bool>,
+    pub max_retries: Option<i32>,
+    pub timeout_seconds: Option<i64>,
+    pub instruction_ids: Option<String>,
+}
+
+#[derive(Deserialize)]
+pub struct ToggleTaskRequest {
+    pub enabled: bool,
+}
+
 // Route Handlers
 
 /// GET /api/ai/Assistant/auth/status - Check authentication status
@@ -2416,4 +2489,409 @@ fn get_model_for_provider(provider: Provider) -> String {
             }
         }
     })
+}
+
+// ============================================================================
+// AUTOMATION HANDLERS
+// ============================================================================
+
+/// GET /api/ai/automation — List all scheduled tasks
+async fn list_automation_tasks() -> Response {
+    let pool = match crate::ai::chat_db::get_chat_pool() {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                "Database not initialized",
+                None,
+            )
+        }
+    };
+
+    match crate::ai::scheduled_db::list_tasks(&pool) {
+        Ok(tasks) => success_response(serde_json::json!({ "tasks": tasks })),
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to list tasks: {}", e),
+            None,
+        ),
+    }
+}
+
+/// POST /api/ai/automation — Create a new scheduled task
+async fn create_automation_task(Json(req): Json<CreateAutomationTaskRequest>) -> Response {
+    let pool = match crate::ai::chat_db::get_chat_pool() {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                "Database not initialized",
+                None,
+            )
+        }
+    };
+
+    // Validate schedule type
+    if !["interval", "daily", "weekly"].contains(&req.schedule_type.as_str()) {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "INVALID_SCHEDULE_TYPE",
+            "Invalid schedule_type. Must be: interval, daily, or weekly",
+            None,
+        );
+    }
+
+    // Validate schedule value
+    if let Err(e) =
+        crate::ai::scheduled_db::calculate_next_run(&req.schedule_type, &req.schedule_value, None)
+    {
+        return error_response(
+            StatusCode::BAD_REQUEST,
+            "INVALID_SCHEDULE",
+            &format!("Invalid schedule_value: {}", e),
+            None,
+        );
+    }
+
+    match crate::ai::scheduled_db::create_task(
+        &pool,
+        &req.name,
+        &req.instruction,
+        &req.schedule_type,
+        &req.schedule_value,
+        Some(&req.tool_permissions),
+        Some(&req.priority),
+    ) {
+        Ok(id) => {
+            // Update optional fields
+            if req.instruction_ids.is_some()
+                || req.max_retries.is_some()
+                || req.timeout_seconds.is_some()
+                || !req.notify_telegram
+                || !req.notify_on_success
+                || !req.notify_on_failure
+            {
+                let _ = crate::ai::scheduled_db::update_task(
+                    &pool,
+                    id,
+                    None,
+                    None,
+                    req.instruction_ids.as_ref().map(|s| Some(s.as_str())),
+                    None,
+                    None,
+                    None,
+                    None,
+                    Some(req.notify_telegram),
+                    Some(req.notify_on_success),
+                    Some(req.notify_on_failure),
+                    req.max_retries,
+                    req.timeout_seconds,
+                );
+            }
+
+            match crate::ai::scheduled_db::get_task(&pool, id) {
+                Ok(Some(task)) => success_response(serde_json::json!({ "task": task })),
+                _ => success_response(serde_json::json!({ "id": id })),
+            }
+        }
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to create task: {}", e),
+            None,
+        ),
+    }
+}
+
+/// GET /api/ai/automation/:id — Get a specific task
+async fn get_automation_task(Path(id): Path<i64>) -> Response {
+    let pool = match crate::ai::chat_db::get_chat_pool() {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                "Database not initialized",
+                None,
+            )
+        }
+    };
+
+    match crate::ai::scheduled_db::get_task(&pool, id) {
+        Ok(Some(task)) => success_response(serde_json::json!({ "task": task })),
+        Ok(None) => error_response(StatusCode::NOT_FOUND, "NOT_FOUND", "Task not found", None),
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to get task: {}", e),
+            None,
+        ),
+    }
+}
+
+/// PATCH /api/ai/automation/:id — Update a task
+async fn update_automation_task(
+    Path(id): Path<i64>,
+    Json(req): Json<UpdateAutomationTaskRequest>,
+) -> Response {
+    let pool = match crate::ai::chat_db::get_chat_pool() {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                "Database not initialized",
+                None,
+            )
+        }
+    };
+
+    // Validate schedule if provided
+    if let (Some(st), Some(sv)) = (&req.schedule_type, &req.schedule_value) {
+        if let Err(e) = crate::ai::scheduled_db::calculate_next_run(st, sv, None) {
+            return error_response(
+                StatusCode::BAD_REQUEST,
+                "INVALID_SCHEDULE",
+                &format!("Invalid schedule: {}", e),
+                None,
+            );
+        }
+    }
+
+    match crate::ai::scheduled_db::update_task(
+        &pool,
+        id,
+        req.name.as_deref(),
+        req.instruction.as_deref(),
+        req.instruction_ids.as_ref().map(|s| Some(s.as_str())),
+        req.schedule_type.as_deref(),
+        req.schedule_value.as_deref(),
+        req.tool_permissions.as_deref(),
+        req.priority.as_deref(),
+        req.notify_telegram,
+        req.notify_on_success,
+        req.notify_on_failure,
+        req.max_retries,
+        req.timeout_seconds,
+    ) {
+        Ok(_) => match crate::ai::scheduled_db::get_task(&pool, id) {
+            Ok(Some(task)) => success_response(serde_json::json!({ "task": task })),
+            _ => success_response(serde_json::json!({ "updated": true })),
+        },
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to update task: {}", e),
+            None,
+        ),
+    }
+}
+
+/// DELETE /api/ai/automation/:id — Delete a task
+async fn delete_automation_task(Path(id): Path<i64>) -> Response {
+    let pool = match crate::ai::chat_db::get_chat_pool() {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                "Database not initialized",
+                None,
+            )
+        }
+    };
+
+    match crate::ai::scheduled_db::delete_task(&pool, id) {
+        Ok(_) => success_response(serde_json::json!({ "deleted": true })),
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to delete task: {}", e),
+            None,
+        ),
+    }
+}
+
+/// POST /api/ai/automation/:id/toggle — Enable/disable a task
+async fn toggle_automation_task(
+    Path(id): Path<i64>,
+    Json(req): Json<ToggleTaskRequest>,
+) -> Response {
+    let pool = match crate::ai::chat_db::get_chat_pool() {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                "Database not initialized",
+                None,
+            )
+        }
+    };
+
+    match crate::ai::scheduled_db::toggle_task(&pool, id, req.enabled) {
+        Ok(_) => match crate::ai::scheduled_db::get_task(&pool, id) {
+            Ok(Some(task)) => success_response(serde_json::json!({ "task": task })),
+            _ => success_response(serde_json::json!({ "toggled": true })),
+        },
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to toggle task: {}", e),
+            None,
+        ),
+    }
+}
+
+/// POST /api/ai/automation/:id/run — Trigger immediate execution
+async fn run_automation_task(Path(id): Path<i64>) -> Response {
+    let pool = match crate::ai::chat_db::get_chat_pool() {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                "Database not initialized",
+                None,
+            )
+        }
+    };
+
+    let task = match crate::ai::scheduled_db::get_task(&pool, id) {
+        Ok(Some(t)) => t,
+        Ok(None) => {
+            return error_response(StatusCode::NOT_FOUND, "NOT_FOUND", "Task not found", None)
+        }
+        Err(e) => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                &format!("Failed to get task: {}", e),
+                None,
+            )
+        }
+    };
+
+    // Execute in background
+    tokio::spawn(async move {
+        let pool = match crate::ai::chat_db::get_chat_pool() {
+            Some(p) => p,
+            None => return,
+        };
+        let timeout = if task.timeout_seconds > 0 {
+            task.timeout_seconds as u64
+        } else {
+            120
+        };
+        // Use the service's execute function
+        let _ = crate::services::implementations::scheduled_ai_tasks_service::execute_scheduled_task_public(
+            &pool, &task, timeout
+        ).await;
+    });
+
+    success_response(serde_json::json!({ "triggered": true, "task_id": id }))
+}
+
+/// GET /api/ai/automation/:id/runs — Get run history for a task
+async fn get_automation_task_runs(Path(id): Path<i64>) -> Response {
+    let pool = match crate::ai::chat_db::get_chat_pool() {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                "Database not initialized",
+                None,
+            )
+        }
+    };
+
+    match crate::ai::scheduled_db::list_runs_for_task(&pool, id, 50) {
+        Ok(runs) => success_response(serde_json::json!({ "runs": runs })),
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to list runs: {}", e),
+            None,
+        ),
+    }
+}
+
+/// GET /api/ai/automation/runs — Get all recent runs
+async fn get_automation_recent_runs() -> Response {
+    let pool = match crate::ai::chat_db::get_chat_pool() {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                "Database not initialized",
+                None,
+            )
+        }
+    };
+
+    match crate::ai::scheduled_db::list_recent_runs(&pool, 100) {
+        Ok(runs) => success_response(serde_json::json!({ "runs": runs })),
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to list recent runs: {}", e),
+            None,
+        ),
+    }
+}
+
+/// GET /api/ai/automation/runs/:id — Get a specific run
+async fn get_automation_run_detail(Path(run_id): Path<i64>) -> Response {
+    let pool = match crate::ai::chat_db::get_chat_pool() {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                "Database not initialized",
+                None,
+            )
+        }
+    };
+
+    match crate::ai::scheduled_db::get_run(&pool, run_id) {
+        Ok(Some(run)) => success_response(serde_json::json!({ "run": run })),
+        Ok(None) => error_response(StatusCode::NOT_FOUND, "NOT_FOUND", "Run not found", None),
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to get run: {}", e),
+            None,
+        ),
+    }
+}
+
+/// GET /api/ai/automation/stats — Aggregated automation statistics
+async fn get_automation_stats_handler() -> Response {
+    let pool = match crate::ai::chat_db::get_chat_pool() {
+        Some(p) => p,
+        None => {
+            return error_response(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "DB_ERROR",
+                "Database not initialized",
+                None,
+            )
+        }
+    };
+
+    match crate::ai::scheduled_db::get_automation_stats(&pool) {
+        Ok(stats) => success_response(serde_json::json!({ "stats": stats })),
+        Err(e) => error_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "DB_ERROR",
+            &format!("Failed to get stats: {}", e),
+            None,
+        ),
+    }
 }

@@ -55,6 +55,9 @@ pub enum EventCategory {
     /// Token filtering events (snapshot computation, token evaluation)
     Filtering,
 
+    /// Scheduled task execution events
+    ScheduledTask,
+
     /// Other events (with custom category name)
     Other(String),
 }
@@ -77,6 +80,7 @@ impl EventCategory {
             EventCategory::Security => "security".to_string(),
             EventCategory::Connectivity => "connectivity".to_string(),
             EventCategory::Filtering => "filtering".to_string(),
+            EventCategory::ScheduledTask => "scheduled_task".to_string(),
             EventCategory::Other(name) => name.clone(),
         }
     }
@@ -99,6 +103,7 @@ impl EventCategory {
             "security" => EventCategory::Security,
             "connectivity" => EventCategory::Connectivity,
             "filtering" => EventCategory::Filtering,
+            "scheduled_task" => EventCategory::ScheduledTask,
             other => EventCategory::Other(other.to_string()),
         }
     }

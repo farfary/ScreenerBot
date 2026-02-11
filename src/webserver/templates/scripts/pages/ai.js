@@ -29,6 +29,7 @@ function createLifecycle() {
   let providersPoller = null;
   let cachePoller = null;
   let chatPoller = null;
+  let automationPoller = null;
   let _chatWidget = null;
 
   // Event cleanup tracking
@@ -46,6 +47,9 @@ function createLifecycle() {
     historyTotal: 0,
     instructions: [], // Store instructions for drag-drop
     draggedItem: null, // Track dragged instruction
+    automationTasks: [],
+    automationRuns: [],
+    automationStats: null,
     AssistantAuth: {
       authenticated: false,
       hasGithubToken: false,
@@ -130,6 +134,7 @@ function createLifecycle() {
     if (providersPoller) providersPoller.stop();
     if (cachePoller) cachePoller.stop();
     if (chatPoller) chatPoller.stop();
+    if (automationPoller) automationPoller.stop();
 
     // Hide all panels
     const allPanels = $$(".ai-panel-content");
@@ -162,6 +167,11 @@ function createLifecycle() {
     } else if (tabId === "chat") {
       loadSessions();
       if (chatPoller) chatPoller.start();
+    } else if (tabId === "automation") {
+      loadAutomationTasks();
+      loadAutomationRuns();
+      loadAutomationStats();
+      if (automationPoller) automationPoller.start();
     }
   }
 
@@ -2751,6 +2761,596 @@ function createLifecycle() {
   }
 
   // ============================================================================
+  // Automation Tab
+  // ============================================================================
+
+  async function loadAutomationTasks() {
+    try {
+      const response = await fetch("/api/ai/automation");
+      if (!response.ok) throw new Error("Failed to load tasks");
+      const data = await response.json();
+      state.automationTasks = data.tasks || [];
+      renderAutomationList(state.automationTasks);
+    } catch (error) {
+      console.error("[AI] Error loading automation tasks:", error);
+    }
+  }
+
+  async function loadAutomationRuns() {
+    try {
+      const response = await fetch("/api/ai/automation/runs");
+      if (!response.ok) throw new Error("Failed to load runs");
+      const data = await response.json();
+      state.automationRuns = data.runs || [];
+      renderAutomationRuns(state.automationRuns);
+    } catch (error) {
+      console.error("[AI] Error loading automation runs:", error);
+    }
+  }
+
+  async function loadAutomationStats() {
+    try {
+      const response = await fetch("/api/ai/automation/stats");
+      if (!response.ok) throw new Error("Failed to load stats");
+      const data = await response.json();
+      state.automationStats = data.stats;
+      renderAutomationStats(data.stats);
+    } catch (error) {
+      console.error("[AI] Error loading automation stats:", error);
+    }
+  }
+
+  function renderAutomationStats(stats) {
+    if (!stats) return;
+    const el = (id, val) => { const e = $(`#${id}`); if (e) e.textContent = val; };
+    el("auto-stat-total", stats.total_tasks || 0);
+    el("auto-stat-active", stats.active_tasks || 0);
+    el("auto-stat-runs", stats.total_runs || 0);
+    el("auto-stat-success-rate", stats.total_runs > 0
+      ? Math.round((stats.successful_runs / stats.total_runs) * 100) + "%"
+      : "—");
+  }
+
+  function renderAutomationList(tasks) {
+    const container = $("#automation-list");
+    if (!container) return;
+
+    if (!tasks || tasks.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state" id="no-automation-tasks">
+          <i class="empty-icon icon-zap"></i>
+          <p class="empty-text">No scheduled tasks yet</p>
+          <p class="empty-state-subtitle">Create your first automated AI task to get started</p>
+          <button class="btn btn-secondary" onclick="window.aiPage.createAutomationTask()">Create Your First Task</button>
+        </div>
+      `;
+      return;
+    }
+
+    container.innerHTML = tasks.map(task => {
+      const statusClass = task.enabled ? "active" : "paused";
+      const statusLabel = task.enabled ? "Active" : "Paused";
+      const scheduleLabel = formatSchedule(task.schedule_type, task.schedule_value);
+      const lastRun = task.last_run_at ? Utils.formatTimeAgo(new Date(task.last_run_at)) : "Never";
+      const nextRun = task.next_run_at && task.enabled ? Utils.formatTimeAgo(new Date(task.next_run_at)) : "—";
+      const permLabel = task.tool_permissions === "full" ? "Full Access" : "Read Only";
+      const permClass = task.tool_permissions === "full" ? "full" : "readonly";
+
+      return `
+        <div class="automation-task-item" data-id="${task.id}">
+          <div class="automation-task-info">
+            <div class="automation-task-name">${Utils.escapeHtml(task.name)}</div>
+            <div class="automation-task-meta">
+              <span class="schedule-badge"><i class="icon-clock"></i> ${scheduleLabel}</span>
+              <span class="perm-badge ${permClass}">${permLabel}</span>
+              <span class="meta-sep">·</span>
+              <span class="meta-text">Last: ${lastRun}</span>
+              <span class="meta-sep">·</span>
+              <span class="meta-text">Next: ${nextRun}</span>
+            </div>
+          </div>
+          <div class="automation-task-actions">
+            <span class="status-indicator ${statusClass}">${statusLabel}</span>
+            <label class="toggle toggle-sm">
+              <input type="checkbox" ${task.enabled ? "checked" : ""}
+                     onchange="window.aiPage.toggleAutomationTask(${task.id}, this.checked)">
+              <span class="toggle-track"></span>
+            </label>
+            <button class="btn btn-sm btn-secondary" onclick="window.aiPage.runAutomationTask(${task.id})" title="Run Now">
+              <i class="icon-play"></i>
+            </button>
+            <button class="automation-menu-btn" onclick="window.aiPage.showAutomationMenu(event, ${task.id})">⋮</button>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function renderAutomationRuns(runs) {
+    const container = $("#automation-runs-list");
+    const countEl = $("#auto-runs-count");
+    if (!container) return;
+    if (countEl) countEl.textContent = runs.length > 0 ? `${runs.length} runs` : "";
+
+    if (!runs || runs.length === 0) {
+      container.innerHTML = '<div class="automation-runs-empty">No runs yet</div>';
+      return;
+    }
+
+    container.innerHTML = runs.slice(0, 20).map(run => {
+      const statusIcon = run.status === "success" ? "icon-check-circle" : run.status === "running" ? "icon-loader" : "icon-x-circle";
+      const statusClass = run.status === "success" ? "success" : run.status === "running" ? "running" : "failed";
+      const taskName = state.automationTasks.find(t => t.id === run.task_id)?.name || `Task #${run.task_id}`;
+      const time = run.started_at ? Utils.formatTimeAgo(new Date(run.started_at)) : "";
+      const duration = run.duration_ms ? (run.duration_ms / 1000).toFixed(1) + "s" : "";
+
+      return `
+        <div class="automation-run-item ${statusClass}" onclick="window.aiPage.viewAutomationRun(${run.id})">
+          <i class="${statusIcon} run-status-icon"></i>
+          <div class="run-info">
+            <span class="run-task-name">${Utils.escapeHtml(taskName)}</span>
+            <span class="run-time">${time}</span>
+          </div>
+          <span class="run-duration">${duration}</span>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function formatSchedule(type, value) {
+    if (type === "interval") {
+      const secs = parseInt(value);
+      if (secs >= 3600) return `Every ${Math.round(secs / 3600)}h`;
+      if (secs >= 60) return `Every ${Math.round(secs / 60)}m`;
+      return `Every ${secs}s`;
+    }
+    if (type === "daily") return `Daily at ${value} UTC`;
+    if (type === "weekly") {
+      const parts = value.split(":");
+      const days = parts[0];
+      const time = parts.slice(1).join(":");
+      return `${days} at ${time} UTC`;
+    }
+    return value;
+  }
+
+  async function createAutomationTask() {
+    const modal = document.createElement("div");
+    modal.className = "modal-overlay";
+    modal.innerHTML = `
+      <div class="modal automation-modal">
+        <div class="modal-header">
+          <h3><i class="icon-plus"></i> Create Automation Task</h3>
+          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Task Name</label>
+            <input type="text" id="auto-name" placeholder="e.g., Portfolio Monitor">
+          </div>
+          <div class="form-group">
+            <label>Instruction</label>
+            <textarea id="auto-instruction" rows="6" class="instruction-editor" placeholder="What should the AI do? e.g., Check open positions for reversal signs and report findings."></textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group form-group-half">
+              <label>Schedule Type</label>
+              <select id="auto-schedule-type" onchange="window.aiPage.updateScheduleHint()">
+                <option value="interval">Interval</option>
+                <option value="daily">Daily</option>
+                <option value="weekly">Weekly</option>
+              </select>
+            </div>
+            <div class="form-group form-group-half">
+              <label>Schedule Value</label>
+              <input type="text" id="auto-schedule-value" placeholder="300">
+              <small class="form-hint" id="schedule-hint">Interval in seconds (e.g., 300 = every 5 minutes)</small>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group form-group-half">
+              <label>Tool Permissions</label>
+              <select id="auto-tool-permissions">
+                <option value="read_only">Read Only (safe)</option>
+                <option value="full">Full Access (can trade)</option>
+              </select>
+            </div>
+            <div class="form-group form-group-half">
+              <label>Timeout (seconds)</label>
+              <input type="number" id="auto-timeout" value="120" min="30" max="600">
+            </div>
+          </div>
+          <div class="form-group">
+            <div class="checkbox-group">
+              <label class="checkbox-label">
+                <input type="checkbox" id="auto-notify-telegram" checked>
+                <span>Notify via Telegram</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="auto-notify-success" checked>
+                <span>Notify on success</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="checkbox" id="auto-notify-failure" checked>
+                <span>Notify on failure</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+          <button class="btn btn-primary" onclick="window.aiPage.saveNewAutomationTask()">
+            <i class="icon-plus"></i> Create Task
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+
+  function updateScheduleHint() {
+    const type = $("#auto-schedule-type")?.value;
+    const hint = $("#schedule-hint");
+    const input = $("#auto-schedule-value");
+    if (!hint || !input) return;
+
+    if (type === "interval") {
+      hint.textContent = "Interval in seconds (e.g., 300 = every 5 minutes)";
+      input.placeholder = "300";
+    } else if (type === "daily") {
+      hint.textContent = "Time in HH:MM UTC (e.g., 14:00)";
+      input.placeholder = "14:00";
+    } else if (type === "weekly") {
+      hint.textContent = "Days and time: mon,wed,fri:09:00";
+      input.placeholder = "mon,wed,fri:09:00";
+    }
+  }
+
+  async function saveNewAutomationTask() {
+    const name = $("#auto-name")?.value?.trim();
+    const instruction = $("#auto-instruction")?.value?.trim();
+    const scheduleType = $("#auto-schedule-type")?.value;
+    const scheduleValue = $("#auto-schedule-value")?.value?.trim();
+    const toolPermissions = $("#auto-tool-permissions")?.value;
+    const timeout = parseInt($("#auto-timeout")?.value) || 120;
+    const notifyTelegram = $("#auto-notify-telegram")?.checked ?? true;
+    const notifySuccess = $("#auto-notify-success")?.checked ?? true;
+    const notifyFailure = $("#auto-notify-failure")?.checked ?? true;
+
+    if (!name || !instruction || !scheduleValue) {
+      Utils.showToast("Please fill in all required fields", "error");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/ai/automation", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          instruction,
+          schedule_type: scheduleType,
+          schedule_value: scheduleValue,
+          tool_permissions: toolPermissions,
+          timeout_seconds: timeout,
+          notify_telegram: notifyTelegram,
+          notify_on_success: notifySuccess,
+          notify_on_failure: notifyFailure,
+        }),
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.error || "Failed to create task");
+      }
+
+      document.querySelector(".modal-overlay")?.remove();
+      Utils.showToast("Task created successfully", "success");
+      await loadAutomationTasks();
+      await loadAutomationStats();
+    } catch (error) {
+      Utils.showToast(error.message, "error");
+    }
+  }
+
+  async function toggleAutomationTask(id, enabled) {
+    try {
+      const response = await fetch(`/api/ai/automation/${id}/toggle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!response.ok) throw new Error("Failed to toggle task");
+      await loadAutomationTasks();
+      await loadAutomationStats();
+    } catch (error) {
+      Utils.showToast(error.message, "error");
+      await loadAutomationTasks();
+    }
+  }
+
+  async function runAutomationTask(id) {
+    try {
+      const response = await fetch(`/api/ai/automation/${id}/run`, {
+        method: "POST",
+      });
+      if (!response.ok) throw new Error("Failed to trigger task");
+      Utils.showToast("Task triggered", "success");
+      setTimeout(() => loadAutomationRuns(), 2000);
+    } catch (error) {
+      Utils.showToast(error.message, "error");
+    }
+  }
+
+  async function deleteAutomationTask(id) {
+    const confirmed = await ConfirmationDialog.show({
+      title: "Delete Task",
+      message: "Are you sure you want to delete this automation task? This action cannot be undone.",
+      confirmText: "Delete",
+      type: "danger",
+    });
+    if (!confirmed) return;
+
+    try {
+      const response = await fetch(`/api/ai/automation/${id}`, { method: "DELETE" });
+      if (!response.ok) throw new Error("Failed to delete task");
+      Utils.showToast("Task deleted", "success");
+      await loadAutomationTasks();
+      await loadAutomationStats();
+    } catch (error) {
+      Utils.showToast(error.message, "error");
+    }
+  }
+
+  async function editAutomationTask(id) {
+    const task = state.automationTasks.find(t => t.id === id);
+    if (!task) return;
+
+    const modal = document.createElement("div");
+    modal.className = "modal-overlay";
+    modal.innerHTML = `
+      <div class="modal automation-modal">
+        <div class="modal-header">
+          <h3><i class="icon-edit"></i> Edit Task</h3>
+          <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Task Name</label>
+            <input type="text" id="edit-auto-name" value="${Utils.escapeHtml(task.name)}">
+          </div>
+          <div class="form-group">
+            <label>Instruction</label>
+            <textarea id="edit-auto-instruction" rows="6" class="instruction-editor">${Utils.escapeHtml(task.instruction)}</textarea>
+          </div>
+          <div class="form-row">
+            <div class="form-group form-group-half">
+              <label>Schedule Type</label>
+              <select id="edit-auto-schedule-type">
+                <option value="interval" ${task.schedule_type === "interval" ? "selected" : ""}>Interval</option>
+                <option value="daily" ${task.schedule_type === "daily" ? "selected" : ""}>Daily</option>
+                <option value="weekly" ${task.schedule_type === "weekly" ? "selected" : ""}>Weekly</option>
+              </select>
+            </div>
+            <div class="form-group form-group-half">
+              <label>Schedule Value</label>
+              <input type="text" id="edit-auto-schedule-value" value="${Utils.escapeHtml(task.schedule_value)}">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group form-group-half">
+              <label>Tool Permissions</label>
+              <select id="edit-auto-tool-permissions">
+                <option value="read_only" ${task.tool_permissions !== "full" ? "selected" : ""}>Read Only</option>
+                <option value="full" ${task.tool_permissions === "full" ? "selected" : ""}>Full Access</option>
+              </select>
+            </div>
+            <div class="form-group form-group-half">
+              <label>Timeout (seconds)</label>
+              <input type="number" id="edit-auto-timeout" value="${task.timeout_seconds || 120}" min="30" max="600">
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+          <button class="btn btn-primary" onclick="window.aiPage.saveEditedAutomationTask(${id})">
+            <i class="icon-check"></i> Save Changes
+          </button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modal);
+  }
+
+  async function saveEditedAutomationTask(id) {
+    const name = $("#edit-auto-name")?.value?.trim();
+    const instruction = $("#edit-auto-instruction")?.value?.trim();
+    const scheduleType = $("#edit-auto-schedule-type")?.value;
+    const scheduleValue = $("#edit-auto-schedule-value")?.value?.trim();
+    const toolPermissions = $("#edit-auto-tool-permissions")?.value;
+    const timeout = parseInt($("#edit-auto-timeout")?.value) || 120;
+
+    if (!name || !instruction || !scheduleValue) {
+      Utils.showToast("Please fill in all required fields", "error");
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/ai/automation/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          instruction,
+          schedule_type: scheduleType,
+          schedule_value: scheduleValue,
+          tool_permissions: toolPermissions,
+          timeout_seconds: timeout,
+        }),
+      });
+      if (!response.ok) throw new Error("Failed to update task");
+      document.querySelector(".modal-overlay")?.remove();
+      Utils.showToast("Task updated", "success");
+      await loadAutomationTasks();
+    } catch (error) {
+      Utils.showToast(error.message, "error");
+    }
+  }
+
+  async function viewAutomationRun(runId) {
+    try {
+      const response = await fetch(`/api/ai/automation/runs/${runId}`);
+      if (!response.ok) throw new Error("Failed to load run details");
+      const data = await response.json();
+      const run = data.run;
+      const taskName = state.automationTasks.find(t => t.id === run.task_id)?.name || `Task #${run.task_id}`;
+      const toolCalls = run.tool_calls ? JSON.parse(run.tool_calls) : [];
+
+      const modal = document.createElement("div");
+      modal.className = "modal-overlay";
+      modal.innerHTML = `
+        <div class="modal automation-modal">
+          <div class="modal-header">
+            <h3><i class="icon-file-text"></i> Run Details</h3>
+            <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
+          </div>
+          <div class="modal-body">
+            <div class="run-detail-grid">
+              <div class="run-detail-item"><span class="run-detail-label">Task</span><span class="run-detail-value">${Utils.escapeHtml(taskName)}</span></div>
+              <div class="run-detail-item"><span class="run-detail-label">Status</span><span class="run-detail-value status-${run.status}">${run.status}</span></div>
+              <div class="run-detail-item"><span class="run-detail-label">Started</span><span class="run-detail-value">${run.started_at ? new Date(run.started_at).toLocaleString() : "—"}</span></div>
+              <div class="run-detail-item"><span class="run-detail-label">Duration</span><span class="run-detail-value">${run.duration_ms ? (run.duration_ms / 1000).toFixed(1) + "s" : "—"}</span></div>
+              ${run.provider ? `<div class="run-detail-item"><span class="run-detail-label">Provider</span><span class="run-detail-value">${run.provider}</span></div>` : ""}
+              ${run.tokens_used ? `<div class="run-detail-item"><span class="run-detail-label">Tokens</span><span class="run-detail-value">${run.tokens_used}</span></div>` : ""}
+            </div>
+            ${run.error_message ? `<div class="run-error-box"><i class="icon-alert-triangle"></i> ${Utils.escapeHtml(run.error_message)}</div>` : ""}
+            ${toolCalls.length > 0 ? `
+              <div class="run-tools-section">
+                <h4>Tool Calls (${toolCalls.length})</h4>
+                <div class="run-tools-list">
+                  ${toolCalls.map(tc => `
+                    <div class="run-tool-item">
+                      <span class="tool-name">${Utils.escapeHtml(tc.tool_name || tc.name || "unknown")}</span>
+                      <span class="tool-status ${tc.status === "Executed" ? "success" : "failed"}">${tc.status || "—"}</span>
+                    </div>
+                  `).join("")}
+                </div>
+              </div>
+            ` : ""}
+            ${run.ai_response ? `
+              <div class="run-response-section">
+                <h4>AI Response</h4>
+                <div class="run-response-content">${Utils.escapeHtml(run.ai_response)}</div>
+              </div>
+            ` : ""}
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Close</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    } catch (error) {
+      Utils.showToast(error.message, "error");
+    }
+  }
+
+  function showAutomationMenu(event, id) {
+    event.stopPropagation();
+    // Remove existing menus
+    document.querySelectorAll(".automation-context-menu").forEach(m => m.remove());
+
+    const btn = event.currentTarget;
+    const rect = btn.getBoundingClientRect();
+
+    const menu = document.createElement("div");
+    menu.className = "automation-context-menu";
+    menu.style.top = `${rect.bottom + 4}px`;
+    menu.style.left = `${rect.left - 120}px`;
+    menu.innerHTML = `
+      <button onclick="window.aiPage.editAutomationTask(${id}); this.closest('.automation-context-menu').remove();">
+        <i class="icon-edit"></i> Edit
+      </button>
+      <button onclick="window.aiPage.viewAutomationTaskRuns(${id}); this.closest('.automation-context-menu').remove();">
+        <i class="icon-clock"></i> View Runs
+      </button>
+      <hr>
+      <button class="danger" onclick="window.aiPage.deleteAutomationTask(${id}); this.closest('.automation-context-menu').remove();">
+        <i class="icon-trash"></i> Delete
+      </button>
+    `;
+    document.body.appendChild(menu);
+
+    const closeMenu = (e) => {
+      if (!menu.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener("click", closeMenu);
+      }
+    };
+    setTimeout(() => document.addEventListener("click", closeMenu), 10);
+  }
+
+  async function viewAutomationTaskRuns(id) {
+    try {
+      const response = await fetch(`/api/ai/automation/${id}/runs`);
+      if (!response.ok) throw new Error("Failed to load runs");
+      const data = await response.json();
+      const task = state.automationTasks.find(t => t.id === id);
+      const runs = data.runs || [];
+
+      const modal = document.createElement("div");
+      modal.className = "modal-overlay";
+      modal.innerHTML = `
+        <div class="modal automation-modal">
+          <div class="modal-header">
+            <h3><i class="icon-clock"></i> Run History — ${Utils.escapeHtml(task?.name || "Task")}</h3>
+            <button class="modal-close" onclick="this.closest('.modal-overlay').remove()"><i class="icon-x"></i></button>
+          </div>
+          <div class="modal-body">
+            ${runs.length === 0 ? '<div class="automation-runs-empty">No runs yet for this task</div>' :
+              `<div class="automation-runs-list modal-runs-list">
+                ${runs.map(run => {
+                  const statusIcon = run.status === "success" ? "icon-check-circle" : "icon-x-circle";
+                  const statusClass = run.status === "success" ? "success" : "failed";
+                  const time = run.started_at ? new Date(run.started_at).toLocaleString() : "";
+                  const duration = run.duration_ms ? (run.duration_ms / 1000).toFixed(1) + "s" : "";
+                  return `
+                    <div class="automation-run-item ${statusClass}" onclick="window.aiPage.viewAutomationRun(${run.id}); this.closest('.modal-overlay').remove();">
+                      <i class="${statusIcon} run-status-icon"></i>
+                      <div class="run-info">
+                        <span class="run-task-name">${run.status}</span>
+                        <span class="run-time">${time}</span>
+                      </div>
+                      <span class="run-duration">${duration}</span>
+                    </div>
+                  `;
+                }).join("")}
+              </div>`
+            }
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Close</button>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(modal);
+    } catch (error) {
+      Utils.showToast(error.message, "error");
+    }
+  }
+
+  function setupAutomationHandlers() {
+    const newBtn = $("#new-automation-btn");
+    if (newBtn) {
+      addTrackedListener(newBtn, "click", createAutomationTask);
+    }
+    const emptyBtn = $("#empty-add-automation-btn");
+    if (emptyBtn) {
+      addTrackedListener(emptyBtn, "click", createAutomationTask);
+    }
+  }
+
+  // ============================================================================
   // API Export for inline event handlers
   // ============================================================================
 
@@ -2779,6 +3379,17 @@ function createLifecycle() {
   api.summarizeSession = summarizeSession;
   api.generateSessionTitle = generateSessionTitle;
   api.cancelRequest = cancelRequest;
+  api.createAutomationTask = createAutomationTask;
+  api.saveNewAutomationTask = saveNewAutomationTask;
+  api.toggleAutomationTask = toggleAutomationTask;
+  api.runAutomationTask = runAutomationTask;
+  api.deleteAutomationTask = deleteAutomationTask;
+  api.editAutomationTask = editAutomationTask;
+  api.saveEditedAutomationTask = saveEditedAutomationTask;
+  api.viewAutomationRun = viewAutomationRun;
+  api.showAutomationMenu = showAutomationMenu;
+  api.viewAutomationTaskRuns = viewAutomationTaskRuns;
+  api.updateScheduleHint = updateScheduleHint;
 
   // ============================================================================
   // Lifecycle Hooks
@@ -2808,6 +3419,7 @@ function createLifecycle() {
       setupTestingHandlers();
       setupInstructionHandlers();
       setupChatHandlers();
+      setupAutomationHandlers();
 
       // Setup stats toggle
       const statsToggle = $("#stats-ai-toggle");
@@ -2869,6 +3481,19 @@ function createLifecycle() {
         )
       );
 
+      automationPoller = ctx.managePoller(
+        new Poller(
+          async () => {
+            if (state.currentTab === "automation") {
+              await loadAutomationTasks();
+              await loadAutomationRuns();
+              await loadAutomationStats();
+            }
+          },
+          { label: "Automation Tasks", intervalMs: 10000 }
+        )
+      );
+
       // Load initial data immediately and start appropriate poller
       if (state.currentTab === "stats") {
         await loadAiStatus();
@@ -2883,6 +3508,11 @@ function createLifecycle() {
       } else if (state.currentTab === "chat") {
         await loadSessions();
         chatPoller.start();
+      } else if (state.currentTab === "automation") {
+        await loadAutomationTasks();
+        await loadAutomationRuns();
+        await loadAutomationStats();
+        automationPoller.start();
       }
     },
 

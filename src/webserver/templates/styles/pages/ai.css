@@ -3748,3 +3748,520 @@
     font-size: 14px;
   }
 }
+
+/* ===== AUTOMATION TAB ===== */
+
+/* Automation Stats Cards */
+.automation-stats {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.automation-stat-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 14px 16px;
+  text-align: center;
+}
+
+.automation-stat-card .stat-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.automation-stat-card .stat-label {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+/* Automation List Container */
+.automation-list-container {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 20px;
+}
+
+.automation-list {
+  min-height: 100px;
+}
+
+/* Automation Task Item */
+.automation-task-item {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid rgb(128, 128, 128, 0.1);
+  transition: background 0.15s ease;
+  min-height: 48px;
+}
+
+.automation-task-item:last-child {
+  border-bottom: none;
+}
+
+.automation-task-item:hover {
+  background: var(--bg-hover);
+}
+
+.automation-task-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.automation-task-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  line-height: 1.3;
+}
+
+.automation-task-meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  line-height: 1.3;
+}
+
+.automation-task-meta .meta-sep {
+  opacity: 0.4;
+}
+
+.automation-task-meta .meta-text {
+  opacity: 0.8;
+}
+
+/* Schedule Badge */
+.schedule-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  background: var(--primary-alpha-10);
+  color: var(--primary);
+  border-radius: var(--radius-xs);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.schedule-badge i {
+  font-size: 10px;
+}
+
+/* Permission Badge */
+.perm-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.perm-badge.readonly {
+  background: var(--info-alpha-10);
+  color: var(--info);
+}
+
+.perm-badge.full {
+  background: var(--warning-alpha-10);
+  color: var(--warning);
+}
+
+/* Task Actions */
+.automation-task-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-inline-start: auto;
+  padding-inline-start: 12px;
+}
+
+/* Status Indicator */
+.status-indicator {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.status-indicator.active {
+  background: var(--success-alpha-15);
+  color: var(--success);
+}
+
+.status-indicator.paused {
+  background: var(--text-muted);
+  background: rgb(128, 128, 128, 0.1);
+  color: var(--text-secondary);
+}
+
+/* Automation Menu Button */
+.automation-menu-btn {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.automation-menu-btn:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+/* Context Menu */
+.automation-context-menu {
+  position: fixed;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: var(--shadow-floating-md);
+  padding: 4px;
+  z-index: var(--z-context-menu);
+  min-width: 150px;
+}
+
+.automation-context-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 13px;
+  border-radius: 4px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.automation-context-menu button:hover {
+  background: var(--bg-hover);
+}
+
+.automation-context-menu button.danger {
+  color: var(--danger);
+}
+
+.automation-context-menu button.danger:hover {
+  background: var(--danger-alpha-10);
+}
+
+.automation-context-menu hr {
+  border: none;
+  border-top: 1px solid var(--border-color);
+  margin: 4px 0;
+}
+
+.automation-context-menu button i {
+  font-size: 14px;
+  opacity: 0.7;
+}
+
+/* Recent Runs Section */
+.automation-runs-section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.automation-runs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.automation-runs-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+
+.automation-runs-title i {
+  font-size: 16px;
+  opacity: 0.6;
+}
+
+.automation-runs-count {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.automation-runs-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.automation-runs-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* Run Item */
+.automation-run-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgb(128, 128, 128, 0.06);
+  transition: background 0.15s ease;
+  cursor: pointer;
+  gap: 10px;
+}
+
+.automation-run-item:last-child {
+  border-bottom: none;
+}
+
+.automation-run-item:hover {
+  background: var(--bg-hover);
+}
+
+.run-status-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.automation-run-item.success .run-status-icon {
+  color: var(--success);
+}
+
+.automation-run-item.failed .run-status-icon {
+  color: var(--danger);
+}
+
+.automation-run-item.running .run-status-icon {
+  color: var(--warning);
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.run-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.run-task-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.run-time {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.run-duration {
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+/* Run Detail Modal */
+.run-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.run-detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.run-detail-label {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.run-detail-value {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+.run-detail-value.status-success { color: var(--success); }
+.run-detail-value.status-failed { color: var(--danger); }
+.run-detail-value.status-timeout { color: var(--warning); }
+.run-detail-value.status-running { color: var(--info); }
+
+.run-error-box {
+  background: var(--danger-alpha-10);
+  border: 1px solid var(--danger-alpha-20);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--danger);
+  font-size: 13px;
+  margin-bottom: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.run-error-box i {
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.run-tools-section,
+.run-response-section {
+  margin-bottom: 16px;
+}
+
+.run-tools-section h4,
+.run-response-section h4 {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.run-tools-list {
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.run-tool-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid rgb(128, 128, 128, 0.06);
+  font-size: 12px;
+}
+
+.run-tool-item:last-child {
+  border-bottom: none;
+}
+
+.tool-name {
+  font-family: var(--font-mono, monospace);
+  color: var(--text-primary);
+}
+
+.tool-status {
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+}
+
+.tool-status.success {
+  background: var(--success-alpha-15);
+  color: var(--success);
+}
+
+.tool-status.failed {
+  background: var(--danger-alpha-15);
+  color: var(--danger);
+}
+
+.run-response-content {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px;
+  font-size: 12px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  max-height: 200px;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* Automation Modal */
+.automation-modal {
+  width: 560px;
+  max-width: 90vw;
+}
+
+.modal-runs-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* Form row for side-by-side fields */
+.form-row {
+  display: flex;
+  gap: 12px;
+}
+
+.form-group-half {
+  flex: 1;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .automation-stats {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .automation-task-item {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .automation-task-actions {
+    padding-inline-start: 0;
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .run-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .form-row {
+    flex-direction: column;
+    gap: 0;
+  }
+}

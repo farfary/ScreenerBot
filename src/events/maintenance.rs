@@ -44,6 +44,7 @@ fn is_category_enabled(category: &EventCategory) -> bool {
         EventCategory::Security => c.events.record_security,
         EventCategory::Connectivity => c.events.record_connectivity,
         EventCategory::Filtering => c.events.record_filtering,
+        EventCategory::ScheduledTask => c.events.record_system, // Use system flag for scheduled tasks
         EventCategory::Other(_) => true, // Always allow custom categories when enabled
     })
 }
@@ -742,6 +743,37 @@ pub async fn record_api_event(api_name: &str, action: &str, severity: Severity, 
     );
 
     crate::events::record_safe(event).await;
+}
+
+// =============================================================================
+// SCHEDULED TASK EVENTS
+// =============================================================================
+
+/// Record a scheduled task event (execution, completion, failure)
+pub fn record_event(category: EventCategory, title: &str, description: &str, severity: Severity) {
+    let title = title.to_string();
+    let description = description.to_string();
+
+    tokio::spawn(async move {
+        if !is_category_enabled(&category) {
+            return;
+        }
+
+        let payload = json!({
+            "title": title,
+            "description": description,
+            "event_time": Utc::now().to_rfc3339()
+        });
+
+        let event = Event::new(category, Some(title), severity, None, None, payload);
+
+        crate::events::record_safe(event).await;
+    });
+}
+
+/// Record a scheduled task event
+pub fn record_scheduled_task_event(title: &str, description: &str, severity: Severity) {
+    record_event(EventCategory::ScheduledTask, title, description, severity);
 }
 
 // =============================================================================

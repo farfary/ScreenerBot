@@ -29,7 +29,11 @@ const DEFAULT_JUPITER_API_KEY: &str = "YOUR_JUPITER_API_KEY";
 /// Get the Jupiter API key (from config or default)
 fn get_api_key() -> String {
     let key = with_config(|cfg| cfg.swaps.jupiter.api_key.clone());
-    if key.is_empty() { DEFAULT_JUPITER_API_KEY.to_string() } else { key }
+    if key.is_empty() {
+        DEFAULT_JUPITER_API_KEY.to_string()
+    } else {
+        key
+    }
 }
 
 /// HARDCODED REFERRAL FEE: 0.5% (50 basis points)

@@ -317,9 +317,38 @@ Priority-ordered conditions:
 
 ---
 
+## AI Assistant
+
+Multi-provider LLM integration for intelligent analysis and automated tasks. All features disabled by default.
+
+### Providers
+
+Supports 10 providers: OpenAI, Anthropic, Groq, DeepSeek, Gemini, Ollama, Together AI, OpenRouter, Mistral, an LLM provider.
+
+### Features
+
+- **Token Filtering**: AI evaluates tokens during the filtering pipeline with configurable confidence thresholds
+- **Entry/Exit Analysis**: LLM-powered trade decision support with risk assessment
+- **Interactive Chat**: Tool-calling chat interface with portfolio, trading, and system tools
+- **Custom Instructions**: User-defined prompts injected into all AI evaluations
+- **Automation**: Scheduled AI tasks with interval/daily/weekly schedules, headless tool execution, Telegram notifications, and run history tracking
+
+### Automation
+
+Create scheduled tasks that run AI instructions automatically:
+
+- **Interval**: Run every N seconds (e.g., every 5 minutes)
+- **Daily**: Run at a specific time UTC (e.g., 14:00)
+- **Weekly**: Run on specific days at a time (e.g., mon,wed,fri:09:00)
+- Configurable tool permissions (read-only or full access)
+- Run history with tool call details and AI responses
+- Telegram notifications on completion or failure
+
+---
+
 ## Dashboard
 
-Web interface at `http://localhost:8080` with 12 pages:
+Web interface at `http://localhost:8080` with 13 pages:
 
 - **Home**: Overview, positions, system health
 - **Positions**: Open/closed with P&L tracking
@@ -328,6 +357,7 @@ Web interface at `http://localhost:8080` with 12 pages:
 - **Trader**: Trading controls and monitoring
 - **Transactions**: Real-time stream with classification
 - **Strategies**: Strategy builder
+- **Assistant**: AI chat, providers, instructions, automation, and testing
 - **Wallet**: Balance and holdings
 - **Events**: System event log
 - **Services**: Health and metrics
@@ -338,7 +368,7 @@ Web interface at `http://localhost:8080` with 12 pages:
 
 ## Configuration
 
-Managed through `data/config.toml` with hot-reload support. 16 config sections:
+Managed through `data/config.toml` with hot-reload support. 17 config sections:
 
 | Section          | Purpose                                                        |
 | ---------------- | -------------------------------------------------------------- |
@@ -358,6 +388,7 @@ Managed through `data/config.toml` with hot-reload support. 16 config sections:
 | `[connectivity]` | Endpoint health monitoring                                     |
 | `[sol_price]`    | SOL/USD price service                                          |
 | `[gui]`          | Desktop application settings                                   |
+| `[ai]`           | AI providers, filtering, trading analysis, chat, automation    |
 
 Access via `with_config(|cfg| cfg.trader.max_open_positions)`. Hot-reload with `reload_config()`.
 

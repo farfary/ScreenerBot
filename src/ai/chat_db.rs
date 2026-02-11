@@ -181,6 +181,15 @@ fn initialize_schema(conn: &rusqlite::Connection) -> Result<(), String> {
     )
     .map_err(|e| format!("Failed to create sessions index: {}", e))?;
 
+    // Add is_hidden column if not exists (for scheduled task sessions)
+    let _ = conn.execute(
+        "ALTER TABLE chat_sessions ADD COLUMN is_hidden INTEGER NOT NULL DEFAULT 0",
+        [],
+    );
+
+    // Initialize scheduled tasks tables
+    crate::ai::scheduled_db::initialize_scheduled_tables(conn)?;
+
     Ok(())
 }
 
@@ -205,6 +214,26 @@ pub fn create_session(pool: &Pool<SqliteConnectionManager>, title: &str) -> Resu
     Ok(id)
 }
 
+/// Create a hidden chat session (for scheduled task runs)
+pub fn create_hidden_session(
+    pool: &Pool<SqliteConnectionManager>,
+    title: &str,
+) -> Result<i64, String> {
+    let conn = pool
+        .get()
+        .map_err(|e| format!("Failed to get connection: {}", e))?;
+    let now = chrono::Utc::now().to_rfc3339();
+
+    conn.execute(
+        "INSERT INTO chat_sessions (title, is_hidden, created_at, updated_at) VALUES (?1, 1, ?2, ?3)",
+        params![title, &now, &now],
+    )
+    .map_err(|e| format!("Failed to insert hidden session: {}", e))?;
+
+    let id = conn.last_insert_rowid();
+    Ok(id)
+}
+
 /// Get all chat sessions ordered by most recent
 pub fn get_sessions(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<ChatSession>, String> {
     let conn = pool
@@ -217,6 +246,7 @@ pub fn get_sessions(pool: &Pool<SqliteConnectionManager>) -> Result<Vec<ChatSess
                     s.created_at, s.updated_at 
              FROM chat_sessions s 
              LEFT JOIN chat_messages m ON s.id = m.session_id 
+             WHERE s.is_hidden = 0
              GROUP BY s.id 
              ORDER BY s.updated_at DESC",
         )
