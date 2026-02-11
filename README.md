@@ -493,7 +493,7 @@ src/
 | 💬 **Telegram Group** | [t.me/screenerbotio_talk](https://t.me/screenerbotio_talk) |
 | 🆘 **Telegram Support** | [t.me/screenerbotio_support](https://t.me/screenerbotio_support) |
 | 𝕏 **X (Twitter)** | [x.com/screenerbotio](https://x.com/screenerbotio) |
-| 📦 **Docs & Installer** | [github.com/screenerbotio/docs](https://github.com/screenerbotio/docs) |
+| 📖 **Docs & Screenshots** | [github.com/screenerbotio/Docs](https://github.com/screenerbotio/Docs) |
 
 ---
 
