@@ -571,3 +571,10 @@ Contributions welcome:
   <img src="https://img.shields.io/badge/Powered%20by-Solana-9945FF?style=flat-square&logo=solana&logoColor=white" alt="Solana">
   <img src="https://img.shields.io/badge/Desktop-Electron-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron">
 </p>
+
+---
+
+## Author
+
+**Farhad Arghavan**  
+Email: farhad.argn@gmail.com
