@@ -34,6 +34,8 @@ mod crypto;
 mod database;
 mod manager;
 mod types;
+pub mod validation;
+pub mod balance_monitor;
 
 // Re-export types
 pub use types::{

@@ -25,6 +25,7 @@ pub mod geckoterminal;
 pub mod jupiter;
 pub mod llm;
 pub mod rugcheck;
+pub mod sol_price;
 
 // Re-exports for convenience
 pub use client::{HttpClient, RateLimiter};
