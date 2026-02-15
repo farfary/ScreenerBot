@@ -176,7 +176,6 @@
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
-  overflow: hidden;
 }
 
 .setup-form-container {
@@ -219,7 +218,6 @@
   gap: 1rem;
   flex: 1;
   min-height: 0;
-  overflow: hidden;
 }
 
 /* Header spans full width */
@@ -255,7 +253,6 @@
   flex-direction: column;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
-  overflow: hidden;
 }
 
 .setup-card::before {

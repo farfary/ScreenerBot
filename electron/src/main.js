@@ -6,6 +6,12 @@ const fs = require('fs');
 const os = require('os');
 
 // ============================================================================
+// EPIPE PROTECTION - Prevent crashes when stdout/stderr pipes break
+// ============================================================================
+process.stdout?.on('error', (err) => { if (err.code === 'EPIPE') return; });
+process.stderr?.on('error', (err) => { if (err.code === 'EPIPE') return; });
+
+// ============================================================================
 // SINGLE INSTANCE LOCK - Must be checked FIRST before any other initialization
 // ============================================================================
 const gotTheLock = app.requestSingleInstanceLock();
@@ -336,6 +342,9 @@ function startBackend() {
         RUST_BACKTRACE: '1'
       }
     });
+
+    backendProcess.stdout.on('error', (err) => { if (err.code === 'EPIPE') return; });
+    backendProcess.stderr.on('error', (err) => { if (err.code === 'EPIPE') return; });
 
     backendProcess.stdout.on('data', (data) => {
       const lines = data.toString().trim().split('\n');

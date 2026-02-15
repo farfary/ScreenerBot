@@ -1,10 +1,10 @@
 // Onboarding Flow Controller
-// Handles the 3-page introduction for first-time users
+// Handles the multi-page introduction for first-time users
 
 class OnboardingControllerClass {
   constructor() {
     this.currentSlide = 0;
-    this.totalSlides = 3;
+    this.totalSlides = 5;
     this.initialized = false;
   }
 
@@ -100,7 +100,7 @@ class OnboardingControllerClass {
     // Update theme
     const screen = document.getElementById("onboardingScreen");
     if (screen) {
-      const themes = ["blue", "purple", "green"];
+      const themes = ["blue", "purple", "green", "amber", "cyan"];
       screen.setAttribute("data-theme", themes[index] || "blue");
     }
 
@@ -109,6 +109,14 @@ class OnboardingControllerClass {
       slide.classList.remove("active", "prev");
       if (i === index) {
         slide.classList.add("active");
+        // Stagger feature card animations
+        const cards = slide.querySelectorAll(".slide-feature");
+        cards.forEach((card, ci) => {
+          card.style.animationDelay = `${0.1 + ci * 0.08}s`;
+          card.classList.remove("slide-feature-enter");
+          void card.offsetWidth; // force reflow
+          card.classList.add("slide-feature-enter");
+        });
       } else if (i < index) {
         slide.classList.add("prev");
       }

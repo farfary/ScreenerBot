@@ -34,6 +34,16 @@
   --accent-onboarding-rgb: 63, 185, 80;
 }
 
+.onboarding-screen[data-theme="amber"] {
+  --accent-onboarding: #f59e0b;
+  --accent-onboarding-rgb: 245, 158, 11;
+}
+
+.onboarding-screen[data-theme="cyan"] {
+  --accent-onboarding: #22d3ee;
+  --accent-onboarding-rgb: 34, 211, 238;
+}
+
 /* Window Title Bar - Drag Region (macOS traffic lights only) */
 .window-titlebar {
   display: none; /* Hidden by default on Windows/Linux/browser */
@@ -363,6 +373,22 @@
 
 .onboarding-btn-primary:active {
   transform: translateY(0);
+}
+
+/* Stagger animation for feature cards */
+@keyframes slideFeatureEnter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.slide-feature-enter {
+  animation: slideFeatureEnter 0.4s cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 
 /* Responsive adjustments for tablets */
