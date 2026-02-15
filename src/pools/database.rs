@@ -1301,10 +1301,10 @@ impl PoolsDatabase {
 // GLOBAL DATABASE INSTANCE
 // =============================================================================
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
 /// Global database instance - thread-safe using Lazy + RwLock pattern
-static GLOBAL_POOLS_DB: Lazy<RwLock<Option<PoolsDatabase>>> = Lazy::new(|| RwLock::new(None));
+static GLOBAL_POOLS_DB: LazyLock<RwLock<Option<PoolsDatabase>>> = LazyLock::new(|| RwLock::new(None));
 
 /// Initialize the global pools database
 pub async fn initialize_database() -> Result<(), String> {

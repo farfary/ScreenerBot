@@ -10,7 +10,7 @@
 /// - Dashboard gets stats from here
 /// - Trader gets available tokens from here
 use chrono::{DateTime, Utc};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::sync::RwLock;
 
 /// Filtered token lists with metadata
@@ -44,8 +44,8 @@ impl Default for FilteredTokenLists {
 }
 
 /// Global storage for filtered lists
-static FILTERED_LISTS: Lazy<RwLock<FilteredTokenLists>> =
-    Lazy::new(|| RwLock::new(FilteredTokenLists::default()));
+static FILTERED_LISTS: LazyLock<RwLock<FilteredTokenLists>> =
+    LazyLock::new(|| RwLock::new(FilteredTokenLists::default()));
 
 /// Store filtered results from filtering system
 ///

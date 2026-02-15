@@ -11,7 +11,7 @@
 /// - Error resilience with fallback mechanisms
 /// - Thread-safe price access for concurrent operations
 use crate::logger::{self, LogTag};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use std::sync::RwLock as StdRwLock;
@@ -105,12 +105,12 @@ impl SolPriceData {
 // =============================================================================
 
 /// Global SOL price cache with thread-safe access
-static SOL_PRICE_CACHE: Lazy<Arc<StdRwLock<SolPriceData>>> =
-    Lazy::new(|| Arc::new(StdRwLock::new(SolPriceData::default())));
+static SOL_PRICE_CACHE: LazyLock<Arc<StdRwLock<SolPriceData>>> =
+    LazyLock::new(|| Arc::new(StdRwLock::new(SolPriceData::default())));
 
 /// Service status tracking
-static SERVICE_RUNNING: Lazy<Arc<std::sync::atomic::AtomicBool>> =
-    Lazy::new(|| Arc::new(std::sync::atomic::AtomicBool::new(false)));
+static SERVICE_RUNNING: LazyLock<Arc<std::sync::atomic::AtomicBool>> =
+    LazyLock::new(|| Arc::new(std::sync::atomic::AtomicBool::new(false)));
 
 // =============================================================================
 // PUBLIC API

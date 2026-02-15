@@ -51,8 +51,8 @@ pub struct AtaRentInfo {
 }
 
 /// Global cache for ATA rent amounts (10-second cache)
-static ATA_RENT_CACHE: once_cell::sync::Lazy<Arc<std::sync::Mutex<Option<AtaRentInfo>>>> =
-    once_cell::sync::Lazy::new(|| Arc::new(std::sync::Mutex::new(None)));
+static ATA_RENT_CACHE: std::sync::LazyLock<Arc<std::sync::Mutex<Option<AtaRentInfo>>>> =
+    std::sync::LazyLock::new(|| Arc::new(std::sync::Mutex::new(None)));
 
 /// Default ATA rent in lamports (0.00203928 SOL)
 pub const DEFAULT_ATA_RENT_LAMPORTS: u64 = 2_039_280;

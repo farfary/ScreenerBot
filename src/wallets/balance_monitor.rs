@@ -1,7 +1,7 @@
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
 use futures::stream::{self, StreamExt};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
@@ -343,8 +343,8 @@ impl WalletSnapshotStatusCache {
     }
 }
 
-static WALLET_SNAPSHOT_STATUS: Lazy<WalletSnapshotStatusCache> =
-    Lazy::new(WalletSnapshotStatusCache::default);
+static WALLET_SNAPSHOT_STATUS: LazyLock<WalletSnapshotStatusCache> =
+    LazyLock::new(WalletSnapshotStatusCache::default);
 
 fn update_wallet_snapshot_status(timestamp: DateTime<Utc>) {
     WALLET_SNAPSHOT_STATUS.mark_ready(timestamp);
@@ -376,15 +376,15 @@ struct CachedDashboardMetrics {
     window_start: Option<DateTime<Utc>>,
 }
 
-static API_RESPONSE_CACHE: Lazy<
+static API_RESPONSE_CACHE: LazyLock<
     Arc<RwLock<HashMap<DashboardRequestKey, CachedDashboardResponse>>>,
-> = Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
+> = LazyLock::new(|| Arc::new(RwLock::new(HashMap::new())));
 
-static CACHE_METRICS: Lazy<Arc<RwLock<CachePerformanceMetrics>>> =
-    Lazy::new(|| Arc::new(RwLock::new(CachePerformanceMetrics::default())));
+static CACHE_METRICS: LazyLock<Arc<RwLock<CachePerformanceMetrics>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(CachePerformanceMetrics::default())));
 
-static COMPUTATION_FAILURES: Lazy<Arc<RwLock<HashMap<String, (u32, Instant)>>>> =
-    Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
+static COMPUTATION_FAILURES: LazyLock<Arc<RwLock<HashMap<String, (u32, Instant)>>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(HashMap::new())));
 
 fn compress_bytes(raw: &[u8]) -> Result<Vec<u8>, String> {
     let mut encoder = GzEncoder::new(Vec::new(), Compression::fast());
@@ -2454,18 +2454,18 @@ impl WalletDatabase {
 // =============================================================================
 
 /// Global wallet database instance
-pub(crate) static GLOBAL_WALLET_DB: Lazy<Arc<Mutex<Option<WalletDatabase>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(None)));
+pub(crate) static GLOBAL_WALLET_DB: LazyLock<Arc<Mutex<Option<WalletDatabase>>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(None)));
 
 /// Global wallet service metrics
-static WALLET_METRICS_OPERATIONS: Lazy<Arc<std::sync::atomic::AtomicU64>> =
-    Lazy::new(|| Arc::new(std::sync::atomic::AtomicU64::new(0)));
-static WALLET_METRICS_ERRORS: Lazy<Arc<std::sync::atomic::AtomicU64>> =
-    Lazy::new(|| Arc::new(std::sync::atomic::AtomicU64::new(0)));
-static WALLET_METRICS_SNAPSHOTS_TAKEN: Lazy<Arc<std::sync::atomic::AtomicU64>> =
-    Lazy::new(|| Arc::new(std::sync::atomic::AtomicU64::new(0)));
-static WALLET_METRICS_FLOW_SYNCS: Lazy<Arc<std::sync::atomic::AtomicU64>> =
-    Lazy::new(|| Arc::new(std::sync::atomic::AtomicU64::new(0)));
+static WALLET_METRICS_OPERATIONS: LazyLock<Arc<std::sync::atomic::AtomicU64>> =
+    LazyLock::new(|| Arc::new(std::sync::atomic::AtomicU64::new(0)));
+static WALLET_METRICS_ERRORS: LazyLock<Arc<std::sync::atomic::AtomicU64>> =
+    LazyLock::new(|| Arc::new(std::sync::atomic::AtomicU64::new(0)));
+static WALLET_METRICS_SNAPSHOTS_TAKEN: LazyLock<Arc<std::sync::atomic::AtomicU64>> =
+    LazyLock::new(|| Arc::new(std::sync::atomic::AtomicU64::new(0)));
+static WALLET_METRICS_FLOW_SYNCS: LazyLock<Arc<std::sync::atomic::AtomicU64>> =
+    LazyLock::new(|| Arc::new(std::sync::atomic::AtomicU64::new(0)));
 
 /// Get wallet service metrics
 pub fn get_wallet_service_metrics() -> (u64, u64, u64, u64) {

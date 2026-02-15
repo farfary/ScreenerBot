@@ -9,20 +9,20 @@ use super::types::{price_cache_ttl_seconds, PriceHistory, PriceResult, PRICE_HIS
 use crate::logger::{self, LogTag};
 
 use dashmap::DashMap;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use solana_sdk::pubkey::Pubkey;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use tokio::sync::Notify;
 
 /// Global price cache - high-performance concurrent hashmap
-static PRICE_CACHE: Lazy<DashMap<String, PriceResult>> = Lazy::new(DashMap::new);
+static PRICE_CACHE: LazyLock<DashMap<String, PriceResult>> = LazyLock::new(DashMap::new);
 
 /// Global price history - DashMap is already thread-safe, no additional RwLock needed
-static PRICE_HISTORY: Lazy<DashMap<String, PriceHistory>> = Lazy::new(DashMap::new);
+static PRICE_HISTORY: LazyLock<DashMap<String, PriceHistory>> = LazyLock::new(DashMap::new);
 
 /// Global shutdown handle for cleanup task
-static CLEANUP_SHUTDOWN: Lazy<Arc<Notify>> = Lazy::new(|| Arc::new(Notify::new()));
+static CLEANUP_SHUTDOWN: LazyLock<Arc<Notify>> = LazyLock::new(|| Arc::new(Notify::new()));
 
 /// Initialize the cache system
 pub async fn initialize_cache() {

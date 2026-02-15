@@ -4,7 +4,7 @@
 // used throughout the transactions system.
 
 use chrono::{DateTime, Utc};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -55,12 +55,12 @@ pub const WSOL_MINT: &str = "So11111111111111111111111111111111111111112";
 // =============================================================================
 
 /// Global known signatures cache for cross-manager coordination
-static GLOBAL_KNOWN_SIGNATURES: Lazy<Arc<Mutex<HashSet<String>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(HashSet::new())));
+static GLOBAL_KNOWN_SIGNATURES: LazyLock<Arc<Mutex<HashSet<String>>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(HashSet::new())));
 
 /// Global pending transactions tracking
-static GLOBAL_PENDING_TRANSACTIONS: Lazy<Arc<Mutex<HashMap<String, DateTime<Utc>>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(HashMap::new())));
+static GLOBAL_PENDING_TRANSACTIONS: LazyLock<Arc<Mutex<HashMap<String, DateTime<Utc>>>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(HashMap::new())));
 
 // =============================================================================
 // UTILITY FUNCTIONS

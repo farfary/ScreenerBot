@@ -1,6 +1,6 @@
 use crate::filtering::types::PassedToken;
 use dashmap::DashMap;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -18,7 +18,7 @@ pub struct PaginationManager {
 }
 
 /// Global pagination manager singleton
-pub static PAGINATION_MANAGER: Lazy<PaginationManager> = Lazy::new(PaginationManager::new);
+pub static PAGINATION_MANAGER: LazyLock<PaginationManager> = LazyLock::new(PaginationManager::new);
 
 impl PaginationManager {
     pub fn new() -> Self {

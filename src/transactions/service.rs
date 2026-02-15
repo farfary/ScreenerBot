@@ -5,7 +5,7 @@
 
 use chrono::{DateTime, Utc};
 use futures::stream::{FuturesUnordered, StreamExt};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::Duration;
@@ -44,8 +44,8 @@ use crate::transactions::types::DeferredRetry;
 
 /// Global deferred retry queue
 /// Transactions are added here when they fail due to temporary issues like RPC indexing delays
-static DEFERRED_RETRIES: Lazy<Arc<Mutex<BTreeMap<String, DeferredRetry>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(BTreeMap::new())));
+static DEFERRED_RETRIES: LazyLock<Arc<Mutex<BTreeMap<String, DeferredRetry>>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(BTreeMap::new())));
 
 /// Add a transaction to the deferred retry queue
 async fn defer_transaction_retry(signature: String, delay_secs: i64, reason: String) {
@@ -83,14 +83,14 @@ async fn get_deferred_retries_count() -> usize {
 // =============================================================================
 
 /// Global transaction service manager instance
-static GLOBAL_TRANSACTION_MANAGER: Lazy<Arc<Mutex<Option<Arc<Mutex<TransactionsManager>>>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(None)));
+static GLOBAL_TRANSACTION_MANAGER: LazyLock<Arc<Mutex<Option<Arc<Mutex<TransactionsManager>>>>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(None)));
 
 /// Global service running flag
-static SERVICE_RUNNING: Lazy<Arc<Mutex<bool>>> = Lazy::new(|| Arc::new(Mutex::new(false)));
+static SERVICE_RUNNING: LazyLock<Arc<Mutex<bool>>> = LazyLock::new(|| Arc::new(Mutex::new(false)));
 
 /// Global shutdown notification
-static SHUTDOWN_NOTIFY: Lazy<Arc<Notify>> = Lazy::new(|| Arc::new(Notify::new()));
+static SHUTDOWN_NOTIFY: LazyLock<Arc<Notify>> = LazyLock::new(|| Arc::new(Notify::new()));
 
 // =============================================================================
 // SERVICE CONFIGURATION

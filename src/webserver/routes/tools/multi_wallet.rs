@@ -3,7 +3,7 @@
 use axum::extract::Path;
 use axum::response::Response;
 use axum::Json;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -45,8 +45,8 @@ pub struct MultiWalletSession {
 }
 
 /// Global multi-wallet sessions state
-pub static MULTI_WALLET_SESSIONS: Lazy<Arc<RwLock<HashMap<String, MultiWalletSession>>>> =
-    Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
+pub static MULTI_WALLET_SESSIONS: LazyLock<Arc<RwLock<HashMap<String, MultiWalletSession>>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(HashMap::new())));
 
 /// Session cleanup interval (1 hour in seconds)
 const SESSION_CLEANUP_INTERVAL_SECS: i64 = 3600;

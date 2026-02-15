@@ -2,7 +2,7 @@
 
 use axum::response::Response;
 use axum::Json;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -40,8 +40,8 @@ impl Default for VolumeAggregatorState {
 }
 
 /// Global volume aggregator state
-pub static VOLUME_AGGREGATOR_STATE: Lazy<Arc<RwLock<VolumeAggregatorState>>> =
-    Lazy::new(|| Arc::new(RwLock::new(VolumeAggregatorState::default())));
+pub static VOLUME_AGGREGATOR_STATE: LazyLock<Arc<RwLock<VolumeAggregatorState>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(VolumeAggregatorState::default())));
 
 // =============================================================================
 // Volume Aggregator Handlers

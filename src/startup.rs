@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard};
@@ -25,8 +25,8 @@ struct InternalStatus {
     start_instant: Option<Instant>,
 }
 
-static TRACKER: Lazy<Mutex<HashMap<&'static str, InternalStatus>>> =
-    Lazy::new(|| Mutex::new(HashMap::new()));
+static TRACKER: LazyLock<Mutex<HashMap<&'static str, InternalStatus>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
 
 fn tracker<'a>() -> MutexGuard<'a, HashMap<&'static str, InternalStatus>> {
     TRACKER

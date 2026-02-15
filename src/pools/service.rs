@@ -14,7 +14,7 @@ use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::logger::{self, LogTag};
 use crate::rpc::get_rpc_client;
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -30,21 +30,21 @@ const FETCH_INTERVAL_MS: u64 = 500;
 static SERVICE_RUNNING: AtomicBool = AtomicBool::new(false);
 
 // Thread-safe global state using Lazy + RwLock pattern
-static GLOBAL_SHUTDOWN_HANDLE: Lazy<RwLock<Option<Arc<Notify>>>> = Lazy::new(|| RwLock::new(None));
+static GLOBAL_SHUTDOWN_HANDLE: LazyLock<RwLock<Option<Arc<Notify>>>> = LazyLock::new(|| RwLock::new(None));
 
 // =============================================================================
 // POOL MONITORING CONFIGURATION
 // =============================================================================
 
 // Debug override for token monitoring (used by debug tools)
-static DEBUG_TOKEN_OVERRIDE: Lazy<RwLock<Option<Vec<String>>>> = Lazy::new(|| RwLock::new(None));
+static DEBUG_TOKEN_OVERRIDE: LazyLock<RwLock<Option<Vec<String>>>> = LazyLock::new(|| RwLock::new(None));
 
 // Service components (will be initialized when service starts)
-static POOL_DISCOVERY: Lazy<RwLock<Option<Arc<PoolDiscovery>>>> = Lazy::new(|| RwLock::new(None));
-static POOL_ANALYZER: Lazy<RwLock<Option<Arc<PoolAnalyzer>>>> = Lazy::new(|| RwLock::new(None));
-static ACCOUNT_FETCHER: Lazy<RwLock<Option<Arc<AccountFetcher>>>> = Lazy::new(|| RwLock::new(None));
-static PRICE_CALCULATOR: Lazy<RwLock<Option<Arc<PriceCalculator>>>> =
-    Lazy::new(|| RwLock::new(None));
+static POOL_DISCOVERY: LazyLock<RwLock<Option<Arc<PoolDiscovery>>>> = LazyLock::new(|| RwLock::new(None));
+static POOL_ANALYZER: LazyLock<RwLock<Option<Arc<PoolAnalyzer>>>> = LazyLock::new(|| RwLock::new(None));
+static ACCOUNT_FETCHER: LazyLock<RwLock<Option<Arc<AccountFetcher>>>> = LazyLock::new(|| RwLock::new(None));
+static PRICE_CALCULATOR: LazyLock<RwLock<Option<Arc<PriceCalculator>>>> =
+    LazyLock::new(|| RwLock::new(None));
 
 // Public accessors for service manager (used by individual service implementations)
 pub fn get_pool_discovery() -> Option<Arc<PoolDiscovery>> {

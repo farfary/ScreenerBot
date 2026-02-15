@@ -17,13 +17,13 @@ use crate::tokens::schema;
 use crate::tokens::updates;
 use crate::tokens::updates::RateLimitCoordinator;
 use async_trait::async_trait;
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
 use std::sync::Arc;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
 // Global rate limit coordinator for force update API
-static RATE_COORDINATOR: OnceCell<Arc<RateLimitCoordinator>> = OnceCell::new();
+static RATE_COORDINATOR: OnceLock<Arc<RateLimitCoordinator>> = OnceLock::new();
 
 /// Get global rate limit coordinator (for force update API)
 pub fn get_rate_coordinator() -> Option<Arc<RateLimitCoordinator>> {

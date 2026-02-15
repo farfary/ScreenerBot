@@ -6,7 +6,7 @@
 /// - Output settings (console, file, colors)
 use super::levels::LogLevel;
 use super::tags::LogTag;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 
@@ -52,8 +52,8 @@ impl Default for LoggerConfig {
 }
 
 /// Global logger configuration singleton
-static LOGGER_CONFIG: Lazy<Arc<RwLock<LoggerConfig>>> =
-    Lazy::new(|| Arc::new(RwLock::new(LoggerConfig::default())));
+static LOGGER_CONFIG: LazyLock<Arc<RwLock<LoggerConfig>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(LoggerConfig::default())));
 
 /// Get a copy of the current logger configuration
 pub fn get_logger_config() -> LoggerConfig {

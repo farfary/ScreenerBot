@@ -251,8 +251,8 @@ impl Default for ConfirmationManager {
 }
 
 /// Global confirmation manager instance
-static CONFIRMATION_MANAGER: once_cell::sync::Lazy<ConfirmationManager> =
-    once_cell::sync::Lazy::new(|| ConfirmationManager::new());
+static CONFIRMATION_MANAGER: std::sync::LazyLock<ConfirmationManager> =
+    std::sync::LazyLock::new(|| ConfirmationManager::new());
 
 /// Get the global confirmation manager
 pub fn get_confirmation_manager() -> &'static ConfirmationManager {

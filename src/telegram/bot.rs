@@ -161,10 +161,10 @@ impl Default for TelegramBot {
 // GLOBAL BOT INSTANCE
 // ============================================================================
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::sync::Mutex;
 
-static TELEGRAM_BOT: Lazy<Mutex<Option<TelegramBot>>> = Lazy::new(|| Mutex::new(None));
+static TELEGRAM_BOT: LazyLock<Mutex<Option<TelegramBot>>> = LazyLock::new(|| Mutex::new(None));
 
 /// Initialize the global bot instance
 pub async fn init_bot() -> Result<(), String> {

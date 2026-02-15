@@ -47,8 +47,8 @@ struct ImportSession {
 }
 
 /// Global session storage for import operations
-static IMPORT_SESSIONS: once_cell::sync::Lazy<RwLock<HashMap<String, ImportSession>>> =
-    once_cell::sync::Lazy::new(|| RwLock::new(HashMap::new()));
+static IMPORT_SESSIONS: std::sync::LazyLock<RwLock<HashMap<String, ImportSession>>> =
+    std::sync::LazyLock::new(|| RwLock::new(HashMap::new()));
 
 /// Session expiry time (10 minutes)
 const SESSION_EXPIRY_SECS: u64 = 600;

@@ -1,6 +1,6 @@
 use crate::tokens::database;
 use crate::tokens::types::{DexScreenerData, GeckoTerminalData, RugcheckData, Token, TokenResult};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::collections::{HashMap, VecDeque};
 use std::hash::Hash;
 use std::sync::{Arc, Mutex, RwLock};
@@ -222,24 +222,24 @@ impl TokenStore {
     }
 }
 
-static TOKEN_STORE: Lazy<TokenStore> =
-    Lazy::new(|| TokenStore::new(Duration::from_secs(TOKEN_SNAPSHOT_TTL_SECS)));
+static TOKEN_STORE: LazyLock<TokenStore> =
+    LazyLock::new(|| TokenStore::new(Duration::from_secs(TOKEN_SNAPSHOT_TTL_SECS)));
 
-static DEXSCREENER_CACHE: Lazy<TimedCache<String, DexScreenerData>> = Lazy::new(|| {
+static DEXSCREENER_CACHE: LazyLock<TimedCache<String, DexScreenerData>> = LazyLock::new(|| {
     TimedCache::new(
         Duration::from_secs(DEXSCREENER_TTL_SECS),
         MARKET_CACHE_CAPACITY,
     )
 });
 
-static GECKOTERMINAL_CACHE: Lazy<TimedCache<String, GeckoTerminalData>> = Lazy::new(|| {
+static GECKOTERMINAL_CACHE: LazyLock<TimedCache<String, GeckoTerminalData>> = LazyLock::new(|| {
     TimedCache::new(
         Duration::from_secs(GECKOTERMINAL_TTL_SECS),
         MARKET_CACHE_CAPACITY,
     )
 });
 
-static RUGCHECK_CACHE: Lazy<TimedCache<String, RugcheckData>> = Lazy::new(|| {
+static RUGCHECK_CACHE: LazyLock<TimedCache<String, RugcheckData>> = LazyLock::new(|| {
     TimedCache::new(
         Duration::from_secs(RUGCHECK_TTL_SECS),
         SECURITY_CACHE_CAPACITY,

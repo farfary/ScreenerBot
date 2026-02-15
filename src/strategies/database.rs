@@ -3,7 +3,7 @@ use crate::strategies::types::{
     EvaluationResult, RiskLevel, Strategy, StrategyPerformance, StrategyTemplate, StrategyType,
 };
 use chrono::{DateTime, Utc};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
@@ -11,7 +11,7 @@ use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 // Static flag to track if database has been initialized
-static STRATEGIES_DB_INITIALIZED: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
+static STRATEGIES_DB_INITIALIZED: LazyLock<AtomicBool> = LazyLock::new(|| AtomicBool::new(false));
 
 // Database schema version
 const STRATEGIES_SCHEMA_VERSION: u32 = 1;
@@ -120,7 +120,7 @@ CREATE TABLE IF NOT EXISTS schema_version (
 // CONNECTION POOL
 // =============================================================================
 
-static DB_POOL: Lazy<Pool<SqliteConnectionManager>> = Lazy::new(|| {
+static DB_POOL: LazyLock<Pool<SqliteConnectionManager>> = LazyLock::new(|| {
     let db_path = crate::paths::get_strategies_db_path();
     let manager = SqliteConnectionManager::file(&db_path);
     Pool::builder()

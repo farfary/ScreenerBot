@@ -5,7 +5,7 @@
 //! monitor continues to manage open positions.
 
 use chrono::{DateTime, Duration, Utc};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::sync::RwLock;
 
 use crate::logger::{self, LogTag};
@@ -27,7 +27,7 @@ pub struct LossLimitState {
 }
 
 /// Global loss limit state
-static LOSS_LIMIT_STATE: Lazy<RwLock<LossLimitStateInternal>> = Lazy::new(|| {
+static LOSS_LIMIT_STATE: LazyLock<RwLock<LossLimitStateInternal>> = LazyLock::new(|| {
     RwLock::new(LossLimitStateInternal {
         period_start: Utc::now(),
         cumulative_loss_sol: 0.0,

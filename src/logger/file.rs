@@ -7,7 +7,7 @@
 //! - Thread-safe concurrent writes
 
 use chrono::Local;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
@@ -162,7 +162,7 @@ impl FileLogger {
 }
 
 /// Global file logger instance
-static FILE_LOGGER: Lazy<Arc<Mutex<Option<FileLogger>>>> = Lazy::new(|| {
+static FILE_LOGGER: LazyLock<Arc<Mutex<Option<FileLogger>>>> = LazyLock::new(|| {
     if ENABLE_FILE_LOGGING {
         match FileLogger::new() {
             Ok(logger) => Arc::new(Mutex::new(Some(logger))),
@@ -194,7 +194,7 @@ fn get_log_directory() -> Result<PathBuf, Box<dyn std::error::Error>> {
 /// Initialize the file logging system
 pub fn init_file_logging() {
     if ENABLE_FILE_LOGGING {
-        Lazy::force(&FILE_LOGGER);
+        LazyLock::force(&FILE_LOGGER);
     }
 }
 

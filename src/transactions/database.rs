@@ -4,7 +4,7 @@
 // for transaction data, replacing the previous JSON file-based approach.
 
 use chrono::{DateTime, Utc};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
@@ -100,7 +100,7 @@ pub struct TransactionListResult {
 const DATABASE_SCHEMA_VERSION: u32 = 4;
 
 /// Static flag to track if database has been initialized (to reduce log noise)
-static DATABASE_INITIALIZED: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
+static DATABASE_INITIALIZED: LazyLock<AtomicBool> = LazyLock::new(|| AtomicBool::new(false));
 
 /// Raw transactions table schema - stores blockchain data
 const SCHEMA_RAW_TRANSACTIONS: &str = r#"
@@ -2384,8 +2384,8 @@ mod tests {
 // =============================================================================
 
 /// Global database instance for cross-module access
-static GLOBAL_TRANSACTION_DATABASE: Lazy<Arc<Mutex<Option<Arc<TransactionDatabase>>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(None)));
+static GLOBAL_TRANSACTION_DATABASE: LazyLock<Arc<Mutex<Option<Arc<TransactionDatabase>>>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(None)));
 
 /// Initialize global transaction database
 pub async fn init_transaction_database() -> Result<Arc<TransactionDatabase>, String> {

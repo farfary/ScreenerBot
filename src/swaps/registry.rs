@@ -1,7 +1,7 @@
 /// Router Registry - Manages all available swap routers
 /// Provides router discovery, fallback chains, and global access
 use crate::swaps::router::SwapRouter;
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
 use std::sync::Arc;
 
 // ============================================================================
@@ -81,7 +81,7 @@ impl RouterRegistry {
 // ============================================================================
 
 /// Global registry instance (lazy initialized)
-static REGISTRY: OnceCell<RouterRegistry> = OnceCell::new();
+static REGISTRY: OnceLock<RouterRegistry> = OnceLock::new();
 
 /// Get global router registry
 /// Initializes on first access

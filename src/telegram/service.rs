@@ -226,10 +226,10 @@ impl Service for TelegramService {
 // GLOBAL SERVICE ACCESS
 // ============================================================================
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 
-static TELEGRAM_SERVICE: Lazy<RwLock<TelegramService>> =
-    Lazy::new(|| RwLock::new(TelegramService::new()));
+static TELEGRAM_SERVICE: LazyLock<RwLock<TelegramService>> =
+    LazyLock::new(|| RwLock::new(TelegramService::new()));
 
 /// Get the global Telegram service (read-only)
 pub async fn get_service() -> tokio::sync::RwLockReadGuard<'static, TelegramService> {

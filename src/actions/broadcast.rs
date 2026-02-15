@@ -3,10 +3,10 @@
 //! Provides pub/sub mechanism for real-time action updates to clients via SSE
 
 use super::types::ActionUpdate;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use tokio::sync::broadcast;
 
-static ACTION_BROADCAST: Lazy<broadcast::Sender<ActionUpdate>> = Lazy::new(|| {
+static ACTION_BROADCAST: LazyLock<broadcast::Sender<ActionUpdate>> = LazyLock::new(|| {
     let (tx, _) = broadcast::channel(1000);
     tx
 });

@@ -284,11 +284,11 @@ async fn discovery_poll(bot: &Bot, offset: &Arc<AtomicI64>) {
 // GLOBAL DISCOVERY SERVICE
 // ============================================================================
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use tokio::sync::RwLock;
 
-static DISCOVERY_SERVICE: Lazy<RwLock<DiscoveryService>> =
-    Lazy::new(|| RwLock::new(DiscoveryService::new()));
+static DISCOVERY_SERVICE: LazyLock<RwLock<DiscoveryService>> =
+    LazyLock::new(|| RwLock::new(DiscoveryService::new()));
 
 /// Start the discovery service
 pub async fn start_discovery() -> Result<(), String> {

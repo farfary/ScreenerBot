@@ -5,7 +5,7 @@
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::telegram::types::{DiscoveredChat, SessionState, TelegramSession};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -301,7 +301,7 @@ impl Default for TelegramSessionManager {
 // GLOBAL SINGLETON
 // ============================================================================
 
-static SESSION_MANAGER: Lazy<TelegramSessionManager> = Lazy::new(TelegramSessionManager::new);
+static SESSION_MANAGER: LazyLock<TelegramSessionManager> = LazyLock::new(TelegramSessionManager::new);
 
 /// Get the global session manager instance
 pub fn get_session_manager() -> &'static TelegramSessionManager {

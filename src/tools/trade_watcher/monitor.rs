@@ -2,7 +2,7 @@
 //!
 //! Monitors pools for trades and triggers actions based on watch configuration.
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -30,8 +30,8 @@ const MIN_TRADE_VOLUME_USD: f64 = 10.0;
 // GLOBAL STATE
 // =============================================================================
 
-static TRADE_MONITOR: Lazy<Arc<RwLock<TradeMonitor>>> =
-    Lazy::new(|| Arc::new(RwLock::new(TradeMonitor::new())));
+static TRADE_MONITOR: LazyLock<Arc<RwLock<TradeMonitor>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(TradeMonitor::new())));
 
 // =============================================================================
 // TRADE MONITOR

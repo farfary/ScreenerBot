@@ -5,7 +5,7 @@ use crate::tokens::database;
 use crate::tokens::service::get_rate_coordinator;
 use crate::tokens::types::{TokenError, TokenPoolInfo, TokenPoolsSnapshot, TokenResult};
 use chrono::Utc;
-use once_cell::sync::{Lazy, OnceCell};
+use std::sync::{LazyLock, OnceLock};
 use serde::{Deserialize, Serialize};
 use std::array;
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -35,17 +35,17 @@ pub struct PoolCacheMetrics {
     pub stale_entries: usize,
 }
 
-static TOKEN_POOLS_CACHE: Lazy<RwLock<HashMap<String, TokenPoolCacheEntry>>> =
-    Lazy::new(|| RwLock::new(HashMap::new()));
+static TOKEN_POOLS_CACHE: LazyLock<RwLock<HashMap<String, TokenPoolCacheEntry>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
 
-static POOL_REFRESH_INFLIGHT: Lazy<AsyncMutex<HashMap<String, std::sync::Arc<Notify>>>> =
-    Lazy::new(|| AsyncMutex::new(HashMap::new()));
+static POOL_REFRESH_INFLIGHT: LazyLock<AsyncMutex<HashMap<String, std::sync::Arc<Notify>>>> =
+    LazyLock::new(|| AsyncMutex::new(HashMap::new()));
 
-static POOL_PREFETCH_STATE: Lazy<AsyncMutex<HashMap<String, Instant>>> =
-    Lazy::new(|| AsyncMutex::new(HashMap::new()));
+static POOL_PREFETCH_STATE: LazyLock<AsyncMutex<HashMap<String, Instant>>> =
+    LazyLock::new(|| AsyncMutex::new(HashMap::new()));
 
-static POOL_PREFETCH_SCHEDULER: Lazy<Arc<PrefetchScheduler>> =
-    Lazy::new(|| Arc::new(PrefetchScheduler::new()));
+static POOL_PREFETCH_SCHEDULER: LazyLock<Arc<PrefetchScheduler>> =
+    LazyLock::new(|| Arc::new(PrefetchScheduler::new()));
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum PrefetchPriority {
@@ -95,7 +95,7 @@ impl PrefetchSchedulerInner {
 struct PrefetchScheduler {
     inner: AsyncMutex<PrefetchSchedulerInner>,
     notify: Notify,
-    started: OnceCell<()>,
+    started: OnceLock<()>,
     worker_count: usize,
 }
 
@@ -104,7 +104,7 @@ impl PrefetchScheduler {
         Self {
             inner: AsyncMutex::new(PrefetchSchedulerInner::new()),
             notify: Notify::new(),
-            started: OnceCell::new(),
+            started: OnceLock::new(),
             worker_count: POOL_PREFETCH_WORKER_COUNT,
         }
     }

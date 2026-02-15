@@ -6,7 +6,7 @@
 //! - Failed ATA cache
 
 use chrono::{DateTime, Utc};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, OptionalExtension};
@@ -350,7 +350,7 @@ CREATE INDEX IF NOT EXISTS idx_watched_tokens_active ON watched_tokens(is_active
 // =============================================================================
 
 /// Global connection pool for tools database
-static DB_POOL: Lazy<Pool<SqliteConnectionManager>> = Lazy::new(|| {
+static DB_POOL: LazyLock<Pool<SqliteConnectionManager>> = LazyLock::new(|| {
     let db_path = get_tools_db_path();
 
     // Ensure parent directory exists

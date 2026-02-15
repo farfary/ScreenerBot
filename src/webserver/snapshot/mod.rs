@@ -2,7 +2,7 @@ mod collectors;
 mod types;
 
 use chrono::Utc;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::sync::RwLock;
 use std::time::Instant;
 
@@ -31,8 +31,8 @@ struct CachedSystemMetrics {
     last_updated: Instant,
 }
 
-static SYSTEM_METRICS_CACHE: Lazy<RwLock<Option<CachedSystemMetrics>>> =
-    Lazy::new(|| RwLock::new(None));
+static SYSTEM_METRICS_CACHE: LazyLock<RwLock<Option<CachedSystemMetrics>>> =
+    LazyLock::new(|| RwLock::new(None));
 
 /// Gather current status snapshot (aggregates data from multiple sources)
 pub async fn gather_status_snapshot() -> StatusSnapshot {

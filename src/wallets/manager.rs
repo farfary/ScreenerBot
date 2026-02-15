@@ -2,7 +2,7 @@
 //!
 //! Core wallet management functionality with caching and thread-safe operations.
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use solana_sdk::signature::Keypair;
 use solana_sdk::signer::Signer;
 use std::collections::HashMap;
@@ -27,12 +27,12 @@ use crate::rpc::{get_rpc_client, RpcClientMethods};
 // =============================================================================
 
 /// Global wallet database instance
-static WALLETS_DB: Lazy<Arc<RwLock<Option<WalletsDatabase>>>> =
-    Lazy::new(|| Arc::new(RwLock::new(None)));
+static WALLETS_DB: LazyLock<Arc<RwLock<Option<WalletsDatabase>>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(None)));
 
 /// Cached main wallet keypair for fast access
-static MAIN_WALLET_CACHE: Lazy<Arc<RwLock<Option<CachedMainWallet>>>> =
-    Lazy::new(|| Arc::new(RwLock::new(None)));
+static MAIN_WALLET_CACHE: LazyLock<Arc<RwLock<Option<CachedMainWallet>>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(None)));
 
 /// Cached main wallet data
 struct CachedMainWallet {

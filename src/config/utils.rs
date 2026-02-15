@@ -7,7 +7,7 @@ use crate::logger::{self, LogTag};
 /// - Hot-reloading configuration at runtime
 /// - Thread-safe access helpers
 /// - File watching for automatic reloads
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::{Keypair, Signer};
 use std::sync::RwLock;
@@ -16,7 +16,7 @@ use std::sync::RwLock;
 ///
 /// This is the single source of truth for all configuration values.
 /// Access it using the helper functions below.
-pub static CONFIG: OnceCell<RwLock<Config>> = OnceCell::new();
+pub static CONFIG: OnceLock<RwLock<Config>> = OnceLock::new();
 
 /// Load configuration from disk and initialize the global CONFIG
 ///

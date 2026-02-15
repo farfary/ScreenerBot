@@ -28,13 +28,13 @@
 /// - `--verbose-<module>`: Enable verbose logging for specific module
 ///
 use crate::logger::{self, LogTag};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::env;
 use std::sync::Mutex;
 
 /// Global command-line arguments storage
 /// Thread-safe singleton that stores arguments for access throughout the application
-pub static CMD_ARGS: Lazy<Mutex<Vec<String>>> = Lazy::new(|| Mutex::new(env::args().collect()));
+pub static CMD_ARGS: LazyLock<Mutex<Vec<String>>> = LazyLock::new(|| Mutex::new(env::args().collect()));
 
 /// Sets the global command-line arguments
 /// Used by binaries and tests to override the default env::args() collection

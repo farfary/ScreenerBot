@@ -6,7 +6,7 @@
 //! - Built-in instruction templates
 
 use crate::logger::{self, LogTag};
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::sync::{Arc, Mutex};
@@ -15,7 +15,7 @@ use std::sync::{Arc, Mutex};
 // GLOBAL DATABASE INSTANCE
 // =============================================================================
 
-static GLOBAL_AI_DB: OnceCell<Arc<Mutex<Connection>>> = OnceCell::new();
+static GLOBAL_AI_DB: OnceLock<Arc<Mutex<Connection>>> = OnceLock::new();
 
 // =============================================================================
 // DATA STRUCTURES

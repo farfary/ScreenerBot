@@ -6,17 +6,17 @@
 use super::db::ActionsDatabase;
 use super::types::{Action, ActionId, ActionState, ActionUpdate, StepStatus};
 use crate::logger::{self, LogTag};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
-static ACTIVE_ACTIONS: Lazy<Arc<RwLock<HashMap<ActionId, Action>>>> =
-    Lazy::new(|| Arc::new(RwLock::new(HashMap::new())));
+static ACTIVE_ACTIONS: LazyLock<Arc<RwLock<HashMap<ActionId, Action>>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(HashMap::new())));
 
-static ACTIONS_DB: Lazy<Arc<tokio::sync::RwLock<Option<ActionsDatabase>>>> =
-    Lazy::new(|| Arc::new(tokio::sync::RwLock::new(None)));
+static ACTIONS_DB: LazyLock<Arc<tokio::sync::RwLock<Option<ActionsDatabase>>>> =
+    LazyLock::new(|| Arc::new(tokio::sync::RwLock::new(None)));
 
 /// Initialize the actions database
 pub async fn init_database() -> Result<(), String> {

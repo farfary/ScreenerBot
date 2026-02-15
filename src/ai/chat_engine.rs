@@ -11,7 +11,7 @@ use crate::apis::llm::{
     Provider,
 };
 use crate::logger::{self, LogTag};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use regex::Regex;
@@ -31,11 +31,11 @@ const MAX_TOOL_ITERATIONS: usize = 5;
 // =============================================================================
 
 /// Regex for JSON code blocks in LLM responses
-static JSON_CODE_BLOCK_PATTERN: Lazy<Regex> =
-    Lazy::new(|| Regex::new(r"(?s)```json\s*(\{.+?\})\s*```").expect("Invalid JSON pattern regex"));
+static JSON_CODE_BLOCK_PATTERN: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"(?s)```json\s*(\{.+?\})\s*```").expect("Invalid JSON pattern regex"));
 
 /// Regex for loose JSON tool calls without code blocks
-static LOOSE_JSON_PATTERN: Lazy<Regex> = Lazy::new(|| {
+static LOOSE_JSON_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?s)\{[^{}]*"tool_calls"[^{}]*\[.+?\]\s*\}"#)
         .expect("Invalid loose JSON pattern regex")
 });

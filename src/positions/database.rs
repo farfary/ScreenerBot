@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
@@ -21,7 +21,7 @@ use crate::logger::{self, LogTag};
 use crate::positions::types::{EntryRecord, ExitRecord, Position};
 
 // Static flag to track if database has been initialized (to reduce log noise)
-static POSITIONS_DB_INITIALIZED: Lazy<AtomicBool> = Lazy::new(|| AtomicBool::new(false));
+static POSITIONS_DB_INITIALIZED: LazyLock<AtomicBool> = LazyLock::new(|| AtomicBool::new(false));
 
 // Database schema version
 const POSITIONS_SCHEMA_VERSION: u32 = 1;
@@ -2186,8 +2186,8 @@ impl PositionsDatabase {
 // =============================================================================
 
 /// Global positions database instance
-static GLOBAL_POSITIONS_DB: Lazy<Arc<Mutex<Option<PositionsDatabase>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(None)));
+static GLOBAL_POSITIONS_DB: LazyLock<Arc<Mutex<Option<PositionsDatabase>>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(None)));
 
 /// Initialize the global positions database
 pub async fn initialize_positions_database() -> Result<(), String> {

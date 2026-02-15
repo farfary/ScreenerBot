@@ -33,8 +33,8 @@ const DYNAMIC_PORT_START: u16 = 49152;
 const DYNAMIC_PORT_END: u16 = 65535;
 
 /// Global shutdown notifier
-static SHUTDOWN_NOTIFY: once_cell::sync::Lazy<Arc<Notify>> =
-    once_cell::sync::Lazy::new(|| Arc::new(Notify::new()));
+static SHUTDOWN_NOTIFY: std::sync::LazyLock<Arc<Notify>> =
+    std::sync::LazyLock::new(|| Arc::new(Notify::new()));
 
 /// Find an available port in the dynamic range
 async fn find_available_port() -> Result<u16, String> {

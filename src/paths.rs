@@ -27,7 +27,7 @@
 //! └── *.csv
 //! ```
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -41,7 +41,7 @@ use crate::logger::{self, LogTag};
 static INITIALIZED: AtomicBool = AtomicBool::new(false);
 
 /// Lazy-initialized base directory (thread-safe)
-static BASE_DIRECTORY: Lazy<PathBuf> = Lazy::new(|| {
+static BASE_DIRECTORY: LazyLock<PathBuf> = LazyLock::new(|| {
     let base_dir = resolve_base_directory();
     INITIALIZED.store(true, Ordering::SeqCst);
     base_dir

@@ -6,7 +6,7 @@
 //! - Tool execution tracking with inputs/outputs
 
 use crate::logger::{self, LogTag};
-use once_cell::sync::OnceCell;
+use std::sync::OnceLock;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, OptionalExtension};
@@ -17,7 +17,7 @@ use std::sync::Arc;
 // GLOBAL CONNECTION POOL
 // =============================================================================
 
-static GLOBAL_CHAT_POOL: OnceCell<Arc<Pool<SqliteConnectionManager>>> = OnceCell::new();
+static GLOBAL_CHAT_POOL: OnceLock<Arc<Pool<SqliteConnectionManager>>> = OnceLock::new();
 
 // =============================================================================
 // DATA STRUCTURES

@@ -1,10 +1,10 @@
 use chrono::{DateTime, Utc};
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicBool, AtomicU32};
 
 // Startup timestamp to track when the bot started for trading logic
-pub static STARTUP_TIME: Lazy<DateTime<Utc>> = Lazy::new(|| Utc::now());
+pub static STARTUP_TIME: LazyLock<DateTime<Utc>> = LazyLock::new(|| Utc::now());
 
 // ================================================================================================
 // STARTUP COORDINATION SYSTEM - ENSURES PROPER SERVICE INITIALIZATION ORDER
@@ -270,10 +270,10 @@ pub fn is_token_active_in_dashboard(mint: &str) -> bool {
 static FORCE_STOPPED: AtomicBool = AtomicBool::new(false);
 
 /// Force stop timestamp - when force stop was activated
-static FORCE_STOPPED_AT: Lazy<RwLock<Option<DateTime<Utc>>>> = Lazy::new(|| RwLock::new(None));
+static FORCE_STOPPED_AT: LazyLock<RwLock<Option<DateTime<Utc>>>> = LazyLock::new(|| RwLock::new(None));
 
 /// Force stop reason - why force stop was activated
-static FORCE_STOPPED_REASON: Lazy<RwLock<String>> = Lazy::new(|| RwLock::new(String::new()));
+static FORCE_STOPPED_REASON: LazyLock<RwLock<String>> = LazyLock::new(|| RwLock::new(String::new()));
 
 /// Check if trading is force stopped
 pub fn is_force_stopped() -> bool {

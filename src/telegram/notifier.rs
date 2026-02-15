@@ -316,15 +316,15 @@ impl TelegramNotifier {
 // GLOBAL NOTIFICATION FUNCTIONS
 // ============================================================================
 
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::sync::RwLock;
 
 /// Global notifier instance
-static NOTIFIER: Lazy<RwLock<Option<TelegramNotifier>>> = Lazy::new(|| RwLock::new(None));
+static NOTIFIER: LazyLock<RwLock<Option<TelegramNotifier>>> = LazyLock::new(|| RwLock::new(None));
 
 /// Notification queue sender
-static NOTIFICATION_QUEUE: Lazy<RwLock<Option<mpsc::Sender<Notification>>>> =
-    Lazy::new(|| RwLock::new(None));
+static NOTIFICATION_QUEUE: LazyLock<RwLock<Option<mpsc::Sender<Notification>>>> =
+    LazyLock::new(|| RwLock::new(None));
 
 /// Initialize the global notifier
 pub fn init_notifier() -> Result<(), String> {

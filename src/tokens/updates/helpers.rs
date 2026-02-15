@@ -1,6 +1,6 @@
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::collections::HashSet;
 use std::sync::Mutex as StdMutex;
 
@@ -9,8 +9,8 @@ use std::sync::Mutex as StdMutex;
 pub(super) const PERMANENT_FAILURE_THRESHOLD: u32 = 3;
 
 /// In-flight token tracking to prevent duplicate fetches across loops
-pub(super) static IN_FLIGHT_TOKENS: Lazy<StdMutex<HashSet<String>>> =
-    Lazy::new(|| StdMutex::new(HashSet::new()));
+pub(super) static IN_FLIGHT_TOKENS: LazyLock<StdMutex<HashSet<String>>> =
+    LazyLock::new(|| StdMutex::new(HashSet::new()));
 
 /// Try to mark a token as in-flight. Returns true if marked, false if already in-flight.
 pub(super) fn try_mark_in_flight(mint: &str) -> bool {

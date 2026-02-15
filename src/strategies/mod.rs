@@ -12,14 +12,14 @@ use crate::strategies::types::{
     EvaluationContext, EvaluationResult, MarketData, PositionData, Strategy, StrategyType,
 };
 use chrono::Utc;
-use once_cell::sync::Lazy;
+use std::sync::LazyLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
 /// Global strategy engine instance
-static STRATEGY_ENGINE: Lazy<Arc<RwLock<Option<StrategyEngine>>>> =
-    Lazy::new(|| Arc::new(RwLock::new(None)));
+static STRATEGY_ENGINE: LazyLock<Arc<RwLock<Option<StrategyEngine>>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(None)));
 
 /// Initialize the strategy system
 pub async fn init_strategy_system(config: EngineConfig) -> Result<(), String> {

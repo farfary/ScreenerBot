@@ -55,7 +55,7 @@ pub use maintenance::{
     record_system_event, record_token_event, record_trader_event, record_transaction_event,
     record_wallet_event, search_events, start_maintenance_task,
 };
-use once_cell::sync::{Lazy, OnceCell};
+use std::sync::{LazyLock, OnceLock};
 use std::collections::VecDeque;
 use std::sync::Arc;
 use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
@@ -75,19 +75,19 @@ struct EventWriter {
 }
 
 /// Global event writer instance
-static EVENT_WRITER: Lazy<Arc<Mutex<Option<EventWriter>>>> =
-    Lazy::new(|| Arc::new(Mutex::new(None)));
+static EVENT_WRITER: LazyLock<Arc<Mutex<Option<EventWriter>>>> =
+    LazyLock::new(|| Arc::new(Mutex::new(None)));
 
 /// Global database handle
-pub static EVENTS_DB: OnceCell<Arc<EventsDatabase>> = OnceCell::new();
+pub static EVENTS_DB: OnceLock<Arc<EventsDatabase>> = OnceLock::new();
 
 /// Global broadcaster for real-time event delivery
-static EVENTS_BROADCAST_TX: OnceCell<broadcast::Sender<Event>> = OnceCell::new();
+static EVENTS_BROADCAST_TX: OnceLock<broadcast::Sender<Event>> = OnceLock::new();
 
 /// Ring buffer cache of recent events
 const EVENTS_CACHE_CAPACITY: usize = 5000;
-static EVENTS_CACHE: Lazy<Arc<RwLock<VecDeque<Event>>>> =
-    Lazy::new(|| Arc::new(RwLock::new(VecDeque::with_capacity(EVENTS_CACHE_CAPACITY))));
+static EVENTS_CACHE: LazyLock<Arc<RwLock<VecDeque<Event>>>> =
+    LazyLock::new(|| Arc::new(RwLock::new(VecDeque::with_capacity(EVENTS_CACHE_CAPACITY))));
 
 // =============================================================================
 // PUBLIC API

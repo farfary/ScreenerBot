@@ -52,8 +52,8 @@ use status::{
 
 /// In-memory storage for device code during OAuth flow
 /// This is stored globally so the poll endpoint can access the device_code
-pub(crate) static DEVICE_CODE_STORAGE: once_cell::sync::Lazy<RwLock<Option<String>>> =
-    once_cell::sync::Lazy::new(|| RwLock::new(None));
+pub(crate) static DEVICE_CODE_STORAGE: std::sync::LazyLock<RwLock<Option<String>>> =
+    std::sync::LazyLock::new(|| RwLock::new(None));
 
 // ============================================================================
 // ROUTES
