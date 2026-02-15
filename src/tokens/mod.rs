@@ -1,7 +1,7 @@
 /// New unified token data system with clean architecture
 ///
 /// Architecture:
-/// - database.rs: Unified database operations (all SQL in one place)
+/// - database/: Split database module (10 focused submodules)
 /// - schema.rs: Database schema definition (6 tables, 12 indexes)
 /// - market/: Market data fetchers (DexScreener, GeckoTerminal)
 /// - security/: Security data fetchers (Rugcheck)

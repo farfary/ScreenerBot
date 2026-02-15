@@ -62,7 +62,18 @@
 src/tokens/
 ├── mod.rs              Module root — public API re-exports
 ├── types.rs            Core domain types (Token, errors, data bundles)
-├── database.rs         Unified SQLite operations (94 methods)
+├── database/           SQLite operations (split into 10 focused submodules)
+│   ├── mod.rs          Core: globals, struct, new(), connection()
+│   ├── metadata.rs     Token CRUD + batch info queries
+│   ├── market.rs       DexScreener + GeckoTerminal data + freshness/errors
+│   ├── security.rs     Rugcheck security data operations
+│   ├── pool_data.rs    Token pool snapshot operations
+│   ├── rejections.rs   Rejection tracking, history, and aggregated stats
+│   ├── blacklist.rs    Token blacklist CRUD
+│   ├── priority.rs     Priority management + batch updates
+│   ├── tracking.rs     Update tracking + mark_* + counts
+│   ├── assembly.rs     Complex multi-table token assembly queries
+│   └── async_api.rs    Async convenience wrappers (~40 functions)
 ├── schema.rs           Database schema (10 tables, 33 indexes)
 ├── updates.rs          Priority-based background update loops
 ├── discovery.rs        Multi-source token discovery pipeline
@@ -379,7 +390,7 @@ The service uses a two-layer design:
 
 <p align="center"><strong>Architectural Principles for Performance and Reliability</strong></p>
 
-1.  **Consolidated Storage**: All SQL operations are centralized in `database.rs`, ensuring a single source of truth for schema interactions.
+1.  **Consolidated Storage**: All SQL operations are centralized in the `database/` module (split into 10 focused submodules), ensuring a single source of truth for schema interactions.
 2.  **Non-Blocking I/O**: Multi-threaded database access via `tokio::spawn_blocking` prevents thread starvation.
 3.  **Atomic Batches**: Large-scale updates use SQLite transactions to minimize lock contention and maximize throughput.
 4.  **Priority-First Scheduling**: Trading-critical tokens (open positions) are prioritized over background discovery tasks.
