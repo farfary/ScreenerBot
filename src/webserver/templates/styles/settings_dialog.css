@@ -8,7 +8,7 @@
 .settings-dialog {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  z-index: var(--z-dialog);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2143,7 +2143,7 @@
 .security-modal {
   position: fixed;
   inset: 0;
-  z-index: 10100;
+  z-index: var(--z-status-bar);
   display: flex;
   align-items: center;
   justify-content: center;

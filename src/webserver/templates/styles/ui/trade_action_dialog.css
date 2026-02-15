@@ -9,7 +9,7 @@
   padding: 20px;
   background: rgb(0, 0, 0, 0.6);
   backdrop-filter: blur(8px);
-  z-index: 10001; /* Above token details dialog (10000) */
+  z-index: var(--z-trade-dialog); /* Above token details dialog */
   animation: trade-overlay-fade-in 200ms ease;
 }
 
@@ -797,7 +797,7 @@ body.trade-action-dialog-open {
   justify-content: center;
   background: rgb(0, 0, 0, 0.7);
   backdrop-filter: blur(4px);
-  z-index: 10002;
+  z-index: var(--z-confirmation);
   animation: trade-overlay-fade-in 150ms ease;
 }
 

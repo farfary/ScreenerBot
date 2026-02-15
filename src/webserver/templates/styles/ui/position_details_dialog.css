@@ -11,7 +11,7 @@
 .position-details-dialog {
   position: fixed;
   inset: 0;
-  z-index: 10000;
+  z-index: var(--z-dialog);
   display: flex;
   flex-direction: column;
   opacity: 0;

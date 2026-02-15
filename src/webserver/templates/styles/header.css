@@ -31,7 +31,7 @@
   position: sticky;
   top: 0;
   width: 100%;
-  z-index: 1000;
+  z-index: var(--z-header);
   background: var(--header-solid-bg, #0d1117);
   border-bottom: 1px solid var(--header-border, #30363d);
   box-shadow: var(--header-shadow, 0 4px 20px rgb(0, 0, 0, 0.4));

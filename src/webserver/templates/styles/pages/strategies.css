@@ -807,7 +807,7 @@
 /* Modals (Keep existing styles but ensure z-index) */
 .condition-catalog-modal,
 .parameter-editor-modal {
-  z-index: 1000;
+  z-index: var(--z-header);
 }
 
 /* Tab System */
@@ -1424,7 +1424,7 @@
   display: none;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-header);
   padding: 1rem;
 }
 
@@ -1825,7 +1825,7 @@
   display: none;
   align-items: center;
   justify-content: center;
-  z-index: 1000;
+  z-index: var(--z-header);
   animation: fadeIn 0.2s ease-out;
 }
 
@@ -2182,7 +2182,7 @@
   display: none;
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: var(--z-header);
   align-items: center;
   justify-content: center;
 }

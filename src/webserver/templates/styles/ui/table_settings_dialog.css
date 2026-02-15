@@ -3,7 +3,7 @@
   inset: 0;
   background: var(--shadow-lg);
   backdrop-filter: blur(3px);
-  z-index: 10000; /* Same level as other main dialogs */
+  z-index: var(--z-dialog); /* Same level as other main dialogs */
   display: flex;
   align-items: center;
   justify-content: center;

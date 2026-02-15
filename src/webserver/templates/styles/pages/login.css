@@ -12,7 +12,7 @@
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
-  z-index: 10000;
+  z-index: var(--z-dialog);
 }
 
 .login-container {

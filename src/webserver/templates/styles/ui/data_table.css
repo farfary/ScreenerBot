@@ -140,7 +140,7 @@ body.dt-column-resizing .data-table col {
   border: 1px solid var(--border-color);
   border-radius: 8px;
   box-shadow: 0 8px 24px rgb(0, 0, 0, 0.2);
-  z-index: 1000;
+  z-index: var(--z-header);
   min-width: 220px;
   max-height: 420px;
   overflow-y: auto;
@@ -1112,7 +1112,7 @@ body.dt-column-resizing * {
   border: 1px solid var(--border-color);
   border-radius: 6px;
   box-shadow: 0 8px 24px rgb(0, 0, 0, 0.15);
-  z-index: 1000;
+  z-index: var(--z-header);
   animation: slideDown 0.15s ease;
   display: none;
   opacity: 0;
@@ -1801,7 +1801,7 @@ body.dt-column-resizing * {
 /* Context Menu */
 .dt-context-menu {
   position: fixed;
-  z-index: 10000;
+  z-index: var(--z-dialog);
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   border-radius: 8px;

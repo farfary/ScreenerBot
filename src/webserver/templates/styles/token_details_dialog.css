@@ -11,7 +11,7 @@
 .token-details-dialog {
   position: fixed;
   inset: 0;
-  z-index: 10000; /* Above header (1000), below trade-action-dialog (10001) */
+  z-index: var(--z-dialog); /* Above header, below trade-action-dialog */
   display: flex;
   flex-direction: column;
   opacity: 0;

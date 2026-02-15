@@ -138,7 +138,7 @@
 
 .advanced-chart-tooltip {
   position: absolute;
-  z-index: 1000;
+  z-index: var(--z-header);
   min-width: 140px;
   max-width: 200px;
   padding: var(--spacing-sm);
@@ -356,7 +356,7 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
   box-shadow: 0 8px 24px var(--shadow-lg);
-  z-index: 1000;
+  z-index: var(--z-header);
   display: none;
 }
 
@@ -592,7 +592,7 @@
 .advanced-chart-wrapper.fullscreen {
   position: fixed;
   inset: 0;
-  z-index: 9999;
+  z-index: var(--z-dialog-overlay);
   border-radius: 0;
 }
 

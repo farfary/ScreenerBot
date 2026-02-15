@@ -23,7 +23,7 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%) scale(0.95);
-  z-index: 9999;
+  z-index: var(--z-dialog-overlay);
   width: min(640px, 90vw);
   max-height: 85vh;
   display: flex;

@@ -19,7 +19,7 @@
   position: fixed;
   top: 80px;
   right: 20px;
-  z-index: 10001; /* Must be above all dialogs (settings, token details, etc. use 10000) */
+  z-index: var(--z-toast); /* Must be above all dialogs */
   display: flex;
   flex-direction: column;
   gap: 8px;
