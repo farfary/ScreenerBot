@@ -99,8 +99,6 @@ impl Service for TokensServiceNew {
             LogTag::Tokens,
             &format!("Service initialized with database at {}", db_path.display()),
         );
-        // Mark tokens system ready after successful initialization
-        TOKENS_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);
         Ok(())
     }
 
@@ -111,7 +109,12 @@ impl Service for TokensServiceNew {
     ) -> Result<Vec<JoinHandle<()>>, String> {
         let db = self.db.as_ref().ok_or("Database not initialized")?.clone();
 
-        let _ = monitor; // Metrics instrumentation will be wired up in a follow-up
+        // TODO: Wire up metrics instrumentation
+        logger::warning(
+            LogTag::Tokens,
+            "Metrics collection not yet implemented - TaskMonitor not instrumented",
+        );
+        let _ = monitor;
 
         // Create a single shared rate limit coordinator for all token tasks
         let coordinator = Arc::new(RateLimitCoordinator::new());
@@ -151,6 +154,9 @@ impl Service for TokensServiceNew {
             LogTag::Tokens,
             &format!("Service started with {} background tasks", handles.len()),
         );
+        
+        // Mark tokens system ready after all update loops are started
+        TOKENS_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);
         Ok(handles)
     }
 
@@ -158,6 +164,8 @@ impl Service for TokensServiceNew {
         logger::info(LogTag::Tokens, "Service stopping...");
         // On stop, mark as not ready
         TOKENS_SYSTEM_READY.store(false, std::sync::atomic::Ordering::SeqCst);
+        // Clear global database reference
+        crate::tokens::database::clear_global_database();
         Ok(())
     }
 

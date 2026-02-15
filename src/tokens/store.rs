@@ -9,7 +9,7 @@ use std::time::{Duration, Instant};
 const TOKEN_SNAPSHOT_TTL_SECS: u64 = 30;
 const DEXSCREENER_TTL_SECS: u64 = 30;
 const GECKOTERMINAL_TTL_SECS: u64 = 60;
-const RUGCHECK_TTL_SECS: u64 = 1800;
+const RUGCHECK_TTL_SECS: u64 = 300; // 5 minutes - security data shouldn't be stale
 const MARKET_CACHE_CAPACITY: usize = 2000;
 const SECURITY_CACHE_CAPACITY: usize = 3000;
 

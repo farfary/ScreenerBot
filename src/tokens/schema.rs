@@ -278,6 +278,12 @@ pub const CREATE_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_rejection_history_time ON rejection_history(rejected_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_rejection_history_reason_time ON rejection_history(reason, rejected_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_rejection_history_mint ON rejection_history(mint)",
+    
+    // Unique constraint to prevent duplicate rejection history entries
+    "CREATE UNIQUE INDEX IF NOT EXISTS idx_rejection_history_unique ON rejection_history(mint, source, rejected_at)",
+    
+    // Partial index for active (non-blacklisted) tokens by priority (common query pattern)
+    "CREATE INDEX IF NOT EXISTS idx_tracking_active_priority ON update_tracking(priority DESC, market_data_last_updated_at ASC) WHERE last_rejection_at IS NULL",
 ];
 
 /// ALTER TABLE statements for schema migrations (existing databases)
@@ -315,6 +321,9 @@ pub fn initialize_schema(conn: &Connection) -> Result<(), String> {
     // page_size must be set before any tables are created
     conn.pragma_update(None, "page_size", &4096i64)
         .map_err(|e| format!("Failed to set page_size: {}", e))?;
+    // Enable foreign key constraints
+    conn.pragma_update(None, "foreign_keys", &"ON")
+        .map_err(|e| format!("Failed to set foreign_keys: {}", e))?;
     // Prefer busy_timeout API over PRAGMA busy_timeout
     conn.busy_timeout(Duration::from_millis(30000))
         .map_err(|e| format!("Failed to set busy_timeout: {}", e))?;

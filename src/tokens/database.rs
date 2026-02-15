@@ -1,7 +1,6 @@
 /// Unified database operations for tokens system
 /// All SQL operations in one place with proper error handling
 use chrono::{DateTime, Utc};
-use once_cell::sync::OnceCell;
 use rusqlite::types::FromSql;
 use rusqlite::{params, params_from_iter, Connection, Row};
 use std::collections::HashMap;
@@ -9,6 +8,7 @@ use std::sync::{Arc, Mutex};
 
 use crate::logger::{self, LogTag};
 use crate::tokens::pools;
+use crate::tokens::store;
 use crate::tokens::types::{
     DataSource, DexScreenerData, GeckoTerminalData, Priority, RugcheckData, SecurityRisk,
     SocialLink, Token, TokenError, TokenHolder, TokenMetadata, TokenPoolInfo, TokenPoolSources,
@@ -16,18 +16,27 @@ use crate::tokens::types::{
 };
 
 // Global database instance for easy access
-static GLOBAL_DB: OnceCell<Arc<TokenDatabase>> = OnceCell::new();
+static GLOBAL_DB: std::sync::Mutex<Option<Arc<TokenDatabase>>> = std::sync::Mutex::new(None);
 
 /// Initialize global database (called by service)
 pub fn init_global_database(db: Arc<TokenDatabase>) -> Result<(), String> {
-    GLOBAL_DB
-        .set(db)
-        .map_err(|_| "Global database already initialized".to_string())
+    let mut guard = GLOBAL_DB
+        .lock()
+        .map_err(|e| format!("Lock poisoned: {}", e))?;
+    *guard = Some(db);
+    Ok(())
 }
 
 /// Get global database instance
 pub fn get_global_database() -> Option<Arc<TokenDatabase>> {
-    GLOBAL_DB.get().cloned()
+    GLOBAL_DB.lock().ok()?.clone()
+}
+
+/// Clear global database (called on service restart)
+pub fn clear_global_database() {
+    if let Ok(mut guard) = GLOBAL_DB.lock() {
+        *guard = None;
+    }
 }
 
 /// Token database with connection pool
@@ -195,6 +204,9 @@ impl TokenDatabase {
             ],
         )
         .map_err(|e| TokenError::Database(format!("Failed to upsert Rugcheck data: {}", e)))?;
+
+        // Update in-memory cache
+        store::store_rugcheck(mint, data);
 
         Ok(())
     }
@@ -664,6 +676,9 @@ impl TokenDatabase {
             ],
         ).map_err(|e| TokenError::Database(format!("Failed to upsert DexScreener data: {}", e)))?;
 
+        // Update in-memory cache
+        store::store_dexscreener(mint, data);
+
         Ok(())
     }
 
@@ -816,6 +831,9 @@ impl TokenDatabase {
         insert_result.map_err(|e| {
             TokenError::Database(format!("Failed to upsert GeckoTerminal data: {}", e))
         })?;
+
+        // Update in-memory cache
+        store::store_geckoterminal(mint, data);
 
         Ok(())
     }
@@ -1022,6 +1040,30 @@ impl TokenDatabase {
             .transaction()
             .map_err(|e| TokenError::Database(format!("Failed to start transaction: {}", e)))?;
 
+        // Query existing first_seen_ts values BEFORE delete to preserve them
+        let mut existing_first_seen: HashMap<String, i64> = HashMap::new();
+        {
+            let mut stmt = tx
+                .prepare(
+                    "SELECT pool_address, pool_data_first_seen_at FROM token_pools WHERE mint = ?1",
+                )
+                .map_err(|e| TokenError::Database(format!("Failed to prepare query: {}", e)))?;
+
+            let rows = stmt
+                .query_map(params![&snapshot.mint], |row| {
+                    Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+                })
+                .map_err(|e| {
+                    TokenError::Database(format!("Failed to query existing pools: {}", e))
+                })?;
+
+            for row in rows {
+                if let Ok((pool_addr, ts)) = row {
+                    existing_first_seen.insert(pool_addr, ts);
+                }
+            }
+        }
+
         tx.execute(
             "DELETE FROM token_pools WHERE mint = ?1",
             params![&snapshot.mint],
@@ -1033,14 +1075,11 @@ impl TokenDatabase {
                 TokenError::Database(format!("Failed to serialize pool sources: {}", e))
             })?;
 
-            // Check if this pool already exists to preserve first_seen_at
-            let first_seen_ts = tx
-                .query_row(
-                    "SELECT pool_data_first_seen_at FROM token_pools WHERE mint = ?1 AND pool_address = ?2",
-                    params![&snapshot.mint, &pool.pool_address],
-                    |row| row.get::<_, i64>(0),
-                )
-                .unwrap_or_else(|_| pool.pool_data_last_fetched_at.timestamp());
+            // Use preserved first_seen_ts or fall back to current timestamp
+            let first_seen_ts = existing_first_seen
+                .get(&pool.pool_address)
+                .copied()
+                .unwrap_or_else(|| pool.pool_data_last_fetched_at.timestamp());
 
             tx.execute(
                 "INSERT INTO token_pools (
@@ -1426,6 +1465,15 @@ impl TokenDatabase {
 
     /// Update priority for a token
     pub fn update_priority(&self, mint: &str, priority: i32) -> TokenResult<()> {
+        // Validate priority value (Bug #29 fix)
+        let valid_priorities = [10, 25, 40, 55, 60, 75, 100];
+        if !valid_priorities.contains(&priority) {
+            return Err(TokenError::Database(format!(
+                "Invalid priority value: {}. Must be one of: 10, 25, 40, 55, 60, 75, 100",
+                priority
+            )));
+        }
+
         let conn = self
             .conn
             .lock()
@@ -1539,6 +1587,15 @@ impl TokenDatabase {
     pub fn batch_update_priority(&self, mints: &[String], priority: i32) -> TokenResult<usize> {
         if mints.is_empty() {
             return Ok(0);
+        }
+
+        // Validate priority value (Bug #29 fix)
+        let valid_priorities = [10, 25, 40, 55, 60, 75, 100];
+        if !valid_priorities.contains(&priority) {
+            return Err(TokenError::Database(format!(
+                "Invalid priority value: {}. Must be one of: 10, 25, 40, 55, 60, 75, 100",
+                priority
+            )));
         }
 
         let mut conn = self
@@ -2095,6 +2152,8 @@ impl TokenDatabase {
     }
 
     /// Check if token has stale market data (>2 minutes old or missing)
+    /// Reserved for future use in health monitoring/diagnostics (Bug #27)
+    #[allow(dead_code)]
     pub fn is_market_data_stale(&self, mint: &str, threshold_seconds: i64) -> TokenResult<bool> {
         let conn = self
             .conn
@@ -3675,7 +3734,7 @@ impl TokenDatabase {
     }
 
     /// Get priority for a token
-    fn get_priority(&self, mint: &str) -> TokenResult<Priority> {
+    pub fn get_priority(&self, mint: &str) -> TokenResult<Priority> {
         let conn = self
             .conn
             .lock()
@@ -4192,9 +4251,14 @@ pub async fn replace_token_pools_async(snapshot: TokenPoolsSnapshot) -> TokenRes
     let db = get_global_database()
         .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
 
+    let mint = snapshot.mint.clone();
+
     tokio::task::spawn_blocking(move || db.replace_token_pools(&snapshot))
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {}", e)))??;
+
+    // Invalidate cache after successful pool replacement
+    store::invalidate_token_snapshot(&mint);
 
     Ok(())
 }
@@ -4316,6 +4380,8 @@ pub async fn update_token_priority_async(mint: &str, priority: i32) -> TokenResu
 }
 
 /// Async: check if token market data is stale
+/// Reserved for future use in health monitoring/diagnostics (Bug #27)
+#[allow(dead_code)]
 pub async fn is_market_data_stale_async(mint: &str, threshold_seconds: i64) -> TokenResult<bool> {
     let db = get_global_database()
         .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;

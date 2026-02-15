@@ -177,6 +177,10 @@ impl DexScreenerClient {
                     format!("HTTP {}: {}", status, body),
                 )
                 .await;
+            // Simple 429 backoff to avoid hammering when rate limited
+            if status.as_u16() == 429 {
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
             return Err(format!("DexScreener API error {}: {}", status, body));
         }
 
@@ -365,6 +369,10 @@ impl DexScreenerClient {
                     format!("HTTP {}: {}", status, body),
                 )
                 .await;
+            // Simple 429 backoff to avoid hammering when rate limited
+            if status.as_u16() == 429 {
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
             return Err(format!("DexScreener API error {}: {}", status, body));
         }
 
@@ -497,6 +505,10 @@ impl DexScreenerClient {
                     format!("HTTP {}: {}", status, body),
                 )
                 .await;
+            // Simple 429 backoff to avoid hammering when rate limited
+            if status.as_u16() == 429 {
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
             return Err(format!("DexScreener API error {}: {}", status, body));
         }
 
@@ -553,6 +565,10 @@ impl DexScreenerClient {
                     format!("HTTP {}: {}", status, body),
                 )
                 .await;
+            // Simple 429 backoff to avoid hammering when rate limited
+            if status.as_u16() == 429 {
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
             return Err(format!("DexScreener API error {}: {}", status, body));
         }
 

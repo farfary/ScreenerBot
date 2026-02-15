@@ -191,14 +191,30 @@ pub async fn fetch_dexscreener_data_batch(
 
     // 3. Fetch from batch API endpoint
     let api_manager = crate::apis::manager::get_api_manager();
-    let pools = api_manager
+    let pools = match api_manager
         .dexscreener
         .fetch_token_batch(&to_fetch, None)
         .await
-        .map_err(|e| TokenError::Api {
-            source: "DexScreener".to_string(),
-            message: format!("{:?}", e),
-        })?;
+    {
+        Ok(pools) => pools,
+        Err(e) => {
+            // Log the batch API failure but don't fail the entire request
+            // Return what we have from cache/DB
+            logger::warning(
+                LogTag::Tokens,
+                &format!(
+                    "[TOKENS][DEXSCREENER] Batch API failed for {} tokens: {:?}",
+                    to_fetch.len(),
+                    e
+                ),
+            );
+            // Mark all unfetched tokens as None
+            for mint in &to_fetch {
+                results.insert(mint.clone(), None);
+            }
+            return Ok(results);
+        }
+    };
 
     // Process pools - DexScreener batch returns ONE best pool per token
     use crate::constants::SOL_MINT;

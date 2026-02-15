@@ -34,14 +34,35 @@ use crate::tokens::types::{TokenError, TokenResult};
 use futures::future::join_all;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::sync::Mutex as StdMutex;
 use std::time::{Duration, Instant};
-use tokio::sync::{Mutex, Notify, Semaphore};
+use tokio::sync::{Mutex, Notify, OwnedSemaphorePermit, Semaphore};
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 
 /// Number of consecutive failures before marking a token as permanently failed for market data
 /// "Token not listed" errors are considered permanent after this many attempts
 const PERMANENT_FAILURE_THRESHOLD: u32 = 3;
+
+/// In-flight token tracking to prevent duplicate fetches across loops
+static IN_FLIGHT_TOKENS: once_cell::sync::Lazy<StdMutex<HashSet<String>>> =
+    once_cell::sync::Lazy::new(|| StdMutex::new(HashSet::new()));
+
+/// Try to mark a token as in-flight. Returns true if marked, false if already in-flight.
+fn try_mark_in_flight(mint: &str) -> bool {
+    if let Ok(mut set) = IN_FLIGHT_TOKENS.lock() {
+        set.insert(mint.to_string())
+    } else {
+        true // If lock poisoned, allow fetch
+    }
+}
+
+/// Clear in-flight marker for a token
+fn clear_in_flight(mint: &str) {
+    if let Ok(mut set) = IN_FLIGHT_TOKENS.lock() {
+        set.remove(mint);
+    }
+}
 
 /// Check if updates should be paused due to active tools
 fn should_skip_for_tools() -> bool {
@@ -191,15 +212,11 @@ impl RateLimitCoordinator {
 
     /// Acquire permit for DexScreener token batch API call (market data updates)
     /// Rate limit: 300/min
-    pub async fn acquire_dexscreener_batch(&self) -> Result<(), TokenError> {
+    pub async fn acquire_dexscreener_batch(&self) -> Result<OwnedSemaphorePermit, TokenError> {
         self.dexscreener_batch_sem
             .clone()
             .acquire_owned()
             .await
-            .map(|permit| {
-                // Do not release permits early; refill task restores capacity each minute
-                permit.forget();
-            })
             .map_err(|e| TokenError::RateLimit {
                 source: "DexScreener-Batch".to_string(),
                 message: format!("Failed to acquire permit: {}", e),
@@ -208,14 +225,11 @@ impl RateLimitCoordinator {
 
     /// Acquire permit for DexScreener profiles API call (discovery)
     /// Rate limit: 60/min
-    pub async fn acquire_dexscreener_profiles(&self) -> Result<(), TokenError> {
+    pub async fn acquire_dexscreener_profiles(&self) -> Result<OwnedSemaphorePermit, TokenError> {
         self.dexscreener_profiles_sem
             .clone()
             .acquire_owned()
             .await
-            .map(|permit| {
-                permit.forget();
-            })
             .map_err(|e| TokenError::RateLimit {
                 source: "DexScreener-Profiles".to_string(),
                 message: format!("Failed to acquire permit: {}", e),
@@ -224,14 +238,11 @@ impl RateLimitCoordinator {
 
     /// Acquire permit for DexScreener boosts API call (discovery)
     /// Rate limit: 60/min
-    pub async fn acquire_dexscreener_boosts(&self) -> Result<(), TokenError> {
+    pub async fn acquire_dexscreener_boosts(&self) -> Result<OwnedSemaphorePermit, TokenError> {
         self.dexscreener_boosts_sem
             .clone()
             .acquire_owned()
             .await
-            .map(|permit| {
-                permit.forget();
-            })
             .map_err(|e| TokenError::RateLimit {
                 source: "DexScreener-Boosts".to_string(),
                 message: format!("Failed to acquire permit: {}", e),
@@ -240,14 +251,11 @@ impl RateLimitCoordinator {
 
     /// Acquire permit for DexScreener full pool fetch API call
     /// Rate limit: 300/min
-    pub async fn acquire_dexscreener_pools(&self) -> Result<(), TokenError> {
+    pub async fn acquire_dexscreener_pools(&self) -> Result<OwnedSemaphorePermit, TokenError> {
         self.dexscreener_pools_sem
             .clone()
             .acquire_owned()
             .await
-            .map(|permit| {
-                permit.forget();
-            })
             .map_err(|e| TokenError::RateLimit {
                 source: "DexScreener-Pools".to_string(),
                 message: format!("Failed to acquire permit: {}", e),
@@ -255,12 +263,11 @@ impl RateLimitCoordinator {
     }
 
     /// Acquire permit for GeckoTerminal API call
-    pub async fn acquire_geckoterminal(&self) -> Result<(), TokenError> {
+    pub async fn acquire_geckoterminal(&self) -> Result<OwnedSemaphorePermit, TokenError> {
         self.geckoterminal_sem
             .clone()
             .acquire_owned()
             .await
-            .map(|permit| permit.forget())
             .map_err(|e| TokenError::RateLimit {
                 source: "GeckoTerminal".to_string(),
                 message: format!("Failed to acquire permit: {}", e),
@@ -268,12 +275,11 @@ impl RateLimitCoordinator {
     }
 
     /// Acquire permit for Rugcheck API call
-    pub async fn acquire_rugcheck(&self) -> Result<(), TokenError> {
+    pub async fn acquire_rugcheck(&self) -> Result<OwnedSemaphorePermit, TokenError> {
         self.rugcheck_sem
             .clone()
             .acquire_owned()
             .await
-            .map(|permit| permit.forget())
             .map_err(|e| TokenError::RateLimit {
                 source: "Rugcheck".to_string(),
                 message: format!("Failed to acquire permit: {}", e),
@@ -387,16 +393,12 @@ impl PoolPriorityManager {
             }
 
             let demote_after = self.demote_after;
-            state.retain(|mint, info| {
-                if pool_set.contains(mint) {
-                    true
-                } else if now.duration_since(info.last_seen) >= demote_after {
+            // Collect demotion candidates WITHOUT removing from state yet
+            for (mint, info) in state.iter() {
+                if !pool_set.contains(mint) && now.duration_since(info.last_seen) >= demote_after {
                     demotion_candidates.push((mint.clone(), info.previous_priority));
-                    false
-                } else {
-                    true
                 }
-            });
+            }
         }
 
         if !promotions.is_empty() {
@@ -478,11 +480,17 @@ impl PoolPriorityManager {
                     &format!("Failed to demote {} from PoolTracked priority: {}", mint, e),
                 );
             } else {
-                demoted.push((mint, target_priority));
+                demoted.push((mint.clone(), target_priority));
             }
         }
 
+        // NOW remove successfully demoted tokens from state (after DB writes succeed)
         if !demoted.is_empty() {
+            let mut state = self.state.lock().await;
+            for (mint, _) in &demoted {
+                state.remove(mint);
+            }
+
             let count = demoted.len();
             let sample_entries: Vec<String> = demoted
                 .iter()
@@ -525,8 +533,11 @@ pub async fn update_token(
 
     // Update DexScreener market data only
     match coordinator.acquire_dexscreener_batch().await {
-        Ok(_) => match dexscreener::fetch_dexscreener_data(mint, db).await {
-            Ok(Some(_)) => successes.push("DexScreener".to_string()),
+        Ok(permit) => match dexscreener::fetch_dexscreener_data(mint, db).await {
+            Ok(Some(_)) => {
+                permit.forget();
+                successes.push("DexScreener".to_string());
+            }
             Ok(None) => failures.push(format!("DexScreener: Token not listed")),
             Err(e) => failures.push(format!("DexScreener: {}", e)),
         },
@@ -630,6 +641,17 @@ pub async fn update_tokens_batch(
         return Ok(Vec::new());
     }
 
+    // Filter out tokens already being fetched by other loops
+    let mints_to_fetch: Vec<String> = mints
+        .iter()
+        .filter(|mint| try_mark_in_flight(mint))
+        .cloned()
+        .collect();
+
+    if mints_to_fetch.is_empty() {
+        return Ok(Vec::new());
+    }
+
     let mut results = Vec::new();
 
     // Acquire rate limit permit for DexScreener batch endpoint (market data)
@@ -637,7 +659,14 @@ pub async fn update_tokens_batch(
 
     // Fetch DexScreener data
     let dex_result = match dex_permit {
-        Ok(_) => dexscreener::fetch_dexscreener_data_batch(mints, db).await,
+        Ok(permit) => {
+            let result = dexscreener::fetch_dexscreener_data_batch(&mints_to_fetch, db).await;
+            // Only forget permit if API call succeeded
+            if result.is_ok() {
+                permit.forget();
+            }
+            result
+        }
         Err(e) => Err(TokenError::RateLimit {
             source: "DexScreener-Batch".to_string(),
             message: e.to_string(),
@@ -659,7 +688,7 @@ pub async fn update_tokens_batch(
         };
 
     // Process each token with batch results (market data from DexScreener only)
-    for mint in mints {
+    for mint in &mints_to_fetch {
         let mut successes = Vec::new();
         let mut failures = Vec::new();
 
@@ -691,6 +720,11 @@ pub async fn update_tokens_batch(
         });
     }
 
+    // Clear in-flight markers for all tokens
+    for mint in &mints_to_fetch {
+        clear_in_flight(mint);
+    }
+
     Ok(results)
 }
 
@@ -720,10 +754,16 @@ async fn update_security_data(db: &TokenDatabase, coordinator: &RateLimitCoordin
 
     let mint = &tokens[0];
 
+    // Check if token is already being fetched
+    if !try_mark_in_flight(mint) {
+        return; // Another loop is already fetching this token
+    }
+
     // Fetch security data for single token
     match coordinator.acquire_rugcheck().await {
-        Ok(_) => match rugcheck::fetch_rugcheck_data(mint, db).await {
+        Ok(permit) => match rugcheck::fetch_rugcheck_data(mint, db).await {
             Ok(Some(_)) => {
+                permit.forget();
                 logger::debug(
                     LogTag::Tokens,
                     &format!("Security data fetched for {}", mint),
@@ -762,6 +802,9 @@ async fn update_security_data(db: &TokenDatabase, coordinator: &RateLimitCoordin
             logger::error(LogTag::Tokens, &format!("Rugcheck rate limit: {}", e));
         }
     }
+
+    // Clear in-flight marker
+    clear_in_flight(mint);
 }
 
 // ============================================================================
@@ -781,6 +824,7 @@ pub fn start_update_loop(
     let coord_security = coordinator.clone();
     let shutdown_security = shutdown.clone();
     handles.push(tokio::spawn(async move {
+        // Stagger loop start to avoid thundering herd (0s delay)
         update_security_data(&db_security, &coord_security).await;
         loop {
             tokio::select! {
@@ -797,6 +841,8 @@ pub fn start_update_loop(
     let coord_seed = coordinator.clone();
     let shutdown_seed = shutdown.clone();
     handles.push(tokio::spawn(async move {
+        // Stagger loop start to avoid thundering herd (2s delay)
+        sleep(Duration::from_secs(2)).await;
         update_uninitialized_tokens(&db_seed, &coord_seed).await;
         loop {
             tokio::select! {
@@ -814,6 +860,8 @@ pub fn start_update_loop(
     let db_pool_state = db.clone();
     let shutdown_pool_sync = shutdown.clone();
     handles.push(tokio::spawn(async move {
+        // Stagger loop start to avoid thundering herd (4s delay)
+        sleep(Duration::from_secs(4)).await;
         manager_sync.sync(db_pool_state.as_ref()).await;
         loop {
             tokio::select! {
@@ -830,6 +878,8 @@ pub fn start_update_loop(
     let coord_pool = coordinator.clone();
     let shutdown_pool_update = shutdown.clone();
     handles.push(tokio::spawn(async move {
+        // Stagger loop start to avoid thundering herd (6s delay)
+        sleep(Duration::from_secs(6)).await;
         update_pool_tracked_tokens(&db_pool_update, &coord_pool).await;
         loop {
             tokio::select! {
@@ -846,6 +896,8 @@ pub fn start_update_loop(
     let coord_open_pos = coordinator.clone();
     let shutdown_open_pos = shutdown.clone();
     handles.push(tokio::spawn(async move {
+        // Stagger loop start to avoid thundering herd (8s delay)
+        sleep(Duration::from_secs(8)).await;
         loop {
             tokio::select! {
                 _ = shutdown_open_pos.notified() => break,
@@ -861,6 +913,8 @@ pub fn start_update_loop(
     let coord_filter_passed = coordinator.clone();
     let shutdown_filter_passed = shutdown.clone();
     handles.push(tokio::spawn(async move {
+        // Stagger loop start to avoid thundering herd (10s delay)
+        sleep(Duration::from_secs(10)).await;
         loop {
             tokio::select! {
                 _ = shutdown_filter_passed.notified() => break,
@@ -876,6 +930,8 @@ pub fn start_update_loop(
     let coord_background = coordinator.clone();
     let shutdown_background = shutdown.clone();
     handles.push(tokio::spawn(async move {
+        // Stagger loop start to avoid thundering herd (12s delay)
+        sleep(Duration::from_secs(12)).await;
         loop {
             tokio::select! {
                 _ = shutdown_background.notified() => break,
@@ -1110,19 +1166,27 @@ async fn update_pool_tracked_tokens(db: &TokenDatabase, coordinator: &RateLimitC
                             ),
                         );
                     } else if result.is_success() {
-                        // Success: Demote from PoolTracked (75) to Stale (40) priority
-                        // After fresh update, token returns to normal priority rotation
-                        // Using Stale (40) instead of non-existent "High" (50)
-                        if let Err(e) = db.update_priority(&result.mint, Priority::Stale.to_value())
-                        {
-                            logger::warning(
-                                LogTag::Tokens,
-                                &format!(
-                                    "Failed to demote {} from PoolTracked to Stale priority: {}",
-                                    result.mint, e
-                                ),
-                            );
+                        // Success: Check if token should keep PoolTracked priority
+                        // Bug #23 fix: Don't demote if current priority is PoolTracked
+                        // This prevents priority churn for tokens actively tracked by pool service
+                        let current_priority =
+                            db.get_priority(&result.mint).unwrap_or(Priority::Standard);
+                        if current_priority != Priority::PoolTracked {
+                            // Demote from higher priorities to Stale (40) after fresh update
+                            // Token returns to normal priority rotation
+                            if let Err(e) =
+                                db.update_priority(&result.mint, Priority::Stale.to_value())
+                            {
+                                logger::warning(
+                                    LogTag::Tokens,
+                                    &format!(
+                                        "Failed to demote {} to Stale priority: {}",
+                                        result.mint, e
+                                    ),
+                                );
+                            }
                         }
+                        // If PoolTracked, keep it - pool service maintains this priority
                     }
                 }
             }
@@ -1322,21 +1386,39 @@ pub async fn force_update_token(
         // DexScreener market data
         async {
             match coord_ref.acquire_dexscreener_batch().await {
-                Ok(_) => dexscreener::fetch_dexscreener_data(&mint_str, db_ref).await,
+                Ok(permit) => {
+                    let result = dexscreener::fetch_dexscreener_data(&mint_str, db_ref).await;
+                    if result.is_ok() && matches!(result, Ok(Some(_))) {
+                        permit.forget();
+                    }
+                    result
+                }
                 Err(e) => Err(e),
             }
         },
         // GeckoTerminal market data
         async {
             match coord_ref.acquire_geckoterminal().await {
-                Ok(_) => geckoterminal::fetch_geckoterminal_data(&mint_str, db_ref).await,
+                Ok(permit) => {
+                    let result = geckoterminal::fetch_geckoterminal_data(&mint_str, db_ref).await;
+                    if result.is_ok() && matches!(result, Ok(Some(_))) {
+                        permit.forget();
+                    }
+                    result
+                }
                 Err(e) => Err(e),
             }
         },
         // Rugcheck security data
         async {
             match coord_ref.acquire_rugcheck().await {
-                Ok(_) => rugcheck::fetch_rugcheck_data(&mint_str, db_ref).await,
+                Ok(permit) => {
+                    let result = rugcheck::fetch_rugcheck_data(&mint_str, db_ref).await;
+                    if result.is_ok() && matches!(result, Ok(Some(_))) {
+                        permit.forget();
+                    }
+                    result
+                }
                 Err(e) => Err(e),
             }
         }

@@ -560,11 +560,12 @@ async fn fetch_dexscreener_profiles(
     coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
     // Use profiles-specific rate limit (60/min, separate from market data updates)
-    let _ = coordinator
+    let permit = coordinator
         .acquire_dexscreener_profiles()
         .await
         .map_err(|e| e.to_string())?;
     let profiles = api.dexscreener.get_latest_profiles().await?;
+    permit.forget();
 
     Ok(profiles
         .into_iter()
@@ -589,11 +590,12 @@ async fn fetch_dexscreener_latest_boosts(
     coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
     // Use boosts-specific rate limit (60/min, separate from market data updates)
-    let _ = coordinator
+    let permit = coordinator
         .acquire_dexscreener_boosts()
         .await
         .map_err(|e| e.to_string())?;
     let boosts = api.dexscreener.get_latest_boosted_tokens().await?;
+    permit.forget();
 
     Ok(boosts
         .into_iter()
@@ -612,7 +614,7 @@ async fn fetch_dexscreener_top_boosts(
     coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
     // Use boosts-specific rate limit (60/min, separate from market data updates)
-    let _ = coordinator
+    let permit = coordinator
         .acquire_dexscreener_boosts()
         .await
         .map_err(|e| e.to_string())?;
@@ -620,6 +622,7 @@ async fn fetch_dexscreener_top_boosts(
         .dexscreener
         .get_top_boosted_tokens(Some("solana"))
         .await?;
+    permit.forget();
 
     Ok(boosts
         .into_iter()
@@ -636,7 +639,7 @@ async fn fetch_gecko_new_pools(
     api: &Arc<crate::apis::ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
-    let _ = coordinator
+    let permit = coordinator
         .acquire_geckoterminal()
         .await
         .map_err(|e| e.to_string())?;
@@ -644,6 +647,7 @@ async fn fetch_gecko_new_pools(
         .geckoterminal
         .fetch_new_pools_by_network("solana", None, Some(1))
         .await?;
+    permit.forget();
 
     let mut records = Vec::new();
     for pool in pools {
@@ -664,7 +668,7 @@ async fn fetch_gecko_recent_updates(
     api: &Arc<crate::apis::ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
-    let _ = coordinator
+    let permit = coordinator
         .acquire_geckoterminal()
         .await
         .map_err(|e| e.to_string())?;
@@ -672,6 +676,7 @@ async fn fetch_gecko_recent_updates(
         .geckoterminal
         .fetch_recently_updated_tokens(None, Some("solana"))
         .await?;
+    permit.forget();
 
     Ok(response
         .data
@@ -689,7 +694,7 @@ async fn fetch_gecko_trending(
     api: &Arc<crate::apis::ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
-    let _ = coordinator
+    let permit = coordinator
         .acquire_geckoterminal()
         .await
         .map_err(|e| e.to_string())?;
@@ -697,6 +702,7 @@ async fn fetch_gecko_trending(
         .geckoterminal
         .fetch_trending_pools_by_network(Some("solana"), Some(1), None, None)
         .await?;
+    permit.forget();
 
     let mut records = Vec::new();
     for pool in pools {
@@ -717,7 +723,7 @@ async fn fetch_rugcheck_new_tokens(
     api: &Arc<crate::apis::ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
-    let _ = coordinator
+    let permit = coordinator
         .acquire_rugcheck()
         .await
         .map_err(|e| e.to_string())?;
@@ -726,6 +732,7 @@ async fn fetch_rugcheck_new_tokens(
         .fetch_new_tokens()
         .await
         .map_err(|e| e.to_string())?;
+    permit.forget();
 
     Ok(tokens
         .into_iter()
@@ -742,7 +749,7 @@ async fn fetch_rugcheck_recent_tokens(
     api: &Arc<crate::apis::ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
-    let _ = coordinator
+    let permit = coordinator
         .acquire_rugcheck()
         .await
         .map_err(|e| e.to_string())?;
@@ -751,6 +758,7 @@ async fn fetch_rugcheck_recent_tokens(
         .fetch_recent_tokens()
         .await
         .map_err(|e| e.to_string())?;
+    permit.forget();
 
     Ok(tokens
         .into_iter()
@@ -770,7 +778,7 @@ async fn fetch_rugcheck_trending_tokens(
     api: &Arc<crate::apis::ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
-    let _ = coordinator
+    let permit = coordinator
         .acquire_rugcheck()
         .await
         .map_err(|e| e.to_string())?;
@@ -779,6 +787,7 @@ async fn fetch_rugcheck_trending_tokens(
         .fetch_trending_tokens()
         .await
         .map_err(|e| e.to_string())?;
+    permit.forget();
 
     Ok(tokens
         .into_iter()
@@ -795,7 +804,7 @@ async fn fetch_rugcheck_verified_tokens(
     api: &Arc<crate::apis::ApiManager>,
     coordinator: Arc<RateLimitCoordinator>,
 ) -> Result<Vec<DiscoveryRecord>, String> {
-    let _ = coordinator
+    let permit = coordinator
         .acquire_rugcheck()
         .await
         .map_err(|e| e.to_string())?;
@@ -804,6 +813,7 @@ async fn fetch_rugcheck_verified_tokens(
         .fetch_verified_tokens()
         .await
         .map_err(|e| e.to_string())?;
+    permit.forget();
 
     Ok(tokens
         .into_iter()

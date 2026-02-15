@@ -145,7 +145,15 @@ pub async fn fetch_geckoterminal_data_batch(
         };
 
         // Store market data in database
-        db.upsert_geckoterminal_data(mint, &data).ok();
+        if let Err(e) = db.upsert_geckoterminal_data(mint, &data) {
+            logger::error(
+                LogTag::Tokens,
+                &format!(
+                    "[TOKENS][GECKOTERMINAL] Failed to save GeckoTerminal data for {}: {}",
+                    mint, e
+                ),
+            );
+        }
 
         // CRITICAL: Update token metadata (symbol/name) from GeckoTerminal data
         // This fixes race condition where Pool Service discovers token first without metadata

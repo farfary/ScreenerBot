@@ -46,15 +46,20 @@ pub async fn fetch_from_sources(
                 )
                 .await
                 {
-                    Ok(Ok(())) => {
+                    Ok(Ok(permit)) => {
                         // Got permit, proceed with fetch
-                        api.dexscreener
+                        let result = api.dexscreener
                             .fetch_token_pools(&mint, None)
                             .await
                             .map_err(|e| TokenError::Api {
                                 source: "DexScreener".to_string(),
                                 message: e,
-                            })
+                            });
+                        // Only forget permit if API call succeeded
+                        if result.is_ok() {
+                            permit.forget();
+                        }
+                        result
                     }
                     Ok(Err(e)) => Err(e),
                     Err(_) => Err(TokenError::RateLimit {
@@ -81,15 +86,20 @@ pub async fn fetch_from_sources(
                 )
                 .await
                 {
-                    Ok(Ok(())) => {
+                    Ok(Ok(permit)) => {
                         // Got permit, proceed with fetch
-                        api.geckoterminal
+                        let result = api.geckoterminal
                             .fetch_pools(&mint)
                             .await
                             .map_err(|e| TokenError::Api {
                                 source: "GeckoTerminal".to_string(),
                                 message: e,
-                            })
+                            });
+                        // Only forget permit if API call succeeded
+                        if result.is_ok() {
+                            permit.forget();
+                        }
+                        result
                     }
                     Ok(Err(e)) => Err(e),
                     Err(_) => Err(TokenError::RateLimit {

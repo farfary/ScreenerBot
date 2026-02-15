@@ -157,7 +157,17 @@ pub async fn fetch_rugcheck_data(
             ),
         );
         // Return stale DB data if available, otherwise None
-        return Ok(db.get_rugcheck_data(mint)?);
+        let db_data = db.get_rugcheck_data(mint)?;
+        if db_data.is_some() {
+            logger::warning(
+                LogTag::Tokens,
+                &format!(
+                    "[RUGCHECK] Returning stale data for {}: API unavailable",
+                    mint
+                ),
+            );
+        }
+        return Ok(db_data);
     }
 
     // 3. Fetch from API

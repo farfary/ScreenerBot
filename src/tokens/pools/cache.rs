@@ -195,6 +195,10 @@ impl PrefetchScheduler {
 
             let mut prefetch_state = POOL_PREFETCH_STATE.lock().await;
             prefetch_state.remove(&mint);
+        } else {
+            // Success path: also remove prefetch state to avoid memory leak
+            let mut prefetch_state = POOL_PREFETCH_STATE.lock().await;
+            prefetch_state.remove(&mint);
         }
     }
 }
@@ -267,7 +271,9 @@ fn refreshed_at_from_snapshot(snapshot: &TokenPoolsSnapshot) -> Instant {
         .signed_duration_since(snapshot.pool_data_last_fetched_at)
         .num_seconds()
         .max(0) as u64;
-    now.checked_sub(Duration::from_secs(age_secs))
+    // Cap age to prevent clock drift issues (max 5 minutes reasonable)
+    let capped_age = age_secs.min(300);
+    now.checked_sub(Duration::from_secs(capped_age))
         .unwrap_or(now)
 }
 
@@ -304,10 +310,8 @@ fn store_pool_snapshot(snapshot: TokenPoolsSnapshot) {
 }
 
 fn is_snapshot_fresh(snapshot: &TokenPoolsSnapshot) -> bool {
-    let age = Utc::now()
-        .signed_duration_since(snapshot.pool_data_last_fetched_at)
-        .num_seconds();
-    age >= 0 && age <= TOKEN_POOLS_TTL_SECS as i64
+    let refreshed_at = refreshed_at_from_snapshot(snapshot);
+    refreshed_at.elapsed() <= pool_cache_ttl()
 }
 
 async fn refresh_token_pools_and_cache(

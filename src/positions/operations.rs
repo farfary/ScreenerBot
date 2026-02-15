@@ -562,6 +562,19 @@ async fn open_position_impl(token_mint: &str, trade_size_sol: f64) -> Result<Str
     // Add to state
     add_position(position_with_id).await;
 
+    // Bug #25 fix: Set token priority to OpenPosition (100) for fastest updates (5s interval)
+    // This ensures price tracking is responsive during active trading
+    if let Some(db) = crate::tokens::database::get_global_database() {
+        let _ = db.update_priority(
+            &api_token.mint,
+            crate::tokens::priorities::Priority::OpenPosition.to_value(),
+        );
+        logger::debug(
+            LogTag::Positions,
+            &format!("Set token {} to OpenPosition priority", api_token.symbol),
+        );
+    }
+
     // We intentionally keep the global slot occupied for the lifecycle of this position by
     // calling forget() so the permit is NOT returned on drop. Terminal transitions will
     // explicitly release it.

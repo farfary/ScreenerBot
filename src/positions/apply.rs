@@ -236,6 +236,22 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                     ),
                                 );
 
+                                // Bug #25 fix: Reset token priority to Standard (25) after position close
+                                // This prevents stale OpenPosition priority after trading ends
+                                if let Some(db) = crate::tokens::database::get_global_database() {
+                                    let _ = db.update_priority(
+                                        &position.mint,
+                                        crate::tokens::priorities::Priority::Standard.to_value(),
+                                    );
+                                    logger::debug(
+                                        LogTag::Positions,
+                                        &format!(
+                                            "Reset token {} to Standard priority after close",
+                                            position.symbol
+                                        ),
+                                    );
+                                }
+
                                 // Queue Telegram notification for position closed
                                 if with_config(|c| {
                                     c.telegram.enabled && c.telegram.notify_position_closed
@@ -362,6 +378,21 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                     position_id
                                 ),
                             );
+
+                            // Bug #25 fix: Reset token priority after synthetic exit
+                            if let Some(db) = crate::tokens::database::get_global_database() {
+                                let _ = db.update_priority(
+                                    &position.mint,
+                                    crate::tokens::priorities::Priority::Standard.to_value(),
+                                );
+                                logger::debug(
+                                    LogTag::Positions,
+                                    &format!(
+                                        "Reset token {} to Standard priority after synthetic exit",
+                                        position.symbol
+                                    ),
+                                );
+                            }
                         }
                         Err(e) => {
                             return Err(format!("Failed to update database: {}", e));
@@ -400,6 +431,22 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                             position_id
                         ),
                     );
+
+                    // Bug #25 fix: Reset token priority after orphan removal
+                    if let Some(db) = crate::tokens::database::get_global_database() {
+                        let _ = db.update_priority(
+                            &mint,
+                            crate::tokens::priorities::Priority::Standard.to_value(),
+                        );
+                        logger::debug(
+                            LogTag::Positions,
+                            &format!(
+                                "Reset token priority to Standard after orphan removal (ID: {})",
+                                position_id
+                            ),
+                        );
+                    }
+
                     // NOTE: position removal already purged signature indexes. Optionally we could
                     // attempt to prune per-mint lock map here if implemented in state.
                 }
