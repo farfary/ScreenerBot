@@ -75,7 +75,12 @@ src/tokens/
 │   ├── assembly.rs     Complex multi-table token assembly queries
 │   └── async_api.rs    Async convenience wrappers (~40 functions)
 ├── schema.rs           Database schema (10 tables, 33 indexes)
-├── updates.rs          Priority-based background update loops
+├── updates/            Priority-based background update loops (split into 5 submodules)
+│   ├── mod.rs          Module re-exports (public API)
+│   ├── helpers.rs      In-flight tracking, error classification, dashboard filtering
+│   ├── rate_limiter.rs RateLimitCoordinator with per-endpoint semaphores
+│   ├── core.rs         update_token, update_tokens_batch, PoolPriorityManager
+│   └── loops.rs        start_update_loop + 5 priority-specific loops + force_update
 ├── discovery.rs        Multi-source token discovery pipeline
 ├── store.rs            In-memory TTL caches (4 cache types)
 ├── decimals.rs         Decimal lookup with 3-tier fallback
