@@ -1,6 +1,7 @@
 // Position management module - clean modular design
 pub mod apply;
-pub mod db;
+pub mod database;
+pub use database as db;
 pub mod lib;
 pub mod loss_detection;
 pub mod metrics;

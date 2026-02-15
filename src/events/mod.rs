@@ -41,7 +41,8 @@
 /// ## Integration:
 /// Events complement but do not replace the logging system. Logs are for real-time
 /// monitoring and debugging; events are for persistent analysis and metrics.
-pub mod db;
+pub mod database;
+pub use database as db;
 pub mod maintenance;
 pub mod types;
 

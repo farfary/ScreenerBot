@@ -7,7 +7,8 @@
 pub mod cache;
 pub mod chat_db;
 pub mod chat_engine;
-pub mod db;
+pub mod database;
+pub use database as db;
 pub mod engine;
 pub mod permissions;
 pub mod prompts;

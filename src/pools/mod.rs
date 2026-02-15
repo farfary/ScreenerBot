@@ -18,7 +18,8 @@ mod calculator;
 mod discovery;
 
 // Re-export db types for blacklist API
-pub mod db;
+pub mod database;
+pub use database as db;
 
 // Re-export fetcher types for debug bins
 pub mod fetcher;

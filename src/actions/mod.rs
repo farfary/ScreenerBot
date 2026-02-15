@@ -42,7 +42,8 @@
 //! ```
 
 pub mod broadcast;
-pub mod db;
+pub mod database;
+pub use database as db;
 pub mod state;
 pub mod types;
 

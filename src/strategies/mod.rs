@@ -1,5 +1,6 @@
 pub mod conditions;
-pub mod db;
+pub mod database;
+pub use database as db;
 pub mod engine;
 pub mod types;
 
