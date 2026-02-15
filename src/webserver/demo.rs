@@ -27,7 +27,7 @@ use crate::webserver::routes::header::{
     SystemHeaderInfo, TraderHeaderInfo, WalletHeaderInfo,
 };
 use crate::webserver::routes::positions::{PositionResponse, PositionsStatsResponse};
-use crate::webserver::routes::trader::{ExitBreakdown, TraderStatsResponse};
+use crate::webserver::routes::trader::types::{ExitBreakdown, TraderStatsResponse};
 use crate::webserver::routes::wallet::{
     TokenBalanceInfo, WalletCurrentResponse, WalletTokenHolding, WalletTokensResponse,
 };
