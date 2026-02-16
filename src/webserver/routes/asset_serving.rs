@@ -109,6 +109,7 @@ pub async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String
         "data_table/column_management.js" => Some(templates::DATA_TABLE_COLUMN_MANAGEMENT),
         "data_table/client_pagination.js" => Some(templates::DATA_TABLE_CLIENT_PAGINATION),
         "data_table/server_pagination.js" => Some(templates::DATA_TABLE_SERVER_PAGINATION),
+        "data_table/event_handlers.js" => Some(templates::DATA_TABLE_EVENT_HANDLERS),
         "dropdown.js" => Some(templates::DROPDOWN_UI),
         "table_toolbar.js" => Some(templates::TABLE_TOOLBAR_UI),
         "toast.js" => Some(templates::TOAST_UI),
