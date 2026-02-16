@@ -50,7 +50,13 @@ const CONFIRMATION_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/confirmation_dialog.css");
 const CONTEXT_MENU_STYLES: &str = include_str!("templates/styles/ui/context_menu.css");
 const ADVANCED_CHART_STYLES: &str = include_str!("templates/styles/ui/advanced_chart.css");
-const TOKEN_DETAILS_DIALOG_STYLES: &str = include_str!("templates/styles/token_details_dialog.css");
+const TOKEN_DETAILS_BASE_STYLES: &str = include_str!("templates/styles/token_details/base.css");
+const TOKEN_DETAILS_OVERVIEW_STYLES: &str =
+    include_str!("templates/styles/token_details/overview_chart.css");
+const TOKEN_DETAILS_SECURITY_STYLES: &str =
+    include_str!("templates/styles/token_details/security.css");
+const TOKEN_DETAILS_CONTENT_STYLES: &str =
+    include_str!("templates/styles/token_details/positions_pools_links.css");
 const TRANSACTION_DETAILS_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/transaction_details_dialog.css");
 const POSITION_DETAILS_DIALOG_STYLES: &str =
@@ -293,7 +299,10 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         CONFIRMATION_DIALOG_STYLES,
         CONTEXT_MENU_STYLES,
         ADVANCED_CHART_STYLES,
-        TOKEN_DETAILS_DIALOG_STYLES,
+        TOKEN_DETAILS_BASE_STYLES,
+        TOKEN_DETAILS_OVERVIEW_STYLES,
+        TOKEN_DETAILS_SECURITY_STYLES,
+        TOKEN_DETAILS_CONTENT_STYLES,
         TRANSACTION_DETAILS_DIALOG_STYLES,
         POSITION_DETAILS_DIALOG_STYLES,
         SETTINGS_DIALOG_STYLES,

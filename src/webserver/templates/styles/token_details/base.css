@@ -1,0 +1,690 @@
+/* Token Details Dialog Styles - Redesigned */
+
+/* =============================================================================
+   BASE DIALOG STRUCTURE - Full Screen Desktop App Style
+   Platform-aware layout:
+   - Browser/Windows/Linux: No title bar offset, full height
+   - macOS Electron: 28px title bar for traffic lights + window drag
+   Status bar (24px) at bottom for version info
+   ============================================================================= */
+
+.token-details-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog); /* Above header, below trade-action-dialog */
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.token-details-dialog.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Title bar area - hidden by default (browser/Windows/Linux) */
+.token-details-dialog::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 0;
+  background: var(--bg-secondary);
+  z-index: 1;
+  transition: height 0.15s ease;
+}
+
+/* macOS Electron: Show title bar background for traffic lights */
+.electron-macos .token-details-dialog::before {
+  height: 28px;
+}
+
+/* Backdrop - full coverage by default */
+.dialog-backdrop {
+  position: absolute;
+  inset: 0 0 24px;
+  background: transparent;
+  cursor: default;
+}
+
+/* macOS Electron: Backdrop starts below title bar */
+.electron-macos .dialog-backdrop {
+  inset: 28px 0 24px;
+}
+
+/* Dialog container - full height by default */
+.token-details-dialog .dialog-container {
+  position: relative;
+  margin-top: 0;
+  margin-bottom: 24px;
+  background: var(--bg-primary);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  width: 100%;
+  flex: 1;
+  max-width: none;
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: dialogFadeIn 0.25s ease-out;
+  z-index: 2;
+}
+
+/* macOS Electron: Content starts below traffic light area */
+.electron-macos .token-details-dialog .dialog-container {
+  margin-top: 28px;
+}
+
+@keyframes dialogFadeIn {
+  0% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+/* =============================================================================
+   HEADER - Desktop App Style with Two Rows
+   ============================================================================= */
+
+.dialog-header {
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+/* Top row: Token info, Price, Actions */
+.header-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px 12px;
+  gap: 20px;
+  min-height: 68px;
+}
+
+/* Left section - Token identity */
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 0 0 auto;
+  min-width: 200px;
+}
+
+.header-logo {
+  width: 52px;
+  height: 52px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 4px var(--shadow-sm);
+}
+
+.header-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.logo-placeholder {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.header-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.title-main {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+}
+
+.title-sub {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Badges row - separate from title */
+.header-badges-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 20px 10px;
+  border-bottom: 1px solid var(--border-subtle, var(--border-color));
+}
+
+.title-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.header-status-area {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.last-updated {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  transition: opacity 0.15s ease;
+}
+
+.badge:hover {
+  opacity: 0.9;
+}
+
+.badge-success {
+  background: var(--success-alpha-20);
+  color: var(--success-color);
+}
+
+.badge-info {
+  background: var(--primary-alpha-20);
+  color: var(--primary-color);
+}
+
+.badge-danger {
+  background: var(--danger-alpha-20);
+  color: var(--danger);
+}
+
+.badge-warning {
+  background: var(--warning-alpha-20);
+  color: var(--warning-color);
+}
+
+.badge-secondary {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+/* Center section - Price & metrics */
+.header-center {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+}
+
+#headerPrice {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.price-loading {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+/* Price block - stacked layout */
+.price-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.price-sol-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.price-sol {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+  letter-spacing: -0.02em;
+}
+
+.price-sol-unit {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.price-usd {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+  font-weight: 500;
+}
+
+/* Price change badge */
+.price-change {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  font-family: var(--font-data);
+  padding: 4px 10px;
+  border-radius: 8px;
+  letter-spacing: -0.01em;
+}
+
+.price-change.positive {
+  color: var(--success-color);
+  background: var(--success-alpha-15, rgb(63, 185, 80, 0.15));
+}
+
+.price-change.negative {
+  color: var(--danger);
+  background: var(--danger-alpha-15, rgb(248, 81, 73, 0.15));
+}
+
+/* Metrics row */
+.price-metrics {
+  display: flex;
+  gap: 20px;
+  padding-left: 20px;
+  border-left: 1px solid var(--border-color);
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.metric-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  min-width: 64px;
+}
+
+.metric-label {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 500;
+}
+
+.metric-value {
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  font-weight: 600;
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+/* Right section - Trade actions & controls */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.header-trade-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-right: 10px;
+  border-right: 1px solid var(--border-color);
+}
+
+.trade-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px var(--shadow-sm);
+}
+
+.trade-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.trade-btn.buy-btn {
+  color: var(--header-text);
+  background: var(--success-color);
+  border-color: var(--success-color);
+}
+
+.trade-btn.buy-btn:hover:not(:disabled) {
+  background: var(--success-hover);
+  border-color: var(--success-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px var(--shadow-md);
+}
+
+.trade-btn.sell-btn {
+  color: var(--header-text);
+  background: var(--danger);
+  border-color: var(--danger);
+}
+
+.trade-btn.sell-btn:hover:not(:disabled) {
+  background: var(--danger-hover);
+  border-color: var(--danger-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px var(--shadow-md);
+}
+
+.trade-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.action-btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--text-muted);
+  color: var(--text-primary);
+}
+
+.action-btn svg,
+.action-btn i {
+  width: 14px;
+  height: 14px;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.dialog-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+
+.dialog-close:hover {
+  background: var(--danger-alpha-15);
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.dialog-close svg,
+.dialog-close i {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* =============================================================================
+  TAB BAR - Improved UI/UX (Clean Pill Style)
+  - Click focus highlight should not look like selected
+  - Keep keyboard accessibility via :focus-visible
+  ============================================================================= */
+
+.dialog-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Hidden scrollbar - uses global scrollbar-hidden pattern */
+
+.tab-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 16px;
+  height: 36px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 0.8125rem; /* 13px */
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  flex-shrink: 0;
+  position: relative;
+
+  /* Prevent persistent "clicked" focus styling */
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+}
+
+.tab-button:focus {
+  outline: none;
+}
+
+/* Keyboard accessibility: show focus only when appropriate */
+.tab-button:focus-visible {
+  outline: 2px solid var(--primary-alpha-20);
+  outline-offset: 2px;
+}
+
+.tab-button i {
+  font-size: 15px;
+  opacity: 0.6;
+  transition: opacity 0.2s ease;
+}
+
+.tab-button:hover {
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+}
+
+.tab-button:hover i {
+  opacity: 0.9;
+}
+
+.tab-button.active {
+  color: var(--primary-color);
+  background: var(--primary-alpha-10);
+  font-weight: 600;
+  border-color: var(--primary-alpha-20);
+}
+
+.tab-button.active i {
+  opacity: 1;
+}
+
+/* Remove old underline indicator completely */
+.tab-button::after {
+  display: none !important;
+}
+
+/* =============================================================================
+   BODY & TAB CONTENT
+   ============================================================================= */
+
+.dialog-body {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg-primary);
+}
+
+.token-details-dialog .tab-content {
+  position: absolute;
+  inset: 0;
+  padding: 0;
+  overflow: hidden;
+  display: none;
+}
+
+.token-details-dialog .tab-content.active {
+  display: block;
+}
+
+/* Security and other tabs need scrolling */
+.token-details-dialog .tab-content[data-tab-content="security"],
+.token-details-dialog .tab-content[data-tab-content="positions"],
+.token-details-dialog .tab-content[data-tab-content="pools"],
+.token-details-dialog .tab-content[data-tab-content="links"] {
+  overflow-y: auto;
+  padding: 0;
+}
+
+/* Loading & Empty States */
+.loading-spinner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  height: 200px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.loading-spinner::before {
+  content: "";
+  width: 28px;
+  height: 28px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: loading-spin 0.8s linear infinite;
+}
+
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 300px;
+  color: var(--text-secondary);
+  text-align: center;
+  gap: var(--spacing-md);
+}
+
+.empty-state svg {
+  opacity: 0.5;
+}
+
+.empty-state h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.empty-state p {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.empty-state.small {
+  min-height: 100px;
+  height: auto;
+  padding: var(--spacing-lg);
+}
