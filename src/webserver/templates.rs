@@ -175,6 +175,10 @@ pub const TRANSACTION_DETAILS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/transaction_details_dialog.js");
 pub const POSITION_DETAILS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/position_details_dialog.js");
+pub const POSITION_DETAILS_ANALYTICS_TAB_JS: &str =
+    include_str!("templates/scripts/ui/position_details/analytics_tab.js");
+pub const POSITION_DETAILS_SECONDARY_TABS_JS: &str =
+    include_str!("templates/scripts/ui/position_details/secondary_tabs.js");
 pub const TOOL_FAVORITES_UI: &str = include_str!("templates/scripts/ui/tool_favorites.js");
 pub const CONTEXT_MENU_UI: &str = include_str!("templates/scripts/ui/context_menu.js");
 pub const ADVANCED_CHART_UI: &str = include_str!("templates/scripts/ui/advanced_chart.js");

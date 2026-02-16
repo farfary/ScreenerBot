@@ -117,6 +117,10 @@ pub async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String
         "token_details/pools_links_tab.js" => Some(templates::TOKEN_DETAILS_POOLS_LINKS_TAB_UI),
         "transaction_details_dialog.js" => Some(templates::TRANSACTION_DETAILS_DIALOG_UI),
         "position_details_dialog.js" => Some(templates::POSITION_DETAILS_DIALOG_UI),
+        "position_details/analytics_tab.js" => Some(templates::POSITION_DETAILS_ANALYTICS_TAB_JS),
+        "position_details/secondary_tabs.js" => {
+            Some(templates::POSITION_DETAILS_SECONDARY_TABS_JS)
+        }
         "tool_favorites.js" => Some(templates::TOOL_FAVORITES_UI),
         "context_menu.js" => Some(templates::CONTEXT_MENU_UI),
         "advanced_chart.js" => Some(templates::ADVANCED_CHART_UI),
