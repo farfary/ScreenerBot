@@ -64,6 +64,8 @@ pub async fn get_page_script(axum::extract::Path(file): axum::extract::Path<Stri
         "config/utils.js" => Some(templates::CONFIG_UTILS_JS),
         "config/field_renderers.js" => Some(templates::CONFIG_FIELD_RENDERERS_JS),
         "strategies.js" => Some(templates::STRATEGIES_PAGE_SCRIPT),
+        "strategies/condition_editor.js" => Some(templates::STRATEGIES_CONDITION_EDITOR_JS),
+        "strategies/condition_catalog.js" => Some(templates::STRATEGIES_CONDITION_CATALOG_JS),
         "trader.js" => Some(templates::TRADER_PAGE_SCRIPT),
         "trader/examples.js" => Some(templates::TRADER_EXAMPLES_JS),
         "trader/controls.js" => Some(templates::TRADER_CONTROLS_JS),
