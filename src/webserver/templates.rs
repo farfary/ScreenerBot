@@ -27,7 +27,10 @@ const CONFIG_PAGE_STYLES: &str = include_str!("templates/styles/pages/config.css
 const STRATEGIES_PAGE_STYLES: &str = include_str!("templates/styles/pages/strategies.css");
 const TRADER_PAGE_STYLES: &str = include_str!("templates/styles/pages/trader.css");
 const WALLETS_PAGE_STYLES: &str = include_str!("templates/styles/pages/wallets.css");
-const TOOLS_PAGE_STYLES: &str = include_str!("templates/styles/pages/tools.css");
+const TOOLS_BASE_STYLES: &str = include_str!("templates/styles/pages/tools/base.css");
+const TOOLS_WALLET_STYLES: &str = include_str!("templates/styles/pages/tools/wallet_tools.css");
+const TOOLS_TOKEN_STYLES: &str = include_str!("templates/styles/pages/tools/token_tools.css");
+const TOOLS_TRADING_STYLES: &str = include_str!("templates/styles/pages/tools/trading_tools.css");
 const AI_BASE_STYLES: &str = include_str!("templates/styles/pages/ai/base.css");
 const AI_PROVIDERS_STYLES: &str = include_str!("templates/styles/pages/ai/providers.css");
 const AI_INSTRUCTIONS_STYLES: &str = include_str!("templates/styles/pages/ai/instructions.css");
@@ -65,7 +68,10 @@ const TRANSACTION_DETAILS_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/transaction_details_dialog.css");
 const POSITION_DETAILS_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/position_details_dialog.css");
-const SETTINGS_DIALOG_STYLES: &str = include_str!("templates/styles/settings_dialog.css");
+const SETTINGS_BASE_STYLES: &str = include_str!("templates/styles/settings/base.css");
+const SETTINGS_SECURITY_STYLES: &str = include_str!("templates/styles/settings/security.css");
+const SETTINGS_UPDATES_STYLES: &str = include_str!("templates/styles/settings/updates.css");
+const SETTINGS_DATA_STYLES: &str = include_str!("templates/styles/settings/data.css");
 const STATUS_BAR_STYLES: &str = include_str!("templates/styles/status_bar.css");
 const HINT_POPOVER_STYLES: &str = include_str!("templates/styles/ui/hint_popover.css");
 const SEARCH_DIALOG_STYLES: &str = include_str!("templates/styles/ui/search_dialog.css");
@@ -309,7 +315,10 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         TOKEN_DETAILS_CONTENT_STYLES,
         TRANSACTION_DETAILS_DIALOG_STYLES,
         POSITION_DETAILS_DIALOG_STYLES,
-        SETTINGS_DIALOG_STYLES,
+        SETTINGS_BASE_STYLES,
+        SETTINGS_SECURITY_STYLES,
+        SETTINGS_UPDATES_STYLES,
+        SETTINGS_DATA_STYLES,
         HINT_POPOVER_STYLES,
         SEARCH_DIALOG_STYLES,
         CUSTOM_SELECT_STYLES,
@@ -340,7 +349,10 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         STRATEGIES_PAGE_STYLES,
         TRADER_PAGE_STYLES,
         WALLETS_PAGE_STYLES,
-        TOOLS_PAGE_STYLES,
+        TOOLS_BASE_STYLES,
+        TOOLS_WALLET_STYLES,
+        TOOLS_TOKEN_STYLES,
+        TOOLS_TRADING_STYLES,
         AI_BASE_STYLES,
         AI_PROVIDERS_STYLES,
         AI_INSTRUCTIONS_STYLES,
@@ -365,7 +377,16 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         ("strategies", STRATEGIES_PAGE_STYLES),
         ("trader", TRADER_PAGE_STYLES),
         ("wallets", WALLETS_PAGE_STYLES),
-        ("tools", TOOLS_PAGE_STYLES),
+        (
+            "tools",
+            &[
+                TOOLS_BASE_STYLES,
+                TOOLS_WALLET_STYLES,
+                TOOLS_TOKEN_STYLES,
+                TOOLS_TRADING_STYLES,
+            ]
+            .join("\n"),
+        ),
         (
             "ai",
             &[
