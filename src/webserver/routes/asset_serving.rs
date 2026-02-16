@@ -58,6 +58,8 @@ pub async fn get_page_script(axum::extract::Path(file): axum::extract::Path<Stri
         "tokens/favorites.js" => Some(templates::TOKENS_FAVORITES_JS),
         "positions.js" => Some(templates::POSITIONS_PAGE_SCRIPT),
         "filtering.js" => Some(templates::FILTERING_PAGE_SCRIPT),
+        "filtering/config_metadata.js" => Some(templates::FILTERING_CONFIG_METADATA_JS),
+        "filtering/renderers.js" => Some(templates::FILTERING_RENDERERS_JS),
         "config.js" => Some(templates::CONFIG_PAGE_SCRIPT),
         "strategies.js" => Some(templates::STRATEGIES_PAGE_SCRIPT),
         "trader.js" => Some(templates::TRADER_PAGE_SCRIPT),

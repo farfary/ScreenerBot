@@ -206,6 +206,10 @@ pub const TOKENS_OHLCV_JS: &str = include_str!("templates/scripts/pages/tokens/o
 pub const TOKENS_FAVORITES_JS: &str = include_str!("templates/scripts/pages/tokens/favorites.js");
 pub const POSITIONS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/positions.js");
 pub const FILTERING_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/filtering.js");
+pub const FILTERING_CONFIG_METADATA_JS: &str =
+    include_str!("templates/scripts/pages/filtering/config_metadata.js");
+pub const FILTERING_RENDERERS_JS: &str =
+    include_str!("templates/scripts/pages/filtering/renderers.js");
 pub const CONFIG_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/config.js");
 pub const STRATEGIES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/strategies.js");
 pub const TRADER_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/trader.js");
