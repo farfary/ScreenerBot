@@ -213,6 +213,12 @@ pub const POSITION_DETAILS_ANALYTICS_TAB_JS: &str =
     include_str!("templates/scripts/ui/position_details/analytics_tab.js");
 pub const POSITION_DETAILS_SECONDARY_TABS_JS: &str =
     include_str!("templates/scripts/ui/position_details/secondary_tabs.js");
+pub const POSITION_DETAILS_OVERVIEW_TAB_JS: &str =
+    include_str!("templates/scripts/ui/position_details/overview_tab.js");
+pub const POSITION_DETAILS_CHART_TAB_JS: &str =
+    include_str!("templates/scripts/ui/position_details/chart_tab.js");
+pub const POSITION_DETAILS_UTILITIES_JS: &str =
+    include_str!("templates/scripts/ui/position_details/utilities.js");
 pub const TOOL_FAVORITES_UI: &str = include_str!("templates/scripts/ui/tool_favorites.js");
 pub const CONTEXT_MENU_UI: &str = include_str!("templates/scripts/ui/context_menu.js");
 pub const CONTEXT_MENU_ACTIONS_JS: &str =

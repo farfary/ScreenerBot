@@ -135,6 +135,9 @@ pub async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String
         "position_details/secondary_tabs.js" => {
             Some(templates::POSITION_DETAILS_SECONDARY_TABS_JS)
         }
+        "position_details/overview_tab.js" => Some(templates::POSITION_DETAILS_OVERVIEW_TAB_JS),
+        "position_details/chart_tab.js" => Some(templates::POSITION_DETAILS_CHART_TAB_JS),
+        "position_details/utilities.js" => Some(templates::POSITION_DETAILS_UTILITIES_JS),
         "tool_favorites.js" => Some(templates::TOOL_FAVORITES_UI),
         "context_menu.js" => Some(templates::CONTEXT_MENU_UI),
         "context_menu/actions.js" => Some(templates::CONTEXT_MENU_ACTIONS_JS),
