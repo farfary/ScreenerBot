@@ -25,12 +25,22 @@ const POSITIONS_PAGE_STYLES: &str = include_str!("templates/styles/pages/positio
 const FILTERING_BASE_STYLES: &str = include_str!("templates/styles/pages/filtering/base.css");
 const FILTERING_RESULTS_STYLES: &str =
     include_str!("templates/styles/pages/filtering/results.css");
+const FILTERING_RESULTS_EXPLORER_STYLES: &str =
+    include_str!("templates/styles/pages/filtering/results_explorer.css");
 const CONFIG_PAGE_STYLES: &str = include_str!("templates/styles/pages/config.css");
+const CONFIG_SIDEBAR_STYLES: &str = include_str!("templates/styles/pages/config/sidebar.css");
+const CONFIG_FIELDS_STYLES: &str = include_str!("templates/styles/pages/config/fields.css");
+const CONFIG_RESPONSIVE_STYLES: &str =
+    include_str!("templates/styles/pages/config/responsive.css");
 const STRATEGIES_PAGE_STYLES: &str = include_str!("templates/styles/pages/strategies.css");
 const STRATEGIES_CONDITION_CARDS_STYLES: &str =
     include_str!("templates/styles/pages/strategies/condition_cards.css");
 const STRATEGIES_MODALS_STYLES: &str =
     include_str!("templates/styles/pages/strategies/modals.css");
+const STRATEGIES_EDITOR_STYLES: &str =
+    include_str!("templates/styles/pages/strategies/editor.css");
+const STRATEGIES_UI_COMPONENTS_STYLES: &str =
+    include_str!("templates/styles/pages/strategies/ui_components.css");
 const TRADER_PAGE_STYLES: &str = include_str!("templates/styles/pages/trader.css");
 const TRADER_CONFIG_COMPONENTS_STYLES: &str =
     include_str!("templates/styles/pages/trader/config_components.css");
@@ -43,6 +53,8 @@ const WALLETS_MODALS_STYLES: &str = include_str!("templates/styles/pages/wallets
 const WALLETS_IMPORT_EXPORT_STYLES: &str =
     include_str!("templates/styles/pages/wallets/import_export.css");
 const TOOLS_BASE_STYLES: &str = include_str!("templates/styles/pages/tools/base.css");
+const TOOLS_CONTENT_STYLES: &str = include_str!("templates/styles/pages/tools/content.css");
+const TOOLS_COMPONENTS_STYLES: &str = include_str!("templates/styles/pages/tools/components.css");
 const TOOLS_WALLET_STYLES: &str = include_str!("templates/styles/pages/tools/wallet_tools.css");
 const TOOLS_TOKEN_STYLES: &str = include_str!("templates/styles/pages/tools/token_tools.css");
 const TOOLS_TRADING_STYLES: &str = include_str!("templates/styles/pages/tools/trading_tools.css");
@@ -50,6 +62,8 @@ const AI_BASE_STYLES: &str = include_str!("templates/styles/pages/ai/base.css");
 const AI_PROVIDERS_STYLES: &str = include_str!("templates/styles/pages/ai/providers.css");
 const AI_INSTRUCTIONS_STYLES: &str = include_str!("templates/styles/pages/ai/instructions.css");
 const AI_CHAT_STYLES: &str = include_str!("templates/styles/pages/ai/chat.css");
+const AI_CHAT_MESSAGES_STYLES: &str = include_str!("templates/styles/pages/ai/chat_messages.css");
+const AI_CHAT_INPUT_STYLES: &str = include_str!("templates/styles/pages/ai/chat_input.css");
 const AI_AUTOMATION_STYLES: &str = include_str!("templates/styles/pages/ai/automation.css");
 const HOME_PAGE_STYLES: &str = include_str!("templates/styles/pages/home.css");
 const UPDATES_PAGE_STYLES: &str = include_str!("templates/styles/pages/updates.css");
@@ -82,6 +96,10 @@ const TOKEN_DETAILS_OVERVIEW_STYLES: &str =
     include_str!("templates/styles/token_details/overview_chart.css");
 const TOKEN_DETAILS_SECURITY_STYLES: &str =
     include_str!("templates/styles/token_details/security.css");
+const TOKEN_DETAILS_SECURITY_HOLDERS_STYLES: &str =
+    include_str!("templates/styles/token_details/security_holders.css");
+const TOKEN_DETAILS_SECURITY_RISKS_STYLES: &str =
+    include_str!("templates/styles/token_details/security_risks.css");
 const TOKEN_DETAILS_POSITIONS_STYLES: &str =
     include_str!("templates/styles/token_details/positions.css");
 const TOKEN_DETAILS_POOLS_STYLES: &str = include_str!("templates/styles/token_details/pools.css");
@@ -398,6 +416,8 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         TOKEN_DETAILS_BASE_STYLES,
         TOKEN_DETAILS_OVERVIEW_STYLES,
         TOKEN_DETAILS_SECURITY_STYLES,
+        TOKEN_DETAILS_SECURITY_HOLDERS_STYLES,
+        TOKEN_DETAILS_SECURITY_RISKS_STYLES,
         TOKEN_DETAILS_POSITIONS_STYLES,
         TOKEN_DETAILS_POOLS_STYLES,
         TOKEN_DETAILS_LINKS_STYLES,
@@ -437,16 +457,24 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         POSITIONS_PAGE_STYLES,
         FILTERING_BASE_STYLES,
         FILTERING_RESULTS_STYLES,
+        FILTERING_RESULTS_EXPLORER_STYLES,
         CONFIG_PAGE_STYLES,
+        CONFIG_SIDEBAR_STYLES,
+        CONFIG_FIELDS_STYLES,
+        CONFIG_RESPONSIVE_STYLES,
         STRATEGIES_PAGE_STYLES,
         STRATEGIES_CONDITION_CARDS_STYLES,
         STRATEGIES_MODALS_STYLES,
+        STRATEGIES_EDITOR_STYLES,
+        STRATEGIES_UI_COMPONENTS_STYLES,
         TRADER_PAGE_STYLES,
         WALLETS_PAGE_STYLES,
         WALLETS_MAIN_WALLET_STYLES,
         WALLETS_MODALS_STYLES,
         WALLETS_IMPORT_EXPORT_STYLES,
         TOOLS_BASE_STYLES,
+        TOOLS_CONTENT_STYLES,
+        TOOLS_COMPONENTS_STYLES,
         TOOLS_WALLET_STYLES,
         TOOLS_TOKEN_STYLES,
         TOOLS_TRADING_STYLES,
@@ -454,6 +482,8 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         AI_PROVIDERS_STYLES,
         AI_INSTRUCTIONS_STYLES,
         AI_CHAT_STYLES,
+        AI_CHAT_MESSAGES_STYLES,
+        AI_CHAT_INPUT_STYLES,
         AI_AUTOMATION_STYLES,
         HOME_PAGE_STYLES,
         UPDATES_PAGE_STYLES,
@@ -472,15 +502,31 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         ("positions", POSITIONS_PAGE_STYLES),
         (
             "filtering",
-            &[FILTERING_BASE_STYLES, FILTERING_RESULTS_STYLES].join("\n"),
+            &[
+                FILTERING_BASE_STYLES,
+                FILTERING_RESULTS_STYLES,
+                FILTERING_RESULTS_EXPLORER_STYLES,
+            ]
+            .join("\n"),
         ),
-        ("config", CONFIG_PAGE_STYLES),
+        (
+            "config",
+            &[
+                CONFIG_PAGE_STYLES,
+                CONFIG_SIDEBAR_STYLES,
+                CONFIG_FIELDS_STYLES,
+                CONFIG_RESPONSIVE_STYLES,
+            ]
+            .join("\n"),
+        ),
         (
             "strategies",
             &[
                 STRATEGIES_PAGE_STYLES,
                 STRATEGIES_CONDITION_CARDS_STYLES,
                 STRATEGIES_MODALS_STYLES,
+                STRATEGIES_EDITOR_STYLES,
+                STRATEGIES_UI_COMPONENTS_STYLES,
             ]
             .join("\n"),
         ),
@@ -508,6 +554,8 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
             "tools",
             &[
                 TOOLS_BASE_STYLES,
+                TOOLS_CONTENT_STYLES,
+                TOOLS_COMPONENTS_STYLES,
                 TOOLS_WALLET_STYLES,
                 TOOLS_TOKEN_STYLES,
                 TOOLS_TRADING_STYLES,
@@ -521,6 +569,8 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
                 AI_PROVIDERS_STYLES,
                 AI_INSTRUCTIONS_STYLES,
                 AI_CHAT_STYLES,
+                AI_CHAT_MESSAGES_STYLES,
+                AI_CHAT_INPUT_STYLES,
                 AI_AUTOMATION_STYLES,
             ]
             .join("\n"),

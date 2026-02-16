@@ -1,0 +1,334 @@
+/* =============================================================================
+   Main Content Area - Full Width
+   ============================================================================= */
+
+.tools-main {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--bg-primary);
+}
+
+/* Header */
+.tools-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-lg);
+  padding: var(--spacing-md) var(--spacing-lg);
+  min-height: var(--header-height);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--card-bg);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.tool-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(135deg, var(--primary-alpha-20), var(--primary-alpha-5));
+  color: var(--primary-color);
+  font-size: 1.25rem;
+}
+
+.tool-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tool-title-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.tool-title-row h1 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tool-info p {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+}
+
+.help-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.help-btn:hover {
+  background: var(--hover-bg);
+  color: var(--primary-color);
+  border-color: var(--primary-color);
+}
+
+/* =============================================================================
+   Content Area - Full Width Utilization
+   ============================================================================= */
+
+.tools-content {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: var(--spacing-lg);
+  scrollbar-gutter: stable;
+}
+
+/* Tool Panels - Full Width */
+.tool-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-lg);
+  width: 100%;
+  max-width: 100%;
+}
+
+/* Two-column layout for larger screens */
+.tool-panel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: var(--spacing-lg);
+}
+
+.tool-panel-full {
+  grid-column: 1 / -1;
+}
+
+/* Tool Sections */
+.tool-section {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+
+.tool-section .section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-md);
+  border-bottom: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+
+.tool-section .section-header h3 {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tool-section .section-header h3 i {
+  font-size: 0.9rem;
+  color: var(--primary-color);
+}
+
+.tool-section .section-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+}
+
+.tool-section .section-content {
+  padding: var(--spacing-md);
+}
+
+/* Section with hint */
+.section-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacing-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  background: var(--primary-alpha-5);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.section-hint i {
+  color: var(--primary-color);
+  font-size: 0.85rem;
+  margin-top: 2px;
+}
+
+.section-hint p {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* =============================================================================
+   Placeholder State
+   ============================================================================= */
+
+.tool-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacing-lg);
+  height: 100%;
+  min-height: 400px;
+  text-align: center;
+  padding: var(--spacing-xl);
+}
+
+.placeholder-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  border-radius: var(--radius-xl);
+  background: var(--bg-secondary);
+  border: 2px dashed var(--border-color);
+}
+
+.placeholder-icon i {
+  font-size: 2rem;
+  color: var(--text-muted);
+}
+
+.tool-placeholder h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tool-placeholder > p {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+  max-width: 400px;
+}
+
+.placeholder-hints {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-sm);
+  margin-top: var(--spacing-md);
+  padding: var(--spacing-md);
+  border-radius: var(--radius-lg);
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+}
+
+.hint-item {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.hint-item i {
+  color: var(--primary-color);
+  font-size: 0.9rem;
+}
+
+/* =============================================================================
+   Auto Cleanup Toggle
+   ============================================================================= */
+
+.auto-cleanup-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-md);
+  padding: var(--spacing-md);
+  margin-bottom: var(--spacing-md);
+  border-radius: var(--radius-md);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.auto-cleanup-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-md);
+}
+
+.auto-cleanup-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.auto-cleanup-label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.auto-cleanup-desc {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.auto-cleanup-status {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-xs);
+  padding: var(--spacing-xs) var(--spacing-sm);
+  border-radius: var(--radius-full);
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.auto-cleanup-status i {
+  font-size: 0.75rem;
+}
+
+.auto-cleanup-status.active {
+  background: var(--success-alpha-10);
+  border-color: var(--success-alpha-30);
+  color: var(--success-color);
+}
+
+/* Toggle Switch - Now uses centralized .toggle from form_controls.css */
+/* Migrated: Use <label class="toggle"><input type="checkbox"><span class="toggle-track"></span></label> */

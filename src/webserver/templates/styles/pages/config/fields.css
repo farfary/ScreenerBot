@@ -1,0 +1,441 @@
+/* Config Field Styles */
+
+.config-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, var(--config-field-control-width));
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.15s ease;
+}
+
+.config-field:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--text-muted);
+}
+
+.config-category-body
+  .config-field:nth-child(even):not(
+    .config-field--changed,
+    .config-field--match,
+    .config-field--error
+  ) {
+  background: var(--bg-card);
+}
+
+.config-field.config-field--changed {
+  border-color: var(--config-accent);
+  background: var(--config-accent-light);
+  box-shadow:
+    inset 4px 0 0 0 var(--config-accent),
+    0 2px 8px var(--primary-alpha-10);
+}
+
+.config-field.config-field--changed::before {
+  content: "";
+  position: absolute;
+  top: 8px;
+  left: -8px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--config-accent);
+  animation: pulse-dot 2s infinite;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.5;
+    transform: scale(0.8);
+  }
+}
+
+.config-field.config-field--match {
+  border-color: var(--config-success);
+  box-shadow: 0 0 0 2px var(--config-success-light);
+}
+
+.config-field.config-field--error {
+  border-color: var(--config-error);
+  background: var(--config-error-light);
+}
+
+/* Object fields need full width layout */
+.config-field:has(.config-object-wrapper) {
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.config-field-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.config-field-name {
+  font-size: 0.925rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.config-field-key {
+  font-size: 0.7rem;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+  opacity: 0.8;
+}
+
+.config-field:hover .config-field-key {
+  opacity: 1;
+  color: var(--text-secondary);
+}
+
+.config-field-hint {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.config-field-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+.config-field-unit {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.config-field-impact {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-size: 0.65rem;
+  background: var(--bg-card-hover);
+  color: var(--text-secondary);
+  border: 1px solid currentcolor;
+}
+
+.config-field-impact.critical {
+  background: var(--config-error-light);
+  color: var(--config-error);
+  border-color: var(--config-error);
+  animation: subtle-pulse 3s infinite;
+}
+
+@keyframes subtle-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.config-field-impact.high {
+  background: var(--config-warning-light);
+  color: var(--config-warning);
+  border-color: var(--config-warning);
+}
+
+.config-field-impact.medium {
+  background: var(--warning-alpha-20);
+  color: var(--warning-color);
+  border-color: var(--warning-color);
+}
+
+.config-field-impact.low {
+  background: var(--config-success-light);
+  color: var(--config-success);
+  border-color: var(--config-success);
+}
+
+.config-field-impact.performance {
+  background: var(--solana-alpha-20);
+  color: var(--solana-purple);
+  border-color: var(--solana-purple);
+}
+
+.config-field-default {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  overflow-wrap: break-word;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.config-field-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.config-object-wrapper {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+}
+
+.config-object-wrapper.collapsed .config-object-group {
+  display: none;
+}
+
+.config-object-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 10px 14px;
+  background: linear-gradient(135deg, var(--config-accent-light), var(--config-accent-medium));
+  border-radius: 10px;
+  border: 1px solid var(--config-accent);
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.15s ease;
+}
+
+.config-object-header:hover {
+  background: var(--config-accent-medium);
+  box-shadow: 0 2px 8px var(--primary-alpha-10);
+  transform: translateY(-1px);
+}
+
+.config-object-header:active {
+  transform: translateY(0);
+}
+
+.config-object-chevron {
+  font-size: 1rem;
+  color: var(--config-accent);
+  transition:
+    transform 0.25s ease,
+    color 0.2s ease;
+}
+
+.config-object-wrapper.collapsed .config-object-chevron {
+  transform: rotate(-90deg);
+}
+
+.config-object-header:hover .config-object-chevron {
+  color: var(--text-primary);
+}
+
+.config-object-group {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  border-radius: 12px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  box-shadow: inset 0 1px 3px var(--shadow-sm);
+}
+
+.config-object-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, var(--config-field-control-width));
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.config-object-field:hover {
+  background: var(--config-accent-light);
+  border-color: var(--text-muted);
+}
+
+.config-object-field--changed {
+  border-color: var(--config-accent);
+  background: var(--config-accent-light);
+  box-shadow: inset 2px 0 0 0 var(--config-accent);
+}
+
+.config-object-field--match {
+  border-color: var(--config-success);
+  box-shadow: 0 0 0 1px var(--config-success-light);
+}
+
+/* Nested object fields need full width layout too */
+.config-object-field:has(.config-object-wrapper) {
+  grid-template-columns: 1fr;
+  gap: 10px;
+  background: var(--bg-card);
+  border-color: var(--border-color);
+}
+
+/* Add visual depth for multiple nesting levels */
+.config-object-group .config-object-group {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+  margin-left: 8px;
+}
+
+.config-object-group .config-object-group .config-object-group {
+  background: var(--bg-card-hover);
+  border-color: var(--border-color);
+  margin-left: 12px;
+}
+
+.config-object-field-label {
+  gap: 6px;
+}
+
+.config-object-field-control {
+  align-items: stretch;
+  width: 100%;
+}
+
+.config-object-field-control textarea,
+.config-object-field-control input[type="text"],
+.config-object-field-control input[type="number"] {
+  width: 100%;
+}
+
+.config-field-control input[type="text"],
+.config-field-control input[type="number"],
+.config-field-control textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease,
+    background 0.2s ease;
+}
+
+.config-field-control input[type="text"]:hover,
+.config-field-control input[type="number"]:hover,
+.config-field-control textarea:hover {
+  border-color: var(--text-muted);
+  background: var(--bg-card);
+}
+
+.config-field-control .config-field-error-input {
+  border-color: var(--config-error);
+  box-shadow: 0 0 0 3px var(--config-error-light);
+  background: var(--danger-alpha-10);
+}
+
+.config-field-control input[type="number"] {
+  text-align: right;
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+  padding-right: 14px;
+}
+
+.config-field-control textarea {
+  min-height: 100px;
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.config-field-control input:focus,
+.config-field-control textarea:focus {
+  outline: none;
+  border-color: var(--link-color);
+  box-shadow:
+    0 0 0 3px var(--primary-alpha-20),
+    0 2px 8px var(--primary-alpha-10);
+  background: var(--bg-card);
+}
+
+.config-field-control input::placeholder,
+.config-field-control textarea::placeholder {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.config-field-control input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  cursor: pointer;
+  accent-color: var(--primary-color);
+  border-radius: 4px;
+}
+
+.config-field-reset {
+  align-self: flex-end;
+  padding: 4px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-card-hover);
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    transform 0.15s ease;
+}
+
+.config-field-reset:hover {
+  background: var(--config-accent-light);
+  border-color: var(--config-accent);
+  color: var(--config-accent);
+  transform: translateY(-1px);
+}
+
+.config-field-reset:active {
+  transform: translateY(0);
+}
+
+.config-field-reset:disabled {
+  display: none;
+}
+
+.config-field-error {
+  width: 100%;
+  text-align: right;
+  font-size: 0.72rem;
+  color: var(--config-error);
+  min-height: 1em;
+}

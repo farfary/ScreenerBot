@@ -1,0 +1,591 @@
+/* ==========================================================================
+   Condition Cards - See strategies/condition_cards.css
+   ========================================================================== */
+
+/* Modals (Keep existing styles but ensure z-index) */
+.condition-catalog-modal,
+.parameter-editor-modal {
+  z-index: var(--z-header);
+}
+
+/* Tab System */
+.tab-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+.sidebar-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  background: var(--background-color);
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 0.75rem 0.5rem;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+/* Hide properties tab since we use modal now */
+.tab-btn[data-tab="properties"],
+.tab-content[data-tab="properties"] {
+  display: none !important;
+}
+
+.tab-btn:hover {
+  background: var(--hover-color);
+  color: var(--text-color);
+}
+
+.tab-btn.active {
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
+  background: var(--surface-color);
+}
+
+.tab-btn .icon {
+  font-size: 1rem;
+}
+
+.tab-content {
+  display: none;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+
+.tab-content.active {
+  display: flex;
+}
+
+/* Sidebar Sections */
+.sidebar-section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 1rem;
+}
+
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.section-header h3 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--text-color);
+}
+
+/* Strategy Filters */
+.strategy-filters,
+.template-filters {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.filter-btn {
+  flex: 1;
+  padding: 0.5rem;
+  background: var(--background-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  transition: all 0.2s;
+}
+
+.filter-btn:hover {
+  background: var(--hover-color);
+  color: var(--text-color);
+}
+
+.filter-btn.active {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.template-filters {
+  flex-direction: column;
+}
+
+.template-filters select {
+  appearance: none;
+  padding: 0.5rem 2rem 0.5rem 0.5rem;
+  background-color: var(--background-color);
+  background-image: var(--select-arrow);
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-color);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+/* Strategy List */
+.strategy-list,
+.template-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Merged strategy-item styles - applies to both sidebar and template lists */
+.strategy-item {
+  padding: 0.75rem;
+  background: var(--background-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.strategy-item:hover {
+  background: var(--hover-color);
+  border-color: var(--primary-color);
+  box-shadow: 0 2px 8px rgb(0, 0, 0, 0.1);
+  transform: translateY(-1px);
+}
+
+.strategy-item.active {
+  background: var(--primary-color-light);
+  border-color: var(--primary-color);
+}
+
+.strategy-item-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.strategy-item-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-color);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.strategy-item-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.strategy-item-meta {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+}
+
+.strategy-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.strategy-badge.entry {
+  background: var(--success-color-light);
+  color: var(--success-color);
+}
+
+.strategy-badge.exit {
+  background: var(--warning-color-light);
+  color: var(--warning-color);
+}
+
+.strategy-badge.enabled {
+  background: var(--success-color-light);
+  color: var(--success-color);
+}
+
+.strategy-badge.disabled {
+  background: var(--text-muted-light);
+  color: var(--text-muted);
+}
+
+/* Template Item */
+.template-item {
+  padding: 0.75rem;
+  background: var(--background-color);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.template-item:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 2px 8px rgb(0, 0, 0, 0.1);
+}
+
+.template-item-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.template-item-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-color);
+}
+
+.template-item-description {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+  line-height: 1.4;
+}
+
+.template-item-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.risk-badge {
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.7rem;
+  font-weight: 500;
+}
+
+.risk-badge.low {
+  background: var(--success-color-light);
+  color: var(--success-color);
+}
+
+.risk-badge.medium {
+  background: var(--warning-color-light);
+  color: var(--warning-color);
+}
+
+.risk-badge.high {
+  background: var(--error-color-light);
+  color: var(--error-color);
+}
+
+/* Property Editor */
+.property-editor {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.property-group {
+  margin-bottom: 1.5rem;
+}
+
+.property-group-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-color);
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.property-field {
+  margin-bottom: 1rem;
+}
+
+.property-label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-color);
+  margin-bottom: 0.5rem;
+}
+
+.property-input {
+  width: 100%;
+  padding: 0.5rem;
+  background: var(--background-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-color);
+  font-size: 0.85rem;
+}
+
+.property-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+}
+
+.property-description {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-top: 0.25rem;
+}
+
+/* Sidebar Actions */
+.sidebar-actions {
+  padding: 1rem;
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* Editor Container */
+.strategy-editor-container {
+  grid-row: 1 / 2;
+  grid-column: 2;
+  display: flex;
+  flex-direction: column;
+  background: var(--background-color);
+  overflow: hidden;
+}
+
+/* editor-header styles defined earlier */
+
+.editor-title {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+/* strategy-name-input styles defined earlier */
+
+.strategy-type-select {
+  appearance: none;
+  padding: 0.5rem 2rem 0.5rem 0.75rem;
+  background-color: var(--background-color);
+  background-image: var(--select-arrow);
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-color);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.editor-content {
+  flex: 1;
+  overflow: auto;
+  display: flex;
+  justify-content: center;
+  padding: 1rem;
+}
+
+.conditions-list {
+  width: 100%;
+  max-width: 1080px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.condition-card {
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+}
+
+.condition-card .card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+}
+
+.condition-card .card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.condition-card .card-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.condition-card .card-body {
+  display: none;
+  padding: 0.75rem 1rem 1rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.condition-card.expanded .card-body {
+  display: block;
+}
+
+.condition-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.condition-badge {
+  font-size: 0.7rem;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  background: var(--background-color);
+  border: 1px solid var(--border-color);
+}
+
+.condition-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.condition-summary {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.param-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.param-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.param-field label {
+  font-size: 0.8rem;
+  color: var(--text-color);
+}
+
+.param-field input,
+.param-field select {
+  padding: 0.45rem 0.5rem;
+  background-color: var(--background-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  color: var(--text-color);
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.param-field select {
+  appearance: none;
+  padding-right: 28px;
+  cursor: pointer;
+  background-image: var(--select-arrow);
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 12px;
+}
+
+.param-field input:focus,
+.param-field select:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--primary-alpha-20);
+}
+
+.param-field input::placeholder {
+  color: var(--text-muted);
+}
+
+.param-advanced {
+  margin-top: 0.75rem;
+}
+
+.param-advanced-toggle {
+  font-size: 0.8rem;
+  color: var(--primary-color);
+  cursor: pointer;
+}
+
+.empty-state-content .icon {
+  font-size: 3rem;
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.empty-state-content h3 {
+  font-size: 1.2rem;
+  margin: 0 0 0.5rem;
+  color: var(--text-color);
+}
+
+.empty-state-content p {
+  color: var(--text-muted);
+  margin-bottom: 1.5rem;
+}
+
+.quick-start {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+/* Search Container */
+.search-container {
+  padding: 1rem;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  gap: 0.5rem;
+}
+
+.search-input {
+  flex: 1;
+  padding: 8px 12px;
+  background: var(--input-bg);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  transition:
+    border-color 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.search-input:hover:not(:disabled) {
+  border-color: var(--primary-color);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--primary-alpha-10);
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
