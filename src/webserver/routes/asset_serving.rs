@@ -71,6 +71,8 @@ pub async fn get_page_script(axum::extract::Path(file): axum::extract::Path<Stri
         "trader/controls.js" => Some(templates::TRADER_CONTROLS_JS),
         "trader/features.js" => Some(templates::TRADER_FEATURES_JS),
         "wallets.js" => Some(templates::WALLETS_PAGE_SCRIPT),
+        "wallets/bulk_operations.js" => Some(templates::WALLETS_BULK_OPERATIONS_JS),
+        "wallets/renderers.js" => Some(templates::WALLETS_RENDERERS_JS),
         "tools.js" => Some(templates::TOOLS_PAGE_SCRIPT),
         "tools/wallet_tools.js" => Some(templates::TOOLS_WALLET_TOOLS),
         "tools/token_tools.js" => Some(templates::TOOLS_TOKEN_TOOLS),
