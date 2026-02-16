@@ -71,6 +71,7 @@ const ABOUT_PAGE_STYLES: &str = include_str!("templates/styles/pages/about.css")
 const SPLASH_PAGE_STYLES: &str = include_str!("templates/styles/pages/splash.css");
 const ONBOARDING_PAGE_STYLES: &str = include_str!("templates/styles/pages/onboarding.css");
 const SETUP_PAGE_STYLES: &str = include_str!("templates/styles/pages/setup.css");
+const SETUP_STEPS_STYLES: &str = include_str!("templates/styles/pages/setup/steps.css");
 const LOCKSCREEN_PAGE_STYLES: &str = include_str!("templates/styles/pages/lockscreen.css");
 const LOGIN_PAGE_STYLES: &str = include_str!("templates/styles/pages/login.css");
 const DATA_TABLE_STYLES: &str = include_str!("templates/styles/ui/data_table.css");
@@ -108,6 +109,8 @@ const TOKEN_DETAILS_TRANSACTIONS_SHARED_STYLES: &str =
     include_str!("templates/styles/token_details/transactions_shared.css");
 const TRANSACTION_DETAILS_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/transaction_details_dialog.css");
+const TRANSACTION_DETAILS_TAB_CONTENT_STYLES: &str =
+    include_str!("templates/styles/ui/transaction_details/tab_content.css");
 const POSITION_DETAILS_BASE_STYLES: &str =
     include_str!("templates/styles/ui/position_details/base.css");
 const POSITION_DETAILS_OVERVIEW_STYLES: &str =
@@ -115,6 +118,7 @@ const POSITION_DETAILS_OVERVIEW_STYLES: &str =
 const POSITION_DETAILS_TRANSACTIONS_STYLES: &str =
     include_str!("templates/styles/ui/position_details/transactions.css");
 const SETTINGS_BASE_STYLES: &str = include_str!("templates/styles/settings/base.css");
+const SETTINGS_TABS_STYLES: &str = include_str!("templates/styles/settings/tabs.css");
 const SETTINGS_SECURITY_STYLES: &str = include_str!("templates/styles/settings/security.css");
 const SETTINGS_UPDATES_STYLES: &str = include_str!("templates/styles/settings/updates.css");
 const SETTINGS_DATA_STYLES: &str = include_str!("templates/styles/settings/data.css");
@@ -423,10 +427,12 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         TOKEN_DETAILS_LINKS_STYLES,
         TOKEN_DETAILS_TRANSACTIONS_SHARED_STYLES,
         TRANSACTION_DETAILS_DIALOG_STYLES,
+        TRANSACTION_DETAILS_TAB_CONTENT_STYLES,
         POSITION_DETAILS_BASE_STYLES,
         POSITION_DETAILS_OVERVIEW_STYLES,
         POSITION_DETAILS_TRANSACTIONS_STYLES,
         SETTINGS_BASE_STYLES,
+        SETTINGS_TABS_STYLES,
         SETTINGS_SECURITY_STYLES,
         SETTINGS_UPDATES_STYLES,
         SETTINGS_DATA_STYLES,
@@ -443,6 +449,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         SPLASH_PAGE_STYLES,
         ONBOARDING_PAGE_STYLES,
         SETUP_PAGE_STYLES,
+        SETUP_STEPS_STYLES,
         // Lockscreen overlay (security)
         LOCKSCREEN_PAGE_STYLES,
         // Status bar (always visible at bottom)
