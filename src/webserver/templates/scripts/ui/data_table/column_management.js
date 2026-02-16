@@ -1,0 +1,457 @@
+/**
+ * Column Management Mixin for DataTable
+ * Handles column width calculations, resizing, and auto-sizing
+ */
+
+export function applyColumnManagementMixin(DataTable) {
+  const proto = DataTable.prototype;
+
+  proto._getColumnConfig = function (columnId) {
+    return this.options.columns.find((col) => col.id === columnId);
+  };
+
+  proto._getColumnMinWidth = function (columnId) {
+    const column = this._getColumnConfig(columnId);
+    if (!column) {
+      return 80;
+    }
+    if (typeof column.minWidth === "number" && column.minWidth >= 0) {
+      return column.minWidth;
+    }
+    return 80;
+  };
+
+  proto._getColumnMaxWidth = function (columnId) {
+    const column = this._getColumnConfig(columnId);
+    if (!column) {
+      return Number.POSITIVE_INFINITY;
+    }
+    if (typeof column.maxWidth === "number" && column.maxWidth > 0) {
+      return column.maxWidth;
+    }
+    return Number.POSITIVE_INFINITY;
+  };
+
+  proto._markColumnAsUserResized = function (columnId) {
+    if (!columnId) {
+      return;
+    }
+    if (!this.state.userResizedColumns) {
+      this.state.userResizedColumns = {};
+    }
+    this.state.userResizedColumns[columnId] = true;
+  };
+
+  /**
+   * Apply column width by updating the <col> element
+   * This is much more efficient than updating every <td> element
+   * The browser handles the column layout automatically
+   */
+  proto._applyColumnWidth = function (columnId, widthPx) {
+    if (!columnId || !Number.isFinite(widthPx)) return;
+
+    const minWidth = this._getColumnMinWidth(columnId);
+    const maxWidth = this._getColumnMaxWidth(columnId);
+    const w = Math.min(maxWidth, Math.max(minWidth, Math.round(widthPx)));
+
+    // Update <col> element (primary width control)
+    const col = this.elements.cols?.[columnId];
+    if (col) {
+      col.style.width = `${w}px`;
+      col.style.minWidth = `${w}px`;
+      col.style.maxWidth = `${w}px`;
+    }
+
+    // Update header for proper pointer events hit-box
+    const th = this.elements.thead?.querySelector(`th[data-column-id="${columnId}"]`);
+    if (th) {
+      th.style.width = `${w}px`;
+    }
+  };
+
+  proto._applyTableWidth = function () {
+    if (!this.elements.table) {
+      return;
+    }
+
+    if (typeof this.state.tableWidth === "number") {
+      this.elements.table.style.width = `${this.state.tableWidth}px`;
+    } else {
+      this.elements.table.style.width = "";
+    }
+  };
+
+  proto._applyStoredColumnWidths = function () {
+    if (!this.elements.table) {
+      return;
+    }
+
+    Object.entries(this.state.columnWidths).forEach(([columnId, width]) => {
+      if (typeof width === "number" && !Number.isNaN(width)) {
+        this._applyColumnWidth(columnId, width);
+      }
+    });
+
+    this._applyTableWidth();
+  };
+
+  proto._autoSizeColumnsFromContent = function () {
+    if (this.options.autoSizeColumns === false) {
+      return;
+    }
+    if (!this.elements.thead || !this.elements.tbody) {
+      return;
+    }
+
+    const visibleColumns = this._getOrderedColumns();
+    if (!visibleColumns || visibleColumns.length === 0) {
+      return;
+    }
+
+    // Skip if columns are locked and all have sizes
+    if (this.options.lockColumnWidths && this.state.columnWidthsLocked) {
+      const needsSizing = visibleColumns.some(
+        (col) => typeof this.state.columnWidths[col.id] !== "number"
+      );
+      if (!needsSizing) {
+        return;
+      }
+    }
+
+    // Skip content-based sizing if we've already auto-fitted and have stable widths
+    // This prevents oscillation during rapid data updates
+    if (this.state.hasAutoFitted && this._allColumnsHaveWidths()) {
+      return;
+    }
+
+    const allRows = Array.from(this.elements.tbody.querySelectorAll("tr[data-row-id]"));
+    const sampleSize = Math.min(this.options.autoSizeSample, allRows.length);
+    const sampleRows = sampleSize > 0 ? allRows.slice(0, sampleSize) : [];
+    const padding = this.options.autoSizePadding;
+
+    let didChange = false;
+
+    visibleColumns.forEach((col) => {
+      const columnId = col.id;
+      if (!columnId || !this._isColumnVisible(columnId)) {
+        return;
+      }
+
+      const hasFixedWidth =
+        col.autoWidth !== true &&
+        col.width !== undefined &&
+        col.width !== null &&
+        !(typeof col.width === "string" && col.width.trim().toLowerCase() === "auto");
+
+      if (hasFixedWidth) {
+        const minWidth = this._getColumnMinWidth(columnId);
+        const maxWidth = this._getColumnMaxWidth(columnId);
+        const fixed = Math.min(maxWidth, Math.max(minWidth, Number(col.width)));
+        if (
+          typeof fixed === "number" &&
+          !Number.isNaN(fixed) &&
+          this.state.columnWidths[columnId] !== fixed
+        ) {
+          this.state.columnWidths[columnId] = fixed;
+          this._applyColumnWidth(columnId, fixed);
+          didChange = true;
+        }
+        return;
+      }
+
+      if (this.state.userResizedColumns?.[columnId]) {
+        return;
+      }
+
+      const headerCell = this.elements.thead.querySelector(`th[data-column-id="${columnId}"]`);
+
+      let maxWidth = headerCell ? Math.ceil(headerCell.scrollWidth) : 0;
+
+      sampleRows.forEach((row) => {
+        const cell = row.querySelector(`td[data-column-id="${columnId}"]`);
+        if (!cell) {
+          return;
+        }
+        const cellWidth = Math.ceil(cell.scrollWidth);
+        if (cellWidth > maxWidth) {
+          maxWidth = cellWidth;
+        }
+      });
+
+      if (maxWidth === 0 && headerCell) {
+        maxWidth = Math.ceil(headerCell.offsetWidth);
+      }
+
+      const minWidth = this._getColumnMinWidth(columnId);
+      const maxWidthLimit = this._getColumnMaxWidth(columnId);
+      let finalWidth = Math.max(minWidth, maxWidth + padding);
+      const previous = this.state.columnWidths[columnId];
+
+      if (Number.isFinite(previous)) {
+        // Prevent oscillation: only allow width changes if content significantly changed
+        // Use a higher threshold to prevent micro-adjustments from causing visual jitter
+        const growthThreshold = 4;
+        const shrinkThreshold = 8;
+
+        // Calculate the difference between new measured width and stored width
+        const widthDiff = finalWidth - previous;
+
+        if (widthDiff > growthThreshold) {
+          // Content grew significantly, allow increase
+          // finalWidth stays as calculated
+        } else if (widthDiff < -shrinkThreshold) {
+          // Content shrank significantly, but only shrink if user hasn't interacted
+          // Keep previous width to prevent shrinking on data updates
+          finalWidth = previous;
+        } else {
+          // Within threshold, keep stable
+          finalWidth = previous;
+        }
+      }
+
+      if (!Number.isFinite(finalWidth)) {
+        return;
+      }
+
+      finalWidth = Math.min(maxWidthLimit, finalWidth);
+
+      if (!Number.isFinite(previous) || Math.abs(previous - finalWidth) > 1) {
+        this.state.columnWidths[columnId] = finalWidth;
+        this._applyColumnWidth(columnId, finalWidth);
+        didChange = true;
+      }
+    });
+
+    if (didChange) {
+      const total = this._computeTableWidthFromState();
+      if (typeof total === "number") {
+        this.state.tableWidth = total;
+      }
+      // Don't reset hasAutoFitted here - content-based sizing shouldn't trigger container fit
+    }
+
+    if (this.options.lockColumnWidths) {
+      const allSized = visibleColumns.every(
+        (col) => typeof this.state.columnWidths[col.id] === "number"
+      );
+      if (allSized) {
+        this.state.columnWidthsLocked = true;
+      }
+    }
+    // Note: fitToContainer is now called separately in _renderTable to avoid double-fitting
+  };
+
+  // Snapshot current natural widths for visible columns into state if missing
+  // This function ONLY captures widths - fitting is done separately
+  proto._snapshotColumnWidths = function () {
+    if (!this.elements.thead) return;
+    const headers = this.elements.thead.querySelectorAll("th[data-column-id]");
+    headers.forEach((th) => {
+      const id = th.dataset.columnId;
+      if (!id) return;
+      if (typeof this.state.columnWidths[id] !== "number") {
+        const w = th.offsetWidth;
+        if (w && !Number.isNaN(w)) this.state.columnWidths[id] = Math.round(w);
+      }
+    });
+
+    // Update table width sum (fitting and DOM application done by caller)
+    const sum = this._computeTableWidthFromState();
+    if (typeof sum === "number") {
+      this.state.tableWidth = sum;
+    }
+  };
+
+  // Check if all visible columns have stored widths
+  proto._allColumnsHaveWidths = function () {
+    const visibleColumns = this._getOrderedColumns();
+    if (!visibleColumns || visibleColumns.length === 0) return false;
+    return visibleColumns.every((col) => typeof this.state.columnWidths[col.id] === "number");
+  };
+
+  proto._computeTableWidthFromState = function () {
+    const cols = this._getOrderedColumns();
+    if (!cols || cols.length === 0) return null;
+    let total = 0;
+    cols.forEach((c) => {
+      if (!this._isColumnVisible(c.id)) return;
+      const w = this.state.columnWidths[c.id];
+      if (typeof w === "number" && !Number.isNaN(w)) total += w;
+    });
+    return Math.max(0, Math.round(total));
+  };
+
+  /**
+   * Fit columns proportionally to container width if they would overflow
+   */
+  proto._fitColumnsToContainer = function () {
+    if (!this.elements.scrollContainer) return;
+
+    // Use clientWidth which excludes vertical scrollbar width
+    const containerWidth = this.elements.scrollContainer.clientWidth;
+    const totalWidth = this._computeTableWidthFromState();
+    if (!totalWidth || totalWidth <= 0) return;
+
+    const visibleColumns = this._getOrderedColumns();
+    if (!visibleColumns || visibleColumns.length === 0) return;
+
+    // We always attempt to match the container exactly on init-fit
+    const targetWidth = Math.max(0, Math.floor(containerWidth));
+
+    // Helper to apply final widths and snap table width to target
+    const applyFinal = () => {
+      // After adjusting individual columns, recompute and set table width
+      const recomputed = this._computeTableWidthFromState();
+      // Snap to target to avoid 1px rounding horizontal scrollbars
+      this.state.tableWidth = targetWidth;
+      this._applyTableWidth();
+
+      this._log("info", "Columns fitted to container", {
+        originalWidth: totalWidth,
+        containerWidth: targetWidth,
+        resultingWidth: recomputed,
+      });
+    };
+
+    // Proportional scale when overflowing
+    if (totalWidth > targetWidth) {
+      const scaleFactor = targetWidth / totalWidth;
+      let runningTotal = 0;
+      const lastIdx = visibleColumns.length - 1;
+
+      visibleColumns.forEach((col, idx) => {
+        const currentWidth = this.state.columnWidths[col.id];
+        if (typeof currentWidth === "number" && !Number.isNaN(currentWidth)) {
+          // Skip user-resized columns - preserve their width
+          if (this.state.userResizedColumns?.[col.id]) {
+            runningTotal += currentWidth;
+            return;
+          }
+
+          const minWidth = this._getColumnMinWidth(col.id);
+          const maxWidth = this._getColumnMaxWidth(col.id);
+          // Round down to avoid overflow accumulation, we'll fix remainder on last column
+          let scaled = Math.max(minWidth, Math.floor(currentWidth * scaleFactor));
+
+          if (Number.isFinite(maxWidth)) {
+            scaled = Math.min(maxWidth, scaled);
+          }
+
+          // On last column, absorb remainder so total matches targetWidth exactly (or as close as min allows)
+          if (idx === lastIdx) {
+            const remainder = targetWidth - runningTotal;
+            // If remainder is less than minWidth, respect minWidth but it may still overflow in extreme cases
+            const capped = Number.isFinite(maxWidth) ? Math.min(maxWidth, remainder) : remainder;
+            scaled = Math.max(minWidth, capped);
+          }
+
+          runningTotal += scaled;
+          this.state.columnWidths[col.id] = scaled;
+          this._applyColumnWidth(col.id, scaled);
+        }
+      });
+
+      applyFinal();
+      return;
+    }
+
+    // If under target, expand last non-user-resized column to fill remaining gap for exact fit
+    if (totalWidth < targetWidth) {
+      // Choose the last visible column that wasn't manually resized to absorb the gap
+      let lastCol = null;
+      for (let i = visibleColumns.length - 1; i >= 0; i--) {
+        if (!this.state.userResizedColumns?.[visibleColumns[i].id]) {
+          lastCol = visibleColumns[i];
+          break;
+        }
+      }
+
+      if (lastCol) {
+        const currentWidth = this.state.columnWidths[lastCol.id];
+        if (typeof currentWidth === "number" && !Number.isNaN(currentWidth)) {
+          const gap = targetWidth - totalWidth;
+          const minWidth = this._getColumnMinWidth(lastCol.id);
+          const maxWidth = this._getColumnMaxWidth(lastCol.id);
+          const unclamped = currentWidth + gap;
+          const newWidth = Math.min(maxWidth, Math.max(minWidth, unclamped));
+          this.state.columnWidths[lastCol.id] = newWidth;
+          this._applyColumnWidth(lastCol.id, newWidth);
+        }
+      }
+
+      applyFinal();
+      return;
+    }
+
+    // Already exactly matching
+    applyFinal();
+  };
+
+  /**
+   * Handle column resize drag with RAF throttling for smooth performance
+   */
+  proto._handleResize = function (e) {
+    if (!this.resizing) return;
+    e.preventDefault();
+
+    // Throttle updates with requestAnimationFrame
+    if (this._pendingRAF) return;
+
+    this._pendingRAF = requestAnimationFrame(() => {
+      this._pendingRAF = null;
+
+      if (!this.resizing) return;
+
+      const { columnId, startX, startWidth, minWidth } = this.resizing;
+
+      const effectiveMin = typeof minWidth === "number" ? minWidth : 50;
+      let diff = e.pageX - startX;
+
+      // Prevent shrinking beyond min width
+      const maxDecrease = startWidth - effectiveMin;
+      if (diff < -maxDecrease) {
+        diff = -maxDecrease;
+      }
+
+      const newWidth = Math.max(effectiveMin, Math.round(startWidth + diff));
+      this._markColumnAsUserResized(columnId);
+      this.state.columnWidths[columnId] = newWidth;
+      this._applyColumnWidth(columnId, newWidth);
+
+      // Grow table width - don't shrink other columns
+      const total = this._computeTableWidthFromState();
+      if (typeof total === "number") {
+        this.state.tableWidth = total;
+        this._applyTableWidth();
+      }
+    });
+  };
+
+  /**
+   * Handle resize end
+   */
+  proto._handleResizeEnd = function () {
+    // Cancel any pending RAF
+    if (this._pendingRAF) {
+      cancelAnimationFrame(this._pendingRAF);
+      this._pendingRAF = null;
+    }
+
+    if (this.resizing) {
+      const { leftHeader, handle } = this.resizing;
+      if (leftHeader) {
+        leftHeader.classList.remove("dt-resizing");
+      }
+      if (handle) {
+        handle.classList.remove("active");
+      }
+
+      this._saveState();
+      this.resizing = null;
+    }
+
+    document.body.classList.remove("dt-column-resizing");
+    document.removeEventListener("mousemove", this._handleResize);
+    document.removeEventListener("mouseup", this._handleResizeEnd);
+  };
+}
