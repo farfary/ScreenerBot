@@ -77,7 +77,11 @@ pub use verifier::{
 };
 
 // Public API exports - Database operations
-pub use database::{get_transaction_database, init_transaction_database, TransactionDatabase};
+pub use database::{
+    get_transaction_database, init_transaction_database, DatabaseStats, IntegrityReport,
+    TransactionCursor, TransactionDatabase, TransactionListFilters, TransactionListResult,
+    TransactionListRow, WalletFlowExportRow,
+};
 
 // Public API exports - Program IDs and router detection
 pub use program_ids::{
