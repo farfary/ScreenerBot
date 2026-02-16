@@ -159,6 +159,8 @@ pub const CONFIRMATION_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/confirmation_dialog.js");
 pub const TRADE_ACTION_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/trade_action_dialog.js");
+pub const TRADE_ACTION_QUICK_TRADE_JS: &str = include_str!("templates/scripts/ui/trade_action/quick_trade.js");
+pub const TRADE_ACTION_QUOTE_MANAGER_JS: &str = include_str!("templates/scripts/ui/trade_action/quote_manager.js");
 pub const TAB_BAR_UI: &str = include_str!("templates/scripts/ui/tab_bar.js");
 pub const ACTION_BAR_UI: &str = include_str!("templates/scripts/ui/action_bar.js");
 pub const TABLE_SETTINGS_DIALOG_UI: &str =
