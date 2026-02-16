@@ -1,0 +1,139 @@
+/* =============================================================================
+   About Page Styles
+   ============================================================================= */
+
+/* App Info Section */
+.about-info-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-md);
+}
+
+.about-header {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-lg);
+}
+
+.about-logo {
+  width: 80px;
+  height: 80px;
+  background: linear-gradient(135deg, var(--primary-color) 0%, var(--primary-color-dark) 100%);
+  border-radius: var(--radius-lg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.about-logo-icon {
+  font-size: 40px;
+  color: white;
+}
+
+.about-brand-title {
+  font-family: var(--font-brand);
+  font-size: var(--font-size-xl);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-primary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.about-subtitle {
+  font-size: var(--font-size-base);
+  color: var(--text-secondary);
+  margin-bottom: var(--spacing-xs);
+}
+
+.about-version {
+  font-size: var(--font-size-sm);
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.about-description {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.6;
+}
+
+/* Card Grid Layout - Resources, Community, Support, Legal sections */
+.about-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: var(--spacing-md);
+}
+
+/* Card Links - All clickable status cards */
+.about-card-link {
+  text-decoration: none;
+  cursor: pointer;
+}
+
+/* External link icons inside cards */
+.about-external-icon {
+  font-size: 1.2rem;
+  color: var(--text-secondary);
+}
+
+/* Community Section - Social media cards with brand colors */
+.about-card-telegram {
+  border-color: #26a5e4;
+}
+
+.about-icon-telegram {
+  color: #26a5e4;
+}
+
+.about-card-twitter {
+  border-color: #1da1f2;
+}
+
+.about-icon-twitter {
+  color: #1da1f2;
+}
+
+.about-card-github {
+  border-color: #6e5494;
+}
+
+.about-icon-github {
+  color: #6e5494;
+}
+
+/* Support and Legal sections - Use secondary color for consistency */
+.about-icon-secondary {
+  color: var(--text-secondary);
+}
+
+/* Risk Disclaimer Section */
+.about-section-no-border {
+  border-bottom: none;
+}
+
+.about-disclaimer-box {
+  background: var(--warning-alpha-10);
+  border: 1px solid var(--warning-color);
+  border-radius: var(--radius-md);
+  padding: var(--spacing-md);
+}
+
+.about-disclaimer-text {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin-bottom: var(--spacing-sm);
+}
+
+.about-disclaimer-text-last {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.6;
+  margin: 0;
+}
+
+.about-disclaimer-strong {
+  color: var(--warning-color);
+}

@@ -31,6 +31,7 @@ const TOOLS_PAGE_STYLES: &str = include_str!("templates/styles/pages/tools.css")
 const AI_PAGE_STYLES: &str = include_str!("templates/styles/pages/ai.css");
 const HOME_PAGE_STYLES: &str = include_str!("templates/styles/pages/home.css");
 const UPDATES_PAGE_STYLES: &str = include_str!("templates/styles/pages/updates.css");
+const ABOUT_PAGE_STYLES: &str = include_str!("templates/styles/pages/about.css");
 const SPLASH_PAGE_STYLES: &str = include_str!("templates/styles/pages/splash.css");
 const ONBOARDING_PAGE_STYLES: &str = include_str!("templates/styles/pages/onboarding.css");
 const SETUP_PAGE_STYLES: &str = include_str!("templates/styles/pages/setup.css");
@@ -330,6 +331,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         AI_PAGE_STYLES,
         HOME_PAGE_STYLES,
         UPDATES_PAGE_STYLES,
+        ABOUT_PAGE_STYLES,
     ];
     // Suppress unused variable warning - active_tab was used for conditional style loading
     // but we now include all styles upfront to prevent FOUC in WebView
@@ -351,6 +353,7 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         ("ai", AI_PAGE_STYLES),
         ("home", HOME_PAGE_STYLES),
         ("updates", UPDATES_PAGE_STYLES),
+        ("about", ABOUT_PAGE_STYLES),
     ] {
         if styles.trim().is_empty() {
             continue;
