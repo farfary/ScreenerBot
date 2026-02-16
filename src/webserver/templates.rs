@@ -136,6 +136,12 @@ pub const TABLE_SETTINGS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/table_settings_dialog.js");
 pub const TOKEN_DETAILS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/token_details_dialog.js");
+pub const TOKEN_DETAILS_OVERVIEW_TAB_UI: &str =
+    include_str!("templates/scripts/ui/token_details/overview_tab.js");
+pub const TOKEN_DETAILS_SECURITY_TAB_UI: &str =
+    include_str!("templates/scripts/ui/token_details/security_tab.js");
+pub const TOKEN_DETAILS_POOLS_LINKS_TAB_UI: &str =
+    include_str!("templates/scripts/ui/token_details/pools_links_tab.js");
 pub const TRANSACTION_DETAILS_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/transaction_details_dialog.js");
 pub const POSITION_DETAILS_DIALOG_UI: &str =
