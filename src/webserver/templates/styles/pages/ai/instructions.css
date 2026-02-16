@@ -1,0 +1,481 @@
+/* ============================================================================
+   Instructions Tab Styles
+   ============================================================================ */
+
+/* Toolbar with Filters and Search */
+.instructions-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.filter-group {
+  display: flex;
+  gap: 12px;
+}
+
+/* AI-specific filter-select overrides - base in notifications.css */
+.ai-page .filter-select {
+  padding: 8px 32px 8px 12px;
+  font-size: 13px;
+  border-radius: 6px;
+  background-image: var(--select-arrow);
+  background-position: right 10px center;
+}
+
+.search-box {
+  position: relative;
+  flex: 1;
+  max-width: 300px;
+}
+
+.search-input {
+  width: 100%;
+  padding: 8px 36px 8px 12px;
+  font-size: 13px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  color: var(--text-primary);
+  transition: border-color 0.15s ease;
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.search-icon {
+  position: absolute;
+  inset-inline-end: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Instructions List Container */
+.instructions-list-container {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 24px;
+}
+
+.instructions-list {
+  min-height: 200px;
+}
+
+.instruction-item {
+  display: flex;
+  align-items: center;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgb(128, 128, 128, 0.1);
+  transition: background 0.15s ease;
+  cursor: grab;
+  min-height: 40px;
+}
+
+.instruction-item:last-child {
+  border-bottom: 1px solid rgb(128, 128, 128, 0.1);
+}
+
+.instruction-item:hover {
+  background: var(--hover-bg);
+}
+
+.instruction-item.dragging {
+  opacity: 0.5;
+  background: var(--primary-alpha-10);
+}
+
+.instruction-item.drag-over {
+  border-color: var(--primary);
+  background: var(--primary-alpha-5);
+}
+
+.instruction-drag-handle {
+  color: var(--text-muted);
+  margin-inline-end: 10px;
+  cursor: grab;
+  font-size: 16px;
+  line-height: 1;
+  user-select: none;
+  opacity: 0.4;
+  transition:
+    opacity 0.15s ease,
+    color 0.15s ease;
+}
+
+.instruction-item:hover .instruction-drag-handle {
+  opacity: 0.7;
+  color: var(--text-secondary);
+}
+
+.instruction-drag-handle:active {
+  cursor: grabbing;
+}
+
+.instruction-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.instruction-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  line-height: 1.3;
+}
+
+.instruction-meta {
+  font-size: 11px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.3;
+}
+
+.instruction-meta .category-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  text-transform: capitalize;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.instruction-meta .category-tag.filtering {
+  background: var(--primary-alpha-15);
+  color: var(--primary);
+}
+
+.instruction-meta .category-tag.trading {
+  background: var(--success-alpha-15);
+  color: var(--success);
+}
+
+.instruction-meta .category-tag.analysis {
+  background: var(--warning-alpha-15);
+  color: var(--warning);
+}
+
+.instruction-meta .category-tag.general {
+  background: var(--info-alpha-15);
+  color: var(--info);
+}
+
+.instruction-meta .priority-text {
+  opacity: 0.7;
+  font-size: 10px;
+}
+
+.instruction-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-inline-start: auto;
+  padding-inline-start: 12px;
+}
+
+/* Instruction toggle - uses centralized .toggle-sm from form_controls.css */
+.instruction-toggle {
+  flex-shrink: 0;
+}
+
+.instruction-menu-btn {
+  width: 24px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.instruction-menu-btn:hover {
+  background: var(--hover-bg);
+  color: var(--text-primary);
+}
+
+/* Empty State */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+}
+
+.empty-icon {
+  width: 48px;
+  height: 48px;
+  margin-bottom: 16px;
+  opacity: 0.5;
+}
+
+.empty-text {
+  color: var(--text-secondary);
+  margin-bottom: 16px;
+}
+
+/* Templates Section (Collapsible) */
+.templates-section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.templates-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.templates-header:hover {
+  background: var(--hover-bg);
+}
+
+.templates-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.templates-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.templates-toggle {
+  color: var(--text-secondary);
+  transition: transform 0.2s ease;
+}
+
+.templates-section.collapsed .templates-toggle {
+  transform: rotate(-90deg);
+}
+
+.templates-body {
+  border-top: 1px solid var(--border-color);
+  padding: 16px 20px;
+  transition: all 0.2s ease;
+}
+
+.templates-section.collapsed .templates-body {
+  display: none;
+}
+
+.templates-description {
+  color: var(--text-secondary);
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.templates-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+  gap: 12px;
+}
+
+.template-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 14px;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.template-card:hover {
+  border-color: var(--primary);
+  background: var(--primary-alpha-5);
+}
+
+.template-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.template-description {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* Instruction Context Menu */
+.instruction-context-menu {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  overflow: hidden;
+  min-width: 150px;
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  cursor: pointer;
+  color: var(--text-primary);
+  font-size: 13px;
+  transition: background 0.15s ease;
+}
+
+.context-menu-item:hover {
+  background: var(--hover-bg);
+}
+
+.context-menu-item.danger {
+  color: var(--danger);
+}
+
+.context-menu-item.danger:hover {
+  background: var(--danger-alpha-10);
+}
+
+.context-menu-item i {
+  font-size: 14px;
+}
+
+/* ============================================================================
+   History Tab Styles
+   ============================================================================ */
+
+/* Template Preview Modal */
+.template-preview-modal {
+  max-width: 700px;
+}
+
+.template-preview-info {
+  margin-bottom: 1rem;
+}
+
+.preview-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.template-preview-content {
+  margin-top: 1rem;
+}
+
+.template-preview-content h4 {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.template-content-display {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 1rem;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* ============================================================================
+   History Tab
+   ============================================================================ */
+
+.history-section {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--ai-card-radius);
+  padding: var(--ai-card-padding);
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.history-table th,
+.history-table td {
+  padding: 0.75rem;
+  text-align: start;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.history-table th {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.decision-row.pass {
+  background: rgb(34, 197, 94, 0.05);
+}
+
+.decision-row.reject {
+  background: rgb(239, 68, 68, 0.05);
+}
+
+.token-symbol {
+  font-weight: 600;
+  display: block;
+  color: var(--text-primary);
+}
+
+.token-mint {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 1rem;
+  padding: 1rem;
+  margin-top: 1rem;
+}
+

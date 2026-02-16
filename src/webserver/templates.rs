@@ -28,7 +28,11 @@ const STRATEGIES_PAGE_STYLES: &str = include_str!("templates/styles/pages/strate
 const TRADER_PAGE_STYLES: &str = include_str!("templates/styles/pages/trader.css");
 const WALLETS_PAGE_STYLES: &str = include_str!("templates/styles/pages/wallets.css");
 const TOOLS_PAGE_STYLES: &str = include_str!("templates/styles/pages/tools.css");
-const AI_PAGE_STYLES: &str = include_str!("templates/styles/pages/ai.css");
+const AI_BASE_STYLES: &str = include_str!("templates/styles/pages/ai/base.css");
+const AI_PROVIDERS_STYLES: &str = include_str!("templates/styles/pages/ai/providers.css");
+const AI_INSTRUCTIONS_STYLES: &str = include_str!("templates/styles/pages/ai/instructions.css");
+const AI_CHAT_AUTOMATION_STYLES: &str =
+    include_str!("templates/styles/pages/ai/chat_automation.css");
 const HOME_PAGE_STYLES: &str = include_str!("templates/styles/pages/home.css");
 const UPDATES_PAGE_STYLES: &str = include_str!("templates/styles/pages/updates.css");
 const ABOUT_PAGE_STYLES: &str = include_str!("templates/styles/pages/about.css");
@@ -337,7 +341,10 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         TRADER_PAGE_STYLES,
         WALLETS_PAGE_STYLES,
         TOOLS_PAGE_STYLES,
-        AI_PAGE_STYLES,
+        AI_BASE_STYLES,
+        AI_PROVIDERS_STYLES,
+        AI_INSTRUCTIONS_STYLES,
+        AI_CHAT_AUTOMATION_STYLES,
         HOME_PAGE_STYLES,
         UPDATES_PAGE_STYLES,
         ABOUT_PAGE_STYLES,
@@ -359,7 +366,16 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         ("trader", TRADER_PAGE_STYLES),
         ("wallets", WALLETS_PAGE_STYLES),
         ("tools", TOOLS_PAGE_STYLES),
-        ("ai", AI_PAGE_STYLES),
+        (
+            "ai",
+            &[
+                AI_BASE_STYLES,
+                AI_PROVIDERS_STYLES,
+                AI_INSTRUCTIONS_STYLES,
+                AI_CHAT_AUTOMATION_STYLES,
+            ]
+            .join("\n"),
+        ),
         ("home", HOME_PAGE_STYLES),
         ("updates", UPDATES_PAGE_STYLES),
         ("about", ABOUT_PAGE_STYLES),
