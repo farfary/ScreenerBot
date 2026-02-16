@@ -67,6 +67,8 @@ pub(super) const TOOLS_WALLET_STYLES: &str = include_str!("templates/styles/page
 pub(super) const TOOLS_TOKEN_STYLES: &str = include_str!("templates/styles/pages/tools/token_tools.css");
 pub(super) const TOOLS_TRADING_STYLES: &str = include_str!("templates/styles/pages/tools/trading_tools.css");
 pub(super) const AI_BASE_STYLES: &str = include_str!("templates/styles/pages/ai/base.css");
+pub(super) const AI_SETTINGS_TESTING_STYLES: &str =
+    include_str!("templates/styles/pages/ai/settings_testing.css");
 pub(super) const AI_PROVIDERS_STYLES: &str = include_str!("templates/styles/pages/ai/providers.css");
 pub(super) const AI_INSTRUCTIONS_STYLES: &str = include_str!("templates/styles/pages/ai/instructions.css");
 pub(super) const AI_CHAT_STYLES: &str = include_str!("templates/styles/pages/ai/chat.css");
@@ -129,8 +131,12 @@ pub(super) const POSITION_DETAILS_BASE_STYLES: &str =
     include_str!("templates/styles/ui/position_details/base.css");
 pub(super) const POSITION_DETAILS_OVERVIEW_STYLES: &str =
     include_str!("templates/styles/ui/position_details/overview.css");
+pub(super) const POSITION_DETAILS_HISTORY_STYLES: &str =
+    include_str!("templates/styles/ui/position_details/history.css");
 pub(super) const POSITION_DETAILS_TRANSACTIONS_STYLES: &str =
     include_str!("templates/styles/ui/position_details/transactions.css");
+pub(super) const POSITION_DETAILS_TRANSACTIONS_DETAIL_STYLES: &str =
+    include_str!("templates/styles/ui/position_details/transactions_detail.css");
 
 // CSS Styles - Settings and Misc
 pub(super) const SETTINGS_BASE_STYLES: &str = include_str!("templates/styles/settings/base.css");
