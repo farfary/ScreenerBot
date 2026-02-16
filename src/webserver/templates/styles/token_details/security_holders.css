@@ -32,7 +32,7 @@
   width: 36px;
   height: 36px;
   background: var(--bg-primary);
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   border: 1px solid var(--border-color);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
 }
@@ -121,7 +121,7 @@
   font-size: 0.65rem;
   font-weight: 600;
   padding: 2px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 
 .concentration-badge.danger {
@@ -323,7 +323,7 @@
 .podium-avatar {
   width: 40px;
   height: 40px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--bg-tertiary);
   border: 2px solid var(--border-color);
   display: flex;
@@ -361,7 +361,7 @@
   background: linear-gradient(180deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
   border: 1px solid var(--border-color);
   border-bottom: none;
-  border-radius: 8px 8px 0 0;
+  border-radius: var(--radius-lg) 8px 0 0;
   position: relative;
 }
 
@@ -396,7 +396,7 @@
   font-family: var(--font-mono);
   background: var(--bg-secondary);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border-color);
   text-align: center;
 }
@@ -489,7 +489,7 @@
   font-weight: 700;
   color: var(--text-muted);
   background: var(--bg-tertiary);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   font-feature-settings: "tnum";
 }
 
@@ -525,7 +525,7 @@
   color: var(--text-secondary);
   transition: all var(--transition-fast);
   padding: 2px 0;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .holder-row:hover .holder-address a {
@@ -555,14 +555,14 @@
   position: relative;
   height: 6px;
   background: var(--bg-tertiary); /* Darker track */
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
 .holder-bar-container .bar-fill {
   height: 100%;
   background: linear-gradient(90deg, var(--primary-color), var(--primary-alpha-80));
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   transition: width 1s cubic-bezier(0.2, 0.8, 0.2, 1);
   box-shadow: 0 0 4px var(--primary-alpha-30);
 }
@@ -581,7 +581,7 @@
   font-size: 0.6rem;
   font-weight: 700;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--warning-color);
   background: var(--warning-alpha-10);
   border: 1px solid var(--warning-alpha-30);
@@ -601,7 +601,7 @@
   font-size: 0.6rem;
   font-weight: 600;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--text-secondary);
   background: var(--bg-tertiary);
   border: 1px solid var(--border-subtle, var(--border-color));

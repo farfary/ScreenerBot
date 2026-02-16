@@ -29,7 +29,7 @@
   padding: 5px 10px;
   background: var(--primary-alpha-10);
   border: 1px solid var(--primary-alpha-20);
-  border-radius: 20px;
+  border-radius: var(--radius-full);
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--primary-color);
@@ -84,7 +84,7 @@
   align-items: flex-end;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 16px;
+  border-radius: var(--radius-2xl);
   padding: 10px 12px 10px 16px;
   transition:
     border-color 0.2s ease,
@@ -211,7 +211,7 @@
   padding: 0 4px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-family: inherit;
   font-size: 0.625rem;
   font-weight: 500;
@@ -232,7 +232,7 @@
   width: 32px;
   height: 32px;
   min-height: 32px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: none;
   background: transparent;
   color: var(--text-muted);
@@ -269,7 +269,7 @@
   width: 32px;
   height: 32px;
   min-height: 32px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: none;
   background: var(--primary-color);
   color: white;
@@ -366,7 +366,7 @@
   width: 4px;
   height: 4px;
   background: currentColor;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: typingDot 1.2s infinite ease-in-out;
 }
 

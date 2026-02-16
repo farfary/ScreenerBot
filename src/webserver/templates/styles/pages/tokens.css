@@ -29,7 +29,7 @@
   height: 28px;
   min-width: 28px;
   min-height: 28px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   object-fit: cover;
   background: var(--bg-secondary);
   flex-shrink: 0;
@@ -169,7 +169,7 @@
   letter-spacing: 0.03em;
   white-space: nowrap;
   min-width: auto;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid transparent;
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -250,7 +250,7 @@
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -277,7 +277,7 @@
 .priority-badge {
   display: inline-block;
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   font-size: 0.7rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -315,7 +315,7 @@
 .backfill-bar {
   height: 4px;
   background: var(--bg-secondary);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   position: relative;
   overflow: hidden;
 }
@@ -327,7 +327,7 @@
   top: 0;
   height: 100%;
   width: var(--progress, 0%);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   transition: width var(--transition-normal);
 }
 
@@ -363,7 +363,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   text-transform: uppercase;
 }
 
@@ -410,7 +410,7 @@
   font-size: 0.8rem;
   padding: 2px 6px;
   background: var(--bg-tertiary);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--text-secondary);
 }
 
@@ -447,7 +447,7 @@
   font-family: var(--font-mono);
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--text-secondary);
 }
 

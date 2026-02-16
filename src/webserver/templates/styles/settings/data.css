@@ -5,7 +5,7 @@
 .data-overview-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 16px;
 }
 
@@ -30,7 +30,7 @@
   justify-content: space-between;
   padding: 12px 16px;
   background: linear-gradient(135deg, var(--primary-alpha-10), var(--primary-alpha-5));
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   margin-bottom: 16px;
   position: relative;
   overflow: hidden;
@@ -79,7 +79,7 @@
   gap: 12px;
   padding: 8px 12px;
   background: var(--bg-primary);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
 }
 
@@ -92,14 +92,14 @@
 .data-db-bar-container {
   height: 6px;
   background: var(--bg-secondary);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
 }
 
 .data-db-bar {
   height: 100%;
   background: var(--link-color);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   transition: width var(--transition-normal);
 }
 
@@ -128,7 +128,7 @@
 .config-info-box {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 12px;
 }
 
@@ -154,7 +154,7 @@
   white-space: nowrap;
   cursor: pointer;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   transition:
     background-color 0.15s ease,
     color 0.15s ease;
@@ -185,7 +185,7 @@
 .preset-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 16px;
   display: flex;
   flex-direction: column;
@@ -210,7 +210,7 @@
 .preset-icon {
   width: 44px;
   height: 44px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   display: flex;
   align-items: center;
   justify-content: center;

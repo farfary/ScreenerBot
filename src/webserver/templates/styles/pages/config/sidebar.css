@@ -118,7 +118,7 @@
 
 .config-section-count {
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--config-accent-light);
   color: var(--config-accent);
   font-weight: 600;
@@ -129,7 +129,7 @@
 
 .config-section-pending {
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--config-error-light);
   color: var(--config-error);
   font-weight: 600;
@@ -171,7 +171,7 @@
   justify-content: center;
   gap: 8px;
   padding: 10px 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   border: 1px solid var(--border-color);
   background: var(--bg-secondary);
   color: var(--text-primary);

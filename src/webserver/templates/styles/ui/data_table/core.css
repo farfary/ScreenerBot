@@ -65,7 +65,7 @@
   margin-right: 2px;
   border: 2px solid var(--primary-color);
   border-top-color: transparent;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: dt-sort-spin 0.6s linear infinite;
 }
 
@@ -91,7 +91,7 @@
   padding: 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 8px 24px rgb(0, 0, 0, 0.2);
   z-index: var(--z-header);
   min-width: 220px;
@@ -366,7 +366,7 @@ body.dt-column-resizing * {
   gap: 10px;
   padding: 8px 10px;
   cursor: pointer;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   transition: all var(--transition-fast);
   user-select: none;
   box-sizing: border-box;
@@ -580,7 +580,7 @@ body.dt-column-resizing * {
   z-index: var(--z-dialog);
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 4px 12px var(--shadow-lg);
   padding: 4px 0;
   min-width: 180px;
@@ -663,7 +663,7 @@ body.dt-column-resizing * {
   height: 32px;
   border: 3px solid var(--border-color);
   border-top-color: var(--primary-color);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: dt-loading-spin 0.8s linear infinite;
 }
 

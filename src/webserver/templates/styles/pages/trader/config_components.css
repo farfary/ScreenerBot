@@ -10,7 +10,7 @@
 /* Unified Card Container */
 .config-card {
   background: var(--card-bg);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 1.25rem;
   border: 1px solid var(--border-color);
   box-shadow: 0 2px 8px var(--shadow-sm);
@@ -34,7 +34,7 @@
   padding: 1rem 1.25rem;
   background: linear-gradient(135deg, var(--primary-alpha-5), transparent);
   border-bottom: 1px solid var(--border-color);
-  border-radius: 8px 8px 0 0;
+  border-radius: var(--radius-lg) 8px 0 0;
 }
 
 .config-card .card-header h3 {
@@ -75,7 +75,7 @@
 .config-group-primary {
   background: var(--primary-alpha-5);
   padding: 1rem;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--primary-alpha-15);
 }
 
@@ -158,7 +158,7 @@
 
 .config-badge {
   padding: 0.1875rem 0.5rem;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   font-size: 0.625rem;
   font-weight: 600;
   text-transform: uppercase;
@@ -195,7 +195,7 @@
   font-size: 1rem;
   font-weight: 600;
   border: 2px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--background-secondary);
   color: var(--text-primary);
   transition: all var(--transition-base);
@@ -221,7 +221,7 @@
   font-size: 0.875rem;
   font-weight: 500;
   border: 2px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--background-secondary);
   color: var(--text-primary);
   transition: all var(--transition-base);
@@ -240,7 +240,7 @@
   margin-top: 0.5rem;
   padding: 0.5rem 0.75rem;
   background: var(--background-tertiary);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 
 .impact-label {
@@ -260,7 +260,7 @@
 /* Visual Example */
 .visual-example {
   background: linear-gradient(135deg, var(--background-secondary) 0%, var(--card-bg) 100%);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 0.75rem;
 }
 
@@ -294,7 +294,7 @@
 .step-icon {
   width: 28px;
   height: 28px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -372,7 +372,7 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.625rem;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: 0.8125rem;
 }
 
@@ -411,7 +411,7 @@
 /* Feature Preview */
 .feature-preview {
   background: var(--card-bg);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   padding: 1.5rem;
   margin-top: 1.5rem;
   border: 1px solid var(--border-color);
@@ -445,7 +445,7 @@
   gap: 1rem;
   padding: 1rem;
   background: var(--background-secondary);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
 }
 
@@ -475,7 +475,7 @@
 /* Quick Stats */
 .stats-section-compact {
   background: var(--card-bg);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   padding: 1.5rem;
   box-shadow: 0 2px 8px rgb(0, 0, 0, 0.1);
 }
@@ -498,7 +498,7 @@
 
 .quick-stat-card {
   background: var(--background-secondary);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 1rem;
   text-align: center;
   border: 1px solid var(--border-color);

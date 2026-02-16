@@ -35,7 +35,7 @@
 .links-info-card {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 14px;
   transition: border-color var(--transition-fast);
 }
@@ -101,7 +101,7 @@
   font-size: 0.65rem;
   font-weight: 600;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--bg-secondary);
   color: var(--text-secondary);
 }
@@ -141,7 +141,7 @@
 
 .links-media-preview {
   width: 100%;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -204,7 +204,7 @@
 .links-section-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 14px;
   transition: border-color var(--transition-fast);
 }
@@ -246,7 +246,7 @@
   padding: 10px 12px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   text-decoration: none;
   transition: all var(--transition-fast);
   font-size: 0.75rem;
@@ -293,7 +293,7 @@
   padding: 10px 12px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   text-decoration: none;
   transition: all var(--transition-fast);
 }
@@ -333,7 +333,7 @@
   padding: 10px 12px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   text-decoration: none;
   transition: all var(--transition-fast);
 }
@@ -371,7 +371,7 @@
   padding: 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--text-muted);
   font-size: 0.75rem;
 }
@@ -411,7 +411,7 @@
   padding: 12px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   text-decoration: none;
   transition: all var(--transition-base);
   cursor: pointer;

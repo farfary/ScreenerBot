@@ -6,7 +6,7 @@
 .icon-container {
   width: 40px;
   height: 40px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--primary-alpha-10);
   display: flex;
   align-items: center;
@@ -32,7 +32,7 @@
 /* Metric Cards */
 .metric-card {
   background: var(--background-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 0.625rem; /* Reduced from 0.875rem for compactness */
   border: 1px solid var(--border-color);
   display: flex;
@@ -65,7 +65,7 @@
 .metric-icon {
   width: 24px; /* Reduced from 28px for compactness */
   height: 24px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--primary-alpha-10);
   display: flex;
   align-items: center;
@@ -155,7 +155,7 @@
 
 .health-card {
   background: var(--background-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 0.75rem;
   border: 1px solid var(--border-color);
   display: flex;
@@ -172,7 +172,7 @@
 .health-icon {
   width: 32px;
   height: 32px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--primary-alpha-10);
   display: flex;
   align-items: center;
@@ -290,7 +290,7 @@
 .position-summary-card {
   background: var(--background-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 1rem;
   transition: box-shadow var(--transition-base);
 }

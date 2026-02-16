@@ -24,7 +24,7 @@
 
 .verification-ring {
   position: absolute;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   border: 2px solid transparent;
 }
 
@@ -59,7 +59,7 @@
   content: "";
   position: absolute;
   inset: -2px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   border: 2px solid transparent;
   border-top-color: #58a6ff;
   animation: ring-scan 1.5s linear infinite;
@@ -80,7 +80,7 @@
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, rgb(88 166 255 / 0.2), rgb(88 166 255 / 0.05));
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   border: 1px solid rgb(88 166 255 / 0.3);
   backdrop-filter: blur(8px);
   animation: icon-glow 2s ease-in-out infinite;
@@ -165,7 +165,7 @@
   padding: 1.25rem;
   background: linear-gradient(135deg, rgb(22 27 34 / 0.9), rgb(13 17 23 / 0.9));
   border: 1px solid var(--border-color, #30363d);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   align-items: flex-start;
   overflow: hidden;
   transition: all var(--transition-normal);
@@ -244,7 +244,7 @@
   align-items: center;
   justify-content: center;
   background: rgb(88 166 255 / 0.1);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   flex-shrink: 0;
   transition: all var(--transition-normal);
 }
@@ -300,7 +300,7 @@
   color: var(--text-muted, #6e7681);
   padding: 0.5rem;
   background: var(--bg-primary, #0d1117);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   font-family: var(--font-mono);
   word-break: break-all;
   display: none;
@@ -317,7 +317,7 @@
   height: 14px;
   border: 2px solid var(--border-color, #30363d);
   border-top-color: var(--accent-secondary, #58a6ff);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: setup-spin 0.7s linear infinite;
 }
 
@@ -378,7 +378,7 @@
   height: 8px;
   background: var(--bg-tertiary, #21262d);
   border: 1px solid var(--border-color, #30363d);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   margin-bottom: 0.5rem;
 }
@@ -390,7 +390,7 @@
     var(--accent-primary, #1f6feb) 0%,
     var(--accent-secondary, #58a6ff) 100%
   );
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   transition: width 0.4s ease;
   width: 0;
 }
@@ -413,7 +413,7 @@
 
 .setup-btn {
   padding: 0.75rem 1.5rem;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-size: 0.9375rem;
   font-weight: 700;
   cursor: pointer;
@@ -466,7 +466,7 @@
   background: rgb(30, 10, 10, 0.9);
   border: 1px solid rgb(248, 81, 73, 0.4);
   box-shadow: 0 12px 32px rgb(0, 0, 0, 0.5);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   animation: setup-slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   display: none;
   z-index: 100;
@@ -599,7 +599,7 @@
   padding: 0.625rem 0.875rem;
   background: linear-gradient(135deg, rgb(35, 134, 54, 0.15) 0%, rgb(35, 134, 54, 0.08) 100%);
   border: 1px solid rgb(35, 134, 54, 0.3);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-family: var(--font-mono, "JetBrains Mono", monospace);
   font-size: 0.75rem;
   color: var(--success, #3fb950);
@@ -627,7 +627,7 @@
   padding: 0;
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--text-secondary, #8b949e);
   cursor: pointer;
   transition: all var(--transition-fast);

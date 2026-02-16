@@ -776,7 +776,7 @@
   width: 90vw;
   max-width: 500px;
   background: var(--bg-primary);
-  border-radius: 16px;
+  border-radius: var(--radius-2xl);
   overflow: hidden;
   box-shadow:
     0 30px 90px rgb(0, 0, 0, 0.7),
@@ -832,7 +832,7 @@
   color: var(--text-primary);
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   display: flex;
   align-items: center;

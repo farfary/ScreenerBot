@@ -31,7 +31,7 @@
 .position-details-dialog .pdd-banner-logo {
   width: 48px;
   height: 48px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   overflow: hidden;
   background: var(--bg-primary);
   border: 2px solid var(--border-color);

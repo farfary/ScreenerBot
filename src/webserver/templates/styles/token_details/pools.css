@@ -35,7 +35,7 @@
 .pools-summary-card {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 12px;
   transition: border-color var(--transition-fast);
 }
@@ -135,7 +135,7 @@
   font-family: var(--font-data);
   background: var(--bg-secondary);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 /* Pool list header */
@@ -163,7 +163,7 @@
 .pool-detail-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   transition: border-color var(--transition-fast);
 }
@@ -207,7 +207,7 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--primary-color);
   background: var(--primary-alpha-10);
 }
@@ -218,7 +218,7 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .pool-detail-role.base {
@@ -332,7 +332,7 @@
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   transition: all var(--transition-fast);
   flex-shrink: 0;
 }
@@ -357,7 +357,7 @@
 .pool-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
@@ -386,7 +386,7 @@
   text-transform: uppercase;
   letter-spacing: 0.05em;
   padding: 2px 8px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   color: var(--primary-color);
   background: var(--primary-alpha-10);
 }

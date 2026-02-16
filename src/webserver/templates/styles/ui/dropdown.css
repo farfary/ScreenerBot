@@ -102,7 +102,7 @@
   flex-shrink: 0;
   font-size: 0.7rem;
   padding: 2px 6px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   font-weight: 600;
   background: var(--badge-bg, #e0e0e0);
   color: var(--badge-color, #333);
@@ -177,7 +177,7 @@
   font-size: 0.65rem;
   font-weight: 700;
   padding: 2px 5px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   min-width: 16px;
   text-align: center;
   line-height: 1;

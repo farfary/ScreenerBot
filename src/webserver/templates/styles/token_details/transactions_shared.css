@@ -84,7 +84,7 @@
   justify-content: center;
   width: 20px;
   height: 20px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   flex-shrink: 0;
 }
 
@@ -221,7 +221,7 @@
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
 }
 
 .transaction-icon svg {
@@ -364,7 +364,7 @@
   justify-content: center;
   width: 24px;
   height: 24px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--text-muted);
   transition:
     background 0.15s ease,
@@ -564,7 +564,7 @@
   padding: 4px 10px;
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
-  border-radius: 20px;
+  border-radius: var(--radius-full);
   font-size: 0.6rem;
   transition: opacity var(--transition-normal);
   overflow: hidden;
@@ -586,7 +586,7 @@
 .status-icon {
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   flex-shrink: 0;
   transition: background-color var(--transition-base);
 }

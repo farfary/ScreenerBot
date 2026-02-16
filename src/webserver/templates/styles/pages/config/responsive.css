@@ -274,7 +274,7 @@
   justify-content: center;
   width: 24px;
   height: 24px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--primary-color);
   color: #fff;
   font-size: 0.75rem;

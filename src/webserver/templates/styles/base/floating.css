@@ -325,7 +325,7 @@
   flex-shrink: 0;
   font-size: 0.7rem;
   padding: 2px 6px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   font-weight: 600;
   background: var(--bg-card-hover);
   color: var(--text-secondary);

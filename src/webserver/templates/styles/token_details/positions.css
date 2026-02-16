@@ -58,7 +58,7 @@
 .position-card {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   transition:
     border-color 0.15s ease,
@@ -109,7 +109,7 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .position-status.open {
@@ -126,7 +126,7 @@
   font-size: 0.6rem;
   font-weight: 600;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   white-space: nowrap;
 }
 
@@ -175,7 +175,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.03em;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: 1px solid transparent;
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -200,7 +200,7 @@
   height: 10px;
   border: 2px solid currentcolor;
   border-top-color: transparent;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: position-btn-spin 0.6s linear infinite;
 }
 
@@ -224,7 +224,7 @@
   color: #f87171;
   background: rgb(239, 68, 68, 0.15);
   border: 1px solid rgb(239, 68, 68, 0.3);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
@@ -261,7 +261,7 @@
   color: #60a5fa;
   background: rgb(59, 130, 246, 0.15);
   border: 1px solid rgb(59, 130, 246, 0.3);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
@@ -368,7 +368,7 @@
   gap: 1px;
   padding: 6px 8px;
   background: var(--bg-secondary);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .position-cell .cell-label {

@@ -21,7 +21,7 @@
 .ai-page .filter-select {
   padding: 8px 32px 8px 12px;
   font-size: 13px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background-image: var(--select-arrow);
   background-position: right 10px center;
 }
@@ -38,7 +38,7 @@
   font-size: 13px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--text-primary);
   transition: border-color var(--transition-fast);
 }
@@ -67,7 +67,7 @@
 .instructions-list-container {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   overflow: hidden;
   margin-bottom: 24px;
 }
@@ -249,7 +249,7 @@
 .templates-section {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   overflow: hidden;
 }
 
@@ -314,7 +314,7 @@
 .template-card {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 14px;
   transition: all var(--transition-fast);
   cursor: pointer;
@@ -342,7 +342,7 @@
 .instruction-context-menu {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   overflow: hidden;
   min-width: 150px;
@@ -409,7 +409,7 @@
 .template-content-display {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 1rem;
   font-size: 0.85rem;
   color: var(--text-secondary);

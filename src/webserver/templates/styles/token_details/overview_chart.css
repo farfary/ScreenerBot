@@ -44,7 +44,7 @@
   padding: 8px 6px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   text-align: center;
   transition: border-color var(--transition-fast);
 }
@@ -95,7 +95,7 @@
 .info-card {
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
   transition: border-color var(--transition-fast);
 }
@@ -135,14 +135,14 @@
   color: var(--success-color);
   background: var(--success-alpha-10);
   padding: 2px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-weight: 600;
 }
 
 .info-card .card-header .ratio-badge {
   font-size: 0.65rem;
   padding: 2px 8px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-weight: 600;
   font-family: var(--font-data);
 }
@@ -312,7 +312,7 @@
   padding: 2px 8px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   color: var(--text-secondary);
   transition:
     background 0.15s ease,
@@ -571,7 +571,7 @@
 .txn-bar-container {
   display: flex;
   height: 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   overflow: hidden;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
@@ -587,14 +587,14 @@
 
 .txn-bar.buy-bar {
   background: var(--success-color);
-  border-top-left-radius: 999px;
-  border-bottom-left-radius: 999px;
+  border-top-left-radius: var(--radius-full);
+  border-bottom-left-radius: var(--radius-full);
 }
 
 .txn-bar.sell-bar {
   background: var(--danger);
-  border-top-right-radius: 999px;
-  border-bottom-right-radius: 999px;
+  border-top-right-radius: var(--radius-full);
+  border-bottom-right-radius: var(--radius-full);
 }
 
 .txn-counts {
@@ -753,7 +753,7 @@
 
 .ohlcv-change {
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   font-weight: 600;
 }
 
@@ -779,14 +779,14 @@
   gap: 2px;
   background: var(--bg-primary);
   padding: 2px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .timeframe-btn {
   padding: 4px 8px;
   background: transparent;
   border: none;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   color: var(--text-secondary);
   font-size: 0.65rem;
   font-weight: 600;
@@ -864,7 +864,7 @@
   height: 32px;
   border: 3px solid var(--border-color);
   border-top-color: var(--primary-color);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: chart-spinner 1s linear infinite;
 }
 

@@ -18,7 +18,7 @@
   padding: 14px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 16px;
+  border-radius: var(--radius-2xl);
 }
 
 .settings-about-logo img {
@@ -48,7 +48,7 @@
   padding: 6px 14px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   margin-bottom: 20px;
   font-size: 0.8rem;
   color: var(--text-secondary);
@@ -76,7 +76,7 @@
   padding: 14px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   margin-bottom: 20px;
 }
 
@@ -88,7 +88,7 @@
   justify-content: center;
   background: var(--primary-alpha-10);
   color: var(--primary-color);
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   font-size: 1.1rem;
   flex-shrink: 0;
 }
@@ -138,7 +138,7 @@
   padding: 7px 14px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: 0.8rem;
   font-weight: 500;
@@ -210,7 +210,7 @@
   gap: 4px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   padding: 8px;
   max-height: 380px;
   overflow-y: auto;
@@ -225,7 +225,7 @@
   padding: 8px 10px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   transition:
     transform 0.15s ease,
     opacity 0.15s ease,
@@ -265,7 +265,7 @@
   right: 0;
   height: 3px;
   background: var(--primary-color);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   box-shadow: 0 0 8px var(--primary-color);
 }
 
@@ -277,7 +277,7 @@
   right: 0;
   height: 3px;
   background: var(--primary-color);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   box-shadow: 0 0 8px var(--primary-color);
 }
 
@@ -288,7 +288,7 @@
   width: 22px;
   height: 22px;
   background: var(--bg-secondary);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: 0.7rem;
   font-weight: 700;
   color: var(--text-secondary);
@@ -321,7 +321,7 @@
   width: 32px;
   height: 32px;
   background: var(--primary-alpha-10);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   color: var(--primary-color);
   flex-shrink: 0;
 }
@@ -351,7 +351,7 @@
   justify-content: center;
   width: 24px;
   height: 24px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   transition: all var(--transition-fast);
 }
 
@@ -382,7 +382,7 @@
   padding: 10px 14px;
   background: var(--primary-alpha-10);
   border: 1px solid var(--primary-alpha-20);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-size: 0.8rem;
   color: var(--primary-color);
 }
@@ -418,7 +418,7 @@
   color: var(--primary-color);
   background: var(--primary-alpha-10);
   padding: 10px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
 }
 
 .licenses-header h3 {
@@ -466,7 +466,7 @@
 .license-item {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 10px 12px;
   transition: border-color var(--transition-fast);
 }
@@ -523,7 +523,7 @@
   color: var(--text-secondary);
   background: var(--bg-primary);
   padding: 2px 6px;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   white-space: nowrap;
 }
 
@@ -589,7 +589,7 @@
   .settings-nav-item {
     padding: 8px 12px;
     white-space: nowrap;
-    border-radius: 6px;
+    border-radius: var(--radius-md);
   }
 
   .settings-nav-item::before {
@@ -633,7 +633,7 @@
 .settings-nav-indicator {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--primary-color);
   margin-left: auto;
   position: relative;
@@ -644,7 +644,7 @@
   content: "";
   position: absolute;
   inset: -4px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   border: 2px solid var(--primary-color);
   opacity: 0;
   animation: settings-nav-pulse-ring 2s ease-in-out infinite;

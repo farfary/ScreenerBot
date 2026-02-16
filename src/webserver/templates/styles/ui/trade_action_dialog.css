@@ -121,7 +121,7 @@ body.trade-action-dialog-open {
   min-height: 30px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -494,7 +494,7 @@ body.trade-action-dialog-open {
   height: 18px;
   border: 2px solid transparent;
   border-top-color: #fff;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: trade-spinner 0.8s linear infinite;
 }
 
@@ -597,7 +597,7 @@ body.trade-action-dialog-open {
   height: 16px;
   border: 2px solid rgb(var(--color-border));
   border-top-color: rgb(var(--color-accent));
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: trade-spinner 0.8s linear infinite;
 }
 

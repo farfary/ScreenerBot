@@ -127,7 +127,7 @@
   width: 36px;
   height: 36px;
   background: rgb(88, 166, 255, 0.1);
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   font-size: 1.1rem;
   color: var(--link-color, #58a6ff);
 }
@@ -159,7 +159,7 @@
   padding: 6px 14px;
   background: var(--link-color, #58a6ff);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: white;
   font-size: 0.75rem;
   font-weight: 600;
@@ -188,7 +188,7 @@
   justify-content: center;
   background: rgb(255, 255, 255, 0.05);
   border: 1px solid var(--border-color, #30363d);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--text-secondary, #8b949e);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -299,7 +299,7 @@
   justify-content: center;
   background: var(--bg-primary, #0d1117);
   border: 1px solid var(--border-color, #30363d);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   color: var(--text-secondary, #8b949e);
   cursor: pointer;
   z-index: 10;
@@ -377,7 +377,7 @@
   position: relative;
   width: 48px;
   height: 48px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   object-fit: cover;
   background: var(--bg-primary, #0d1117);
   border: 2px solid rgb(255, 255, 255, 0.1);
@@ -396,7 +396,7 @@
     rgb(139, 92, 246, 0.15) 50%,
     transparent 70%
   );
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   z-index: -1;
   animation: logo-pulse 3s ease-in-out infinite;
 }
@@ -412,7 +412,7 @@
     rgb(88, 166, 255, 0.1) 50%,
     transparent 70%
   );
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   z-index: -1;
   animation: logo-pulse 3s ease-in-out infinite;
   animation-delay: 0.5s;
@@ -439,7 +439,7 @@
   justify-content: center;
   width: 48px;
   height: 48px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: linear-gradient(135deg, var(--bg-secondary, #161b22), var(--bg-primary, #0d1117));
   border: 2px solid rgb(255, 255, 255, 0.1);
   flex-shrink: 0;
@@ -497,7 +497,7 @@
   align-items: center;
   justify-content: center;
   background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   color: #000;
   box-shadow: 0 2px 8px rgb(245, 158, 11, 0.4);
 }

@@ -26,7 +26,7 @@ body.events-dialog-open {
   background: var(--bg-surface, #111827);
   color: var(--text-primary, #f9fafb);
   border: 1px solid var(--border-color, rgb(148, 163, 184, 0.25));
-  border-radius: 16px;
+  border-radius: var(--radius-2xl);
   box-shadow: 0 20px 45px rgb(15, 23, 42, 0.45);
   overflow: hidden;
 }
@@ -85,7 +85,7 @@ body.events-dialog-open {
   min-height: 30px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -110,7 +110,7 @@ body.events-dialog-open {
 
 .events-dialog-message {
   padding: 14px 16px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   background: rgb(59, 130, 246, 0.08);
   color: var(--text-primary, #f9fafb);
   line-height: 1.45;
@@ -133,7 +133,7 @@ body.events-dialog-open {
   flex-direction: column;
   gap: 4px;
   padding: 12px 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   background: rgb(30, 41, 59, 0.55);
   border: 1px solid rgb(148, 163, 184, 0.18);
 }
@@ -156,7 +156,7 @@ body.events-dialog-open {
   font-size: 0.9rem;
   background: rgb(15, 23, 42, 0.45);
   padding: 2px 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 
 .events-dialog-field--wide {
@@ -186,7 +186,7 @@ body.events-dialog-open {
   overflow: auto;
   padding: 16px;
   background: rgb(15, 23, 42, 0.65);
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   border: 1px solid rgb(148, 163, 184, 0.25);
   font-size: 0.85rem;
   line-height: 1.5;
@@ -207,7 +207,7 @@ body.events-dialog-open {
   align-items: center;
   gap: 8px;
   padding: 10px 18px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   border: 1px solid rgb(59, 130, 246, 0.4);
   background: rgb(59, 130, 246, 0.12);
   color: rgb(96, 165, 250);
@@ -258,7 +258,7 @@ body.events-dialog-open {
 .events-dialog-dismiss {
   min-width: 96px;
   padding: 10px 18px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   border: 1px solid rgb(148, 163, 184, 0.25);
   background: rgb(30, 41, 59, 0.75);
   color: var(--text-primary, #f9fafb);
@@ -279,7 +279,7 @@ body.events-dialog-open {
 
 @media (width <= 600px) {
   .events-dialog {
-    border-radius: 12px;
+    border-radius: var(--radius-xl);
   }
 
   .events-dialog-body {

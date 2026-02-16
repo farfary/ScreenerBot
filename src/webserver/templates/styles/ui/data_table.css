@@ -35,7 +35,7 @@ body.dt-column-resizing .data-table col {
   top: 12px;
   right: 16px;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: rgb(148, 163, 184, 0.15);
   color: var(--text-secondary);
   font-size: 0.7rem;

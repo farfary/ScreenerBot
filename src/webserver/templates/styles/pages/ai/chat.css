@@ -373,7 +373,7 @@
   width: 96px;
   height: 96px;
   background: var(--primary-alpha-10);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   margin-bottom: var(--spacing-sm);
 }
 

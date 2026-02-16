@@ -154,6 +154,7 @@
   --spacing-2xl: 48px;
 
   /* Border Radius Scale */
+  --radius-xs: 2px;
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
@@ -320,6 +321,7 @@
   --spacing-2xl: 48px;
 
   /* Border Radius Scale */
+  --radius-xs: 2px;
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;

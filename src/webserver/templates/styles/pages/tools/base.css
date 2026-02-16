@@ -202,7 +202,7 @@
 .nav-item-status {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   flex-shrink: 0;
   position: relative;
 }

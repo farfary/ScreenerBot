@@ -61,7 +61,7 @@
 .config-section-icon {
   width: 36px;
   height: 36px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -92,7 +92,7 @@
 
 .config-summary-badge {
   padding: 4px 10px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg-card-hover);
   border: 1px solid var(--border-color);
   font-weight: 600;
@@ -120,7 +120,7 @@
 
 .config-header-action {
   padding: 8px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: 1px solid var(--border-color);
   background: var(--bg-secondary);
   color: var(--text-primary);
@@ -200,7 +200,7 @@
   align-items: center;
   gap: 8px;
   padding: 6px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--bg-card-hover);
   border: 1px solid var(--border-color);
   font-size: 0.8rem;
@@ -254,7 +254,7 @@
 .config-state {
   padding: 24px;
   margin-bottom: 20px;
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   border: 1px dashed var(--border-color);
   background: var(--bg-card-hover);
   color: var(--text-secondary);
@@ -323,7 +323,7 @@
 
 .config-category {
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   background: var(--bg-card);
   box-shadow: 0 2px 8px var(--shadow-sm);
   overflow: hidden;
@@ -377,7 +377,7 @@
   font-size: 1.1rem;
   color: var(--text-secondary);
   background: var(--bg-card-hover);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   transition:
     transform 0.2s ease,
     color 0.2s ease,
@@ -403,7 +403,7 @@
 
 .config-category-chip {
   padding: 3px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   border: 1px solid var(--border-color);
   background: var(--bg-card-hover);
   font-weight: 600;

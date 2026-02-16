@@ -131,7 +131,7 @@
 .position-details-dialog .header-logo {
   width: 36px;
   height: 36px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   overflow: hidden;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
@@ -340,7 +340,7 @@
   min-height: 30px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -406,7 +406,7 @@
   min-height: 30px;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -449,7 +449,7 @@
   padding: 6px 14px;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: 0.75rem;
   font-weight: 500;
   color: var(--text-secondary);
@@ -495,7 +495,7 @@
   width: 20px;
   height: 2px;
   background: var(--primary-color);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 /* =============================================================================
@@ -538,7 +538,7 @@
   height: 16px;
   border: 2px solid var(--border-color);
   border-top-color: var(--primary-color);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: pdd-spin 0.8s linear infinite;
 }
 

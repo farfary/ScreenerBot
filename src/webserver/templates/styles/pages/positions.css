@@ -26,7 +26,7 @@
   height: 28px;
   min-width: 28px;
   min-height: 28px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   object-fit: cover;
   background: var(--bg-secondary);
   display: inline-block;
@@ -78,7 +78,7 @@
   letter-spacing: 0.03em;
   white-space: nowrap;
   min-width: auto;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid transparent;
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -146,7 +146,7 @@
   height: 12px;
   border: 2px solid currentcolor;
   border-top-color: transparent;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: row-action-spin 0.6s linear infinite;
 }
 

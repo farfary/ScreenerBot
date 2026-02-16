@@ -139,7 +139,7 @@
   padding: 0.375rem 0.5rem;
   background: transparent;
   border: 1px solid transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--text-color);
   flex: 1;
   min-width: 0;
@@ -162,7 +162,7 @@
 
 .strategy-status-badge {
   padding: 4px 12px;
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -213,7 +213,7 @@
   padding: 6px 12px;
   font-size: 0.8rem;
   height: 32px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   gap: 6px;
   font-weight: 500;
   transition: all var(--transition-base);
@@ -245,7 +245,7 @@
   display: inline-flex;
   background: var(--background-color);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   padding: 2px;
   gap: 2px;
   flex-shrink: 0;
@@ -258,7 +258,7 @@
   padding: 0.25rem 0.625rem;
   background: transparent;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--text-secondary);
   font-size: 0.8rem;
   font-weight: 500;

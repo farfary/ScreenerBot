@@ -336,14 +336,14 @@
 .bar-track {
   height: 6px;
   background: var(--bg-secondary);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   width: 100%;
 }
 
 .bar-fill {
   height: 100%;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -374,7 +374,7 @@
   display: inline-flex;
   align-items: center;
   padding: 2px 8px;
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   font-size: 0.7rem;
   font-weight: 500;
   background: var(--bg-secondary);
@@ -395,7 +395,7 @@
 .mini-bar {
   height: 4px;
   background: var(--bg-secondary);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
   overflow: hidden;
   width: 100%;
 }
@@ -403,7 +403,7 @@
 .mini-bar-fill {
   height: 100%;
   background: var(--error-color);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 .pass-rate-segment {
@@ -541,7 +541,7 @@
   height: 20px;
   border: 2px solid var(--border-color);
   border-top-color: var(--link-color);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: spin 0.8s linear infinite;
   margin-inline-end: var(--spacing-sm);
 }

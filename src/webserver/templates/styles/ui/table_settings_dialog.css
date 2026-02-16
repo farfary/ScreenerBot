@@ -23,7 +23,7 @@
   display: flex;
   flex-direction: column;
   background: var(--bg-card);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   box-shadow: 0 20px 60px var(--shadow-lg);
   border: 1px solid var(--border-color);
   padding: 0;
@@ -68,7 +68,7 @@
   min-height: 30px;
   border: 1px solid transparent;
   background: transparent;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
   cursor: pointer;
   transition: all var(--transition-fast);
@@ -101,7 +101,7 @@
   min-width: 220px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -138,7 +138,7 @@
   align-items: center;
   gap: 12px;
   padding: 6px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
   transition:
@@ -187,7 +187,7 @@
 .table-settings-column-index {
   width: 28px;
   height: 28px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -241,7 +241,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
   background: var(--bg-secondary);
   color: var(--text-secondary);
@@ -290,7 +290,7 @@
   font-style: italic;
   background: var(--bg-secondary);
   border: 1px dashed var(--border-color);
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
 }
 
 body.table-settings-open {
@@ -305,7 +305,7 @@ body.table-settings-open {
   padding: 12px 16px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   margin-bottom: 4px;
 }
 
@@ -347,7 +347,7 @@ body.table-settings-open {
   width: 100%;
   padding: 8px 12px;
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--input-bg);
   color: var(--text-primary);
   font-size: 0.9rem;

@@ -50,7 +50,7 @@
   padding: 0 6px;
   background: transparent;
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--text-secondary);
   font-size: 0.8125rem;
   font-weight: 500;
@@ -128,7 +128,7 @@
   height: 28px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: 0.8125rem;
   font-family: inherit;
@@ -202,7 +202,7 @@
 .dt-pagination-mode-toggle {
   display: inline-flex;
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   overflow: hidden;
   margin-left: 8px;
 }
@@ -295,7 +295,7 @@
   padding: 0 6px;
   background: transparent;
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--text-secondary);
   font-size: 0.8125rem;
   font-weight: 500;
@@ -373,7 +373,7 @@
   height: 28px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-size: 0.8125rem;
   font-family: inherit;

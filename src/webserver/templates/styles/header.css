@@ -271,7 +271,7 @@
   font-family: var(--font-data);
   font-feature-settings: "tnum" 1;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .card-change.positive {
@@ -345,7 +345,7 @@
 .bot-card {
   position: relative;
   overflow: hidden;
-  border-radius: 6px; /* Tighter border radius */
+  border-radius: var(--radius-md); /* Tighter border radius */
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
@@ -409,7 +409,7 @@
 /* Ripple Effect */
 .card-ripple {
   position: absolute;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: rgb(255, 255, 255, 0.25);
   transform: scale(0);
   animation: ripple-effect 0.6s cubic-bezier(0, 0, 0.2, 1);
@@ -474,7 +474,7 @@
   height: 36px;
   background: transparent;
   border: 1px solid rgb(255, 255, 255, 0.15);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   color: var(--text-primary);
   font-size: 14px;
   cursor: pointer;
@@ -511,7 +511,7 @@
   color: #fff;
   font-size: 10px;
   font-weight: 700;
-  border-radius: 9px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 2px 6px rgb(0, 0, 0, 0.4);
 }
 
@@ -710,7 +710,7 @@
 .ticker-segment .status-dot {
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--success-color, #3fb950);
   margin-right: 2px;
   animation: pulse-dot 2s ease-in-out infinite;

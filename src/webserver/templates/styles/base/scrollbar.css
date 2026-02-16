@@ -430,7 +430,7 @@
 
 .scrollbar-code::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb);
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 .scrollbar-code::-webkit-scrollbar-thumb:hover {

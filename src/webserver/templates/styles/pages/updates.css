@@ -249,7 +249,7 @@
   height: 16px;
   border: 2px solid transparent;
   border-top-color: currentcolor;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: spin 1s linear infinite;
 }
 

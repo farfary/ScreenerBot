@@ -392,7 +392,7 @@
 .indicator-dropdown-item .indicator-color {
   width: 12px;
   height: 3px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 /* =============================================================================
@@ -509,7 +509,7 @@
 .comparison-color {
   width: 16px;
   height: 3px;
-  border-radius: 2px;
+  border-radius: var(--radius-xs);
 }
 
 .comparison-symbol {
@@ -531,7 +531,7 @@
   border: none;
   color: var(--text-muted);
   cursor: pointer;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   transition: all var(--transition-fast);
 }
 
@@ -560,7 +560,7 @@
   height: 32px;
   border: 2px solid var(--border-color);
   border-top-color: var(--primary-color);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: chart-spin 0.8s linear infinite;
 }
 

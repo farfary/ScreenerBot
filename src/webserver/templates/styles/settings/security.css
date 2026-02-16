@@ -155,7 +155,7 @@
   padding: 10px 14px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   color: var(--text-primary);
   font-size: 0.9rem;
   font-weight: 500;
@@ -190,7 +190,7 @@
   gap: var(--spacing-sm);
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: var(--spacing-sm);
   min-height: 60px;
 }
@@ -214,7 +214,7 @@
   padding: var(--spacing-sm) var(--spacing-md);
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   transition: all var(--transition-fast);
 }
 
@@ -255,7 +255,7 @@
   padding: var(--spacing-sm) var(--spacing-md);
   background: var(--bg-primary);
   border: 1px solid var(--warning-alpha-30, rgb(234, 179, 8, 0.3));
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   transition: all var(--transition-fast);
 }
 
@@ -415,7 +415,7 @@ button.link-button:hover {
 /* Error Message */
 .telegram-auth-error {
   padding: var(--spacing-sm, 8px) var(--spacing-md, 12px);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--danger-alpha-10);
   color: var(--error-color);
   font-size: 0.8rem;
@@ -493,7 +493,7 @@ button.link-button:hover {
   justify-content: center;
   width: 22px;
   height: 22px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--primary-color);
   color: #fff;
   font-size: 0.7rem;
@@ -513,7 +513,7 @@ button.link-button:hover {
   justify-content: center;
   padding: var(--spacing-md, 14px);
   background: #fff;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   margin-bottom: var(--spacing-md, 14px);
 }
 
@@ -531,7 +531,7 @@ button.link-button:hover {
   height: 180px;
   background: var(--bg-tertiary);
   border: 1px dashed var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
   font-size: 0.85rem;
   text-align: center;
@@ -556,7 +556,7 @@ button.link-button:hover {
   padding: var(--spacing-sm, 8px) var(--spacing-md, 12px);
   background: var(--bg-card-hover);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 
 .telegram-totp-secret code {
@@ -576,7 +576,7 @@ button.link-button:hover {
   padding: var(--spacing-sm, 8px) var(--spacing-md, 12px);
   background: var(--warning-alpha-10);
   border: 1px solid var(--warning-alpha-20);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: 0.8rem;
   color: var(--warning-color);
   margin-bottom: var(--spacing-md, 14px);
@@ -631,7 +631,7 @@ button.link-button:hover {
   padding: 6px 10px;
   background: var(--bg-card-hover);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-family: "JetBrains Mono", monospace;
   font-size: 0.8rem;
   color: var(--text-primary);
@@ -643,7 +643,7 @@ button.link-button:hover {
   padding: var(--spacing-md, 14px);
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 
 .discovery-status {
@@ -660,7 +660,7 @@ button.link-button:hover {
   padding: var(--spacing-md, 14px);
   background: var(--primary-alpha-10);
   border: 1px solid var(--primary-alpha-20);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-size: 0.85rem;
 }
 
@@ -680,7 +680,7 @@ button.link-button:hover {
   min-width: 20px;
   background: var(--primary-color);
   color: var(--bg-primary);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   font-size: 0.7rem;
   font-weight: 700;
 }
@@ -692,7 +692,7 @@ button.link-button:hover {
   padding: var(--spacing-sm, 8px) var(--spacing-md, 12px);
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   margin: var(--spacing-xs, 4px) 0 var(--spacing-xs, 4px) 28px;
   font-size: 0.8rem;
   color: var(--text-secondary);
@@ -740,7 +740,7 @@ button.link-button:hover {
   padding: var(--spacing-sm, 8px) var(--spacing-md, 12px);
   background: var(--bg-primary);
   border: 1px solid var(--success-alpha-30, rgb(59, 185, 80, 0.3));
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   transition: all var(--transition-fast);
 }
 

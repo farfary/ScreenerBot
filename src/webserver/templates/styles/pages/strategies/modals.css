@@ -31,7 +31,7 @@
 .condition-catalog-content {
   background: var(--surface-color);
   border: 2px solid var(--primary-color);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   width: 90%;
   max-width: 960px;
   max-height: 85vh;
@@ -64,7 +64,7 @@
   padding: 0.5rem;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   color: var(--text-muted);
   font-size: 1.5rem;
@@ -103,7 +103,7 @@
   align-items: center;
   gap: 0.35rem;
   padding: 0.4rem 0.85rem;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-color);
   background: var(--bg-secondary);
   color: var(--text-color);
@@ -140,7 +140,7 @@
   justify-content: space-between;
   padding: 0.75rem 1rem;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   transition: all 0.2s;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
@@ -193,7 +193,7 @@
   padding: 1rem;
   background: var(--surface-color);
   border: 1.5px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   transition: all 0.2s;
   user-select: none;
@@ -251,7 +251,7 @@
 .parameter-editor-content {
   background: var(--surface-color);
   border: 2px solid var(--primary-color);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   width: 90%;
   max-width: 600px;
   max-height: 80vh;
@@ -303,7 +303,7 @@
   padding: 0.5rem;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   color: var(--text-muted);
   font-size: 1.5rem;
@@ -389,7 +389,7 @@
   padding: 0.7rem;
   background: var(--background-color);
   border: 2px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   color: var(--text-color);
   font-size: 0.9rem;
   transition: all 0.2s;
@@ -437,7 +437,7 @@
   gap: 0.5rem;
   padding: 0.5rem 1rem;
   background: var(--background-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   font-size: 0.85rem;
 }
 
@@ -491,7 +491,7 @@
   padding: 0.5rem 0.875rem;
   background: var(--surface-color);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-size: 0.8rem;
   font-weight: 500;
@@ -560,7 +560,7 @@
   padding: 0.5rem;
   background: var(--surface-color);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   cursor: pointer;
   font-size: 14px;
   color: var(--text-muted);

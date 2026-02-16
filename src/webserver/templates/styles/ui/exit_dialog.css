@@ -41,7 +41,7 @@
   /* stylelint-disable-next-line property-no-vendor-prefix -- Safari compat */
   -webkit-backdrop-filter: blur(24px);
   border: 1px solid rgb(255, 255, 255, 0.1);
-  border-radius: 16px;
+  border-radius: var(--radius-2xl);
   box-shadow:
     0 24px 80px rgb(0, 0, 0, 0.6),
     0 0 0 1px rgb(255, 255, 255, 0.05) inset,
@@ -75,7 +75,7 @@
 
 .exit-dialog__glow {
   position: absolute;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   filter: blur(60px);
   opacity: 0.15;
   pointer-events: none;
@@ -137,7 +137,7 @@
   margin-bottom: 16px;
   background: linear-gradient(135deg, rgb(88, 166, 255, 0.15) 0%, rgb(153, 69, 255, 0.15) 100%);
   border: 1px solid rgb(255, 255, 255, 0.1);
-  border-radius: 16px;
+  border-radius: var(--radius-2xl);
   animation: exit-icon-float 3s ease-in-out infinite;
 }
 
@@ -194,7 +194,7 @@
   padding: 16px;
   background: rgb(255, 255, 255, 0.03);
   border: 1px solid rgb(255, 255, 255, 0.06);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   cursor: pointer;
   text-align: left;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
@@ -237,7 +237,7 @@
   height: 44px;
   flex-shrink: 0;
   background: rgb(88, 166, 255, 0.1);
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   font-size: 20px;
   color: var(--primary-color, #58a6ff);
   transition: all var(--transition-base);
@@ -320,7 +320,7 @@
   color: var(--text-secondary, #8b949e);
   background: transparent;
   border: 1px solid rgb(255, 255, 255, 0.1);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   cursor: pointer;
   transition: all var(--transition-base);
 }

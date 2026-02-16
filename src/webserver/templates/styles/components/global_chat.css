@@ -12,7 +12,7 @@
   z-index: var(--z-dialog-overlay);
   width: 48px;
   height: 48px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   border: none;
   cursor: pointer;
   display: flex;
@@ -50,7 +50,7 @@
   content: "";
   position: absolute;
   inset: -4px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--color-accent, #6c5ce7);
   opacity: 0;
   animation: gchat-pulse 3s ease-in-out infinite;
@@ -127,7 +127,7 @@
   z-index: 1;
   width: min(92vw, 920px);
   height: min(88vh, 760px);
-  border-radius: 16px;
+  border-radius: var(--radius-2xl);
   overflow: hidden;
   background: var(--color-bg-secondary, #1a1a2e);
   border: 1px solid var(--color-border, rgba(255, 255, 255, 0.08));
@@ -177,7 +177,7 @@
   justify-content: center;
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   border: none;
   background: transparent;
   color: var(--color-text-secondary, #a0a0a0);

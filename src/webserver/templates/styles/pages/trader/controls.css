@@ -20,7 +20,7 @@
   padding: 0.75rem 1rem;
   background: linear-gradient(135deg, var(--danger-alpha-15) 0%, var(--danger-alpha-10) 100%);
   border: 1px solid var(--danger-alpha-40);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   margin-bottom: 0.75rem;
 }
 
@@ -30,7 +30,7 @@
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--danger-alpha-20);
   color: var(--error-color);
   font-size: 1.1rem;
@@ -89,7 +89,7 @@
   padding: 0.75rem;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   transition: border-color var(--transition-base);
 }
 
@@ -148,7 +148,7 @@
   height: 22px;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 11px;
+  border-radius: var(--radius-xl);
   transition: all var(--transition-base);
 }
 
@@ -160,7 +160,7 @@
   width: 16px;
   height: 16px;
   background: var(--text-muted);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   transition: all var(--transition-base);
   box-shadow: 0 1px 3px rgb(0, 0, 0, 0.2);
 }
@@ -185,7 +185,7 @@
   padding: 0.75rem;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   margin-bottom: 0.75rem;
 }
 
@@ -219,7 +219,7 @@
 .loss-limit-bar {
   height: 6px;
   background: var(--bg-tertiary);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   overflow: hidden;
   margin-bottom: 0.5rem;
 }
@@ -227,7 +227,7 @@
 .loss-limit-progress {
   height: 100%;
   background: var(--success-color);
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   transition:
     width 0.3s ease,
     background 0.3s ease;
@@ -273,7 +273,7 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   transition: all var(--transition-base);
 }
 
@@ -293,7 +293,7 @@
   gap: 0.5rem;
   font-size: 0.875rem;
   font-weight: 500;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   transition: all var(--transition-base);
 }
 

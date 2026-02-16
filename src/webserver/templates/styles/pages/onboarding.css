@@ -103,7 +103,7 @@
   color: var(--text-muted, #8b949e);
   background: var(--bg-tertiary, #21262d);
   padding: 0.2rem 0.5rem;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 /* Main content area - takes all available space */
@@ -205,7 +205,7 @@
   padding: 1.25rem;
   background: rgb(var(--accent-onboarding-rgb) / 3%);
   border: 1px solid rgb(var(--accent-onboarding-rgb) / 10%);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   overflow: hidden;
@@ -266,7 +266,7 @@
   padding: 0.625rem 1.25rem;
   background: rgb(255 255 255 / 4%);
   backdrop-filter: blur(8px);
-  border-radius: 100px;
+  border-radius: var(--radius-full);
   width: fit-content;
   margin: 0 auto;
   border: 1px solid rgb(255 255 255 / 5%);
@@ -275,7 +275,7 @@
 .progress-dot {
   width: 8px;
   height: 8px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: rgb(255 255 255 / 15%);
   border: none;
   cursor: pointer;
@@ -291,7 +291,7 @@
 .progress-dot.active {
   background: var(--accent-onboarding);
   width: 24px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   box-shadow: 0 0 12px rgb(var(--accent-onboarding-rgb) / 50%);
 }
 
@@ -331,7 +331,7 @@
 
 .onboarding-btn {
   padding: 0.75rem 1.75rem;
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;

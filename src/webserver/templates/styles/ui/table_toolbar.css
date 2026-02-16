@@ -74,7 +74,7 @@
 
 .table-toolbar-title__tag {
   padding: 0.125rem 0.5rem;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: rgb(59, 130, 246, 0.12);
   color: var(--primary-color);
   font-size: 0.65rem;
@@ -258,7 +258,7 @@
   gap: 12px;
   min-width: 0;
   padding: 10px 14px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   border: 1px solid rgb(148, 163, 184, 0.22);
   background: rgb(30, 41, 59, 0.45);
   transition:
@@ -340,7 +340,7 @@
   position: relative;
   width: 42px;
   height: 22px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: var(--border-color);
   border: 1px solid var(--border-color);
   transition: all var(--transition-base);
@@ -354,7 +354,7 @@
   top: 1px;
   left: 1px;
   background: var(--bg-primary);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   box-shadow: 0 1px 3px rgb(15, 23, 42, 0.25);
   transition: transform var(--transition-base);
 }
@@ -403,7 +403,7 @@
 .dt-search-input {
   padding: 8px 12px;
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg-primary);
   color: var(--text-primary);
   font-size: 0.875rem;
@@ -514,7 +514,7 @@
   align-items: center;
   gap: 6px;
   padding: 8px 14px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg-primary);
   color: var(--text-primary);
   font-weight: 500;
@@ -621,7 +621,7 @@
   gap: 10px;
   padding: 10px 14px;
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   background: var(--bg-card);
   box-shadow: 0 1px 2px rgb(15, 23, 42, 0.12);
 }
@@ -729,7 +729,7 @@
   width: 100%;
   padding: 5px 9px;
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: var(--bg-primary);
   color: var(--text-primary);
   font-size: 0.9em;
@@ -823,7 +823,7 @@
 .filter-chip {
   padding: 4px 12px;
   border: 1px solid var(--border-color);
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   background: var(--bg-primary);
   color: var(--text-secondary);
   font-size: 0.75em;
@@ -868,7 +868,7 @@
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  border-radius: 999px;
+  border-radius: var(--radius-full);
   background: rgb(148, 163, 184, 0.12);
   color: var(--text-secondary);
   font-size: 0.78em;

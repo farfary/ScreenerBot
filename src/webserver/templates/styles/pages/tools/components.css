@@ -186,7 +186,7 @@
   justify-content: center;
   width: 24px;
   height: 24px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--primary-alpha-20);
   color: var(--primary-color);
   font-size: 0.75rem;
@@ -585,7 +585,7 @@
   background: var(--link-color);
   color: var(--bg-primary);
   padding: 0 6px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   font-size: 0.625rem;
   font-weight: 600;
 }
@@ -662,7 +662,7 @@
 .favorite-logo {
   width: 20px;
   height: 20px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
 }
 
 .favorite-symbol {

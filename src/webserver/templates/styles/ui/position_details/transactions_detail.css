@@ -23,7 +23,7 @@
 .position-details-dialog .pdd-token-logo-lg {
   width: 64px;
   height: 64px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   overflow: hidden;
   background: var(--bg-primary);
   border: 2px solid var(--border-color);
@@ -132,7 +132,7 @@
 .position-details-dialog .pdd-score-circle {
   width: 56px;
   height: 56px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -148,7 +148,7 @@
   content: "";
   position: absolute;
   inset: 6px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   background: var(--bg-secondary);
 }
 

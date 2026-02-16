@@ -11,7 +11,7 @@
 .automation-stat-card {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 14px 16px;
   text-align: center;
 }
@@ -35,7 +35,7 @@
 .automation-list-container {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   overflow: hidden;
   margin-bottom: 20px;
 }
@@ -146,7 +146,7 @@
   text-transform: uppercase;
   letter-spacing: 0.5px;
   padding: 2px 8px;
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
 }
 
 .status-indicator.active {
@@ -188,7 +188,7 @@
   position: fixed;
   background: var(--card-bg);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   box-shadow: var(--shadow-floating-md);
   padding: 4px;
   z-index: var(--z-context-menu);
@@ -205,7 +205,7 @@
   background: transparent;
   color: var(--text-primary);
   font-size: 13px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   text-align: left;
 }
@@ -237,7 +237,7 @@
 .automation-runs-section {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 12px;
+  border-radius: var(--radius-xl);
   overflow: hidden;
 }
 
@@ -378,7 +378,7 @@
 .run-error-box {
   background: var(--danger-alpha-10);
   border: 1px solid var(--danger-alpha-20);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 12px;
   color: var(--danger);
   font-size: 13px;
@@ -408,7 +408,7 @@
 
 .run-tools-list {
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 
@@ -450,7 +450,7 @@
 .run-response-content {
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
   padding: 12px;
   font-size: 12px;
   color: var(--text-primary);

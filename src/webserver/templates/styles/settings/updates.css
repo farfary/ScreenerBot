@@ -15,7 +15,7 @@
   padding: 14px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 
 .settings-update-icon {
@@ -25,7 +25,7 @@
   align-items: center;
   justify-content: center;
   background: var(--success-alpha-10);
-  border-radius: 10px;
+  border-radius: var(--radius-xl);
   color: var(--success-color);
   font-size: 1.4rem;
   flex-shrink: 0;
@@ -55,7 +55,7 @@
   padding: 7px 14px;
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   color: var(--text-primary);
   font-size: 0.8rem;
   font-weight: 600;
@@ -84,7 +84,7 @@
   padding: 12px 14px;
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  border-radius: 8px;
+  border-radius: var(--radius-lg);
 }
 
 .settings-release-header {
@@ -108,7 +108,7 @@
 .settings-release-badge {
   padding: 2px 8px;
   background: var(--primary-alpha-10);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   color: var(--primary-color);
   font-size: 0.65rem;
   font-weight: 600;
@@ -224,7 +224,7 @@
 .status-icon-wrapper {
   width: 80px;
   height: 80px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -250,7 +250,7 @@
   position: absolute;
   width: 100px;
   height: 100px;
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   border: 2px solid var(--primary-color);
   opacity: 0;
   animation: settings-pulse-ring 2s ease-out infinite;
@@ -695,7 +695,7 @@
   height: 18px;
   border: 2px solid var(--bg-card-hover);
   border-top-color: var(--primary-color);
-  border-radius: 50%;
+  border-radius: var(--radius-full);
   animation: settings-spin 0.8s linear infinite;
 }
 
