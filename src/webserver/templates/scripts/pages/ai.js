@@ -12,7 +12,7 @@ import { createInstructionsTab } from "./ai/instructions_tab.js";
 import { createAutomationTab } from "./ai/automation_tab.js";
 
 // Constants
-const DEFAULT_TAB = "stats";
+const DEFAULT_TAB = "chat";
 
 // Provider names mapping
 const PROVIDER_NAMES = {
@@ -103,11 +103,16 @@ function createLifecycle() {
    * Initialize sidebar navigation
    */
   function initSubTabs() {
-    const navItems = $$(".ai-sidebar-nav-item");
+    const navItems = $$(".ai-nav-item");
     navItems.forEach((item) => {
       addTrackedListener(item, "click", () => {
         const tabId = item.dataset.tab;
-        switchTab(tabId);
+        if (tabId && tabId !== state.currentTab) {
+          console.log("[AI] Sidebar navigation to:", tabId);
+          state.currentTab = tabId;
+          updateSidebarNavigation(tabId);
+          switchTab(tabId);
+        }
       });
     });
   }
@@ -116,12 +121,9 @@ function createLifecycle() {
    * Update sidebar navigation active state
    */
   function updateSidebarNavigation(tabId) {
-    $$(".ai-sidebar-nav-item").forEach((item) => {
-      if (item.dataset.tab === tabId) {
-        item.classList.add("active");
-      } else {
-        item.classList.remove("active");
-      }
+    $$(".ai-nav-item").forEach((item) => {
+      const isActive = item.dataset.tab === tabId;
+      item.classList.toggle("active", isActive);
     });
   }
 
@@ -129,28 +131,26 @@ function createLifecycle() {
    * Switch between main tabs
    */
   function switchTab(tabId) {
-    if (state.currentTab === tabId) return;
-
-    state.currentTab = tabId;
-    updateSidebarNavigation(tabId);
-
-    // Hide all tab content
-    $$(".ai-tab-content").forEach((tab) => tab.classList.remove("active"));
-
-    // Show selected tab
-    const activeTab = $(`#tab-${tabId}`);
-    if (activeTab) {
-      activeTab.classList.add("active");
-    }
-
-    // Stop all pollers
+    // Stop all pollers to prevent memory leaks
     if (statusPoller) statusPoller.stop();
     if (providersPoller) providersPoller.stop();
     if (cachePoller) cachePoller.stop();
     if (chatPoller) chatPoller.stop();
     if (automationPoller) automationPoller.stop();
 
-    // Load tab data and start appropriate poller
+    // Hide all panels
+    const allPanels = $$(".ai-panel-content");
+    allPanels.forEach((panel) => {
+      panel.classList.remove("active");
+    });
+
+    // Show the selected panel
+    const selectedPanel = $(`#${tabId}-panel`);
+    if (selectedPanel) {
+      selectedPanel.classList.add("active");
+    }
+
+    // Load data for the tab and start appropriate poller
     if (tabId === "stats") {
       loadAiStatus();
       if (statusPoller) statusPoller.start();
@@ -253,17 +253,18 @@ function createLifecycle() {
       cacheHitRate.textContent = `${Math.round(rate * 100)}%`;
     }
 
-    // Avg Response Time
-    const avgTime = $("#metric-avg-response-time");
-    if (avgTime) {
-      avgTime.textContent = `${Math.round(metrics.avg_response_time_ms || 0)}ms`;
+    // Avg Latency
+    const avgLatency = $("#metric-avg-latency");
+    if (avgLatency) {
+      avgLatency.textContent = `${Math.round(metrics.avg_response_time_ms || 0)}ms`;
     }
 
-    // Success Rate
-    const successRate = $("#metric-success-rate");
-    if (successRate) {
-      const rate = metrics.success_rate || 0;
-      successRate.textContent = `${Math.round(rate * 100)}%`;
+    // Active Providers
+    const providers = $("#metric-providers");
+    if (providers) {
+      const active = metrics.active_providers || 0;
+      const total = metrics.total_providers || 10;
+      providers.textContent = `${active} / ${total}`;
     }
   }
 
@@ -271,7 +272,7 @@ function createLifecycle() {
    * Update recent decisions feed
    */
   function updateRecentDecisions(decisions) {
-    const container = $("#recent-decisions-list");
+    const container = $("#recent-decisions-container");
     if (!container) return;
 
     if (!decisions || decisions.length === 0) {
@@ -432,18 +433,11 @@ function createLifecycle() {
    * Update cache stats display
    */
   function updateCacheStats(stats) {
-    const totalEntries = $("#cache-total-entries");
-    const totalSize = $("#cache-total-size");
-    const hitRate = $("#cache-hit-rate");
-    const avgLatency = $("#cache-avg-latency");
+    const cacheSize = $("#cache-size");
+    const cacheMemory = $("#cache-memory");
 
-    if (totalEntries) totalEntries.textContent = formatNumber(stats.total_entries || 0);
-    if (totalSize) totalSize.textContent = formatBytes(stats.total_size_bytes || 0);
-    if (hitRate) {
-      const rate = stats.hit_rate || 0;
-      hitRate.textContent = `${Math.round(rate * 100)}%`;
-    }
-    if (avgLatency) avgLatency.textContent = `${Math.round(stats.avg_latency_ms || 0)}ms`;
+    if (cacheSize) cacheSize.textContent = formatNumber(stats.total_entries || 0);
+    if (cacheMemory) cacheMemory.textContent = formatBytes(stats.total_size_bytes || 0);
   }
 
   /**
@@ -688,31 +682,29 @@ function createLifecycle() {
   function initChatWidget() {
     if (_chatWidget) return;
 
-    const container = $("#chat-widget-container");
-    if (!container) {
-      // Expected on AI page — global chat widget is not used here
-      return;
-    }
+    const container = $("#chat-panel");
+    if (!container) return;
 
-    _chatWidget = new ChatWidget(container, {
-      endpoint: "/api/ai/chat",
-      sessionEndpoint: "/api/ai/sessions",
-    });
+    // Clear the static HTML - ChatWidget builds its own
+    container.innerHTML = "";
+    _chatWidget = new ChatWidget(container, { showSidebar: true });
   }
 
   /**
    * Load chat sessions
    */
   async function loadSessions() {
-    // ChatWidget handles this internally
+    if (!_chatWidget) initChatWidget();
+    if (_chatWidget) await _chatWidget.loadSessions();
   }
 
   /**
    * Create new chat session
    */
   async function createSession() {
+    if (!_chatWidget) initChatWidget();
     if (_chatWidget) {
-      await _chatWidget.createNewSession();
+      await _chatWidget.createSession();
     }
   }
 
