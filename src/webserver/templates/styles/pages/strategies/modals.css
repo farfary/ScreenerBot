@@ -1,0 +1,586 @@
+/* ==========================================================================
+   Modals (Condition Catalog & Parameter Editor)
+   ========================================================================== */
+
+/* Modals (Keep existing styles but ensure z-index) */
+.condition-catalog-modal,
+.parameter-editor-modal {
+  z-index: var(--z-header);
+}
+
+/* ==========================================================================
+   Condition Catalog Modal
+   ========================================================================== */
+
+.condition-catalog-modal {
+  position: fixed;
+  inset: 0;
+  background: rgb(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-header);
+  padding: 1rem;
+}
+
+.condition-catalog-modal.active {
+  display: flex;
+}
+
+.condition-catalog-content {
+  background: var(--surface-color);
+  border: 2px solid var(--primary-color);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 960px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgb(0, 0, 0, 0.3);
+  overflow: hidden;
+}
+
+.condition-catalog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 2px solid var(--border-color);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.condition-catalog-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-color);
+}
+
+.condition-catalog-close {
+  padding: 0.5rem;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 1.5rem;
+  transition: all 0.2s;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.condition-catalog-close:hover {
+  background: var(--hover-color);
+  color: var(--text-color);
+}
+
+.condition-catalog-body {
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+
+.condition-catalog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.catalog-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.4rem 0.85rem;
+  border-radius: 6px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-color);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.catalog-toggle-btn:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.catalog-toggle-btn i {
+  font-size: 0.9rem;
+}
+
+.condition-categories {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0.5rem;
+  margin: -0.5rem;
+  min-height: 200px;
+}
+
+.condition-category {
+  margin-bottom: 1.25rem;
+}
+
+.category-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: all 0.2s;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.category-header:hover {
+  background: var(--hover-color);
+  border-color: var(--primary-color);
+}
+
+.category-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: var(--text-color);
+}
+
+.category-title .icon {
+  font-size: 1.2rem;
+}
+
+.category-toggle {
+  font-size: 1rem;
+  color: var(--text-muted);
+  transition: transform 0.2s;
+  font-weight: 600;
+}
+
+.category-header:not(.collapsed) .category-toggle {
+  transform: rotate(90deg);
+}
+
+.category-items {
+  padding-left: 1rem;
+  padding-right: 0.5rem;
+  margin-top: 0.75rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 0.75rem;
+}
+
+.category-items.collapsed {
+  display: none;
+}
+
+/* Condition Item (Draggable) */
+.condition-item {
+  padding: 1rem;
+  background: var(--surface-color);
+  border: 1.5px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+  position: relative;
+}
+
+.condition-item:hover {
+  border-color: var(--primary-color);
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.15);
+  transform: translateY(-2px);
+  background: var(--bg-primary);
+}
+
+.condition-item:active {
+  transform: translateY(0);
+}
+
+.condition-item-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+/* ==========================================================================
+   Parameter Editor Modal
+   ========================================================================== */
+
+.parameter-editor-modal {
+  position: fixed;
+  inset: 0;
+  background: rgb(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: var(--z-header);
+  animation: fade-in 0.2s ease-out;
+}
+
+.parameter-editor-modal.active {
+  display: flex;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+.parameter-editor-content {
+  background: var(--surface-color);
+  border: 2px solid var(--primary-color);
+  border-radius: 12px;
+  width: 90%;
+  max-width: 600px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 20px 60px rgb(0, 0, 0, 0.3);
+  animation: slide-up 0.3s ease-out;
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(50px);
+    opacity: 0;
+  }
+
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.parameter-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.25rem;
+  border-bottom: 2px solid var(--border-color);
+  background: linear-gradient(135deg, var(--primary-color-light), var(--surface-color));
+}
+
+.parameter-editor-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.parameter-editor-title .icon {
+  font-size: 1.5rem;
+}
+
+.parameter-editor-title h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.parameter-editor-close {
+  padding: 0.5rem;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 1.5rem;
+  line-height: 1;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+}
+
+.parameter-editor-close:hover {
+  background: var(--error-color);
+  color: white;
+  transform: rotate(90deg);
+}
+
+.parameter-editor-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+}
+
+.parameter-editor-footer {
+  padding: 1rem 1.25rem;
+  border-top: 2px solid var(--border-color);
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  background: var(--background-color);
+}
+
+.parameter-editor-footer .btn {
+  min-width: 100px;
+}
+
+/* Enhanced Property Editor inside Modal */
+.parameter-editor-modal .property-group {
+  margin-bottom: 1.75rem;
+}
+
+.parameter-editor-modal .property-group-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--primary-color);
+  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 2px solid var(--primary-color-light);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.parameter-editor-modal .property-group-title::before {
+  content: "▶";
+  font-size: 0.8rem;
+  color: var(--primary-color);
+}
+
+.parameter-editor-modal .property-field {
+  margin-bottom: 1.25rem;
+}
+
+.parameter-editor-modal .property-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-color);
+  margin-bottom: 0.6rem;
+}
+
+.parameter-editor-modal .property-label::before {
+  content: "•";
+  color: var(--primary-color);
+  font-size: 1.2rem;
+}
+
+.parameter-editor-modal .property-input {
+  width: 100%;
+  padding: 0.7rem;
+  background: var(--background-color);
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  color: var(--text-color);
+  font-size: 0.9rem;
+  transition: all 0.2s;
+}
+
+.parameter-editor-modal .property-input:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 3px var(--primary-color-light);
+}
+
+.parameter-editor-modal .property-description {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+  padding-left: 0.5rem;
+  border-left: 3px solid var(--primary-color-light);
+  line-height: 1.4;
+}
+
+/* ==========================================================================
+   Strategy Toolbar (Modal-related)
+   ========================================================================== */
+
+.strategy-toolbar {
+  grid-row: 2 / 3;
+  grid-column: 1 / 3;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem;
+  background: var(--surface-color);
+  border-top: 2px solid var(--border-color);
+}
+
+.toolbar-section {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.validation-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--background-color);
+  border-radius: 6px;
+  font-size: 0.85rem;
+}
+
+.validation-status .status-icon {
+  font-size: 1rem;
+}
+
+.validation-status.valid .status-icon {
+  color: var(--success-color);
+}
+
+.validation-status.invalid .status-icon {
+  color: var(--error-color);
+}
+
+/* Empty State - Scoped to strategies page */
+.strategies-page .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.strategies-page .empty-state .icon,
+.strategies-page .empty-state i[class^="icon-"] {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.3;
+  color: var(--text-muted);
+  line-height: 1;
+}
+
+.strategies-page .empty-state p {
+  margin: 0.5rem 0 0.25rem;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.strategies-page .empty-state small {
+  font-size: 0.8rem;
+  opacity: 0.7;
+  color: var(--text-secondary);
+}
+
+/* Buttons - Scoped to strategies page */
+.strategies-page .btn {
+  padding: 0.5rem 0.875rem;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-color);
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.strategies-page .btn .icon {
+  font-size: 14px;
+  line-height: 1;
+}
+
+.strategies-page .btn:hover {
+  background: var(--hover-color);
+  border-color: var(--primary-color);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgb(0, 0, 0, 0.08);
+}
+
+.strategies-page .btn:active {
+  transform: translateY(0);
+}
+
+.strategies-page .btn.primary {
+  background: var(--primary-color);
+  border-color: var(--primary-color);
+  color: white;
+}
+
+.strategies-page .btn.primary:hover {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+}
+
+.strategies-page .btn.success {
+  background: var(--success-color);
+  border-color: var(--success-color);
+  color: white;
+}
+
+.strategies-page .btn.success:hover {
+  background: var(--success-color-dark);
+  border-color: var(--success-color-dark);
+}
+
+.strategies-page .btn.dashed {
+  border: 1px dashed var(--border-color);
+  background: transparent;
+  color: var(--text-muted);
+}
+
+.strategies-page .btn.dashed:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+  background: var(--primary-color-light);
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.strategies-page .btn-icon {
+  padding: 0.5rem;
+  background: var(--surface-color);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-muted);
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  line-height: 1;
+}
+
+.strategies-page .btn-icon:hover {
+  background: var(--hover-color);
+  color: var(--text-color);
+  border-color: var(--primary-color);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 6px rgb(0, 0, 0, 0.08);
+}
+
+.strategies-page .btn-icon:active {
+  transform: translateY(0);
+}

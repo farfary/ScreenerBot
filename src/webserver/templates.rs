@@ -27,6 +27,10 @@ const FILTERING_RESULTS_STYLES: &str =
     include_str!("templates/styles/pages/filtering/results.css");
 const CONFIG_PAGE_STYLES: &str = include_str!("templates/styles/pages/config.css");
 const STRATEGIES_PAGE_STYLES: &str = include_str!("templates/styles/pages/strategies.css");
+const STRATEGIES_CONDITION_CARDS_STYLES: &str =
+    include_str!("templates/styles/pages/strategies/condition_cards.css");
+const STRATEGIES_MODALS_STYLES: &str =
+    include_str!("templates/styles/pages/strategies/modals.css");
 const TRADER_PAGE_STYLES: &str = include_str!("templates/styles/pages/trader.css");
 const WALLETS_PAGE_STYLES: &str = include_str!("templates/styles/pages/wallets.css");
 const TOOLS_BASE_STYLES: &str = include_str!("templates/styles/pages/tools/base.css");
@@ -397,6 +401,8 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         FILTERING_RESULTS_STYLES,
         CONFIG_PAGE_STYLES,
         STRATEGIES_PAGE_STYLES,
+        STRATEGIES_CONDITION_CARDS_STYLES,
+        STRATEGIES_MODALS_STYLES,
         TRADER_PAGE_STYLES,
         WALLETS_PAGE_STYLES,
         TOOLS_BASE_STYLES,
@@ -427,7 +433,15 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
             &[FILTERING_BASE_STYLES, FILTERING_RESULTS_STYLES].join("\n"),
         ),
         ("config", CONFIG_PAGE_STYLES),
-        ("strategies", STRATEGIES_PAGE_STYLES),
+        (
+            "strategies",
+            &[
+                STRATEGIES_PAGE_STYLES,
+                STRATEGIES_CONDITION_CARDS_STYLES,
+                STRATEGIES_MODALS_STYLES,
+            ]
+            .join("\n"),
+        ),
         ("trader", TRADER_PAGE_STYLES),
         ("wallets", WALLETS_PAGE_STYLES),
         (
