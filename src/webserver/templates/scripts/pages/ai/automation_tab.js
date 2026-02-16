@@ -663,13 +663,12 @@ function setupAutomationHandlers() {
     renderAutomationList,
     renderAutomationRuns,
     createAutomationTask,
-    saveAutomationTask,
     toggleAutomationTask,
     editAutomationTask,
     deleteAutomationTask,
     runAutomationTask,
     viewAutomationRun,
-    viewTaskRuns,
+    viewAutomationTaskRuns,
     setupAutomationHandlers,
   };
 }

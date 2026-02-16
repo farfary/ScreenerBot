@@ -690,7 +690,7 @@ function createLifecycle() {
 
     const container = $("#chat-widget-container");
     if (!container) {
-      console.error("[AI] Chat widget container not found");
+      // Expected on AI page — global chat widget is not used here
       return;
     }
 
@@ -801,13 +801,12 @@ function createLifecycle() {
 
   // Automation Tab API
   api.createAutomationTask = automationTab.createAutomationTask;
-  api.saveAutomationTask = automationTab.saveAutomationTask;
   api.toggleAutomationTask = automationTab.toggleAutomationTask;
   api.runAutomationTask = automationTab.runAutomationTask;
   api.deleteAutomationTask = automationTab.deleteAutomationTask;
   api.editAutomationTask = automationTab.editAutomationTask;
   api.viewAutomationRun = automationTab.viewAutomationRun;
-  api.viewAutomationTaskRuns = automationTab.viewTaskRuns;
+  api.viewAutomationTaskRuns = automationTab.viewAutomationTaskRuns;
 
   // History Tab API
   api.loadHistory = loadHistory;
