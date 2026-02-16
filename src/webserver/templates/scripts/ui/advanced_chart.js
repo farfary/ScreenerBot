@@ -14,92 +14,34 @@
  * - Responsive sizing with ResizeObserver
  * - Crosshair with synchronized tooltip
  *
- * Dependencies: lightweight-charts (TradingView)
+ * Dependencies:
+ * - lightweight-charts (TradingView)
+ * - advanced_chart/formatters.js (CHART_THEMES, TIMEFRAMES, price formatting)
+ * - advanced_chart/indicators.js (technical indicator calculations)
  */
 
 (function () {
   "use strict";
 
   // ==========================================================================
-  // CONSTANTS & DEFAULTS
+  // IMPORT FROM EXTERNAL MODULES
   // ==========================================================================
 
-  const CHART_THEMES = {
-    dark: {
-      background: "#0d1117",
-      textColor: "#8b949e",
-      gridColor: "#21262d",
-      borderColor: "#30363d",
-      crosshairColor: "#58a6ff",
-      upColor: "#3fb950",
-      downColor: "#f85149",
-      volumeUpColor: "rgba(63, 185, 80, 0.3)",
-      volumeDownColor: "rgba(248, 81, 73, 0.3)",
-      wickUpColor: "#3fb950",
-      wickDownColor: "#f85149",
-      overlayBackground: "rgba(13, 17, 23, 0.9)",
-      tooltipBackground: "#161b22",
-      tooltipBorder: "#30363d",
-      indicatorColors: {
-        ema9: "#f59e0b",
-        ema21: "#8b5cf6",
-        sma50: "#06b6d4",
-        sma200: "#ec4899",
-        rsi: "#58a6ff",
-        macdLine: "#3fb950",
-        macdSignal: "#f85149",
-        macdHistogramUp: "rgba(63, 185, 80, 0.5)",
-        macdHistogramDown: "rgba(248, 81, 73, 0.5)",
-        bollingerUpper: "rgba(88, 166, 255, 0.5)",
-        bollingerLower: "rgba(88, 166, 255, 0.5)",
-        bollingerMiddle: "#58a6ff",
-      },
-      positionColors: {
-        entry: "#3fb950",
-        exit: "#f85149",
-        dca: "#f59e0b",
-        stopLoss: "#ef4444",
-        takeProfit: "#10b981",
-      },
-    },
-    light: {
-      background: "#ffffff",
-      textColor: "#374151",
-      gridColor: "#e5e7eb",
-      borderColor: "#d1d5db",
-      crosshairColor: "#1565c0",
-      upColor: "#10b981",
-      downColor: "#ef4444",
-      volumeUpColor: "rgba(16, 185, 129, 0.3)",
-      volumeDownColor: "rgba(239, 68, 68, 0.3)",
-      wickUpColor: "#10b981",
-      wickDownColor: "#ef4444",
-      overlayBackground: "rgba(255, 255, 255, 0.95)",
-      tooltipBackground: "#ffffff",
-      tooltipBorder: "#d1d5db",
-      indicatorColors: {
-        ema9: "#d97706",
-        ema21: "#7c3aed",
-        sma50: "#0891b2",
-        sma200: "#db2777",
-        rsi: "#1565c0",
-        macdLine: "#059669",
-        macdSignal: "#dc2626",
-        macdHistogramUp: "rgba(16, 185, 129, 0.5)",
-        macdHistogramDown: "rgba(239, 68, 68, 0.5)",
-        bollingerUpper: "rgba(21, 101, 192, 0.4)",
-        bollingerLower: "rgba(21, 101, 192, 0.4)",
-        bollingerMiddle: "#1565c0",
-      },
-      positionColors: {
-        entry: "#059669",
-        exit: "#dc2626",
-        dca: "#d97706",
-        stopLoss: "#dc2626",
-        takeProfit: "#059669",
-      },
-    },
-  };
+  // These are loaded from separate script files and exposed on window
+  const { CHART_THEMES, TIMEFRAMES, formatPriceSubscript, formatPriceAuto } =
+    window.ChartFormatters || {};
+  const Indicators = window.ChartIndicators || {};
+
+  // Validate dependencies are loaded
+  if (!CHART_THEMES || !Indicators) {
+    console.error(
+      "AdvancedChart: Missing dependencies. Ensure formatters.js and indicators.js are loaded first."
+    );
+  }
+
+  // ==========================================================================
+  // CONSTANTS & DEFAULTS
+  // ==========================================================================
 
   const DEFAULT_OPTIONS = {
     theme: "dark",
@@ -129,248 +71,6 @@
     watermark: null, // { text, fontSize, color }
     height: null, // null for auto
     minHeight: 300,
-  };
-
-  const TIMEFRAMES = {
-    "1m": { label: "1M", seconds: 60 },
-    "5m": { label: "5M", seconds: 300 },
-    "15m": { label: "15M", seconds: 900 },
-    "30m": { label: "30M", seconds: 1800 },
-    "1h": { label: "1H", seconds: 3600 },
-    "4h": { label: "4H", seconds: 14400 },
-    "12h": { label: "12H", seconds: 43200 },
-    "1d": { label: "1D", seconds: 86400 },
-  };
-
-  // ==========================================================================
-  // PRICE FORMATTING UTILITIES
-  // ==========================================================================
-
-  /**
-   * Format price with intelligent notation for very small numbers
-   * Uses subscript notation: 0.0₉12345 means 0.000000000012345 (9 zeros after decimal)
-   */
-  function formatPriceSubscript(price, precision = 9) {
-    if (price === 0) return "0";
-    if (!Number.isFinite(price)) return "—";
-
-    const absPrice = Math.abs(price);
-    const sign = price < 0 ? "-" : "";
-
-    // Handle normal-sized numbers (>= 0.0001)
-    if (absPrice >= 0.0001) {
-      const formatted = absPrice.toFixed(precision);
-      return sign + formatted.replace(/\.?0+$/, "");
-    }
-
-    // Count leading zeros after decimal
-    const str = absPrice.toFixed(20);
-    const match = str.match(/^0\.0*/);
-    if (!match) return sign + absPrice.toPrecision(precision);
-
-    const leadingZeros = match[0].length - 2; // Subtract "0."
-
-    // Get significant digits after zeros
-    const significantPart = str.substring(match[0].length);
-    const significant = significantPart.substring(0, Math.min(5, significantPart.length));
-
-    // Use subscript for zero count
-    const subscriptDigits = "₀₁₂₃₄₅₆₇₈₉";
-    let subscript = "";
-    const zeroStr = leadingZeros.toString();
-    for (const char of zeroStr) {
-      subscript += subscriptDigits[parseInt(char, 10)];
-    }
-
-    return `${sign}0.0${subscript}${significant}`;
-  }
-
-  /**
-   * Format price based on magnitude for chart display
-   */
-  function formatPriceAuto(price, precision = 9) {
-    if (price === 0) return "0";
-    if (!Number.isFinite(price)) return "—";
-
-    const absPrice = Math.abs(price);
-
-    // Very small prices - use subscript
-    if (absPrice < 0.000001) {
-      return formatPriceSubscript(price, precision);
-    }
-
-    // Small prices - use scientific notation
-    if (absPrice < 0.0001) {
-      return price.toExponential(4);
-    }
-
-    // Normal prices
-    if (absPrice < 1) {
-      const formatted = price.toFixed(precision);
-      return formatted.replace(/\.?0+$/, "");
-    }
-
-    // Larger prices
-    if (absPrice < 1000) {
-      return price.toFixed(Math.min(4, precision));
-    }
-
-    // Very large prices
-    return price.toLocaleString("en-US", {
-      maximumFractionDigits: 2,
-    });
-  }
-
-  // ==========================================================================
-  // INDICATOR CALCULATIONS
-  // ==========================================================================
-
-  const Indicators = {
-    /**
-     * Calculate Simple Moving Average
-     */
-    sma(data, period) {
-      const result = [];
-      for (let i = 0; i < data.length; i++) {
-        if (i < period - 1) {
-          result.push({ time: data[i].time, value: null });
-          continue;
-        }
-        let sum = 0;
-        for (let j = 0; j < period; j++) {
-          sum += data[i - j].close;
-        }
-        result.push({ time: data[i].time, value: sum / period });
-      }
-      return result;
-    },
-
-    /**
-     * Calculate Exponential Moving Average
-     */
-    ema(data, period) {
-      const result = [];
-      const multiplier = 2 / (period + 1);
-      let ema = null;
-
-      for (let i = 0; i < data.length; i++) {
-        if (i < period - 1) {
-          result.push({ time: data[i].time, value: null });
-          continue;
-        }
-
-        if (ema === null) {
-          // Initialize with SMA
-          let sum = 0;
-          for (let j = 0; j < period; j++) {
-            sum += data[i - j].close;
-          }
-          ema = sum / period;
-        } else {
-          ema = (data[i].close - ema) * multiplier + ema;
-        }
-
-        result.push({ time: data[i].time, value: ema });
-      }
-      return result;
-    },
-
-    /**
-     * Calculate Relative Strength Index
-     */
-    rsi(data, period = 14) {
-      const result = [];
-      const gains = [];
-      const losses = [];
-
-      for (let i = 0; i < data.length; i++) {
-        if (i === 0) {
-          result.push({ time: data[i].time, value: null });
-          continue;
-        }
-
-        const change = data[i].close - data[i - 1].close;
-        gains.push(change > 0 ? change : 0);
-        losses.push(change < 0 ? Math.abs(change) : 0);
-
-        if (i < period) {
-          result.push({ time: data[i].time, value: null });
-          continue;
-        }
-
-        const avgGain = gains.slice(-period).reduce((a, b) => a + b, 0) / period;
-        const avgLoss = losses.slice(-period).reduce((a, b) => a + b, 0) / period;
-
-        const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
-        const rsi = 100 - 100 / (1 + rs);
-
-        result.push({ time: data[i].time, value: rsi });
-      }
-      return result;
-    },
-
-    /**
-     * Calculate MACD (Moving Average Convergence Divergence)
-     */
-    macd(data, fastPeriod = 12, slowPeriod = 26, signalPeriod = 9) {
-      const fastEMA = this.ema(data, fastPeriod);
-      const slowEMA = this.ema(data, slowPeriod);
-
-      const macdLine = [];
-      for (let i = 0; i < data.length; i++) {
-        const fast = fastEMA[i].value;
-        const slow = slowEMA[i].value;
-        macdLine.push({
-          time: data[i].time,
-          value: fast !== null && slow !== null ? fast - slow : null,
-          close: fast !== null && slow !== null ? fast - slow : 0,
-        });
-      }
-
-      const signalLine = this.ema(macdLine, signalPeriod);
-      const histogram = [];
-
-      for (let i = 0; i < data.length; i++) {
-        const macd = macdLine[i].value;
-        const signal = signalLine[i].value;
-        histogram.push({
-          time: data[i].time,
-          value: macd !== null && signal !== null ? macd - signal : null,
-        });
-      }
-
-      return { macdLine, signalLine, histogram };
-    },
-
-    /**
-     * Calculate Bollinger Bands
-     */
-    bollinger(data, period = 20, stdDev = 2) {
-      const sma = this.sma(data, period);
-      const upper = [];
-      const lower = [];
-
-      for (let i = 0; i < data.length; i++) {
-        if (sma[i].value === null) {
-          upper.push({ time: data[i].time, value: null });
-          lower.push({ time: data[i].time, value: null });
-          continue;
-        }
-
-        // Calculate standard deviation
-        let sumSquared = 0;
-        for (let j = 0; j < period; j++) {
-          const diff = data[i - j].close - sma[i].value;
-          sumSquared += diff * diff;
-        }
-        const std = Math.sqrt(sumSquared / period);
-
-        upper.push({ time: data[i].time, value: sma[i].value + stdDev * std });
-        lower.push({ time: data[i].time, value: sma[i].value - stdDev * std });
-      }
-
-      return { upper, middle: sma, lower };
-    },
   };
 
   // ==========================================================================

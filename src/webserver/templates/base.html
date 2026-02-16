@@ -563,9 +563,15 @@
     <script type="module" src="/scripts/core/header.js?v={{ASSET_VERSION}}"></script>
 
     <!-- UI Components -->
+    <!-- Context Menu dependencies (must load before context_menu.js) -->
+    <script src="/scripts/ui/context_menu/builders.js?v={{ASSET_VERSION}}"></script>
+    <script src="/scripts/ui/context_menu/actions.js?v={{ASSET_VERSION}}"></script>
     <script type="module" src="/scripts/ui/context_menu.js?v={{ASSET_VERSION}}"></script>
     <script type="module" src="/scripts/ui/search_dialog.js?v={{ASSET_VERSION}}"></script>
     <script type="module" src="/scripts/ui/exit_dialog.js?v={{ASSET_VERSION}}"></script>
+    <!-- AdvancedChart dependencies (must load before advanced_chart.js) -->
+    <script src="/scripts/ui/advanced_chart/formatters.js?v={{ASSET_VERSION}}"></script>
+    <script src="/scripts/ui/advanced_chart/indicators.js?v={{ASSET_VERSION}}"></script>
     <script src="/scripts/ui/advanced_chart.js?v={{ASSET_VERSION}}"></script>
 
     <!-- Initialize global search dialog -->

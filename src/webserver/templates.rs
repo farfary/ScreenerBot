@@ -183,7 +183,15 @@ pub const POSITION_DETAILS_SECONDARY_TABS_JS: &str =
     include_str!("templates/scripts/ui/position_details/secondary_tabs.js");
 pub const TOOL_FAVORITES_UI: &str = include_str!("templates/scripts/ui/tool_favorites.js");
 pub const CONTEXT_MENU_UI: &str = include_str!("templates/scripts/ui/context_menu.js");
+pub const CONTEXT_MENU_ACTIONS_JS: &str =
+    include_str!("templates/scripts/ui/context_menu/actions.js");
+pub const CONTEXT_MENU_BUILDERS_JS: &str =
+    include_str!("templates/scripts/ui/context_menu/builders.js");
 pub const ADVANCED_CHART_UI: &str = include_str!("templates/scripts/ui/advanced_chart.js");
+pub const ADVANCED_CHART_INDICATORS_JS: &str =
+    include_str!("templates/scripts/ui/advanced_chart/indicators.js");
+pub const ADVANCED_CHART_FORMATTERS_JS: &str =
+    include_str!("templates/scripts/ui/advanced_chart/formatters.js");
 pub const SETTINGS_DIALOG_UI: &str = include_str!("templates/scripts/ui/settings_dialog.js");
 pub const SETTINGS_SECURITY_TAB_UI: &str =
     include_str!("templates/scripts/ui/settings/security_tab.js");

@@ -132,7 +132,11 @@ pub async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String
         }
         "tool_favorites.js" => Some(templates::TOOL_FAVORITES_UI),
         "context_menu.js" => Some(templates::CONTEXT_MENU_UI),
+        "context_menu/actions.js" => Some(templates::CONTEXT_MENU_ACTIONS_JS),
+        "context_menu/builders.js" => Some(templates::CONTEXT_MENU_BUILDERS_JS),
         "advanced_chart.js" => Some(templates::ADVANCED_CHART_UI),
+        "advanced_chart/indicators.js" => Some(templates::ADVANCED_CHART_INDICATORS_JS),
+        "advanced_chart/formatters.js" => Some(templates::ADVANCED_CHART_FORMATTERS_JS),
         "settings_dialog.js" => Some(templates::SETTINGS_DIALOG_UI),
         "settings/security_tab.js" => Some(templates::SETTINGS_SECURITY_TAB_UI),
         "settings/data_tab.js" => Some(templates::SETTINGS_DATA_TAB_UI),
