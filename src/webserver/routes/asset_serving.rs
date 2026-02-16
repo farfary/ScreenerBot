@@ -46,7 +46,8 @@ pub async fn get_core_script(axum::extract::Path(file): axum::extract::Path<Stri
 
 /// Serve page JavaScript modules
 pub async fn get_page_script(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
-    let content = match file.as_str() {
+    let file = file.strip_prefix('/').unwrap_or(&file);
+    let content = match file {
         "home.js" => Some(embeds::HOME_PAGE_SCRIPT),
         "services.js" => Some(embeds::SERVICES_PAGE_SCRIPT),
         "transactions.js" => Some(embeds::TRANSACTIONS_PAGE_SCRIPT),
@@ -104,7 +105,8 @@ pub async fn get_page_script(axum::extract::Path(file): axum::extract::Path<Stri
 
 /// Serve UI component JavaScript modules
 pub async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
-    let content = match file.as_str() {
+    let file = file.strip_prefix('/').unwrap_or(&file);
+    let content = match file {
         "data_table.js" => Some(embeds::DATA_TABLE_UI),
         "data_table/column_management.js" => Some(embeds::DATA_TABLE_COLUMN_MANAGEMENT),
         "data_table/client_pagination.js" => Some(embeds::DATA_TABLE_CLIENT_PAGINATION),

@@ -61,8 +61,8 @@ pub fn create_router(state: Arc<AppState>) -> Router {
         .route("/updates", axum::routing::get(updates_page))
         .route("/about", axum::routing::get(about_page))
         .route("/scripts/core/:file", axum::routing::get(get_core_script))
-        .route("/scripts/pages/:file", axum::routing::get(get_page_script))
-        .route("/scripts/ui/:file", axum::routing::get(get_ui_script))
+        .route("/scripts/pages/*file", axum::routing::get(get_page_script))
+        .route("/scripts/ui/*file", axum::routing::get(get_ui_script))
         .route("/assets/:file", axum::routing::get(get_asset))
         .route("/assets/fonts/:file", axum::routing::get(get_font))
         .route(
