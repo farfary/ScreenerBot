@@ -2,394 +2,44 @@ import { registerPage } from "../core/lifecycle.js";
 import { Poller } from "../core/poller.js";
 import { requestManager } from "../core/request_manager.js";
 import * as Utils from "../core/utils.js";
-import * as AppState from "../core/app_state.js";
 import { DataTable } from "../ui/data_table.js";
 import { TabBar, TabBarManager } from "../ui/tab_bar.js";
 import { TradeActionDialog } from "../ui/trade_action_dialog.js";
 import { TokenDetailsDialog } from "../ui/token_details_dialog.js";
-import * as Hints from "../core/hints.js";
-import { HintTrigger } from "../ui/hint_popover.js";
 import { showBillboardRow, hideBillboardRow } from "../ui/billboard_row.js";
 import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { InputDialog } from "../ui/input_dialog.js";
 
-// Sub-tabs (views) configuration with hint references
-const TOKEN_VIEWS = [
-  {
-    id: "favorites",
-    label: '<i class="icon-star"></i> Favorites',
-    hintKey: "tokens.favorites",
-  },
-  { id: "pool", label: '<i class="icon-droplet"></i> Pool Service', hintKey: "tokens.poolService" },
-  {
-    id: "no_market",
-    label: '<i class="icon-trending-down"></i> No Market Data',
-    hintKey: "tokens.noMarketData",
-  },
-  { id: "all", label: '<i class="icon-list"></i> All Tokens', hintKey: "tokens.allTokens" },
-  { id: "passed", label: '<i class="icon-check"></i> Passed', hintKey: "tokens.passedTokens" },
-  {
-    id: "rejected",
-    label: '<i class="icon-circle-x"></i> Rejected',
-    hintKey: "tokens.rejectedTokens",
-  },
-  {
-    id: "blacklisted",
-    label: '<i class="icon-ban"></i> Blacklisted',
-    hintKey: "tokens.blacklistedTokens",
-  },
-  {
-    id: "positions",
-    label: '<i class="icon-chart-bar"></i> Positions',
-    hintKey: "tokens.positionsTokens",
-  },
-  { id: "recent", label: '<i class="icon-clock"></i> Recent', hintKey: "tokens.recentTokens" },
-  {
-    id: "ohlcv",
-    label: '<i class="icon-chart-candlestick"></i> OHLCV Data',
-    hintKey: "tokens.ohlcvData",
-  },
-];
-
-// Constants
-const DEFAULT_VIEW = "all";
-const DEFAULT_SERVER_SORT = { by: "symbol", direction: "asc" };
-const DEFAULT_FILTERS = {
-  pool_price: false,
-  positions: false,
-  rejection_reason: "all",
-};
-const DEFAULT_SUMMARY = { priced: 0, positions: 0, blacklisted: 0 };
-
-const getDefaultFiltersForView = (view) => {
-  const filters = { ...DEFAULT_FILTERS };
-  if (view === "positions") {
-    filters.positions = true;
-  }
-  return filters;
-};
-
-const COLUMN_TO_SORT_KEY = {
-  token: "symbol",
-  price_sol: "price_sol",
-  liquidity_usd: "liquidity_usd",
-  volume_24h: "volume_24h",
-  fdv: "fdv",
-  market_cap: "market_cap",
-  price_change_h1: "price_change_h1",
-  price_change_h24: "price_change_h24",
-  txns_5m: "txns_5m",
-  txns_1h: "txns_1h",
-  txns_6h: "txns_6h",
-  txns_24h: "txns_24h",
-  risk_score: "risk_score",
-  updated_at: "market_data_last_fetched_at",
-  first_seen_at: "first_discovered_at",
-  token_birth_at: "blockchain_created_at",
-};
-
-// View-aware sort key resolver for "updated_at" column
-const getServerSortKey = (columnId, currentView) => {
-  if (columnId === "updated_at") {
-    // Different views show different timestamps in "Updated" column
-    if (currentView === "pool" || currentView === "positions") {
-      return "pool_price_last_calculated_at";
-    } else if (currentView === "no_market") {
-      return "metadata_last_fetched_at";
-    } else {
-      return "market_data_last_fetched_at";
-    }
-  }
-
-  // Use mapping for other columns
-  return COLUMN_TO_SORT_KEY[columnId] || columnId;
-};
-
-const SORT_KEY_TO_COLUMN = Object.entries(COLUMN_TO_SORT_KEY).reduce((acc, [columnId, sortKey]) => {
-  acc[sortKey] = columnId;
-  return acc;
-}, {});
-
-const getTokensTableStateKey = (view) => `tokens-table.${view}`;
-
-const PAGE_LIMIT = 100; // chunked fetch size for incremental scrolling
-const PRICE_HIGHLIGHT_DURATION_MS = 10_000;
-
-function findFirstDifferenceIndex(a, b) {
-  if (typeof a !== "string" || typeof b !== "string") {
-    return -1;
-  }
-
-  const minLength = Math.min(a.length, b.length);
-  for (let i = 0; i < minLength; i += 1) {
-    if (a[i] !== b[i]) {
-      return i;
-    }
-  }
-
-  if (a.length !== b.length) {
-    return minLength;
-  }
-
-  return -1;
-}
-
-function priceCell(value, row = null) {
-  const formatted = Utils.formatPriceSol(value, { fallback: "—", decimals: 12 });
-  const baseValue = Utils.escapeHtml(formatted);
-
-  let directionClass = "price-change--neutral";
-  let arrowSymbol = "▲";
-  let arrowClass = "price-change-arrow price-change-arrow--placeholder";
-  let valueHtml = baseValue;
-
-  if (row && row.price_change_meta) {
-    const { direction, currentFormatted, changeStartIndex } = row.price_change_meta;
-    if (
-      direction &&
-      typeof changeStartIndex === "number" &&
-      currentFormatted &&
-      formatted !== "—"
-    ) {
-      const boundedIndex = Math.max(0, Math.min(changeStartIndex, currentFormatted.length));
-      const leadingPart = Utils.escapeHtml(currentFormatted.slice(0, boundedIndex));
-      const changedPart = Utils.escapeHtml(currentFormatted.slice(boundedIndex));
-      valueHtml = `${leadingPart}<span class="price-change-diff">${changedPart}</span>`;
-      directionClass = direction === "up" ? "price-change--up" : "price-change--down";
-      arrowSymbol = direction === "up" ? "▲" : "▼";
-      arrowClass = "price-change-arrow";
-    }
-  }
-
-  return `<span class="price-change ${directionClass}"><span class="${arrowClass}" aria-hidden="true">${arrowSymbol}</span><span class="price-change-value">${valueHtml}</span></span>`;
-}
-
-function usdCell(value) {
-  return Utils.formatCurrencyUSD(value, { fallback: "—" });
-}
-
-function percentCell(value) {
-  if (value === null || value === undefined) return "—";
-  const num = Number(value);
-  if (!Number.isFinite(num)) return "—";
-  const cls = num > 0 ? "value-positive" : num < 0 ? "value-negative" : "";
-  const text = Utils.formatPercentValue(num, { includeSign: true, decimals: 2 });
-  return `<span class="${cls}">${text}</span>`;
-}
-
-function timeAgoCell(seconds) {
-  return Utils.formatTimeAgo(seconds, { fallback: "—" });
-}
-
-// Rejection reason label mapping (machine code -> human-readable)
-const REJECTION_LABELS = {
-  no_decimals: "No decimals in database",
-  token_too_new: "Token too new",
-  cooldown_filtered: "Cooldown filtered",
-  dex_data_missing: "DexScreener data missing",
-  gecko_data_missing: "GeckoTerminal data missing",
-  rug_data_missing: "Rugcheck data missing",
-  dex_empty_name: "Empty name",
-  dex_empty_symbol: "Empty symbol",
-  dex_empty_logo: "Empty logo URL",
-  dex_empty_website: "Empty website URL",
-  dex_txn_5m: "Low 5m transactions",
-  dex_txn_1h: "Low 1h transactions",
-  dex_zero_liq: "Zero liquidity",
-  dex_liq_low: "Liquidity too low",
-  dex_liq_high: "Liquidity too high",
-  dex_mcap_low: "Market cap too low",
-  dex_mcap_high: "Market cap too high",
-  dex_vol_low: "Volume too low",
-  dex_vol_missing: "Volume missing",
-  dex_fdv_low: "FDV too low",
-  dex_fdv_high: "FDV too high",
-  dex_fdv_missing: "FDV missing",
-  dex_vol5m_low: "5m volume too low",
-  dex_vol5m_missing: "5m volume missing",
-  dex_vol1h_low: "1h volume too low",
-  dex_vol1h_missing: "1h volume missing",
-  dex_vol6h_low: "6h volume too low",
-  dex_vol6h_missing: "6h volume missing",
-  dex_price_change_5m_low: "5m price change too low",
-  dex_price_change_5m_high: "5m price change too high",
-  dex_price_change_5m_missing: "5m price change missing",
-  dex_price_change_low: "Price change too low",
-  dex_price_change_high: "Price change too high",
-  dex_price_change_missing: "Price change missing",
-  dex_price_change_6h_low: "6h price change too low",
-  dex_price_change_6h_high: "6h price change too high",
-  dex_price_change_6h_missing: "6h price change missing",
-  dex_price_change_24h_low: "24h price change too low",
-  dex_price_change_24h_high: "24h price change too high",
-  dex_price_change_24h_missing: "24h price change missing",
-  gecko_liq_missing: "Liquidity missing",
-  gecko_liq_low: "Liquidity too low",
-  gecko_liq_high: "Liquidity too high",
-  gecko_mcap_missing: "Market cap missing",
-  gecko_mcap_low: "Market cap too low",
-  gecko_mcap_high: "Market cap too high",
-  gecko_vol5m_low: "5m volume too low",
-  gecko_vol5m_missing: "5m volume missing",
-  gecko_vol1h_low: "1h volume too low",
-  gecko_vol1h_missing: "1h volume missing",
-  gecko_vol24h_low: "24h volume too low",
-  gecko_vol24h_missing: "24h volume missing",
-  gecko_price_change_5m_low: "5m price change too low",
-  gecko_price_change_5m_high: "5m price change too high",
-  gecko_price_change_5m_missing: "5m price change missing",
-  gecko_price_change_1h_low: "1h price change too low",
-  gecko_price_change_1h_high: "1h price change too high",
-  gecko_price_change_1h_missing: "1h price change missing",
-  gecko_price_change_24h_low: "24h price change too low",
-  gecko_price_change_24h_high: "24h price change too high",
-  gecko_price_change_24h_missing: "24h price change missing",
-  gecko_pool_count_low: "Pool count too low",
-  gecko_pool_count_high: "Pool count too high",
-  gecko_pool_count_missing: "Pool count missing",
-  gecko_reserve_low: "Reserve too low",
-  gecko_reserve_missing: "Reserve missing",
-  rug_rugged: "Rugged token",
-  rug_score: "Risk score too high",
-  rug_level_danger: "Danger risk level",
-  rug_mint_authority: "Mint authority present",
-  rug_freeze_authority: "Freeze authority present",
-  rug_top_holder: "Top holder % too high",
-  rug_top3_holders: "Top 3 holders % too high",
-  rug_min_holders: "Not enough holders",
-  rug_insider_count: "Too many insider holders",
-  rug_insider_pct: "Insider % too high",
-  rug_creator_pct: "Creator balance too high",
-  rug_transfer_fee_present: "Transfer fee present",
-  rug_transfer_fee_high: "Transfer fee too high",
-  rug_transfer_fee_missing: "Transfer fee data missing",
-  rug_graph_insiders: "Graph insiders too high",
-  rug_lp_providers_low: "LP providers too low",
-  rug_lp_providers_missing: "LP providers missing",
-  rug_lp_lock_low: "LP lock too low",
-  rug_lp_lock_missing: "LP lock missing",
-};
-
-function getRejectionDisplayLabel(reasonCode) {
-  if (!reasonCode) return null;
-  return REJECTION_LABELS[reasonCode] || reasonCode;
-}
-
-function tokenCell(row) {
-  const src = row.logo_url || row.image_url;
-  const logo = src
-    ? `<img class="token-logo clickable-logo" alt="" src="${Utils.escapeHtml(src)}" data-logo-url="${Utils.escapeHtml(src)}" data-token-symbol="${Utils.escapeHtml(row.symbol || "")}" data-token-name="${Utils.escapeHtml(row.name || "")}" data-token-mint="${Utils.escapeHtml(row.mint || "")}" title="Click to enlarge" />`
-    : '<span class="token-logo">N/A</span>';
-  const sym = Utils.escapeHtml(row.symbol || "—");
-  const name = row.name ? `<div class="token-name">${Utils.escapeHtml(row.name)}</div>` : "";
-  return `<div class="token-cell">${logo}<div><div class="token-symbol">${sym}</div>${name}</div></div>`;
-}
-
-function normalizeBlacklistReasons(mint, sourcesMap) {
-  if (!mint || typeof mint !== "string") return [];
-  if (!sourcesMap || typeof sourcesMap !== "object") return [];
-  const raw = sourcesMap[mint];
-  if (!Array.isArray(raw) || raw.length === 0) return [];
-  return raw
-    .filter((entry) => entry && typeof entry === "object")
-    .map((entry) => {
-      const category =
-        typeof entry.category === "string" && entry.category.trim().length > 0
-          ? entry.category.trim()
-          : "unknown";
-      const reason =
-        typeof entry.reason === "string" && entry.reason.trim().length > 0
-          ? entry.reason.trim()
-          : "unknown_reason";
-      const detail =
-        typeof entry.detail === "string" && entry.detail.trim().length > 0
-          ? entry.detail.trim()
-          : null;
-      return { category, reason, detail };
-    });
-}
-function summarizeBlacklistReasons(sourceList) {
-  if (!Array.isArray(sourceList) || sourceList.length === 0) return "";
-  return sourceList
-    .map((source) => {
-      if (!source || typeof source !== "object") return "unknown";
-      const category = source.category || "unknown";
-      const reason = source.reason || "unknown_reason";
-      const detail = source.detail ? ` (${source.detail})` : "";
-      return `${category}:${reason}${detail}`;
-    })
-    .join(", ");
-}
-
-function resolveSortColumn(sortKey) {
-  if (!sortKey) {
-    return null;
-  }
-  // Dynamic keys mapping back to 'updated_at'
-  if (
-    [
-      "pool_price_last_calculated_at",
-      "metadata_last_fetched_at",
-      "market_data_last_fetched_at",
-    ].includes(sortKey)
-  ) {
-    return "updated_at";
-  }
-  return SORT_KEY_TO_COLUMN[sortKey] ?? null;
-}
-
-function normalizeSortDirection(direction) {
-  return direction === "desc" ? "desc" : "asc";
-}
-
-function loadPersistedSort(stateKey) {
-  if (!stateKey) return null;
-  const saved = AppState.load(stateKey);
-  if (saved && typeof saved === "object" && saved.sortColumn) {
-    return {
-      column: saved.sortColumn,
-      direction: normalizeSortDirection(saved.sortDirection),
-    };
-  }
-  return null;
-}
-
-/**
- * Attach hint triggers to tab buttons
- * Must be called after tab bar is rendered
- */
-async function attachHintsToTabs() {
-  // Initialize hints system (loads settings and dismissed state)
-  await Hints.init();
-
-  if (!Hints.isEnabled()) return;
-
-  const container = document.querySelector("#subTabsContainer");
-  if (!container) return;
-
-  // Find all tab buttons and attach hints
-  TOKEN_VIEWS.forEach((view) => {
-    if (!view.hintKey) return;
-
-    const hint = Hints.getHint(view.hintKey);
-    if (!hint || Hints.isDismissed(hint.id)) return;
-
-    const tabButton = container.querySelector(`[data-tab-id="${view.id}"]`);
-    if (!tabButton) return;
-
-    // Check if hint already attached
-    if (tabButton.querySelector(".hint-trigger")) return;
-
-    // Append hint trigger to tab button (pass hintKey as path)
-    const triggerHtml = HintTrigger.render(hint, view.hintKey, { size: "sm" });
-    if (triggerHtml) {
-      tabButton.insertAdjacentHTML("beforeend", triggerHtml);
-    }
-  });
-
-  // Initialize hint trigger handlers
-  HintTrigger.initAll();
-}
+// Import sub-modules
+import {
+  TOKEN_VIEWS,
+  DEFAULT_VIEW,
+  DEFAULT_SERVER_SORT,
+  DEFAULT_FILTERS,
+  DEFAULT_SUMMARY,
+  PAGE_LIMIT,
+  PRICE_HIGHLIGHT_DURATION_MS,
+  getDefaultFiltersForView,
+  getServerSortKey,
+  getTokensTableStateKey,
+} from "./tokens/constants.js";
+import {
+  findFirstDifferenceIndex,
+  priceCell,
+  usdCell,
+  percentCell,
+  timeAgoCell,
+  getRejectionDisplayLabel,
+  tokenCell,
+  normalizeBlacklistReasons,
+  summarizeBlacklistReasons,
+  resolveSortColumn,
+  normalizeSortDirection,
+  loadPersistedSort,
+  attachHintsToTabs,
+} from "./tokens/formatters.js";
+import { createOhlcvModule } from "./tokens/ohlcv.js";
+import { createFavoritesModule } from "./tokens/favorites.js";
 
 function createLifecycle() {
   let table = null;
@@ -434,14 +84,27 @@ function createLifecycle() {
     hasLoadedOnce: false,
   };
 
-  /**
-   * Add tracked event listener for cleanup
-   */
-  function addTrackedListener(element, event, handler) {
-    if (!element) return;
-    element.addEventListener(event, handler);
-    eventCleanups.push(() => element.removeEventListener(event, handler));
-  }
+  // Create modules dependencies object (mutable refs to share state)
+  const deps = {
+    state,
+    ohlcvState,
+    favoritesState,
+    ohlcvTable: null,
+    favoritesTable: null,
+    poller: null,
+    lastUpdatePoller: null,
+    ohlcvPoller: null,
+    requestManager,
+    DataTable,
+    Utils,
+    Poller,
+    ConfirmationDialog,
+    InputDialog,
+  };
+
+  // Initialize sub-modules
+  const ohlcv = createOhlcvModule(deps);
+  const favorites = createFavoritesModule(deps);
 
   const resetPriceTracking = () => {
     priceHistory.clear();
@@ -1575,668 +1238,6 @@ function createLifecycle() {
     ];
   };
 
-  // ═══════════════════════════════════════════════════════════════════════════
-  // OHLCV TABLE FUNCTIONS
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  const buildOhlcvColumns = () => {
-    return [
-      {
-        id: "mint",
-        label: "Token",
-        sortable: true,
-        minWidth: 120,
-        maxWidth: 200,
-        wrap: false,
-        render: (value) => {
-          const short = value ? `${value.slice(0, 6)}...${value.slice(-4)}` : "—";
-          return `<span class="mint-cell" title="${Utils.escapeHtml(value)}">${short}</span>`;
-        },
-      },
-      {
-        id: "status",
-        label: "Status",
-        sortable: true,
-        minWidth: 90,
-        wrap: false,
-        render: (value) => {
-          const isActive = value === "active";
-          const cls = isActive ? "status-active" : "status-inactive";
-          const icon = isActive ? "icon-activity" : "icon-pause";
-          return `<span class="status-badge ${cls}"><i class="${icon}"></i> ${value}</span>`;
-        },
-      },
-      {
-        id: "priority",
-        label: "Priority",
-        sortable: true,
-        minWidth: 80,
-        wrap: false,
-        render: (value) => {
-          const priorityClass =
-            {
-              critical: "priority-critical",
-              high: "priority-high",
-              medium: "priority-medium",
-              low: "priority-low",
-            }[value?.toLowerCase()] || "priority-medium";
-          return `<span class="priority-badge ${priorityClass}">${value || "—"}</span>`;
-        },
-      },
-      {
-        id: "candle_count",
-        label: "Candles",
-        sortable: true,
-        minWidth: 90,
-        wrap: false,
-        align: "right",
-        render: (value) => Utils.formatNumber(value, { fallback: "0" }),
-      },
-      {
-        id: "backfill_progress",
-        label: "Backfill",
-        sortable: false,
-        minWidth: 120,
-        wrap: false,
-        render: (value) => {
-          if (!value) return "—";
-          const { completed, total, percent, timeframes } = value;
-          const pct = Math.round(percent);
-          const progressCls =
-            pct === 100 ? "progress-complete" : pct > 50 ? "progress-partial" : "progress-low";
-
-          // Build timeframe icons
-          const tfIcons = [
-            { key: "m1", label: "1m", done: timeframes?.["1m"] ?? timeframes?.m1 },
-            { key: "m5", label: "5m", done: timeframes?.["5m"] ?? timeframes?.m5 },
-            { key: "m15", label: "15m", done: timeframes?.["15m"] ?? timeframes?.m15 },
-            { key: "h1", label: "1h", done: timeframes?.["1h"] ?? timeframes?.h1 },
-            { key: "h4", label: "4h", done: timeframes?.["4h"] ?? timeframes?.h4 },
-            { key: "h12", label: "12h", done: timeframes?.["12h"] ?? timeframes?.h12 },
-            { key: "d1", label: "1d", done: timeframes?.["1d"] ?? timeframes?.d1 },
-          ]
-            .map((tf) => {
-              const cls = tf.done ? "tf-done" : "tf-pending";
-              return `<span class="tf-indicator ${cls}" title="${tf.label}: ${tf.done ? "Complete" : "Pending"}">${tf.label.charAt(0)}</span>`;
-            })
-            .join("");
-
-          return `<div class="backfill-cell">
-            <div class="backfill-bar ${progressCls}" style="--progress: ${pct}%"></div>
-            <span class="backfill-text">${completed}/${total}</span>
-            <div class="tf-indicators">${tfIcons}</div>
-          </div>`;
-        },
-      },
-      {
-        id: "data_span_hours",
-        label: "Data Span",
-        sortable: true,
-        minWidth: 90,
-        wrap: false,
-        align: "right",
-        render: (value) => {
-          if (!value || value <= 0) return "—";
-          if (value < 24) return `${value.toFixed(1)}h`;
-          const days = value / 24;
-          return `${days.toFixed(1)}d`;
-        },
-      },
-      {
-        id: "open_gaps",
-        label: "Gaps",
-        sortable: true,
-        minWidth: 70,
-        wrap: false,
-        align: "right",
-        render: (value) => {
-          if (!value || value === 0) return '<span class="value-positive">0</span>';
-          return `<span class="value-warning">${value}</span>`;
-        },
-      },
-      {
-        id: "pool_count",
-        label: "Pools",
-        sortable: true,
-        minWidth: 70,
-        wrap: false,
-        align: "right",
-        render: (value) => Utils.formatNumber(value, { fallback: "0" }),
-      },
-      {
-        id: "last_fetch",
-        label: "Last Fetch",
-        sortable: true,
-        minWidth: 100,
-        wrap: false,
-        render: (value) => {
-          if (!value) return "—";
-          const timestamp =
-            typeof value === "string" ? Math.floor(new Date(value).getTime() / 1000) : value;
-          return timeAgoCell(timestamp);
-        },
-      },
-      {
-        id: "actions",
-        label: "",
-        sortable: false,
-        minWidth: 80,
-        maxWidth: 80,
-        wrap: false,
-        render: (_value, row) => {
-          return `<button class="btn btn-small btn-danger ohlcv-delete-btn" data-mint="${Utils.escapeHtml(row.mint)}" title="Delete OHLCV data">
-            <i class="icon-trash-2"></i>
-          </button>`;
-        },
-      },
-    ];
-  };
-
-  const fetchOhlcvData = async () => {
-    ohlcvState.isLoading = true;
-    try {
-      const response = await requestManager.fetch("/api/ohlcv/tokens", { priority: "normal" });
-      if (response && response.tokens) {
-        ohlcvState.tokens = response.tokens;
-        ohlcvState.stats = response.stats;
-      }
-    } catch (err) {
-      console.error("Failed to fetch OHLCV data:", err);
-      Utils.showToast("Failed to load OHLCV data", "error");
-    } finally {
-      ohlcvState.isLoading = false;
-    }
-  };
-
-  const updateOhlcvTable = () => {
-    if (!ohlcvTable) return;
-    ohlcvTable.setData(ohlcvState.tokens, { preserveScroll: true });
-    updateOhlcvToolbar();
-  };
-
-  const updateOhlcvToolbar = () => {
-    if (!ohlcvTable) return;
-    const stats = ohlcvState.stats || {};
-
-    ohlcvTable.updateToolbarSummary([
-      {
-        id: "ohlcv-total",
-        label: "Total Tokens",
-        value: Utils.formatNumber(stats.total_tokens ?? 0, 0),
-      },
-      {
-        id: "ohlcv-active",
-        label: "Active",
-        value: Utils.formatNumber(stats.active_tokens ?? 0, 0),
-        variant: "success",
-      },
-      {
-        id: "ohlcv-candles",
-        label: "Candles",
-        value: Utils.formatCompactNumber(stats.total_candles ?? 0),
-        variant: "info",
-      },
-      {
-        id: "ohlcv-size",
-        label: "DB Size",
-        value: `${(stats.database_size_mb ?? 0).toFixed(1)} MB`,
-        variant: "secondary",
-      },
-    ]);
-  };
-
-  const handleOhlcvDelete = async (mint) => {
-    const result = await ConfirmationDialog.show({
-      title: "Delete OHLCV Data",
-      message: `Delete all OHLCV data for ${mint.slice(0, 8)}...?`,
-      confirmLabel: "Delete",
-      variant: "danger",
-    });
-    if (!result.confirmed) return;
-
-    try {
-      const response = await requestManager.fetch(`/api/ohlcv/${mint}/delete`, {
-        method: "DELETE",
-        priority: "high",
-      });
-
-      if (response) {
-        Utils.showToast(
-          `Deleted: ${response.candles_deleted} candles, ${response.pools_deleted} pools`,
-          "success"
-        );
-        await fetchOhlcvData();
-        updateOhlcvTable();
-      }
-    } catch (err) {
-      console.error("Failed to delete OHLCV data:", err);
-      Utils.showToast("Failed to delete OHLCV data", "error");
-    }
-  };
-
-  const handleOhlcvCleanup = async () => {
-    const result = await InputDialog.show({
-      title: "Delete Inactive Tokens",
-      message: "Delete inactive tokens older than specified hours",
-      placeholder: "Hours...",
-      defaultValue: "24",
-      confirmLabel: "Delete",
-      type: "number",
-      validate: (value) => {
-        const num = parseInt(value, 10);
-        if (isNaN(num) || num < 1) return "Please enter a positive number";
-        return null;
-      },
-    });
-    if (!result) return;
-
-    const inactiveHours = parseInt(result.value, 10);
-
-    try {
-      const response = await requestManager.fetch("/api/ohlcv/cleanup", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ inactive_hours: inactiveHours }),
-        priority: "high",
-      });
-
-      if (response) {
-        Utils.showToast(`Cleaned up ${response.deleted_count} inactive tokens`, "success");
-        await fetchOhlcvData();
-        updateOhlcvTable();
-      }
-    } catch (err) {
-      console.error("Failed to cleanup OHLCV data:", err);
-      Utils.showToast("Failed to cleanup OHLCV data", "error");
-    }
-  };
-
-  const initOhlcvTable = () => {
-    if (ohlcvTable) return; // Already initialized
-
-    // Create container for OHLCV table
-    const rootEl = document.querySelector("#tokens-root");
-    if (!rootEl) return;
-
-    // Create OHLCV container
-    let ohlcvContainer = document.querySelector("#ohlcv-table-container");
-    if (!ohlcvContainer) {
-      ohlcvContainer = document.createElement("div");
-      ohlcvContainer.id = "ohlcv-table-container";
-      ohlcvContainer.className = "ohlcv-table-container";
-      ohlcvContainer.style.display = "none";
-      rootEl.parentNode.insertBefore(ohlcvContainer, rootEl.nextSibling);
-    }
-
-    ohlcvTable = new DataTable({
-      container: "#ohlcv-table-container",
-      columns: buildOhlcvColumns(),
-      rowIdField: "mint",
-      stateKey: "ohlcv-table",
-      enableLogging: false,
-      sorting: {
-        mode: "client",
-        column: "candle_count",
-        direction: "desc",
-      },
-      clientPagination: {
-        enabled: true,
-        pageSizes: [10, 20, 50, 100, "all"],
-        defaultPageSize: 50,
-        stateKey: "tokens.ohlcv.pageSize",
-      },
-      compact: true,
-      stickyHeader: true,
-      zebra: true,
-      fitToContainer: true,
-      autoSizeColumns: false,
-      uniformRowHeight: 2,
-      toolbar: {
-        title: {
-          icon: "icon-chart-candlestick",
-          text: "OHLCV Data",
-        },
-        summary: [
-          { id: "ohlcv-total", label: "Total Tokens", value: "0" },
-          { id: "ohlcv-active", label: "Active", value: "0", variant: "success" },
-          { id: "ohlcv-candles", label: "Candles", value: "0", variant: "info" },
-          { id: "ohlcv-size", label: "DB Size", value: "0 MB", variant: "secondary" },
-        ],
-        actions: [
-          {
-            id: "cleanup",
-            label: "Cleanup Inactive",
-            icon: "icon-trash-2",
-            variant: "warning",
-            onClick: handleOhlcvCleanup,
-          },
-        ],
-      },
-    });
-
-    // Add click handler for delete buttons
-    ohlcvContainer.addEventListener("click", (e) => {
-      const deleteBtn = e.target.closest(".ohlcv-delete-btn");
-      if (deleteBtn) {
-        const mint = deleteBtn.getAttribute("data-mint");
-        if (mint) handleOhlcvDelete(mint);
-      }
-    });
-  };
-
-  const showOhlcvView = () => {
-    const tokensRoot = document.querySelector("#tokens-root");
-    const ohlcvContainer = document.querySelector("#ohlcv-table-container");
-
-    if (tokensRoot) tokensRoot.style.display = "none";
-    if (ohlcvContainer) ohlcvContainer.style.display = "";
-
-    // Pause main table poller, start OHLCV poller
-    if (poller) poller.pause();
-    if (lastUpdatePoller) lastUpdatePoller.pause();
-
-    if (!ohlcvPoller) {
-      ohlcvPoller = new Poller(
-        async () => {
-          await fetchOhlcvData();
-          updateOhlcvTable();
-        },
-        {
-          label: "OHLCV",
-          getInterval: () => 30000,
-          pauseWhenHidden: true,
-        }
-      );
-    }
-    ohlcvPoller.start();
-
-    // Initial load
-    fetchOhlcvData().then(() => updateOhlcvTable());
-  };
-
-  const hideOhlcvView = () => {
-    const tokensRoot = document.querySelector("#tokens-root");
-    const ohlcvContainer = document.querySelector("#ohlcv-table-container");
-
-    if (tokensRoot) tokensRoot.style.display = "";
-    if (ohlcvContainer) ohlcvContainer.style.display = "none";
-
-    // Pause OHLCV poller, resume main poller
-    if (ohlcvPoller) ohlcvPoller.pause();
-    if (poller) poller.start();
-    if (lastUpdatePoller) lastUpdatePoller.start();
-  };
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  // FAVORITES TABLE FUNCTIONS
-  // ═══════════════════════════════════════════════════════════════════════════
-
-  const buildFavoritesColumns = () => {
-    return [
-      {
-        id: "token",
-        label: "Token",
-        sortable: true,
-        minWidth: 200,
-        wrap: false,
-        render: (_v, row) => {
-          const logo = row.logo_url
-            ? `<img class="token-logo" alt="" src="${Utils.escapeHtml(row.logo_url)}" />`
-            : '<span class="token-logo">N/A</span>';
-          const sym = Utils.escapeHtml(row.symbol || "???");
-          const name = row.name
-            ? `<div class="token-name">${Utils.escapeHtml(row.name)}</div>`
-            : "";
-          return `<div class="token-cell">${logo}<div><div class="token-symbol">${sym}</div>${name}</div></div>`;
-        },
-      },
-      {
-        id: "mint",
-        label: "Mint",
-        sortable: true,
-        minWidth: 150,
-        wrap: false,
-        render: (value) => {
-          const short = value ? `${value.slice(0, 8)}...${value.slice(-4)}` : "—";
-          return `<code class="mint-code" title="${Utils.escapeHtml(value)}">${short}</code>`;
-        },
-      },
-      {
-        id: "notes",
-        label: "Notes",
-        sortable: false,
-        minWidth: 200,
-        wrap: true,
-        render: (value) => {
-          if (!value) return '<span class="text-muted">—</span>';
-          return Utils.escapeHtml(value);
-        },
-      },
-      {
-        id: "created_at",
-        label: "Added",
-        sortable: true,
-        minWidth: 120,
-        wrap: false,
-        render: (value) => {
-          if (!value) return "—";
-          const timestamp =
-            typeof value === "string" ? Math.floor(new Date(value).getTime() / 1000) : value;
-          return timeAgoCell(timestamp);
-        },
-      },
-      {
-        id: "actions",
-        label: "",
-        sortable: false,
-        minWidth: 120,
-        maxWidth: 120,
-        wrap: false,
-        render: (_value, row) => {
-          return `
-            <div class="favorites-actions">
-              <button class="btn btn-small btn-icon favorites-action-btn" data-action="copy" data-mint="${Utils.escapeHtml(row.mint)}" title="Copy Mint">
-                <i class="icon-copy"></i>
-              </button>
-              <button class="btn btn-small btn-icon favorites-action-btn" data-action="external" data-mint="${Utils.escapeHtml(row.mint)}" title="View on DexScreener">
-                <i class="icon-external-link"></i>
-              </button>
-              <button class="btn btn-small btn-icon btn-danger favorites-action-btn" data-action="remove" data-mint="${Utils.escapeHtml(row.mint)}" title="Remove from favorites">
-                <i class="icon-trash-2"></i>
-              </button>
-            </div>
-          `;
-        },
-      },
-    ];
-  };
-
-  const fetchFavorites = async () => {
-    favoritesState.isLoading = true;
-    try {
-      const response = await requestManager.fetch("/api/tokens/favorites", { priority: "normal" });
-      if (response && response.favorites) {
-        favoritesState.favorites = response.favorites;
-      }
-    } catch (err) {
-      console.error("Failed to fetch favorites:", err);
-      Utils.showToast("Failed to load favorites", "error");
-    } finally {
-      favoritesState.isLoading = false;
-    }
-  };
-
-  const updateFavoritesTable = () => {
-    if (!favoritesTable) return;
-    const isEmpty = favoritesState.favorites.length === 0;
-    const emptyState = document.querySelector("#favorites-empty-state");
-
-    if (isEmpty) {
-      favoritesTable.setData([], { preserveScroll: false });
-      if (emptyState) emptyState.style.display = "";
-    } else {
-      if (emptyState) emptyState.style.display = "none";
-      favoritesTable.setData(favoritesState.favorites, { preserveScroll: true });
-    }
-    updateFavoritesToolbar();
-  };
-
-  const updateFavoritesToolbar = () => {
-    if (!favoritesTable) return;
-    const count = favoritesState.favorites.length;
-
-    favoritesTable.updateToolbarSummary([
-      {
-        id: "favorites-total",
-        label: "Total Favorites",
-        value: Utils.formatNumber(count, 0),
-        variant: count > 0 ? "info" : "secondary",
-      },
-    ]);
-  };
-
-  const handleFavoriteAction = async (action, mint) => {
-    switch (action) {
-      case "copy":
-        try {
-          await navigator.clipboard.writeText(mint);
-          Utils.showToast("Mint address copied", "success");
-        } catch (err) {
-          console.error("Failed to copy mint:", err);
-          Utils.showToast("Failed to copy mint", "warning");
-        }
-        break;
-
-      case "external":
-        Utils.openExternal(`https://dexscreener.com/solana/${mint}`);
-        break;
-
-      case "remove":
-        try {
-          await requestManager.fetch(`/api/tokens/favorites/${encodeURIComponent(mint)}`, {
-            method: "DELETE",
-            priority: "high",
-          });
-          // Remove from local state
-          favoritesState.favorites = favoritesState.favorites.filter((f) => f.mint !== mint);
-          updateFavoritesTable();
-          Utils.showToast("Removed from favorites", "success");
-        } catch (err) {
-          console.error("Failed to remove favorite:", err);
-          Utils.showToast("Failed to remove favorite", "error");
-        }
-        break;
-    }
-  };
-
-  const initFavoritesTable = () => {
-    if (favoritesTable) return; // Already initialized
-
-    // Create container for favorites table
-    const rootEl = document.querySelector("#tokens-root");
-    if (!rootEl) return;
-
-    // Create favorites container
-    let favoritesContainer = document.querySelector("#favorites-table-container");
-    if (!favoritesContainer) {
-      favoritesContainer = document.createElement("div");
-      favoritesContainer.id = "favorites-table-container";
-      favoritesContainer.className = "favorites-table-container";
-      favoritesContainer.style.display = "none";
-      rootEl.parentNode.insertBefore(favoritesContainer, rootEl.nextSibling);
-    }
-
-    // Create empty state element
-    let emptyState = document.querySelector("#favorites-empty-state");
-    if (!emptyState) {
-      emptyState = document.createElement("div");
-      emptyState.id = "favorites-empty-state";
-      emptyState.className = "empty-state";
-      emptyState.style.display = "none";
-      emptyState.innerHTML = `
-        <div class="empty-state-icon">⭐</div>
-        <h3 class="empty-state-title">No Favorites Yet</h3>
-        <p class="empty-state-description">
-          Use the search (<kbd>⌘K</kbd>) to find tokens and add them to your favorites.
-        </p>
-      `;
-      favoritesContainer.appendChild(emptyState);
-    }
-
-    favoritesTable = new DataTable({
-      container: "#favorites-table-container",
-      columns: buildFavoritesColumns(),
-      rowIdField: "mint",
-      stateKey: "favorites-table",
-      enableLogging: false,
-      sorting: {
-        mode: "client",
-        column: "created_at",
-        direction: "desc",
-      },
-      clientPagination: {
-        enabled: true,
-        pageSizes: [10, 20, 50, 100, "all"],
-        defaultPageSize: 50,
-        stateKey: "tokens.favorites.pageSize",
-      },
-      compact: true,
-      stickyHeader: true,
-      zebra: true,
-      fitToContainer: true,
-      autoSizeColumns: false,
-      uniformRowHeight: 2,
-      toolbar: {
-        title: {
-          icon: "icon-star",
-          text: "Favorite Tokens",
-        },
-        summary: [
-          { id: "favorites-total", label: "Total Favorites", value: "0", variant: "secondary" },
-        ],
-      },
-    });
-
-    // Add click handler for action buttons
-    favoritesContainer.addEventListener("click", (e) => {
-      const actionBtn = e.target.closest(".favorites-action-btn");
-      if (actionBtn) {
-        const action = actionBtn.getAttribute("data-action");
-        const mint = actionBtn.getAttribute("data-mint");
-        if (action && mint) handleFavoriteAction(action, mint);
-      }
-    });
-  };
-
-  const showFavoritesView = () => {
-    const tokensRoot = document.querySelector("#tokens-root");
-    const favoritesContainer = document.querySelector("#favorites-table-container");
-    const ohlcvContainer = document.querySelector("#ohlcv-table-container");
-
-    if (tokensRoot) tokensRoot.style.display = "none";
-    if (favoritesContainer) favoritesContainer.style.display = "";
-    if (ohlcvContainer) ohlcvContainer.style.display = "none";
-
-    // Pause main table poller
-    if (poller) poller.pause();
-    if (lastUpdatePoller) lastUpdatePoller.pause();
-    if (ohlcvPoller) ohlcvPoller.pause();
-
-    // Initial load
-    fetchFavorites().then(() => updateFavoritesTable());
-  };
-
-  const hideFavoritesView = () => {
-    const tokensRoot = document.querySelector("#tokens-root");
-    const favoritesContainer = document.querySelector("#favorites-table-container");
-
-    if (tokensRoot) tokensRoot.style.display = "";
-    if (favoritesContainer) favoritesContainer.style.display = "none";
-
-    // Resume main poller
-    if (poller) poller.start();
-    if (lastUpdatePoller) lastUpdatePoller.start();
-  };
 
   // ═══════════════════════════════════════════════════════════════════════════
   // VIEW SWITCHING
@@ -2249,26 +1250,26 @@ function createLifecycle() {
 
     // Handle Favorites view specially - it has its own table
     if (view === "favorites") {
-      initFavoritesTable();
-      showFavoritesView();
+      favorites.initFavoritesTable();
+      favorites.showFavoritesView();
       return;
     }
 
     // Leaving Favorites view - hide it
     if (previousView === "favorites") {
-      hideFavoritesView();
+      favorites.hideFavoritesView();
     }
 
     // Handle OHLCV view specially - it has its own table
     if (view === "ohlcv") {
-      initOhlcvTable();
-      showOhlcvView();
+      ohlcv.initOhlcvTable();
+      ohlcv.showOhlcvView();
       return;
     }
 
     // Leaving OHLCV view - hide it
     if (previousView === "ohlcv") {
-      hideOhlcvView();
+      ohlcv.hideOhlcvView();
     }
 
     state.totalCount = null;
@@ -2981,8 +1982,8 @@ function createLifecycle() {
 
       // Handle OHLCV view specially - it has its own table
       if (state.view === "ohlcv") {
-        initOhlcvTable();
-        showOhlcvView();
+        ohlcv.initOhlcvTable();
+        ohlcv.showOhlcvView();
       } else if (!hasSortRestored) {
         // Trigger initial data load if no sort state was restored
         // (sort restoration triggers reload via handleSortChange)
@@ -3016,26 +2017,27 @@ function createLifecycle() {
 
       // Handle OHLCV view specially - it has its own poller
       if (state.view === "ohlcv") {
-        if (ohlcvPoller) {
-          ohlcvPoller.start();
+        if (deps.ohlcvPoller) {
+          deps.ohlcvPoller.start();
         } else {
           // OHLCV poller not initialized yet, fetch data
-          fetchOhlcvData().catch(() => {});
+          ohlcv.fetchOhlcvData().catch(() => {});
         }
         return;
       }
 
       // Handle Favorites view specially - refresh favorites data
       if (state.view === "favorites") {
-        fetchFavorites()
-          .then(() => updateFavoritesTable())
+        favorites
+          .fetchFavorites()
+          .then(() => favorites.updateFavoritesTable())
           .catch(() => {});
         return;
       }
 
       // Start poller to update "Last Update" display every second
       if (!lastUpdatePoller) {
-        lastUpdatePoller = ctx.managePoller(
+        lastUpdatePoller = deps.lastUpdatePoller = ctx.managePoller(
           new Poller(
             () => {
               // Only update if we have a lastUpdate timestamp
@@ -3047,17 +2049,17 @@ function createLifecycle() {
               label: "TokensLastUpdate",
               getInterval: () => 1000, // 1 second fixed interval
               pauseWhenHidden: true,
-            }
-          )
+            },
+          ),
         );
         lastUpdatePoller.start();
       }
 
       if (!poller) {
-        poller = ctx.managePoller(
+        poller = deps.poller = ctx.managePoller(
           new Poller(() => requestReload("poll", { silent: true, preserveScroll: true }), {
             label: "Tokens",
-          })
+          }),
         );
       }
       poller.start();
