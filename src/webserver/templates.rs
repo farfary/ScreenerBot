@@ -144,6 +144,11 @@ pub const TOOL_FAVORITES_UI: &str = include_str!("templates/scripts/ui/tool_favo
 pub const CONTEXT_MENU_UI: &str = include_str!("templates/scripts/ui/context_menu.js");
 pub const ADVANCED_CHART_UI: &str = include_str!("templates/scripts/ui/advanced_chart.js");
 pub const SETTINGS_DIALOG_UI: &str = include_str!("templates/scripts/ui/settings_dialog.js");
+pub const SETTINGS_SECURITY_TAB_UI: &str =
+    include_str!("templates/scripts/ui/settings/security_tab.js");
+pub const SETTINGS_DATA_TAB_UI: &str = include_str!("templates/scripts/ui/settings/data_tab.js");
+pub const SETTINGS_UPDATES_TAB_UI: &str =
+    include_str!("templates/scripts/ui/settings/updates_tab.js");
 pub const NOTIFICATION_PANEL_UI: &str = include_str!("templates/scripts/ui/notification_panel.js");
 pub const HINT_POPOVER_UI: &str = include_str!("templates/scripts/ui/hint_popover.js");
 pub const SEARCH_DIALOG_UI: &str = include_str!("templates/scripts/ui/search_dialog.js");
