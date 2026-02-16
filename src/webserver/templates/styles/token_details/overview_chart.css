@@ -46,7 +46,7 @@
   border: 1px solid var(--border-color);
   border-radius: 6px;
   text-align: center;
-  transition: border-color 0.15s ease;
+  transition: border-color var(--transition-fast);
 }
 
 .quick-stat:hover {
@@ -97,7 +97,7 @@
   border: 1px solid var(--border-color);
   border-radius: 8px;
   overflow: hidden;
-  transition: border-color 0.15s ease;
+  transition: border-color var(--transition-fast);
 }
 
 .info-card:hover {
@@ -791,7 +791,7 @@
   font-size: 0.65rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   text-transform: uppercase;
 }
 
@@ -816,7 +816,7 @@
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
 }
 
 .chart-timeframe:hover {
@@ -844,7 +844,7 @@
   justify-content: center;
   background: var(--bg-primary);
   z-index: 10;
-  transition: opacity 0.3s ease;
+  transition: opacity var(--transition-normal);
 }
 
 .chart-loading-overlay.hidden {

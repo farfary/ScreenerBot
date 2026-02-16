@@ -160,7 +160,7 @@
   border-radius: 3px;
   color: var(--text-secondary);
   font-size: 0.8rem;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   border: 1px solid transparent;
   position: relative;
 }
@@ -238,7 +238,7 @@
   border-radius: 4px;
   color: var(--text-primary);
   font-size: 0.8rem;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .explorer-search-input-wrapper input:focus {
@@ -568,7 +568,7 @@
   display: flex;
   gap: 2px;
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--transition-fast);
   margin-inline-start: auto;
 }
 
@@ -633,7 +633,7 @@
   font-family: var(--font-data);
   font-size: 0.7rem;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .pagination-controls .page-btn:hover:not(:disabled) {
@@ -749,7 +749,7 @@
   font-weight: 600;
   cursor: pointer;
   border-radius: var(--radius-sm);
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   font-family: var(--font-data);
 }
 
@@ -781,7 +781,7 @@
   font-size: 0.75rem;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .custom-range-toggle:hover {

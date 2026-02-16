@@ -28,7 +28,7 @@
   padding: 14px 20px;
   gap: var(--spacing-md);
   border-bottom: 1px solid rgb(255 255 255 / 0.05);
-  transition: all 0.15s ease-out;
+  transition: all var(--transition-fast)-out;
 }
 
 .provider-item:last-child {
@@ -66,7 +66,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   flex-shrink: 0;
 }
 
@@ -201,7 +201,7 @@
   background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease-out;
+  transition: all var(--transition-fast)-out;
 }
 
 .provider-btn i {
@@ -359,7 +359,7 @@
   cursor: pointer;
   padding: 4px;
   border-radius: var(--radius-sm);
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -479,7 +479,7 @@
   font-size: 0.8rem;
   cursor: pointer;
   border-radius: var(--radius-sm);
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast);
 }
 
 .model-suggestion:hover {
@@ -670,7 +670,7 @@
   border: none;
   cursor: pointer;
   color: var(--text-muted);
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   padding: 0;
   width: 32px;
   height: 32px;
@@ -783,7 +783,7 @@
   background: var(--bg-secondary);
   color: var(--text-primary);
   font-size: var(--input-font-size, 0.875rem);
-  transition: border-color 0.2s ease;
+  transition: border-color var(--transition-base);
 }
 
 .modal-body .form-group input:focus,

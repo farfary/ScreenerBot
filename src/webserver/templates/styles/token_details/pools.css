@@ -37,7 +37,7 @@
   border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 12px;
-  transition: border-color 0.15s ease;
+  transition: border-color var(--transition-fast);
 }
 
 .pools-summary-card:hover {
@@ -165,7 +165,7 @@
   border: 1px solid var(--border-color);
   border-radius: 8px;
   overflow: hidden;
-  transition: border-color 0.15s ease;
+  transition: border-color var(--transition-fast);
 }
 
 .pool-detail-card:hover {
@@ -333,7 +333,7 @@
   color: var(--text-muted);
   cursor: pointer;
   border-radius: 3px;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   flex-shrink: 0;
 }
 

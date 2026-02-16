@@ -16,7 +16,7 @@
   justify-content: flex-end;
   pointer-events: none;
   opacity: 0;
-  transition: opacity 0.15s ease-out;
+  transition: opacity var(--transition-fast)-out;
 }
 
 .notification-drawer[data-state="open"] {
@@ -96,7 +96,7 @@ body.notification-drawer-open {
   padding: 3px 8px;
   border-radius: 10px;
   background: var(--success-alpha-10);
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
 }
 
 .notification-connection__dot {
@@ -104,7 +104,7 @@ body.notification-drawer-open {
   height: 6px;
   border-radius: 50%;
   background: var(--success-color);
-  transition: all 0.3s ease;
+  transition: all var(--transition-normal);
 }
 
 .notification-connection[data-state="disconnected"] {
@@ -146,7 +146,7 @@ body.notification-drawer-open {
   cursor: pointer;
   font-size: 13px;
   color: var(--text-muted);
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .panel-action-btn:hover {
@@ -167,7 +167,7 @@ body.notification-drawer-open {
   line-height: 1;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .panel-close-btn:hover {
@@ -196,7 +196,7 @@ body.notification-drawer-open {
   gap: 6px;
   padding: 10px 12px;
   border-right: 1px solid var(--border-color);
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast);
 }
 
 .summary-stat:last-child {
@@ -268,7 +268,7 @@ body.notification-drawer-open {
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   white-space: nowrap;
 }
 
@@ -331,7 +331,7 @@ body.notification-drawer-open {
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   appearance: none;
   background-image: var(--select-arrow);
   background-repeat: no-repeat;
@@ -360,7 +360,7 @@ body.notification-drawer-open {
   color: var(--text-muted);
   font-size: 12px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   flex-shrink: 0;
 }
 
@@ -397,7 +397,7 @@ body.notification-drawer-open {
   padding: 8px 10px;
   margin-bottom: 4px;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   overflow: hidden;
 }
 
@@ -545,7 +545,7 @@ body.notification-drawer-open {
   height: 100%;
   background: var(--warning-color);
   border-radius: 2px;
-  transition: width 0.3s ease;
+  transition: width var(--transition-normal);
   position: relative;
   overflow: hidden;
 }
@@ -663,7 +663,7 @@ body.notification-drawer-open {
   color: var(--text-secondary);
   font-size: 16px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
   box-shadow: 0 2px 8px var(--shadow-sm);
   z-index: 10;
 }

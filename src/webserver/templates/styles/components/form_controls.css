@@ -489,7 +489,7 @@ input[type="radio"]:disabled {
   background: white;
   border-radius: 50%;
   box-shadow: 0 1px 3px rgb(0, 0, 0, 0.2);
-  transition: transform 0.2s ease;
+  transition: transform var(--transition-base);
 }
 
 /* Checked state */
@@ -527,7 +527,7 @@ input[type="radio"]:disabled {
   color: var(--text-secondary);
   cursor: pointer;
   user-select: none;
-  transition: color 0.15s ease;
+  transition: color var(--transition-fast);
 }
 
 .toggle input:checked ~ .toggle-label {
@@ -584,7 +584,7 @@ input[type="radio"]:disabled {
   font-size: 16px;
   line-height: 1;
   pointer-events: none;
-  transition: color 0.15s ease;
+  transition: color var(--transition-fast);
 }
 
 .search-wrapper input {

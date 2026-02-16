@@ -37,7 +37,7 @@
   border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 14px;
-  transition: border-color 0.15s ease;
+  transition: border-color var(--transition-fast);
 }
 
 .links-info-card:hover {
@@ -206,7 +206,7 @@
   border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 14px;
-  transition: border-color 0.15s ease;
+  transition: border-color var(--transition-fast);
 }
 
 .links-section-card:hover {
@@ -248,7 +248,7 @@
   border: 1px solid var(--border-color);
   border-radius: 6px;
   text-decoration: none;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   font-size: 0.75rem;
   color: var(--text-primary);
 }
@@ -270,7 +270,7 @@
   font-size: 0.65rem !important;
   color: var(--text-muted) !important;
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--transition-fast);
 }
 
 .links-explorer-item:hover .link-external-icon,
@@ -295,7 +295,7 @@
   border: 1px solid var(--border-color);
   border-radius: 4px;
   text-decoration: none;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .links-official-item:hover {
@@ -335,7 +335,7 @@
   border: 1px solid var(--border-color);
   border-radius: 4px;
   text-decoration: none;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .links-social-item:hover {
@@ -413,7 +413,7 @@
   border: 1px solid var(--border-color);
   border-radius: 8px;
   text-decoration: none;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
   cursor: pointer;
 }
 

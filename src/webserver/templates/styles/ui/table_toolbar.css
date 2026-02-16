@@ -343,7 +343,7 @@
   border-radius: 999px;
   background: var(--border-color);
   border: 1px solid var(--border-color);
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
 }
 
 .table-toolbar-switch__slider::before {
@@ -356,7 +356,7 @@
   background: var(--bg-primary);
   border-radius: 50%;
   box-shadow: 0 1px 3px rgb(15, 23, 42, 0.25);
-  transition: transform 0.2s ease;
+  transition: transform var(--transition-base);
 }
 
 .table-toolbar-switch__input:checked + .table-toolbar-switch__slider {
@@ -410,7 +410,7 @@
   line-height: 1.5;
   height: 38px;
   box-sizing: border-box;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
 }
 
 /* Select-specific styles with chevron */
@@ -481,7 +481,7 @@
   height: 18px;
   font-size: 0.85em;
   cursor: pointer;
-  transition: color 0.2s ease;
+  transition: color var(--transition-base);
 }
 
 .table-toolbar-input__clear {
@@ -524,7 +524,7 @@
   box-sizing: border-box;
   cursor: pointer;
   border: 1px solid var(--border-color);
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
   white-space: nowrap;
 }
 
@@ -805,7 +805,7 @@
   height: 18px;
   font-size: 0.85em;
   cursor: pointer;
-  transition: color 0.2s ease;
+  transition: color var(--transition-base);
 }
 
 .toolbar-search__clear:hover,

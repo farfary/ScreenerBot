@@ -176,7 +176,7 @@
   font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
   white-space: nowrap;
   user-select: none;
 }
@@ -301,7 +301,7 @@
   color: var(--text-primary);
   font-size: 1rem;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
   user-select: none;
 }
 
@@ -364,7 +364,7 @@
   font-weight: 500;
   color: var(--text-primary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   white-space: nowrap;
   user-select: none;
 }

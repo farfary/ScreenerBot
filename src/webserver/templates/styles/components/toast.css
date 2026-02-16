@@ -163,7 +163,7 @@
     transparent 70%
   );
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition: opacity var(--transition-normal);
 }
 
 .toast:hover .toast__icon::before {
@@ -587,7 +587,7 @@
 @media (prefers-reduced-motion: reduce) {
   .toast {
     animation: none;
-    transition: opacity 0.2s ease;
+    transition: opacity var(--transition-base);
   }
 
   .toast--visible {
@@ -595,7 +595,7 @@
   }
 
   .toast--exiting {
-    transition: opacity 0.2s ease;
+    transition: opacity var(--transition-base);
   }
 
   .toast:hover {

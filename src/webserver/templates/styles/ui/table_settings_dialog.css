@@ -71,7 +71,7 @@
   border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   flex-shrink: 0;
 }
 
@@ -167,7 +167,7 @@
   line-height: 1;
   user-select: none;
   opacity: 0.5;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--transition-fast);
 }
 
 .table-settings-column-item:hover .table-settings-drag-handle {
@@ -351,7 +351,7 @@ body.table-settings-open {
   background: var(--input-bg);
   color: var(--text-primary);
   font-size: 0.9rem;
-  transition: border-color 0.15s ease;
+  transition: border-color var(--transition-fast);
 }
 
 .table-settings-search:focus {

@@ -60,7 +60,7 @@
   font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .settings-update-btn:hover {
@@ -423,7 +423,7 @@
   height: 100%;
   background: linear-gradient(90deg, var(--primary-color), #58c4dc);
   border-radius: var(--radius-sm);
-  transition: width 0.3s ease;
+  transition: width var(--transition-normal);
   position: relative;
 }
 
@@ -507,7 +507,7 @@
   font-size: var(--font-size-base);
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
   white-space: nowrap;
 }
 

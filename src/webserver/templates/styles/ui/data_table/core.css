@@ -3,7 +3,7 @@
 /* Table fade during loading */
 .data-table-wrapper.is-loading .data-table tbody {
   opacity: 0.45;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-base);
   pointer-events: none;
 }
 
@@ -274,7 +274,7 @@
   white-space: nowrap;
   position: relative;
   user-select: none;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
   box-sizing: border-box; /* Make width include padding and borders */
 }
 
@@ -310,7 +310,7 @@
 .dt-sort-icon {
   font-size: 0.75rem;
   opacity: 0.4;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-base);
 }
 
 .data-table th.sortable:hover .dt-sort-icon {
@@ -349,7 +349,7 @@ body.dt-column-resizing * {
   color: var(--text-secondary);
   cursor: grab;
   user-select: none;
-  transition: color 0.2s ease;
+  transition: color var(--transition-base);
 }
 
 .dt-column-drag-handle:hover {
@@ -367,7 +367,7 @@ body.dt-column-resizing * {
   padding: 8px 10px;
   cursor: pointer;
   border-radius: 6px;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   user-select: none;
   box-sizing: border-box;
 }
@@ -408,7 +408,7 @@ body.dt-column-resizing * {
   height: 100%;
   cursor: col-resize;
   background: transparent;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
   z-index: 2;
 }
 
@@ -421,7 +421,7 @@ body.dt-column-resizing * {
   width: 2px;
   height: 60%;
   background: transparent;
-  transition: background 0.2s ease;
+  transition: background var(--transition-base);
 }
 
 .dt-resize-handle:hover,
@@ -438,7 +438,7 @@ body.dt-column-resizing * {
 /* Table body */
 .data-table tbody tr {
   border-bottom: 1px solid var(--border-color);
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   min-height: 44px;
 }
 
@@ -471,7 +471,7 @@ body.dt-column-resizing * {
   padding: 8px 12px;
   color: var(--text-primary);
   border-bottom: 1px solid var(--border-color);
-  transition: color 0.15s ease;
+  transition: color var(--transition-fast);
   overflow-wrap: break-word;
   max-width: none;
   box-sizing: border-box; /* Make width include padding and borders */

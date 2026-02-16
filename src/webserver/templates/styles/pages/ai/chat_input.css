@@ -163,7 +163,7 @@
 
 #chat-input::placeholder {
   color: var(--text-muted);
-  transition: color 0.2s ease;
+  transition: color var(--transition-base);
 }
 
 #chat-input:focus,
@@ -395,7 +395,7 @@
   font-size: 0.6875rem;
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
-  transition: color 0.2s ease;
+  transition: color var(--transition-base);
 }
 
 .char-count:empty {

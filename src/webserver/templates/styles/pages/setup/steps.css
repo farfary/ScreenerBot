@@ -168,7 +168,7 @@
   border-radius: 12px;
   align-items: flex-start;
   overflow: hidden;
-  transition: all 0.3s ease;
+  transition: all var(--transition-normal);
 }
 
 .setup-verification-item:hover {
@@ -246,7 +246,7 @@
   background: rgb(88 166 255 / 0.1);
   border-radius: 12px;
   flex-shrink: 0;
-  transition: all 0.3s ease;
+  transition: all var(--transition-normal);
 }
 
 .setup-verification-icon i {
@@ -630,7 +630,7 @@
   border-radius: 4px;
   color: var(--text-secondary, #8b949e);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .wallet-copy-btn:hover {

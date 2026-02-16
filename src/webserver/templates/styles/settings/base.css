@@ -13,7 +13,7 @@
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-base);
   pointer-events: none;
   padding: 20px;
 }
@@ -134,7 +134,7 @@
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
   letter-spacing: 0.01em;
 }
 
@@ -165,7 +165,7 @@
   color: var(--text-secondary);
   font-size: 1.2rem;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
 }
 
 .settings-close-btn:hover {
@@ -213,7 +213,7 @@
   font-size: 0.9rem;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
   text-align: left;
   position: relative;
 }
@@ -223,7 +223,7 @@
   width: 18px;
   text-align: center;
   opacity: 0.7;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--transition-fast);
 }
 
 .settings-nav-item:hover {
@@ -367,7 +367,7 @@
   gap: 20px;
   padding: 16px 20px;
   background: var(--bg-secondary);
-  transition: background 0.2s ease;
+  transition: background var(--transition-base);
 }
 
 .settings-field:not(:last-child) {
@@ -445,7 +445,7 @@
   background-image: var(--select-arrow);
   background-repeat: no-repeat;
   background-position: right 8px center;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .settings-select:hover {

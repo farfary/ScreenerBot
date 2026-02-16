@@ -225,7 +225,7 @@
   border: none;
   border-radius: var(--floating-item-radius);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   user-select: none;
   text-align: left;
   font-family: inherit;
@@ -292,7 +292,7 @@
   justify-content: center;
   font-size: 1rem;
   color: var(--text-secondary);
-  transition: color 0.15s ease;
+  transition: color var(--transition-fast);
 }
 
 .floating-item:hover .floating-item-icon,

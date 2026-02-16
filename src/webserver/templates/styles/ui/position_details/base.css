@@ -343,7 +343,7 @@
   border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   text-decoration: none;
   flex-shrink: 0;
 }
@@ -409,7 +409,7 @@
   border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   flex-shrink: 0;
 }
 
@@ -454,7 +454,7 @@
   font-weight: 500;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   white-space: nowrap;
   flex-shrink: 0;
   position: relative;
@@ -463,7 +463,7 @@
 .position-details-dialog .tab-button i {
   font-size: 14px;
   opacity: 0.6;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--transition-fast);
 }
 
 .position-details-dialog .tab-button:hover {

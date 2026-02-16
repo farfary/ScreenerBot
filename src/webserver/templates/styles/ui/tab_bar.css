@@ -40,7 +40,7 @@
   --tab-bar-sub-font-size: 0.9em;
 
   /* Transitions */
-  --tab-bar-transition: all 0.2s ease;
+  --tab-bar-transition: all var(--transition-base);
 }
 
 /* ============================================================================
@@ -145,7 +145,7 @@
   font-size: 0.85em;
   line-height: 1;
   opacity: 0.8;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--transition-fast);
 }
 
 .sub-tab:hover {
@@ -359,7 +359,7 @@
   z-index: 10;
   opacity: 0;
   pointer-events: none;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-base);
   padding: 0;
   color: var(--text-secondary);
   font-size: 1rem;
@@ -399,7 +399,7 @@
   pointer-events: none;
   z-index: 5;
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-base);
 }
 
 .tab-scroll-wrapper::before {
@@ -451,7 +451,7 @@
   pointer-events: none;
   z-index: 5;
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-base);
 }
 
 .tabs-scroll-wrapper::before {

@@ -88,7 +88,7 @@
   border-radius: var(--radius-sm, 6px);
   color: var(--text-secondary, #8b949e);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .pool-selector-close:hover {
@@ -184,7 +184,7 @@
   border: 1px solid rgb(255, 255, 255, 0.06);
   border-radius: var(--radius-md, 8px);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .pool-item:hover,

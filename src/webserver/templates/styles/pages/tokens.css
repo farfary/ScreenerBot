@@ -172,7 +172,7 @@
   border-radius: 6px;
   border: 1px solid transparent;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 /* Buy button - green accent */
@@ -328,7 +328,7 @@
   height: 100%;
   width: var(--progress, 0%);
   border-radius: 2px;
-  transition: width 0.3s ease;
+  transition: width var(--transition-normal);
 }
 
 .backfill-bar.progress-complete::after {

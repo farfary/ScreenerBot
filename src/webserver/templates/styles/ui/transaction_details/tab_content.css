@@ -246,7 +246,7 @@
   gap: 12px;
   padding: 12px 14px;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast);
 }
 
 .transaction-details-dialog .instruction-card-header:hover {
@@ -287,7 +287,7 @@
 
 .transaction-details-dialog .instruction-expand {
   color: var(--text-muted);
-  transition: transform 0.2s ease;
+  transition: transform var(--transition-base);
 }
 
 .transaction-details-dialog .instruction-card.expanded .instruction-expand {
@@ -624,7 +624,7 @@
   font-weight: 600;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .transaction-details-dialog .raw-copy-btn:hover,
@@ -702,7 +702,7 @@
   border-radius: 4px;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   padding: 0;
 }
 

@@ -485,7 +485,7 @@
   align-items: center;
   padding: 10px 16px;
   border-bottom: 1px solid var(--border-color);
-  transition: background 0.2s ease;
+  transition: background var(--transition-base);
 }
 
 .fee-row:hover {

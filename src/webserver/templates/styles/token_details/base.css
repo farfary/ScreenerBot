@@ -216,7 +216,7 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--transition-fast);
 }
 
 .badge:hover {
@@ -394,7 +394,7 @@
   border: 1px solid transparent;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
   text-transform: uppercase;
   letter-spacing: 0.04em;
   white-space: nowrap;
@@ -457,7 +457,7 @@
   border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   text-decoration: none;
   flex-shrink: 0;
 }
@@ -489,7 +489,7 @@
   border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   flex-shrink: 0;
   margin-left: 4px;
 }
@@ -566,7 +566,7 @@
 .tab-button i {
   font-size: 15px;
   opacity: 0.6;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-base);
 }
 
 .tab-button:hover {

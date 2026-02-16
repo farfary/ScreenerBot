@@ -275,7 +275,7 @@
   font-size: 0.85rem;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   position: relative;
 }
 
@@ -440,7 +440,7 @@
   color: var(--link-color);
   font-size: 0.8rem;
   text-decoration: none;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .ta-link:hover {
@@ -569,7 +569,7 @@
     var(--error-color)
   );
   border-radius: 4px;
-  transition: width 0.3s ease;
+  transition: width var(--transition-normal);
 }
 
 .ta-holder-pct {

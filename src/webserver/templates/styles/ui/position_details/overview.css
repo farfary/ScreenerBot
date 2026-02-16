@@ -458,7 +458,7 @@
   border: 1px solid transparent;
   border-radius: var(--radius-md);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   white-space: nowrap;
   min-height: 48px;
 }
@@ -849,7 +849,7 @@
   font-size: 0.7rem;
   font-weight: 500;
   text-decoration: none;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .position-details-dialog .pdd-external-link:hover {

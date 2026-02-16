@@ -103,7 +103,7 @@
   align-items: center;
   gap: 0.5rem;
   opacity: 0.4;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-base);
 }
 
 .setup-step.active,
@@ -265,7 +265,7 @@
     transparent 40%
   );
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition: opacity var(--transition-normal);
   pointer-events: none;
 }
 
@@ -332,7 +332,7 @@
   font-family: var(--font-mono, "JetBrains Mono", monospace);
   font-size: 0.8125rem;
   resize: none;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   min-height: 80px;
 }
 
@@ -356,7 +356,7 @@
   font-size: 1rem;
   color: var(--text-muted, #8b949e);
   opacity: 0.6;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--transition-fast);
   padding: 0.25rem;
 }
 
@@ -479,7 +479,7 @@
   border: 1px solid var(--border-color, #30363d);
   border-radius: 4px;
   text-decoration: none;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .setup-provider-chip:hover {

@@ -56,7 +56,7 @@
   color: var(--primary-color);
   font-size: 1.35rem;
   position: relative;
-  transition: transform 0.2s ease;
+  transition: transform var(--transition-base);
 }
 
 .page-badge i {
@@ -133,7 +133,7 @@
 }
 
 .header-actions .btn {
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .header-actions .btn:hover {
@@ -221,7 +221,7 @@
   border-radius: var(--radius-lg);
   background: var(--card-bg);
   border: 1px solid var(--border-color);
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
   text-align: center;
   position: relative;
   overflow: hidden;
@@ -236,7 +236,7 @@
   height: 3px;
   background: linear-gradient(90deg, transparent, var(--primary-alpha-30), transparent);
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-base);
 }
 
 .stat-card:hover {
@@ -260,7 +260,7 @@
   color: var(--primary-color);
   font-size: 1.25rem;
   flex-shrink: 0;
-  transition: transform 0.2s ease;
+  transition: transform var(--transition-base);
 }
 
 .stat-icon i {
@@ -360,7 +360,7 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   overflow: hidden;
-  transition: border-color 0.2s ease;
+  transition: border-color var(--transition-base);
 }
 
 .token-holdings-table:hover {
@@ -458,7 +458,7 @@
   border-radius: var(--radius-lg);
   overflow: hidden;
   min-height: 280px;
-  transition: border-color 0.2s ease;
+  transition: border-color var(--transition-base);
 }
 
 #secondaries-table-container:hover,
@@ -497,7 +497,7 @@
 }
 
 .wallets-table tbody tr {
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast);
 }
 
 .wallets-table tbody tr:hover {
@@ -623,7 +623,7 @@
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .copy-btn:hover {
@@ -642,7 +642,7 @@
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   font-size: 0.75rem;
 }
 

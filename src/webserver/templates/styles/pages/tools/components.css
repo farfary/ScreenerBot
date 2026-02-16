@@ -18,7 +18,7 @@
   border-radius: var(--radius-lg);
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
 }
 
 .stat-card:hover {
@@ -348,7 +348,7 @@
   border-radius: var(--radius-lg);
   background: var(--bg-secondary);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
 }
 
 .image-upload-area:hover {
@@ -396,7 +396,7 @@
   white-space: nowrap;
   opacity: 0;
   visibility: hidden;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   pointer-events: none;
   z-index: var(--z-header);
   box-shadow: 0 4px 12px var(--shadow-md);
@@ -568,7 +568,7 @@
   color: var(--text-secondary);
   cursor: pointer;
   font-size: 0.875rem;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
 }
 
 .tool-favorites-trigger:hover {
@@ -635,7 +635,7 @@
   padding: var(--spacing-sm);
   border-bottom: 1px solid var(--border-color);
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast);
 }
 
 .favorite-item:last-child {
@@ -696,7 +696,7 @@
   cursor: pointer;
   padding: var(--spacing-xs);
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--transition-fast);
 }
 
 .favorite-item:hover .favorite-delete-btn {

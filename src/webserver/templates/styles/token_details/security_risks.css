@@ -19,7 +19,7 @@
   background: var(--bg-primary);
   border-radius: var(--radius-lg);
   border-left: 3px solid var(--border-color);
-  transition: transform 0.15s ease;
+  transition: transform var(--transition-fast);
 }
 
 .risk-item:hover {
@@ -296,7 +296,7 @@
   border: 1px solid var(--border-color);
   border-radius: 6px;
   font-size: 0.75rem;
-  transition: border-color 0.15s ease;
+  transition: border-color var(--transition-fast);
   animation: slideInRow 0.3s ease-out forwards;
   opacity: 0;
   animation-delay: calc(var(--i) * 0.05s);

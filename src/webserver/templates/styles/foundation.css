@@ -158,6 +158,14 @@
   --radius-md: 6px;
   --radius-lg: 8px;
   --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-full: 9999px;
+
+  /* Transition Timing */
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+  --transition-normal: 300ms ease;
+  --transition-slow: 500ms ease;
 
   /* Z-Index Scale - Layering hierarchy
      Full z-index system is defined in base/floating.css
@@ -316,6 +324,14 @@
   --radius-md: 6px;
   --radius-lg: 8px;
   --radius-xl: 12px;
+  --radius-2xl: 16px;
+  --radius-full: 9999px;
+
+  /* Transition Timing */
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+  --transition-normal: 300ms ease;
+  --transition-slow: 500ms ease;
 
   /* Typography System */
   --font-sans: -apple-system, blinkmacsystemfont, "Segoe UI", roboto, sans-serif;

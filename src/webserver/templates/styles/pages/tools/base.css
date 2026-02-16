@@ -124,7 +124,7 @@
   font-family: inherit;
   text-align: left;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   position: relative;
 }
 
@@ -163,7 +163,7 @@
   background: var(--bg-secondary);
   color: var(--text-secondary);
   font-size: 0.95rem;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   flex-shrink: 0;
 }
 

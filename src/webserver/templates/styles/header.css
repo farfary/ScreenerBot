@@ -15,7 +15,7 @@
   user-select: none;
   -webkit-app-region: drag; /* Enable native drag for this region */
   app-region: drag;
-  transition: background-color 0.3s ease;
+  transition: background-color var(--transition-normal);
 }
 
 /* Show title bar background on macOS in Electron */
@@ -197,7 +197,7 @@
   border-radius: 0;
   border: none;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
 }
 
 .header-card:hover {
@@ -478,7 +478,7 @@
   color: var(--text-primary);
   font-size: 14px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
 }
 
 .header-action-btn:hover {
@@ -536,7 +536,7 @@
   pointer-events: none;
   z-index: 5;
   opacity: 0;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-base);
 }
 
 .header-row-2-wrapper::before {
@@ -587,7 +587,7 @@
   color: var(--text-secondary);
   text-decoration: none;
   border-bottom: 3px solid transparent;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
   white-space: nowrap;
 }
 
@@ -654,7 +654,7 @@
   font-family: var(--font-data);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   letter-spacing: 0.01em;
   border-right: 1px solid var(--ticker-border, rgb(255, 255, 255, 0.06));
   position: relative;
@@ -675,7 +675,7 @@
   display: inline-flex;
   align-items: center;
   opacity: 0.6;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--transition-fast);
 }
 
 .ticker-segment:hover .ticker-icon {

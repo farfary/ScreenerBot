@@ -22,7 +22,7 @@
   width: 4px;
   background: var(--primary-color);
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition: opacity var(--transition-normal);
 }
 
 .condition-card:hover {
@@ -92,7 +92,7 @@
   background: linear-gradient(135deg, var(--primary-color-alpha), transparent);
   color: var(--primary-color);
   flex-shrink: 0;
-  transition: all 0.3s ease;
+  transition: all var(--transition-normal);
 }
 
 .condition-card:hover .condition-icon {
@@ -207,7 +207,7 @@
   inset: 0;
   background-color: var(--border-color);
   border-radius: 22px;
-  transition: all 0.3s ease;
+  transition: all var(--transition-normal);
 }
 
 .status-indicator::before {
@@ -219,7 +219,7 @@
   bottom: 3px;
   background-color: white;
   border-radius: 50%;
-  transition: transform 0.3s ease;
+  transition: transform var(--transition-normal);
   box-shadow: 0 1px 3px rgb(0, 0, 0, 0.2);
 }
 
@@ -252,7 +252,7 @@
 .card-summary {
   padding: 0 1.25rem 0.75rem;
   border-bottom: 1px solid transparent;
-  transition: all 0.3s ease;
+  transition: all var(--transition-normal);
 }
 
 .condition-card.expanded .card-summary {
@@ -292,7 +292,7 @@
   background: var(--surface-color);
   color: var(--text-muted);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
   font-size: 0.85rem;
 }
 

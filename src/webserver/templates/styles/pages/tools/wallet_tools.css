@@ -417,7 +417,7 @@
   gap: var(--spacing-sm);
   padding: var(--spacing-sm) var(--spacing-md);
   border-bottom: 1px solid var(--border-alpha-10);
-  transition: background-color 0.15s ease;
+  transition: background-color var(--transition-fast);
 }
 
 .burn-token-row:last-child {

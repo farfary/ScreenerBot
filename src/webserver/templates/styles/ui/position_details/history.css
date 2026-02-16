@@ -15,7 +15,7 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
   padding: var(--spacing-md);
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast);
 }
 
 .position-details-dialog .pdd-timeline-item:hover {
@@ -122,7 +122,7 @@
   padding: 4px 8px;
   background: var(--bg-primary);
   border-radius: var(--radius-sm);
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .position-details-dialog .pdd-signature-text:hover {
@@ -132,7 +132,7 @@
 .position-details-dialog .pdd-signature-link {
   color: var(--text-secondary);
   text-decoration: none;
-  transition: color 0.15s ease;
+  transition: color var(--transition-fast);
 }
 
 .position-details-dialog .pdd-signature-link:hover {

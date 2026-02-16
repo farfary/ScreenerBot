@@ -355,7 +355,7 @@
   font-size: 0.925rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s ease;
+  transition: background var(--transition-base);
 }
 
 .config-category-header:hover {

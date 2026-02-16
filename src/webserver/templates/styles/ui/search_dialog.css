@@ -69,7 +69,7 @@
   border: 1px solid rgb(255, 255, 255, 0.1);
   border-radius: var(--radius-md, 8px);
   padding: var(--spacing-sm, 8px) var(--spacing-md, 16px);
-  transition: border-color 0.15s ease;
+  transition: border-color var(--transition-fast);
 }
 
 .search-input-wrapper:focus-within {
@@ -267,7 +267,7 @@
   flex-shrink: 0;
   margin-left: var(--spacing-sm, 8px);
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--transition-fast);
 }
 
 .search-result:hover .search-result-actions,

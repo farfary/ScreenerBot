@@ -124,7 +124,7 @@ body.trade-action-dialog-open {
   border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   flex-shrink: 0;
 }
 
@@ -257,7 +257,7 @@ body.trade-action-dialog-open {
   font-size: 0.875rem;
   font-weight: 600;
   text-align: center;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -347,7 +347,7 @@ body.trade-action-dialog-open {
   font-size: 1rem;
   font-weight: 600;
   font-family: var(--font-data, monospace);
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .trade-action-input::placeholder {
@@ -427,7 +427,7 @@ body.trade-action-dialog-open {
   font-size: 0.9375rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   border: 1px solid transparent;
   display: flex;
   align-items: center;
@@ -846,7 +846,7 @@ body.trade-action-dialog-open {
   font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   border: 1px solid transparent;
 }
 

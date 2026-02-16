@@ -38,7 +38,7 @@
   display: flex;
   gap: 0.5rem;
   align-items: flex-start;
-  transition: box-shadow 0.2s ease;
+  transition: box-shadow var(--transition-base);
 }
 
 .metric-card:hover {
@@ -161,7 +161,7 @@
   display: flex;
   gap: 0.625rem;
   align-items: flex-start;
-  transition: box-shadow 0.2s ease;
+  transition: box-shadow var(--transition-base);
 }
 
 .health-card:hover {
@@ -292,7 +292,7 @@
   border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 1rem;
-  transition: box-shadow 0.2s ease;
+  transition: box-shadow var(--transition-base);
 }
 
 .position-summary-card:hover {

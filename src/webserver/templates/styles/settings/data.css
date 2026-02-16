@@ -100,7 +100,7 @@
   height: 100%;
   background: var(--link-color);
   border-radius: 3px;
-  transition: width 0.3s ease;
+  transition: width var(--transition-normal);
 }
 
 .data-db-size {
@@ -168,7 +168,7 @@
 .config-info-value::after {
   content: " 📋";
   opacity: 0;
-  transition: opacity 0.15s ease;
+  transition: opacity var(--transition-fast);
 }
 
 .config-info-value:hover::after {

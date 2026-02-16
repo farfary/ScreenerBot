@@ -164,7 +164,7 @@
   font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   text-transform: uppercase;
   letter-spacing: 0.03em;
   text-decoration: none;
@@ -191,7 +191,7 @@
   border-radius: 6px;
   color: var(--text-secondary, #8b949e);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .billboard-close-btn:hover {
@@ -303,7 +303,7 @@
   color: var(--text-secondary, #8b949e);
   cursor: pointer;
   z-index: 10;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   box-shadow: 0 4px 12px rgb(0, 0, 0, 0.4);
 }
 
@@ -344,7 +344,7 @@
   border: 1px solid var(--border-color, #30363d);
   border-radius: var(--radius-lg, 8px);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
   flex-shrink: 0;
   min-width: 160px;
   max-width: 180px;
@@ -526,7 +526,7 @@
   color: var(--text-secondary, #8b949e);
   text-decoration: none;
   border-radius: var(--radius-sm, 4px);
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .billboard-cat-social:hover {
@@ -550,7 +550,7 @@
   color: var(--text-secondary, #8b949e);
   cursor: pointer;
   border-radius: var(--radius-sm, 4px);
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .billboard-cat-copy-btn:hover {

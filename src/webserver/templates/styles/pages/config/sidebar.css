@@ -97,7 +97,7 @@
 .config-section-label span.icon {
   font-size: 1.1rem;
   color: var(--text-secondary);
-  transition: color 0.2s ease;
+  transition: color var(--transition-base);
 }
 
 .config-section-item:hover .config-section-label span.icon {

@@ -236,7 +236,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
 }
 
 .trader-action-bar .btn-primary {
@@ -294,7 +294,7 @@
   border-radius: 6px;
   padding: 0.875rem;
   box-shadow: 0 1px 3px rgb(0, 0, 0, 0.1);
-  transition: box-shadow 0.2s ease;
+  transition: box-shadow var(--transition-base);
 }
 
 .card-base:hover {
@@ -311,7 +311,7 @@
   padding: 0.75rem; /* Reduced from var(--trader-card-padding) which is 1rem */
   border: 1px solid var(--trader-card-border);
   box-shadow: var(--trader-card-shadow);
-  transition: box-shadow 0.2s ease;
+  transition: box-shadow var(--transition-base);
 }
 
 .stats-section:hover {
@@ -546,7 +546,7 @@
   color: var(--text-primary);
   font-size: 14px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
   min-width: 100px;
 }
 

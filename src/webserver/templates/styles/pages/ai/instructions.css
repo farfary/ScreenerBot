@@ -40,7 +40,7 @@
   border: 1px solid var(--border-color);
   border-radius: 6px;
   color: var(--text-primary);
-  transition: border-color 0.15s ease;
+  transition: border-color var(--transition-fast);
 }
 
 .search-input:focus {
@@ -81,7 +81,7 @@
   align-items: center;
   padding: 10px 16px;
   border-bottom: 1px solid rgb(128, 128, 128, 0.1);
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast);
   cursor: grab;
   min-height: 40px;
 }
@@ -214,7 +214,7 @@
   cursor: pointer;
   font-size: 14px;
   line-height: 1;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   flex-shrink: 0;
 }
 
@@ -259,7 +259,7 @@
   align-items: center;
   padding: 16px 20px;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast);
 }
 
 .templates-header:hover {
@@ -282,7 +282,7 @@
 
 .templates-toggle {
   color: var(--text-secondary);
-  transition: transform 0.2s ease;
+  transition: transform var(--transition-base);
 }
 
 .templates-section.collapsed .templates-toggle {
@@ -292,7 +292,7 @@
 .templates-body {
   border-top: 1px solid var(--border-color);
   padding: 16px 20px;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
 }
 
 .templates-section.collapsed .templates-body {
@@ -316,7 +316,7 @@
   border: 1px solid var(--border-color);
   border-radius: 8px;
   padding: 14px;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   cursor: pointer;
 }
 
@@ -356,7 +356,7 @@
   cursor: pointer;
   color: var(--text-primary);
   font-size: 13px;
-  transition: background 0.15s ease;
+  transition: background var(--transition-fast);
 }
 
 .context-menu-item:hover {

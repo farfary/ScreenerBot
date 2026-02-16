@@ -164,7 +164,7 @@
   gap: 0.5rem;
   padding: 0.375rem 0.625rem;
   border-radius: 6px;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
 }
 
 .control-item.auto-trader-control {
@@ -198,7 +198,7 @@
   border-radius: 4px;
   color: var(--text-muted);
   opacity: 0.7;
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-base);
   margin-left: auto;
   pointer-events: none;
 }
@@ -217,7 +217,7 @@
   border-radius: 6px;
   font-size: 1rem;
   color: var(--text-secondary);
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
 }
 
 .auto-trader-control .control-icon {
@@ -399,7 +399,7 @@
   font-size: 0.65rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .period-tab:hover {
@@ -430,7 +430,7 @@
   flex-direction: column;
   gap: 0.25rem;
   border: 1px solid rgb(255 255 255 / 0.04);
-  transition: border-color 0.15s ease;
+  transition: border-color var(--transition-fast);
 }
 
 .analytics-item:hover {
@@ -621,7 +621,7 @@
   height: 100%;
   background: var(--link-color);
   border-radius: 2px;
-  transition: width 0.3s ease;
+  transition: width var(--transition-normal);
 }
 
 .mini-progress-bar.warning {
@@ -861,7 +861,7 @@
 /* Smooth transition when data loads */
 .wallet-hero,
 .dashboard-card {
-  transition: opacity 0.2s ease;
+  transition: opacity var(--transition-base);
 }
 
 .wallet-hero.loaded,

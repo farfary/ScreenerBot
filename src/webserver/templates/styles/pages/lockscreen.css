@@ -184,7 +184,7 @@
   font-family: var(--font-mono);
   font-weight: 600;
   color: var(--text-primary);
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .lockscreen-pin-digit.filled {
@@ -229,7 +229,7 @@
   font-weight: 600;
   color: var(--text-primary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   user-select: none;
 }
 
@@ -296,7 +296,7 @@
   font-size: 1rem;
   font-family: var(--font-mono);
   color: var(--text-primary);
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   outline: none;
 }
 
@@ -324,7 +324,7 @@
   border-radius: var(--radius-md);
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .lockscreen-password-toggle:hover {
@@ -354,7 +354,7 @@
   letter-spacing: 0.05em;
   color: white;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .lockscreen-password-submit:hover {

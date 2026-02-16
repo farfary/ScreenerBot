@@ -221,7 +221,7 @@
     transparent 40%
   );
   opacity: 0;
-  transition: opacity 0.3s ease;
+  transition: opacity var(--transition-normal);
 }
 
 .slide-feature:hover {
@@ -314,7 +314,7 @@
   font-weight: 500;
   cursor: pointer;
   padding: 0.5rem 1rem;
-  transition: color 0.2s ease;
+  transition: color var(--transition-base);
   justify-self: start;
 }
 

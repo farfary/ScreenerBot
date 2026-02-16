@@ -160,7 +160,7 @@
   border-radius: 4px;
   background: transparent;
   color: var(--text-secondary);
-  transition: color 0.15s ease;
+  transition: color var(--transition-fast);
   flex-shrink: 0;
 }
 
@@ -442,7 +442,7 @@
   background: var(--bg-tertiary);
   border: 1px solid var(--border-color);
   border-radius: 6px;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
 }
 
 .metric-card:hover {
@@ -495,7 +495,7 @@
   gap: 0.75rem;
   padding: 0.75rem;
   border-bottom: 1px solid var(--border-color);
-  transition: background 0.2s ease;
+  transition: background var(--transition-base);
 }
 
 .decision-item:last-child {

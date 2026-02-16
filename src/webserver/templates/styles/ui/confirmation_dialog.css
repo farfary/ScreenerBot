@@ -125,7 +125,7 @@
   border: 1px solid rgb(255, 255, 255, 0.08);
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
 }
 
 .confirmation-dialog__checkbox:hover {
@@ -163,7 +163,7 @@
   border: none;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
   letter-spacing: 0.01em;
   line-height: 1.4;
   min-width: 100px;

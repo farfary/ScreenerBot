@@ -108,7 +108,7 @@
   background: var(--primary-color);
   cursor: pointer;
   box-shadow: 0 2px 6px rgb(0, 0, 0, 0.3);
-  transition: transform 0.15s ease;
+  transition: transform var(--transition-fast);
 }
 
 .range-slider input[type="range"]::-webkit-slider-thumb:hover {
@@ -122,7 +122,7 @@
   background: var(--primary-color);
   cursor: pointer;
   box-shadow: 0 2px 6px rgb(0, 0, 0, 0.3);
-  transition: transform 0.15s ease;
+  transition: transform var(--transition-fast);
   border: none;
 }
 
@@ -155,7 +155,7 @@
   color: var(--text-primary);
   cursor: pointer;
   appearance: none;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .custom-select select:hover {
@@ -191,7 +191,7 @@
   border-radius: 8px;
   color: var(--text-primary);
   min-width: 120px;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
 }
 
 .text-input:hover {
@@ -297,7 +297,7 @@
   color: var(--text-primary);
   font-size: var(--input-font-size, 0.875rem);
   font-family: var(--font-mono);
-  transition: border-color 0.2s ease;
+  transition: border-color var(--transition-base);
 }
 
 .form-control:focus {

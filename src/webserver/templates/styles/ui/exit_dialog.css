@@ -240,7 +240,7 @@
   border-radius: 10px;
   font-size: 20px;
   color: var(--primary-color, #58a6ff);
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
 }
 
 .exit-dialog__option:hover .exit-dialog__option-icon {
@@ -290,7 +290,7 @@
   color: var(--text-muted, #6e7681);
   opacity: 0;
   transform: translateX(-8px);
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
 }
 
 .exit-dialog__option:hover .exit-dialog__option-arrow {
@@ -322,7 +322,7 @@
   border: 1px solid rgb(255, 255, 255, 0.1);
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all var(--transition-base);
 }
 
 .exit-dialog__cancel:hover {

@@ -317,7 +317,7 @@
   font-weight: 500;
   color: var(--primary-color);
   text-decoration: none;
-  transition: color 0.15s ease;
+  transition: color var(--transition-fast);
 }
 
 .hint-popover__learn-more:hover {
@@ -338,7 +338,7 @@
   color: var(--text-muted);
   cursor: pointer;
   user-select: none;
-  transition: color 0.15s ease;
+  transition: color var(--transition-fast);
 }
 
 .hint-popover__dismiss:hover {
