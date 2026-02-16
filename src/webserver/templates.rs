@@ -198,6 +198,14 @@ pub const SETTINGS_SECURITY_TAB_UI: &str =
 pub const SETTINGS_DATA_TAB_UI: &str = include_str!("templates/scripts/ui/settings/data_tab.js");
 pub const SETTINGS_UPDATES_TAB_UI: &str =
     include_str!("templates/scripts/ui/settings/updates_tab.js");
+pub const SETTINGS_INTERFACE_TAB_UI: &str =
+    include_str!("templates/scripts/ui/settings/interface_tab.js");
+pub const SETTINGS_NAVIGATION_TAB_UI: &str =
+    include_str!("templates/scripts/ui/settings/navigation_tab.js");
+pub const SETTINGS_LICENSES_TAB_UI: &str =
+    include_str!("templates/scripts/ui/settings/licenses_tab.js");
+pub const SETTINGS_TELEGRAM_TAB_UI: &str =
+    include_str!("templates/scripts/ui/settings/telegram_tab.js");
 pub const NOTIFICATION_PANEL_UI: &str = include_str!("templates/scripts/ui/notification_panel.js");
 pub const HINT_POPOVER_UI: &str = include_str!("templates/scripts/ui/hint_popover.js");
 pub const SEARCH_DIALOG_UI: &str = include_str!("templates/scripts/ui/search_dialog.js");
