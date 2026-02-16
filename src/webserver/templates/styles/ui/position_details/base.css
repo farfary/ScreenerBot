@@ -1,0 +1,549 @@
+/* Position Details Dialog - Base Structure */
+
+/* =============================================================================
+   BASE DIALOG STRUCTURE - Full Screen Desktop App Style
+   Platform-aware layout:
+   - Browser/Windows/Linux: No title bar offset, full height
+   - macOS Electron: 28px title bar for traffic lights + window drag
+   Status bar (24px) at bottom
+   ============================================================================= */
+
+.position-details-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: flex;
+  flex-direction: column;
+  opacity: 0;
+  transition: opacity 0.25s ease;
+  pointer-events: none;
+}
+
+.position-details-dialog.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Title bar area - hidden by default (browser/Windows/Linux) */
+.position-details-dialog::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 0;
+  background: var(--bg-secondary);
+  z-index: 1;
+  transition: height 0.15s ease;
+}
+
+/* macOS Electron: Show title bar background */
+.electron-macos .position-details-dialog::before {
+  height: 28px;
+}
+
+/* =============================================================================
+   BACKDROP
+   ============================================================================= */
+
+.position-details-dialog .dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgb(0, 0, 0, 0.6);
+  z-index: 0;
+}
+
+/* macOS Electron: Backdrop starts below title bar */
+.electron-macos .position-details-dialog .dialog-backdrop {
+  top: 28px;
+}
+
+/* =============================================================================
+   CONTENT CONTAINER
+   ============================================================================= */
+
+.position-details-dialog .dialog-container {
+  position: relative;
+  margin-top: 0;
+  margin-bottom: 24px;
+  background: var(--bg-primary);
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  width: 100%;
+  flex: 1;
+  max-width: none;
+  max-height: none;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: pdd-fade-in 0.25s ease-out;
+  z-index: 2;
+}
+
+/* macOS Electron: Content starts below title bar */
+.electron-macos .position-details-dialog .dialog-container {
+  margin-top: 28px;
+}
+
+@keyframes pdd-fade-in {
+  0% {
+    opacity: 0;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+/* =============================================================================
+   HEADER
+   ============================================================================= */
+
+.position-details-dialog .dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  gap: 16px;
+  min-height: 64px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+}
+
+.position-details-dialog .header-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 16px;
+}
+
+.position-details-dialog .header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 0 0 auto;
+  min-width: 200px;
+}
+
+.position-details-dialog .header-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.position-details-dialog .header-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.position-details-dialog .header-logo .logo-placeholder {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.position-details-dialog .header-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.position-details-dialog .header-title .title-main {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.position-details-dialog .header-title .title-sub {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 400;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.position-details-dialog .header-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Header Center - Price Section */
+.position-details-dialog .header-center {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.position-details-dialog .header-price {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.position-details-dialog .price-loading {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.position-details-dialog .price-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.position-details-dialog .price-sol-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.position-details-dialog .price-sol {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+.position-details-dialog .price-sol-unit {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.position-details-dialog .price-label {
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.position-details-dialog .pnl-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+}
+
+.position-details-dialog .pnl-block.pdd-positive {
+  background: var(--success-alpha-10);
+}
+
+.position-details-dialog .pnl-block.pdd-negative {
+  background: var(--danger-alpha-10);
+}
+
+.position-details-dialog .pnl-value {
+  font-size: 1rem;
+  font-weight: 600;
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+.position-details-dialog .pdd-positive .pnl-value {
+  color: var(--success-color);
+}
+
+.position-details-dialog .pdd-negative .pnl-value {
+  color: var(--danger);
+}
+
+.position-details-dialog .pnl-percent {
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.position-details-dialog .pdd-positive .pnl-percent {
+  color: var(--success-color);
+}
+
+.position-details-dialog .pdd-negative .pnl-percent {
+  color: var(--danger);
+}
+
+.position-details-dialog .price-metrics {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-left: 16px;
+  border-left: 1px solid var(--border-color);
+}
+
+.position-details-dialog .metric-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.position-details-dialog .metric-label {
+  font-size: 0.625rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.position-details-dialog .metric-value {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+/* Header Right Section */
+.position-details-dialog .header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.position-details-dialog .header-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.position-details-dialog .header-actions .action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+  flex-shrink: 0;
+}
+
+.position-details-dialog .header-actions .action-btn:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-color);
+  color: var(--text-primary);
+}
+
+.position-details-dialog .header-actions .action-btn i {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* Badges */
+.position-details-dialog .pdd-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.position-details-dialog .pdd-badge-success {
+  background: var(--success-alpha-20);
+  color: var(--success-color);
+}
+
+.position-details-dialog .pdd-badge-secondary {
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.position-details-dialog .pdd-badge-info {
+  background: var(--primary-alpha-20);
+  color: var(--primary-color);
+}
+
+.position-details-dialog .pdd-badge-warning {
+  background: var(--warning-alpha-20);
+  color: var(--warning-color);
+}
+
+/* Close Button */
+.position-details-dialog .dialog-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  min-height: 30px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.position-details-dialog .dialog-close:hover {
+  background: var(--danger-alpha-15);
+  border-color: var(--danger-alpha-30);
+  color: var(--danger);
+}
+
+.position-details-dialog .dialog-close svg,
+.position-details-dialog .dialog-close i {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+/* =============================================================================
+   TAB BAR
+   ============================================================================= */
+
+.position-details-dialog .dialog-tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.position-details-dialog .tab-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.position-details-dialog .tab-button i {
+  font-size: 14px;
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}
+
+.position-details-dialog .tab-button:hover {
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+}
+
+.position-details-dialog .tab-button:hover i {
+  opacity: 0.9;
+}
+
+.position-details-dialog .tab-button.active {
+  color: var(--primary-color);
+  background: var(--primary-alpha-10);
+  font-weight: 600;
+}
+
+.position-details-dialog .tab-button.active i {
+  opacity: 1;
+}
+
+/* Active indicator line */
+.position-details-dialog .tab-button.active::after {
+  content: "";
+  position: absolute;
+  bottom: -6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 2px;
+  background: var(--primary-color);
+  border-radius: 2px;
+}
+
+/* =============================================================================
+   BODY & TAB CONTENT
+   ============================================================================= */
+
+.position-details-dialog .dialog-body {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+  background: var(--bg-primary);
+}
+
+.position-details-dialog .tab-content {
+  position: absolute;
+  inset: 0;
+  padding: 16px;
+  overflow-y: auto;
+  display: none;
+}
+
+.position-details-dialog .tab-content.active {
+  display: block;
+}
+
+/* Loading spinner */
+.position-details-dialog .loading-spinner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 200px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  gap: var(--spacing-sm);
+}
+
+.position-details-dialog .loading-spinner::before {
+  content: "";
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: pdd-spin 0.8s linear infinite;
+}
+
+@keyframes pdd-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

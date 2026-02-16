@@ -22,7 +22,9 @@ const TRANSACTIONS_PAGE_STYLES: &str = include_str!("templates/styles/pages/tran
 const EVENTS_PAGE_STYLES: &str = include_str!("templates/styles/pages/events.css");
 const TOKENS_PAGE_STYLES: &str = include_str!("templates/styles/pages/tokens.css");
 const POSITIONS_PAGE_STYLES: &str = include_str!("templates/styles/pages/positions.css");
-const FILTERING_PAGE_STYLES: &str = include_str!("templates/styles/pages/filtering.css");
+const FILTERING_BASE_STYLES: &str = include_str!("templates/styles/pages/filtering/base.css");
+const FILTERING_RESULTS_STYLES: &str =
+    include_str!("templates/styles/pages/filtering/results.css");
 const CONFIG_PAGE_STYLES: &str = include_str!("templates/styles/pages/config.css");
 const STRATEGIES_PAGE_STYLES: &str = include_str!("templates/styles/pages/strategies.css");
 const TRADER_PAGE_STYLES: &str = include_str!("templates/styles/pages/trader.css");
@@ -66,8 +68,12 @@ const TOKEN_DETAILS_CONTENT_STYLES: &str =
     include_str!("templates/styles/token_details/positions_pools_links.css");
 const TRANSACTION_DETAILS_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/transaction_details_dialog.css");
-const POSITION_DETAILS_DIALOG_STYLES: &str =
-    include_str!("templates/styles/ui/position_details_dialog.css");
+const POSITION_DETAILS_BASE_STYLES: &str =
+    include_str!("templates/styles/ui/position_details/base.css");
+const POSITION_DETAILS_OVERVIEW_STYLES: &str =
+    include_str!("templates/styles/ui/position_details/overview.css");
+const POSITION_DETAILS_TRANSACTIONS_STYLES: &str =
+    include_str!("templates/styles/ui/position_details/transactions.css");
 const SETTINGS_BASE_STYLES: &str = include_str!("templates/styles/settings/base.css");
 const SETTINGS_SECURITY_STYLES: &str = include_str!("templates/styles/settings/security.css");
 const SETTINGS_UPDATES_STYLES: &str = include_str!("templates/styles/settings/updates.css");
@@ -314,7 +320,9 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         TOKEN_DETAILS_SECURITY_STYLES,
         TOKEN_DETAILS_CONTENT_STYLES,
         TRANSACTION_DETAILS_DIALOG_STYLES,
-        POSITION_DETAILS_DIALOG_STYLES,
+        POSITION_DETAILS_BASE_STYLES,
+        POSITION_DETAILS_OVERVIEW_STYLES,
+        POSITION_DETAILS_TRANSACTIONS_STYLES,
         SETTINGS_BASE_STYLES,
         SETTINGS_SECURITY_STYLES,
         SETTINGS_UPDATES_STYLES,
@@ -344,7 +352,8 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         EVENTS_PAGE_STYLES,
         TOKENS_PAGE_STYLES,
         POSITIONS_PAGE_STYLES,
-        FILTERING_PAGE_STYLES,
+        FILTERING_BASE_STYLES,
+        FILTERING_RESULTS_STYLES,
         CONFIG_PAGE_STYLES,
         STRATEGIES_PAGE_STYLES,
         TRADER_PAGE_STYLES,
@@ -372,7 +381,10 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         ("events", EVENTS_PAGE_STYLES),
         ("tokens", TOKENS_PAGE_STYLES),
         ("positions", POSITIONS_PAGE_STYLES),
-        ("filtering", FILTERING_PAGE_STYLES),
+        (
+            "filtering",
+            &[FILTERING_BASE_STYLES, FILTERING_RESULTS_STYLES].join("\n"),
+        ),
         ("config", CONFIG_PAGE_STYLES),
         ("strategies", STRATEGIES_PAGE_STYLES),
         ("trader", TRADER_PAGE_STYLES),
