@@ -7,6 +7,14 @@ import { ConfirmationDialog } from "../ui/confirmation_dialog.js";
 import { requestManager } from "../core/request_manager.js";
 import { ActionBar, ActionBarManager } from "../ui/action_bar.js";
 import { playToggleOn, playToggleOff, playError } from "../core/sounds.js";
+import { createExampleUpdaters } from "./trader/examples.js";
+import { createTraderControls } from "./trader/controls.js";
+import {
+  fetchFeatureStatus,
+  isTabUsable,
+  applyFeatureStatusToTabs,
+  handleFeatureRestrictedTab,
+} from "./trader/features.js";
 
 // Sub-tabs configuration
 const SUB_TABS = [
@@ -22,59 +30,6 @@ const SUB_TABS = [
 
 // Constants
 const DEFAULT_TAB = "stats";
-
-// =============================================================================
-// Feature Status Constants
-// =============================================================================
-
-/**
- * Feature status values from the API
- */
-const FEATURE_STATUS = {
-  AVAILABLE: "available",
-  COMING_SOON: "coming_soon",
-  BETA: "beta",
-  DISABLED: "disabled",
-};
-
-/**
- * Maps tab IDs to feature API keys (trading features)
- */
-const TAB_TO_FEATURE_MAP = {
-  roi: "roi_exit",
-  "trailing-stop": "trailing_stop",
-  "stop-loss": "stop_loss",
-  "time-rules": "time_override",
-  dca: "dca",
-  "strategy-control": "strategies",
-  // These tabs don't have feature flags - always available
-  stats: null,
-  "general-settings": null,
-};
-
-/**
- * Status display configuration for badges
- */
-const STATUS_CONFIG = {
-  [FEATURE_STATUS.COMING_SOON]: {
-    label: "Coming Soon",
-    cssClass: "coming-soon",
-    tooltip: "This feature is coming soon",
-    message: "This feature is coming soon and not yet available.",
-  },
-  [FEATURE_STATUS.BETA]: {
-    label: "Beta",
-    cssClass: "beta",
-    tooltip: "Beta feature - may have bugs",
-    message: null, // Beta features are usable
-  },
-  [FEATURE_STATUS.DISABLED]: {
-    label: "Disabled",
-    cssClass: "disabled",
-    tooltip: "This feature is currently disabled",
-    message: "This feature is currently disabled.",
-  },
-};
 
 function createLifecycle() {
   // Component references
@@ -98,141 +53,19 @@ function createLifecycle() {
     strategies: [],
   };
 
-  // ============================================================================
-  // Feature Status Functions
-  // ============================================================================
-
-  /**
-   * Fetch trading feature status from the API
-   * @returns {Promise<Object>} Feature status by feature key
-   */
-  async function fetchFeatureStatus() {
-    try {
-      const response = await fetch("/api/features");
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const data = await response.json();
-      return data.trading || {};
-    } catch (error) {
-      console.warn("[Trader] Failed to fetch feature status, defaulting to available:", error);
-      return {};
-    }
-  }
-
-  /**
-   * Get the feature status for a tab
-   * @param {string} tabId - The tab ID (e.g., "roi", "stop-loss")
-   * @returns {string} The status ("available", "coming_soon", "beta", "disabled")
-   */
-  function getTabFeatureStatus(tabId) {
-    const featureKey = TAB_TO_FEATURE_MAP[tabId];
-    // Tabs without feature mapping are always available
-    if (!featureKey) {
-      return FEATURE_STATUS.AVAILABLE;
-    }
-    if (!tradingFeatures[featureKey]) {
-      return FEATURE_STATUS.AVAILABLE;
-    }
-    return tradingFeatures[featureKey];
-  }
-
-  /**
-   * Check if a tab is usable (can be clicked/used)
-   * @param {string} tabId - The tab ID
-   * @returns {boolean} True if tab is available or beta
-   */
-  function isTabUsable(tabId) {
-    const status = getTabFeatureStatus(tabId);
-    return status === FEATURE_STATUS.AVAILABLE || status === FEATURE_STATUS.BETA;
-  }
-
-  /**
-   * Apply feature status to all tab buttons
-   */
-  function applyFeatureStatusToTabs() {
-    const tabButtons = $$(".sub-tab[data-tab-id]");
-
-    tabButtons.forEach((button) => {
-      const tabId = button.getAttribute("data-tab-id");
-      const status = getTabFeatureStatus(tabId);
-
-      // Remove any existing status badges
-      const existingBadge = button.querySelector(".tab-status-badge");
-      if (existingBadge) {
-        existingBadge.remove();
-      }
-
-      // Remove existing status classes
-      button.classList.remove(
-        "tab-feature-disabled",
-        "tab-feature-beta",
-        "tab-feature-coming-soon"
-      );
-      button.removeAttribute("data-feature-status");
-
-      // If available, no modifications needed
-      if (status === FEATURE_STATUS.AVAILABLE) {
-        return;
-      }
-
-      // Get status configuration
-      const config = STATUS_CONFIG[status];
-      if (!config) return;
-
-      // Add data attribute for styling
-      button.setAttribute("data-feature-status", status);
-
-      // Add appropriate class
-      if (status === FEATURE_STATUS.DISABLED) {
-        button.classList.add("tab-feature-disabled");
-      } else if (status === FEATURE_STATUS.BETA) {
-        button.classList.add("tab-feature-beta");
-      } else if (status === FEATURE_STATUS.COMING_SOON) {
-        button.classList.add("tab-feature-coming-soon");
-      }
-
-      // Add status badge for non-available/non-beta statuses
-      if (status !== FEATURE_STATUS.BETA) {
-        const badge = document.createElement("span");
-        badge.className = `tab-status-badge ${config.cssClass}`;
-        badge.textContent = config.label;
-        button.appendChild(badge);
-      } else {
-        // Beta gets a small indicator badge
-        const badge = document.createElement("span");
-        badge.className = `tab-status-badge ${config.cssClass}`;
-        badge.textContent = config.label;
-        button.appendChild(badge);
-      }
-    });
-  }
-
-  /**
-   * Handle click on a feature-restricted tab
-   * @param {string} tabId - The tab ID being clicked
-   * @returns {boolean} True if tab switch should proceed
-   */
-  function handleFeatureRestrictedTab(tabId) {
-    const status = getTabFeatureStatus(tabId);
-
-    // Available and beta tabs can proceed
-    if (status === FEATURE_STATUS.AVAILABLE || status === FEATURE_STATUS.BETA) {
-      return true;
-    }
-
-    // Show toast for restricted tabs
-    const config = STATUS_CONFIG[status];
-    if (config && config.message) {
-      Utils.showToast({
-        type: "warning",
-        title: config.label,
-        message: config.message,
-      });
-    }
-
-    return false;
-  }
+  // Initialize sub-modules
+  const examples = createExampleUpdaters({ $, Utils });
+  const controls = createTraderControls({
+    state,
+    $,
+    Utils,
+    requestManager,
+    ConfirmationDialog,
+    playToggleOn,
+    playToggleOff,
+    playError,
+    eventCleanups,
+  });
 
   // ============================================================================
   // Helper Functions
@@ -245,275 +78,6 @@ function createLifecycle() {
     if (!element) return;
     element.addEventListener(event, handler);
     eventCleanups.push(() => element.removeEventListener(event, handler));
-  }
-
-  /**
-   * Convert time duration to human-readable format
-   */
-  function convertTimeToReadable(duration, unit) {
-    const units = {
-      seconds: { seconds: 1, minutes: 60, hours: 3600, days: 86400 },
-      minutes: { seconds: 1 / 60, minutes: 1, hours: 60, days: 1440 },
-      hours: { seconds: 1 / 3600, minutes: 1 / 60, hours: 1, days: 24 },
-      days: { seconds: 1 / 86400, minutes: 1 / 1440, hours: 1 / 24, days: 1 },
-    };
-
-    if (!units[unit]) return `${duration} ${unit}`;
-
-    const conversions = units[unit];
-    const totalSeconds = duration / conversions.seconds;
-
-    // Find the best unit for display
-    if (totalSeconds >= 86400 && totalSeconds % 86400 === 0) {
-      const days = totalSeconds / 86400;
-      return `${days} day${days !== 1 ? "s" : ""}`;
-    }
-    if (totalSeconds >= 3600 && totalSeconds % 3600 === 0) {
-      const hours = totalSeconds / 3600;
-      return `${hours} hour${hours !== 1 ? "s" : ""}`;
-    }
-    if (totalSeconds >= 60 && totalSeconds % 60 === 0) {
-      const minutes = totalSeconds / 60;
-      return `${minutes} minute${minutes !== 1 ? "s" : ""}`;
-    }
-    return `${totalSeconds} second${totalSeconds !== 1 ? "s" : ""}`;
-  }
-
-  /**
-   * Update time conversion hint display
-   */
-  function updateTimeConversionHint() {
-    const durationInput = $("#time-max-hold");
-    const unitSelect = $("#time-unit");
-    const hintText = $("#time-conversion-hint");
-    const exampleDuration = $("#time-example-duration");
-
-    if (!durationInput || !unitSelect || !hintText) return;
-
-    const duration = parseFloat(durationInput.value) || 168;
-    const unit = unitSelect.value || "hours";
-
-    const readable = convertTimeToReadable(duration, unit);
-    hintText.textContent = `${duration} ${unit} = ${readable}`;
-
-    if (exampleDuration) {
-      exampleDuration.textContent = readable;
-    }
-  }
-
-  /**
-   * Update ROI example display
-   */
-  function updateRoiExample() {
-    const roiInput = $("#roi-target");
-    const impactText = $("#roi-impact");
-    const exampleProfit = $("#roi-example-profit");
-    const exampleTarget = $("#roi-example-target");
-    const exampleSummary = $("#roi-example-summary");
-
-    if (!roiInput) return;
-
-    const value = parseFloat(roiInput.value) || 20;
-
-    // Update impact text
-    if (impactText) {
-      impactText.textContent = `Exit at +${value}% profit`;
-    }
-
-    // Update visual example
-    if (exampleProfit) {
-      exampleProfit.textContent = `+${value}% profit`;
-    }
-    if (exampleTarget) {
-      const targetValue = (0.01 * (1 + value / 100)).toFixed(4);
-      exampleTarget.textContent = `${targetValue} SOL`;
-    }
-    if (exampleSummary) {
-      exampleSummary.textContent = `+${value}%`;
-    }
-  }
-
-  /**
-   * Update time override loss example display
-   */
-  function updateTimeLossExample() {
-    const lossInput = $("#time-loss-threshold");
-    const impactText = $("#time-loss-impact");
-    const exampleLoss = $("#time-example-loss");
-
-    if (!lossInput) return;
-
-    const value = parseFloat(lossInput.value) || -40;
-    const absValue = Math.abs(value);
-
-    // Update impact text
-    if (impactText) {
-      impactText.textContent = `Exit if down ${absValue}% or more after hold period`;
-    }
-
-    // Update visual example
-    if (exampleLoss) {
-      exampleLoss.textContent = `${value}%`;
-    }
-  }
-
-  /**
-   * Update stop loss visual example calculations
-   */
-  function updateStopLossExample() {
-    const thresholdInput = $("#stop-loss-threshold");
-    const minHoldInput = $("#stop-loss-min-hold");
-    const allowPartialInput = $("#stop-loss-allow-partial");
-
-    if (!thresholdInput) return;
-
-    const threshold = parseFloat(thresholdInput.value) || 50;
-    const minHold = parseInt(minHoldInput?.value || "0", 10);
-    const allowPartial = allowPartialInput?.checked || false;
-
-    // Update impact text
-    const impactText = $("#stop-loss-impact");
-    if (impactText) {
-      impactText.textContent = `Exit when down ${threshold}% from entry`;
-    }
-
-    // Update example values
-    const exampleEntry = $("#stop-loss-example-entry");
-    const exampleTrigger = $("#stop-loss-example-trigger");
-    const exampleExit = $("#stop-loss-example-exit");
-    const exampleLoss = $("#stop-loss-example-loss");
-
-    // Example: Entry at 0.01 SOL
-    const entryPrice = 0.01;
-    const exitPrice = entryPrice * (1 - threshold / 100);
-
-    if (exampleEntry) exampleEntry.textContent = `${entryPrice.toFixed(6)} SOL`;
-    if (exampleTrigger) exampleTrigger.textContent = `-${threshold}%`;
-    if (exampleExit) exampleExit.textContent = `${exitPrice.toFixed(6)} SOL`;
-    if (exampleLoss) exampleLoss.textContent = `-${threshold}%`;
-
-    // Update hold time display
-    const holdTimeDisplay = $("#stop-loss-hold-time-display");
-    if (holdTimeDisplay) {
-      if (minHold === 0) {
-        holdTimeDisplay.textContent = "Immediate";
-      } else if (minHold < 60) {
-        holdTimeDisplay.textContent = `${minHold}s delay`;
-      } else if (minHold < 3600) {
-        holdTimeDisplay.textContent = `${Math.round(minHold / 60)}m delay`;
-      } else {
-        holdTimeDisplay.textContent = `${(minHold / 3600).toFixed(1)}h delay`;
-      }
-    }
-
-    // Update partial exit indicator
-    const partialIndicator = $("#stop-loss-partial-indicator");
-    if (partialIndicator) {
-      partialIndicator.textContent = allowPartial ? "Partial exits allowed" : "Full position exit";
-    }
-  }
-
-  /**
-   * Update trailing stop visual example calculations
-   */
-  function updateTrailingStopExample() {
-    const activationInput = $("#trail-activation");
-    const distanceInput = $("#trail-distance");
-
-    if (!activationInput || !distanceInput) return;
-
-    const activation = parseFloat(activationInput.value) || 15;
-    const distance = parseFloat(distanceInput.value) || 5;
-
-    // Example scenario: Entry at 1.00 SOL
-    const entryPrice = 1.0;
-    const activationPrice = entryPrice * (1 + activation / 100);
-    const peakPrice = activationPrice * 1.2; // +20% from activation
-    const exitPrice = peakPrice * (1 - distance / 100);
-    const protectedProfit = ((exitPrice - entryPrice) / entryPrice) * 100;
-
-    // Update timeline values
-    const stepEntry = $("#example-entry");
-    const stepActivation = $("#example-activation");
-    const stepPeak = $("#example-peak");
-    const stepExit = $("#example-exit");
-
-    if (stepEntry) stepEntry.textContent = `${entryPrice.toFixed(4)} SOL`;
-    if (stepActivation) {
-      stepActivation.textContent = `${activationPrice.toFixed(4)} SOL`;
-      const activationDetail = $("#example-activation-pct");
-      if (activationDetail) activationDetail.textContent = `+${activation}% profit`;
-    }
-    if (stepPeak) {
-      stepPeak.textContent = `${peakPrice.toFixed(4)} SOL`;
-      const peakDetail = $("#example-peak-pct");
-      if (peakDetail) {
-        const gainFromEntry = ((peakPrice - entryPrice) / entryPrice) * 100;
-        peakDetail.textContent = `+${gainFromEntry.toFixed(1)}% profit`;
-      }
-    }
-    if (stepExit) {
-      stepExit.textContent = `${exitPrice.toFixed(4)} SOL`;
-      const exitDetail = $("#example-exit-pct");
-      if (exitDetail) exitDetail.textContent = `+${protectedProfit.toFixed(1)}% final`;
-    }
-
-    // Update summary
-    const summaryProtected = $("#example-protected");
-    const summaryAvoided = $("#example-avoided");
-    if (summaryProtected) {
-      summaryProtected.textContent = `${protectedProfit.toFixed(1)}%`;
-    }
-    if (summaryAvoided) {
-      const avoidedLoss = ((peakPrice - exitPrice) / peakPrice) * 100;
-      summaryAvoided.textContent = `${avoidedLoss.toFixed(1)}%`;
-    }
-
-    // Update impact indicators
-    const activationIndicator = $("#activation-indicator");
-    const distanceIndicator = $("#distance-indicator");
-    const activationImpact = $("#activation-impact-text");
-    const distanceImpact = $("#distance-impact-text");
-
-    if (activationIndicator) {
-      activationIndicator.innerHTML =
-        activation >= 20
-          ? '<i class="icon-triangle-alert"></i>'
-          : '<i class="icon-circle-check"></i>';
-      activationIndicator.style.background =
-        activation >= 20 ? "var(--warning-alpha-10)" : "var(--success-alpha-10)";
-      activationIndicator.style.color = activation >= 20 ? "var(--warning)" : "var(--success)";
-    }
-
-    if (activationImpact) {
-      if (activation < 10) {
-        activationImpact.textContent = "Activates quickly - good for volatile tokens";
-      } else if (activation < 20) {
-        activationImpact.textContent = "Balanced activation - suitable for most scenarios";
-      } else {
-        activationImpact.textContent = "Delayed activation - may miss protection window";
-      }
-    }
-
-    if (distanceIndicator) {
-      distanceIndicator.innerHTML =
-        distance >= 10
-          ? '<i class="icon-triangle-alert"></i>'
-          : '<i class="icon-circle-check"></i>';
-      distanceIndicator.style.background =
-        distance >= 10 ? "var(--warning-alpha-10)" : "var(--success-alpha-10)";
-      distanceIndicator.style.color = distance >= 10 ? "var(--warning)" : "var(--success)";
-    }
-
-    if (distanceImpact) {
-      if (distance < 5) {
-        distanceImpact.textContent = "Tight protection - may exit on minor dips";
-      } else if (distance < 10) {
-        distanceImpact.textContent = "Balanced protection - good for most situations";
-      } else {
-        distanceImpact.textContent = "Loose protection - allows larger pullbacks";
-      }
-    }
   }
 
   /**
@@ -1004,12 +568,12 @@ function createLifecycle() {
 
     // Load preview when switching to stop loss tab
     if (tabId === "stop-loss") {
-      updateStopLossExample();
+      examples.updateStopLossExample();
     }
 
     // Load preview when switching to trailing stop tab
     if (tabId === "trailing-stop") {
-      updateTrailingStopExample();
+      examples.updateTrailingStopExample();
       loadTrailingStopStats();
       loadTrailingStopPreview();
     }
@@ -1040,9 +604,9 @@ function createLifecycle() {
       updateConfigOverview();
 
       // Update visual examples with loaded values
-      updateStopLossExample();
-      updateRoiExample();
-      updateTimeLossExample();
+      examples.updateStopLossExample();
+      examples.updateRoiExample();
+      examples.updateTimeLossExample();
     } catch (error) {
       console.error("[Trader] Failed to load config:", error);
       Utils.showToast({
@@ -1201,7 +765,7 @@ function createLifecycle() {
     }
 
     // Update time conversion hint
-    updateTimeConversionHint();
+    examples.updateTimeConversionHint();
 
     // General Settings
     const maxPositions = $("#max-positions");
@@ -1674,401 +1238,19 @@ function createLifecycle() {
     }
   }
 
-  // ============================================================================
-  // Auto Trader Toggle Functions
-  // ============================================================================
-
-  /**
-   * Update all auto trader status bars on the page
-   */
-  function updateAutoTraderStatusBars(status) {
-    const isRunning = status?.running === true;
-    const isAvailable = status !== undefined && status !== null;
-    const statusText = isRunning ? "Running" : "Stopped";
-    const statusAttr = isRunning ? "running" : "stopped";
-    const toggleLabel = isRunning ? "ON" : "OFF";
-
-    // Update stats tab status bar
-    const statsBar = $("#trader-status-bar");
-    if (statsBar) {
-      statsBar.setAttribute("data-status", statusAttr);
-      const statsStatusText = $("#trader-status-text");
-      if (statsStatusText) statsStatusText.textContent = statusText;
-      const statsToggle = $("#stats-trader-toggle");
-      if (statsToggle) {
-        statsToggle.checked = isRunning;
-        statsToggle.disabled = !isAvailable;
-      }
-      const statsToggleLabel = $("#stats-toggle-label");
-      if (statsToggleLabel) statsToggleLabel.textContent = toggleLabel;
-    }
-
-    // Update settings tab status bar
-    const settingsBar = $("#settings-trader-status-bar");
-    if (settingsBar) {
-      settingsBar.setAttribute("data-status", statusAttr);
-      const settingsStatusText = $("#settings-trader-status-text");
-      if (settingsStatusText) settingsStatusText.textContent = statusText;
-      const settingsToggle = $("#settings-trader-toggle");
-      if (settingsToggle) {
-        settingsToggle.checked = isRunning;
-        settingsToggle.disabled = !isAvailable;
-      }
-      const settingsToggleLabel = $("#settings-toggle-label");
-      if (settingsToggleLabel) settingsToggleLabel.textContent = toggleLabel;
-    }
-  }
-
-  /**
-   * Toggle auto trader on/off
-   */
-  async function toggleAutoTrader(shouldStart, _triggerElement) {
-    // Disable all toggles while processing
-    const allToggles = [$("#stats-trader-toggle"), $("#settings-trader-toggle")];
-    allToggles.forEach((toggle) => {
-      if (toggle) toggle.disabled = true;
-    });
-
-    const endpoint = shouldStart ? "/api/trader/start" : "/api/trader/stop";
-
-    try {
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-
-      if (!response.ok) {
-        throw new Error(`Failed to ${shouldStart ? "start" : "stop"} trader`);
-      }
-
-      // Play sound feedback
-      if (shouldStart) {
-        playToggleOn();
-      } else {
-        playToggleOff();
-      }
-
-      // Show toast
-      Utils.showToast(`Auto Trader ${shouldStart ? "started" : "stopped"}`, "success");
-
-      // Update status bars
-      updateAutoTraderStatusBars({ running: shouldStart });
-    } catch (error) {
-      console.error("Toggle auto trader error:", error);
-      Utils.showToast(error.message, "error");
-      playError();
-
-      // Revert toggle states
-      updateAutoTraderStatusBars({ running: !shouldStart });
-    } finally {
-      // Re-enable all toggles
-      allToggles.forEach((toggle) => {
-        if (toggle) toggle.disabled = false;
-      });
-    }
-  }
-
-  /**
-   * Setup auto trader toggle event handlers
-   */
-  function setupAutoTraderToggles() {
-    const statsToggle = $("#stats-trader-toggle");
-    const settingsToggle = $("#settings-trader-toggle");
-
-    if (statsToggle) {
-      addTrackedListener(statsToggle, "change", (e) => {
-        toggleAutoTrader(e.target.checked, statsToggle);
-      });
-    }
-
-    if (settingsToggle) {
-      addTrackedListener(settingsToggle, "change", (e) => {
-        toggleAutoTrader(e.target.checked, settingsToggle);
-      });
-    }
-
-    // Initial fetch of trader status
-    fetchTraderStatus();
-  }
-
-  /**
-   * Fetch and update trader status
-   */
-  async function fetchTraderStatus() {
-    try {
-      const response = await fetch("/api/trader/status");
-      if (response.ok) {
-        const data = await response.json();
-        updateAutoTraderStatusBars(data);
-      }
-    } catch (error) {
-      console.warn("[Trader] Failed to fetch trader status:", error);
-    }
-  }
-
-  // ============================================================================
-  // Trading Controls (Force Stop, Monitor Toggles, Loss Limit)
-  // ============================================================================
-
-  /**
-   * Load trading controls status from API
-   */
-  async function loadControlsStatus() {
-    try {
-      // Load force stop status
-      const forceStopRes = await fetch("/api/trader/force-stop/status");
-      if (forceStopRes.ok) {
-        const forceStopData = await forceStopRes.json();
-        updateForceStopBanner(forceStopData.data);
-      }
-
-      // Load monitors status
-      const monitorsRes = await fetch("/api/trader/monitors/status");
-      if (monitorsRes.ok) {
-        const monitorsData = await monitorsRes.json();
-        updateMonitorControls(monitorsData.data);
-      }
-
-      // Load loss limit status
-      const lossLimitRes = await fetch("/api/trader/loss-limit/status");
-      if (lossLimitRes.ok) {
-        const lossLimitData = await lossLimitRes.json();
-        updateLossLimitPanel(lossLimitData.data);
-      }
-    } catch (err) {
-      console.error("[Trader] Failed to load controls status:", err);
-    }
-  }
-
-  /**
-   * Update force stop banner visibility and content
-   */
-  function updateForceStopBanner(data) {
-    const banner = $("#force-stop-banner");
-    const btn = $("#force-stop-btn");
-
-    if (!banner || !btn) return;
-
-    if (data && data.is_stopped) {
-      banner.style.display = "flex";
-      const reasonEl = $("#force-stop-reason");
-      if (reasonEl) {
-        reasonEl.textContent = data.reason || "Manual force stop";
-      }
-      btn.style.display = "none";
-    } else {
-      banner.style.display = "none";
-      btn.style.display = "flex";
-    }
-  }
-
-  /**
-   * Update monitor toggle controls
-   */
-  function updateMonitorControls(data) {
-    const entryToggle = $("#entry-monitor-toggle");
-    const exitToggle = $("#exit-monitor-toggle");
-    const entryStatus = $("#entry-monitor-status");
-    const exitStatus = $("#exit-monitor-status");
-
-    if (!data) return;
-
-    if (entryToggle) {
-      entryToggle.checked = data.entry_monitor?.enabled ?? false;
-      entryToggle.disabled = data.force_stopped ?? false;
-    }
-    if (exitToggle) {
-      exitToggle.checked = data.exit_monitor?.enabled ?? false;
-      exitToggle.disabled = data.force_stopped ?? false;
-    }
-
-    if (entryStatus) {
-      const running = data.entry_monitor?.running ?? false;
-      entryStatus.textContent = running ? "Running" : "Stopped";
-      entryStatus.className = "control-status " + (running ? "status-running" : "status-stopped");
-    }
-
-    if (exitStatus) {
-      const running = data.exit_monitor?.running ?? false;
-      exitStatus.textContent = running ? "Running" : "Stopped";
-      exitStatus.className = "control-status " + (running ? "status-running" : "status-stopped");
-    }
-  }
-
-  /**
-   * Update loss limit panel display
-   */
-  function updateLossLimitPanel(data) {
-    const panel = $("#loss-limit-panel");
-
-    if (!panel) return;
-
-    if (!data || !data.enabled) {
-      panel.style.display = "none";
-      return;
-    }
-
-    panel.style.display = "block";
-
-    const value = $("#loss-limit-value");
-    const progress = $("#loss-limit-progress");
-    const period = $("#loss-limit-period");
-    const status = $("#loss-limit-status");
-
-    if (value) {
-      const currentLoss = data.current_loss_sol?.toFixed(4) ?? "0.0000";
-      const limitSol = data.limit_sol?.toFixed(4) ?? "0.0000";
-      value.textContent = `${currentLoss} / ${limitSol} SOL`;
-    }
-
-    if (progress) {
-      const percent = Math.min(data.progress_percent ?? 0, 100);
-      progress.style.width = `${percent}%`;
-
-      progress.classList.remove("limit-exceeded", "limit-warning");
-      if (percent >= 100) {
-        progress.classList.add("limit-exceeded");
-      } else if (percent >= 75) {
-        progress.classList.add("limit-warning");
-      }
-    }
-
-    if (period) {
-      const remainingSecs = data.period_remaining_secs ?? 0;
-      const hours = Math.floor(remainingSecs / 3600);
-      const mins = Math.floor((remainingSecs % 3600) / 60);
-      period.textContent = `Resets in ${hours}h ${mins}m`;
-    }
-
-    if (status) {
-      if (data.is_limited) {
-        status.textContent = "LIMIT REACHED";
-        status.className = "loss-limit-status status-limited";
-      } else {
-        status.textContent = "";
-        status.className = "loss-limit-status";
-      }
-    }
-  }
-
-  /**
-   * Setup event handlers for trading controls
-   */
-  function setupControlsEventHandlers() {
-    // Force Stop button
-    const forceStopBtn = $("#force-stop-btn");
-    if (forceStopBtn) {
-      addTrackedListener(forceStopBtn, "click", async () => {
-        const result = await ConfirmationDialog.show({
-          title: "Force Stop Trading",
-          message: "This will immediately halt ALL trading operations. Continue?",
-          confirmLabel: "Stop Trading",
-          variant: "danger",
-        });
-        if (!result.confirmed) return;
-
-        try {
-          const res = await fetch("/api/trader/force-stop", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ reason: "Manual force stop from dashboard" }),
-          });
-          const data = await res.json();
-          if (data.success) {
-            Utils.showToast("Force stop activated", "warning");
-            playError();
-            await loadControlsStatus();
-          } else {
-            Utils.showToast(data.error || "Failed to activate force stop", "error");
-          }
-        } catch {
-          Utils.showToast("Failed to activate force stop", "error");
-        }
-      });
-    }
-
-    // Resume button
-    const resumeBtn = $("#resume-trading-btn");
-    if (resumeBtn) {
-      addTrackedListener(resumeBtn, "click", async () => {
-        try {
-          const res = await fetch("/api/trader/resume", { method: "POST" });
-          const data = await res.json();
-          if (data.success) {
-            Utils.showToast("Force stop cleared", "success");
-            playToggleOn();
-            await loadControlsStatus();
-          } else {
-            Utils.showToast(data.error || "Failed to resume trading", "error");
-          }
-        } catch {
-          Utils.showToast("Failed to resume trading", "error");
-        }
-      });
-    }
-
-    // Entry monitor toggle
-    const entryToggle = $("#entry-monitor-toggle");
-    if (entryToggle) {
-      addTrackedListener(entryToggle, "change", async (e) => {
-        try {
-          const res = await fetch("/api/trader/monitors/entry/toggle", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ enabled: e.target.checked }),
-          });
-          const data = await res.json();
-          if (!data.success) {
-            e.target.checked = !e.target.checked; // Revert
-            Utils.showToast("Failed to toggle entry monitor", "error");
-          } else {
-            e.target.checked ? playToggleOn() : playToggleOff();
-          }
-        } catch {
-          e.target.checked = !e.target.checked;
-          Utils.showToast("Failed to toggle entry monitor", "error");
-        }
-      });
-    }
-
-    // Exit monitor toggle
-    const exitToggle = $("#exit-monitor-toggle");
-    if (exitToggle) {
-      addTrackedListener(exitToggle, "change", async (e) => {
-        try {
-          const res = await fetch("/api/trader/monitors/exit/toggle", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ enabled: e.target.checked }),
-          });
-          const data = await res.json();
-          if (!data.success) {
-            e.target.checked = !e.target.checked; // Revert
-            Utils.showToast("Failed to toggle exit monitor", "error");
-          } else {
-            e.target.checked ? playToggleOn() : playToggleOff();
-          }
-        } catch {
-          e.target.checked = !e.target.checked;
-          Utils.showToast("Failed to toggle exit monitor", "error");
-        }
-      });
-    }
-  }
-
   /**
    * Setup form submission handlers
    * Note: Button handlers moved to ActionBar in configureActionBar()
    */
   function setupFormHandlers() {
     // Setup auto trader toggle handlers
-    setupAutoTraderToggles();
+    controls.setupAutoTraderToggles();
 
     // Stop loss threshold input listener
     const stopLossThreshold = $("#stop-loss-threshold");
     if (stopLossThreshold) {
       addTrackedListener(stopLossThreshold, "input", () => {
-        updateStopLossExample();
+        examples.updateStopLossExample();
       });
     }
 
@@ -2076,7 +1258,7 @@ function createLifecycle() {
     const stopLossMinHold = $("#stop-loss-min-hold");
     if (stopLossMinHold) {
       addTrackedListener(stopLossMinHold, "input", () => {
-        updateStopLossExample();
+        examples.updateStopLossExample();
       });
     }
 
@@ -2084,7 +1266,7 @@ function createLifecycle() {
     const stopLossAllowPartial = $("#stop-loss-allow-partial");
     if (stopLossAllowPartial) {
       addTrackedListener(stopLossAllowPartial, "change", () => {
-        updateStopLossExample();
+        examples.updateStopLossExample();
       });
     }
 
@@ -2092,7 +1274,7 @@ function createLifecycle() {
     const timeUnit = $("#time-unit");
     if (timeUnit) {
       addTrackedListener(timeUnit, "change", () => {
-        updateTimeConversionHint();
+        examples.updateTimeConversionHint();
       });
     }
 
@@ -2100,7 +1282,7 @@ function createLifecycle() {
     const timeMaxHold = $("#time-max-hold");
     if (timeMaxHold) {
       addTrackedListener(timeMaxHold, "input", () => {
-        updateTimeConversionHint();
+        examples.updateTimeConversionHint();
       });
     }
 
@@ -2108,7 +1290,7 @@ function createLifecycle() {
     const roiTarget = $("#roi-target");
     if (roiTarget) {
       addTrackedListener(roiTarget, "input", () => {
-        updateRoiExample();
+        examples.updateRoiExample();
       });
     }
 
@@ -2116,7 +1298,7 @@ function createLifecycle() {
     const timeLossThreshold = $("#time-loss-threshold");
     if (timeLossThreshold) {
       addTrackedListener(timeLossThreshold, "input", () => {
-        updateTimeLossExample();
+        examples.updateTimeLossExample();
       });
     }
 
@@ -2148,10 +1330,10 @@ function createLifecycle() {
     const debouncedTrailingPreview =
       typeof Utils.debounce === "function"
         ? Utils.debounce(() => {
-            updateTrailingStopExample();
+            examples.updateTrailingStopExample();
           }, 300)
         : () => {
-            updateTrailingStopExample();
+            examples.updateTrailingStopExample();
           };
 
     // Trailing activation input
@@ -2292,7 +1474,7 @@ function createLifecycle() {
       console.log("[Trader] Initializing page");
 
       // Fetch feature status early (non-blocking, but before tab bar setup)
-      const featurePromise = fetchFeatureStatus();
+      const featurePromise = fetchFeatureStatus(requestManager);
 
       // Initialize ActionBar
       actionBar = new ActionBar({
@@ -2320,7 +1502,7 @@ function createLifecycle() {
         },
         beforeChange: (newTabId) => {
           // Check if the tab is usable based on feature status
-          return handleFeatureRestrictedTab(newTabId);
+          return handleFeatureRestrictedTab(tradingFeatures, newTabId, Utils);
         },
       });
 
@@ -2334,13 +1516,13 @@ function createLifecycle() {
       tabBar.show();
 
       // Apply feature status badges/styling to tabs
-      applyFeatureStatusToTabs();
+      applyFeatureStatusToTabs(tradingFeatures, $$);
 
       // Sync state with tab bar's restored state (from server or URL hash)
       const activeTab = tabBar.getActiveTab();
       if (activeTab && activeTab !== state.currentTab) {
         // Ensure the restored tab is usable
-        if (isTabUsable(activeTab)) {
+        if (isTabUsable(tradingFeatures, activeTab)) {
           state.currentTab = activeTab;
         } else {
           // Fallback to default tab if restored tab is not usable
@@ -2356,7 +1538,7 @@ function createLifecycle() {
       setupFormHandlers();
 
       // Setup trading controls event handlers
-      setupControlsEventHandlers();
+      controls.setupControlsEventHandlers();
 
       // Setup preview listeners (Phase 2)
       setupPreviewListeners();
@@ -2384,7 +1566,7 @@ function createLifecycle() {
           async () => {
             if (state.currentTab === "stats") {
               await loadStats();
-              await loadControlsStatus();
+              await controls.loadControlsStatus();
             }
           },
           { label: "Trader Stats", intervalMs: 5000 }
@@ -2432,7 +1614,7 @@ function createLifecycle() {
       await Promise.all([loadConfig(), loadStrategies()]);
       if (state.currentTab === "stats") {
         await loadStats();
-        await loadControlsStatus();
+        await controls.loadControlsStatus();
       }
       if (state.currentTab === "strategy-control" && strategiesPoller) {
         strategiesPoller.start();
