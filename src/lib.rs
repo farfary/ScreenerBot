@@ -4,6 +4,7 @@ pub mod actions;
 pub mod ai;
 pub mod apis;
 pub mod arguments;
+pub mod ata_operations;
 pub mod config;
 pub mod connectivity;
 pub mod constants;
