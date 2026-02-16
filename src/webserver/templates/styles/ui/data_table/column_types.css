@@ -1,0 +1,544 @@
+/* ==================== Image Column Styles ==================== */
+
+/* Image cell container */
+.dt-image-cell {
+  padding: 8px 12px !important;
+}
+
+.dt-image-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 100%;
+}
+
+.dt-image-clickable {
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.dt-image-clickable:hover {
+  opacity: 0.85;
+}
+
+.dt-image-clickable:active {
+  opacity: 0.7;
+}
+
+/* Image element */
+.dt-image {
+  display: inline-block;
+  flex-shrink: 0;
+  object-fit: cover;
+  border: 2px solid var(--border-color);
+  transition: all 0.2s;
+}
+
+.dt-image:hover {
+  border-color: var(--primary-color);
+  transform: scale(1.05);
+}
+
+/* Image shapes */
+.dt-img-circle {
+  border-radius: 50%;
+}
+
+.dt-img-square {
+  border-radius: 0;
+}
+
+.dt-img-rounded {
+  border-radius: 6px;
+}
+
+/* Image fallback (emoji or placeholder) */
+.dt-image-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: var(--bg-secondary);
+  border: 2px solid var(--border-color);
+  color: var(--text-secondary);
+  font-weight: 600;
+  user-select: none;
+}
+
+.dt-image-fallback.dt-img-circle {
+  border-radius: 50%;
+}
+
+.dt-image-fallback.dt-img-square {
+  border-radius: 0;
+}
+
+.dt-image-fallback.dt-img-rounded {
+  border-radius: 6px;
+}
+
+/* Text alongside image */
+.dt-image-text {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 150px;
+}
+
+/* Render error styling */
+.dt-render-error {
+  color: var(--error-color, #ef4444);
+  font-size: 0.75rem;
+  font-weight: 500;
+  padding: 2px 6px;
+  background: rgb(239, 68, 68, 0.1);
+  border-radius: 3px;
+  cursor: help;
+}
+
+/* Dark theme adjustments */
+[data-theme="dark"] .dt-image {
+  border-color: rgb(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .dt-image:hover {
+  border-color: var(--primary-color);
+}
+
+[data-theme="dark"] .dt-image-fallback {
+  background: rgb(255, 255, 255, 0.05);
+  border-color: rgb(255, 255, 255, 0.1);
+}
+
+/* Loading skeleton for lazy-loaded images */
+@keyframes shimmer {
+  0% {
+    background-position: -468px 0;
+  }
+
+  100% {
+    background-position: 468px 0;
+  }
+}
+
+.dt-image[loading="lazy"] {
+  background: linear-gradient(
+    90deg,
+    var(--bg-secondary) 0%,
+    var(--bg-hover) 50%,
+    var(--bg-secondary) 100%
+  );
+  background-size: 468px 100%;
+  animation: shimmer 1.2s infinite;
+}
+
+/* Responsive adjustments */
+@media (width <= 768px) {
+  .dt-image-text {
+    max-width: 100px;
+    font-size: 0.8125rem;
+  }
+
+  .dt-image-container {
+    gap: 8px;
+  }
+}
+
+/* ==================== Action Buttons Column Styles ==================== */
+
+/* Action cell container */
+.dt-actions-cell {
+  padding: 8px 12px !important;
+  white-space: nowrap;
+}
+
+.dt-actions-container {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+/* Action button base */
+.dt-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.dt-action-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary-color);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.1);
+}
+
+.dt-action-btn:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.dt-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Action button icon */
+.dt-action-btn-icon {
+  font-size: 0.9375rem;
+  line-height: 1;
+}
+
+/* Action button variants */
+.dt-action-btn-primary {
+  background: var(--primary-color);
+  color: white;
+  border-color: var(--primary-color);
+}
+
+.dt-action-btn-primary:hover {
+  background: var(--primary-hover, #2563eb);
+  border-color: var(--primary-hover, #2563eb);
+}
+
+.dt-action-btn-success {
+  background: var(--success-color, #10b981);
+  color: white;
+  border-color: var(--success-color, #10b981);
+}
+
+.dt-action-btn-success:hover {
+  background: var(--success-hover, #059669);
+  border-color: var(--success-hover, #059669);
+}
+
+.dt-action-btn-danger {
+  background: var(--error-color, #ef4444);
+  color: white;
+  border-color: var(--error-color, #ef4444);
+}
+
+.dt-action-btn-danger:hover {
+  background: var(--error-hover, #dc2626);
+  border-color: var(--error-hover, #dc2626);
+}
+
+.dt-action-btn-warning {
+  background: var(--warning-color, #f59e0b);
+  color: white;
+  border-color: var(--warning-color, #f59e0b);
+}
+
+.dt-action-btn-warning:hover {
+  background: var(--warning-hover, #d97706);
+  border-color: var(--warning-hover, #d97706);
+}
+
+.dt-action-btn-ghost {
+  background: transparent;
+  border-color: transparent;
+}
+
+.dt-action-btn-ghost:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-color);
+}
+
+/* Icon-only button */
+.dt-action-btn-icon-only {
+  padding: 6px;
+  min-width: 32px;
+  min-height: 32px;
+}
+
+/* Small button variant */
+.dt-action-btn-sm {
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  min-height: 26px;
+}
+
+.dt-action-btn-sm.dt-action-btn-icon-only {
+  padding: 4px;
+  min-width: 26px;
+  min-height: 26px;
+}
+
+/* ==================== Dropdown Menu (Three Dot Style) ==================== */
+
+/* Dropdown trigger */
+.dt-actions-dropdown {
+  position: relative;
+  display: inline-block;
+}
+
+.dt-actions-dropdown-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 6px;
+  border: 1px solid var(--border-color);
+  border-radius: 5px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.dt-actions-dropdown-trigger:hover {
+  background: var(--bg-hover);
+  border-color: var(--primary-color);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.1);
+}
+
+.dt-actions-dropdown-trigger:active {
+  transform: translateY(0);
+}
+
+.dt-actions-dropdown-trigger.active {
+  background: var(--bg-hover);
+  border-color: var(--primary-color);
+}
+
+/* Dropdown menu */
+.dt-actions-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  min-width: 160px;
+  padding: 6px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgb(0, 0, 0, 0.15);
+  z-index: var(--z-header);
+  animation: slideDown 0.15s ease;
+  display: none;
+  opacity: 0;
+  transform: translateY(-4px);
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
+}
+
+.dt-actions-dropdown-menu.open {
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.dt-actions-dropdown-menu.menu-left {
+  right: auto;
+  left: 0;
+}
+
+/* Dropdown item */
+.dt-actions-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.dt-actions-dropdown-item:hover {
+  background: var(--bg-hover);
+  color: var(--primary-color);
+}
+
+.dt-actions-dropdown-item:active {
+  transform: scale(0.98);
+}
+
+.dt-actions-dropdown-item.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.dt-actions-dropdown-item.danger {
+  color: var(--error-color, #ef4444);
+}
+
+.dt-actions-dropdown-item.danger:hover {
+  background: rgb(239, 68, 68, 0.1);
+  color: var(--error-color, #ef4444);
+}
+
+/* Dropdown item icon */
+.dt-actions-dropdown-item-icon {
+  font-size: 1rem;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+/* Dropdown divider */
+.dt-actions-dropdown-divider {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--border-color);
+}
+
+/* Dark theme support */
+[data-theme="dark"] .dt-action-btn {
+  border-color: rgb(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .dt-actions-dropdown-trigger {
+  border-color: rgb(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .dt-actions-dropdown-menu {
+  background: var(--bg-secondary);
+  border-color: rgb(255, 255, 255, 0.1);
+  box-shadow: 0 8px 24px rgb(0, 0, 0, 0.5);
+}
+
+/* Responsive adjustments */
+@media (width <= 768px) {
+  .dt-actions-container {
+    gap: 4px;
+  }
+
+  .dt-action-btn {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+  }
+
+  .dt-action-btn-icon-only {
+    min-width: 28px;
+    min-height: 28px;
+  }
+
+  .dt-actions-dropdown-trigger {
+    width: 28px;
+    height: 28px;
+  }
+}
+
+/* =============================================================================
+   Trading Terminal Numeric Styles
+   ============================================================================= */
+
+/* Numeric cells in tables - using JetBrains Mono for tabular figures */
+.data-table td[data-type="number"],
+.data-table td[data-type="price"],
+.data-table td[data-type="percent"],
+.data-table td[data-type="sol"],
+.data-table td[data-type="currency"],
+.data-table .dt-cell-numeric {
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-align: right;
+}
+
+/* Positive values (profit, gain) */
+.data-table .dt-positive,
+.data-table td.positive,
+.data-table [data-value-type="positive"] {
+  color: var(--success-color);
+}
+
+/* Negative values (loss) */
+.data-table .dt-negative,
+.data-table td.negative,
+.data-table [data-value-type="negative"] {
+  color: var(--error-color);
+}
+
+/* Price display with emphasis */
+.data-table .dt-price {
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+  font-weight: 600;
+}
+
+/* Percentage with background indicator */
+.data-table .dt-pnl {
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.data-table .dt-pnl.positive {
+  color: var(--success-color);
+  background: var(--success-alpha-10);
+}
+
+.data-table .dt-pnl.negative {
+  color: var(--error-color);
+  background: var(--danger-alpha-10);
+}
+
+/* SOL amount display */
+.data-table .dt-sol {
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+  font-weight: 500;
+}
+
+.data-table .dt-sol::after {
+  content: " SOL";
+  font-size: 0.8em;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+/* Time/duration display */
+.data-table .dt-time {
+  font-family: var(--font-data);
+  font-feature-settings: "tnum" 1;
+  color: var(--text-secondary);
+}
+
+/* Address/signature truncated display */
+.data-table .dt-address {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--text-secondary);
+}
+
+/* Token symbol in tables */
+.data-table .dt-symbol {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+

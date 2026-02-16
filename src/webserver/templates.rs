@@ -49,8 +49,8 @@ const TOOLS_TRADING_STYLES: &str = include_str!("templates/styles/pages/tools/tr
 const AI_BASE_STYLES: &str = include_str!("templates/styles/pages/ai/base.css");
 const AI_PROVIDERS_STYLES: &str = include_str!("templates/styles/pages/ai/providers.css");
 const AI_INSTRUCTIONS_STYLES: &str = include_str!("templates/styles/pages/ai/instructions.css");
-const AI_CHAT_AUTOMATION_STYLES: &str =
-    include_str!("templates/styles/pages/ai/chat_automation.css");
+const AI_CHAT_STYLES: &str = include_str!("templates/styles/pages/ai/chat.css");
+const AI_AUTOMATION_STYLES: &str = include_str!("templates/styles/pages/ai/automation.css");
 const HOME_PAGE_STYLES: &str = include_str!("templates/styles/pages/home.css");
 const UPDATES_PAGE_STYLES: &str = include_str!("templates/styles/pages/updates.css");
 const ABOUT_PAGE_STYLES: &str = include_str!("templates/styles/pages/about.css");
@@ -60,6 +60,11 @@ const SETUP_PAGE_STYLES: &str = include_str!("templates/styles/pages/setup.css")
 const LOCKSCREEN_PAGE_STYLES: &str = include_str!("templates/styles/pages/lockscreen.css");
 const LOGIN_PAGE_STYLES: &str = include_str!("templates/styles/pages/login.css");
 const DATA_TABLE_STYLES: &str = include_str!("templates/styles/ui/data_table.css");
+const DATA_TABLE_CORE_STYLES: &str = include_str!("templates/styles/ui/data_table/core.css");
+const DATA_TABLE_COLUMN_TYPES_STYLES: &str =
+    include_str!("templates/styles/ui/data_table/column_types.css");
+const DATA_TABLE_PAGINATION_STYLES: &str =
+    include_str!("templates/styles/ui/data_table/pagination.css");
 const TABLE_TOOLBAR_STYLES: &str = include_str!("templates/styles/ui/table_toolbar.css");
 const EVENTS_DIALOG_STYLES: &str = include_str!("templates/styles/ui/events_dialog.css");
 const TRADE_ACTION_DIALOG_STYLES: &str =
@@ -364,6 +369,9 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         NOTIFICATION_STYLES,
         TOAST_STYLES,
         DATA_TABLE_STYLES,
+        DATA_TABLE_CORE_STYLES,
+        DATA_TABLE_COLUMN_TYPES_STYLES,
+        DATA_TABLE_PAGINATION_STYLES,
         TABLE_TOOLBAR_STYLES,
         EVENTS_DIALOG_STYLES,
         TRADE_ACTION_DIALOG_STYLES,
@@ -431,7 +439,8 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         AI_BASE_STYLES,
         AI_PROVIDERS_STYLES,
         AI_INSTRUCTIONS_STYLES,
-        AI_CHAT_AUTOMATION_STYLES,
+        AI_CHAT_STYLES,
+        AI_AUTOMATION_STYLES,
         HOME_PAGE_STYLES,
         UPDATES_PAGE_STYLES,
         ABOUT_PAGE_STYLES,
@@ -497,7 +506,8 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
                 AI_BASE_STYLES,
                 AI_PROVIDERS_STYLES,
                 AI_INSTRUCTIONS_STYLES,
-                AI_CHAT_AUTOMATION_STYLES,
+                AI_CHAT_STYLES,
+                AI_AUTOMATION_STYLES,
             ]
             .join("\n"),
         ),

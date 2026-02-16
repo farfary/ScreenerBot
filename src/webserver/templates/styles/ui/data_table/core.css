@@ -1,0 +1,791 @@
+/* ==================== Loading State Improvements ==================== */
+
+/* Table fade during loading */
+.data-table-wrapper.is-loading .data-table tbody {
+  opacity: 0.45;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+
+/* Animated loading bar under header */
+.data-table-wrapper.is-loading .data-table thead::after {
+  content: "";
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--primary-color) 30%,
+    var(--primary-color) 70%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: dt-loading-slide 1.2s ease-in-out infinite;
+  z-index: 10;
+}
+
+@keyframes dt-loading-slide {
+  0% {
+    background-position: 100% 0;
+  }
+
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+/* Toolbar loading indicator */
+.data-table-wrapper.is-loading .data-table-toolbar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--primary-color), transparent);
+  background-size: 200% 100%;
+  animation: dt-loading-slide 1.2s ease-in-out infinite;
+}
+
+/* Column sorting indicator - spinner on sorted column */
+.data-table thead th.is-sorting .dt-sort-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.data-table thead th.is-sorting .dt-sort-icon::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 2px;
+  border: 2px solid var(--primary-color);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: dt-sort-spin 0.6s linear infinite;
+}
+
+@keyframes dt-sort-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Column toggle */
+.dt-column-toggle {
+  position: relative;
+}
+
+.dt-column-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  padding: 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0, 0, 0, 0.2);
+  z-index: var(--z-header);
+  min-width: 220px;
+  max-height: 420px;
+  overflow-y: auto;
+  animation: slideDown 0.2s ease;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Scroll container */
+.data-table-scroll-container {
+  flex: 1;
+  overflow: auto; /* Enable both horizontal and vertical scrolling */
+  position: relative;
+  min-height: 0; /* Critical for flex scrolling */
+}
+
+/* Scrollbar styling - uses global scrollbar-table pattern */
+/* Note: Inherits from global scrollbar system in scrollbar.css */
+
+.data-table-blocking-state {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  text-align: center;
+  background: var(--bg-primary);
+  z-index: 2;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity 0.18s ease,
+    visibility 0.18s ease;
+}
+
+.data-table-blocking-state.is-visible {
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+.data-table-blocking-state__inner {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 560px;
+  align-items: center;
+}
+
+.data-table-blocking-state__icon {
+  font-size: 2.4rem;
+  color: var(--text-secondary);
+}
+
+.data-table-blocking-state__title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.data-table-blocking-state__description {
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+}
+
+.data-table-blocking-state--loading .data-table-blocking-state__icon {
+  color: var(--primary-color);
+  animation: data-table-blocking-spin 1s linear infinite;
+}
+
+.data-table-blocking-state--info .data-table-blocking-state__icon {
+  color: var(--primary-color);
+}
+
+.data-table-blocking-state--warning .data-table-blocking-state__icon {
+  color: var(--warning);
+}
+
+.data-table-blocking-state--error .data-table-blocking-state__icon {
+  color: var(--badge-error, #d32f2f);
+}
+
+@keyframes data-table-blocking-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Fixed height support */
+.data-table-wrapper.fixed-height {
+  height: 600px; /* Default fixed height */
+}
+
+.data-table-wrapper.fixed-height .data-table-scroll-container {
+  max-height: calc(100% - 52px); /* Subtract toolbar height */
+  overflow-y: auto;
+}
+
+/* Custom height variants */
+.data-table-wrapper.fixed-height-sm {
+  height: 400px;
+}
+
+.data-table-wrapper.fixed-height-md {
+  height: 600px;
+}
+
+.data-table-wrapper.fixed-height-lg {
+  height: 800px;
+}
+
+.data-table-wrapper.fixed-height-xl {
+  height: 1000px;
+}
+
+/* Table */
+.data-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.875rem;
+  table-layout: fixed; /* Stabilize width distribution and prevent overflow from content */
+}
+
+.data-table.compact {
+  font-size: 0.75rem;
+}
+
+.data-table.compact th {
+  padding: 8px 10px;
+  font-size: 0.6875rem;
+}
+
+.data-table.compact td {
+  padding: 6px 10px;
+}
+
+/* Table header */
+.data-table thead {
+  background: var(--bg-secondary);
+  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.05);
+  position: relative; /* Required for loading bar */
+}
+
+.data-table thead.sticky {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  box-shadow: 0 2px 8px rgb(0, 0, 0, 0.1);
+}
+
+.data-table th {
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-secondary);
+  border-bottom: 2px solid var(--border-color);
+  background: var(--bg-secondary);
+  white-space: nowrap;
+  position: relative;
+  user-select: none;
+  transition: all 0.2s ease;
+  box-sizing: border-box; /* Make width include padding and borders */
+}
+
+.data-table th.sortable {
+  cursor: pointer;
+}
+
+.data-table th.sortable:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.data-table th.sorted {
+  background: var(--bg-hover);
+  color: var(--primary-color);
+  border-bottom-color: var(--primary-color);
+}
+
+.dt-header-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.dt-header-label {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dt-sort-icon {
+  font-size: 0.75rem;
+  opacity: 0.4;
+  transition: opacity 0.2s ease;
+}
+
+.data-table th.sortable:hover .dt-sort-icon {
+  opacity: 0.7;
+}
+
+.data-table th.sorted .dt-sort-icon {
+  opacity: 1;
+  color: var(--primary-color);
+}
+
+.dt-header-column {
+  position: relative;
+}
+
+.dt-header-column.dt-resizing,
+.dt-header-column.dt-resizing-adjacent {
+  background: rgb(59, 130, 246, 0.12);
+  border-bottom-color: var(--primary-color);
+  box-shadow: inset 0 -2px 0 rgb(59, 130, 246, 0.35);
+  color: var(--text-primary);
+}
+
+body.dt-column-resizing,
+body.dt-column-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+.dt-column-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  cursor: grab;
+  user-select: none;
+  transition: color 0.2s ease;
+}
+
+.dt-column-drag-handle:hover {
+  color: var(--primary-color);
+}
+
+.dt-column-drag-handle:active {
+  cursor: grabbing;
+}
+
+.dt-column-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.dt-column-menu-item:hover {
+  background: var(--bg-hover);
+  transform: translateX(2px);
+}
+
+.dt-column-menu-item.dragging {
+  opacity: 0.6;
+}
+
+.dt-column-menu-item.drag-over {
+  background: rgb(59, 130, 246, 0.1);
+  border: 1px dashed var(--primary-color);
+}
+
+.dt-column-menu-item input[type="checkbox"] {
+  cursor: pointer;
+  margin: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.dt-column-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* Resize handle */
+.dt-resize-handle {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 6px;
+  height: 100%;
+  cursor: col-resize;
+  background: transparent;
+  transition: all 0.2s ease;
+  z-index: 2;
+}
+
+.dt-resize-handle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2px;
+  height: 60%;
+  background: transparent;
+  transition: background 0.2s ease;
+}
+
+.dt-resize-handle:hover,
+.dt-resize-handle.active {
+  background: rgb(59, 130, 246, 0.1);
+}
+
+.dt-resize-handle:hover::after,
+.dt-resize-handle.active::after {
+  background: var(--primary-color);
+  box-shadow: 0 0 6px rgb(59, 130, 246, 0.6);
+}
+
+/* Table body */
+.data-table tbody tr {
+  border-bottom: 1px solid var(--border-color);
+  transition: all 0.15s ease;
+  min-height: 44px;
+}
+
+.data-table.compact tbody tr {
+  min-height: 36px;
+}
+
+.data-table tbody tr:hover {
+  background: var(--bg-hover);
+  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.05);
+}
+
+.data-table tbody tr.selected {
+  background: rgb(59, 130, 246, 0.1);
+}
+
+.data-table tbody tr.selected:hover {
+  background: rgb(59, 130, 246, 0.15);
+}
+
+.data-table.zebra tbody tr:nth-child(even) {
+  background: rgb(0, 0, 0, 0.02);
+}
+
+.data-table.zebra tbody tr:nth-child(even):hover {
+  background: var(--bg-hover);
+}
+
+.data-table td {
+  padding: 8px 12px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-color);
+  transition: color 0.15s ease;
+  overflow-wrap: break-word;
+  max-width: none;
+  box-sizing: border-box; /* Make width include padding and borders */
+  min-height: inherit;
+  vertical-align: middle; /* Center content vertically */
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+/* Uniform row height mode */
+.data-table.uniform-rows tbody tr {
+  /* Row height = line-height * lines + vertical padding (approx) */
+  --dt-row-line-height: 1.4;
+  --dt-row-lines: var(--dt-row-lines, 2);
+  --dt-row-padding-y: 16px; /* td padding top + bottom */
+  --dt-row-content-height: calc(var(--dt-row-line-height) * 1em * var(--dt-row-lines));
+  --dt-row-total-height: calc(var(--dt-row-content-height) + var(--dt-row-padding-y));
+}
+
+.data-table.compact.uniform-rows tbody tr {
+  --dt-row-padding-y: 12px; /* compact td padding top + bottom */
+}
+
+.data-table.uniform-rows td {
+  /* Enforce fixed height on td (more reliable than tr height) */
+  height: var(--dt-row-total-height);
+  max-height: var(--dt-row-total-height);
+  line-height: var(--dt-row-line-height);
+  overflow: hidden;
+  position: relative;
+}
+
+.data-table.uniform-rows td .dt-cell-clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  line-clamp: var(--dt-row-lines);
+  -webkit-line-clamp: var(--dt-row-lines);
+  overflow: hidden;
+  white-space: normal;
+}
+
+/* Flex cells in uniform rows - constrain height */
+.data-table.uniform-rows td > div:first-child:last-child {
+  max-height: var(--dt-row-content-height);
+  overflow: hidden;
+}
+
+/* Text wrapping support */
+.data-table td.wrap-text {
+  white-space: normal;
+  word-break: break-word;
+  line-height: 1.5;
+}
+
+.data-table td.wrap-text code {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.data-table td.no-wrap {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.data-table td .mono-text {
+  font-family: var(--font-mono);
+  word-break: break-all;
+  display: inline;
+}
+
+.data-table td a.mono-text {
+  color: var(--link-color);
+  text-decoration: none;
+}
+
+.data-table td a.mono-text:hover {
+  color: var(--link-hover);
+  text-decoration: underline;
+}
+
+/* Drag and Drop Headers */
+.dt-header-column[draggable="true"] {
+  cursor: grab;
+}
+
+.dt-header-column[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.dt-header-column.is-dragging {
+  opacity: 0.4;
+  background: var(--bg-card-hover);
+}
+
+.dt-header-column.is-drag-over {
+  border-left: 2px solid var(--primary-color);
+  background: var(--bg-card-hover);
+}
+
+/* Context Menu */
+.dt-context-menu {
+  position: fixed;
+  z-index: var(--z-dialog);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px var(--shadow-lg);
+  padding: 4px 0;
+  min-width: 180px;
+  font-size: 0.9rem;
+  color: var(--text-primary);
+}
+
+.dt-context-menu-item {
+  padding: 8px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.dt-context-menu-item:hover {
+  background: var(--bg-card-hover);
+  color: var(--primary-color);
+}
+
+.dt-context-menu-item .icon {
+  width: 16px;
+  text-align: center;
+  font-size: 1rem;
+}
+
+.dt-context-menu-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 4px 0;
+}
+/* ==================== State Cells (Loading & Empty) ==================== */
+
+.data-table td.dt-state-cell {
+  text-align: center;
+  padding: 64px 32px;
+  background: transparent;
+}
+
+/* Empty State */
+.dt-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-tertiary);
+}
+
+.dt-empty-icon {
+  font-size: 2.5rem;
+  opacity: 0.4;
+  color: var(--text-secondary);
+}
+
+.dt-empty-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.dt-empty-message {
+  font-size: 0.875rem;
+  color: var(--text-tertiary);
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+/* Loading State (initial load with no data) */
+.dt-loading-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  color: var(--text-secondary);
+}
+
+.dt-loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--border-color);
+  border-top-color: var(--primary-color);
+  border-radius: 50%;
+  animation: dt-loading-spin 0.8s linear infinite;
+}
+
+@keyframes dt-loading-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.dt-loading-text {
+  font-size: 0.9375rem;
+  font-weight: 500;
+}
+
+/* Legacy empty/loading styles (backward compatibility) */
+.data-table td.dt-empty {
+  text-align: center;
+  padding: 48px 32px;
+  color: var(--text-tertiary);
+  font-size: 0.9375rem;
+}
+
+.data-table td.dt-empty::before {
+  content: "📭";
+  display: block;
+  font-size: 2.5rem;
+  margin-bottom: 12px;
+  opacity: 0.5;
+}
+
+/* Loading state */
+.data-table .dt-loading {
+  text-align: center;
+  padding: 48px 32px;
+  color: var(--text-secondary);
+}
+
+.data-table .dt-loading::before {
+  content: "⏳";
+  display: block;
+  font-size: 2.5rem;
+  margin-bottom: 12px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (width <= 768px) {
+  .data-table-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dt-toolbar-left,
+  .dt-toolbar-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .dt-search-input {
+    width: 100%;
+  }
+
+  .data-table {
+    font-size: 0.8125rem;
+  }
+
+  .data-table th,
+  .data-table td {
+    padding: 8px 12px;
+  }
+}
+
+/* Dark theme support */
+[data-theme="dark"] .data-table-wrapper {
+  background: var(--bg-primary);
+}
+
+[data-theme="dark"] .data-table-toolbar {
+  background: var(--bg-secondary);
+  border-bottom-color: var(--border-color);
+}
+
+[data-theme="dark"] .dt-column-menu {
+  background: var(--bg-secondary);
+  border-color: var(--border-color);
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.5);
+}
+
+/* Loading state */
+.data-table tbody tr.loading td {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+/* Animation for new rows */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.data-table tbody tr.new {
+  animation: fadeIn 0.3s ease-out;
+}
+
