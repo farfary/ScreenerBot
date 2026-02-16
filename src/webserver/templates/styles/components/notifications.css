@@ -447,15 +447,7 @@ body.notification-drawer-open {
   animation: spin 1s linear infinite;
 }
 
-@keyframes spin {
-  from {
-    transform: rotate(0deg);
-  }
 
-  to {
-    transform: rotate(360deg);
-  }
-}
 
 .notification-title {
   flex: 1;

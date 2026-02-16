@@ -303,17 +303,6 @@
   opacity: 0.6;
 }
 
-@keyframes pulse {
-  0%,
-  100% {
-    opacity: 1;
-  }
-
-  50% {
-    opacity: 0.5;
-  }
-}
-
 /* Sidebar Footer */
 .sidebar-footer {
   padding: var(--spacing-sm) var(--spacing-md);

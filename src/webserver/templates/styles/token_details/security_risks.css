@@ -117,12 +117,6 @@
   animation: spin 0.8s linear infinite;
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 .security-score-container.security-loading .score-bg {
   stroke: var(--border-color);
   opacity: 0.5;

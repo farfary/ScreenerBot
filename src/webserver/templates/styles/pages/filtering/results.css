@@ -546,12 +546,6 @@
   margin-inline-end: var(--spacing-sm);
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 /* Analytics empty state */
 .analytics-empty {
   display: flex;
