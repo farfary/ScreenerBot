@@ -152,62 +152,11 @@
   gap: 0.5rem;
 }
 
-/* Trader Toggle Switch */
-.trader-toggle-switch {
-  position: relative;
+/* Trader Toggle - Use standard .toggle from form_controls.css */
+.status-bar-toggle .toggle {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  cursor: pointer;
-}
-
-.trader-toggle-switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-  position: absolute;
-}
-
-.trader-toggle-track {
-  position: relative;
-  width: 40px;
-  height: 22px;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-color);
-  border-radius: 11px;
-  transition: all 0.2s ease;
-}
-
-.trader-toggle-track::before {
-  content: "";
-  position: absolute;
-  top: 3px;
-  left: 3px;
-  width: 16px;
-  height: 16px;
-  background: var(--text-muted);
-  border-radius: 50%;
-  transition: all 0.2s ease;
-  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.2);
-}
-
-.trader-toggle-switch input:checked + .trader-toggle-track {
-  background: var(--success-color);
-  border-color: var(--success-color);
-}
-
-.trader-toggle-switch input:checked + .trader-toggle-track::before {
-  left: calc(100% - 19px);
-  background: #fff;
-}
-
-.trader-toggle-switch input:disabled + .trader-toggle-track {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.trader-toggle-switch:hover .trader-toggle-track {
-  border-color: var(--primary-alpha-50);
 }
 
 .trader-toggle-label {
@@ -217,10 +166,17 @@
   letter-spacing: 0.05em;
   color: var(--text-muted);
   min-width: 24px;
+  cursor: pointer;
+  user-select: none;
 }
 
-.trader-toggle-switch input:checked ~ .trader-toggle-label {
+.toggle input:checked ~ .trader-toggle-label {
   color: var(--success-color);
+}
+
+.toggle input:disabled ~ .trader-toggle-label {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ============================================================================
