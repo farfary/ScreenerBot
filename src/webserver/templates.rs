@@ -211,6 +211,8 @@ pub const FILTERING_CONFIG_METADATA_JS: &str =
 pub const FILTERING_RENDERERS_JS: &str =
     include_str!("templates/scripts/pages/filtering/renderers.js");
 pub const CONFIG_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/config.js");
+pub const CONFIG_UTILS_JS: &str = include_str!("templates/scripts/pages/config/utils.js");
+pub const CONFIG_FIELD_RENDERERS_JS: &str = include_str!("templates/scripts/pages/config/field_renderers.js");
 pub const STRATEGIES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/strategies.js");
 pub const TRADER_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/trader.js");
 pub const WALLETS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/wallets.js");
