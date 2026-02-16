@@ -91,6 +91,9 @@ pub async fn get_page_script(axum::extract::Path(file): axum::extract::Path<Stri
 pub async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
     let content = match file.as_str() {
         "data_table.js" => Some(templates::DATA_TABLE_UI),
+        "data_table/column_management.js" => Some(templates::DATA_TABLE_COLUMN_MANAGEMENT),
+        "data_table/client_pagination.js" => Some(templates::DATA_TABLE_CLIENT_PAGINATION),
+        "data_table/server_pagination.js" => Some(templates::DATA_TABLE_SERVER_PAGINATION),
         "dropdown.js" => Some(templates::DROPDOWN_UI),
         "table_toolbar.js" => Some(templates::TABLE_TOOLBAR_UI),
         "toast.js" => Some(templates::TOAST_UI),
