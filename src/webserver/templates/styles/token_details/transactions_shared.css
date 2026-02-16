@@ -1,0 +1,632 @@
+/* =============================================================================
+   TRANSACTION PAIR - Entry/Exit symmetric display for position cards
+   ============================================================================= */
+
+.tx-pair-section {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-color);
+}
+
+.tx-pair-title {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.tx-pair-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.tx-pair-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-color);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.tx-pair-item:hover:not(.empty) {
+  background: var(--bg-card-hover);
+}
+
+.tx-pair-item.empty {
+  justify-content: center;
+  opacity: 0.5;
+}
+
+.tx-pair-empty {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+
+/* Entry (buy) styling */
+.tx-pair-item.entry {
+  border-left: 3px solid var(--success-color);
+}
+
+.tx-pair-item.entry .tx-pair-icon {
+  color: var(--success-color);
+  background: var(--success-alpha-15);
+}
+
+.tx-pair-item.entry .tx-pair-label {
+  color: var(--success-color);
+}
+
+/* Exit (sell) styling - symmetric with entry */
+.tx-pair-item.exit {
+  border-left: 3px solid var(--danger);
+}
+
+.tx-pair-item.exit .tx-pair-icon {
+  color: var(--danger);
+  background: var(--danger-alpha-15);
+}
+
+.tx-pair-item.exit .tx-pair-label {
+  color: var(--danger);
+}
+
+.tx-pair-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tx-pair-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.tx-pair-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+
+.tx-pair-label {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.tx-pair-signature {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  color: var(--link-color);
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tx-pair-signature:hover {
+  text-decoration: underline;
+}
+
+.tx-pair-item .btn-copy-mini {
+  flex-shrink: 0;
+  opacity: 0.4;
+}
+
+.tx-pair-item:hover .btn-copy-mini {
+  opacity: 0.8;
+}
+
+/* =============================================================================
+   TRANSACTION HISTORY - Entries & Exits with symmetric layout
+   ============================================================================= */
+
+.transaction-history {
+  margin-top: 12px;
+  border-top: 1px solid var(--border-color);
+  padding-top: 12px;
+}
+
+.transaction-history-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+}
+
+.transaction-history-title svg {
+  width: 14px;
+  height: 14px;
+  opacity: 0.6;
+}
+
+.transaction-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Transaction row - symmetric entry/exit design */
+.transaction-row {
+  display: grid;
+  grid-template-columns: 24px 70px 1fr 100px 100px 40px;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-primary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.transaction-row:hover {
+  background: var(--bg-card-hover);
+  transform: translateX(2px);
+}
+
+/* Entry (buy) styling */
+.transaction-row.entry {
+  border-left: 3px solid var(--success-color);
+}
+
+.transaction-row.entry .transaction-icon {
+  color: var(--success-color);
+  background: var(--success-alpha-15);
+}
+
+/* Exit (sell) styling - symmetric with entry */
+.transaction-row.exit {
+  border-left: 3px solid var(--danger);
+}
+
+.transaction-row.exit .transaction-icon {
+  color: var(--danger);
+  background: var(--danger-alpha-15);
+}
+
+/* DCA entry styling */
+.transaction-row.dca {
+  border-left: 3px solid var(--primary-color);
+}
+
+.transaction-row.dca .transaction-icon {
+  color: var(--primary-color);
+  background: var(--primary-alpha-15);
+}
+
+.transaction-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+}
+
+.transaction-icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+.transaction-type {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.transaction-type-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.transaction-row.entry .transaction-type-label {
+  color: var(--success-color);
+}
+
+.transaction-row.exit .transaction-type-label {
+  color: var(--danger);
+}
+
+.transaction-row.dca .transaction-type-label {
+  color: var(--primary-color);
+}
+
+.transaction-type-time {
+  font-size: 0.6rem;
+  color: var(--text-muted);
+}
+
+.transaction-price {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.transaction-price-label {
+  font-size: 0.55rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.transaction-price-value {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+.transaction-amount {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: right;
+}
+
+.transaction-amount-label {
+  font-size: 0.55rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.transaction-amount-value {
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+.transaction-row.entry .transaction-amount-value {
+  color: var(--danger); /* Spent SOL */
+}
+
+.transaction-row.exit .transaction-amount-value {
+  color: var(--success-color); /* Received SOL */
+}
+
+.transaction-row.dca .transaction-amount-value {
+  color: var(--danger); /* Spent SOL */
+}
+
+.transaction-sol {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  text-align: right;
+}
+
+.transaction-sol-label {
+  font-size: 0.55rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.transaction-sol-value {
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+.transaction-row.entry .transaction-sol-value,
+.transaction-row.dca .transaction-sol-value {
+  color: var(--danger);
+}
+
+.transaction-row.exit .transaction-sol-value {
+  color: var(--success-color);
+}
+
+.transaction-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.transaction-link a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  color: var(--text-muted);
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.transaction-link a:hover {
+  background: var(--bg-secondary);
+  color: var(--link-color);
+}
+
+.transaction-link svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Empty transaction state */
+.transaction-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  background: var(--bg-primary);
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--border-color);
+}
+
+/* =============================================================================
+   SCROLLBAR
+   ============================================================================= */
+
+/* Token details dialog uses global scrollbar-dialog pattern */
+/* Note: Inherits from global scrollbar system in scrollbar.css */
+
+/* =============================================================================
+   RESPONSIVE
+   ============================================================================= */
+
+@media (width <= 1200px) {
+  .dialog-container {
+    width: 95vw;
+    height: 90vh;
+  }
+
+  .overview-split-layout {
+    grid-template-columns: 45% 55%;
+  }
+
+  .header-center {
+    display: none;
+  }
+
+  .dialog-header {
+    justify-content: space-between;
+  }
+
+  .header-right {
+    flex-shrink: 0;
+  }
+}
+
+@media (width <= 900px) {
+  .overview-split-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .overview-left {
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+    max-height: 40vh;
+  }
+
+  .security-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .pools-container {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .pools-left-col {
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+    max-height: 35vh;
+  }
+
+  .links-container {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .links-left-col {
+    border-right: none;
+    border-bottom: 1px solid var(--border-color);
+    max-height: 35vh;
+  }
+
+  .links-grid-compact {
+    grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+  }
+}
+
+@media (width <= 768px) {
+  .dialog-container {
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+    max-width: none;
+    max-height: none;
+  }
+
+  .dialog-header {
+    padding: var(--spacing-sm) var(--spacing-md);
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+  }
+
+  .header-left {
+    gap: var(--spacing-sm);
+    min-width: auto;
+  }
+
+  .header-right {
+    order: 3;
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .header-trade-actions {
+    margin-right: 0;
+    padding-right: 0;
+    border-right: none;
+  }
+
+  .header-logo {
+    width: 40px;
+    height: 40px;
+  }
+
+  .title-main {
+    font-size: 1.1rem;
+  }
+
+  .title-sub {
+    font-size: 0.8rem;
+  }
+
+  .dialog-tabs {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    gap: 0;
+  }
+
+  .tab-button {
+    padding: 8px 12px;
+    font-size: 0.8rem;
+  }
+
+  .tab-button svg {
+    display: none;
+  }
+
+  .token-details-dialog .tab-content {
+    padding: var(--spacing-md);
+  }
+
+  .change-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .price-metrics {
+    flex-wrap: wrap;
+    gap: var(--spacing-sm);
+  }
+
+  .positions-grid,
+  .pools-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .links-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* =============================================================================
+   DATA SOURCES STATUS BAR - Shows loading status of each data source
+   ============================================================================= */
+
+.data-sources-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 10px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  font-size: 0.6rem;
+  transition: opacity 0.3s ease;
+  overflow: hidden;
+}
+
+.data-sources-status.all-loaded {
+  opacity: 0.7;
+  border-color: transparent;
+  background: transparent;
+  padding: 0;
+}
+
+.source-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-icon {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background-color 0.2s ease;
+}
+
+.status-icon.pending {
+  background-color: var(--text-muted, #484f58);
+}
+
+.status-icon.loading {
+  background-color: var(--warning-color, #d29922);
+  animation: status-pulse 1s ease-in-out infinite;
+}
+
+.status-icon.success {
+  background-color: var(--success-color, #3fb950);
+}
+
+.status-icon.error {
+  background-color: var(--danger, #f85149);
+}
+
+.status-icon.cached {
+  background-color: var(--primary-color, #58a6ff);
+}
+
+@keyframes status-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.4;
+  }
+}
+
+.status-label {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+  font-size: 0.55rem;
+}

@@ -1,0 +1,427 @@
+/* =============================================================================
+   POOLS TAB
+   ============================================================================= */
+
+/* Two-column layout for pools */
+.pools-container {
+  display: grid;
+  grid-template-columns: minmax(260px, 28%) 1fr;
+  gap: 0;
+  min-height: 100%;
+}
+
+/* Left column - Summary */
+.pools-left-col {
+  background: var(--bg-secondary);
+  border-right: 1px solid var(--border-color);
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Right column - Pool list */
+.pools-right-col {
+  background: var(--bg-primary);
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Summary cards */
+.pools-summary-card {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 12px;
+  transition: border-color 0.15s ease;
+}
+
+.pools-summary-card:hover {
+  border-color: var(--text-muted);
+}
+
+.pools-summary-card.canonical-highlight {
+  border-color: var(--primary-alpha-30);
+  background: var(--primary-alpha-5);
+}
+
+.pools-summary-card.canonical-highlight:hover {
+  border-color: var(--primary-color);
+}
+
+.pools-summary-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pools-summary-title svg {
+  color: var(--primary-color);
+}
+
+.pools-summary-stats {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pools-stat {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pools-stat-label {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+.pools-stat-value {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+.pools-canonical-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* DEX breakdown */
+.pools-dex-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pools-dex-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.pools-dex-row:last-child {
+  border-bottom: none;
+}
+
+.pools-dex-name {
+  font-size: 0.75rem;
+  color: var(--text-primary);
+}
+
+.pools-dex-count {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-family: var(--font-data);
+  background: var(--bg-secondary);
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* Pool list header */
+.pools-list-header {
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.pools-list-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Pool list */
+.pools-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Pool detail card */
+.pool-detail-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+
+.pool-detail-card:hover {
+  border-color: var(--text-muted);
+}
+
+.pool-detail-card.canonical {
+  border-color: var(--primary-alpha-40);
+}
+
+.pool-detail-card.canonical:hover {
+  border-color: var(--primary-color);
+}
+
+.pool-detail-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--bg-card-hover);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.pool-detail-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pool-detail-program {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pool-canonical-badge {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  color: var(--primary-color);
+  background: var(--primary-alpha-10);
+}
+
+.pool-detail-role {
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.pool-detail-role.base {
+  color: var(--success-color);
+  background: var(--success-alpha-10);
+}
+
+.pool-detail-role.quote {
+  color: var(--primary-color);
+  background: var(--primary-alpha-10);
+}
+
+.pool-detail-body {
+  padding: 10px;
+}
+
+.pool-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pool-detail-divider {
+  height: 1px;
+  background: var(--border-color);
+  margin: 8px 0;
+}
+
+.pool-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 24px;
+}
+
+.pool-detail-row.reserves-row {
+  margin-bottom: 4px;
+}
+
+.pool-detail-label {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.pool-detail-value-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pool-detail-value {
+  font-size: 0.75rem;
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+.pool-detail-value.mono {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+}
+
+.pool-detail-value.highlight {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.pool-detail-value.muted {
+  color: var(--text-muted);
+  font-size: 0.65rem;
+}
+
+/* Reserve accounts list */
+.pool-reserves-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-left: 8px;
+}
+
+.pool-reserve-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pool-reserve-addr {
+  font-size: 0.65rem;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.pool-no-data {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+/* Copy button mini */
+.copy-btn-mini {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  border-radius: 3px;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.copy-btn-mini:hover {
+  color: var(--text-primary);
+  background: var(--bg-card-hover);
+}
+
+.copy-btn-mini svg {
+  width: 10px;
+  height: 10px;
+}
+
+/* Legacy styles for backward compatibility */
+.pools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 16px;
+}
+
+.pool-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pool-card.canonical {
+  border-color: var(--primary-alpha-30);
+}
+
+.pool-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: var(--bg-card-hover);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.pool-program {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.canonical-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 8px;
+  border-radius: 10px;
+  color: var(--primary-color);
+  background: var(--primary-alpha-10);
+}
+
+.pool-body {
+  padding: 12px;
+}
+
+.pool-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.pool-row:not(:last-child) {
+  border-bottom: 1px solid var(--border-color);
+}
+
+.pool-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.pool-value {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  font-weight: 500;
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+.pool-value.mono {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+}

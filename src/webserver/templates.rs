@@ -37,6 +37,11 @@ const TRADER_CONFIG_COMPONENTS_STYLES: &str =
 const TRADER_CONTROLS_STYLES: &str = include_str!("templates/styles/pages/trader/controls.css");
 const TRADER_METRICS_STYLES: &str = include_str!("templates/styles/pages/trader/metrics.css");
 const WALLETS_PAGE_STYLES: &str = include_str!("templates/styles/pages/wallets.css");
+const WALLETS_MAIN_WALLET_STYLES: &str =
+    include_str!("templates/styles/pages/wallets/main_wallet.css");
+const WALLETS_MODALS_STYLES: &str = include_str!("templates/styles/pages/wallets/modals.css");
+const WALLETS_IMPORT_EXPORT_STYLES: &str =
+    include_str!("templates/styles/pages/wallets/import_export.css");
 const TOOLS_BASE_STYLES: &str = include_str!("templates/styles/pages/tools/base.css");
 const TOOLS_WALLET_STYLES: &str = include_str!("templates/styles/pages/tools/wallet_tools.css");
 const TOOLS_TOKEN_STYLES: &str = include_str!("templates/styles/pages/tools/token_tools.css");
@@ -72,8 +77,12 @@ const TOKEN_DETAILS_OVERVIEW_STYLES: &str =
     include_str!("templates/styles/token_details/overview_chart.css");
 const TOKEN_DETAILS_SECURITY_STYLES: &str =
     include_str!("templates/styles/token_details/security.css");
-const TOKEN_DETAILS_CONTENT_STYLES: &str =
-    include_str!("templates/styles/token_details/positions_pools_links.css");
+const TOKEN_DETAILS_POSITIONS_STYLES: &str =
+    include_str!("templates/styles/token_details/positions.css");
+const TOKEN_DETAILS_POOLS_STYLES: &str = include_str!("templates/styles/token_details/pools.css");
+const TOKEN_DETAILS_LINKS_STYLES: &str = include_str!("templates/styles/token_details/links.css");
+const TOKEN_DETAILS_TRANSACTIONS_SHARED_STYLES: &str =
+    include_str!("templates/styles/token_details/transactions_shared.css");
 const TRANSACTION_DETAILS_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/transaction_details_dialog.css");
 const POSITION_DETAILS_BASE_STYLES: &str =
@@ -367,7 +376,10 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         TOKEN_DETAILS_BASE_STYLES,
         TOKEN_DETAILS_OVERVIEW_STYLES,
         TOKEN_DETAILS_SECURITY_STYLES,
-        TOKEN_DETAILS_CONTENT_STYLES,
+        TOKEN_DETAILS_POSITIONS_STYLES,
+        TOKEN_DETAILS_POOLS_STYLES,
+        TOKEN_DETAILS_LINKS_STYLES,
+        TOKEN_DETAILS_TRANSACTIONS_SHARED_STYLES,
         TRANSACTION_DETAILS_DIALOG_STYLES,
         POSITION_DETAILS_BASE_STYLES,
         POSITION_DETAILS_OVERVIEW_STYLES,
@@ -409,6 +421,9 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
         STRATEGIES_MODALS_STYLES,
         TRADER_PAGE_STYLES,
         WALLETS_PAGE_STYLES,
+        WALLETS_MAIN_WALLET_STYLES,
+        WALLETS_MODALS_STYLES,
+        WALLETS_IMPORT_EXPORT_STYLES,
         TOOLS_BASE_STYLES,
         TOOLS_WALLET_STYLES,
         TOOLS_TOKEN_STYLES,
@@ -456,7 +471,16 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
             ]
             .join("\n"),
         ),
-        ("wallets", WALLETS_PAGE_STYLES),
+        (
+            "wallets",
+            &[
+                WALLETS_PAGE_STYLES,
+                WALLETS_MAIN_WALLET_STYLES,
+                WALLETS_MODALS_STYLES,
+                WALLETS_IMPORT_EXPORT_STYLES,
+            ]
+            .join("\n"),
+        ),
         (
             "tools",
             &[
