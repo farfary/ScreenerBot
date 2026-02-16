@@ -32,6 +32,10 @@ const STRATEGIES_CONDITION_CARDS_STYLES: &str =
 const STRATEGIES_MODALS_STYLES: &str =
     include_str!("templates/styles/pages/strategies/modals.css");
 const TRADER_PAGE_STYLES: &str = include_str!("templates/styles/pages/trader.css");
+const TRADER_CONFIG_COMPONENTS_STYLES: &str =
+    include_str!("templates/styles/pages/trader/config_components.css");
+const TRADER_CONTROLS_STYLES: &str = include_str!("templates/styles/pages/trader/controls.css");
+const TRADER_METRICS_STYLES: &str = include_str!("templates/styles/pages/trader/metrics.css");
 const WALLETS_PAGE_STYLES: &str = include_str!("templates/styles/pages/wallets.css");
 const TOOLS_BASE_STYLES: &str = include_str!("templates/styles/pages/tools/base.css");
 const TOOLS_WALLET_STYLES: &str = include_str!("templates/styles/pages/tools/wallet_tools.css");
@@ -442,7 +446,16 @@ pub fn base_template(title: &str, active_tab: &str, content: &str) -> String {
             ]
             .join("\n"),
         ),
-        ("trader", TRADER_PAGE_STYLES),
+        (
+            "trader",
+            &[
+                TRADER_PAGE_STYLES,
+                TRADER_CONFIG_COMPONENTS_STYLES,
+                TRADER_CONTROLS_STYLES,
+                TRADER_METRICS_STYLES,
+            ]
+            .join("\n"),
+        ),
         ("wallets", WALLETS_PAGE_STYLES),
         (
             "tools",

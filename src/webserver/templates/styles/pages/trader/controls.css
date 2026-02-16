@@ -1,0 +1,411 @@
+/* ============================================================================
+   Trading Controls Section
+   ============================================================================ */
+
+.stats-section-controls {
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  margin-bottom: 1rem;
+}
+
+.stats-section-controls .section-header {
+  margin-bottom: 0.75rem;
+}
+
+/* Force Stop Banner */
+.force-stop-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: linear-gradient(135deg, var(--danger-alpha-15) 0%, var(--danger-alpha-10) 100%);
+  border: 1px solid var(--danger-alpha-40);
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+}
+
+.force-stop-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: var(--danger-alpha-20);
+  color: var(--error-color);
+  font-size: 1.1rem;
+  animation: force-stop-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes force-stop-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.force-stop-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.force-stop-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--error-color);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.force-stop-reason {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+}
+
+/* Monitor Controls Grid */
+.controls-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+@media (width <= 600px) {
+  .controls-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.control-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  transition: border-color 0.2s ease;
+}
+
+.control-card:hover {
+  border-color: var(--primary-alpha-40);
+}
+
+.control-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.control-header i {
+  color: var(--primary-color);
+  font-size: 1rem;
+}
+
+.control-status {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+}
+
+.control-status.status-running {
+  color: var(--success-color);
+}
+
+.control-status.status-stopped {
+  color: var(--text-muted);
+}
+
+/* Control Toggle Switch */
+.control-toggle {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+}
+
+.control-toggle input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+
+.control-toggle .toggle-track {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-color);
+  border-radius: 11px;
+  transition: all 0.2s ease;
+}
+
+.control-toggle .toggle-track::before {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 3px rgb(0, 0, 0, 0.2);
+}
+
+.control-toggle input:checked + .toggle-track {
+  background: var(--success-color);
+  border-color: var(--success-color);
+}
+
+.control-toggle input:checked + .toggle-track::before {
+  left: calc(100% - 19px);
+  background: #fff;
+}
+
+.control-toggle input:disabled + .toggle-track {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Loss Limit Panel */
+.loss-limit-panel {
+  padding: 0.75rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  margin-bottom: 0.75rem;
+}
+
+.loss-limit-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.loss-limit-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.loss-limit-label i {
+  color: var(--warning-color);
+}
+
+.loss-limit-value {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.loss-limit-bar {
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 0.5rem;
+}
+
+.loss-limit-progress {
+  height: 100%;
+  background: var(--success-color);
+  border-radius: 3px;
+  transition:
+    width 0.3s ease,
+    background 0.3s ease;
+}
+
+.loss-limit-progress.limit-warning {
+  background: var(--warning-color);
+}
+
+.loss-limit-progress.limit-exceeded {
+  background: var(--error-color);
+}
+
+.loss-limit-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.loss-limit-period {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+}
+
+.loss-limit-status {
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.loss-limit-status.status-limited {
+  color: var(--error-color);
+}
+
+/* Force Stop Button */
+.btn-force-stop {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.btn-force-stop:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px var(--danger-alpha-30);
+}
+
+.btn-link {
+  background: none;
+  border: none;
+  padding: 0.5rem 0.75rem;
+  color: var(--primary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+}
+
+.btn-link:hover {
+  background: var(--primary-alpha-10);
+  color: var(--primary-hover);
+}
+
+/* .btn-sm is now in components.css */
+
+.config-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.875rem;
+  padding: 0.25rem 0;
+}
+
+@media (width <= 1400px) {
+  .config-overview-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem;
+  }
+}
+
+@media (width <= 768px) {
+  .config-overview-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}
+
+.config-column {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.config-column-header {
+  font-weight: 600;
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding-bottom: 0.375rem;
+  border-bottom: 1px solid var(--primary-alpha-20);
+}
+
+.config-items-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.config-item-compact {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.6875rem;
+  padding: 0.125rem 0;
+}
+
+.config-item-compact .status-icon {
+  width: 13px;
+  height: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 11px;
+}
+
+.config-item-compact .status-icon.enabled {
+  color: var(--success);
+}
+
+.config-item-compact .status-icon.disabled {
+  color: var(--text-tertiary);
+  opacity: 0.5;
+}
+
+.config-item-compact .label {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  min-width: fit-content;
+}
+
+.config-item-compact .value {
+  color: var(--text-primary);
+  font-weight: 500;
+  margin-left: auto;
+  text-align: right;
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+/* Metrics Grid */
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.5rem; /* Reduced from 0.625rem for tighter spacing */
+}
+
+@media (width <= 1400px) {
+  .metrics-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (width <= 768px) {
+  .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,361 @@
+/* ============================================================================
+   Shared Icon Container Pattern (Reusable across all tabs)
+   ============================================================================ */
+
+/* Base icon container - 40px standard */
+.icon-container {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  background: var(--primary-alpha-10);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.icon-container i {
+  font-size: 20px;
+  color: var(--primary);
+}
+
+/* Large variant - 48px for headers/prominent elements */
+.icon-container-lg {
+  width: 48px;
+  height: 48px;
+}
+
+.icon-container-lg i {
+  font-size: 24px;
+}
+
+/* Metric Cards */
+.metric-card {
+  background: var(--background-secondary);
+  border-radius: 6px;
+  padding: 0.625rem; /* Reduced from 0.875rem for compactness */
+  border: 1px solid var(--border-color);
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  transition: box-shadow 0.2s ease;
+}
+
+.metric-card:hover {
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.08);
+  border-color: var(--primary-alpha-30);
+}
+
+.metric-card-primary {
+  background: linear-gradient(135deg, var(--background-secondary) 0%, var(--primary-alpha-10) 100%);
+  border-color: var(--primary-alpha-30);
+}
+
+.metric-highlight-success {
+  background: linear-gradient(135deg, var(--background-secondary) 0%, var(--success-alpha-10) 100%);
+  border-color: var(--success-alpha-30);
+}
+
+.metric-highlight-danger {
+  background: linear-gradient(135deg, var(--background-secondary) 0%, var(--danger-alpha-10) 100%);
+  border-color: var(--danger-alpha-30);
+}
+
+/* Metric icon extends base icon-container */
+.metric-icon {
+  width: 24px; /* Reduced from 28px for compactness */
+  height: 24px;
+  border-radius: 6px;
+  background: var(--primary-alpha-10);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.metric-icon i {
+  font-size: 12px; /* Reduced from 14px for better proportions */
+  color: var(--primary);
+}
+
+.metric-highlight-success .metric-icon {
+  background: var(--success-alpha-10);
+}
+
+.metric-highlight-success .metric-icon i {
+  color: var(--success);
+}
+
+.metric-highlight-danger .metric-icon {
+  background: var(--danger-alpha-10);
+}
+
+.metric-highlight-danger .metric-icon i {
+  color: var(--danger);
+}
+
+.metric-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.metric-label {
+  font-size: 0.5625rem; /* Reduced from 0.625rem for tighter layout */
+  color: var(--text-secondary);
+  margin-bottom: 0.125rem; /* Reduced from 0.25rem */
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.metric-value {
+  font-family: var(--font-data);
+  font-size: 1.125rem; /* Reduced from 1.25rem for better proportions */
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.125rem;
+  line-height: 1.2;
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
+
+.metric-value.positive {
+  color: var(--success);
+}
+
+.metric-value.negative {
+  color: var(--danger);
+}
+
+.metric-detail {
+  font-size: 0.5625rem; /* Reduced from 0.625rem for compactness */
+  color: var(--text-muted);
+  line-height: 1.3;
+}
+
+/* Health System Cards */
+.health-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+
+@media (width <= 1100px) {
+  .health-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (width <= 600px) {
+  .health-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.health-card {
+  background: var(--background-secondary);
+  border-radius: 6px;
+  padding: 0.75rem;
+  border: 1px solid var(--border-color);
+  display: flex;
+  gap: 0.625rem;
+  align-items: flex-start;
+  transition: box-shadow 0.2s ease;
+}
+
+.health-card:hover {
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.08);
+  border-color: var(--primary-alpha-30);
+}
+
+.health-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--primary-alpha-10);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.health-icon i {
+  font-size: 16px;
+  color: var(--primary);
+}
+
+.health-icon.running {
+  background: var(--success-alpha-10);
+}
+
+.health-icon.running i {
+  color: var(--success);
+}
+
+.health-icon.stopped {
+  background: var(--danger-alpha-10);
+}
+
+.health-icon.stopped i {
+  color: var(--danger);
+}
+
+.health-icon.paused {
+  background: var(--warning-alpha-10);
+}
+
+.health-icon.paused i {
+  color: var(--warning);
+}
+
+.health-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.health-label {
+  font-size: 0.625rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.25rem;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.health-value {
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  line-height: 1.3;
+}
+
+.health-detail {
+  font-size: 0.5625rem;
+  color: var(--text-muted);
+  line-height: 1.3;
+  margin-top: 0.125rem;
+}
+
+/* Time Rule Values (position exit timeline) */
+.time-rule-value {
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+  font-weight: 500;
+}
+
+/* Positions Summary */
+.positions-summary {
+  min-height: 100px;
+}
+
+.trader-page .loading-state,
+.trader-page .info-state,
+.trader-page .empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 2rem;
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+}
+
+.trader-page .loading-state i,
+.trader-page .info-state i,
+.trader-page .empty-state i {
+  font-size: 2rem;
+  opacity: 0.5;
+}
+
+.trader-page .loading-state i {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.positions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1rem;
+}
+
+.position-summary-card {
+  background: var(--background-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  padding: 1rem;
+  transition: box-shadow 0.2s ease;
+}
+
+.position-summary-card:hover {
+  box-shadow: 0 4px 12px rgb(0, 0, 0, 0.08);
+  border-color: var(--primary-alpha-30);
+}
+
+.position-summary-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.position-summary-token {
+  font-weight: 600;
+  font-size: 0.938rem;
+  color: var(--text-primary);
+}
+
+.position-summary-roi {
+  font-weight: 700;
+  font-size: 0.875rem;
+}
+
+.position-summary-roi.positive {
+  color: var(--success);
+}
+
+.position-summary-roi.negative {
+  color: var(--danger);
+}
+
+.position-summary-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.813rem;
+  color: var(--text-secondary);
+}
+
+.position-summary-row {
+  display: flex;
+  justify-content: space-between;
+}
+
+.position-summary-label {
+  color: var(--text-muted);
+}
+
+.position-summary-value {
+  color: var(--text-primary);
+  font-weight: 500;
+  font-family: var(--font-data);
+  font-feature-settings:
+    "tnum" 1,
+    "zero" 1;
+}
