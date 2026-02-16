@@ -1,6 +1,7 @@
 mod server;
 
 pub mod demo;
+mod demo_data;
 pub mod middleware;
 pub mod routes;
 pub mod session;
