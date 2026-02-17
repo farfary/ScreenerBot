@@ -790,3 +790,24 @@ body.dt-column-resizing * {
   animation: fadeIn 0.3s ease-out;
 }
 
+/* ==================== Reduced Motion ==================== */
+@media (prefers-reduced-motion: reduce) {
+  .data-table-wrapper.is-loading .data-table thead::after,
+  .data-table-wrapper.is-loading-subtle .data-table thead::after,
+  .data-table-wrapper.is-loading .data-table-toolbar::before {
+    animation: none;
+  }
+
+  .data-table thead th.is-sorting .dt-sort-icon::before {
+    animation: none;
+  }
+
+  .data-table-blocking-state--loading .data-table-blocking-state__icon {
+    animation: none;
+  }
+
+  .dt-loading-state .dt-loading-spinner {
+    animation: none;
+  }
+}
+
