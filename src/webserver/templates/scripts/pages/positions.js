@@ -569,7 +569,7 @@ function createLifecycle() {
 
       if (!poller) {
         poller = ctx.managePoller(
-          new Poller(() => table?.refresh({ reason: "poll", preserveScroll: true }), {
+          new Poller(() => table?.refresh({ reason: "poll", preserveScroll: true, silent: true }), {
             label: "Positions",
           })
         );
