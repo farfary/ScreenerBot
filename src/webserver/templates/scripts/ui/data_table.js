@@ -211,6 +211,7 @@ export class DataTable {
       selectedRows: new Set(),
       scrollPosition: 0,
       isLoading: false,
+      isLoadingSubtle: false,
       tableWidth: null,
       hasAutoFitted: false, // Track if columns have been auto-fitted once
       userResizedColumns: {},
@@ -1607,8 +1608,10 @@ export class DataTable {
     pagination.loadingInitial = false;
 
     if (!silent) {
-      // Pass sorting column for visual feedback
+      // Use subtle loading (thin bar only) for poll/refresh, full loading for user actions
+      const useSubtle = reason === "poll" || reason === "refresh";
       this._setLoadingState(true, {
+        subtle: useSubtle,
         sortingColumn: reason === "reload" || reason === "sort" ? this.state.sortColumn : null,
       });
     }
@@ -1772,14 +1775,23 @@ export class DataTable {
 
   _setLoadingState(value, options = {}) {
     const normalized = Boolean(value);
-    if (this.state.isLoading === normalized && !options.force) {
+    const subtle = Boolean(options.subtle);
+
+    if (this.state.isLoading === normalized && this.state.isLoadingSubtle === subtle && !options.force) {
       return;
     }
     this.state.isLoading = normalized;
+    this.state.isLoadingSubtle = normalized ? subtle : false;
 
     // Update wrapper loading class for CSS transitions
     if (this.elements.wrapper) {
-      this.elements.wrapper.classList.toggle("is-loading", normalized);
+      if (subtle && normalized) {
+        this.elements.wrapper.classList.remove("is-loading");
+        this.elements.wrapper.classList.add("is-loading-subtle");
+      } else {
+        this.elements.wrapper.classList.remove("is-loading-subtle");
+        this.elements.wrapper.classList.toggle("is-loading", normalized);
+      }
     }
 
     // Track which column is being sorted for loading indicator

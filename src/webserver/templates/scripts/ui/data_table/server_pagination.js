@@ -176,7 +176,8 @@ export function applyServerPaginationMixin(DataTable) {
     }
 
     if (!options.silent) {
-      this._setLoadingState(true);
+      const useSubtle = options.reason === "poll" || options.reason === "refresh";
+      this._setLoadingState(true, { subtle: useSubtle });
     }
 
     try {
@@ -713,7 +714,8 @@ export function applyServerPaginationMixin(DataTable) {
     }
 
     if (!silent && normalizedDirection === "initial") {
-      this._setLoadingState(true);
+      const useSubtle = reason === "poll" || reason === "refresh";
+      this._setLoadingState(true, { subtle: useSubtle });
     }
 
     let loadPromise;

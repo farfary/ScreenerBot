@@ -1,14 +1,15 @@
 /* ==================== Loading State Improvements ==================== */
 
-/* Table fade during loading */
+/* Table fade during loading (full loading — user-initiated actions) */
 .data-table-wrapper.is-loading .data-table tbody {
   opacity: 0.45;
   transition: opacity var(--transition-base);
   pointer-events: none;
 }
 
-/* Animated loading bar under header */
-.data-table-wrapper.is-loading .data-table thead::after {
+/* Animated loading bar under header (shared by full + subtle modes) */
+.data-table-wrapper.is-loading .data-table thead::after,
+.data-table-wrapper.is-loading-subtle .data-table thead::after {
   content: "";
   position: absolute;
   bottom: 0;
@@ -37,7 +38,7 @@
   }
 }
 
-/* Toolbar loading indicator */
+/* Toolbar loading indicator (full loading only) */
 .data-table-wrapper.is-loading .data-table-toolbar::before {
   content: "";
   position: absolute;
