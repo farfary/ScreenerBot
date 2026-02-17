@@ -700,29 +700,9 @@ body.dt-column-resizing * {
 }
 
 /* Loading state */
-.data-table .dt-loading {
-  text-align: center;
-  padding: 48px 32px;
-  color: var(--text-secondary);
-}
-
-.data-table .dt-loading::before {
-  content: "⏳";
-  display: block;
-  font-size: 2.5rem;
-  margin-bottom: 12px;
-  animation: dt-pulse 2s ease-in-out infinite;
-}
-
-@keyframes dt-pulse {
-  0%,
-  100% {
-    opacity: 0.5;
-  }
-
-  50% {
-    opacity: 1;
-  }
+.data-table tbody tr.loading td {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 @media (width <= 768px) {
@@ -765,29 +745,6 @@ body.dt-column-resizing * {
   background: var(--bg-secondary);
   border-color: var(--border-color);
   box-shadow: 0 4px 12px rgb(0, 0, 0, 0.5);
-}
-
-/* Loading state */
-.data-table tbody tr.loading td {
-  opacity: 0.5;
-  pointer-events: none;
-}
-
-/* Animation for new rows */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.data-table tbody tr.new {
-  animation: fadeIn 0.3s ease-out;
 }
 
 /* ==================== Reduced Motion ==================== */
