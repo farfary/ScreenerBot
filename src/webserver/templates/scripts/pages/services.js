@@ -58,6 +58,7 @@ function createLifecycle() {
 
   const state = {
     summary: null,
+    hasLoadedOnce: false,
   };
 
   const updateToolbar = () => {
@@ -108,15 +109,26 @@ function createLifecycle() {
   };
 
   const loadServicesPage = async ({ reason, signal }) => {
+    if (!state.hasLoadedOnce && reason !== "poll" && table?.showBlockingState) {
+      table.showBlockingState({
+        variant: "loading",
+        title: "Loading services...",
+      });
+    }
+
     try {
       const data = await requestManager.fetch("/api/services/overview", {
         headers: { "X-Requested-With": "fetch" },
         cache: "no-store",
         priority: "normal",
+        signal,
       });
 
       const services = Array.isArray(data?.services) ? data.services : [];
       state.summary = data?.summary ?? null;
+
+      state.hasLoadedOnce = true;
+      table?.hideBlockingState?.();
 
       return {
         rows: services,
@@ -133,7 +145,13 @@ function createLifecycle() {
         throw error;
       }
       console.error("[Services] Failed to fetch:", error);
-      if (reason !== "poll") {
+      if (!state.hasLoadedOnce) {
+        table?.showBlockingState?.({
+          variant: "error",
+          title: "Failed to load services",
+          description: "Waiting for the backend to respond. We will retry automatically.",
+        });
+      } else if (reason !== "poll") {
         Utils.showToast("Failed to refresh services", "warning");
       }
       throw error;
@@ -421,6 +439,7 @@ function createLifecycle() {
       }
       poller = null;
       state.summary = null;
+      state.hasLoadedOnce = false;
       window.servicesTable = null;
     },
   };
