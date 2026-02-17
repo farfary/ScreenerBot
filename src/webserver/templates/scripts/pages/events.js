@@ -91,6 +91,7 @@ function createLifecycle() {
     filters: { ...DEFAULT_FILTERS },
     search: "",
     totalCount: null,
+    hasLoadedOnce: false,
   };
 
   const buildBaseParams = (limit = PAGE_LIMIT) => {
@@ -144,6 +145,7 @@ function createLifecycle() {
         headers: { "X-Requested-With": "fetch" },
         cache: "no-store",
         priority: "normal",
+        signal,
       });
     };
 
@@ -172,6 +174,14 @@ function createLifecycle() {
       return deduped;
     };
 
+    if (!state.hasLoadedOnce && reason !== "poll" && table?.showBlockingState) {
+      table.showBlockingState({
+        variant: "loading",
+        title: "Loading events...",
+      });
+    }
+
+    try {
     if (direction === "prev") {
       const maxId = cursor ?? existingRows[0]?.id ?? null;
       if (!maxId) {
@@ -222,6 +232,9 @@ function createLifecycle() {
       state.totalCount = data.total_count;
     }
 
+    state.hasLoadedOnce = true;
+    table?.hideBlockingState?.();
+
     return {
       rows: fresh,
       cursorPrev,
@@ -229,6 +242,22 @@ function createLifecycle() {
       hasMoreNext: (data?.events?.length ?? 0) >= PAGE_LIMIT,
       hasMorePrev: true,
     };
+    } catch (error) {
+      if (error?.name === "AbortError") {
+        throw error;
+      }
+      console.error("[Events] Failed to load events:", error);
+      if (!state.hasLoadedOnce) {
+        table?.showBlockingState?.({
+          variant: "error",
+          title: "Failed to load events",
+          description: "Waiting for the backend to respond. We will retry automatically.",
+        });
+      } else if (reason !== "poll") {
+        Utils.showToast("Failed to load events", "warning");
+      }
+      throw error;
+    }
   };
 
   const handlePageLoaded = () => {
@@ -525,6 +554,7 @@ function createLifecycle() {
       ctxRef = null;
       state.filters = { ...DEFAULT_FILTERS };
       state.search = "";
+      state.hasLoadedOnce = false;
       window.eventsTable = null;
     },
   };
