@@ -643,7 +643,10 @@ function createLifecycle() {
     activate(ctx) {
       ctxRef = ctx;
       if (!poller) {
-        poller = ctx.managePoller(new Poller(() => fetchSummary({}), { label: "Transactions" }));
+        poller = ctx.managePoller(new Poller(() => {
+          fetchSummary({});
+          requestReload("poll", { silent: true, preserveScroll: true });
+        }, { label: "Transactions" }));
       }
       poller.start();
       if ((table?.getData?.() ?? []).length === 0) {
