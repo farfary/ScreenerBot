@@ -98,10 +98,10 @@
   min-width: 220px;
   max-height: 420px;
   overflow-y: auto;
-  animation: slideDown 0.2s ease;
+  animation: dt-slideDown 0.2s ease;
 }
 
-@keyframes slideDown {
+@keyframes dt-slideDown {
   from {
     opacity: 0;
     transform: translateY(-8px);
