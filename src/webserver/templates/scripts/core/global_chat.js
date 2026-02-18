@@ -30,12 +30,12 @@ class GlobalChat {
   }
 
   _buildDOM() {
-    // Floating button
+    // Header action button
     this._btn = document.createElement("button");
-    this._btn.className = "global-chat-btn";
-    this._btn.setAttribute("aria-label", "Open AI Chat");
+    this._btn.className = "header-action-btn global-chat-btn";
+    this._btn.setAttribute("aria-label", "AI Assistant");
     this._btn.setAttribute("title", "AI Assistant");
-    this._btn.innerHTML = '<i class="icon-bot-message-square"></i>';
+    this._btn.innerHTML = '<i class="action-icon icon-bot-message-square"></i>';
 
     // Overlay
     this._overlay = document.createElement("div");
@@ -56,7 +56,13 @@ class GlobalChat {
       </div>
     `;
 
-    document.body.appendChild(this._btn);
+    // Insert as first child of .header-actions (before search button)
+    const headerActions = document.querySelector(".header-actions");
+    if (headerActions) {
+      headerActions.insertBefore(this._btn, headerActions.firstChild);
+    } else {
+      document.body.appendChild(this._btn);
+    }
     document.body.appendChild(this._overlay);
   }
 
