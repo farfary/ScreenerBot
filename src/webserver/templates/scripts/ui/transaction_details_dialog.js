@@ -393,8 +393,13 @@ export class TransactionDetailsDialog {
     const tx = this.fullTransactionData;
     if (!tx) return;
 
+    const swapHtml = this._buildSwapSection(tx);
+    const pnlHtml = this._buildPnLSection(tx);
+    const tokenHtml = this._buildTokenSection(tx);
+    const hasExtraSections = swapHtml || pnlHtml || tokenHtml;
+
     content.innerHTML = `
-      <div class="tx-overview-layout">
+      <div class="tx-overview-layout${hasExtraSections ? "" : " single-column"}">
         <div class="overview-section">
           <div class="section-header">Transaction Details</div>
           <div class="info-grid">
@@ -409,9 +414,9 @@ export class TransactionDetailsDialog {
           </div>
         </div>
 
-        ${this._buildSwapSection(tx)}
-        ${this._buildPnLSection(tx)}
-        ${this._buildTokenSection(tx)}
+        ${swapHtml}
+        ${pnlHtml}
+        ${tokenHtml}
       </div>
     `;
   }

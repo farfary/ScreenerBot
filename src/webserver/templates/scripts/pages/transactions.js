@@ -124,6 +124,8 @@ function createLifecycle() {
     summary: null,
   };
 
+  let lastUserReloadAt = 0;
+
   const buildFiltersPayload = () => {
     const filters = {};
     const typeValue = state.filters.type;
@@ -260,6 +262,18 @@ function createLifecycle() {
         state.totalEstimate = data.total_estimate;
       }
 
+      // For initial/reload direction, return all items without dedup.
+      // _replaceData._isDataUnchanged() handles skip-if-same optimization.
+      // Dedup is only needed for prev direction (prepending new transactions).
+      if (direction !== "prev") {
+        const items = Array.isArray(data?.items) ? data.items : [];
+        return {
+          rows: items,
+          cursorNext: data?.next_cursor ?? null,
+          hasMoreNext: Boolean(data?.next_cursor),
+        };
+      }
+
       const existingRows = table?.getData?.() ?? [];
       const existingKeys = new Set(
         existingRows
@@ -267,78 +281,56 @@ function createLifecycle() {
           .filter((signature) => typeof signature === "string")
       );
 
-      if (direction === "prev") {
-        const aggregated = [];
-        let hitDuplicate = false;
-        const processBatch = (batch) => {
-          for (const row of batch) {
-            const signature = row?.signature;
-            if (!signature) {
-              continue;
-            }
-            if (existingKeys.has(signature)) {
-              hitDuplicate = true;
-              return false;
-            }
-            existingKeys.add(signature);
-            aggregated.push(row);
+      const aggregated = [];
+      let hitDuplicate = false;
+      const processBatch = (batch) => {
+        for (const row of batch) {
+          const signature = row?.signature;
+          if (!signature) {
+            continue;
           }
-          return true;
-        };
-
-        const firstItems = Array.isArray(data?.items) ? data.items : [];
-        processBatch(firstItems);
-
-        let nextCursor = data?.next_cursor ?? null;
-        let guard = 0;
-        const MAX_EXTRA_BATCHES = 5;
-
-        while (nextCursor && guard < MAX_EXTRA_BATCHES && !hitDuplicate) {
-          guard += 1;
-          const nextPayload = buildRequestPayload(nextCursor);
-          const nextData = await requestManager.fetch("/api/transactions/list", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Requested-With": "fetch",
-            },
-            body: JSON.stringify(nextPayload),
-            cache: "no-store",
-            priority: "normal",
-          });
-
-          const nextItems = Array.isArray(nextData?.items) ? nextData.items : [];
-
-          processBatch(nextItems);
-          nextCursor = nextData?.next_cursor ?? null;
+          if (existingKeys.has(signature)) {
+            hitDuplicate = true;
+            return false;
+          }
+          existingKeys.add(signature);
+          aggregated.push(row);
         }
+        return true;
+      };
 
-        const hasMorePrev = !hitDuplicate && Boolean(nextCursor);
+      const firstItems = Array.isArray(data?.items) ? data.items : [];
+      processBatch(firstItems);
 
-        return {
-          rows: aggregated,
-          hasMorePrev,
-        };
+      let nextCursor = data?.next_cursor ?? null;
+      let guard = 0;
+      const MAX_EXTRA_BATCHES = 5;
+
+      while (nextCursor && guard < MAX_EXTRA_BATCHES && !hitDuplicate) {
+        guard += 1;
+        const nextPayload = buildRequestPayload(nextCursor);
+        const nextData = await requestManager.fetch("/api/transactions/list", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Requested-With": "fetch",
+          },
+          body: JSON.stringify(nextPayload),
+          cache: "no-store",
+          priority: "normal",
+        });
+
+        const nextItems = Array.isArray(nextData?.items) ? nextData.items : [];
+
+        processBatch(nextItems);
+        nextCursor = nextData?.next_cursor ?? null;
       }
 
-      const items = Array.isArray(data?.items) ? data.items : [];
-      const fresh = [];
-      for (const row of items) {
-        const signature = row?.signature;
-        if (!signature) {
-          continue;
-        }
-        if (existingKeys.has(signature)) {
-          continue;
-        }
-        existingKeys.add(signature);
-        fresh.push(row);
-      }
+      const hasMorePrev = !hitDuplicate && Boolean(nextCursor);
 
       return {
-        rows: fresh,
-        cursorNext: data?.next_cursor ?? null,
-        hasMoreNext: Boolean(data?.next_cursor),
+        rows: aggregated,
+        hasMorePrev,
       };
     } catch (error) {
       if (error?.name === "AbortError") {
@@ -356,10 +348,45 @@ function createLifecycle() {
     updateToolbar();
   };
 
-  const requestReload = (reason = "manual", options = {}) => {
-    if (!table) {
-      return Promise.resolve(null);
+  const shouldSkipPollReload = () => {
+    if (!table) return false;
+
+    // If table is already loading, skip poll to avoid reload loops
+    if (table.state?.isLoading) return true;
+
+    // Skip polls shortly after user-triggered reload
+    if (lastUserReloadAt && Date.now() - lastUserReloadAt < 2500) return true;
+
+    const paginationState =
+      typeof table.getPaginationState === "function" ? table.getPaginationState() : null;
+    if (paginationState?.loadingNext || paginationState?.loadingPrev || paginationState?.loadingInitial) {
+      return true;
     }
+
+    // Skip if any UI interaction is in progress (dropdown, input focus, hover)
+    const container = table?.elements?.container;
+    if (container) {
+      const hoveredRow = container.querySelector("tr[data-row-id]:hover");
+      if (hoveredRow) return true;
+
+      const focusedElement = document.activeElement;
+      if (focusedElement && container.contains(focusedElement)) {
+        const tagName = focusedElement.tagName?.toLowerCase();
+        if (tagName === "input" || tagName === "select" || tagName === "button") return true;
+      }
+    }
+
+    return false;
+  };
+
+  const requestReload = (reason = "manual", options = {}) => {
+    if (!table) return Promise.resolve(null);
+    if (reason === "poll" && shouldSkipPollReload()) return Promise.resolve(null);
+
+    if (reason !== "poll") {
+      lastUserReloadAt = Date.now();
+    }
+
     return table.reload({
       reason,
       silent: options.silent ?? false,

@@ -9,6 +9,10 @@
   gap: 0.625rem;
 }
 
+.transaction-details-dialog .tx-overview-layout.single-column {
+  grid-template-columns: 1fr;
+}
+
 .transaction-details-dialog .overview-section {
   background: var(--bg-secondary);
   border: 1px solid var(--border-color);
