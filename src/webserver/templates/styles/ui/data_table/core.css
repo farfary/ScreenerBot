@@ -113,10 +113,19 @@
   }
 }
 
-/* Scroll container */
+/* Fixed header container — sits above the scroll container, never scrolls vertically.
+   overflow: hidden clips the header table when the body scrolls horizontally (synced via JS). */
+.data-table-header-container {
+  flex-shrink: 0;
+  overflow: hidden;
+  position: relative; /* for loading bar ::after */
+  scrollbar-gutter: var(--scrollbar-gutter);
+}
+
+/* Scroll container — body only, scrolls both axes */
 .data-table-scroll-container {
   flex: 1;
-  overflow: auto; /* Enable both horizontal and vertical scrolling */
+  overflow: auto;
   position: relative;
   min-height: 0; /* Critical for flex scrolling */
   scrollbar-gutter: var(--scrollbar-gutter);
@@ -252,15 +261,8 @@
 /* Table header */
 .data-table thead {
   background: var(--bg-secondary);
-  box-shadow: 0 2px 4px rgb(0, 0, 0, 0.05);
-  position: relative; /* Required for loading bar */
-}
-
-.data-table thead.sticky {
-  position: sticky;
-  top: 0;
-  z-index: 10;
   box-shadow: 0 2px 8px rgb(0, 0, 0, 0.1);
+  position: relative; /* Required for loading bar */
 }
 
 .data-table th {

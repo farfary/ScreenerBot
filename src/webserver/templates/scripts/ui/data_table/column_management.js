@@ -54,12 +54,20 @@ export function applyColumnManagementMixin(DataTable) {
     const maxWidth = this._getColumnMaxWidth(columnId);
     const w = Math.min(maxWidth, Math.max(minWidth, Math.round(widthPx)));
 
-    // Update <col> element (primary width control)
+    // Update <col> element in body table (primary width control)
     const col = this.elements.cols?.[columnId];
     if (col) {
       col.style.width = `${w}px`;
       col.style.minWidth = `${w}px`;
       col.style.maxWidth = `${w}px`;
+    }
+
+    // Mirror width to header table's <col> element
+    const headerCol = this.elements.headerColgroup?.querySelector(`col[data-column-id="${columnId}"]`);
+    if (headerCol) {
+      headerCol.style.width = `${w}px`;
+      headerCol.style.minWidth = `${w}px`;
+      headerCol.style.maxWidth = `${w}px`;
     }
 
     // Update header for proper pointer events hit-box
@@ -70,15 +78,9 @@ export function applyColumnManagementMixin(DataTable) {
   };
 
   proto._applyTableWidth = function () {
-    if (!this.elements.table) {
-      return;
-    }
-
-    if (typeof this.state.tableWidth === "number") {
-      this.elements.table.style.width = `${this.state.tableWidth}px`;
-    } else {
-      this.elements.table.style.width = "";
-    }
+    const w = typeof this.state.tableWidth === "number" ? `${this.state.tableWidth}px` : "";
+    if (this.elements.table) this.elements.table.style.width = w;
+    if (this.elements.headerTable) this.elements.headerTable.style.width = w;
   };
 
   proto._applyStoredColumnWidths = function () {

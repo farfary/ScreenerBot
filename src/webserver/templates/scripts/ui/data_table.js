@@ -456,6 +456,11 @@ export class DataTable {
         ? this.options.uniformRowHeight
         : null;
 
+    const tableClasses = `data-table ${this.options.compact ? "compact" : ""} ${
+      this.options.zebra ? "zebra" : ""
+    } ${uniformRowsLines ? "uniform-rows" : ""}`.trim();
+    const tableStyle = uniformRowsLines ? `style="--dt-row-lines: ${uniformRowsLines};"` : "";
+
     container.innerHTML = `
       <div class="data-table-wrapper ${fixedHeightClass}" ${
         typeof this.options.fixedHeight === "number"
@@ -463,6 +468,14 @@ export class DataTable {
           : ""
       }>
         ${this._renderToolbar()}
+        <div class="data-table-header-container">
+          <table class="${tableClasses}" ${tableStyle}>
+            ${this._renderColgroup()}
+            <thead>
+              ${this._renderHeader()}
+            </thead>
+          </table>
+        </div>
         <div class="data-table-scroll-container">
           <div class="data-table-blocking-state" aria-live="polite" aria-hidden="true">
             <div class="data-table-blocking-state__inner">
@@ -473,15 +486,8 @@ export class DataTable {
               </div>
             </div>
           </div>
-          <table class="data-table ${this.options.compact ? "compact" : ""} ${
-            this.options.zebra ? "zebra" : ""
-          } ${uniformRowsLines ? "uniform-rows" : ""}" ${
-            uniformRowsLines ? `style="--dt-row-lines: ${uniformRowsLines};"` : ""
-          }>
+          <table class="${tableClasses}" ${tableStyle}>
             ${this._renderColgroup()}
-            <thead class="${this.options.stickyHeader ? "sticky" : ""}">
-              ${this._renderHeader()}
-            </thead>
             <tbody>
               ${this._renderBody()}
             </tbody>
@@ -494,8 +500,10 @@ export class DataTable {
 
     this.elements.wrapper = container.querySelector(".data-table-wrapper");
     this.elements.toolbar = container.querySelector(".data-table-toolbar");
+    this.elements.headerContainer = container.querySelector(".data-table-header-container");
     this.elements.scrollContainer = container.querySelector(".data-table-scroll-container");
-    this.elements.table = container.querySelector(".data-table");
+    this.elements.headerTable = this.elements.headerContainer?.querySelector(".data-table");
+    this.elements.table = this.elements.scrollContainer?.querySelector(".data-table");
     this.elements.thead = container.querySelector("thead");
     this.elements.tbody = container.querySelector("tbody");
     this.elements.blockingState = container.querySelector(".data-table-blocking-state");
@@ -507,8 +515,9 @@ export class DataTable {
     this.elements.clientPaginationBar = container.querySelector(".dt-client-pagination-bar");
     this.elements.serverPaginationBar = container.querySelector(".dt-server-pagination-bar");
 
-    // Cache col elements for fast width updates
-    this.elements.colgroup = container.querySelector("colgroup");
+    // Cache col elements for fast width updates (from BODY table — header syncs from these)
+    this.elements.colgroup = this.elements.table?.querySelector("colgroup");
+    this.elements.headerColgroup = this.elements.headerTable?.querySelector("colgroup");
     this.elements.cols = {};
     if (this.elements.colgroup) {
       const cols = this.elements.colgroup.querySelectorAll("col[data-column-id]");
@@ -520,8 +529,10 @@ export class DataTable {
       });
     }
 
-    if (this.elements.table && typeof this.state.tableWidth === "number") {
-      this.elements.table.style.width = `${this.state.tableWidth}px`;
+    // Apply stored table width to BOTH header and body tables
+    if (typeof this.state.tableWidth === "number") {
+      if (this.elements.table) this.elements.table.style.width = `${this.state.tableWidth}px`;
+      if (this.elements.headerTable) this.elements.headerTable.style.width = `${this.state.tableWidth}px`;
     }
 
     // Snapshot natural widths on first paint so later resizes don't cause other columns to stretch
@@ -1476,13 +1487,15 @@ export class DataTable {
       this._updateTableBody(visibleRows);
     }
 
-    if (this.elements.table) {
-      const colgroupMarkup = this._renderColgroup().trim();
-      const existingColgroup = this.elements.table.querySelector("colgroup");
-      if (existingColgroup) {
-        existingColgroup.outerHTML = colgroupMarkup;
+    // Update colgroup in BOTH header and body tables
+    const colgroupMarkup = this._renderColgroup().trim();
+    for (const tbl of [this.elements.table, this.elements.headerTable]) {
+      if (!tbl) continue;
+      const existing = tbl.querySelector("colgroup");
+      if (existing) {
+        existing.outerHTML = colgroupMarkup;
       } else {
-        this.elements.table.insertAdjacentHTML("afterbegin", colgroupMarkup);
+        tbl.insertAdjacentHTML("afterbegin", colgroupMarkup);
       }
     }
 
@@ -1491,8 +1504,9 @@ export class DataTable {
       this.elements.thead = this.elements.container.querySelector("thead");
       this.elements.tbody = this.elements.container.querySelector("tbody");
 
-      // Re-cache col elements
-      this.elements.colgroup = this.elements.container.querySelector("colgroup");
+      // Re-cache col elements from body table
+      this.elements.colgroup = this.elements.table?.querySelector("colgroup");
+      this.elements.headerColgroup = this.elements.headerTable?.querySelector("colgroup");
       this.elements.cols = {};
       if (this.elements.colgroup) {
         const cols = this.elements.colgroup.querySelectorAll("col[data-column-id]");
@@ -1545,6 +1559,9 @@ export class DataTable {
 
       scrollContainer.scrollTop = targetTop;
       scrollContainer.scrollLeft = prevScrollLeft;
+      if (this.elements.headerContainer) {
+        this.elements.headerContainer.scrollLeft = prevScrollLeft;
+      }
       this.state.scrollPosition = targetTop;
 
       if (this._pagination?.enabled) {

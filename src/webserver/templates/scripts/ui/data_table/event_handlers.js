@@ -664,6 +664,14 @@ export function applyEventHandlersMixin(DataTable) {
     };
     this._addEventListener(this.elements.scrollContainer, "scroll", scrollHandler);
 
+    // Sync horizontal scroll from body scroll container to the fixed header container
+    if (this.elements.headerContainer && this.elements.scrollContainer) {
+      const hScrollSync = () => {
+        this.elements.headerContainer.scrollLeft = this.elements.scrollContainer.scrollLeft;
+      };
+      this._addEventListener(this.elements.scrollContainer, "scroll", hScrollSync);
+    }
+
     // Attach client pagination events
     this._attachClientPaginationEvents();
 
