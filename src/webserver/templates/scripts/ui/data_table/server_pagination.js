@@ -942,19 +942,23 @@ export function applyServerPaginationMixin(DataTable) {
     // Use rowKey if available for faster comparison
     const rowKey = this.options.rowKey;
     if (rowKey) {
-      // Compare by row keys and a subset of values for performance
       for (let i = 0; i < newRows.length; i++) {
         const oldRow = currentData[i];
         const newRow = newRows[i];
 
-        // Check if key changed
+        // Check if row identity changed
         if (oldRow?.[rowKey] !== newRow?.[rowKey]) {
           return false;
         }
 
-        // Quick shallow comparison of visible columns
-        for (const col of this.options.columns) {
-          if (oldRow?.[col.id] !== newRow?.[col.id]) {
+        // Compare all primitive fields to catch timestamp changes, computed values,
+        // and any data used by render functions (not just visible column IDs)
+        const keys = Object.keys(newRow);
+        for (const key of keys) {
+          const val = newRow[key];
+          // Skip objects/arrays — they may differ by reference without semantic change
+          if (val !== null && typeof val === "object") continue;
+          if (oldRow?.[key] !== val) {
             return false;
           }
         }
@@ -984,10 +988,15 @@ export function applyServerPaginationMixin(DataTable) {
     // Check if data has actually changed to avoid unnecessary re-renders
     // This prevents DOM churn during polling when data is the same
     if (!meta.forceRender && this._isDataUnchanged(sanitized)) {
-      this._log("debug", "Data unchanged, skipping re-render", { rows: sanitized.length });
-      this._updatePaginationMeta(meta, { replace: true });
-      this._setLoadingState(false);
-      return;
+      // Still re-render periodically to refresh time-relative cells (e.g., "5s ago" text)
+      const now = Date.now();
+      const timeSinceRender = now - (this._lastFullRenderTime || 0);
+      if (timeSinceRender < 5000) {
+        this._log("debug", "Data unchanged, skipping re-render", { rows: sanitized.length });
+        this._updatePaginationMeta(meta, { replace: true });
+        this._setLoadingState(false);
+        return;
+      }
     }
 
     const isInitialLoad = this.state.data.length === 0;
@@ -1005,6 +1014,7 @@ export function applyServerPaginationMixin(DataTable) {
       renderOptions.resetScroll = true;
     }
     this._applyFilters({ renderOptions });
+    this._lastFullRenderTime = Date.now();
     this._log("info", "Data replaced", { rows: sanitized.length });
   };
 
