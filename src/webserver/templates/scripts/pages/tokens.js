@@ -504,7 +504,7 @@ function createLifecycle() {
       }
 
       // Skip if any row is currently being hovered (prevents hover state loss)
-      const hoveredRow = container.querySelector("tr.dt-row:hover");
+      const hoveredRow = container.querySelector("tr[data-row-id]:hover");
       if (hoveredRow) {
         return true;
       }
