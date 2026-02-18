@@ -1,22 +1,19 @@
 #!/bin/bash
-# ┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-# ┃                                                                                                  ┃
-# ┃ ███████╗ ██████╗██████╗ ███████╗███████╗███╗   ██╗███████╗██████╗ ██████╗  ██████╗ ████████╗ ┃
-# ┃ ██╔════╝██╔════╝██╔══██╗██╔════╝██╔════╝████╗  ██║██╔════╝██╔══██╗██╔══██╗██╔═══██╗╚══██╔══╝ ┃
-# ┃ ███████╗██║     ██████╔╝█████╗  █████╗  ██╔██╗ ██║█████╗  ██████╔╝██████╔╝██║   ██║   ██║    ┃
-# ┃ ╚════██║██║     ██╔══██╗██╔══╝  ██╔══╝  ██║╚██╗██║██╔══╝  ██╔══██╗██╔══██╗██║   ██║   ██║    ┃
-# ┃ ███████║╚██████╗██║  ██║███████╗███████╗██║ ╚████║███████╗██║  ██║██████╔╝╚██████╔╝   ██║    ┃
-# ┃ ╚══════╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝╚═════╝  ╚═════╝    ╚═╝    ┃
-# ┃                                                                                                  ┃
-# ┃                                         SCREENERBOT                                              ┃
-# ┃                                                                                                  ┃
-# ┃              ScreenerBot VPS Manager - Installation, Update & Management Tool                    ┃
-# ┃              https://screenerbot.io                                                              ┃
-# ┃                                                                                                  ┃
-# ┃                            ◆ Automated Solana DeFi Trading Bot ◆                                 ┃
-# ┃              Copyright © 2025 ScreenerBot. All rights reserved.                                  ┃
-# ┃                                                                                                  ┃
-# ┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+#
+# ███████╗ ██████╗██████╗ ███████╗███████╗███╗   ██╗███████╗██████╗ ██████╗  ██████╗ ████████╗
+# ██╔════╝██╔════╝██╔══██╗██╔════╝██╔════╝████╗  ██║██╔════╝██╔══██╗██╔══██╗██╔═══██╗╚══██╔══╝
+# ███████╗██║     ██████╔╝█████╗  █████╗  ██╔██╗ ██║█████╗  ██████╔╝██████╔╝██║   ██║   ██║   
+# ╚════██║██║     ██╔══██╗██╔══╝  ██╔══╝  ██║╚██╗██║██╔══╝  ██╔══██╗██╔══██╗██║   ██║   ██║   
+# ███████║╚██████╗██║  ██║███████╗███████╗██║ ╚████║███████╗██║  ██║██████╔╝╚██████╔╝   ██║   
+# ╚══════╝ ╚═════╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═══╝╚══════╝╚═╝  ╚═╝╚═════╝  ╚═════╝    ╚═╝   
+#
+# SCREENERBOT
+#
+# ScreenerBot VPS Manager - Installation, Update & Management Tool
+# https://screenerbot.io
+#
+# ◆ Automated Solana DeFi Trading Bot ◆
+# Copyright © 2025 ScreenerBot. All rights reserved.
 #
 # USAGE:
 #   curl -fsSL https://screenerbot.io/install.sh | bash
@@ -113,6 +110,7 @@ if [ -t 1 ] && command -v tput &>/dev/null; then
     readonly CYAN=$(tput setaf 6)
     readonly WHITE=$(tput setaf 7)
     readonly BOLD=$(tput bold)
+    readonly ITALIC=$(tput sitm 2>/dev/null || echo -e "\e[3m")
     readonly DIM=$(tput dim)
     readonly RESET=$(tput sgr0)
 else
@@ -124,6 +122,7 @@ else
     readonly CYAN=""
     readonly WHITE=""
     readonly BOLD=""
+    readonly ITALIC=""
     readonly DIM=""
     readonly RESET=""
 fi
@@ -177,9 +176,7 @@ log_error() {
 }
 
 log_step() {
-    echo -e "\n${CYAN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
-    echo -e "${CYAN}${BOLD}▶ $1${RESET}"
-    echo -e "${CYAN}${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${RESET}"
+    echo -e "\n${CYAN}${BOLD}${ITALIC}▶ $1${RESET}"
 }
 
 # Spinner animation for long-running tasks
@@ -204,6 +201,12 @@ spinner() {
     tput cnorm >&2 2>/dev/null || true
 }
 
+# Repeat a character N times (tr breaks on multibyte Unicode chars)
+repeat_char() {
+    local char="$1" count="$2" i
+    for ((i=0; i<count; i++)); do printf '%s' "$char"; done
+}
+
 # Progress bar animation
 progress_bar() {
     local current=$1
@@ -214,8 +217,8 @@ progress_bar() {
     local empty=$((width - filled))
     
     printf "\r  [" >&2
-    printf "%${filled}s" '' | tr ' ' '█' >&2
-    printf "%${empty}s" '' | tr ' ' '░' >&2
+    repeat_char '█' "$filled" >&2
+    repeat_char '░' "$empty" >&2
     printf "] %3d%%" "$percent" >&2
 }
 
@@ -272,7 +275,7 @@ print_banner() {
     # Single source of truth for banner - call this function everywhere.
     
     # Cyan + Bold + Italic
-    echo -e "${CYAN}${BOLD}\e[3m"
+    echo -e "${CYAN}${BOLD}${ITALIC}"
 
     # ANSI Shadow font (Robotic/Cyberpunk style) - 93 chars wide
     printf "   %s\n" "███████╗ ██████╗██████╗ ███████╗███████╗███╗   ██╗███████╗██████╗ ██████╗  ██████╗ ████████╗"
@@ -850,7 +853,7 @@ download_and_install() {
     # Create temp directory for download
     local temp_dir
     temp_dir=$(mktemp -d)
-    trap "rm -rf '${temp_dir}'" EXIT
+    trap '[ -n "${temp_dir}" ] && rm -rf "${temp_dir}"' EXIT
     
     local download_url
     download_url=$(get_download_url "$version" "$platform")
@@ -910,7 +913,7 @@ download_and_install() {
     # Create symlink
     if [ ! -L "${SYMLINK_PATH}" ] || [ "$(readlink -f "${SYMLINK_PATH}")" != "${INSTALL_DIR}/screenerbot" ]; then
         log_info "Creating symlink: ${SYMLINK_PATH} -> ${INSTALL_DIR}/screenerbot"
-        ln -sf "${INSTALL_DIR}/screenerbot" "${SYMLINK_PATH}"
+        ln -snf "${INSTALL_DIR}/screenerbot" "${SYMLINK_PATH}"
     fi
     
     # Verify installation
@@ -922,6 +925,10 @@ download_and_install() {
     fi
     
     log_success "ScreenerBot v${installed_version} installed successfully!"
+    
+    # Clean up temp dir and trap
+    rm -rf "${temp_dir}" 2>/dev/null
+    trap - EXIT
     
     # Install manager script if not already installed
     if [ ! -x "$MANAGER_PATH" ]; then
@@ -971,25 +978,21 @@ uninstall() {
     fi
     
     # Remove installation directory
-    if [ -d "${INSTALL_DIR}" ]; then
+    if [ -n "${INSTALL_DIR}" ] && [ -d "${INSTALL_DIR}" ]; then
         log_info "Removing installation directory..."
         rm -rf "${INSTALL_DIR}"
     fi
     
     log_success "ScreenerBot uninstalled successfully!"
     
-    # Ask about data directory
+    # Data directory protection — NEVER delete wallet data
     local data_dir
     data_dir=$(get_data_dir)
     if [ -d "$data_dir" ]; then
         echo ""
-        log_warn "Data directory still exists: ${data_dir}"
-        if confirm "Remove data directory? (This will delete all configs and databases)"; then
-            rm -rf "$data_dir"
-            log_success "Data directory removed"
-        else
-            log_info "Data directory preserved at: ${data_dir}"
-        fi
+        log_info "Data directory preserved at: ${data_dir}"
+        log_info "Contains wallets, configs, and databases — never deleted by this script"
+        log_info "To manually remove if needed: rm -rf ${data_dir}"
     fi
 }
 
@@ -1216,7 +1219,16 @@ restore_backup() {
             fi
             return 1
         fi
-        rm -rf "$data_dir"
+        # Move current data aside (never delete wallet data)
+        local move_aside="${data_dir}.pre-restore-$(date +%Y%m%d-%H%M%S)"
+        if ! mv "$data_dir" "$move_aside"; then
+            log_error "Failed to move current data directory aside"
+            if [ "$service_was_running" = true ]; then
+                systemctl start "${SERVICE_NAME}" 2>/dev/null || true
+            fi
+            return 1
+        fi
+        log_info "Current data moved to: $(basename "$move_aside")"
     else
         echo ""
         echo "  ${BOLD}Target:${RESET} ${data_dir}"
@@ -1230,6 +1242,12 @@ restore_backup() {
     # Restore (suppress Docker xattr warnings)
     log_info "Restoring from backup..."
     mkdir -p "$(dirname "$data_dir")"
+    
+    # Check for path traversal in backup archive
+    if tar -tzf "$backup_path" 2>/dev/null | grep -qE '(^|/)\.\.(/|$)'; then
+        log_error "Backup contains suspicious path traversal entries — aborting"
+        return 1
+    fi
     
     local tar_output
     if tar_output=$(tar -xzf "$backup_path" -C "$(dirname "$data_dir")" 2>&1); then
@@ -1293,6 +1311,16 @@ create_service() {
             log_info "Service creation cancelled"
             return 1
         fi
+    fi
+    
+    # Validate username and home directory before embedding in unit file
+    if ! echo "$user" | grep -qE '^[a-zA-Z_][a-zA-Z0-9_-]*$'; then
+        log_error "Invalid username for service: ${user}"
+        return 1
+    fi
+    if ! echo "$home_dir" | grep -qE '^/[a-zA-Z0-9/_.-]+$'; then
+        log_error "Invalid home directory for service: ${home_dir}"
+        return 1
     fi
     
     cat > "${SERVICE_FILE}" << EOF
@@ -1733,12 +1761,26 @@ set_dashboard_password() {
         fi
     fi
     
-    # Build JSON payload
-    local json_payload
+    # Build JSON payload safely (escape special characters to prevent injection)
+    json_escape_val() {
+        local s="$1"
+        s="${s//\\/\\\\}"
+        s="${s//\"/\\\"}"
+        s="${s//$'\n'/\\n}"
+        s="${s//$'\t'/\\t}"
+        s="${s//$'\r'/\\r}"
+        s="${s//$'\b'/\\b}"
+        s="${s//$'\f'/\\f}"
+        printf '%s' "$s"
+    }
+    local json_payload escaped_new
+    escaped_new=$(json_escape_val "$new_password")
     if [ "$has_password" = "true" ] && [ -n "$current_password" ]; then
-        json_payload="{\"current_password\":\"$current_password\",\"new_password\":\"$new_password\"}"
+        local escaped_current
+        escaped_current=$(json_escape_val "$current_password")
+        json_payload="{\"current_password\":\"$escaped_current\",\"new_password\":\"$escaped_new\"}"
     else
-        json_payload="{\"new_password\":\"$new_password\"}"
+        json_payload="{\"new_password\":\"$escaped_new\"}"
     fi
     
     # Send request
@@ -2511,9 +2553,9 @@ draw_modern_bar() {
     fi
     
     printf "${color}"
-    printf "%${filled}s" '' | tr ' ' '▰'
+    repeat_char '▰' "$filled"
     printf "${RESET}${DIM}"
-    printf "%${empty}s" '' | tr ' ' '▱'
+    repeat_char '▱' "$empty"
     printf "${RESET} %3d%%" "$percent"
 }
 
