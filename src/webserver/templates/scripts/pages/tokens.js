@@ -453,20 +453,17 @@ function createLifecycle() {
   const shouldSkipPollReload = () => {
     if (!table) return false;
 
-    // Only the Pool Service view needs real-time table refreshes.
-    // Other views are either static or user-driven and auto-reloading every poll interval
-    // can spam /api/tokens/list and interfere with sorting/pagination responsiveness.
-    if (state.view !== "pool") {
-      return true;
-    }
-
-    // In server-backed "Pages" mode we should not auto-reload the table.
-    // It triggers a full page fetch every interval (default 1s) which can
-    // overwhelm the UI and interfere with user-driven sorts/page navigation.
+    // In server-backed "Pages" mode, reduce poll frequency instead of blocking entirely.
+    // Pages mode refetches the current page, but _isDataUnchanged prevents DOM churn.
     if (
       typeof table.getServerPaginationMode === "function" &&
       table.getServerPaginationMode() === "pages"
     ) {
+      // Allow poll every 5s in pages mode (vs 1s in scroll mode)
+      if (!shouldSkipPollReload._lastPagesPoll || Date.now() - shouldSkipPollReload._lastPagesPoll >= 5000) {
+        shouldSkipPollReload._lastPagesPoll = Date.now();
+        return false;
+      }
       return true;
     }
 
@@ -522,18 +519,7 @@ function createLifecycle() {
       }
     }
 
-    const scrollContainer = table?.elements?.scrollContainer;
-    if (!scrollContainer) {
-      return false;
-    }
-
-    const hasScrollableContent = scrollContainer.scrollHeight > scrollContainer.clientHeight + 16;
-    if (!hasScrollableContent) {
-      return false;
-    }
-
-    const nearTop = scrollContainer.scrollTop <= 120;
-    return !nearTop;
+    return false;
   };
 
   const syncTableSortState = (options = {}) => {
