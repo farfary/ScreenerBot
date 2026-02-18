@@ -85,6 +85,7 @@
 .table-settings-body {
   padding: 20px;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   display: flex;
   flex-direction: column;
   gap: 20px;

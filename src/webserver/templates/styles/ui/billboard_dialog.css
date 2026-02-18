@@ -208,6 +208,7 @@
   flex: 1;
   overflow-y: auto;
   padding: var(--spacing-lg, 24px);
+  scrollbar-gutter: stable;
 }
 
 /* =============================================================================

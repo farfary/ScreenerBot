@@ -119,6 +119,7 @@
 .search-dialog-body {
   max-height: 380px;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .search-results {

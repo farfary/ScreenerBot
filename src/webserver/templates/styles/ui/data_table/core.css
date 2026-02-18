@@ -119,6 +119,7 @@
   overflow: auto; /* Enable both horizontal and vertical scrolling */
   position: relative;
   min-height: 0; /* Critical for flex scrolling */
+  scrollbar-gutter: var(--scrollbar-gutter);
 }
 
 /* Scrollbar styling - uses global scrollbar-table pattern */

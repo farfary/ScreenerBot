@@ -103,6 +103,7 @@ body.events-dialog-open {
 .events-dialog-body {
   padding: 12px 24px 24px;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   display: flex;
   flex-direction: column;
   gap: 16px;
