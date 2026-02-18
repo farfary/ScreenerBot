@@ -833,6 +833,46 @@ export class ChatWidget {
     this._scrollToBottom();
   }
 
+  _formatMarkdown(text) {
+    if (!text) return "";
+    let html = Utils.escapeHtml(text);
+
+    // Store code blocks to protect from further processing
+    const codeBlocks = [];
+    html = html.replace(/```(?:\w*)\n?([\s\S]*?)```/g, (_match, code) => {
+      const idx = codeBlocks.length;
+      codeBlocks.push(`<pre class="chat-code-block"><code>${code.trim()}</code></pre>`);
+      return `\x00CODEBLOCK${idx}\x00`;
+    });
+
+    // Inline code (protect from further processing)
+    const inlineCodes = [];
+    html = html.replace(/`([^`\n]+)`/g, (_match, code) => {
+      const idx = inlineCodes.length;
+      inlineCodes.push(`<code class="chat-inline-code">${code}</code>`);
+      return `\x00INLINE${idx}\x00`;
+    });
+
+    // Bold
+    html = html.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>");
+    // Italic (single *, not preceded/followed by space to avoid list markers)
+    html = html.replace(/(?<!\w)\*(?!\s)(.+?)(?<!\s)\*(?!\w)/g, "<em>$1</em>");
+    // Newlines to <br> (but not before/after code block placeholders)
+    html = html.replace(/\n/g, "<br>");
+
+    // Restore inline codes
+    inlineCodes.forEach((code, idx) => {
+      html = html.replace(`\x00INLINE${idx}\x00`, code);
+    });
+
+    // Restore code blocks
+    codeBlocks.forEach((block, idx) => {
+      html = html.replace(`\x00CODEBLOCK${idx}\x00`, block);
+    });
+
+    return html;
+  }
+
   _renderMessage(msg) {
     const isUser = msg.role === "user";
     const timestamp = msg.timestamp
@@ -864,7 +904,7 @@ export class ChatWidget {
         <div class="message-avatar"><i class="icon-${isUser ? "user" : "bot"}"></i></div>
         <div class="message-content">
           ${toolCallsHtml}
-          ${msg.content ? `<div class="message-bubble">${Utils.escapeHtml(msg.content)}${actionsHtml}</div>` : ""}
+          ${msg.content ? `<div class="message-bubble">${isUser ? Utils.escapeHtml(msg.content) : this._formatMarkdown(msg.content)}${actionsHtml}</div>` : ""}
           <div class="message-meta">${timestamp}</div>
         </div>
       </div>`;

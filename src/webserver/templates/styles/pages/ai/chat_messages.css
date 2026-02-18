@@ -40,7 +40,7 @@
 }
 
 .message.assistant .message-avatar {
-  background: var(--bg-tertiary);
+  background: var(--bg-primary);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
 }
@@ -296,7 +296,7 @@
   width: 40px;
   height: 40px;
   border-radius: var(--radius-full);
-  background: var(--bg-tertiary);
+  background: var(--bg-primary);
   color: var(--text-primary);
   border: 1px solid var(--border-color);
   display: flex;
@@ -362,7 +362,7 @@
   border: 1px solid var(--border-color);
   border-radius: var(--radius-xl);
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-  z-index: 100;
+  z-index: var(--z-popover);
   animation: slideUp 0.2s ease;
 }
 
@@ -395,7 +395,7 @@
 }
 
 .confirmation-content pre {
-  background: var(--bg-tertiary);
+  background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-sm);
   padding: var(--spacing-md);
@@ -411,4 +411,51 @@
   display: flex;
   gap: var(--spacing-sm);
   justify-content: flex-end;
+}
+
+/* Markdown rendering in chat messages */
+.message-bubble strong {
+  font-weight: 700;
+  color: inherit;
+}
+
+.message-bubble em {
+  font-style: italic;
+}
+
+.chat-code-block {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-sm) var(--spacing-md);
+  margin: var(--spacing-sm) 0;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  overflow-x: auto;
+  white-space: pre-wrap;
+}
+
+.chat-code-block code {
+  background: none;
+  padding: 0;
+  border: none;
+  font-size: inherit;
+  color: inherit;
+}
+
+.chat-inline-code {
+  background: var(--bg-primary);
+  padding: 1px 5px;
+  border-radius: var(--radius-xs, 3px);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--primary-color);
+}
+
+/* Ensure user bubble inline code is readable on primary bg */
+.message.user .chat-inline-code {
+  background: rgba(255, 255, 255, 0.2);
+  color: inherit;
 }
