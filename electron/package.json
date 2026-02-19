@@ -4,7 +4,7 @@
   "description": "ScreenerBot Electron Edition - Automated Solana DeFi Trading Bot",
   "main": "src/main.js",
   "author": "ScreenerBot",
-  "license": "UNLICENSED",
+  "license": "BUSL-1.1",
   "private": true,
   "scripts": {
     "sync-version": "node -e \"const fs=require('fs');const c=fs.readFileSync('../Cargo.toml','utf8');const m=c.match(/^version\\s*=\\s*\\\"([^\\\"]+)\\\"/m);if(m){const p=JSON.parse(fs.readFileSync('package.json','utf8'));if(p.version!==m[1]){p.version=m[1];fs.writeFileSync('package.json',JSON.stringify(p,null,2)+'\\n');console.log('Synced version to '+m[1])}}\"",

@@ -131,4 +131,4 @@ The bot is organized into independent services managed by `ServiceManager`:
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the same license as the project.
+By contributing, you agree that your contributions will be licensed under the [Business Source License 1.1](LICENSE) (BSL 1.1), the same license as the project.

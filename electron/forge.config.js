@@ -104,7 +104,7 @@ module.exports = {
           description: 'Automated Solana DeFi trading bot with wallet management',
           categories: ['Finance', 'Utility'],
           icon: path.join(__dirname, 'assets', 'icon.png'),
-          license: 'Proprietary',
+          license: 'BUSL-1.1',
           homepage: 'https://screenerbot.io',
           vendor: 'unknown',
           platform: 'linux'

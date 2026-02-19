@@ -12,7 +12,7 @@
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Built%20with-Rust-000000?style=flat-square&logo=rust&logoColor=white" alt="Built with Rust"></a>
   <a href="https://solana.com/"><img src="https://img.shields.io/badge/Powered%20by-Solana-9945FF?style=flat-square&logo=solana&logoColor=white" alt="Powered by Solana"></a>
   <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Desktop-Electron-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron Desktop"></a>
-  <a href="https://github.com/screenerbotio/ScreenerBot/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="MIT License"></a>
+  <a href="https://github.com/screenerbotio/ScreenerBot/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-BSL--1.1-blue?style=flat-square" alt="BSL 1.1 License"></a>
   <a href="https://screenerbot.io/docs"><img src="https://img.shields.io/badge/Docs-screenerbot.io-blue?style=flat-square" alt="Documentation"></a>
   <a href="https://t.me/screenerbotio_talk"><img src="https://img.shields.io/badge/Community-Telegram-26A5E4?style=flat-square&logo=telegram&logoColor=white" alt="Telegram Community"></a>
   <a href="https://github.com/screenerbotio/ScreenerBot"><img src="https://img.shields.io/github/stars/screenerbotio/ScreenerBot?style=flat-square" alt="GitHub Stars"></a>
@@ -671,3 +671,12 @@ We welcome contributions from the community! Whether you're fixing a bug, adding
 
 **Farhad Arghavan**  
 Email: farhad.argn@gmail.com
+
+## License
+
+This project is licensed under the [Business Source License 1.1](LICENSE) (BSL 1.1).
+
+- **Non-commercial use** is permitted
+- **Commercial use** (competing products or paid services) requires a separate license
+- The code converts to **Apache License 2.0** four years after publication
+- Contact [info@screenerbot.io](mailto:info@screenerbot.io) for alternative licensing
