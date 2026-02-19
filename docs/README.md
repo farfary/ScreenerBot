@@ -9,6 +9,18 @@ docs/
 ├── architecture/          # How systems work (living docs, kept current)
 ├── development/           # How to build, develop, and contribute
 └── investigations/        # Deep technical analyses (dated, historical)
+    ├── 2025-10-blacklist/
+    ├── 2025-10-fixes/
+    ├── 2025-10-trader/
+    ├── 2025-11-dashboard-performance/
+    ├── 2025-11-trader-reorganization/
+    ├── 2025-11-notifications/
+    ├── 2025-11-wallet/
+    ├── 2025-11-timestamps/
+    ├── 2025-12-fixes/
+    ├── 2025-12-frontend/
+    ├── 2025-ai-backend/
+    └── 2026-02-memory/
 ```
 
 ### 📐 Architecture
@@ -25,7 +37,11 @@ Living documentation describing how each major system works. These docs are the 
 | [Partial Sell & DCA](architecture/partial-sell-dca.md) | Position management: DCA entries, partial exits |
 | [Positions & Actions](architecture/positions.md) | Position lifecycle, entry/exit records |
 | [Startup Order](architecture/startup-order.md) | Service startup vs. user-facing workflow order |
+| [Token Details](architecture/token-details-improvements.md) | Token details dialog improvements |
 | [Webserver Port Conflict](architecture/webserver-port-conflict.md) | Port conflict detection and resolution |
+| [Port Conflict Index](architecture/webserver-port-conflict-index.md) | Port conflict decision index |
+| [Port Conflict Quick Ref](architecture/webserver-port-conflict-quickref.md) | Port conflict quick reference |
+| [Port Conflict Summary](architecture/webserver-port-conflict-summary.md) | Port conflict solution summary |
 | [Workflow Order](architecture/workflow-order.md) | Service dependency resolution and startup sequencing |
 
 ### 🛠 Development
@@ -35,11 +51,17 @@ Guides for building, developing, and contributing to ScreenerBot.
 | Document | Description |
 |----------|-------------|
 | [Building](development/building.md) | Cross-platform build guide (macOS, Windows, Linux) |
+| [Build Scripts Analysis](development/build-scripts-analysis.md) | Build scripts analysis and documentation |
 | [CLI Reference](development/cli-reference.md) | Command-line arguments and options |
 | [Assistant Auth API](development/Assistant-auth-api.md) | an LLM provider OAuth integration |
 | [Assistant Auth Reference](development/Assistant-auth-reference.md) | Quick reference for Assistant auth flow |
+| [Debug Manual Trading](development/debug-manual-trading.md) | Manual trading debug guide |
+| [Early CLI Validation](development/early-cli-validation.md) | Early CLI argument validation |
+| [Request Manager](development/request-manager-reference.md) | Request manager quick reference |
+| [Systematic Completion](development/systematic-completion-plan.md) | Systematic completion plan |
 | [Trader Overview](development/trader-overview.md) | Trader module quick summary |
 | [Trader Migration](development/trader-migration.md) | Trader module reorganization guide |
+| [Verification Checklist](development/verification-checklist.md) | Verification checklist |
 
 ### 🔬 Investigations
 
@@ -47,7 +69,18 @@ Historical deep-dive technical analyses. These are **immutable records** — the
 
 | Investigation | Date | Description |
 |--------------|------|-------------|
-| [Memory Optimization](investigations/2026-02-memory/) | Feb 2026 | Root cause analysis of 804MB+ startup RSS, 10-component architecture plan |
+| [Blacklist System](investigations/2025-10-blacklist/) | Oct 2025 | Blacklist implementation, investigation, and simplification |
+| [Bug Fixes & Audits](investigations/2025-10-fixes/) | Oct 2025 | P0 fixes, exit monitor, pool decoder, metrics planning (11 docs) |
+| [Trader Foundation](investigations/2025-10-trader/) | Oct 2025 | Initial trader planning, improvement roadmap, Phase 2 design |
+| [Dashboard Performance](investigations/2025-11-dashboard-performance/) | Nov 2025 | Dashboard loading analysis, frontend performance fixes (6 docs) |
+| [Trader Reorganization](investigations/2025-11-trader-reorganization/) | Nov 2025 | Major trader module reorg, retry system, UI/UX standardization (9 docs) |
+| [Notifications](investigations/2025-11-notifications/) | Nov 2025 | Toast system implementation, panel improvements |
+| [Wallet](investigations/2025-11-wallet/) | Nov 2025 | Wallet improvements and loading investigation |
+| [Timestamps](investigations/2025-11-timestamps/) | Oct-Nov 2025 | Timestamp fields, restructuring, timeframe system |
+| [Bug Fixes](investigations/2025-12-fixes/) | Dec 2025 | Deep investigation and multiple fix rounds |
+| [Frontend](investigations/2025-12-frontend/) | Dec 2025 | Frontend fixes and systematic migration guide |
+| [AI Backend](investigations/2025-ai-backend/) | 2025 | AI backend review, critical fixes, chat bug report |
+| [Memory Optimization](investigations/2026-02-memory/) | Feb 2026 | Root cause analysis of 804MB+ startup RSS, 10-component architecture plan (5,590-line plan + 36 research docs) |
 
 ## Contributing Documentation
 
