@@ -1,0 +1,467 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="A concurrent hash table based on Java’s `ConcurrentHashMap`."><title>flurry - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="/-/rustdoc.static/${f}">`).join(""))</script><link rel="stylesheet" href="/-/rustdoc.static/normalize-9960930a.css"><link rel="stylesheet" href="/-/static/vendored.css?0-0-0-91dcccd9-2026-02-13" media="all" /><link rel="stylesheet" href="/-/rustdoc.static/rustdoc-e56847b5.css"><meta name="rustdoc-vars" data-root-path="../" data-static-root-path="/-/rustdoc.static/" data-current-crate="flurry" data-themes="" data-resource-suffix="-20250906-1.91.0-nightly-1ed3cd703" data-rustdoc-version="1.91.0-nightly (1ed3cd703 2025-09-06)" data-channel="nightly" data-search-js="search-d846cb6c.js" data-stringdex-js="stringdex-5af928a3.js" data-settings-js="settings-c38705f0.js" ><script src="/-/rustdoc.static/storage-e2aeef58.js"></script><script defer src="../crates-20250906-1.91.0-nightly-1ed3cd703.js"></script><script defer src="/-/rustdoc.static/main-6dc2a7f3.js"></script><noscript><link rel="stylesheet" href="/-/rustdoc.static/noscript-263c88ec.css"></noscript><link rel="alternate icon" type="image/png" href="/-/rustdoc.static/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="/-/rustdoc.static/favicon-044be391.svg"><link rel="stylesheet" href="/-/static/rustdoc-2025-08-20.css?0-0-0-91dcccd9-2026-02-13" media="all" /><link rel="stylesheet" href="/-/static/font-awesome.css?0-0-0-91dcccd9-2026-02-13" media="all" />
+
+<link rel="search" href="/-/static/opensearch.xml" type="application/opensearchdescription+xml" title="Docs.rs" />
+
+<script type="text/javascript">(function() {
+    function applyTheme(theme) {
+        if (theme) {
+            document.documentElement.dataset.docsRsTheme = theme;
+        }
+    }
+
+    window.addEventListener("storage", ev => {
+        if (ev.key === "rustdoc-theme") {
+            applyTheme(ev.newValue);
+        }
+    });
+
+    // see ./storage-change-detection.html for details
+    window.addEventListener("message", ev => {
+        if (ev.data && ev.data.storage && ev.data.storage.key === "rustdoc-theme") {
+            applyTheme(ev.data.storage.value);
+        }
+    });
+
+    applyTheme(window.localStorage.getItem("rustdoc-theme"));
+})();</script></head><body class="rustdoc-page">
+<div class="nav-container">
+    <div class="container">
+        <div class="pure-menu pure-menu-horizontal" role="navigation" aria-label="Main navigation">
+            <form action="/releases/search"
+                  method="GET"
+                  id="nav-search-form"
+                  class="landing-search-form-nav  ">
+
+                
+                <a href="/" class="pure-menu-heading pure-menu-link docsrs-logo" aria-label="Docs.rs">
+                    <span title="Docs.rs"><span class="fa fa-solid fa-cubes " aria-hidden="true"></span></span>
+                    <span class="title">Docs.rs</span>
+                </a><ul class="pure-menu-list">
+    <script id="crate-metadata" type="application/json">
+        
+        {
+            "name": "flurry",
+            "version": "0.5.2"
+        }
+    </script><li class="pure-menu-item pure-menu-has-children">
+            <a href="#" class="pure-menu-link crate-name" title="Rust port of Java&#39;s ConcurrentHashMap">
+                <span class="fa fa-solid fa-cube " aria-hidden="true"></span>
+                <span class="title">flurry-0.5.2</span>
+            </a><div class="pure-menu-children package-details-menu">
+                
+                <ul class="pure-menu-list menu-item-divided">
+                    <li class="pure-menu-heading" id="crate-title">
+                        flurry 0.5.2
+                        <span id="clipboard" class="svg-clipboard" title="Copy crate name and version information"></span>
+                    </li><li class="pure-menu-item">
+                        <a href="/flurry/0.5.2/flurry/" class="pure-menu-link description" id="permalink" title="Get a link to this specific version"><span class="fa fa-solid fa-link " aria-hidden="true"></span> Permalink
+                        </a>
+                    </li><li class="pure-menu-item">
+                        <a href="/crate/flurry/latest" class="pure-menu-link description" title="See flurry in docs.rs">
+                            <span class="fa fa-solid fa-cube " aria-hidden="true"></span> Docs.rs crate page
+                        </a>
+                    </li><li class="pure-menu-item">
+                            <span class="pure-menu-link description"><span class="fa fa-solid fa-scale-unbalanced-flip " aria-hidden="true"></span>
+                            <a href="https://spdx.org/licenses/MIT" class="pure-menu-sublink">MIT</a> OR <a href="https://spdx.org/licenses/Apache-2.0" class="pure-menu-sublink">Apache-2.0</a></span>
+                        </li></ul>
+
+                <div class="pure-g menu-item-divided">
+                    <div class="pure-u-1-2 right-border">
+                        <ul class="pure-menu-list">
+                            <li class="pure-menu-heading">Links</li>
+
+                            <li class="pure-menu-item">
+                                    <a href="https://github.com/jonhoo/flurry.git" class="pure-menu-link">
+                                        <span class="fa fa-solid fa-code-branch " aria-hidden="true"></span> Repository
+                                    </a>
+                                </li><li class="pure-menu-item">
+                                <a href="https://crates.io/crates/flurry" class="pure-menu-link" title="See flurry in crates.io">
+                                    <span class="fa fa-solid fa-cube " aria-hidden="true"></span> crates.io
+                                </a>
+                            </li>
+
+                            
+                            <li class="pure-menu-item">
+                                <a href="/crate/flurry/latest/source/" title="Browse source of flurry-0.5.2" class="pure-menu-link">
+                                    <span class="fa fa-solid fa-folder-open " aria-hidden="true"></span> Source
+                                </a>
+                            </li>
+                        </ul>
+                    </div><div class="pure-u-1-2">
+                        <ul class="pure-menu-list" id="topbar-owners">
+                            <li class="pure-menu-heading">Owners</li><li class="pure-menu-item">
+                                    <a href="https://crates.io/users/jonhoo" class="pure-menu-link">
+                                        <span class="fa fa-solid fa-user " aria-hidden="true"></span> jonhoo
+                                    </a>
+                                </li></ul>
+                    </div>
+                </div>
+
+                <div class="pure-g menu-item-divided">
+                    <div class="pure-u-1-2 right-border">
+                        <ul class="pure-menu-list">
+                            <li class="pure-menu-heading">Dependencies</li>
+
+                            
+                            <li class="pure-menu-item">
+                                <div class="pure-menu pure-menu-scrollable sub-menu" tabindex="-1">
+                                    <ul class="pure-menu-list">
+                                        <li class="pure-menu-item"><a href="/ahash/^0.8.4/" class="pure-menu-link">
+                ahash ^0.8.4
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/num_cpus/^1.12.0/" class="pure-menu-link">
+                num_cpus ^1.12.0
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/parking_lot/^0.12/" class="pure-menu-link">
+                parking_lot ^0.12
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/rayon/^1.3/" class="pure-menu-link">
+                rayon ^1.3
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                        <i>optional</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/seize/^0.3.3/" class="pure-menu-link">
+                seize ^0.3.3
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/serde/^1.0.105/" class="pure-menu-link">
+                serde ^1.0.105
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                        <i>optional</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/criterion/^0.5/" class="pure-menu-link">
+                criterion ^0.5
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/rand/^0.8/" class="pure-menu-link">
+                rand ^0.8
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/rayon/^1.3/" class="pure-menu-link">
+                rayon ^1.3
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/serde_json/^1.0.50/" class="pure-menu-link">
+                serde_json ^1.0.50
+                
+                    <i class="dependencies dev">dev</i>
+                    
+                
+            </a>
+        </li><li class="pure-menu-item"><a href="/regex/^1.6.0/" class="pure-menu-link">
+                regex ^1.6.0
+                
+                    <i class="dependencies normal">normal</i>
+                    
+                        <i>optional</i>
+                    
+                
+            </a>
+        </li>
+                                    </ul>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+
+                    <div class="pure-u-1-2">
+                        <ul class="pure-menu-list">
+                            <li class="pure-menu-heading">Versions</li>
+
+                            <li class="pure-menu-item">
+                                <div class="pure-menu pure-menu-scrollable sub-menu" id="releases-list" tabindex="-1" data-url="/crate/flurry/latest/menus/releases/flurry/">
+                                    <span class="rotate"><span class="fa fa-solid fa-spinner " aria-hidden="true"></span></span>
+                                </div>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                    
+                    
+                    <div class="pure-g">
+                        <div class="pure-u-1">
+                            <ul class="pure-menu-list">
+                                <li>
+                                    <a href="/crate/flurry/latest" class="pure-menu-link">
+                                        <b>100%</b>
+                                        of the crate is documented
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </div></div>
+        </li><li class="pure-menu-item pure-menu-has-children">
+                <a href="#" class="pure-menu-link" aria-label="Platform">
+                    <span class="fa fa-solid fa-gears " aria-hidden="true"></span>
+                    <span class="title">Platform</span>
+                </a>
+
+                
+                <ul class="pure-menu-children" id="platforms" data-url="/crate/flurry/latest/menus/platforms/flurry/"><li class="pure-menu-item">
+            <a href="/crate/flurry/latest/target-redirect/i686-pc-windows-msvc/flurry/" class="pure-menu-link" data-fragment="retain" rel="nofollow">i686-pc-windows-msvc</a>
+        </li><li class="pure-menu-item">
+            <a href="/crate/flurry/latest/target-redirect/i686-unknown-linux-gnu/flurry/" class="pure-menu-link" data-fragment="retain" rel="nofollow">i686-unknown-linux-gnu</a>
+        </li><li class="pure-menu-item">
+            <a href="/crate/flurry/latest/target-redirect/x86_64-apple-darwin/flurry/" class="pure-menu-link" data-fragment="retain" rel="nofollow">x86_64-apple-darwin</a>
+        </li><li class="pure-menu-item">
+            <a href="/crate/flurry/latest/target-redirect/x86_64-pc-windows-msvc/flurry/" class="pure-menu-link" data-fragment="retain" rel="nofollow">x86_64-pc-windows-msvc</a>
+        </li><li class="pure-menu-item">
+            <a href="/crate/flurry/latest/target-redirect/flurry/" class="pure-menu-link" data-fragment="retain" rel="nofollow">x86_64-unknown-linux-gnu</a>
+        </li></ul>
+            </li><li class="pure-menu-item">
+                <a href="/crate/flurry/latest/features" title="Browse available feature flags of flurry-0.5.2" class="pure-menu-link">
+                    <span class="fa fa-solid fa-flag " aria-hidden="true"></span>
+                    <span class="title">Feature flags</span>
+                </a>
+            </li>
+        
+    
+</ul><div class="spacer"></div>
+                
+                
+
+<ul class="pure-menu-list">
+                    <li class="pure-menu-item pure-menu-has-children">
+                        <a href="#" class="pure-menu-link" aria-label="docs.rs">docs.rs</a>
+                        <ul class="pure-menu-children aligned-icons"><li class="pure-menu-item"><a class="pure-menu-link" href="/about"><span class="fa fa-solid fa-circle-info " aria-hidden="true"></span> About docs.rs</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="/about/badges"><span class="fa fa-brands fa-fonticons " aria-hidden="true"></span> Badges</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="/about/builds"><span class="fa fa-solid fa-gears " aria-hidden="true"></span> Builds</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="/about/metadata"><span class="fa fa-solid fa-table " aria-hidden="true"></span> Metadata</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="/about/redirections"><span class="fa fa-solid fa-road " aria-hidden="true"></span> Shorthand URLs</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="/about/download"><span class="fa fa-solid fa-download " aria-hidden="true"></span> Download</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="/about/rustdoc-json"><span class="fa fa-solid fa-file-code " aria-hidden="true"></span> Rustdoc JSON</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="/releases/queue"><span class="fa fa-solid fa-gears " aria-hidden="true"></span> Build queue</a></li><li class="pure-menu-item"><a class="pure-menu-link" href="https://foundation.rust-lang.org/policies/privacy-policy/#docs.rs" target="_blank"><span class="fa fa-solid fa-shield-halved " aria-hidden="true"></span> Privacy policy</a></li>
+                        </ul>
+                    </li>
+                </ul>
+                <ul class="pure-menu-list"><li class="pure-menu-item pure-menu-has-children">
+                        <a href="#" class="pure-menu-link" aria-label="Rust">Rust</a>
+                        <ul class="pure-menu-children">
+                            <li class="pure-menu-item"><a class="pure-menu-link" href="https://www.rust-lang.org/" target="_blank">Rust website</a></li>
+                            <li class="pure-menu-item"><a class="pure-menu-link" href="https://doc.rust-lang.org/book/" target="_blank">The Book</a></li>
+
+                            <li class="pure-menu-item"><a class="pure-menu-link" href="https://doc.rust-lang.org/std/" target="_blank">Standard Library API Reference</a></li>
+
+                            <li class="pure-menu-item"><a class="pure-menu-link" href="https://doc.rust-lang.org/rust-by-example/" target="_blank">Rust by Example</a></li>
+
+                            <li class="pure-menu-item"><a class="pure-menu-link" href="https://doc.rust-lang.org/cargo/guide/" target="_blank">The Cargo Guide</a></li>
+
+                            <li class="pure-menu-item"><a class="pure-menu-link" href="https://doc.rust-lang.org/nightly/clippy" target="_blank">Clippy Documentation</a></li>
+                        </ul>
+                    </li>
+                </ul>
+                
+                <div id="search-input-nav">
+                    <label for="nav-search">
+                        <span class="fa fa-solid fa-magnifying-glass " aria-hidden="true"></span>
+                    </label>
+
+                    
+                    
+                    <input id="nav-search" name="query" type="text" aria-label="Find crate by search query" tabindex="-1"
+                        placeholder="Find crate"
+                        >
+                </div>
+            </form>
+        </div>
+    </div>
+</div><div class="rustdoc mod crate container-rustdoc" id="rustdoc_body_wrapper" tabindex="-1"><script async src="/-/static/menu.js?0-0-0-91dcccd9-2026-02-13"></script>
+<script async src="/-/static/index.js?0-0-0-91dcccd9-2026-02-13"></script>
+
+<iframe src="/-/storage-change-detection.html" width="0" height="0" style="display: none"></iframe><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Crate flurry</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../flurry/index.html">flurry</a><span class="version">0.5.2</span></h2></div><div class="sidebar-elems"><ul class="block"><li><a id="all-types" href="all.html">All Items</a></li></ul><section id="rustdoc-toc"><h3><a href="#">Sections</a></h3><ul class="block top-toc"><li><a href="#better-alternatives" title="Better Alternatives">Better Alternatives</a></li><li><a href="#a-note-on-guard-and-memory-use" title="A note on `Guard` and memory use">A note on <code>Guard</code> and memory use</a></li><li><a href="#consistency" title="Consistency">Consistency</a></li><li><a href="#resizing-behavior" title="Resizing behavior">Resizing behavior</a></li><li><a href="#hash-sets" title="Hash Sets">Hash Sets</a></li><li><a href="#implementation-notes" title="Implementation notes">Implementation notes</a><ul><li><a href="#garbage-collection" title="Garbage collection">Garbage collection</a></li></ul></li></ul><h3><a href="#modules">Crate Items</a></h3><ul class="block"><li><a href="#modules" title="Modules">Modules</a></li><li><a href="#structs" title="Structs">Structs</a></li></ul></section><div id="rustdoc-modnav"></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content"><div class="main-heading"><h1>Crate <span>flurry</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../src/flurry/lib.rs.html#1-360">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>A concurrent hash table based on Java’s <code>ConcurrentHashMap</code>.</p>
+<p>A hash table that supports full concurrency of retrievals and high expected concurrency for
+updates. This type is functionally very similar to <code>std::collections::HashMap</code>, and for the
+most part has a similar API. Even though all operations on the map are thread-safe and operate
+on shared references, retrieval operations do <em>not</em> entail locking, and there is <em>not</em> any
+support for locking the entire table in a way that prevents all access.</p>
+<h2 id="better-alternatives"><a class="doc-anchor" href="#better-alternatives">§</a>Better Alternatives</h2>
+<p>Flurry currently suffers performance and memory usage issues under load.
+You may wish to consider <a href="https://docs.rs/papaya"><code>papaya</code></a> or <a href="https://docs.rs/dashmap"><code>dashmap</code></a> as alternatives if this is
+important to you.</p>
+<h2 id="a-note-on-guard-and-memory-use"><a class="doc-anchor" href="#a-note-on-guard-and-memory-use">§</a>A note on <code>Guard</code> and memory use</h2>
+<p>You may have noticed that many of the access methods on this map take a reference to a
+<a href="struct.Guard.html" title="struct flurry::Guard"><code>Guard</code></a>. The exact details of this are beyond the scope of this documentation (for
+that, see the <a href="https://docs.rs/seize"><code>seize</code></a> crate), but some of the implications bear repeating here. You obtain a
+<code>Guard</code> using <a href="struct.HashMap.html#method.guard" title="method flurry::HashMap::guard"><code>HashMap::guard</code></a>, and you can use references to the same guard to make multiple API
+calls if you wish. Whenever you get a reference to something stored in the map, that reference
+is tied to the lifetime of the <code>Guard</code> that you provided. This is because each <code>Guard</code> prevents
+the destruction of any item associated with it. Whenever something is read under a <code>Guard</code>,
+that something stays around for <em>at least</em> as long as the <code>Guard</code> does. The map delays
+deallocating values until it safe to do so, and in order to amortize the cost of the necessary
+bookkeeping it may delay even further until there’s a <em>batch</em> of items that need to be
+deallocated.</p>
+<p>Notice that there is a trade-off here. Creating and dropping a <code>Guard</code> is not free, since it
+also needs to interact with said bookkeeping. But if you keep one around for a long time, you
+may accumulate much garbage which will take up valuable free memory on your system. Use your
+best judgement in deciding whether or not to re-use a <code>Guard</code>.</p>
+<h2 id="consistency"><a class="doc-anchor" href="#consistency">§</a>Consistency</h2>
+<p>Retrieval operations (including <a href="struct.HashMap.html#method.get" title="method flurry::HashMap::get"><code>get</code></a>) generally do not block, so may
+overlap with update operations (including <a href="struct.HashMap.html#method.insert" title="method flurry::HashMap::insert"><code>insert</code></a>). Retrievals
+reflect the results of the most recently <em>completed</em> update operations holding upon their
+onset. (More formally, an update operation for a given key bears a <em>happens-before</em> relation
+with any successful retrieval for that key reporting the updated value.)</p>
+<p>Operations that inspect the map as a whole, rather than a single key, operate on a snapshot of
+the underlying table. For example, iterators return elements reflecting the state of the hash
+table at some point at or since the creation of the iterator. Aggregate status methods like
+<a href="struct.HashMap.html#method.len" title="method flurry::HashMap::len"><code>len</code></a> are typically useful only when a map is not undergoing concurrent
+updates in other threads. Otherwise the results of these methods reflect transient states that
+may be adequate for monitoring or estimation purposes, but not for program control.
+Similarly, <a href="https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html" title="trait core::clone::Clone"><code>Clone</code></a> may not produce a “perfect” clone if the underlying
+map is being concurrently modified.</p>
+<h2 id="resizing-behavior"><a class="doc-anchor" href="#resizing-behavior">§</a>Resizing behavior</h2>
+<p>The table is dynamically expanded when there are too many collisions (i.e., keys that have
+distinct hash codes but fall into the same slot modulo the table size), with the expected
+average effect of maintaining roughly two bins per mapping (corresponding to a 0.75 load factor
+threshold for resizing). There may be much variance around this average as mappings are added
+and removed, but overall, this maintains a commonly accepted time/space tradeoff for hash
+tables.  However, resizing this or any other kind of hash table may be a relatively slow
+operation. When possible, it is a good idea to provide a size estimate by using the
+<a href="struct.HashMap.html#method.with_capacity" title="associated function flurry::HashMap::with_capacity"><code>with_capacity</code></a> constructor. Note that using many keys with
+exactly the same <a href="https://doc.rust-lang.org/nightly/core/hash/trait.Hash.html" title="trait core::hash::Hash"><code>Hash</code></a> value is a sure way to slow down performance of any
+hash table. To ameliorate impact, keys are required to be <a href="https://doc.rust-lang.org/nightly/core/cmp/trait.Ord.html" title="trait core::cmp::Ord"><code>Ord</code></a>. This is used
+by the map to more efficiently store bins that contain a large number of elements with
+colliding hashes using the comparison order on their keys.</p>
+<h2 id="hash-sets"><a class="doc-anchor" href="#hash-sets">§</a>Hash Sets</h2>
+<p>Flurry also supports concurrent hash sets, which may be created through <a href="struct.HashSet.html" title="struct flurry::HashSet"><code>HashSet</code></a>. Hash sets
+offer the same instantiation options as <a href="struct.HashMap.html" title="struct flurry::HashMap"><code>HashMap</code></a>, such as <a href="struct.HashSet.html#method.new" title="associated function flurry::HashSet::new"><code>new</code></a> and
+<a href="struct.HashSet.html#method.with_capacity" title="associated function flurry::HashSet::with_capacity"><code>with_capacity</code></a>.</p>
+<h2 id="implementation-notes"><a class="doc-anchor" href="#implementation-notes">§</a>Implementation notes</h2>
+<p>This data-structure is a pretty direct port of Java’s <code>java.util.concurrent.ConcurrentHashMap</code>
+<a href="http://gee.cs.oswego.edu/dl/concurrency-interest/">from Doug Lea and the rest of the JSR166
+team</a>. Huge thanks to them for releasing the
+code into the public domain! Much of the documentation is also lifted from there. What follows
+is a slightly modified version of their implementation notes from within the <a href="http://gee.cs.oswego.edu/cgi-bin/viewcvs.cgi/jsr166/jsr166/src/main/java/util/concurrent/ConcurrentHashMap.java?revision=1.323&amp;view=markup">source
+file</a>.</p>
+<p>The primary design goal of this hash table is to maintain concurrent readability (typically
+method <a href="struct.HashMap.html#method.get" title="method flurry::HashMap::get"><code>get</code></a>, but also iterators and related methods) while minimizing update contention.
+Secondary goals are to keep space consumption about the same or better than java.util.HashMap,
+and to support high initial insertion rates on an empty table by many threads.</p>
+<p>This map usually acts as a binned (bucketed) hash table.  Each key-value mapping is held in a
+<code>BinEntry</code>. Most nodes are of type <code>BinEntry::Node</code> with hash, key, value, and a <code>next</code> field.
+However, some other types of nodes exist: <code>BinEntry::TreeNode</code>s are arranged in balanced trees
+instead of linear lists. Bins of type <code>BinEntry::Tree</code> hold the roots of sets of <code>BinEntry::TreeNode</code>s.
+Some nodes are of type <code>BinEntry::Moved</code>; these “forwarding nodes” are placed at the
+heads of bins during resizing. The Java version also has other special node types, but these
+have not yet been implemented in this port. These special nodes are all either uncommon or
+transient.</p>
+<p>The table is lazily initialized to a power-of-two size upon the first insertion.  Each bin in
+the table normally contains a list of nodes (most often, the list has only zero or one
+<code>BinEntry</code>). Table accesses require atomic reads, writes, and CASes.</p>
+<p>Insertion (via <code>put</code>) of the first node in an empty bin is performed by just CASing it to the
+bin. This is by far the most common case for put operations under most key/hash distributions.
+Other update operations (insert, delete, and replace) require locks. We do not want to waste
+the space required to associate a distinct lock object with each bin, so we instead embed a
+lock inside each node, and use the lock in the the first node of a bin list as the lock for the
+bin.</p>
+<p>Using the first node of a list as a lock does not by itself suffice though: When a node is
+locked, any update must first validate that it is still the first node after locking it, and
+retry if not. Because new nodes are always appended to lists, once a node is first in a bin, it
+remains first until deleted or the bin becomes invalidated (upon resizing).</p>
+<p>The main disadvantage of per-bin locks is that other update operations on other nodes in a bin
+list protected by the same lock can stall, for example when user <code>Eq</code> implementations or
+mapping functions take a long time.  However, statistically, under random hash codes, this is
+not a common problem. Ideally, the frequency of nodes in bins follows a Poisson distribution
+(http://en.wikipedia.org/wiki/Poisson_distribution) with a parameter of about 0.5 on average,
+given the resizing threshold of 0.75, although with a large variance because of resizing
+granularity. Ignoring variance, the expected occurrences of list size <code>k</code> are <code>exp(-0.5) * pow(0.5, k) / factorial(k)</code>. The first values are:</p>
+<div class="example-wrap"><pre class="language-text"><code>0:    0.60653066
+1:    0.30326533
+2:    0.07581633
+3:    0.01263606
+4:    0.00157952
+5:    0.00015795
+6:    0.00001316
+7:    0.00000094
+8:    0.00000006
+more: less than 1 in ten million</code></pre></div>
+<p>Lock contention probability for two threads accessing distinct elements is roughly <code>1 / (8 * #elements)</code> under random hashes.</p>
+<p>Actual hash code distributions encountered in practice sometimes deviate significantly from
+uniform randomness. This includes the case when <code>N &gt; (1&lt;&lt;30)</code>, so some keys MUST collide.
+Similarly for dumb or hostile usages in which multiple keys are designed to have identical hash
+codes or ones that differs only in masked-out high bits. So we use secondary strategy that
+applies when the number of nodes in a bin exceeds a threshold. These <code>BinEntry::Tree</code> bins use
+a balanced tree to hold nodes (a specialized form of red-black trees), bounding search time to
+<code>O(log N)</code>. Each search step in such a bin is at least twice as slow as in a regular list, but
+given that N cannot exceed <code>(1&lt;&lt;64)</code> (before running out of adresses) this bounds search steps,
+lock hold times, etc, to reasonable constants (roughly 100 nodes inspected per operation worst
+case). <code>BinEntry::Tree</code> nodes (<code>BinEntry::TreeNode</code>s) also maintain the same <code>next</code> traversal
+pointers as regular nodes, so can be traversed in iterators in a similar way.</p>
+<p>The table is resized when occupancy exceeds a percentage threshold (nominally, 0.75, but see
+below). Any thread noticing an overfull bin may assist in resizing after the initiating thread
+allocates and sets up the replacement array. However, rather than stalling, these other threads
+may proceed with insertions etc. The use of <code>BinEntry::Tree</code> bins shields us from the worst case
+effects of overfilling while resizes are in progress. Resizing proceeds by transferring bins,
+one by one, from the table to the next table. However, threads claim small blocks of indices to
+transfer (via the field <code>transfer_index</code>) before doing so, reducing contention. A generation
+stamp in the field <code>size_ctl</code> ensures that resizings do not overlap. Because we are using
+power-of-two expansion, the elements from each bin must either stay at same index, or move with
+a power of two offset. We eliminate unnecessary node creation by catching cases where old nodes
+can be reused because their next fields won’t change. On average, only about one-sixth of them
+need cloning when a table doubles. The nodes they replace will be garbage collectible as soon
+as they are no longer referenced by any reader thread that may be in the midst of concurrently
+traversing table. Upon transfer, the old table bin contains only a special forwarding node
+(<code>BinEntry::Moved</code>) that contains the next table as its key. On encountering a forwarding node,
+access and update operations restart, using the new table.</p>
+<p>Each bin transfer requires its bin lock, which can stall waiting for locks while resizing.
+However, because other threads can join in and help resize rather than contend for locks,
+average aggregate waits become shorter as resizing progresses.  The transfer operation must
+also ensure that all accessible bins in both the old and new table are usable by any traversal.
+This is arranged in part by proceeding from the last bin <code>table.length - 1</code> up towards the
+first.  Upon seeing a forwarding node, traversals (see <code>iter::traverser::Traverser</code>) arrange to
+move to the new table without revisiting nodes.  To ensure that no intervening nodes are
+skipped even when moved out of order, a stack (see class <code>iter::traverser::TableStack</code>) is
+created on first encounter of a forwarding node during a traversal, to maintain its place if
+later processing the current table. The need for these save/restore mechanics is relatively
+rare, but when one forwarding node is encountered, typically many more will be. So <code>Traversers</code>
+use a simple caching scheme to avoid creating so many new <code>TableStack</code> nodes. (Thanks to Peter
+Levart for suggesting use of a stack here.)</p>
+<p><code>BinEntry::Tree</code> bins use a special form of comparison for search and related operations (which
+is the main reason we cannot use existing collections such as tree maps). The contained tree
+is primarily ordered by hash value, then by <a href="https://doc.rust-lang.org/nightly/core/cmp/trait.Ord.html#tymethod.cmp" title="method core::cmp::Ord::cmp"><code>cmp</code></a> order on keys. The
+red-black balancing code is updated from pre-jdk collections (http://gee.cs.oswego.edu/dl/classes/collections/RBCell.java)
+based in turn on Cormen, Leiserson, and Rivest “Introduction to Algorithms” (CLR).</p>
+<p><code>BinEntry::Tree</code> bins also require an additional locking mechanism. While list traversal is
+always possible by readers even during updates, tree traversal is not, mainly because of
+tree-rotations that may change the root node and/or its linkages. Tree bins include a simple
+read-write lock mechanism parasitic on the main bin-synchronization strategy: Structural
+adjustments associated with an insertion or removal are already bin-locked (and so cannot
+conflict with other writers) but must wait for ongoing readers to finish. Since there can be
+only one such waiter, we use a simple scheme using a single <code>waiter</code> field to block writers.
+However, readers need never block. If the root lock is held, they proceed along the slow
+traversal path (via next-pointers) until the lock becomes available or the list is exhausted,
+whichever comes first. These cases are not fast, but maximize aggregate expected throughput.</p>
+<h3 id="garbage-collection"><a class="doc-anchor" href="#garbage-collection">§</a>Garbage collection</h3>
+<p>The Java implementation can rely on Java’s runtime garbage collection to safely deallocate
+deleted or removed nodes, keys, and values. Since Rust does not have such a runtime, we must
+ensure through some other mechanism that we do not drop values before all references to them
+have gone away. We do this using <a href="https://docs.rs/seize"><code>seize</code></a>, which provides a garbage collection scheme based
+on batch reference-counting. This forces us to make certain API changes such as requiring
+<code>Guard</code> arguments to many methods or wrapping the return values, but provides much more efficient
+operation than if every individual value had to be atomically reference-counted.</p>
+</div></details><h2 id="modules" class="section-header">Modules<a href="#modules" class="anchor">§</a></h2><dl class="item-table"><dt><a class="mod" href="iter/index.html" title="mod flurry::iter">iter</a></dt><dd>Iterator types.</dd></dl><h2 id="structs" class="section-header">Structs<a href="#structs" class="anchor">§</a></h2><dl class="item-table"><dt><a class="struct" href="struct.DefaultHashBuilder.html" title="struct flurry::DefaultHashBuilder">Default<wbr>Hash<wbr>Builder</a></dt><dd>Default hash builder for <a href="struct.HashMap.html" title="struct flurry::HashMap"><code>HashMap</code></a>.</dd><dt><a class="struct" href="struct.DefaultHasher.html" title="struct flurry::DefaultHasher">Default<wbr>Hasher</a></dt><dd>Default hasher for <a href="struct.HashMap.html" title="struct flurry::HashMap"><code>HashMap</code></a>.</dd><dt><a class="struct" href="struct.Guard.html" title="struct flurry::Guard">Guard</a></dt><dd>A guard that keeps the current thread marked as active,
+enabling protected loads of atomic pointers.</dd><dt><a class="struct" href="struct.HashMap.html" title="struct flurry::HashMap">HashMap</a></dt><dd>A concurrent hash table.</dd><dt><a class="struct" href="struct.HashMapRef.html" title="struct flurry::HashMapRef">Hash<wbr>MapRef</a></dt><dd>A reference to a <a href="struct.HashMap.html" title="struct flurry::HashMap"><code>HashMap</code></a>, constructed with <a href="struct.HashMap.html#method.pin" title="method flurry::HashMap::pin"><code>HashMap::pin</code></a> or <a href="struct.HashMap.html#method.with_guard" title="method flurry::HashMap::with_guard"><code>HashMap::with_guard</code></a>.</dd><dt><a class="struct" href="struct.HashSet.html" title="struct flurry::HashSet">HashSet</a></dt><dd>A concurrent hash set implemented as a <code>HashMap</code> where the value is <code>()</code>.</dd><dt><a class="struct" href="struct.HashSetRef.html" title="struct flurry::HashSetRef">Hash<wbr>SetRef</a></dt><dd>A reference to a <a href="struct.HashSet.html" title="struct flurry::HashSet"><code>HashSet</code></a>, constructed with <a href="struct.HashSet.html#method.pin" title="method flurry::HashSet::pin"><code>HashSet::pin</code></a> or <a href="struct.HashSet.html#method.with_guard" title="method flurry::HashSet::with_guard"><code>HashSet::with_guard</code></a>.</dd><dt><a class="struct" href="struct.TryInsertError.html" title="struct flurry::TryInsertError">TryInsert<wbr>Error</a></dt><dd>The error type for the <a href="struct.HashMap.html#method.try_insert" title="method flurry::HashMap::try_insert"><code>HashMap::try_insert</code></a> method.</dd></dl></section></div></main></div></body></html>

@@ -13,13 +13,17 @@ docs/
     ├── 2025-10-fixes/
     ├── 2025-10-trader/
     ├── 2025-11-dashboard-performance/
-    ├── 2025-11-trader-reorganization/
     ├── 2025-11-notifications/
-    ├── 2025-11-wallet/
+    ├── 2025-11-rpc-metrics/
     ├── 2025-11-timestamps/
+    ├── 2025-11-trader-reorganization/
+    ├── 2025-11-wallet/
     ├── 2025-12-fixes/
     ├── 2025-12-frontend/
     ├── 2025-ai-backend/
+    ├── 2025-jupiter-referral/
+    ├── 2025-license-gating/
+    ├── 2025-linux-x11/
     └── 2026-02-memory/
 ```
 
@@ -39,6 +43,8 @@ Living documentation describing how each major system works. These docs are the 
 | [Startup Order](architecture/startup-order.md) | Service startup vs. user-facing workflow order |
 | [Token Details](architecture/token-details-improvements.md) | Token details dialog improvements |
 | [Webserver Port Conflict](architecture/webserver-port-conflict.md) | Port conflict detection and resolution |
+| [Port Conflict Implementation](architecture/webserver-port-conflict-implementation.md) | Port conflict implementation details |
+| [Port Conflict Solution](architecture/webserver-port-conflict-solution.md) | Port conflict solution design |
 | [Port Conflict Index](architecture/webserver-port-conflict-index.md) | Port conflict decision index |
 | [Port Conflict Quick Ref](architecture/webserver-port-conflict-quickref.md) | Port conflict quick reference |
 | [Port Conflict Summary](architecture/webserver-port-conflict-summary.md) | Port conflict solution summary |
@@ -62,6 +68,8 @@ Guides for building, developing, and contributing to ScreenerBot.
 | [Trader Overview](development/trader-overview.md) | Trader module quick summary |
 | [Trader Migration](development/trader-migration.md) | Trader module reorganization guide |
 | [Verification Checklist](development/verification-checklist.md) | Verification checklist |
+| [Documentation Plan](development/documentation-plan.md) | Documentation planning and roadmap |
+| [TODOs Archive](development/todos-archive.md) | Archived TODO items and task tracking |
 
 ### 🔬 Investigations
 
@@ -73,14 +81,18 @@ Historical deep-dive technical analyses. These are **immutable records** — the
 | [Bug Fixes & Audits](investigations/2025-10-fixes/) | Oct 2025 | P0 fixes, exit monitor, pool decoder, metrics planning (11 docs) |
 | [Trader Foundation](investigations/2025-10-trader/) | Oct 2025 | Initial trader planning, improvement roadmap, Phase 2 design |
 | [Dashboard Performance](investigations/2025-11-dashboard-performance/) | Nov 2025 | Dashboard loading analysis, frontend performance fixes (6 docs) |
-| [Trader Reorganization](investigations/2025-11-trader-reorganization/) | Nov 2025 | Major trader module reorg, retry system, UI/UX standardization (9 docs) |
+| [Trader Reorganization](investigations/2025-11-trader-reorganization/) | Nov 2025 | Major trader module reorg, retry system, UI/UX standardization (14 docs) |
 | [Notifications](investigations/2025-11-notifications/) | Nov 2025 | Toast system implementation, panel improvements |
+| [RPC Metrics](investigations/2025-11-rpc-metrics/) | Nov 2025 | RPC metrics fix and investigation (2 docs) |
 | [Wallet](investigations/2025-11-wallet/) | Nov 2025 | Wallet improvements and loading investigation |
 | [Timestamps](investigations/2025-11-timestamps/) | Oct-Nov 2025 | Timestamp fields, restructuring, timeframe system |
 | [Bug Fixes](investigations/2025-12-fixes/) | Dec 2025 | Deep investigation and multiple fix rounds |
 | [Frontend](investigations/2025-12-frontend/) | Dec 2025 | Frontend fixes and systematic migration guide |
 | [AI Backend](investigations/2025-ai-backend/) | 2025 | AI backend review, critical fixes, chat bug report |
-| [Memory Optimization](investigations/2026-02-memory/) | Feb 2026 | Root cause analysis of 804MB+ startup RSS, 10-component architecture plan (5,590-line plan + 36 research docs) |
+| [Jupiter Referral](investigations/2025-jupiter-referral/) | 2025 | Jupiter referral program research and implementation guide |
+| [License Gating](investigations/2025-license-gating/) | 2025 | License-gated initialization architecture design |
+| [Linux X11](investigations/2025-linux-x11/) | 2025 | Linux X11 dependency investigation for cross-platform builds |
+| [Memory Optimization](investigations/2026-02-memory/) | Feb 2026 | Root cause analysis of 804MB+ startup RSS, 10-component architecture plan (56 research docs) |
 
 ## Contributing Documentation
 
