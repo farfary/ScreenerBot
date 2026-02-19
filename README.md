@@ -39,36 +39,28 @@
 
 <table>
   <tr>
-    <td align="center"><strong>Dashboard</strong></td>
-    <td align="center"><strong>Positions</strong></td>
+    <td align="center"><strong>Dashboard Overview</strong></td>
+    <td align="center"><strong>Transaction Monitor</strong></td>
   </tr>
   <tr>
-    <td><a href="https://screenerbot.io/screenshots/home.png"><img src="https://screenerbot.io/screenshots/home.png" alt="Dashboard" width="400"></a></td>
-    <td><a href="https://screenerbot.io/screenshots/positions-open.png"><img src="https://screenerbot.io/screenshots/positions-open.png" alt="Positions" width="400"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/home.png"><img src="https://screenerbot.io/api/screenshots/home.webp" alt="Dashboard Overview" width="400"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/transactions.png"><img src="https://screenerbot.io/api/screenshots/transactions.webp" alt="Transaction Monitor" width="400"></a></td>
   </tr>
   <tr>
-    <td align="center"><strong>Tokens & Pools</strong></td>
-    <td align="center"><strong>Filtering</strong></td>
+    <td align="center"><strong>Open Positions</strong></td>
+    <td align="center"><strong>Position History</strong></td>
   </tr>
   <tr>
-    <td><a href="https://screenerbot.io/screenshots/screenshot_tokens_pools.png"><img src="https://screenerbot.io/screenshots/screenshot_tokens_pools.png" alt="Tokens & Pools" width="400"></a></td>
-    <td><a href="https://screenerbot.io/screenshots/screenshot_filtering_dexscreener.png"><img src="https://screenerbot.io/screenshots/screenshot_filtering_dexscreener.png" alt="Filtering" width="400"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/positions-open.png"><img src="https://screenerbot.io/api/screenshots/positions-open.webp" alt="Open Positions" width="400"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/positions-closed.png"><img src="https://screenerbot.io/api/screenshots/positions-closed.webp" alt="Position History" width="400"></a></td>
   </tr>
   <tr>
-    <td align="center"><strong>Trader</strong></td>
-    <td align="center"><strong>Transactions</strong></td>
+    <td align="center"><strong>Trader Interface</strong></td>
+    <td align="center"><strong>Token Details</strong></td>
   </tr>
   <tr>
-    <td><a href="https://screenerbot.io/screenshots/screenshot_trader.png"><img src="https://screenerbot.io/screenshots/screenshot_trader.png" alt="Trader" width="400"></a></td>
-    <td><a href="https://screenerbot.io/screenshots/screenshot_transactions.png"><img src="https://screenerbot.io/screenshots/screenshot_transactions.png" alt="Transactions" width="400"></a></td>
-  </tr>
-  <tr>
-    <td align="center"><strong>Strategies</strong></td>
-    <td align="center"><strong>Configuration</strong></td>
-  </tr>
-  <tr>
-    <td><a href="https://screenerbot.io/screenshots/screenshot_strategies_manage.png"><img src="https://screenerbot.io/screenshots/screenshot_strategies_manage.png" alt="Strategies" width="400"></a></td>
-    <td><a href="https://screenerbot.io/screenshots/screenshot_config.png"><img src="https://screenerbot.io/screenshots/screenshot_config.png" alt="Configuration" width="400"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/trader.png"><img src="https://screenerbot.io/api/screenshots/trader.png" alt="Trader Interface" width="400"></a></td>
+    <td><a href="https://screenerbot.io/api/screenshots/token-details.png"><img src="https://screenerbot.io/api/screenshots/token-details.png" alt="Token Details" width="400"></a></td>
   </tr>
 </table>
 
