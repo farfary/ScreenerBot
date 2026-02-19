@@ -5,35 +5,77 @@
 <h1 align="center">ScreenerBot</h1>
 
 <p align="center">
-  <strong>Native Solana Trading Engine</strong>
+  <strong>Open Source Solana Trading Engine</strong>
 </p>
 
 <p align="center">
   <a href="https://www.rust-lang.org/"><img src="https://img.shields.io/badge/Built%20with-Rust-000000?style=flat-square&logo=rust&logoColor=white" alt="Built with Rust"></a>
   <a href="https://solana.com/"><img src="https://img.shields.io/badge/Powered%20by-Solana-9945FF?style=flat-square&logo=solana&logoColor=white" alt="Powered by Solana"></a>
   <a href="https://www.electronjs.org/"><img src="https://img.shields.io/badge/Desktop-Electron-47848F?style=flat-square&logo=electron&logoColor=white" alt="Electron Desktop"></a>
+  <a href="https://github.com/screenerbotio/ScreenerBot/blob/main/LICENSE"><img src="https://img.shields.io/badge/License-MIT-green?style=flat-square" alt="MIT License"></a>
   <a href="https://screenerbot.io/docs"><img src="https://img.shields.io/badge/Docs-screenerbot.io-blue?style=flat-square" alt="Documentation"></a>
-  <a href="https://t.me/screenerbotio"><img src="https://img.shields.io/badge/Community-Telegram-26A5E4?style=flat-square&logo=telegram&logoColor=white" alt="Telegram"></a>
+  <a href="https://t.me/screenerbotio_talk"><img src="https://img.shields.io/badge/Community-Telegram-26A5E4?style=flat-square&logo=telegram&logoColor=white" alt="Telegram Community"></a>
   <a href="https://github.com/screenerbotio/ScreenerBot"><img src="https://img.shields.io/github/stars/screenerbotio/ScreenerBot?style=flat-square" alt="GitHub Stars"></a>
   <a href="https://screenerbot.io/download"><img src="https://img.shields.io/badge/Download-Latest-orange?style=flat-square" alt="Download"></a>
   <a href="https://x.com/screenerbotio"><img src="https://img.shields.io/badge/X-Follow-000000?style=flat-square&logo=x&logoColor=white" alt="X Follow"></a>
 </p>
 
 <p align="center">
-  A high-performance, local-first automated trading system for Solana DeFi.<br>
-  Built in Rust for native runtime performance and direct blockchain interaction.
+  A high-performance, open source, local-first automated trading system for Solana DeFi.<br>
+  Built in Rust for native runtime performance and direct blockchain interaction.<br>
+  <strong> Your keys never leave your machine.</strong>
 </p>
 
 <p align="center">
-  <a href="https://screenerbot.io">Website</a> |
-  <a href="https://screenerbot.io/docs">Documentation</a> |
-  <a href="https://screenerbot.io/download">Download</a>
+  <a href="https://screenerbot.io">Website</a> •
+  <a href="https://screenerbot.io/docs">Documentation</a> •
+  <a href="https://screenerbot.io/download">Download</a> •
+  <a href="https://t.me/screenerbotio_talk">Join Community</a>
 </p>
 
 ---
 
+## 🌟 Screenshots
+
+<table>
+  <tr>
+    <td align="center"><strong>Dashboard</strong></td>
+    <td align="center"><strong>Positions</strong></td>
+  </tr>
+  <tr>
+    <td><a href="https://screenerbot.io/screenshots/home.png"><img src="https://screenerbot.io/screenshots/home.png" alt="Dashboard" width="400"></a></td>
+    <td><a href="https://screenerbot.io/screenshots/positions-open.png"><img src="https://screenerbot.io/screenshots/positions-open.png" alt="Positions" width="400"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Tokens & Pools</strong></td>
+    <td align="center"><strong>Filtering</strong></td>
+  </tr>
+  <tr>
+    <td><a href="https://screenerbot.io/screenshots/screenshot_tokens_pools.png"><img src="https://screenerbot.io/screenshots/screenshot_tokens_pools.png" alt="Tokens & Pools" width="400"></a></td>
+    <td><a href="https://screenerbot.io/screenshots/screenshot_filtering_dexscreener.png"><img src="https://screenerbot.io/screenshots/screenshot_filtering_dexscreener.png" alt="Filtering" width="400"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Trader</strong></td>
+    <td align="center"><strong>Transactions</strong></td>
+  </tr>
+  <tr>
+    <td><a href="https://screenerbot.io/screenshots/screenshot_trader.png"><img src="https://screenerbot.io/screenshots/screenshot_trader.png" alt="Trader" width="400"></a></td>
+    <td><a href="https://screenerbot.io/screenshots/screenshot_transactions.png"><img src="https://screenerbot.io/screenshots/screenshot_transactions.png" alt="Transactions" width="400"></a></td>
+  </tr>
+  <tr>
+    <td align="center"><strong>Strategies</strong></td>
+    <td align="center"><strong>Configuration</strong></td>
+  </tr>
+  <tr>
+    <td><a href="https://screenerbot.io/screenshots/screenshot_strategies_manage.png"><img src="https://screenerbot.io/screenshots/screenshot_strategies_manage.png" alt="Strategies" width="400"></a></td>
+    <td><a href="https://screenerbot.io/screenshots/screenshot_config.png"><img src="https://screenerbot.io/screenshots/screenshot_config.png" alt="Configuration" width="400"></a></td>
+  </tr>
+</table>
+
+---
+
 <p align="center">
-  <strong>Support Development</strong>
+  <strong>💡 Support Development</strong>
 </p>
 
 <p align="center">
@@ -53,7 +95,7 @@
 ---
 
 <p align="center">
-  <strong>Risk Disclaimer</strong>
+  <strong>⚠️ Risk Disclaimer</strong>
 </p>
 
 <p align="center">
@@ -66,7 +108,7 @@
 ---
 
 <p align="center">
-  <strong>How We're Funded</strong>
+  <strong>💰 How We're Funded</strong>
 </p>
 
 <p align="center">
@@ -79,7 +121,7 @@
 
 ## Why Rust?
 
-ScreenerBot is written in **Rust** - the same language Solana itself is built with. This isn't a coincidence:
+ScreenerBot is written in **Rust** — the same language Solana itself is built with. This isn't a coincidence:
 
 - **Native Performance**: Compiled to machine code, not interpreted. Executes as fast as C/C++.
 - **Memory Safety**: No garbage collector pauses. Predictable, consistent execution times.
@@ -93,6 +135,7 @@ Trading bots written in Python or JavaScript can't match the speed and reliabili
 ## Table of Contents
 
 - [Overview](#overview)
+- [Screenshots](#-screenshots)
 - [Architecture](#architecture)
 - [Core Systems](#core-systems)
 - [Supported DEXs](#supported-dexs)
@@ -123,7 +166,7 @@ ScreenerBot is a professional-grade trading automation platform for Solana DeFi.
 
 ## Architecture
 
-17 independent services orchestrated by a central ServiceManager:
+20+ independent services orchestrated by a central ServiceManager with dependency resolution, priority-based startup, and health monitoring:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
@@ -139,7 +182,7 @@ ScreenerBot is a professional-grade trading automation platform for Solana DeFi.
 │ • Fetcher (batch)│ │ • Market data    │ │ • Batch processor │ │ • Exit eval      │
 │ • Decoders (11)  │ │ • Security data  │ │ • DEX analyzer    │ │ • Executors      │
 │ • Calculator     │ │ • Priority update│ │ • P&L calculation │ │ • Safety gates   │
-│ • Cache          │ │ • Blacklist      │ │ • SQLite cache    │ │ • DCA/Partial    │
+│ • Analyzer       │ │ • Blacklist      │ │ • SQLite cache    │ │ • DCA/Partial    │
 └──────────────────┘ └──────────────────┘ └───────────────────┘ └──────────────────┘
         │                    │                    │                    │
         ▼                    ▼                    ▼                    ▼
@@ -160,11 +203,20 @@ ScreenerBot is a professional-grade trading automation platform for Solana DeFi.
 │ • Fallback logic │ │ • Categorized    │ │ • GMGN           │ │ • Token holdings │
 │ • Critical check │ │ • SQLite storage │ │ • Concurrent     │ │ • Snapshots      │
 └──────────────────┘ └──────────────────┘ └──────────────────┘ └──────────────────┘
+        │                    │                    │                    │
+        ▼                    ▼                    ▼                    ▼
+┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
+│   AI Assistant   │ │ Telegram Service │ │   SOL Price      │ │  Update Checker  │
+├──────────────────┤ ├──────────────────┤ ├──────────────────┤ ├──────────────────┤
+│ • 10 LLM provid. │ │ • Notifications  │ │ • Jupiter feed   │ │ • Version check  │
+│ • Tool-calling   │ │ • Bot commands   │ │ • 30s refresh    │ │ • Auto-notify    │
+│ • Scheduled tasks│ │ • Inline actions │ │ • USD conversion │ │ • Release notes  │
+└──────────────────┘ └──────────────────┘ └──────────────────┘ └──────────────────┘
                                     │
                                     ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │                                 Web Dashboard                                       │
-│              Axum REST API • Real-time Updates • 12 Pages • Hot-reload Config       │
+│           Axum REST API • Real-time Updates • 20 Pages • Hot-reload Config          │
 └─────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -172,24 +224,23 @@ ScreenerBot is a professional-grade trading automation platform for Solana DeFi.
 
 ```
 Level 0 (No dependencies):
-  - Events, RPC Stats, SOL Price, Connectivity
+  - Events, RPC Stats, SOL Price, Connectivity, Positions, Update Check
 
 Level 1:
-  - Tokens (depends on Events)
-  - Pools (depends on Events)
+  - Pools (depends on Transactions)
+  - Tokens (depends on Events, Transactions, Pools)
 
 Level 2:
-  - OHLCV (depends on Pools, Tokens)
-  - Filtering (depends on Pools, Tokens)
-  - Positions (depends on Pools, Tokens)
-  - Transactions (depends on Tokens)
+  - OHLCV (depends on Tokens, Positions)
+  - Filtering (depends on Tokens, Pools)
 
 Level 3:
+  - Pool Discovery/Fetcher/Calculator/Analyzer (depends on Transactions, Pools, Filtering)
+  - AI (depends on Tokens, Positions, Filtering)
   - Trader (depends on Pools, Tokens, Positions, Filtering, Transactions)
-  - Wallet (depends on Transactions)
 
 Level 4:
-  - Webserver (depends on all services)
+  - Webserver, Wallet, Telegram, Scheduled AI Tasks
 ```
 
 ---
@@ -274,8 +325,9 @@ Native decoders for direct pool state interpretation:
 
 - **Jupiter V6**: Aggregation with route optimization
 - **GMGN**: Alternative router for quote comparison
+- **Raydium**: Direct swap for Raydium pools
 
-Concurrent quote fetching with automatic best-route selection.
+Concurrent quote fetching across all routers with automatic best-route selection.
 
 ---
 
@@ -348,34 +400,41 @@ Create scheduled tasks that run AI instructions automatically:
 
 ## Dashboard
 
-Web interface at `http://localhost:8080` with 13 pages:
+Web interface at `http://localhost:8080` with 20 pages:
 
-- **Home**: Overview, positions, system health
-- **Positions**: Open/closed with P&L tracking
-- **Tokens**: Database browser with market and security data
-- **Filtering**: Passed/rejected tokens with reasons
-- **Trader**: Trading controls and monitoring
-- **Transactions**: Real-time stream with classification
-- **Strategies**: Strategy builder
+- **Dashboard**: Overview with positions, system health, and real-time stats
+- **Positions**: Open/closed positions with P&L tracking and detailed analytics
+- **Tokens**: Database browser with market data, security analysis, and pool info
+- **Filtering**: Passed/rejected tokens with detailed rejection reasons
+- **Trader**: Trading controls, monitors, safety gates, and loss limits
+- **Transactions**: Real-time stream with DEX classification and P&L
+- **Strategies**: Visual strategy builder with condition editor
+- **OHLCV**: Candlestick charts with multi-timeframe analysis
 - **Assistant**: AI chat, providers, instructions, automation, and testing
-- **Wallet**: Balance and holdings
-- **Events**: System event log
-- **Services**: Health and metrics
-- **Config**: Hot-reload editor
-- **Initialization**: First-run setup wizard
+- **Wallets**: Multi-wallet management with balance monitoring
+- **Tools**: Multi-wallet trading, volume aggregator, ATA cleanup, burn tokens
+- **Events**: System event log with filtering and search
+- **Services**: Service health, metrics, and dependency status
+- **Config**: Hot-reload configuration editor with metadata-driven UI
+- **Updates**: Version checking and release notes
+- **About**: System information and credits
+- **Lockscreen**: Security screen with password/TOTP protection
+- **Login**: Authentication flow
+- **Setup**: First-run initialization wizard
+- **Onboarding**: Guided setup for new users
 
 ---
 
 ## Configuration
 
-Managed through `data/config.toml` with hot-reload support. 17 config sections:
+Managed through `data/config.toml` with hot-reload support. 19 config sections:
 
 | Section          | Purpose                                                        |
 | ---------------- | -------------------------------------------------------------- |
 | `[trader]`       | Position limits, sizing, ROI targets, DCA, trailing stop       |
 | `[positions]`    | Position tracking, partial exits, cooldowns                    |
 | `[filtering]`    | Token filtering with nested DexScreener/GeckoTerminal/Rugcheck |
-| `[swaps]`        | Router configuration (Jupiter, GMGN)                           |
+| `[swaps]`        | Router configuration (Jupiter, GMGN, Raydium)                  |
 | `[tokens]`       | Token database, update intervals                               |
 | `[pools]`        | Pool discovery, caching                                        |
 | `[rpc]`          | RPC endpoints and rate limiting                                |
@@ -389,6 +448,8 @@ Managed through `data/config.toml` with hot-reload support. 17 config sections:
 | `[sol_price]`    | SOL/USD price service                                          |
 | `[gui]`          | Desktop application settings                                   |
 | `[ai]`           | AI providers, filtering, trading analysis, chat, automation    |
+| `[telegram]`     | Telegram bot, notifications, commands                          |
+| `[summary]`      | Summary and reporting settings                                 |
 
 Access via `with_config(|cfg| cfg.trader.max_open_positions)`. Hot-reload with `reload_config()`.
 
@@ -507,21 +568,31 @@ After building with Electron:
 
 ```
 src/
-+-- apis/           # External API clients
-+-- config/         # Configuration system
-+-- connectivity/   # Endpoint health monitoring
-+-- events/         # Event recording system
-+-- filtering/      # Token filtering engine
-+-- ohlcvs/         # OHLCV candlestick data (7 timeframes)
-+-- pools/          # Pool service and DEX decoders
-+-- positions/      # Position lifecycle management
-+-- services/       # ServiceManager
-+-- strategies/     # Strategy engine
-+-- swaps/          # Swap router integration
-+-- tokens/         # Token database
-+-- trader/         # Trading logic
-+-- transactions/   # Transaction monitoring
-+-- webserver/      # Dashboard and REST API
+├── actions/        # Operation progress tracking with SSE broadcasting
+├── ai/             # AI assistant (10 LLM providers, chat, automation)
+├── apis/           # External API clients (DexScreener, Jupiter, Rugcheck, LLM)
+├── config/         # Macro-driven configuration system with hot-reload
+├── connectivity/   # Endpoint health monitoring with fallback strategies
+├── errors/         # Structured error types with blockchain-aware parsing
+├── events/         # Structured JSON event logging (SQLite)
+├── filtering/      # Multi-criteria token evaluation engine
+├── ohlcvs/         # OHLCV candlestick data (7 timeframes)
+├── pools/          # Pool service with 11 native DEX decoders
+├── positions/      # Position lifecycle (DCA, partial exits, P&L)
+├── rpc/            # Multi-provider RPC with rate limiting & circuit breaker
+├── services/       # ServiceManager with 20+ services
+├── strategies/     # Condition-based trading strategy engine
+├── swaps/          # Multi-router swap execution (Jupiter, GMGN, Raydium)
+├── telegram/       # Telegram bot (notifications, commands, inline actions)
+├── tokens/         # Token database with multi-source aggregation
+├── trader/         # Trading logic (entry/exit evaluation, safety gates)
+├── transactions/   # Real-time transaction monitoring via WebSocket
+├── wallets/        # Wallet management and balance monitoring
+└── webserver/      # Axum REST API + embedded web dashboard (20 pages)
+
+docs/               # Architecture documentation and guides
+electron/           # Electron desktop shell
+public/             # Static assets (CSS, JS, fonts, icons)
 ```
 
 ---
@@ -533,33 +604,63 @@ src/
 | 🌐 **Website** | [screenerbot.io](https://screenerbot.io) |
 | 📚 **Documentation** | [screenerbot.io/docs](https://screenerbot.io/docs) |
 | ⬇️ **Download** | [screenerbot.io/download](https://screenerbot.io/download) |
+| 💬 **Telegram Community** | [t.me/screenerbotio_talk](https://t.me/screenerbotio_talk) |
 | 📢 **Telegram Channel** | [t.me/screenerbotio](https://t.me/screenerbotio) |
-| 💬 **Telegram Group** | [t.me/screenerbotio_talk](https://t.me/screenerbotio_talk) |
 | 🆘 **Telegram Support** | [t.me/screenerbotio_support](https://t.me/screenerbotio_support) |
 | 𝕏 **X (Twitter)** | [x.com/screenerbotio](https://x.com/screenerbotio) |
-| 📖 **Docs & Screenshots** | [github.com/screenerbotio/Docs](https://github.com/screenerbotio/Docs) |
+| 📖 **Architecture Docs** | [`docs/`](docs/) |
+| 🤖 **Agent Guide** | [`AGENTS.md`](AGENTS.md) |
 
 ---
 
 ## Contributing
 
-Contributions welcome:
+We welcome contributions from the community! Whether you're fixing a bug, adding a feature, or improving documentation — every contribution matters.
 
-1. Fork the repository
-2. Create a feature branch
-3. Follow existing code patterns
-4. Ensure `cargo check --lib` passes
-5. Open a pull request
+### Getting Started
 
-**Areas for contribution:** DEX decoders, strategy conditions, dashboard improvements, documentation.
+1. **Join the community** — Start by joining our [Telegram Community](https://t.me/screenerbotio_talk) to discuss ideas, ask questions, and coordinate with other contributors
+2. **Read the docs** — Check the [`docs/`](docs/) folder and [`AGENTS.md`](AGENTS.md) for architecture details, coding patterns, and project structure
+3. **Fork & branch** — Fork the repository and create a feature branch from `main`
+4. **Follow patterns** — Match existing code style, naming conventions, and module structure
+5. **Validate** — Ensure `cargo check --lib` passes before submitting
+6. **Open a PR** — Submit a pull request with a clear description of your changes
+
+### Areas for Contribution
+
+- **DEX decoders** — Add support for new Solana DEX protocols
+- **Strategy conditions** — Implement new technical indicators and conditions
+- **Dashboard improvements** — UI/UX enhancements, new visualizations
+- **Documentation** — Improve guides, add tutorials, translate docs
+- **Bug reports** — Found an issue? [Open a GitHub issue](https://github.com/screenerbotio/ScreenerBot/issues)
+
+> 💬 **Not sure where to start?** Ask in our [Telegram Community](https://t.me/screenerbotio_talk) — we'll help you find something that matches your skills!
 
 ---
 
 ## Community
 
 <p align="center">
+  <strong>Join the ScreenerBot community — your gateway to Solana DeFi trading</strong>
+</p>
+
+<p align="center">
+  <a href="https://t.me/screenerbotio_talk"><img src="https://img.shields.io/badge/💬_Telegram_Community-Join_Discussion-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Community"></a>
+</p>
+
+<p align="center">
+  Our <a href="https://t.me/screenerbotio_talk"><strong>Telegram Community</strong></a> is the main hub for everything ScreenerBot:<br>
+  🗣️ Discuss trading strategies and share insights<br>
+  🐛 Report bugs and request features<br>
+  🤝 Find contributors and collaborate on code<br>
+  📢 Get announcements and early access to new features<br>
+  🆘 Get help from the community and the development team
+</p>
+
+<p align="center">
   <a href="https://t.me/screenerbotio"><img src="https://img.shields.io/badge/Telegram-Channel-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Channel"></a>
   <a href="https://t.me/screenerbotio_talk"><img src="https://img.shields.io/badge/Telegram-Community-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Community"></a>
+  <a href="https://t.me/screenerbotio_support"><img src="https://img.shields.io/badge/Telegram-Support-26A5E4?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Support"></a>
   <a href="https://x.com/screenerbotio"><img src="https://img.shields.io/badge/X-Follow-000000?style=for-the-badge&logo=x&logoColor=white" alt="X (Twitter)"></a>
   <a href="https://screenerbot.io"><img src="https://img.shields.io/badge/Website-screenerbot.io-9945FF?style=for-the-badge" alt="Website"></a>
 </p>
