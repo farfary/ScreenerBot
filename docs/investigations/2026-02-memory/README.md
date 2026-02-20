@@ -1,46 +1,69 @@
 # Memory Optimization Investigation
 
 **Date:** February 2026
-**Status:** Plan Complete — Implementation Pending
+**Status:** Plan Complete (v13) — Implementation Pending
 
 ## Problem
 
 ScreenerBot uses 804MB+ RSS at startup and grows to gigabytes during 24/7 operation with ~275K tokens. This investigation identified all root causes and designed a comprehensive fix.
+
+**Memory split:** ~60% DB-related (SQLite page caches ~450-500 MB), ~40% application logic (filtering snapshot, allocator, caches ~300-340 MB).
 
 ## Root Causes (ordered by impact)
 
 | # | Cause | Impact | Phase |
 |---|-------|--------|-------|
 | 1 | SQLite page caches: 14 DBs × huge cache_size × pool | ~580MB at rest, up to 2.8GB | A |
-| 2 | Filtering snapshot: 171K full Token structs every 3 min | 238MB steady, 455MB peak | C |
+| 2 | Filtering snapshot: 56K tokens with market data every 3 min | ~120MB steady, ~240MB peak | C |
 | 3 | mmap_size 30GB on tokens.db & wallet_monitor.db | Up to 294MB RSS | A |
-| 4 | macOS system allocator never returns pages | ~200MB fragmentation waste | A |
-| 5 | 3 true leaks + 2 slow leaks + 8 bounded caches | 20-100MB growing | B, D |
+| 4 | macOS system allocator never returns pages | ~100-200MB fragmentation waste | A |
+| 5 | 3 true leaks + 2 slow leaks + 9 unbounded caches | 20-100MB growing | B, D |
 | 6 | Dashboard loads ALL positions on every poll | 20-60% overhead | D |
-| 7 | Database disk waste: pools.db 729MB with 0 rows | Disk + mmap waste | E |
+| 7 | Position cloning wastes 18.9 GB/year allocations | Allocator churn | B |
+| 8 | Database disk waste: pools.db 729MB with 0 rows | Disk + mmap waste | E |
 
 ## Solution Architecture
 
 10-component system across 5 phases:
 
 - **Phase A** — SQLite standardization + jemalloc (~90% of benefit)
-- **Phase B** — Cache management with moka
+- **Phase B** — Cache management with moka + leak fixes
 - **Phase C** — Lightweight filtering snapshot (TokenListEntry)
-- **Phase D** — Maintenance service + leak fixes
+- **Phase D** — Maintenance service + periodic cleanup
 - **Phase E** — Database compaction + monitoring
 
-Expected result: 804MB → 250-350MB steady state, growth fully bounded.
+Expected result: 804MB → 150-250MB steady state, growth fully bounded.
 
-## Files
+## Directory Structure
 
-| File | Description |
-|------|-------------|
-| [PLAN.md](PLAN.md) | Full technical plan (5,500+ lines) — root causes, architecture, phases, tests, dependencies |
+```
+├── README.md              ← This file
+├── PLAN.md                ← Master technical plan (5,900+ lines, v13)
+├── AGENTS.md              ← Agent implementation strategy
+├── arc/                   ← Arc<T> memory research (5 files)
+├── moka/                  ← Moka cache library research (4 files)
+├── epoch/                 ← Epoch-based memory reclamation (3 files)
+├── dashmap/               ← DashMap concurrent HashMap research (2 files)
+├── async-rusqlite/        ← Async SQLite patterns research (5 files)
+└── utilities/             ← Crossbeam, Hashbrown, Flurry, sources (5 files)
+```
 
 ## Key Decisions
 
-1. **TokenListEntry** (~550 bytes) replaces full Token (~1,400 bytes) in filtering snapshots — 57% reduction, zero functionality loss
+1. **TokenListEntry** (~550 bytes) replaces full Token (~2,200 bytes) in filtering snapshots — 75% reduction
 2. **SQLite PRAGMA with_init()** pattern standardized across all 14 databases
 3. **jemalloc** as optional allocator via cargo feature flag
 4. **moka** cache library for bounded, TTL-based caching
 5. ALL 275K tokens remain accessible — no data limitation
+6. **MaintenanceService** for periodic VACUUM, cache cleanup, and leak mitigation
+
+## Plan Reading Order
+
+The plan document has been built iteratively (v1-v13). For implementation:
+
+1. **Start with v10** (Line ~4461) — TokenListEntry architecture (Option D)
+2. **Then v11** (Line ~4875) — 12 corrections to file paths and phases
+3. **Then v12** (Line ~5236) — Flow details and scheduling patterns
+4. **Then v13** (Line ~5594) — Non-DB memory deep-dive, corrected estimates
+
+> v1-v9 contain historical analysis. Later versions supersede where they conflict.

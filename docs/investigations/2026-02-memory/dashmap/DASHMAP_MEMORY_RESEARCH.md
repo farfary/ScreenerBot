@@ -572,7 +572,7 @@ hashbrown = "0.14.5"
 
 **Note on Bundled Implementation:**
 
-ScreenerBot includes `/Users/farhad/Desktop/ScreenerBot/dashmap_lib.rs` which appears to be a bundled version of DashMap's source code. This could be for:
+ScreenerBot includes `src/dashmap_lib.rs` which appears to be a bundled version of DashMap's source code. This could be for:
 - Custom modifications
 - Offline compilation
 - Version pinning
