@@ -17,7 +17,7 @@ use solana_sdk::signer::Signer;
 pub enum WalletRole {
     /// Primary trading wallet - shown everywhere, used for auto-trading
     Main,
-    /// Additional wallets for tools, volume aggregator, manual operations
+    /// Additional wallets for tools and manual operations
     Secondary,
     /// Inactive/backup wallets - not used for operations
     Archive,

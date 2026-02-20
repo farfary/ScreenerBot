@@ -1,7 +1,6 @@
 //! Tools Database Module
 //!
 //! SQLite database for persistent storage of tool operations:
-//! - Volume Aggregator sessions and swaps
 //! - ATA cleanup sessions and closures
 //! - Failed ATA cache
 //! - Tool favorites
@@ -14,24 +13,16 @@ mod favorites;
 mod multi_wallet;
 mod schema;
 mod types;
-mod volume_aggregator;
 mod watched_tokens;
 
 // Re-export types
 pub use types::{
-    FailedAtaRow, MwSessionConfig, MwSessionRow, MwWalletOpRow, ToolFavoriteRow, VaAnalyticsSummary,
-    VaSessionRow, VaSwapRow, WatchedToken, WatchedTokenConfig,
+    FailedAtaRow, MwSessionConfig, MwSessionRow, MwWalletOpRow, ToolFavoriteRow,
+    WatchedToken, WatchedTokenConfig,
 };
 
 // Re-export initialization
 pub use schema::init_tools_db;
-
-// Re-export volume aggregator operations
-pub use volume_aggregator::{
-    get_recent_va_sessions, get_va_session, get_va_sessions_analytics, get_va_swaps,
-    insert_va_session, insert_va_swap, update_va_session_metrics, update_va_session_status,
-    update_va_swap_result,
-};
 
 // Re-export ATA cache operations
 pub use ata_cache::{

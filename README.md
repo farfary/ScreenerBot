@@ -404,7 +404,7 @@ Web interface at `http://localhost:8080` with 20 pages:
 - **OHLCV**: Candlestick charts with multi-timeframe analysis
 - **Assistant**: AI chat, providers, instructions, automation, and testing
 - **Wallets**: Multi-wallet management with balance monitoring
-- **Tools**: Multi-wallet trading, volume aggregator, ATA cleanup, burn tokens
+- **Tools**: Multi-wallet trading, ATA cleanup, burn tokens
 - **Events**: System event log with filtering and search
 - **Services**: Service health, metrics, and dependency status
 - **Config**: Hot-reload configuration editor with metadata-driven UI

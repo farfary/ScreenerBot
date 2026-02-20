@@ -7,7 +7,7 @@
 //! - Secure wallet generation using Solana SDK
 //! - AES-256-GCM encryption with machine-derived keys
 //! - Main wallet designation for trading
-//! - Secondary wallets for tools/volume aggregator
+//! - Secondary wallets for tools
 //! - Import/export functionality
 //! - Bulk import from CSV/Excel files
 //!

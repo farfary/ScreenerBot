@@ -41,7 +41,6 @@ pub async fn get_favorites_list(
 pub async fn add_favorite(Json(request): Json<AddToolFavoriteRequest>) -> Response {
     // Validate tool_type
     let valid_types = [
-        "volume_aggregator",
         "buy_multi",
         "sell_multi",
         "token_watch",

@@ -36,83 +36,6 @@ CREATE TABLE IF NOT EXISTS schema_version (
 );
 "#;
 
-/// Volume Aggregator sessions table
-const SCHEMA_VA_SESSIONS: &str = r#"
-CREATE TABLE IF NOT EXISTS va_sessions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL UNIQUE,
-    token_mint TEXT NOT NULL,
-    target_volume_sol REAL NOT NULL,
-    actual_volume_sol REAL NOT NULL DEFAULT 0,
-    
-    -- Delay configuration
-    delay_type TEXT NOT NULL DEFAULT 'fixed',
-    delay_ms INTEGER NOT NULL DEFAULT 1000,
-    delay_max_ms INTEGER,
-    
-    -- Sizing configuration
-    sizing_type TEXT NOT NULL DEFAULT 'fixed',
-    amount_sol REAL NOT NULL DEFAULT 0.01,
-    amount_max_sol REAL,
-    
-    -- Strategy configuration
-    strategy TEXT NOT NULL DEFAULT 'round_robin',
-    wallet_mode TEXT NOT NULL DEFAULT 'auto_select',
-    wallet_addresses TEXT,
-    
-    -- Status tracking
-    status TEXT NOT NULL DEFAULT 'ready',
-    started_at TEXT,
-    ended_at TEXT,
-    error_message TEXT,
-    
-    -- Metrics
-    successful_buys INTEGER NOT NULL DEFAULT 0,
-    successful_sells INTEGER NOT NULL DEFAULT 0,
-    failed_count INTEGER NOT NULL DEFAULT 0,
-    
-    -- Timestamps
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-
-CREATE INDEX IF NOT EXISTS idx_va_sessions_session_id ON va_sessions(session_id);
-CREATE INDEX IF NOT EXISTS idx_va_sessions_token_mint ON va_sessions(token_mint);
-CREATE INDEX IF NOT EXISTS idx_va_sessions_status ON va_sessions(status);
-CREATE INDEX IF NOT EXISTS idx_va_sessions_created ON va_sessions(created_at);
-"#;
-
-/// Volume Aggregator swaps table
-const SCHEMA_VA_SWAPS: &str = r#"
-CREATE TABLE IF NOT EXISTS va_swaps (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    session_id TEXT NOT NULL,
-    tx_index INTEGER NOT NULL,
-    wallet_address TEXT NOT NULL,
-    
-    -- Transaction details
-    is_buy INTEGER NOT NULL,
-    amount_sol REAL NOT NULL,
-    token_amount REAL,
-    signature TEXT,
-    
-    -- Status
-    status TEXT NOT NULL DEFAULT 'pending',
-    error_message TEXT,
-    executed_at TEXT,
-    
-    -- Timestamps
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    
-    FOREIGN KEY (session_id) REFERENCES va_sessions(session_id) ON DELETE CASCADE
-);
-
-CREATE INDEX IF NOT EXISTS idx_va_swaps_session_id ON va_swaps(session_id);
-CREATE INDEX IF NOT EXISTS idx_va_swaps_wallet ON va_swaps(wallet_address);
-CREATE INDEX IF NOT EXISTS idx_va_swaps_status ON va_swaps(status);
-CREATE INDEX IF NOT EXISTS idx_va_swaps_executed ON va_swaps(executed_at);
-"#;
-
 /// ATA cleanup sessions table
 const SCHEMA_ATA_SESSIONS: &str = r#"
 CREATE TABLE IF NOT EXISTS ata_sessions (
@@ -408,12 +331,6 @@ pub fn init_tools_db() -> Result<(), String> {
 
     if current_version.is_none() || current_version.unwrap() < TOOLS_SCHEMA_VERSION {
         // Create all tables
-        conn.execute_batch(SCHEMA_VA_SESSIONS)
-            .map_err(|e| format!("Failed to create va_sessions table: {}", e))?;
-
-        conn.execute_batch(SCHEMA_VA_SWAPS)
-            .map_err(|e| format!("Failed to create va_swaps table: {}", e))?;
-
         conn.execute_batch(SCHEMA_ATA_SESSIONS)
             .map_err(|e| format!("Failed to create ata_sessions table: {}", e))?;
 

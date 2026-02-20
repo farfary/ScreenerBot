@@ -1,7 +1,7 @@
 //! Tool Swap Executor
 //!
 //! Execute swaps using the swaps module but with custom keypairs.
-//! These functions are for tools (like Volume Aggregator) that need
+//! These functions are for tools that need
 //! to execute swaps WITHOUT creating positions in the position tracker.
 
 use solana_sdk::pubkey::Pubkey;

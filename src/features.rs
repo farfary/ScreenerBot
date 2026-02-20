@@ -55,8 +55,6 @@ pub struct ToolFeatures {
     pub trade_watcher: FeatureStatus,
     /// Holder watch tool - monitor token holders
     pub holder_watch: FeatureStatus,
-    /// Volume aggregator tool - aggregate trading volume
-    pub volume_aggregator: FeatureStatus,
     /// Multi-buy tool - buy from multiple wallets
     pub multi_buy: FeatureStatus,
     /// Multi-sell tool - sell from multiple wallets
@@ -78,7 +76,6 @@ impl Default for ToolFeatures {
             create_token: FeatureStatus::ComingSoon,
             trade_watcher: FeatureStatus::ComingSoon,
             holder_watch: FeatureStatus::ComingSoon,
-            volume_aggregator: FeatureStatus::ComingSoon,
             multi_buy: FeatureStatus::ComingSoon,
             multi_sell: FeatureStatus::ComingSoon,
             wallet_consolidation: FeatureStatus::ComingSoon,
@@ -98,7 +95,6 @@ impl ToolFeatures {
             "create-token" => self.create_token,
             "trade-watcher" => self.trade_watcher,
             "token-watch" | "holder-watch" => self.holder_watch,
-            "volume-aggregator" => self.volume_aggregator,
             "buy-multi-wallets" => self.multi_buy,
             "sell-multi-wallets" => self.multi_sell,
             "wallet-consolidation" => self.wallet_consolidation,
@@ -226,7 +222,7 @@ pub fn get_features() -> Features {
 ///
 /// Tool IDs:
 /// - "wallet-cleanup", "burn-tokens", "token-analyzer", "create-token"
-/// - "trade-watcher", "token-watch", "holder-watch", "volume-aggregator"
+/// - "trade-watcher", "token-watch", "holder-watch"
 /// - "buy-multi-wallets", "sell-multi-wallets", "wallet-consolidation"
 /// - "airdrop-checker", "wallet-generator"
 pub fn is_tool_available(tool_id: &str) -> bool {

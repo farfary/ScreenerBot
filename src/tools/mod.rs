@@ -1,10 +1,9 @@
 //! Tools module for ScreenerBot
 //!
-//! Contains utility tools like volume aggregator for token operations.
+//! Contains utility tools for token operations.
 //!
 //! ## Available Tools
 //! - `ata_cleanup` - Scan and close empty ATAs to reclaim rent
-//! - `volume_aggregator` - Generate trading volume using multiple wallets
 //! - `swap_executor` - Execute swaps with custom keypairs (no position tracking)
 //! - `multi_wallet` - Multi-wallet trading tools (buy/sell/consolidate)
 //! - `trade_watcher` - Monitor external wallet trades and trigger actions
@@ -18,7 +17,6 @@ pub mod multi_wallet;
 pub mod swap_executor;
 pub mod trade_watcher;
 mod types;
-pub mod volume_aggregator;
 
 // Re-export common types
 pub use types::{
@@ -27,20 +25,12 @@ pub use types::{
 
 // Re-export database types
 pub use database::{
-    get_recent_va_sessions, get_tool_favorites, get_va_sessions_analytics,
-    increment_tool_favorite_use, init_tools_db, remove_tool_favorite, update_tool_favorite,
-    upsert_tool_favorite, FailedAtaRow, ToolFavoriteRow, VaAnalyticsSummary, VaSessionRow,
-    VaSwapRow,
+    get_tool_favorites, increment_tool_favorite_use, init_tools_db, remove_tool_favorite,
+    update_tool_favorite, upsert_tool_favorite, FailedAtaRow, ToolFavoriteRow,
 };
 
 // Re-export swap executor
 pub use swap_executor::{execute_tool_swap, tool_buy, tool_sell, ToolSwapResult};
-
-// Re-export volume aggregator
-pub use volume_aggregator::{
-    calculate_amount, calculate_amount_clamped, calculate_delay, SessionStatus, StrategyExecutor,
-    TransactionStatus, VolumeAggregator, VolumeConfig, VolumeSession, VolumeTransaction,
-};
 
 // Re-export ATA cleanup types and functions
 pub use ata_cleanup::{

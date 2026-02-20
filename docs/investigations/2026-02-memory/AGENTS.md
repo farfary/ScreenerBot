@@ -2,9 +2,8 @@
 
 > **Issue**: Memory/RAM growing to gigabytes during 24/7 operation
 > **Date Started**: 2026-02-18
-> **Status**: Investigation complete (v12), ready for implementation
-> **Plan Document**: [PLAN.md](./PLAN.md) (~5,590 lines)
-> **Public Copy**: Also in public repo at `ScreenerBot/docs/investigations/2026-02-memory/`
+> **Status**: Investigation complete (v14), ready for implementation
+> **Plan Document**: [PLAN.md](./PLAN.md) (~6,100 lines)
 
 ---
 
@@ -12,16 +11,19 @@
 
 ### What We Found
 - Bot RSS starts at **804 MB** and grows unboundedly to 2+ GB
-- 7 root causes identified (SQLite page caches #1 at ~580MB)
-- 14 SQLite databases with misconfigured cache_size and mmap_size
-- 171K tokens in filtering snapshot consuming ~240MB
-- 3 true memory leaks + 2 slow leaks + unbounded caches
-- macOS system allocator fragmentation (~200MB waste)
+- 8 root causes identified (SQLite page caches, filtering, mmap, allocator, leaks, cloning, dashboard, disk)
+- 14 SQLite databases — only 2 use with_init() (transactions.db, ai_chat.db)
+- SQLite at-rest memory: **~240-280 MB** (earlier estimates of 580MB were overestimated)
+- 56K tokens with market data in filtering snapshot consuming ~120MB steady
+- **5+ true leaks** (DECIMALS_CACHE, TOKEN_2022_CACHE, FETCH_LOCKS, IMPORT_SESSIONS, MULTI_WALLET_SESSIONS, LAST_TOKEN_ACCOUNTS_CHECK)
+- **7 slow leaks** (SIG_TO_MINT_INDEX, POSITION_LOCKS, PENDING_PARTIAL_EXITS, GLOBAL_KNOWN_SIGNATURES, ACTIVE_ACTIONS, etc.)
+- macOS system allocator fragmentation (~100-200MB waste)
+- Position cloning wastes 18.9 GB/year allocations (price_updater.rs)
 
 ### Architecture Designed (10 Components)
-1. Right-Sized SQLite Configuration (~580MB → ~84MB)
-2. Incremental Filtering (eliminate 238MB reload every 3 min)
-3. TokenListEntry lightweight struct (240MB → ~103MB in snapshot)
+1. Right-Sized SQLite Configuration (~280MB → ~84MB)
+2. Incremental Filtering (eliminate full reload every 3 min)
+3. TokenListEntry lightweight struct (~120MB → ~30MB in snapshot) — OPTIONAL
 4. Bounded Caches via moka (stop all unbounded growth)
 5. Automatic Maintenance Service (self-maintaining databases)
 6. jemalloc Allocator (reduce fragmentation ~100-200MB)
@@ -31,10 +33,20 @@
 10. User & Automatic Tuning (3-layer cascade: auto/profile/manual)
 
 ### Expected Results
-- RSS at startup: 804 MB → 150-250 MB
-- RSS after 24h: 2+ GB → 200-350 MB
+- RSS after optimization: **≤350 MB stable** (200-300 MB is legitimate working set)
 - Memory growth: Unbounded → Fully bounded
 - Maintenance: Manual → Automatic
+
+### Implementation Tiers (v14 strategy)
+- **Tier 1** (15 lines, 35 min): jemalloc + price_updater fix + POSITION_LOCKS + mmap fix
+- **Tier 2** (~210 lines, 4 hrs): SQLite standardization + cache_size right-sizing + leak fixes
+- **Tier 3** (if needed): TokenListEntry + incremental filtering + MaintenanceService
+
+### Key Risk: What If It Doesn't Work?
+- Phase C (TokenListEntry) is OPTIONAL — skip if Tier 1+2 achieve target
+- If jemalloc only saves 50 MB (macOS already has decent allocator), still worth 5 lines
+- cache_size reduction needs tiered approach (hot DBs: 5000, cold DBs: 1000) to avoid perf regression
+- Realistic target: stable ≤350 MB (not 150 MB — 200-300 MB is legitimate working set)
 
 ---
 

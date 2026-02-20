@@ -606,36 +606,6 @@ Create new wallets securely on your device.
 • Always backup keys securely`,
     },
 
-    volumeAggregator: {
-      id: "tools.volume_aggregator",
-      title: "Volume Aggregator Tool",
-      content: `**Generate Trading Volume**
-
-Creates organic-looking trading activity for a token using multiple wallets.
-
-**How it works:**
-• Uses your secondary wallets to execute buy/sell pairs
-• Distributes transactions across wallets for natural appearance
-• Configurable amounts and delays between transactions
-
-**Requirements:**
-• At least 2 secondary wallets configured
-• Each wallet needs SOL for gas fees (~0.01 SOL minimum)
-• Token must have active liquidity pools
-
-**Configuration:**
-• **Total Volume** — target SOL volume to generate
-• **Min/Max Amount** — range for individual transaction sizes
-• **Delay** — time between transactions (min 1000ms)
-• **Randomize** — vary amounts within range
-
-**Risks:**
-• Wallet balances are used for transactions
-• Failed transactions may result in partial fills
-• High-frequency trading may trigger rate limits`,
-      learnMoreUrl: "https://screenerbot.io/docs/tools/volume-aggregator",
-    },
-
     multiBuy: {
       id: "tools.multi_buy",
       title: "Multi-Buy Tool",

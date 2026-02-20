@@ -16,7 +16,6 @@ mod favorites;
 mod multi_wallet;
 mod trade_watcher;
 pub mod types;
-mod volume_aggregator;
 
 // Re-export handler functions for use by the router
 use ata_cleanup::{
@@ -35,10 +34,6 @@ use trade_watcher::{
     add_watched_token_handler, delete_watched_token_handler, get_trade_watcher_status_handler,
     get_watched_tokens_handler, search_pools_handler, start_trade_watcher_handler,
     stop_trade_watcher_handler,
-};
-use volume_aggregator::{
-    get_volume_aggregator_sessions, get_volume_aggregator_status, start_volume_aggregator,
-    stop_volume_aggregator,
 };
 
 // =============================================================================
@@ -80,17 +75,6 @@ pub fn routes() -> Router<Arc<AppState>> {
         // Wallet Generator
         .route("/generate-keypair", post(generate_keypair))
         .route("/generate-keypairs", post(generate_keypairs))
-        // Volume Aggregator
-        .route("/volume-aggregator/start", post(start_volume_aggregator))
-        .route(
-            "/volume-aggregator/status",
-            get(get_volume_aggregator_status),
-        )
-        .route("/volume-aggregator/stop", post(stop_volume_aggregator))
-        .route(
-            "/volume-aggregator/sessions",
-            get(get_volume_aggregator_sessions),
-        )
         // Tool Favorites
         .route("/favorites", get(get_favorites_list))
         .route("/favorites", post(add_favorite))

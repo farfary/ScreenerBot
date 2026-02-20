@@ -29,10 +29,6 @@ import {
 } from "./tools/token_tools.js";
 import {
   renderTradeWatcherTool,
-  renderVolumeAggregatorTool,
-  stopVolumeAggregatorPolling,
-  vaHistoryTable,
-  vaToolFavorites,
 } from "./tools/trading_tools.js";
 import {
   renderBuyMultiWalletsTool,
@@ -70,7 +66,6 @@ const TOOL_TO_FEATURE_MAP = {
   "create-token": "create_token",
   "trade-watcher": "trade_watcher",
   "token-watch": "holder_watch",
-  "volume-aggregator": "volume_aggregator",
   "buy-multi-wallets": "multi_buy",
   "sell-multi-wallets": "multi_sell",
   "wallet-consolidation": "wallet_consolidation",
@@ -153,14 +148,6 @@ const TOOL_DEFINITIONS = {
     icon: "icon-activity",
     category: "single-token",
     render: renderTradeWatcherTool,
-  },
-  "volume-aggregator": {
-    id: "volume-aggregator",
-    title: "Volume Aggregator",
-    description: "Generate trading volume using multiple wallets",
-    icon: "icon-chart-bar",
-    category: "single-token",
-    render: renderVolumeAggregatorTool,
   },
   "buy-multi-wallets": {
     id: "buy-multi-wallets",
@@ -499,17 +486,6 @@ function createLifecycle() {
       currentTool = null;
       featureStatus = {}; // Reset feature status
 
-      // Clean up Volume Aggregator resources
-      stopVolumeAggregatorPolling();
-      if (vaHistoryTable) {
-        vaHistoryTable.dispose();
-        vaHistoryTable = null;
-      }
-      if (vaToolFavorites) {
-        vaToolFavorites.dispose();
-        vaToolFavorites = null;
-      }
-
       // Clean up Multi-Buy resources
       stopMultiBuyPolling();
       resetMultiBuyUI();
@@ -532,7 +508,6 @@ function showToolHelp() {
     "wallet-cleanup": "tools.walletCleanup",
     "burn-tokens": "tools.burnTokens",
     "wallet-generator": "tools.walletGenerator",
-    "volume-aggregator": "tools.volumeAggregator",
     "buy-multi-wallets": "tools.multiBuy",
     "sell-multi-wallets": "tools.multiSell",
     "wallet-consolidation": "tools.walletConsolidation",

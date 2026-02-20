@@ -507,7 +507,7 @@ pub async fn delete_wallet(wallet_id: i64) -> Result<(), String> {
 // TOOLS INTEGRATION
 // =============================================================================
 
-/// Get all wallets with their keypairs for volume aggregator/tools
+/// Get all wallets with their keypairs for tools
 pub async fn get_wallets_with_keys() -> Result<Vec<WalletWithKey>, String> {
     let db_guard = WALLETS_DB.read().await;
     let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
