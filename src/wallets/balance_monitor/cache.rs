@@ -2,6 +2,7 @@
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
 use flate2::{read::GzDecoder, write::GzEncoder, Compression};
+use moka::sync::Cache;
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::{Arc, LazyLock, Mutex as StdMutex};
@@ -12,8 +13,8 @@ use crate::config::with_config;
 use crate::logger::{self, LogTag};
 use crate::transactions::get_transaction_database;
 
-use super::database::GLOBAL_WALLET_DB;
 use super::dashboard::compute_dashboard_payload_realtime;
+use super::database::GLOBAL_WALLET_DB;
 use super::types::*;
 
 // Constants
@@ -109,8 +110,13 @@ pub(super) struct CachedDashboardMetrics {
 }
 
 pub(super) static API_RESPONSE_CACHE: LazyLock<
-    Arc<RwLock<HashMap<DashboardRequestKey, CachedDashboardResponse>>>,
-> = LazyLock::new(|| Arc::new(RwLock::new(HashMap::new())));
+    Cache<DashboardRequestKey, CachedDashboardResponse>,
+> = LazyLock::new(|| {
+    Cache::builder()
+        .max_capacity(1000)
+        .time_to_live(Duration::from_secs(300))
+        .build()
+});
 
 pub(super) static CACHE_METRICS: LazyLock<Arc<RwLock<CachePerformanceMetrics>>> =
     LazyLock::new(|| Arc::new(RwLock::new(CachePerformanceMetrics::default())));
@@ -141,7 +147,9 @@ fn decompress_bytes(raw: &[u8]) -> Result<Vec<u8>, String> {
     Ok(buffer)
 }
 
-pub(super) fn serialize_dashboard_payload(payload: &WalletDashboardData) -> Result<Vec<u8>, String> {
+pub(super) fn serialize_dashboard_payload(
+    payload: &WalletDashboardData,
+) -> Result<Vec<u8>, String> {
     let mut sanitized = payload.clone();
     sanitized.cache_metadata = None;
     let json = serde_json::to_vec(&sanitized)
@@ -179,7 +187,11 @@ pub(super) fn ttl_for_window(window_key: &str) -> u64 {
     })
 }
 
-pub(super) async fn record_cache_metrics(source: DashboardDataSource, latency_ms: u128, stale: bool) {
+pub(super) async fn record_cache_metrics(
+    source: DashboardDataSource,
+    latency_ms: u128,
+    stale: bool,
+) {
     let mut guard = CACHE_METRICS.write().await;
     guard.total_requests = guard.total_requests.saturating_add(1);
     guard.total_latency_ms = guard.total_latency_ms.saturating_add(latency_ms);
@@ -234,7 +246,10 @@ pub(super) async fn circuit_reset(window_key: &str) {
 // CACHE COMPUTATION
 // =============================================================================
 
-pub(super) async fn compute_and_cache_metrics_internal(window_key: &'static str, window_hours: i64) {
+pub(super) async fn compute_and_cache_metrics_internal(
+    window_key: &'static str,
+    window_hours: i64,
+) {
     if get_transaction_database().await.is_none() {
         logger::debug(
             LogTag::Wallet,
@@ -351,19 +366,14 @@ pub(super) async fn compute_and_cache_metrics(
     };
 
     {
-        let mut cache_guard = API_RESPONSE_CACHE.write().await;
-        cache_guard.insert(
+        API_RESPONSE_CACHE.insert(
             request_key,
             CachedDashboardResponse {
                 data: payload.clone(),
                 cached_at: Instant::now(),
             },
         );
-        if cache_guard.len() > MAX_API_CACHE_ENTRIES {
-            let cache_ttl_secs = with_config(|cfg| cfg.wallet.api_response_cache_ttl_secs.max(5));
-            let cutoff = Instant::now() - Duration::from_secs(cache_ttl_secs.saturating_mul(2));
-            cache_guard.retain(|_, entry| entry.cached_at > cutoff);
-        }
+        // Moka automatically handles eviction based on max_capacity and TTL
     }
 
     logger::debug(

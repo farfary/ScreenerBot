@@ -4,9 +4,9 @@
 // used throughout the transactions system.
 
 use chrono::{DateTime, Utc};
-use std::sync::LazyLock;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use tokio::sync::Mutex;
 
 use crate::logger::{self, LogTag};
@@ -54,9 +54,10 @@ pub const WSOL_MINT: &str = "So11111111111111111111111111111111111111112";
 // GLOBAL STATE MANAGEMENT
 // =============================================================================
 
-/// Global known signatures cache for cross-manager coordination
-static GLOBAL_KNOWN_SIGNATURES: LazyLock<Arc<Mutex<HashSet<String>>>> =
-    LazyLock::new(|| Arc::new(Mutex::new(HashSet::new())));
+/// Global known signatures cache — bounded moka cache with LRU eviction (max 50K entries).
+/// Prevents unbounded growth (was ~2 MB/day with HashSet).
+static GLOBAL_KNOWN_SIGNATURES: LazyLock<moka::sync::Cache<String, ()>> =
+    LazyLock::new(|| moka::sync::Cache::builder().max_capacity(50_000).build());
 
 /// Global pending transactions tracking
 static GLOBAL_PENDING_TRANSACTIONS: LazyLock<Arc<Mutex<HashMap<String, DateTime<Utc>>>>> =
@@ -68,21 +69,20 @@ static GLOBAL_PENDING_TRANSACTIONS: LazyLock<Arc<Mutex<HashMap<String, DateTime<
 
 /// Check if signature is known globally across all managers
 pub async fn is_signature_known_globally(signature: &str) -> bool {
-    let known_sigs = GLOBAL_KNOWN_SIGNATURES.lock().await;
-    known_sigs.contains(signature)
+    GLOBAL_KNOWN_SIGNATURES.get(signature).is_some()
 }
 
 /// Add signature to global known cache
 pub async fn add_signature_to_known_globally(signature: String) {
-    let mut known_sigs = GLOBAL_KNOWN_SIGNATURES.lock().await;
-    let inserted = known_sigs.insert(signature.clone());
-    if inserted {
+    let was_new = GLOBAL_KNOWN_SIGNATURES.get(&signature).is_none();
+    GLOBAL_KNOWN_SIGNATURES.insert(signature.clone(), ());
+    if was_new {
         logger::debug(
             LogTag::Transactions,
             &format!(
                 "Added signature {} to known cache (total={})",
                 &signature,
-                known_sigs.len()
+                GLOBAL_KNOWN_SIGNATURES.entry_count()
             ),
         );
     }
@@ -90,20 +90,17 @@ pub async fn add_signature_to_known_globally(signature: String) {
 
 /// Remove signature from global known cache
 pub async fn remove_signature_from_known_globally(signature: &str) {
-    let mut known_sigs = GLOBAL_KNOWN_SIGNATURES.lock().await;
-    known_sigs.remove(signature);
+    GLOBAL_KNOWN_SIGNATURES.invalidate(signature);
 }
 
 /// Get count of globally known signatures
 pub async fn get_known_signatures_count() -> usize {
-    let known_sigs = GLOBAL_KNOWN_SIGNATURES.lock().await;
-    known_sigs.len()
+    GLOBAL_KNOWN_SIGNATURES.entry_count() as usize
 }
 
 /// Clear global known signatures cache
 pub async fn clear_global_known_signatures() {
-    let mut known_sigs = GLOBAL_KNOWN_SIGNATURES.lock().await;
-    known_sigs.clear();
+    GLOBAL_KNOWN_SIGNATURES.invalidate_all();
     logger::info(
         LogTag::Transactions,
         "Cleared global known signatures cache",

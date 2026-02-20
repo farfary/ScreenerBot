@@ -1,8 +1,8 @@
 /// Router Registry - Manages all available swap routers
 /// Provides router discovery, fallback chains, and global access
 use crate::swaps::router::SwapRouter;
-use std::sync::OnceLock;
 use std::sync::Arc;
+use std::sync::OnceLock;
 
 // ============================================================================
 // ROUTER REGISTRY

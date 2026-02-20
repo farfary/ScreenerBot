@@ -167,6 +167,10 @@ pub async fn start_rpc_stats_auto_save_service(shutdown: std::sync::Arc<tokio::s
     logger::info(LogTag::Rpc, "Starting RPC stats monitoring service");
 
     let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(60));
+    let mut cleanup_counter: u32 = 0;
+    // Run cleanup every ~60 ticks (60 min) with 72h retention
+    const CLEANUP_EVERY_TICKS: u32 = 60;
+    const RETENTION_HOURS: u64 = 72;
 
     loop {
         tokio::select! {
@@ -188,6 +192,14 @@ pub async fn start_rpc_stats_auto_save_service(shutdown: std::sync::Arc<tokio::s
                                 stats.success_rate, stats.total_errors, stats.total_calls
                             ),
                         );
+                    }
+
+                    // Periodic cleanup of old stats
+                    cleanup_counter += 1;
+                    if cleanup_counter >= CLEANUP_EVERY_TICKS {
+                        cleanup_counter = 0;
+                        client.manager().cleanup_stats(RETENTION_HOURS).await;
+                        logger::info(LogTag::Rpc, "RPC stats cleanup completed");
                     }
                 }
             }

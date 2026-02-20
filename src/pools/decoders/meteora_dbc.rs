@@ -137,7 +137,10 @@ impl PoolDecoder for MeteoraDbcDecoder {
         if sol_decimals > 18 || token_decimals > 18 {
             logger::error(
                 LogTag::PoolDecoder,
-                &format!("Meteora DBC: Decimals too large: sol={}, token={}", sol_decimals, token_decimals),
+                &format!(
+                    "Meteora DBC: Decimals too large: sol={}, token={}",
+                    sol_decimals, token_decimals
+                ),
             );
             return None;
         }

@@ -674,9 +674,7 @@ impl FilterRequest {
 ///
 /// This is used when a token is requested but not found in the local database.
 /// Returns the Token if found and successfully added, None otherwise.
-pub(super) async fn fetch_and_add_token_from_external(
-    mint: &str,
-) -> Option<crate::tokens::Token> {
+pub(super) async fn fetch_and_add_token_from_external(mint: &str) -> Option<crate::tokens::Token> {
     use crate::apis::get_api_manager;
     use crate::tokens::database::get_global_database;
 

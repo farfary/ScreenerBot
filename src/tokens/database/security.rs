@@ -334,7 +334,6 @@ impl TokenDatabase {
         Ok(())
     }
 
-
     pub fn record_security_error(
         &self,
         mint: &str,

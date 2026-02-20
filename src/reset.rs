@@ -189,6 +189,10 @@ pub fn clear_pending_verifications() -> Result<(), String> {
     let conn = Connection::open(&db_path)
         .map_err(|e| format!("Failed to open positions database: {}", e))?;
 
+    // Apply centralized PRAGMA configuration
+    crate::database::configure_connection(&conn, crate::database::POSITIONS_DB)
+        .map_err(|e| format!("Failed to configure connection: {}", e))?;
+
     // Clear pending DCA swaps metadata
     match conn.execute(
         "DELETE FROM position_metadata WHERE key = 'pending_dca_swaps'",

@@ -55,9 +55,9 @@ pub use maintenance::{
     record_system_event, record_token_event, record_trader_event, record_transaction_event,
     record_wallet_event, search_events, start_maintenance_task,
 };
-use std::sync::{LazyLock, OnceLock};
 use std::collections::VecDeque;
 use std::sync::Arc;
+use std::sync::{LazyLock, OnceLock};
 use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
 pub use types::{Event, EventCategory, Severity};
 

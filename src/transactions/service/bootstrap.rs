@@ -9,11 +9,15 @@ use tokio::time::{sleep, timeout};
 
 use crate::logger::{self, LogTag};
 use crate::transactions::{
-    fetcher::TransactionFetcher, manager::TransactionsManager, processor::TransactionProcessor,
+    fetcher::TransactionFetcher,
+    manager::TransactionsManager,
+    processor::TransactionProcessor,
     utils::{add_signature_to_known_globally, is_signature_known_globally, RPC_BATCH_SIZE},
 };
 
-use super::config::{CONCURRENT_BATCH_SIZE, MAX_RETRY_ATTEMPTS, RETRY_BASE_DELAY_SECS, TRANSACTION_TIMEOUT_SECS};
+use super::config::{
+    CONCURRENT_BATCH_SIZE, MAX_RETRY_ATTEMPTS, RETRY_BASE_DELAY_SECS, TRANSACTION_TIMEOUT_SECS,
+};
 
 // =============================================================================
 // STARTUP BOOTSTRAP

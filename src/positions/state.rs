@@ -483,6 +483,12 @@ pub async fn remove_position(mint: &str) -> Option<Position> {
         }
         MINT_TO_POSITION_INDEX.write().await.remove(&removed.mint);
 
+        // Release position lock to prevent unbounded POSITION_LOCKS growth
+        {
+            let mut locks = POSITION_LOCKS.write().await;
+            locks.remove(&removed.mint);
+        }
+
         // Also clear any pending-open state for this mint (safety)
         {
             let mut pending = PENDING_OPEN_SWAPS.write().await;

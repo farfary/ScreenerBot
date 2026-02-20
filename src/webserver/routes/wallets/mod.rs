@@ -3,15 +3,18 @@
 //! CRUD endpoints for multi-wallet management.
 //! Includes bulk import/export with CSV and Excel support.
 
-use axum::{routing::{delete, get, post, put}, Router};
+use axum::{
+    routing::{delete, get, post, put},
+    Router,
+};
 use std::sync::Arc;
 
 use crate::webserver::state::AppState;
 
-pub mod types;
 pub mod crud;
-pub mod import;
 pub mod export;
+pub mod import;
+pub mod types;
 pub mod utils;
 
 // Re-export types for external consumers

@@ -155,7 +155,10 @@ impl PoolDecoder for FluxbeamAmmDecoder {
         if sol_decimals > 18 || token_decimals > 18 {
             logger::error(
                 LogTag::PoolDecoder,
-                &format!("FluxBeam: Decimals too large: sol={}, token={}", sol_decimals, token_decimals),
+                &format!(
+                    "FluxBeam: Decimals too large: sol={}, token={}",
+                    sol_decimals, token_decimals
+                ),
             );
             return None;
         }

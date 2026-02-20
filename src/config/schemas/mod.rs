@@ -8,8 +8,10 @@ mod events;
 mod filtering;
 mod gui;
 mod holder_watch;
+mod maintenance;
 mod monitoring;
 mod ohlcv;
+mod performance;
 mod pools;
 mod positions;
 mod rpc;
@@ -29,8 +31,10 @@ pub use events::*;
 pub use filtering::*;
 pub use gui::*;
 pub use holder_watch::*;
+pub use maintenance::*;
 pub use monitoring::*;
 pub use ohlcv::*;
+pub use performance::*;
 pub use pools::*;
 pub use positions::*;
 pub use rpc::*;
@@ -116,5 +120,11 @@ config_struct! {
 
         /// AI integration configuration for filtering and trading
         ai: AiConfig = AiConfig::default(),
+
+        /// Performance tuning (memory profile, cache sizing)
+        performance: PerformanceConfig = PerformanceConfig::default(),
+
+        /// Automatic maintenance and data retention
+        maintenance: MaintenanceConfig = MaintenanceConfig::default(),
     }
 }

@@ -1,6 +1,11 @@
 //! AI instructions, templates, and history handlers
 
-use axum::{extract::{Path, Query, State}, http::StatusCode, response::Response, Json};
+use axum::{
+    extract::{Path, Query, State},
+    http::StatusCode,
+    response::Response,
+    Json,
+};
 use std::sync::Arc;
 
 use crate::ai::db;
@@ -180,7 +185,10 @@ pub async fn update_instruction(
 }
 
 /// DELETE /api/ai/instructions/:id - Delete instruction
-pub async fn delete_instruction(State(_state): State<Arc<AppState>>, Path(id): Path<i64>) -> Response {
+pub async fn delete_instruction(
+    State(_state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> Response {
     match db::with_ai_db(|conn| db::delete_instruction(conn, id)) {
         Ok(()) => {
             logger::info(LogTag::Api, &format!("Deleted AI instruction: {}", id));
@@ -313,7 +321,10 @@ pub async fn list_history(
 }
 
 /// GET /api/ai/history/:id - Get single decision details
-pub async fn get_history_detail(State(_state): State<Arc<AppState>>, Path(id): Path<i64>) -> Response {
+pub async fn get_history_detail(
+    State(_state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> Response {
     match db::with_ai_db(|conn| db::get_decision(conn, id)) {
         Ok(Some(d)) => success_response(DecisionHistoryResponse {
             id: d.id,

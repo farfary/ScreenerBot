@@ -10,11 +10,11 @@
 // - `maintenance`: Statistics, cleanup, and bootstrap operations
 // - `global`: Global instance management
 
+mod global;
+mod maintenance;
+mod operations;
 mod schema;
 mod types;
-mod operations;
-mod maintenance;
-mod global;
 
 // Re-export public types
 pub use types::{

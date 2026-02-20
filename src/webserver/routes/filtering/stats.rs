@@ -10,7 +10,9 @@ use crate::{
 };
 
 use super::helpers::{get_rejection_category, get_rejection_display_label};
-use super::types::{FilteringStatsResponse, RefreshResponse, RejectionStatEntry, RejectionStatsResponse};
+use super::types::{
+    FilteringStatsResponse, RefreshResponse, RejectionStatEntry, RejectionStatsResponse,
+};
 
 /// GET /api/filtering/stats
 /// Retrieve current filtering statistics including token counts and metrics

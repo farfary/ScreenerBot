@@ -17,8 +17,8 @@ mod watched_tokens;
 
 // Re-export types
 pub use types::{
-    FailedAtaRow, MwSessionConfig, MwSessionRow, MwWalletOpRow, ToolFavoriteRow,
-    WatchedToken, WatchedTokenConfig,
+    FailedAtaRow, MwSessionConfig, MwSessionRow, MwWalletOpRow, ToolFavoriteRow, WatchedToken,
+    WatchedTokenConfig,
 };
 
 // Re-export initialization

@@ -458,6 +458,5 @@ pub async fn get_dashboard_cache_metrics() -> CachePerformanceMetrics {
 }
 
 pub async fn clear_dashboard_api_cache() {
-    let mut guard = API_RESPONSE_CACHE.write().await;
-    guard.clear();
+    API_RESPONSE_CACHE.invalidate_all();
 }

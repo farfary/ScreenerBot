@@ -48,7 +48,8 @@ pub async fn fetch_from_sources(
                 {
                     Ok(Ok(permit)) => {
                         // Got permit, proceed with fetch
-                        let result = api.dexscreener
+                        let result = api
+                            .dexscreener
                             .fetch_token_pools(&mint, None)
                             .await
                             .map_err(|e| TokenError::Api {
@@ -88,13 +89,12 @@ pub async fn fetch_from_sources(
                 {
                     Ok(Ok(permit)) => {
                         // Got permit, proceed with fetch
-                        let result = api.geckoterminal
-                            .fetch_pools(&mint)
-                            .await
-                            .map_err(|e| TokenError::Api {
+                        let result = api.geckoterminal.fetch_pools(&mint).await.map_err(|e| {
+                            TokenError::Api {
                                 source: "GeckoTerminal".to_string(),
                                 message: e,
-                            });
+                            }
+                        });
                         // Only forget permit if API call succeeded
                         if result.is_ok() {
                             permit.forget();

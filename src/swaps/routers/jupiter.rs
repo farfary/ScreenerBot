@@ -300,7 +300,10 @@ impl SwapRouter for JupiterRouter {
             .unwrap_or_else(|_| {
                 logger::warning(
                     LogTag::Swap,
-                    &format!("Jupiter: Failed to parse price_impact_pct '{}', defaulting to 0.0", quote_response.price_impact_pct),
+                    &format!(
+                        "Jupiter: Failed to parse price_impact_pct '{}', defaulting to 0.0",
+                        quote_response.price_impact_pct
+                    ),
                 );
                 0.0
             });

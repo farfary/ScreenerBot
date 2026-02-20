@@ -1,10 +1,6 @@
 //! Blacklist management handlers
 
-use axum::{
-    extract::Path,
-    http::StatusCode,
-    Json,
-};
+use axum::{extract::Path, http::StatusCode, Json};
 
 use super::types::*;
 use crate::{

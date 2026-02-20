@@ -8,6 +8,7 @@ pub mod ata_operations;
 pub mod config;
 pub mod connectivity;
 pub mod constants;
+pub mod database;
 pub mod errors;
 pub mod events;
 pub mod features;

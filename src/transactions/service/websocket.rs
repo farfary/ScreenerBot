@@ -6,7 +6,10 @@ use std::sync::Arc;
 use crate::logger::{self, LogTag};
 use crate::transactions::{
     processor::TransactionProcessor,
-    utils::{add_pending_transaction_globally, add_signature_to_known_globally, remove_pending_transaction_globally},
+    utils::{
+        add_pending_transaction_globally, add_signature_to_known_globally,
+        remove_pending_transaction_globally,
+    },
     websocket,
 };
 

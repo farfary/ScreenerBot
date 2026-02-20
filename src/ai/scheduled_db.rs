@@ -647,7 +647,10 @@ pub fn calculate_next_run(
                 .parse()
                 .map_err(|e| format!("Invalid interval value '{}': {}", schedule_value, e))?;
             if seconds < 60 {
-                return Err(format!("Interval must be at least 60 seconds, got {}", seconds));
+                return Err(format!(
+                    "Interval must be at least 60 seconds, got {}",
+                    seconds
+                ));
             }
             let next = now + chrono::Duration::seconds(seconds as i64);
             Ok(next.to_rfc3339())

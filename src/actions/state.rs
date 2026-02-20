@@ -6,10 +6,10 @@
 use super::db::ActionsDatabase;
 use super::types::{Action, ActionId, ActionState, ActionUpdate, StepStatus};
 use crate::logger::{self, LogTag};
-use std::sync::LazyLock;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use tokio::sync::RwLock;
 
 static ACTIVE_ACTIONS: LazyLock<Arc<RwLock<HashMap<ActionId, Action>>>> =
@@ -478,4 +478,73 @@ pub async fn query_action_history(
     let (actions, total) = db.get_action_history(limit, offset, &filters).await?;
 
     Ok((actions, total))
+}
+
+/// Spawn a background task that periodically cleans up old completed actions.
+/// Call once at startup after init_database().
+pub fn spawn_cleanup_task() {
+    tokio::spawn(async {
+        const RETENTION_DAYS: i64 = 30;
+        const MEMORY_RETENTION_HOURS: i64 = 24;
+        // Wait 5 minutes after startup before first cleanup
+        tokio::time::sleep(tokio::time::Duration::from_secs(300)).await;
+        let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(86400));
+        loop {
+            interval.tick().await;
+
+            // Clean old actions from database
+            if let Some(db_arc) = get_db().await {
+                let db_lock = db_arc.read().await;
+                if let Some(db) = db_lock.as_ref() {
+                    match db.cleanup_old_actions(RETENTION_DAYS).await {
+                        Ok(count) if count > 0 => {
+                            logger::info(
+                                LogTag::System,
+                                &format!(
+                                    "Cleaned up {} old actions (>{} days)",
+                                    count, RETENTION_DAYS
+                                ),
+                            );
+                        }
+                        Err(e) => {
+                            logger::warning(
+                                LogTag::System,
+                                &format!("Actions cleanup failed: {}", e),
+                            );
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
+            // Clean completed actions from in-memory cache (>24h old)
+            let cutoff = chrono::Utc::now() - chrono::Duration::hours(MEMORY_RETENTION_HOURS);
+            let mut actions = ACTIVE_ACTIONS.write().await;
+            let before = actions.len();
+            actions.retain(|_id, action| {
+                // Keep if still running or completed recently
+                match &action.state {
+                    ActionState::Completed
+                    | ActionState::Failed { .. }
+                    | ActionState::Cancelled => {
+                        // Use completed_at if available, otherwise keep
+                        action.completed_at.map_or(true, |t| t > cutoff)
+                    }
+                    _ => true, // Keep pending/running actions
+                }
+            });
+            let removed = before - actions.len();
+            if removed > 0 {
+                logger::info(
+                    LogTag::System,
+                    &format!(
+                        "Evicted {} completed actions from memory (>{} hours, {} remaining)",
+                        removed,
+                        MEMORY_RETENTION_HOURS,
+                        actions.len()
+                    ),
+                );
+            }
+        }
+    });
 }

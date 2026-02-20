@@ -599,8 +599,7 @@ pub async fn get_wallet_dashboard_data(
 
     // Memory cache layer
     {
-        let cache_guard = API_RESPONSE_CACHE.read().await;
-        if let Some(entry) = cache_guard.get(&request_key) {
+        if let Some(entry) = API_RESPONSE_CACHE.get(&request_key) {
             if entry.cached_at.elapsed().as_secs() < cache_ttl_secs {
                 let payload = entry.data.clone();
                 let stale = payload
@@ -686,19 +685,14 @@ pub async fn get_wallet_dashboard_data(
 
                         if valid {
                             {
-                                let mut cache_guard = API_RESPONSE_CACHE.write().await;
-                                cache_guard.insert(
+                                API_RESPONSE_CACHE.insert(
                                     request_key.clone(),
                                     CachedDashboardResponse {
                                         data: payload.clone(),
                                         cached_at: Instant::now(),
                                     },
                                 );
-                                if cache_guard.len() > MAX_API_CACHE_ENTRIES {
-                                    let cutoff = Instant::now()
-                                        - Duration::from_secs(cache_ttl_secs.saturating_mul(2));
-                                    cache_guard.retain(|_, entry| entry.cached_at > cutoff);
-                                }
+                                // Moka automatically handles eviction based on max_capacity and TTL
                             }
 
                             record_cache_metrics(
@@ -778,18 +772,14 @@ pub async fn get_wallet_dashboard_data(
     });
 
     {
-        let mut cache_guard = API_RESPONSE_CACHE.write().await;
-        cache_guard.insert(
+        API_RESPONSE_CACHE.insert(
             request_key,
             CachedDashboardResponse {
                 data: payload.clone(),
                 cached_at: Instant::now(),
             },
         );
-        if cache_guard.len() > MAX_API_CACHE_ENTRIES {
-            let cutoff = Instant::now() - Duration::from_secs(cache_ttl_secs.saturating_mul(2));
-            cache_guard.retain(|_, entry| entry.cached_at > cutoff);
-        }
+        // Moka automatically handles eviction based on max_capacity and TTL
     }
 
     record_cache_metrics(DashboardDataSource::Realtime, latency, false).await;

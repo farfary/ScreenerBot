@@ -71,7 +71,8 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
             Ok(balance)
         }
         Err(e) => {
-            let blockchain_error = crate::errors::parse_solana_error(&e.to_string(), None, "get_token_balance");
+            let blockchain_error =
+                crate::errors::parse_solana_error(&e.to_string(), None, "get_token_balance");
             logger::debug(
                 LogTag::Wallet,
                 &format!(

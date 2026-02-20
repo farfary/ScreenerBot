@@ -112,5 +112,4 @@ impl TokenDatabase {
             Err(e) => Err(TokenError::Database(format!("Query failed: {}", e))),
         }
     }
-
 }

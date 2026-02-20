@@ -1,5 +1,6 @@
 // Database layer for OHLCV module
 
+use crate::database;
 use crate::events::{record_ohlcv_event, Severity};
 use crate::ohlcvs::types::{
     Candle, MintGapAggregate, OhlcvError, OhlcvResult, PoolConfig, Priority, Timeframe,
@@ -19,13 +20,13 @@ pub struct OhlcvDatabase {
 impl OhlcvDatabase {
     /// Initialize the database and create tables
     pub fn new<P: AsRef<Path>>(path: P) -> OhlcvResult<Self> {
-        let mut conn = Connection::open(path)
+        let conn = Connection::open(path)
             .map_err(|e| OhlcvError::DatabaseError(format!("Failed to open database: {}", e)))?;
 
-        // Enable WAL for better concurrent read/write performance BEFORE moving conn
-        let _ = conn.execute("PRAGMA journal_mode=WAL;", []);
-        // Set reasonable busy timeout to handle brief contention
-        let _ = conn.busy_timeout(std::time::Duration::from_millis(30_000));
+        // Apply centralized PRAGMA configuration
+        database::configure_connection(&conn, database::OHLCVS_DB).map_err(|e| {
+            OhlcvError::DatabaseError(format!("Failed to configure connection: {}", e))
+        })?;
 
         let db = Self {
             conn: Arc::new(Mutex::new(conn)),

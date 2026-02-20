@@ -5,13 +5,14 @@
 //! - Chat messages with role, content, and tool calls
 //! - Tool execution tracking with inputs/outputs
 
+use crate::database;
 use crate::logger::{self, LogTag};
-use std::sync::OnceLock;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::sync::OnceLock;
 
 // =============================================================================
 // GLOBAL CONNECTION POOL
@@ -72,20 +73,13 @@ pub fn init_chat_db() -> Result<Pool<SqliteConnectionManager>, String> {
             .map_err(|e| format!("Failed to create data directory: {}", e))?;
     }
 
-    // Create connection manager
-    let manager = SqliteConnectionManager::file(&db_path).with_init(|conn| {
-        // Configure connection for optimal performance
-        conn.pragma_update(None, "journal_mode", "WAL")?;
-        conn.pragma_update(None, "synchronous", "NORMAL")?;
-        conn.pragma_update(None, "cache_size", 5000)?;
-        conn.pragma_update(None, "foreign_keys", "ON")?; // Enable foreign key constraints
-        conn.busy_timeout(std::time::Duration::from_millis(10_000))?;
-        Ok(())
-    });
+    // Create connection manager with centralized configuration
+    let manager = SqliteConnectionManager::file(&db_path)
+        .with_init(|c| database::configure_connection(c, database::AI_CHAT_DB));
 
     // Create connection pool
     let pool = Pool::builder()
-        .max_size(5)
+        .max_size(3)
         .build(manager)
         .map_err(|e| format!("Failed to create connection pool: {}", e))?;
 

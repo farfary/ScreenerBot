@@ -12,31 +12,28 @@ use crate::{
     utils::{get_token_balance, get_total_token_balance, get_wallet_address, sol_to_lamports},
 };
 use chrono::Utc;
-use std::collections::HashMap;
 use std::sync::LazyLock;
-use tokio::sync::RwLock;
 
 // Throttle repeated token accounts queries per mint to reduce RPC pressure
 const TOKEN_ACCOUNTS_THROTTLE_SECS: i64 = 5; // min interval per mint between balance checks
 
-static LAST_TOKEN_ACCOUNTS_CHECK: LazyLock<RwLock<HashMap<String, chrono::DateTime<Utc>>>> =
-    LazyLock::new(|| RwLock::new(HashMap::new()));
+/// Bounded cache for last token accounts check timestamps (max 5K entries, 1h TTL).
+static LAST_TOKEN_ACCOUNTS_CHECK: LazyLock<moka::sync::Cache<String, chrono::DateTime<Utc>>> =
+    LazyLock::new(|| {
+        moka::sync::Cache::builder()
+            .max_capacity(5_000)
+            .time_to_live(std::time::Duration::from_secs(3600))
+            .build()
+    });
 
 async fn should_throttle_token_accounts(mint: &str) -> bool {
     let now = Utc::now();
-    {
-        let map = LAST_TOKEN_ACCOUNTS_CHECK.read().await;
-        if let Some(last) = map.get(mint) {
-            if (now - *last).num_seconds() < TOKEN_ACCOUNTS_THROTTLE_SECS {
-                return true;
-            }
+    if let Some(last) = LAST_TOKEN_ACCOUNTS_CHECK.get(&mint.to_string()) {
+        if (now - last).num_seconds() < TOKEN_ACCOUNTS_THROTTLE_SECS {
+            return true;
         }
     }
-    // Upgrade to write: record this check time
-    {
-        let mut map = LAST_TOKEN_ACCOUNTS_CHECK.write().await;
-        map.insert(mint.to_string(), now);
-    }
+    LAST_TOKEN_ACCOUNTS_CHECK.insert(mint.to_string(), now);
     false
 }
 use serde_json::Value;

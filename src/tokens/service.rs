@@ -17,8 +17,8 @@ use crate::tokens::schema;
 use crate::tokens::updates;
 use crate::tokens::updates::RateLimitCoordinator;
 use async_trait::async_trait;
-use std::sync::OnceLock;
 use std::sync::Arc;
+use std::sync::OnceLock;
 use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
@@ -154,7 +154,7 @@ impl Service for TokensServiceNew {
             LogTag::Tokens,
             &format!("Service started with {} background tasks", handles.len()),
         );
-        
+
         // Mark tokens system ready after all update loops are started
         TOKENS_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);
         Ok(handles)

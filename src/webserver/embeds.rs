@@ -20,27 +20,34 @@ pub(super) const COMPONENT_STYLES: &str = include_str!("templates/styles/compone
 pub(super) const HEADER_STYLES: &str = include_str!("templates/styles/header.css");
 pub(super) const DROPDOWN_STYLES: &str = include_str!("templates/styles/ui/dropdown.css");
 pub(super) const COMMON_STYLES: &str = include_str!("templates/styles/common.css");
-pub(super) const FORM_CONTROLS_STYLES: &str = include_str!("templates/styles/components/form_controls.css");
-pub(super) const NOTIFICATION_STYLES: &str = include_str!("templates/styles/components/notifications.css");
+pub(super) const FORM_CONTROLS_STYLES: &str =
+    include_str!("templates/styles/components/form_controls.css");
+pub(super) const NOTIFICATION_STYLES: &str =
+    include_str!("templates/styles/components/notifications.css");
 pub(super) const TOAST_STYLES: &str = include_str!("templates/styles/components/toast.css");
 
 // CSS Styles - Page-specific
 pub(super) const SERVICES_PAGE_STYLES: &str = include_str!("templates/styles/pages/services.css");
-pub(super) const TRANSACTIONS_PAGE_STYLES: &str = include_str!("templates/styles/pages/transactions.css");
+pub(super) const TRANSACTIONS_PAGE_STYLES: &str =
+    include_str!("templates/styles/pages/transactions.css");
 pub(super) const EVENTS_PAGE_STYLES: &str = include_str!("templates/styles/pages/events.css");
 pub(super) const TOKENS_PAGE_STYLES: &str = include_str!("templates/styles/pages/tokens.css");
 pub(super) const POSITIONS_PAGE_STYLES: &str = include_str!("templates/styles/pages/positions.css");
-pub(super) const FILTERING_BASE_STYLES: &str = include_str!("templates/styles/pages/filtering/base.css");
+pub(super) const FILTERING_BASE_STYLES: &str =
+    include_str!("templates/styles/pages/filtering/base.css");
 pub(super) const FILTERING_RESULTS_STYLES: &str =
     include_str!("templates/styles/pages/filtering/results.css");
 pub(super) const FILTERING_RESULTS_EXPLORER_STYLES: &str =
     include_str!("templates/styles/pages/filtering/results_explorer.css");
 pub(super) const CONFIG_PAGE_STYLES: &str = include_str!("templates/styles/pages/config.css");
-pub(super) const CONFIG_SIDEBAR_STYLES: &str = include_str!("templates/styles/pages/config/sidebar.css");
-pub(super) const CONFIG_FIELDS_STYLES: &str = include_str!("templates/styles/pages/config/fields.css");
+pub(super) const CONFIG_SIDEBAR_STYLES: &str =
+    include_str!("templates/styles/pages/config/sidebar.css");
+pub(super) const CONFIG_FIELDS_STYLES: &str =
+    include_str!("templates/styles/pages/config/fields.css");
 pub(super) const CONFIG_RESPONSIVE_STYLES: &str =
     include_str!("templates/styles/pages/config/responsive.css");
-pub(super) const STRATEGIES_PAGE_STYLES: &str = include_str!("templates/styles/pages/strategies.css");
+pub(super) const STRATEGIES_PAGE_STYLES: &str =
+    include_str!("templates/styles/pages/strategies.css");
 pub(super) const STRATEGIES_CONDITION_CARDS_STYLES: &str =
     include_str!("templates/styles/pages/strategies/condition_cards.css");
 pub(super) const STRATEGIES_MODALS_STYLES: &str =
@@ -52,42 +59,58 @@ pub(super) const STRATEGIES_UI_COMPONENTS_STYLES: &str =
 pub(super) const TRADER_PAGE_STYLES: &str = include_str!("templates/styles/pages/trader.css");
 pub(super) const TRADER_CONFIG_COMPONENTS_STYLES: &str =
     include_str!("templates/styles/pages/trader/config_components.css");
-pub(super) const TRADER_CONTROLS_STYLES: &str = include_str!("templates/styles/pages/trader/controls.css");
-pub(super) const TRADER_METRICS_STYLES: &str = include_str!("templates/styles/pages/trader/metrics.css");
+pub(super) const TRADER_CONTROLS_STYLES: &str =
+    include_str!("templates/styles/pages/trader/controls.css");
+pub(super) const TRADER_METRICS_STYLES: &str =
+    include_str!("templates/styles/pages/trader/metrics.css");
 pub(super) const WALLETS_PAGE_STYLES: &str = include_str!("templates/styles/pages/wallets.css");
 pub(super) const WALLETS_MAIN_WALLET_STYLES: &str =
     include_str!("templates/styles/pages/wallets/main_wallet.css");
-pub(super) const WALLETS_MODALS_STYLES: &str = include_str!("templates/styles/pages/wallets/modals.css");
+pub(super) const WALLETS_MODALS_STYLES: &str =
+    include_str!("templates/styles/pages/wallets/modals.css");
 pub(super) const WALLETS_IMPORT_EXPORT_STYLES: &str =
     include_str!("templates/styles/pages/wallets/import_export.css");
 pub(super) const TOOLS_BASE_STYLES: &str = include_str!("templates/styles/pages/tools/base.css");
-pub(super) const TOOLS_CONTENT_STYLES: &str = include_str!("templates/styles/pages/tools/content.css");
-pub(super) const TOOLS_COMPONENTS_STYLES: &str = include_str!("templates/styles/pages/tools/components.css");
-pub(super) const TOOLS_WALLET_STYLES: &str = include_str!("templates/styles/pages/tools/wallet_tools.css");
-pub(super) const TOOLS_TOKEN_STYLES: &str = include_str!("templates/styles/pages/tools/token_tools.css");
-pub(super) const TOOLS_TRADING_STYLES: &str = include_str!("templates/styles/pages/tools/trading_tools.css");
+pub(super) const TOOLS_CONTENT_STYLES: &str =
+    include_str!("templates/styles/pages/tools/content.css");
+pub(super) const TOOLS_COMPONENTS_STYLES: &str =
+    include_str!("templates/styles/pages/tools/components.css");
+pub(super) const TOOLS_WALLET_STYLES: &str =
+    include_str!("templates/styles/pages/tools/wallet_tools.css");
+pub(super) const TOOLS_TOKEN_STYLES: &str =
+    include_str!("templates/styles/pages/tools/token_tools.css");
+pub(super) const TOOLS_TRADING_STYLES: &str =
+    include_str!("templates/styles/pages/tools/trading_tools.css");
 pub(super) const AI_BASE_STYLES: &str = include_str!("templates/styles/pages/ai/base.css");
 pub(super) const AI_SETTINGS_TESTING_STYLES: &str =
     include_str!("templates/styles/pages/ai/settings_testing.css");
-pub(super) const AI_PROVIDERS_STYLES: &str = include_str!("templates/styles/pages/ai/providers.css");
-pub(super) const AI_INSTRUCTIONS_STYLES: &str = include_str!("templates/styles/pages/ai/instructions.css");
+pub(super) const AI_PROVIDERS_STYLES: &str =
+    include_str!("templates/styles/pages/ai/providers.css");
+pub(super) const AI_INSTRUCTIONS_STYLES: &str =
+    include_str!("templates/styles/pages/ai/instructions.css");
 pub(super) const AI_CHAT_STYLES: &str = include_str!("templates/styles/pages/ai/chat.css");
-pub(super) const AI_CHAT_MESSAGES_STYLES: &str = include_str!("templates/styles/pages/ai/chat_messages.css");
-pub(super) const AI_CHAT_INPUT_STYLES: &str = include_str!("templates/styles/pages/ai/chat_input.css");
-pub(super) const AI_AUTOMATION_STYLES: &str = include_str!("templates/styles/pages/ai/automation.css");
+pub(super) const AI_CHAT_MESSAGES_STYLES: &str =
+    include_str!("templates/styles/pages/ai/chat_messages.css");
+pub(super) const AI_CHAT_INPUT_STYLES: &str =
+    include_str!("templates/styles/pages/ai/chat_input.css");
+pub(super) const AI_AUTOMATION_STYLES: &str =
+    include_str!("templates/styles/pages/ai/automation.css");
 pub(super) const HOME_PAGE_STYLES: &str = include_str!("templates/styles/pages/home.css");
 pub(super) const UPDATES_PAGE_STYLES: &str = include_str!("templates/styles/pages/updates.css");
 pub(super) const ABOUT_PAGE_STYLES: &str = include_str!("templates/styles/pages/about.css");
 pub(super) const SPLASH_PAGE_STYLES: &str = include_str!("templates/styles/pages/splash.css");
-pub(super) const ONBOARDING_PAGE_STYLES: &str = include_str!("templates/styles/pages/onboarding.css");
+pub(super) const ONBOARDING_PAGE_STYLES: &str =
+    include_str!("templates/styles/pages/onboarding.css");
 pub(super) const SETUP_PAGE_STYLES: &str = include_str!("templates/styles/pages/setup.css");
 pub(super) const SETUP_STEPS_STYLES: &str = include_str!("templates/styles/pages/setup/steps.css");
-pub(super) const LOCKSCREEN_PAGE_STYLES: &str = include_str!("templates/styles/pages/lockscreen.css");
+pub(super) const LOCKSCREEN_PAGE_STYLES: &str =
+    include_str!("templates/styles/pages/lockscreen.css");
 pub(super) const LOGIN_PAGE_STYLES: &str = include_str!("templates/styles/pages/login.css");
 
 // CSS Styles - UI Components
 pub(super) const DATA_TABLE_STYLES: &str = include_str!("templates/styles/ui/data_table.css");
-pub(super) const DATA_TABLE_CORE_STYLES: &str = include_str!("templates/styles/ui/data_table/core.css");
+pub(super) const DATA_TABLE_CORE_STYLES: &str =
+    include_str!("templates/styles/ui/data_table/core.css");
 pub(super) const DATA_TABLE_COLUMN_TYPES_STYLES: &str =
     include_str!("templates/styles/ui/data_table/column_types.css");
 pub(super) const DATA_TABLE_PAGINATION_STYLES: &str =
@@ -103,10 +126,12 @@ pub(super) const TABLE_SETTINGS_DIALOG_STYLES: &str =
 pub(super) const CONFIRMATION_DIALOG_STYLES: &str =
     include_str!("templates/styles/ui/confirmation_dialog.css");
 pub(super) const CONTEXT_MENU_STYLES: &str = include_str!("templates/styles/ui/context_menu.css");
-pub(super) const ADVANCED_CHART_STYLES: &str = include_str!("templates/styles/ui/advanced_chart.css");
+pub(super) const ADVANCED_CHART_STYLES: &str =
+    include_str!("templates/styles/ui/advanced_chart.css");
 
 // CSS Styles - Token Details
-pub(super) const TOKEN_DETAILS_BASE_STYLES: &str = include_str!("templates/styles/token_details/base.css");
+pub(super) const TOKEN_DETAILS_BASE_STYLES: &str =
+    include_str!("templates/styles/token_details/base.css");
 pub(super) const TOKEN_DETAILS_OVERVIEW_STYLES: &str =
     include_str!("templates/styles/token_details/overview_chart.css");
 pub(super) const TOKEN_DETAILS_SECURITY_STYLES: &str =
@@ -117,8 +142,10 @@ pub(super) const TOKEN_DETAILS_SECURITY_RISKS_STYLES: &str =
     include_str!("templates/styles/token_details/security_risks.css");
 pub(super) const TOKEN_DETAILS_POSITIONS_STYLES: &str =
     include_str!("templates/styles/token_details/positions.css");
-pub(super) const TOKEN_DETAILS_POOLS_STYLES: &str = include_str!("templates/styles/token_details/pools.css");
-pub(super) const TOKEN_DETAILS_LINKS_STYLES: &str = include_str!("templates/styles/token_details/links.css");
+pub(super) const TOKEN_DETAILS_POOLS_STYLES: &str =
+    include_str!("templates/styles/token_details/pools.css");
+pub(super) const TOKEN_DETAILS_LINKS_STYLES: &str =
+    include_str!("templates/styles/token_details/links.css");
 pub(super) const TOKEN_DETAILS_TRANSACTIONS_SHARED_STYLES: &str =
     include_str!("templates/styles/token_details/transactions_shared.css");
 
@@ -141,18 +168,22 @@ pub(super) const POSITION_DETAILS_TRANSACTIONS_DETAIL_STYLES: &str =
 // CSS Styles - Settings and Misc
 pub(super) const SETTINGS_BASE_STYLES: &str = include_str!("templates/styles/settings/base.css");
 pub(super) const SETTINGS_TABS_STYLES: &str = include_str!("templates/styles/settings/tabs.css");
-pub(super) const SETTINGS_SECURITY_STYLES: &str = include_str!("templates/styles/settings/security.css");
-pub(super) const SETTINGS_UPDATES_STYLES: &str = include_str!("templates/styles/settings/updates.css");
+pub(super) const SETTINGS_SECURITY_STYLES: &str =
+    include_str!("templates/styles/settings/security.css");
+pub(super) const SETTINGS_UPDATES_STYLES: &str =
+    include_str!("templates/styles/settings/updates.css");
 pub(super) const SETTINGS_DATA_STYLES: &str = include_str!("templates/styles/settings/data.css");
 pub(super) const STATUS_BAR_STYLES: &str = include_str!("templates/styles/status_bar.css");
 pub(super) const HINT_POPOVER_STYLES: &str = include_str!("templates/styles/ui/hint_popover.css");
 pub(super) const SEARCH_DIALOG_STYLES: &str = include_str!("templates/styles/ui/search_dialog.css");
 pub(super) const CUSTOM_SELECT_STYLES: &str = include_str!("templates/styles/ui/custom_select.css");
-pub(super) const BILLBOARD_DIALOG_STYLES: &str = include_str!("templates/styles/ui/billboard_dialog.css");
+pub(super) const BILLBOARD_DIALOG_STYLES: &str =
+    include_str!("templates/styles/ui/billboard_dialog.css");
 pub(super) const BILLBOARD_ROW_STYLES: &str = include_str!("templates/styles/ui/billboard_row.css");
 pub(super) const POOL_SELECTOR_STYLES: &str = include_str!("templates/styles/ui/pool_selector.css");
 pub(super) const EXIT_DIALOG_STYLES: &str = include_str!("templates/styles/ui/exit_dialog.css");
-pub(super) const GLOBAL_CHAT_STYLES: &str = include_str!("templates/styles/components/global_chat.css");
+pub(super) const GLOBAL_CHAT_STYLES: &str =
+    include_str!("templates/styles/components/global_chat.css");
 pub(super) const CONFIG_IMPORT_EXPORT_DIALOG_STYLES: &str =
     include_str!("templates/styles/config_import_export_dialog.css");
 
@@ -230,8 +261,10 @@ pub const CONFIRMATION_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/confirmation_dialog.js");
 pub const TRADE_ACTION_DIALOG_UI: &str =
     include_str!("templates/scripts/ui/trade_action_dialog.js");
-pub const TRADE_ACTION_QUICK_TRADE_JS: &str = include_str!("templates/scripts/ui/trade_action/quick_trade.js");
-pub const TRADE_ACTION_QUOTE_MANAGER_JS: &str = include_str!("templates/scripts/ui/trade_action/quote_manager.js");
+pub const TRADE_ACTION_QUICK_TRADE_JS: &str =
+    include_str!("templates/scripts/ui/trade_action/quick_trade.js");
+pub const TRADE_ACTION_QUOTE_MANAGER_JS: &str =
+    include_str!("templates/scripts/ui/trade_action/quote_manager.js");
 pub const TAB_BAR_UI: &str = include_str!("templates/scripts/ui/tab_bar.js");
 pub const ACTION_BAR_UI: &str = include_str!("templates/scripts/ui/action_bar.js");
 pub const TABLE_SETTINGS_DIALOG_UI: &str =
@@ -320,25 +353,32 @@ pub const FILTERING_RENDERERS_JS: &str =
     include_str!("templates/scripts/pages/filtering/renderers.js");
 pub const CONFIG_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/config.js");
 pub const CONFIG_UTILS_JS: &str = include_str!("templates/scripts/pages/config/utils.js");
-pub const CONFIG_FIELD_RENDERERS_JS: &str = include_str!("templates/scripts/pages/config/field_renderers.js");
+pub const CONFIG_FIELD_RENDERERS_JS: &str =
+    include_str!("templates/scripts/pages/config/field_renderers.js");
 pub const STRATEGIES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/strategies.js");
-pub const STRATEGIES_CONDITION_EDITOR_JS: &str = include_str!("templates/scripts/pages/strategies/condition_editor.js");
-pub const STRATEGIES_CONDITION_CATALOG_JS: &str = include_str!("templates/scripts/pages/strategies/condition_catalog.js");
+pub const STRATEGIES_CONDITION_EDITOR_JS: &str =
+    include_str!("templates/scripts/pages/strategies/condition_editor.js");
+pub const STRATEGIES_CONDITION_CATALOG_JS: &str =
+    include_str!("templates/scripts/pages/strategies/condition_catalog.js");
 pub const TRADER_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/trader.js");
 pub const TRADER_EXAMPLES_JS: &str = include_str!("templates/scripts/pages/trader/examples.js");
 pub const TRADER_CONTROLS_JS: &str = include_str!("templates/scripts/pages/trader/controls.js");
 pub const TRADER_FEATURES_JS: &str = include_str!("templates/scripts/pages/trader/features.js");
 pub const WALLETS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/wallets.js");
-pub const WALLETS_BULK_OPERATIONS_JS: &str = include_str!("templates/scripts/pages/wallets/bulk_operations.js");
+pub const WALLETS_BULK_OPERATIONS_JS: &str =
+    include_str!("templates/scripts/pages/wallets/bulk_operations.js");
 pub const WALLETS_RENDERERS_JS: &str = include_str!("templates/scripts/pages/wallets/renderers.js");
 pub const TOOLS_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/tools.js");
 pub const TOOLS_WALLET_TOOLS: &str = include_str!("templates/scripts/pages/tools/wallet_tools.js");
 pub const TOOLS_TOKEN_TOOLS: &str = include_str!("templates/scripts/pages/tools/token_tools.js");
-pub const TOOLS_TRADING_TOOLS: &str = include_str!("templates/scripts/pages/tools/trading_tools.js");
-pub const TOOLS_MULTI_WALLET_TOOLS: &str = include_str!("templates/scripts/pages/tools/multi_wallet_tools.js");
+pub const TOOLS_TRADING_TOOLS: &str =
+    include_str!("templates/scripts/pages/tools/trading_tools.js");
+pub const TOOLS_MULTI_WALLET_TOOLS: &str =
+    include_str!("templates/scripts/pages/tools/multi_wallet_tools.js");
 pub const AI_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/ai.js");
 pub const AI_PROVIDERS_TAB: &str = include_str!("templates/scripts/pages/ai/providers_tab.js");
-pub const AI_INSTRUCTIONS_TAB: &str = include_str!("templates/scripts/pages/ai/instructions_tab.js");
+pub const AI_INSTRUCTIONS_TAB: &str =
+    include_str!("templates/scripts/pages/ai/instructions_tab.js");
 pub const AI_AUTOMATION_TAB: &str = include_str!("templates/scripts/pages/ai/automation_tab.js");
 pub const HOME_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/home.js");
 pub const UPDATES_PAGE_SCRIPT: &str = include_str!("templates/scripts/pages/updates.js");

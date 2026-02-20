@@ -1,8 +1,4 @@
-use axum::{
-    extract::Path,
-    http::StatusCode,
-    response::Response,
-};
+use axum::{extract::Path, http::StatusCode, response::Response};
 use chrono::Utc;
 
 use super::list::map_position_to_response_async;

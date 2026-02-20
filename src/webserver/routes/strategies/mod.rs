@@ -30,7 +30,10 @@ pub fn routes() -> Router<Arc<AppState>> {
         // Strategy CRUD
         .route("/", get(crud::list_strategies).post(crud::create_strategy))
         // Inline validation (must be before /:id routes to avoid path conflict)
-        .route("/validate", post(validation::validate_strategy_inline_handler))
+        .route(
+            "/validate",
+            post(validation::validate_strategy_inline_handler),
+        )
         // Condition schemas
         .route("/conditions/schemas", get(schemas::get_condition_schemas))
         // Templates
@@ -43,7 +46,10 @@ pub fn routes() -> Router<Arc<AppState>> {
                 .delete(crud::delete_strategy_handler),
         )
         // Performance and testing
-        .route("/:id/performance", get(performance::get_strategy_performance_stats))
+        .route(
+            "/:id/performance",
+            get(performance::get_strategy_performance_stats),
+        )
         .route("/:id/test", post(testing::test_strategy))
         // Validate / Deploy (by ID)
         .route("/:id/validate", post(validation::validate_strategy_handler))

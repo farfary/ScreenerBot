@@ -3,7 +3,10 @@ use chrono::Utc;
 
 use crate::{
     logger::{self, LogTag},
-    strategies::{self, db::{get_strategy, update_strategy}},
+    strategies::{
+        self,
+        db::{get_strategy, update_strategy},
+    },
     webserver::utils::success_response,
 };
 

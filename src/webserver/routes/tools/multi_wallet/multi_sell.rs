@@ -22,8 +22,8 @@ use crate::webserver::utils::{error_response, success_response};
 
 use super::super::types::*;
 use super::session::{
-    cleanup_old_sessions, get_session_status, has_active_multi_wallet_session,
-    MultiWalletSession, MULTI_WALLET_SESSIONS,
+    cleanup_old_sessions, get_session_status, has_active_multi_wallet_session, MultiWalletSession,
+    MULTI_WALLET_SESSIONS,
 };
 
 // =============================================================================

@@ -1,5 +1,9 @@
+mod assembly;
+mod async_api;
+mod blacklist;
+mod market;
 /// Unified database operations for tokens system
-/// 
+///
 /// Split into focused submodules:
 /// - metadata: Token CRUD operations
 /// - market: DexScreener and GeckoTerminal market data
@@ -11,17 +15,12 @@
 /// - tracking: Update tracking and diagnostics
 /// - assembly: Complex token assembly queries
 /// - async_api: Async convenience wrappers
-
 mod metadata;
-mod market;
-mod security;
 mod pool_data;
-mod rejections;
-mod blacklist;
 mod priority;
+mod rejections;
+mod security;
 mod tracking;
-mod assembly;
-mod async_api;
 
 use rusqlite::Connection;
 use std::sync::{Arc, Mutex};

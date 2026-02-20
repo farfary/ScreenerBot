@@ -3,6 +3,15 @@
 //! This is the main entry point for the ScreenerBot application.
 //! The bot runs as a headless server with a web-based dashboard.
 
+// jemalloc: better fragmentation behavior than system allocator for long-running processes.
+// Tune via MALLOC_CONF env var if needed, e.g.:
+//   MALLOC_CONF=dirty_decay_ms:1000,muzzy_decay_ms:2000
+// Default dirty_decay_ms=10000 (10s) — lower values return pages to OS faster
+// but increase CPU overhead from the decay thread.
+#[cfg(feature = "jemalloc")]
+#[global_allocator]
+static GLOBAL: tikv_jemallocator::Jemalloc = tikv_jemallocator::Jemalloc;
+
 use screenerbot::arguments::{print_help, print_version, set_cmd_args};
 use screenerbot::config::utils::load_config;
 use screenerbot::config::with_config;

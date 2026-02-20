@@ -12,9 +12,9 @@ use crate::strategies::types::{
     EvaluationContext, EvaluationResult, MarketData, PositionData, Strategy, StrategyType,
 };
 use chrono::Utc;
-use std::sync::LazyLock;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use tokio::sync::RwLock;
 
 /// Global strategy engine instance

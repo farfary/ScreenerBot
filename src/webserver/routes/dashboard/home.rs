@@ -17,9 +17,7 @@ use super::utils::format_uptime;
 
 /// GET /api/dashboard/home
 /// Comprehensive home dashboard with all analytics
-pub async fn get_home_dashboard(
-    State(state): State<Arc<AppState>>,
-) -> Json<HomeDashboardResponse> {
+pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<HomeDashboardResponse> {
     // Return demo data if demo mode is enabled
     if demo::is_demo_mode() {
         return Json(demo::get_demo_home_dashboard());

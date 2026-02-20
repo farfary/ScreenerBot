@@ -7,6 +7,7 @@ use rusqlite::{params, OptionalExtension};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::LazyLock;
 
+use crate::database;
 use crate::logger::{self, LogTag};
 use crate::paths::get_tools_db_path;
 
@@ -18,8 +19,8 @@ use crate::paths::get_tools_db_path;
 const TOOLS_SCHEMA_VERSION: u32 = 1;
 
 /// Connection pool configuration
-const POOL_MAX_SIZE: u32 = 10;
-const POOL_MIN_IDLE: u32 = 2;
+const POOL_MAX_SIZE: u32 = 3;
+const POOL_MIN_IDLE: u32 = 1;
 const CONNECTION_TIMEOUT_MS: u64 = 30_000;
 
 /// Database initialization flag
@@ -274,7 +275,8 @@ static DB_POOL: LazyLock<Pool<SqliteConnectionManager>> = LazyLock::new(|| {
         let _ = std::fs::create_dir_all(parent);
     }
 
-    let manager = SqliteConnectionManager::file(&db_path);
+    let manager = SqliteConnectionManager::file(&db_path)
+        .with_init(|c| database::configure_connection(c, database::TOOLS_DB));
     Pool::builder()
         .max_size(POOL_MAX_SIZE)
         .min_idle(Some(POOL_MIN_IDLE))
@@ -301,19 +303,6 @@ pub fn init_tools_db() -> Result<(), String> {
     }
 
     let conn = get_connection()?;
-
-    // Enable WAL mode for better concurrency
-    conn.execute_batch(
-        "
-        PRAGMA journal_mode = WAL;
-        PRAGMA synchronous = NORMAL;
-        PRAGMA cache_size = 10000;
-        PRAGMA temp_store = memory;
-        PRAGMA busy_timeout = 30000;
-        PRAGMA foreign_keys = ON;
-    ",
-    )
-    .map_err(|e| format!("Failed to set pragmas: {}", e))?;
 
     // Create version table first
     conn.execute_batch(SCHEMA_VERSION_TABLE)

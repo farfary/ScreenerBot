@@ -29,7 +29,8 @@ pub async fn execute_buy(decision: &TradeDecision) -> Result<TradeResult, String
         .unwrap_or_else(|| config::get_trade_size_sol());
 
     // Enforce maximum trade size limit
-    let max_allowed = config::get_trade_size_sol() * crate::trader::constants::MAX_TRADE_SIZE_MULTIPLIER;
+    let max_allowed =
+        config::get_trade_size_sol() * crate::trader::constants::MAX_TRADE_SIZE_MULTIPLIER;
     let trade_size_sol = trade_size_sol.min(max_allowed);
 
     // Call positions open with size so manual size is honored

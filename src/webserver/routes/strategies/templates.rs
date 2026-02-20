@@ -19,6 +19,11 @@ pub async fn list_templates() -> Response {
         let db_path = crate::paths::get_strategies_db_path();
         let conn = rusqlite::Connection::open(&db_path)
             .map_err(|e| format!("Failed to open strategies db: {}", e))?;
+
+        // Apply centralized PRAGMA configuration
+        crate::database::configure_connection(&conn, crate::database::STRATEGIES_DB)
+            .map_err(|e| format!("Failed to configure connection: {}", e))?;
+
         let mut stmt = conn
             .prepare(
                 "SELECT id, name, description, category, risk_level, rules_json, parameters_json, created_at, author FROM strategy_templates ORDER BY created_at DESC",

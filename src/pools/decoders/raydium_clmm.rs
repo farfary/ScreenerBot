@@ -177,7 +177,10 @@ impl PoolDecoder for RaydiumClmmDecoder {
         if sol_decimals > 18 || token_decimals > 18 {
             logger::error(
                 LogTag::PoolDecoder,
-                &format!("Raydium CLMM: Decimals too large: sol={}, token={}", sol_decimals, token_decimals),
+                &format!(
+                    "Raydium CLMM: Decimals too large: sol={}, token={}",
+                    sol_decimals, token_decimals
+                ),
             );
             return None;
         }

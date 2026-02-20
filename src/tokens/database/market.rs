@@ -32,7 +32,6 @@ impl TokenDatabase {
         Ok(count)
     }
 
-
     pub fn get_tokens_no_market(
         &self,
         limit: usize,
@@ -225,7 +224,6 @@ impl TokenDatabase {
         Ok(tokens)
     }
 
-
     // ========================================================================
     // DEXSCREENER DATA OPERATIONS
     // ========================================================================
@@ -386,8 +384,6 @@ impl TokenDatabase {
         }
     }
 
-
-
     // ========================================================================
     // GECKOTERMINAL DATA OPERATIONS
     // ========================================================================
@@ -522,8 +518,6 @@ impl TokenDatabase {
         }
     }
 
-
-
     // ========================================================================
     // MARKET DATA FRESHNESS & ERRORS
     // ========================================================================
@@ -550,7 +544,6 @@ impl TokenDatabase {
             Err(e) => Err(TokenError::Database(format!("Query failed: {}", e))),
         }
     }
-
 
     pub fn get_tokens_without_market_data(&self, limit: usize) -> TokenResult<Vec<String>> {
         let conn = self
@@ -601,7 +594,6 @@ impl TokenDatabase {
 
         Ok(count as u64)
     }
-
 
     pub fn record_market_error(
         &self,
@@ -704,5 +696,4 @@ impl TokenDatabase {
 
         Ok(())
     }
-
 }

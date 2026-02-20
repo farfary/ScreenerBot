@@ -56,7 +56,7 @@ pub use types::{
 pub use state::{
     cancel_action, complete_action_failed, complete_action_success, get_action, get_action_counts,
     get_active_actions, get_all_actions, init_database, query_action_history, register_action,
-    sync_from_db, update_step,
+    spawn_cleanup_task, sync_from_db, update_step,
 };
 
 // Re-export broadcast functions

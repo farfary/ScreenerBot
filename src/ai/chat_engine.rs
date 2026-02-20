@@ -11,13 +11,13 @@ use crate::apis::llm::{
     Provider,
 };
 use crate::logger::{self, LogTag};
-use std::sync::LazyLock;
 use r2d2::Pool;
 use r2d2_sqlite::SqliteConnectionManager;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::LazyLock;
 use tokio::sync::{OnceCell, RwLock};
 
 // =============================================================================
@@ -31,8 +31,9 @@ const MAX_TOOL_ITERATIONS: usize = 5;
 // =============================================================================
 
 /// Regex for JSON code blocks in LLM responses
-static JSON_CODE_BLOCK_PATTERN: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"(?s)```json\s*(\{.+?\})\s*```").expect("Invalid JSON pattern regex"));
+static JSON_CODE_BLOCK_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?s)```json\s*(\{.+?\})\s*```").expect("Invalid JSON pattern regex")
+});
 
 /// Regex for loose JSON tool calls without code blocks
 static LOOSE_JSON_PATTERN: LazyLock<Regex> = LazyLock::new(|| {
@@ -480,26 +481,31 @@ impl ChatEngine {
 
         // Check if there are more tools to confirm
         let has_more_tools = state.current_index + 1 < state.tool_calls.len();
-        
+
         if has_more_tools {
             // Update state with incremented index and re-insert
             let mut updated_state = state.clone();
             updated_state.current_index += 1;
-            
+
             let new_confirmation_id = uuid::Uuid::new_v4().to_string();
             let mut pending = self.confirmation_manager.pending.write().await;
             pending.insert(new_confirmation_id.clone(), updated_state);
-            
+
             // Get tool definition for description
             let next_tool = &state.tool_calls[state.current_index + 1];
-            let description = self.tool_registry.get(&next_tool.name)
+            let description = self
+                .tool_registry
+                .get(&next_tool.name)
                 .map(|t| t.definition().description.clone())
                 .unwrap_or_else(|| "No description available".to_string());
-            
+
             // Return with next pending confirmation
             return Ok(ChatResponse {
                 message_id: state.message_id,
-                content: format!("Tool {} executed. Waiting for next confirmation.", tool_call.name),
+                content: format!(
+                    "Tool {} executed. Waiting for next confirmation.",
+                    tool_call.name
+                ),
                 tool_calls: vec![result.clone()],
                 pending_confirmations: vec![PendingConfirmation {
                     confirmation_id: new_confirmation_id,

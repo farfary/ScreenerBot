@@ -1,10 +1,6 @@
 //! Token detail, analysis, and refresh handlers
 
-use axum::{
-    extract::Path,
-    http::StatusCode,
-    Json,
-};
+use axum::{extract::Path, http::StatusCode, Json};
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
 

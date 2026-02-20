@@ -9,6 +9,7 @@ use std::sync::LazyLock;
 use std::time::Duration;
 use tokio::sync::Mutex;
 
+use crate::database;
 use crate::logger::{self, LogTag};
 
 use super::cache::{update_wallet_snapshot_status, CachedDashboardMetrics};
@@ -180,12 +181,13 @@ impl WalletDatabase {
             &format!("Initializing wallet database at: {}", database_path_str),
         );
 
-        // Configure connection manager
-        let manager = SqliteConnectionManager::file(&database_path);
+        // Configure connection manager with centralized PRAGMAs
+        let manager = SqliteConnectionManager::file(&database_path)
+            .with_init(|c| database::configure_connection(c, database::WALLET_MONITOR_DB));
 
         // Create connection pool
         let pool = Pool::builder()
-            .max_size(3) // Small pool for wallet monitoring
+            .max_size(3)
             .min_idle(Some(1))
             .build(manager)
             .map_err(|e| format!("Failed to create wallet connection pool: {}", e))?;
@@ -206,22 +208,6 @@ impl WalletDatabase {
     /// Initialize database schema with all tables and indexes
     async fn initialize_schema(&mut self) -> Result<(), String> {
         let conn = self.get_connection()?;
-
-        // Configure database settings
-        conn.pragma_update(None, "journal_mode", "WAL")
-            .map_err(|e| format!("Failed to set WAL mode: {}", e))?;
-        conn.pragma_update(None, "foreign_keys", true)
-            .map_err(|e| format!("Failed to enable foreign keys: {}", e))?;
-        conn.pragma_update(None, "synchronous", "NORMAL")
-            .map_err(|e| format!("Failed to set synchronous mode: {}", e))?;
-        conn.busy_timeout(Duration::from_millis(30000))
-            .map_err(|e| format!("Failed to set busy_timeout: {}", e))?;
-        conn.pragma_update(None, "cache_size", &10000i64)
-            .map_err(|e| format!("Failed to set cache_size: {}", e))?;
-        conn.pragma_update(None, "temp_store", &"MEMORY")
-            .map_err(|e| format!("Failed to set temp_store: {}", e))?;
-        conn.pragma_update(None, "mmap_size", &30000000000i64)
-            .map_err(|e| format!("Failed to set mmap_size: {}", e))?;
 
         // Create all tables
         conn.execute(SCHEMA_WALLET_SNAPSHOTS, [])

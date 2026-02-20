@@ -28,10 +28,10 @@ pub use service::{
 
 // Re-export public types
 pub use types::{
-    CachePerformanceMetrics, DailyFlowPoint, DashboardCacheMetadata, DashboardCacheFreshness,
+    CachePerformanceMetrics, DailyFlowPoint, DashboardCacheFreshness, DashboardCacheMetadata,
     DashboardDataSource, NftBalance, TokenBalance, WalletBalancePoint, WalletDashboardData,
-    WalletFlowCacheStats, WalletFlowMetrics, WalletMonitorStats, WalletNftOverview,
-    WalletSnapshot, WalletSnapshotStatus, WalletSummarySnapshot, WalletTokenOverview,
+    WalletFlowCacheStats, WalletFlowMetrics, WalletMonitorStats, WalletNftOverview, WalletSnapshot,
+    WalletSnapshotStatus, WalletSummarySnapshot, WalletTokenOverview,
 };
 
 // Re-export dashboard API

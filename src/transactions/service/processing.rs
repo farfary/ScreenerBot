@@ -7,11 +7,18 @@ use tokio::time::interval;
 
 use crate::logger::{self, LogTag};
 use crate::transactions::{
-    fetcher::TransactionFetcher, processor::TransactionProcessor,
-    utils::{add_signature_to_known_globally, cleanup_expired_pending_transactions, is_signature_known_globally, remove_pending_transaction_globally},
+    fetcher::TransactionFetcher,
+    processor::TransactionProcessor,
+    utils::{
+        add_signature_to_known_globally, cleanup_expired_pending_transactions,
+        is_signature_known_globally, remove_pending_transaction_globally,
+    },
 };
 
-use super::config::{defer_transaction_retry, get_deferred_retries_count, ServiceConfig, DEFERRED_RETRIES};
+use super::config::{
+    defer_transaction_retry, get_deferred_retries_count, get_deferred_retry_keys, ServiceConfig,
+    DEFERRED_RETRIES, DEFERRED_RETRY_KEYS,
+};
 use super::health::{perform_health_check, should_perform_fallback_check, ServiceMetrics};
 use super::lifecycle::{get_global_transaction_manager, SHUTDOWN_NOTIFY};
 use super::websocket::{handle_websocket_transaction, initialize_websocket_monitoring};
@@ -231,14 +238,20 @@ async fn process_deferred_retries(
 
     // Collect retries that are ready to be processed
     {
-        let mut deferred = DEFERRED_RETRIES.lock().await;
-        let signatures: Vec<String> = deferred.keys().cloned().collect();
+        DEFERRED_RETRIES.run_pending_tasks();
+        // Use parallel key index to iterate all deferred retry keys
+        let all_keys = get_deferred_retry_keys();
 
-        for sig in signatures {
-            if let Some(retry) = deferred.get(&sig) {
+        for sig in &all_keys {
+            if let Some(retry) = DEFERRED_RETRIES.get(sig) {
                 if retry.next_retry_at <= now {
-                    ready_retries.push(deferred.remove(&sig).unwrap());
+                    ready_retries.push(retry.clone());
+                    DEFERRED_RETRIES.invalidate(sig);
+                    DEFERRED_RETRY_KEYS.remove(sig);
                 }
+            } else {
+                // Key expired from moka TTL — clean up the key index
+                DEFERRED_RETRY_KEYS.remove(sig);
             }
         }
     }
@@ -274,8 +287,7 @@ async fn process_deferred_retries(
                 retry.next_retry_at = now + chrono::Duration::seconds(delay_secs);
                 retry.last_error = Some(e.clone());
 
-                let mut deferred = DEFERRED_RETRIES.lock().await;
-                deferred.insert(retry.signature.clone(), retry);
+                DEFERRED_RETRIES.insert(retry.signature.clone(), retry);
                 re_deferred += 1;
             }
             Err(e) => {

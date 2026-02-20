@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::Ordering;
 
+use crate::database;
 use crate::logger::{self, LogTag};
 use crate::transactions::{types::*, utils::*};
 
@@ -63,18 +64,11 @@ impl TransactionDatabase {
             );
         }
 
-        let manager = SqliteConnectionManager::file(&database_path).with_init(|c| {
-            c.pragma_update(None, "journal_mode", &"WAL")?;
-            c.pragma_update(None, "synchronous", &"NORMAL")?;
-            c.pragma_update(None, "cache_size", &10000)?;
-            c.pragma_update(None, "temp_store", &"MEMORY")?;
-            c.pragma_update(None, "mmap_size", &268_435_456)?;
-            c.pragma_update(None, "foreign_keys", &1)?;
-            Ok(())
-        });
+        let manager = SqliteConnectionManager::file(&database_path)
+            .with_init(|c| database::configure_connection(c, database::TRANSACTIONS_DB));
 
         let pool = Pool::builder()
-            .max_size(10)
+            .max_size(5)
             .build(manager)
             .map_err(|e| format!("Failed to create connection pool: {}", e))?;
 
@@ -922,4 +916,3 @@ impl TransactionDatabase {
         Ok(count as u64)
     }
 }
-

@@ -115,8 +115,7 @@ pub struct ServiceDetails {
 }
 
 // Global state accessor
-static GLOBAL_APP_STATE: std::sync::OnceLock<Arc<AppState>> =
-    std::sync::OnceLock::new();
+static GLOBAL_APP_STATE: std::sync::OnceLock<Arc<AppState>> = std::sync::OnceLock::new();
 
 /// Set global app state (called during webserver initialization)
 pub fn set_global_app_state(state: Arc<AppState>) {

@@ -1,6 +1,11 @@
 //! AI chat sessions, messages, tools, and permissions handlers
 
-use axum::{extract::{Path, State}, http::StatusCode, response::Response, Json};
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    response::Response,
+    Json,
+};
 use serde::Serialize;
 use std::sync::Arc;
 
@@ -186,7 +191,10 @@ pub async fn create_chat_session(
 }
 
 /// GET /api/ai/chat/sessions/:id - Get session with messages
-pub async fn get_chat_session(State(_state): State<Arc<AppState>>, Path(id): Path<i64>) -> Response {
+pub async fn get_chat_session(
+    State(_state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> Response {
     let pool = match chat_db::get_chat_pool() {
         Some(p) => p,
         None => {
@@ -233,7 +241,10 @@ pub async fn get_chat_session(State(_state): State<Arc<AppState>>, Path(id): Pat
 }
 
 /// DELETE /api/ai/chat/sessions/:id - Delete session
-pub async fn delete_chat_session(State(_state): State<Arc<AppState>>, Path(id): Path<i64>) -> Response {
+pub async fn delete_chat_session(
+    State(_state): State<Arc<AppState>>,
+    Path(id): Path<i64>,
+) -> Response {
     let pool = match chat_db::get_chat_pool() {
         Some(p) => p,
         None => {

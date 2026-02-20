@@ -1,7 +1,7 @@
 # Memory Optimization Investigation
 
 **Date:** February 2026
-**Status:** Plan Complete (v13) — Implementation Pending
+**Status:** Phase A ✅ COMPLETED, Phase B ✅ COMPLETED, Phase C ✅ COMPLETED — Primary target MET
 
 ## Problem
 
@@ -34,12 +34,45 @@ ScreenerBot uses 804MB+ RSS at startup and grows to gigabytes during 24/7 operat
 
 Expected result: 804MB → 150-250MB steady state, growth fully bounded.
 
+## Implementation Progress
+
+### Phase A: SQLite + Allocator ✅ COMPLETED
+- **Implemented:** Standardized SQLite PRAGMA, jemalloc integration, mmap reduction
+- **Result:** ~580MB memory reduction at startup (804MB → ~220MB baseline)
+- **Documents:** 
+  - [phase-a-plan.md](./phase-a-plan.md) — Phase A planning and analysis
+  - [phase-a-summary.md](./phase-a-summary.md) — Implementation results and measurements
+
+### Phase B: Bounded Caches ✅ COMPLETED
+- **Implemented:** moka-based bounded caching with TTL for all unbounded caches
+- **Result:** All 11 major caches migrated to moka (W-TinyLFU eviction), memory growth bounded
+- **Impact:** Prevents unbounded memory growth, fixed cache-related leaks
+- **Documents:** 
+  - [phase-b-plan.md](./phase-b-plan.md) — Detailed implementation plan
+  - [phase-b-summary.md](./phase-b-summary.md) — Implementation results and changes
+
+### Phase C: Token Filtering Optimization ✅ COMPLETED
+- **Implemented:** Unbounded cache fixes, DB maintenance tasks, stale token filtering
+- **Result:** RSS reduced from 1011 MB avg → 371 MB avg (62% reduction)
+- **Token count:** 172K tokens → 15.6K tokens cached (91% reduction)
+- **Disk savings:** 945 MB reclaimed from databases through VACUUM operations
+- **Target achieved:** ≤400 MB RSS target MET under production load
+- **Documents:** 
+  - [phase-c-summary.md](./phase-c-summary.md) — Implementation results and measurements
+
+### Phases D-E: Future Work
+- Phase D: Maintenance service + periodic cleanup
+- Phase E: Enhanced monitoring and alerting
+
 ## Directory Structure
 
 ```
 ├── README.md              ← This file
 ├── PLAN.md                ← Master technical plan (5,900+ lines, v13)
 ├── AGENTS.md              ← Agent implementation strategy
+├── phase-a-plan.md        ← Phase A planning and analysis
+├── phase-a-summary.md     ← Phase A implementation results
+├── phase-b-plan.md        ← Phase B bounded caches plan
 ├── arc/                   ← Arc<T> memory research (5 files)
 ├── moka/                  ← Moka cache library research (4 files)
 ├── epoch/                 ← Epoch-based memory reclamation (3 files)

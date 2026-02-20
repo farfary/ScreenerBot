@@ -325,7 +325,10 @@ impl RaydiumCpmmDecoder {
         if sol_decimals > 18 || token_decimals > 18 {
             logger::error(
                 LogTag::PoolDecoder,
-                &format!("Raydium CPMM: Decimals too large: sol={}, token={}", sol_decimals, token_decimals),
+                &format!(
+                    "Raydium CPMM: Decimals too large: sol={}, token={}",
+                    sol_decimals, token_decimals
+                ),
             );
             return None;
         }

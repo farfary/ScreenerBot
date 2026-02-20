@@ -125,6 +125,7 @@ unicode-width = "0.2"
 
 # Concurrency
 dashmap = "5.5"
+moka = { version = "0.12", features = ["sync"] }
 
 # Rate limiting with GCRA algorithm
 governor = "0.6"
@@ -199,12 +200,16 @@ openssl = { version = "0.10", features = ["vendored"] }
 [target.'cfg(target_os = "android")'.dependencies]
 openssl = { version = "0.10", features = ["vendored"] }
 
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+tikv-jemallocator = { version = "0.6", optional = true }
+
 [build-dependencies]
 # No build dependencies needed
 
 # Features — keep placeholders but no dependencies by default
 [features]
-default = []
+default = ["jemalloc"]
+jemalloc = ["tikv-jemallocator"]
 # debug-tools feature removed - debug binaries are now in crates/debug-tools
 web = []
 telegram = []

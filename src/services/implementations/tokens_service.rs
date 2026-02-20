@@ -62,7 +62,9 @@ impl Service for TokensService {
 
     async fn health(&self) -> ServiceHealth {
         // Health check: verify orchestrator exists AND tokens system is ready (update loops started)
-        if self.orchestrator.is_some() && crate::global::TOKENS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst) {
+        if self.orchestrator.is_some()
+            && crate::global::TOKENS_SYSTEM_READY.load(std::sync::atomic::Ordering::SeqCst)
+        {
             ServiceHealth::Healthy
         } else if self.orchestrator.is_some() {
             ServiceHealth::Starting

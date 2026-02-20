@@ -218,13 +218,16 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
         let price_sol = if is_token_a_sol {
             // Token A is SOL, Token B is target token.
             if sol_decimals > 18 || token_decimals > 18 {
-            logger::error(
-                LogTag::PoolDecoder,
-                &format!("Orca Whirlpool: Decimals too large: sol={}, token={}", sol_decimals, token_decimals),
-            );
-            return None;
-        }
-        // First compute price_b_per_a (token B per token A):
+                logger::error(
+                    LogTag::PoolDecoder,
+                    &format!(
+                        "Orca Whirlpool: Decimals too large: sol={}, token={}",
+                        sol_decimals, token_decimals
+                    ),
+                );
+                return None;
+            }
+            // First compute price_b_per_a (token B per token A):
             // price_b_per_a = (sqrt_price / Q64)^2 * 10^(decimals_a - decimals_b)
             let q64_resolution = 18446744073709551616.0; // 2^64
             let sqrt_price_normalized = (pool_info.sqrt_price as f64) / q64_resolution;

@@ -5,8 +5,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{DateTime, Duration as ChronoDuration, Utc};
-use std::sync::LazyLock;
 use serde_json::json;
+use std::sync::LazyLock;
 use tokio::sync::{Mutex, RwLock};
 
 use crate::events::{record_filtering_event, Severity};
@@ -21,7 +21,8 @@ use super::types::{
     TokenSortKey,
 };
 
-static GLOBAL_STORE: LazyLock<Arc<FilteringStore>> = LazyLock::new(|| Arc::new(FilteringStore::new()));
+static GLOBAL_STORE: LazyLock<Arc<FilteringStore>> =
+    LazyLock::new(|| Arc::new(FilteringStore::new()));
 
 // Timing constants
 // Snapshot is considered stale after FILTER_CACHE_STALE_SECS (180s = 3 min)

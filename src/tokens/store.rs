@@ -1,17 +1,16 @@
 use crate::tokens::database;
 use crate::tokens::types::{DexScreenerData, GeckoTerminalData, RugcheckData, Token, TokenResult};
+use std::collections::HashMap;
 use std::sync::LazyLock;
-use std::collections::{HashMap, VecDeque};
-use std::hash::Hash;
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
 const TOKEN_SNAPSHOT_TTL_SECS: u64 = 30;
 const DEXSCREENER_TTL_SECS: u64 = 30;
 const GECKOTERMINAL_TTL_SECS: u64 = 60;
 const RUGCHECK_TTL_SECS: u64 = 300; // 5 minutes - security data shouldn't be stale
-const MARKET_CACHE_CAPACITY: usize = 2000;
-const SECURITY_CACHE_CAPACITY: usize = 3000;
+const MARKET_CACHE_CAPACITY: u64 = 2000;
+const SECURITY_CACHE_CAPACITY: u64 = 3000;
 
 #[derive(Clone, Debug, Default)]
 pub struct CacheMetrics {
@@ -30,128 +29,6 @@ impl CacheMetrics {
         } else {
             self.hits as f64 / total as f64
         }
-    }
-}
-
-#[derive(Clone)]
-struct CacheEntry<V> {
-    value: V,
-    inserted_at: Instant,
-    last_accessed: Instant,
-}
-
-impl<V> CacheEntry<V> {
-    fn new(value: V) -> Self {
-        let now = Instant::now();
-        Self {
-            value,
-            inserted_at: now,
-            last_accessed: now,
-        }
-    }
-
-    fn is_expired(&self, ttl: Duration) -> bool {
-        self.inserted_at.elapsed() > ttl
-    }
-
-    fn touch(&mut self) {
-        self.last_accessed = Instant::now();
-    }
-}
-
-struct TimedCache<K, V>
-where
-    K: Eq + Hash + Clone,
-    V: Clone,
-{
-    ttl: Duration,
-    capacity: usize,
-    inner: Mutex<TimedCacheInner<K, V>>,
-}
-
-struct TimedCacheInner<K, V>
-where
-    K: Eq + Hash + Clone,
-    V: Clone,
-{
-    map: HashMap<K, CacheEntry<V>>,
-    order: VecDeque<K>,
-    metrics: CacheMetrics,
-}
-
-impl<K, V> TimedCache<K, V>
-where
-    K: Eq + Hash + Clone,
-    V: Clone,
-{
-    fn new(ttl: Duration, capacity: usize) -> Self {
-        Self {
-            ttl,
-            capacity,
-            inner: Mutex::new(TimedCacheInner {
-                map: HashMap::new(),
-                order: VecDeque::new(),
-                metrics: CacheMetrics::default(),
-            }),
-        }
-    }
-
-    fn get(&self, key: &K) -> Option<V> {
-        let mut inner = self.inner.lock().expect("cache poisoned");
-
-        if let Some(entry) = inner.map.get_mut(key) {
-            if entry.is_expired(self.ttl) {
-                inner.map.remove(key);
-                inner.order.retain(|k| k != key);
-                inner.metrics.misses += 1;
-                inner.metrics.expirations += 1;
-                return None;
-            }
-
-            entry.touch();
-            let value = entry.value.clone();
-            let key_clone = key.clone();
-            drop(entry);
-            inner.order.retain(|k| k != key);
-            inner.order.push_back(key_clone);
-            inner.metrics.hits += 1;
-            return Some(value);
-        }
-
-        inner.metrics.misses += 1;
-        None
-    }
-
-    fn insert(&self, key: K, value: V) {
-        let mut inner = self.inner.lock().expect("cache poisoned");
-
-        if !inner.map.contains_key(&key) && inner.map.len() >= self.capacity {
-            if let Some(lru) = inner.order.pop_front() {
-                inner.map.remove(&lru);
-                inner.metrics.evictions += 1;
-            }
-        }
-
-        inner.map.insert(key.clone(), CacheEntry::new(value));
-        inner.order.retain(|k| k != &key);
-        inner.order.push_back(key);
-        inner.metrics.inserts += 1;
-    }
-
-    fn len(&self) -> usize {
-        let inner = self.inner.lock().expect("cache poisoned");
-        inner.map.len()
-    }
-
-    fn metrics(&self) -> CacheMetrics {
-        let inner = self.inner.lock().expect("cache poisoned");
-        inner.metrics.clone()
-    }
-
-    fn clear(&self) {
-        let mut inner = self.inner.lock().expect("cache poisoned");
-        inner.map.clear();
-        inner.order.clear();
     }
 }
 
@@ -225,25 +102,27 @@ impl TokenStore {
 static TOKEN_STORE: LazyLock<TokenStore> =
     LazyLock::new(|| TokenStore::new(Duration::from_secs(TOKEN_SNAPSHOT_TTL_SECS)));
 
-static DEXSCREENER_CACHE: LazyLock<TimedCache<String, DexScreenerData>> = LazyLock::new(|| {
-    TimedCache::new(
-        Duration::from_secs(DEXSCREENER_TTL_SECS),
-        MARKET_CACHE_CAPACITY,
-    )
-});
+static DEXSCREENER_CACHE: LazyLock<moka::sync::Cache<String, DexScreenerData>> =
+    LazyLock::new(|| {
+        moka::sync::Cache::builder()
+            .max_capacity(MARKET_CACHE_CAPACITY)
+            .time_to_live(Duration::from_secs(DEXSCREENER_TTL_SECS))
+            .build()
+    });
 
-static GECKOTERMINAL_CACHE: LazyLock<TimedCache<String, GeckoTerminalData>> = LazyLock::new(|| {
-    TimedCache::new(
-        Duration::from_secs(GECKOTERMINAL_TTL_SECS),
-        MARKET_CACHE_CAPACITY,
-    )
-});
+static GECKOTERMINAL_CACHE: LazyLock<moka::sync::Cache<String, GeckoTerminalData>> =
+    LazyLock::new(|| {
+        moka::sync::Cache::builder()
+            .max_capacity(MARKET_CACHE_CAPACITY)
+            .time_to_live(Duration::from_secs(GECKOTERMINAL_TTL_SECS))
+            .build()
+    });
 
-static RUGCHECK_CACHE: LazyLock<TimedCache<String, RugcheckData>> = LazyLock::new(|| {
-    TimedCache::new(
-        Duration::from_secs(RUGCHECK_TTL_SECS),
-        SECURITY_CACHE_CAPACITY,
-    )
+static RUGCHECK_CACHE: LazyLock<moka::sync::Cache<String, RugcheckData>> = LazyLock::new(|| {
+    moka::sync::Cache::builder()
+        .max_capacity(SECURITY_CACHE_CAPACITY)
+        .time_to_live(Duration::from_secs(RUGCHECK_TTL_SECS))
+        .build()
 });
 
 pub fn get_cached_dexscreener(mint: &str) -> Option<DexScreenerData> {
@@ -255,11 +134,17 @@ pub fn store_dexscreener(mint: &str, data: &DexScreenerData) {
 }
 
 pub fn dexscreener_cache_metrics() -> CacheMetrics {
-    DEXSCREENER_CACHE.metrics()
+    CacheMetrics {
+        hits: 0,
+        misses: 0,
+        evictions: 0,
+        expirations: 0,
+        inserts: DEXSCREENER_CACHE.entry_count(),
+    }
 }
 
 pub fn dexscreener_cache_size() -> usize {
-    DEXSCREENER_CACHE.len()
+    DEXSCREENER_CACHE.entry_count() as usize
 }
 
 pub fn get_cached_geckoterminal(mint: &str) -> Option<GeckoTerminalData> {
@@ -271,11 +156,17 @@ pub fn store_geckoterminal(mint: &str, data: &GeckoTerminalData) {
 }
 
 pub fn geckoterminal_cache_metrics() -> CacheMetrics {
-    GECKOTERMINAL_CACHE.metrics()
+    CacheMetrics {
+        hits: 0,
+        misses: 0,
+        evictions: 0,
+        expirations: 0,
+        inserts: GECKOTERMINAL_CACHE.entry_count(),
+    }
 }
 
 pub fn geckoterminal_cache_size() -> usize {
-    GECKOTERMINAL_CACHE.len()
+    GECKOTERMINAL_CACHE.entry_count() as usize
 }
 
 pub fn get_cached_rugcheck(mint: &str) -> Option<RugcheckData> {
@@ -287,11 +178,17 @@ pub fn store_rugcheck(mint: &str, data: &RugcheckData) {
 }
 
 pub fn rugcheck_cache_metrics() -> CacheMetrics {
-    RUGCHECK_CACHE.metrics()
+    CacheMetrics {
+        hits: 0,
+        misses: 0,
+        evictions: 0,
+        expirations: 0,
+        inserts: RUGCHECK_CACHE.entry_count(),
+    }
 }
 
 pub fn rugcheck_cache_size() -> usize {
-    RUGCHECK_CACHE.len()
+    RUGCHECK_CACHE.entry_count() as usize
 }
 
 pub fn get_cached_token(mint: &str) -> Option<Token> {
@@ -323,10 +220,10 @@ pub async fn get_full_token_async(mint: &str) -> TokenResult<Option<Token>> {
 }
 
 pub fn clear_all_market_caches() {
-    DEXSCREENER_CACHE.clear();
-    GECKOTERMINAL_CACHE.clear();
+    DEXSCREENER_CACHE.invalidate_all();
+    GECKOTERMINAL_CACHE.invalidate_all();
 }
 
 pub fn clear_security_cache() {
-    RUGCHECK_CACHE.clear();
+    RUGCHECK_CACHE.invalidate_all();
 }

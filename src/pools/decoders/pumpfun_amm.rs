@@ -250,7 +250,10 @@ impl PumpFunAmmDecoder {
         if token_decimals > 18 || sol_decimals > 18 {
             logger::error(
                 LogTag::PoolDecoder,
-                &format!("PumpFun AMM: Decimals too large: sol={}, token={}", sol_decimals, token_decimals),
+                &format!(
+                    "PumpFun AMM: Decimals too large: sol={}, token={}",
+                    sol_decimals, token_decimals
+                ),
             );
             return None;
         }

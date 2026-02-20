@@ -5,10 +5,11 @@
 //! - Decision history tracking
 //! - Built-in instruction templates
 
+use crate::database;
 use crate::logger::{self, LogTag};
-use std::sync::OnceLock;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use std::sync::OnceLock;
 use std::sync::{Arc, Mutex};
 
 // =============================================================================
@@ -74,15 +75,9 @@ pub fn init_ai_database() -> Result<Connection, String> {
     let conn = Connection::open(&db_path)
         .map_err(|e| format!("Failed to open AI database at {}: {}", db_path_str, e))?;
 
-    // Configure connection for optimal performance
-    conn.pragma_update(None, "journal_mode", "WAL")
-        .map_err(|e| format!("Failed to set journal mode: {}", e))?;
-    conn.pragma_update(None, "synchronous", "NORMAL")
-        .map_err(|e| format!("Failed to set synchronous mode: {}", e))?;
-    conn.pragma_update(None, "cache_size", 5000)
-        .map_err(|e| format!("Failed to set cache size: {}", e))?;
-    conn.busy_timeout(std::time::Duration::from_millis(10_000))
-        .map_err(|e| format!("Failed to set busy timeout: {}", e))?;
+    // Apply centralized PRAGMA configuration
+    database::configure_connection(&conn, database::AI_DB)
+        .map_err(|e| format!("Failed to configure connection: {}", e))?;
 
     // Create schema
     initialize_schema(&conn)?;
@@ -98,7 +93,14 @@ pub fn init_ai_database() -> Result<Connection, String> {
         .map_err(|_| "Global AI database already initialized".to_string())?;
 
     // Return a new connection for immediate use
-    Connection::open(&db_path).map_err(|e| format!("Failed to reopen AI database: {}", e))
+    let new_conn =
+        Connection::open(&db_path).map_err(|e| format!("Failed to reopen AI database: {}", e))?;
+
+    // Apply centralized PRAGMA configuration to new connection
+    database::configure_connection(&new_conn, database::AI_DB)
+        .map_err(|e| format!("Failed to configure connection: {}", e))?;
+
+    Ok(new_conn)
 }
 
 /// Get global AI database connection

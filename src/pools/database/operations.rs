@@ -4,6 +4,7 @@ use super::types::{BlacklistedAccountRecord, BlacklistedPoolRecord, DbPriceResul
 use super::writer::run_database_writer;
 use crate::logger::{self, LogTag};
 
+use crate::database;
 use rusqlite::{params, Connection};
 use std::collections::HashSet;
 use std::sync::Arc;
@@ -75,6 +76,10 @@ impl PoolsDatabase {
         // Create database connection
         let conn = Connection::open(&self.db_path)
             .map_err(|e| format!("Failed to open pools database: {}", e))?;
+
+        // Apply shared SQLite configuration
+        database::configure_connection(&conn, database::POOLS_DB)
+            .map_err(|e| format!("Failed to configure pools database: {}", e))?;
 
         // Create price history table
         conn.execute(
@@ -426,7 +431,8 @@ impl PoolsDatabase {
                 .ok_or_else(|| "Database not initialized".to_string())?;
 
             // Calculate cutoff date
-            let cutoff_date = chrono::Utc::now() - chrono::Duration::days(MAX_PRICE_HISTORY_AGE_DAYS);
+            let cutoff_date =
+                chrono::Utc::now() - chrono::Duration::days(MAX_PRICE_HISTORY_AGE_DAYS);
             let cutoff_str = cutoff_date.to_rfc3339();
 
             let deleted = conn

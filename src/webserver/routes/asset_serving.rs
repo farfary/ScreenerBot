@@ -134,9 +134,7 @@ pub async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String
         "transaction_details_dialog.js" => Some(embeds::TRANSACTION_DETAILS_DIALOG_UI),
         "position_details_dialog.js" => Some(embeds::POSITION_DETAILS_DIALOG_UI),
         "position_details/analytics_tab.js" => Some(embeds::POSITION_DETAILS_ANALYTICS_TAB_JS),
-        "position_details/secondary_tabs.js" => {
-            Some(embeds::POSITION_DETAILS_SECONDARY_TABS_JS)
-        }
+        "position_details/secondary_tabs.js" => Some(embeds::POSITION_DETAILS_SECONDARY_TABS_JS),
         "position_details/overview_tab.js" => Some(embeds::POSITION_DETAILS_OVERVIEW_TAB_JS),
         "position_details/chart_tab.js" => Some(embeds::POSITION_DETAILS_CHART_TAB_JS),
         "position_details/utilities.js" => Some(embeds::POSITION_DETAILS_UTILITIES_JS),
@@ -216,20 +214,14 @@ pub async fn get_provider_logo(axum::extract::Path(file): axum::extract::Path<St
             (StatusCode::OK, content_type, embeds::PROVIDER_ANTHROPIC).into_response()
         }
         "groq.png" => (StatusCode::OK, content_type, embeds::PROVIDER_GROQ).into_response(),
-        "deepseek.png" => {
-            (StatusCode::OK, content_type, embeds::PROVIDER_DEEPSEEK).into_response()
-        }
+        "deepseek.png" => (StatusCode::OK, content_type, embeds::PROVIDER_DEEPSEEK).into_response(),
         "gemini.png" => (StatusCode::OK, content_type, embeds::PROVIDER_GEMINI).into_response(),
         "ollama.png" => (StatusCode::OK, content_type, embeds::PROVIDER_OLLAMA).into_response(),
-        "together.png" => {
-            (StatusCode::OK, content_type, embeds::PROVIDER_TOGETHER).into_response()
-        }
+        "together.png" => (StatusCode::OK, content_type, embeds::PROVIDER_TOGETHER).into_response(),
         "openrouter.png" => {
             (StatusCode::OK, content_type, embeds::PROVIDER_OPENROUTER).into_response()
         }
-        "mistral.png" => {
-            (StatusCode::OK, content_type, embeds::PROVIDER_MISTRAL).into_response()
-        }
+        "mistral.png" => (StatusCode::OK, content_type, embeds::PROVIDER_MISTRAL).into_response(),
         _ => (StatusCode::NOT_FOUND, "Provider logo not found").into_response(),
     }
 }

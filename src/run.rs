@@ -251,6 +251,12 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
             .await
             .map_err(|e| format!("Failed to sync actions from database: {}", e))?;
 
+        // Start periodic cleanup of old completed actions (30-day retention)
+        crate::actions::spawn_cleanup_task();
+
+        // Start database maintenance (auto-vacuum migration + periodic incremental vacuum)
+        tokio::spawn(crate::database::start_db_maintenance_task());
+
         // 8.5. Initialize AI database (always) and AI engine (if enabled)
         // Database is always initialized so dashboard can view/edit instructions
         if let Err(e) = crate::ai::init_ai_database() {

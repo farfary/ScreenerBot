@@ -27,9 +27,9 @@
 //! └── *.csv
 //! ```
 
-use std::sync::LazyLock;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::LazyLock;
 
 use crate::logger::{self, LogTag};
 

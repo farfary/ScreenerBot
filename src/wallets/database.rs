@@ -9,6 +9,7 @@ use rusqlite::{params, OptionalExtension};
 use std::collections::HashMap;
 
 use super::types::{TokenBalance, Wallet, WalletRole, WalletType};
+use crate::database;
 use crate::paths::get_data_directory;
 
 // =============================================================================
@@ -75,9 +76,10 @@ impl WalletsDatabase {
                 .map_err(|e| format!("Failed to create data directory: {}", e))?;
         }
 
-        let manager = SqliteConnectionManager::file(&db_path);
+        let manager = SqliteConnectionManager::file(&db_path)
+            .with_init(|c| database::configure_connection(c, database::WALLETS_DB));
         let pool = Pool::builder()
-            .max_size(5)
+            .max_size(3)
             .build(manager)
             .map_err(|e| format!("Failed to create wallets connection pool: {}", e))?;
 
@@ -97,16 +99,6 @@ impl WalletsDatabase {
     /// Initialize database schema
     fn initialize(&self) -> Result<(), String> {
         let conn = self.conn()?;
-
-        // Enable WAL mode for better concurrency
-        conn.execute_batch(
-            "PRAGMA journal_mode = WAL;
-             PRAGMA busy_timeout = 30000;
-             PRAGMA cache_size = 5000;
-             PRAGMA temp_store = memory;
-             PRAGMA foreign_keys = ON;",
-        )
-        .map_err(|e| format!("Failed to set pragmas: {}", e))?;
 
         // Create tables
         conn.execute(WALLETS_SCHEMA, [])

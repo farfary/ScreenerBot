@@ -16,8 +16,8 @@
 // - Business logic (async): Use get() for guaranteed decimals with fallback
 // - NEVER read DB directly - always use cache or get()
 
-use std::collections::{HashMap, HashSet};
-use std::sync::{Arc, Mutex, RwLock};
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 use crate::logger::{self, LogTag};
 
@@ -25,23 +25,29 @@ pub use crate::constants::{SOL_DECIMALS, SOL_MINT};
 
 use tokio::sync::Mutex as AsyncMutex;
 
-// In-memory decimals cache for fast synchronous lookups
-// Populated at startup + updated on every DB write
-static DECIMALS_CACHE: std::sync::LazyLock<Arc<RwLock<HashMap<String, u8>>>> =
-    std::sync::LazyLock::new(|| Arc::new(RwLock::new(HashMap::new())));
+// In-memory decimals cache — bounded moka cache for fast synchronous lookups (max 100K entries).
+// Populated at startup + updated on every DB write.
+static DECIMALS_CACHE: std::sync::LazyLock<moka::sync::Cache<String, u8>> =
+    std::sync::LazyLock::new(|| moka::sync::Cache::builder().max_capacity(100_000).build());
 
 // Single-flight locks to prevent duplicate fetches
 static FETCH_LOCKS: std::sync::LazyLock<Mutex<HashMap<String, Arc<AsyncMutex<()>>>>> =
     std::sync::LazyLock::new(|| Mutex::new(HashMap::new()));
 
 // Track mints with unresolved decimals to avoid repeated expensive lookups
-static FAILED_CACHE: std::sync::LazyLock<Arc<RwLock<HashSet<String>>>> =
-    std::sync::LazyLock::new(|| Arc::new(RwLock::new(HashSet::new())));
+// Bounded moka cache (max 50K entries, 24-hour TTL) to prevent unbounded growth
+static FAILED_CACHE: std::sync::LazyLock<moka::sync::Cache<String, ()>> =
+    std::sync::LazyLock::new(|| {
+        moka::sync::Cache::builder()
+            .max_capacity(50_000)
+            .time_to_live(std::time::Duration::from_secs(86400)) // 24 hours
+            .build()
+    });
 
-// Cache for Token2022 detection (mint -> is_token_2022)
+// Cache for Token2022 detection — bounded moka cache (max 100K entries).
 // true = Token2022, false = standard SPL token
-static TOKEN_2022_CACHE: std::sync::LazyLock<Arc<RwLock<HashMap<String, bool>>>> =
-    std::sync::LazyLock::new(|| Arc::new(RwLock::new(HashMap::new())));
+static TOKEN_2022_CACHE: std::sync::LazyLock<moka::sync::Cache<String, bool>> =
+    std::sync::LazyLock::new(|| moka::sync::Cache::builder().max_capacity(100_000).build());
 
 // =============================================================================
 // PUBLIC API
@@ -65,10 +71,7 @@ pub fn get_cached(mint: &str) -> Option<u8> {
         return None;
     }
 
-    let result = DECIMALS_CACHE
-        .read()
-        .ok()
-        .and_then(|m| m.get(mint).copied());
+    let result = DECIMALS_CACHE.get(&mint.to_string());
 
     result
 }
@@ -82,10 +85,7 @@ pub fn is_token_2022_cached(mint: &str) -> Option<bool> {
         return Some(false);
     }
 
-    TOKEN_2022_CACHE
-        .read()
-        .ok()
-        .and_then(|m| m.get(mint).copied())
+    TOKEN_2022_CACHE.get(&mint.to_string())
 }
 
 /// Check if a mint is Token2022 (async with RPC fallback)
@@ -151,9 +151,7 @@ pub async fn is_token_2022(mint: &str) -> bool {
 
 /// Cache Token2022 detection result
 fn cache_token_2022(mint: &str, is_2022: bool) {
-    if let Ok(mut w) = TOKEN_2022_CACHE.write() {
-        w.insert(mint.to_string(), is_2022);
-    }
+    TOKEN_2022_CACHE.insert(mint.to_string(), is_2022);
 }
 
 /// Get decimals with fallback chain (cache → DB → chain)
@@ -331,33 +329,28 @@ pub fn cache(mint: &str, decimals: u8) {
     if decimals > 18 {
         crate::logger::warning(
             crate::logger::LogTag::Tokens,
-            &format!("Ignoring invalid decimals {} for mint {} (max 18)", decimals, mint),
+            &format!(
+                "Ignoring invalid decimals {} for mint {} (max 18)",
+                decimals, mint
+            ),
         );
         return;
     }
-    
-    if let Ok(mut w) = DECIMALS_CACHE.write() {
-        w.insert(mint.to_string(), decimals);
-    }
+
+    DECIMALS_CACHE.insert(mint.to_string(), decimals);
     clear_failure(mint);
 }
 
 /// Clear cached decimals for a specific mint
 pub fn clear_cache(mint: &str) {
-    if let Ok(mut w) = DECIMALS_CACHE.write() {
-        w.remove(mint);
-    }
+    DECIMALS_CACHE.invalidate(&mint.to_string());
     clear_failure(mint);
 }
 
 /// Clear all cached decimals
 pub fn clear_all_cache() {
-    if let Ok(mut w) = DECIMALS_CACHE.write() {
-        w.clear();
-    }
-    if let Ok(mut w) = FAILED_CACHE.write() {
-        w.clear();
-    }
+    DECIMALS_CACHE.invalidate_all();
+    FAILED_CACHE.invalidate_all();
 }
 
 // =============================================================================
@@ -426,16 +419,19 @@ async fn persist_to_db(mint: &str, decimals: u8) -> Result<(), String> {
 
 fn fetch_lock_for(mint: &str) -> Arc<AsyncMutex<()>> {
     let mut map = FETCH_LOCKS.lock().expect("decimals fetch locks poisoned");
-    
+
     // Periodic cleanup to prevent unbounded growth
     if map.len() > 10000 {
         crate::logger::warning(
             crate::logger::LogTag::Tokens,
-            &format!("Decimals fetch lock map has {} entries, clearing to prevent memory leak", map.len()),
+            &format!(
+                "Decimals fetch lock map has {} entries, clearing to prevent memory leak",
+                map.len()
+            ),
         );
         map.clear();
     }
-    
+
     Arc::clone(
         map.entry(mint.to_string())
             .or_insert_with(|| Arc::new(AsyncMutex::new(()))),
@@ -449,20 +445,13 @@ fn release_lock_if_idle(mint: &str) {
 }
 
 fn mark_failure(mint: &str) {
-    if let Ok(mut w) = FAILED_CACHE.write() {
-        w.insert(mint.to_string());
-    }
+    FAILED_CACHE.insert(mint.to_string(), ());
 }
 
 fn clear_failure(mint: &str) {
-    if let Ok(mut w) = FAILED_CACHE.write() {
-        w.remove(mint);
-    }
+    FAILED_CACHE.invalidate(&mint.to_string());
 }
 
 fn is_marked_failure(mint: &str) -> bool {
-    FAILED_CACHE
-        .read()
-        .map(|set| set.contains(mint))
-        .unwrap_or(false)
+    FAILED_CACHE.get(&mint.to_string()).is_some()
 }

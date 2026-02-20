@@ -1,8 +1,8 @@
-use rusqlite::params;
 use chrono::{DateTime, Utc};
+use rusqlite::params;
 
-use crate::logger::{self, LogTag};
 use crate::filtering::RejectedToken;
+use crate::logger::{self, LogTag};
 use crate::tokens::types::{TokenError, TokenResult};
 
 use super::TokenDatabase;
@@ -318,7 +318,6 @@ impl TokenDatabase {
 
         Ok(results)
     }
-
 
     pub fn get_rejected_tokens(
         &self,

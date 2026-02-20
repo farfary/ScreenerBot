@@ -9,8 +9,8 @@ use super::types::{price_cache_ttl_seconds, PriceHistory, PriceResult, PRICE_HIS
 use crate::logger::{self, LogTag};
 
 use dashmap::DashMap;
-use std::sync::LazyLock;
 use solana_sdk::pubkey::Pubkey;
+use std::sync::LazyLock;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use tokio::sync::Notify;
@@ -23,6 +23,11 @@ static PRICE_HISTORY: LazyLock<DashMap<String, PriceHistory>> = LazyLock::new(Da
 
 /// Global shutdown handle for cleanup task
 static CLEANUP_SHUTDOWN: LazyLock<Arc<Notify>> = LazyLock::new(|| Arc::new(Notify::new()));
+
+/// Cached snapshot of open position mints, refreshed each cleanup cycle.
+/// Used by sync cleanup code to avoid calling async get_open_mints().
+static OPEN_MINTS_SNAPSHOT: LazyLock<RwLock<std::collections::HashSet<String>>> =
+    LazyLock::new(|| RwLock::new(std::collections::HashSet::new()));
 
 /// Initialize the cache system
 pub async fn initialize_cache() {
@@ -174,6 +179,12 @@ async fn start_cache_cleanup_task() {
                     break;
                 }
                 _ = interval.tick() => {
+                    // Refresh open mints snapshot for sync cleanup code
+                    let mints: std::collections::HashSet<String> =
+                        crate::positions::get_open_mints().await.into_iter().collect();
+                    if let Ok(mut snapshot) = OPEN_MINTS_SNAPSHOT.write() {
+                        *snapshot = mints;
+                    }
                     cleanup_stale_entries();
                 }
             }
@@ -205,6 +216,64 @@ fn cleanup_stale_entries() {
         logger::debug(
             LogTag::PoolCache,
             &format!("Cleaned {} stale price entries", removed_count),
+        );
+    }
+
+    // Clean price history: evict tokens with no recent price data (>2 hours)
+    // and not in any open position. This bounds PRICE_HISTORY memory growth.
+    cleanup_stale_history_entries();
+}
+
+/// Evict stale tokens from PRICE_HISTORY that are inactive and not in open positions.
+/// Keeps DashMap bounded without migrating to moka (avoids hot-path clone overhead).
+fn cleanup_stale_history_entries() {
+    const HISTORY_EVICTION_SECS: u64 = 7200; // 2 hours
+
+    let now = std::time::Instant::now();
+
+    // Collect tokens to evict: those whose latest price is older than threshold
+    let mut candidates: Vec<String> = Vec::new();
+    for entry in PRICE_HISTORY.iter() {
+        let history = entry.value();
+        if let Some(latest) = history.get_latest() {
+            if now.duration_since(latest.timestamp).as_secs() > HISTORY_EVICTION_SECS {
+                candidates.push(entry.key().clone());
+            }
+        } else {
+            // Empty history — evict
+            candidates.push(entry.key().clone());
+        }
+    }
+
+    if candidates.is_empty() {
+        return;
+    }
+
+    // Get open position mints to protect from eviction (sync-safe: spawn blocking)
+    // Use a cached set refreshed each cleanup cycle to avoid async in sync context
+    let open_mints: std::collections::HashSet<String> = OPEN_MINTS_SNAPSHOT
+        .read()
+        .map(|s| s.clone())
+        .unwrap_or_default();
+
+    let mut evicted = 0;
+    for mint in &candidates {
+        if !open_mints.contains(mint) {
+            PRICE_HISTORY.remove(mint);
+            evicted += 1;
+        }
+    }
+
+    if evicted > 0 {
+        logger::info(
+            LogTag::PoolCache,
+            &format!(
+                "Evicted {} stale tokens from PRICE_HISTORY ({} candidates, {} protected by open positions, {} remaining)",
+                evicted,
+                candidates.len(),
+                candidates.len() - evicted,
+                PRICE_HISTORY.len()
+            ),
         );
     }
 }

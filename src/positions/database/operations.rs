@@ -5,6 +5,7 @@ use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
 use std::path::Path;
 use std::sync::atomic::Ordering;
 
+use crate::database;
 use crate::logger::{self, LogTag};
 use crate::positions::types::{EntryRecord, ExitRecord, Position};
 
@@ -25,13 +26,14 @@ impl PositionsDatabase {
             );
         }
 
-        // Configure connection manager
-        let manager = SqliteConnectionManager::file(&database_path);
+        // Configure connection manager with centralized PRAGMAs
+        let manager = SqliteConnectionManager::file(&database_path)
+            .with_init(|c| database::configure_connection(c, database::POSITIONS_DB));
 
         // Create connection pool
         let pool = Pool::builder()
-            .max_size(5) // Reduce pool size to avoid timeouts
-            .min_idle(Some(1)) // Keep at least 1 connection ready
+            .max_size(5)
+            .min_idle(Some(1))
             .build(manager)
             .map_err(|e| format!("Failed to create positions connection pool: {}", e))?;
 
@@ -58,18 +60,6 @@ impl PositionsDatabase {
     /// Initialize database schema with all tables and indexes
     async fn initialize_schema(&mut self, log_initialization: bool) -> Result<(), String> {
         let conn = self.get_connection()?;
-
-        // Configure database settings
-        conn.pragma_update(None, "journal_mode", "WAL")
-            .map_err(|e| format!("Failed to set WAL mode: {}", e))?;
-        conn.pragma_update(None, "foreign_keys", true)
-            .map_err(|e| format!("Failed to enable foreign keys: {}", e))?;
-        conn.pragma_update(None, "synchronous", "NORMAL")
-            .map_err(|e| format!("Failed to set synchronous mode: {}", e))?;
-        // Additional performance-related PRAGMAs
-        let _ = conn.pragma_update(None, "cache_size", 10000);
-        let _ = conn.pragma_update(None, "temp_store", "memory");
-        let _ = conn.busy_timeout(std::time::Duration::from_millis(30_000));
 
         // Create all tables
         conn.execute(SCHEMA_POSITIONS, [])
@@ -242,19 +232,9 @@ impl PositionsDatabase {
 
     /// Get database connection from pool
     fn get_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
-        let conn = self
-            .pool
+        self.pool
             .get()
-            .map_err(|e| format!("Failed to get positions database connection: {}", e))?;
-
-        // Best-effort per-connection configuration to reduce lock contention
-        let _ = conn.pragma_update(None, "journal_mode", "WAL");
-        let _ = conn.pragma_update(None, "synchronous", "NORMAL");
-        let _ = conn.pragma_update(None, "cache_size", 10000);
-        let _ = conn.pragma_update(None, "temp_store", "memory");
-        let _ = conn.busy_timeout(std::time::Duration::from_millis(30_000));
-
-        Ok(conn)
+            .map_err(|e| format!("Failed to get positions database connection: {}", e))
     }
 
     /// Insert new position and return the assigned ID
@@ -1767,4 +1747,3 @@ impl PositionsDatabase {
         })
     }
 }
-

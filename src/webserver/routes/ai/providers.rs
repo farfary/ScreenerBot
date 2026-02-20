@@ -1,6 +1,11 @@
 //! AI provider management handlers
 
-use axum::{extract::{Path, State}, http::StatusCode, response::Response, Json};
+use axum::{
+    extract::{Path, State},
+    http::StatusCode,
+    response::Response,
+    Json,
+};
 use std::sync::Arc;
 
 use crate::apis::llm::{try_get_llm_manager, ChatMessage, ChatRequest, Provider};
@@ -171,7 +176,10 @@ pub async fn test_provider(
             );
 
             let preview = if response.content.chars().count() > 100 {
-                format!("{}...", response.content.chars().take(100).collect::<String>())
+                format!(
+                    "{}...",
+                    response.content.chars().take(100).collect::<String>()
+                )
             } else {
                 response.content.clone()
             };

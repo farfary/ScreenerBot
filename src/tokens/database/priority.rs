@@ -1,5 +1,5 @@
-use std::collections::HashMap;
 use rusqlite::{params, params_from_iter};
+use std::collections::HashMap;
 
 use crate::logger::{self, LogTag};
 use crate::tokens::types::{Priority, TokenError, TokenResult};
@@ -87,7 +87,6 @@ impl TokenDatabase {
 
         Ok(())
     }
-
 
     pub fn batch_update_priority(&self, mints: &[String], priority: i32) -> TokenResult<usize> {
         if mints.is_empty() {
@@ -186,7 +185,6 @@ impl TokenDatabase {
 
         Ok(result)
     }
-
 
     pub fn summarize_priorities(&self) -> TokenResult<Vec<(i32, u64)>> {
         let conn = self

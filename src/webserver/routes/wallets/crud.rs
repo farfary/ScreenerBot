@@ -9,9 +9,7 @@ use axum::{
 };
 
 use crate::logger::{self, LogTag};
-use crate::wallets::{
-    self, CreateWalletRequest, ImportWalletRequest, UpdateWalletRequest,
-};
+use crate::wallets::{self, CreateWalletRequest, ImportWalletRequest, UpdateWalletRequest};
 use crate::webserver::utils::{error_response, success_response};
 
 use super::types::{
@@ -190,7 +188,10 @@ pub async fn get_wallet(Path(id): Path<i64>) -> Response {
 }
 
 /// Update wallet metadata
-pub async fn update_wallet(Path(id): Path<i64>, Json(request): Json<UpdateWalletRequest>) -> Response {
+pub async fn update_wallet(
+    Path(id): Path<i64>,
+    Json(request): Json<UpdateWalletRequest>,
+) -> Response {
     match wallets::update_wallet(id, request).await {
         Ok(wallet) => success_response(wallet),
         Err(e) => {

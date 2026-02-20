@@ -114,7 +114,10 @@ impl PoolDecoder for RaydiumLegacyAmmDecoder {
         if token_decimals > 18 {
             logger::error(
                 LogTag::PoolDecoder,
-                &format!("Raydium Legacy AMM: Token decimals too large: {}", token_decimals),
+                &format!(
+                    "Raydium Legacy AMM: Token decimals too large: {}",
+                    token_decimals
+                ),
             );
             return None;
         }

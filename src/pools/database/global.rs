@@ -1,6 +1,6 @@
+use super::super::types::{PriceResult, PRICE_HISTORY_MAX_ENTRIES};
 /// Global database instance and convenience functions
 use super::operations::PoolsDatabase;
-use super::super::types::{PriceResult, PRICE_HISTORY_MAX_ENTRIES};
 use super::types::{BlacklistedAccountRecord, BlacklistedPoolRecord};
 
 use std::sync::LazyLock;
@@ -11,7 +11,8 @@ use std::sync::RwLock;
 // =============================================================================
 
 /// Global database instance - thread-safe using Lazy + RwLock pattern
-static GLOBAL_POOLS_DB: LazyLock<RwLock<Option<PoolsDatabase>>> = LazyLock::new(|| RwLock::new(None));
+static GLOBAL_POOLS_DB: LazyLock<RwLock<Option<PoolsDatabase>>> =
+    LazyLock::new(|| RwLock::new(None));
 
 /// Initialize the global pools database
 pub async fn initialize_database() -> Result<(), String> {

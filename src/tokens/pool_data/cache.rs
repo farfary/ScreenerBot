@@ -5,11 +5,11 @@ use crate::tokens::database;
 use crate::tokens::service::get_rate_coordinator;
 use crate::tokens::types::{TokenError, TokenPoolInfo, TokenPoolsSnapshot, TokenResult};
 use chrono::Utc;
-use std::sync::{LazyLock, OnceLock};
 use serde::{Deserialize, Serialize};
 use std::array;
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
+use std::sync::{LazyLock, OnceLock};
 use std::time::{Duration, Instant};
 use tokio::sync::{Mutex as AsyncMutex, Notify};
 
@@ -35,14 +35,25 @@ pub struct PoolCacheMetrics {
     pub stale_entries: usize,
 }
 
-static TOKEN_POOLS_CACHE: LazyLock<RwLock<HashMap<String, TokenPoolCacheEntry>>> =
-    LazyLock::new(|| RwLock::new(HashMap::new()));
+static TOKEN_POOLS_CACHE: LazyLock<moka::sync::Cache<String, TokenPoolCacheEntry>> =
+    LazyLock::new(|| {
+        moka::sync::Cache::builder()
+            .max_capacity(5_000)
+            .time_to_live(std::time::Duration::from_secs(TOKEN_POOLS_TTL_SECS * 2))
+            .build()
+    });
 
 static POOL_REFRESH_INFLIGHT: LazyLock<AsyncMutex<HashMap<String, std::sync::Arc<Notify>>>> =
     LazyLock::new(|| AsyncMutex::new(HashMap::new()));
 
-static POOL_PREFETCH_STATE: LazyLock<AsyncMutex<HashMap<String, Instant>>> =
-    LazyLock::new(|| AsyncMutex::new(HashMap::new()));
+static POOL_PREFETCH_STATE: LazyLock<moka::sync::Cache<String, Instant>> = LazyLock::new(|| {
+    moka::sync::Cache::builder()
+        .max_capacity(5_000)
+        .time_to_live(std::time::Duration::from_secs(
+            POOL_PREFETCH_DEBOUNCE_SECS * 3,
+        ))
+        .build()
+});
 
 static POOL_PREFETCH_SCHEDULER: LazyLock<Arc<PrefetchScheduler>> =
     LazyLock::new(|| Arc::new(PrefetchScheduler::new()));
@@ -193,12 +204,9 @@ impl PrefetchScheduler {
             )
             .await;
 
-            let mut prefetch_state = POOL_PREFETCH_STATE.lock().await;
-            prefetch_state.remove(&mint);
+            POOL_PREFETCH_STATE.invalidate(&mint);
         } else {
-            // Success path: also remove prefetch state to avoid memory leak
-            let mut prefetch_state = POOL_PREFETCH_STATE.lock().await;
-            prefetch_state.remove(&mint);
+            POOL_PREFETCH_STATE.invalidate(&mint);
         }
     }
 }
@@ -248,15 +256,12 @@ async fn schedule_background_refresh_if_due(
     }
 
     let now = Instant::now();
-    {
-        let mut prefetch_state = POOL_PREFETCH_STATE.lock().await;
-        if let Some(last) = prefetch_state.get(trimmed) {
-            if now.duration_since(*last) < Duration::from_secs(POOL_PREFETCH_DEBOUNCE_SECS) {
-                return;
-            }
+    if let Some(last) = POOL_PREFETCH_STATE.get(&trimmed.to_string()) {
+        if now.duration_since(last) < Duration::from_secs(POOL_PREFETCH_DEBOUNCE_SECS) {
+            return;
         }
-        prefetch_state.insert(trimmed.to_string(), now);
     }
+    POOL_PREFETCH_STATE.insert(trimmed.to_string(), now);
 
     enqueue_background_refresh(trimmed.to_string(), priority, allow_stale).await;
 }
@@ -282,9 +287,8 @@ fn is_pool_entry_fresh(entry: &TokenPoolCacheEntry) -> bool {
 }
 
 fn get_cached_pool_snapshot(mint: &str) -> Option<TokenPoolsSnapshot> {
-    let guard = TOKEN_POOLS_CACHE.read().ok()?;
-    let entry = guard.get(mint)?;
-    if is_pool_entry_fresh(entry) {
+    let entry = TOKEN_POOLS_CACHE.get(&mint.to_string())?;
+    if is_pool_entry_fresh(&entry) {
         Some(entry.snapshot.clone())
     } else {
         None
@@ -292,15 +296,13 @@ fn get_cached_pool_snapshot(mint: &str) -> Option<TokenPoolsSnapshot> {
 }
 
 fn get_cached_pool_snapshot_allow_stale(mint: &str) -> Option<TokenPoolsSnapshot> {
-    let guard = TOKEN_POOLS_CACHE.read().ok()?;
-    guard.get(mint).map(|entry| entry.snapshot.clone())
+    TOKEN_POOLS_CACHE
+        .get(&mint.to_string())
+        .map(|entry| entry.snapshot.clone())
 }
 
 fn store_pool_snapshot(snapshot: TokenPoolsSnapshot) {
-    let mut guard = TOKEN_POOLS_CACHE
-        .write()
-        .expect("token pools cache poisoned");
-    guard.insert(
+    TOKEN_POOLS_CACHE.insert(
         snapshot.mint.clone(),
         TokenPoolCacheEntry {
             refreshed_at: refreshed_at_from_snapshot(&snapshot),
@@ -593,7 +595,6 @@ pub async fn prefetch(mints: &[String]) {
     let mut schedule: Vec<(String, PrefetchPriority)> = Vec::new();
 
     {
-        let mut prefetch_state = POOL_PREFETCH_STATE.lock().await;
         for mint in mints {
             let trimmed = mint.trim();
             if trimmed.is_empty() {
@@ -606,8 +607,8 @@ pub async fn prefetch(mints: &[String]) {
                 }
             }
 
-            if let Some(last) = prefetch_state.get(trimmed) {
-                if now.duration_since(*last) < Duration::from_secs(POOL_PREFETCH_DEBOUNCE_SECS) {
+            if let Some(last) = POOL_PREFETCH_STATE.get(&trimmed.to_string()) {
+                if now.duration_since(last) < Duration::from_secs(POOL_PREFETCH_DEBOUNCE_SECS) {
                     continue;
                 }
             }
@@ -620,7 +621,7 @@ pub async fn prefetch(mints: &[String]) {
                 PrefetchPriority::Low
             };
 
-            prefetch_state.insert(trimmed.to_string(), now);
+            POOL_PREFETCH_STATE.insert(trimmed.to_string(), now);
             schedule.push((trimmed.to_string(), priority));
         }
     }
@@ -671,35 +672,18 @@ pub async fn fetch_immediate(mint: &str) -> TokenResult<Option<TokenPoolsSnapsho
 
 /// Clear pool cache (for testing/reset)
 pub fn clear_cache() {
-    if let Ok(mut guard) = TOKEN_POOLS_CACHE.write() {
-        guard.clear();
-    }
-
-    if let Ok(mut guard) = POOL_PREFETCH_STATE.try_lock() {
-        guard.clear();
-    }
+    TOKEN_POOLS_CACHE.invalidate_all();
+    POOL_PREFETCH_STATE.invalidate_all();
 }
 
 /// Get pool cache metrics
 pub fn metrics() -> PoolCacheMetrics {
-    let guard = match TOKEN_POOLS_CACHE.read() {
-        Ok(g) => g,
-        Err(_) => {
-            return PoolCacheMetrics::default();
-        }
-    };
-
-    let ttl = pool_cache_ttl();
-    let entries = guard.len();
-    let fresh_entries = guard
-        .values()
-        .filter(|e| e.refreshed_at.elapsed() <= ttl)
-        .count();
-    let stale_entries = entries - fresh_entries;
-
+    TOKEN_POOLS_CACHE.run_pending_tasks();
+    let entries = TOKEN_POOLS_CACHE.entry_count() as usize;
+    // moka auto-evicts expired entries, so all remaining are within TTL window
     PoolCacheMetrics {
         entries,
-        fresh_entries,
-        stale_entries,
+        fresh_entries: entries,
+        stale_entries: 0,
     }
 }

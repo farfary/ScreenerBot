@@ -6,8 +6,8 @@
 /// - Output settings (console, file, colors)
 use super::levels::LogLevel;
 use super::tags::LogTag;
-use std::sync::LazyLock;
 use std::collections::{HashMap, HashSet};
+use std::sync::LazyLock;
 use std::sync::{Arc, RwLock};
 
 /// Logger runtime configuration

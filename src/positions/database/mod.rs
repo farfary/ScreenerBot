@@ -1,3 +1,6 @@
+mod convenience;
+mod global;
+mod operations;
 /// Database module for positions management
 /// Replaces JSON file-based storage with high-performance SQLite database
 ///
@@ -6,11 +9,7 @@
 /// - ACID transactions for data integrity
 /// - High-performance batch operations
 /// - Comprehensive position state management
-
 mod types;
-mod operations;
-mod global;
-mod convenience;
 
 // Re-export types
 pub use types::{

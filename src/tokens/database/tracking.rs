@@ -66,8 +66,6 @@ impl TokenDatabase {
         Ok(())
     }
 
-
-
     // ========================================================================
     // COUNTS & TRACKING
     // ========================================================================
@@ -209,7 +207,6 @@ impl TokenDatabase {
 
         Ok(records)
     }
-
 }
 
 fn map_tracking_row(row: &rusqlite::Row) -> rusqlite::Result<UpdateTrackingInfo> {

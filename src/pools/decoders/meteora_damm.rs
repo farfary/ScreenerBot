@@ -170,7 +170,10 @@ impl PoolDecoder for MeteoraDammDecoder {
         if sol_decimals > 18 || token_decimals > 18 {
             logger::error(
                 LogTag::PoolDecoder,
-                &format!("Meteora DAMM: Decimals too large: sol={}, token={}", sol_decimals, token_decimals),
+                &format!(
+                    "Meteora DAMM: Decimals too large: sol={}, token={}",
+                    sol_decimals, token_decimals
+                ),
             );
             return None;
         }

@@ -3,6 +3,7 @@
 /// High-performance SQLite database for persistent event storage.
 /// Fresh schema (no migrations), split read/write pools, batched writes,
 /// and keyset-optimized queries.
+use crate::database;
 use crate::events::types::{Event, EventCategory, Severity};
 use crate::logger::{self, LogTag};
 use chrono::{DateTime, Utc};
@@ -22,7 +23,7 @@ const MAX_EVENT_AGE_DAYS: i64 = 30;
 
 /// Connection pool configuration
 const WRITE_POOL_MAX_SIZE: u32 = 2;
-const READ_POOL_MAX_SIZE: u32 = 10;
+const READ_POOL_MAX_SIZE: u32 = 4;
 const POOL_MIN_IDLE: u32 = 1;
 const CONNECTION_TIMEOUT_MS: u64 = 30_000;
 
@@ -43,9 +44,11 @@ impl EventsDatabase {
         let database_path = crate::paths::get_events_db_path();
         let database_path_str = database_path.to_string_lossy().to_string();
 
-        // Configure connection managers (same file for both pools)
-        let write_manager = SqliteConnectionManager::file(&database_path);
-        let read_manager = SqliteConnectionManager::file(&database_path);
+        // Configure connection managers with centralized PRAGMAs
+        let write_manager = SqliteConnectionManager::file(&database_path)
+            .with_init(|c| database::configure_connection(c, database::EVENTS_WRITE_DB));
+        let read_manager = SqliteConnectionManager::file(&database_path)
+            .with_init(|c| database::configure_connection(c, database::EVENTS_READ_DB));
 
         // Create write pool
         let write_pool = Pool::builder()
@@ -84,18 +87,6 @@ impl EventsDatabase {
     async fn initialize_schema(&mut self) -> Result<(), String> {
         // Use a write connection for initialization
         let conn = self.get_write_connection()?;
-
-        // Configure connection for optimal performance
-        conn.pragma_update(None, "journal_mode", "WAL")
-            .map_err(|e| format!("Failed to set journal mode: {}", e))?;
-        conn.pragma_update(None, "synchronous", "NORMAL")
-            .map_err(|e| format!("Failed to set synchronous mode: {}", e))?;
-        conn.pragma_update(None, "cache_size", 10000)
-            .map_err(|e| format!("Failed to set cache size: {}", e))?;
-        conn.pragma_update(None, "temp_store", "memory")
-            .map_err(|e| format!("Failed to set temp store: {}", e))?;
-        conn.busy_timeout(std::time::Duration::from_millis(30_000))
-            .map_err(|e| format!("Failed to set busy timeout: {}", e))?;
 
         // Create main events table (fresh schema)
         conn.execute(
@@ -178,40 +169,16 @@ impl EventsDatabase {
 
     /// Get write connection from pool
     fn get_write_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
-        let conn = self
-            .write_pool
+        self.write_pool
             .get()
-            .map_err(|e| format!("Failed to get events write connection: {}", e))?;
-        // Write-optimized PRAGMAs (database-level WAL already set during init)
-        conn.pragma_update(None, "journal_mode", "WAL")
-            .map_err(|e| format!("Failed to set journal mode: {}", e))?;
-        conn.pragma_update(None, "synchronous", "NORMAL")
-            .map_err(|e| format!("Failed to set synchronous mode: {}", e))?;
-        conn.pragma_update(None, "cache_size", 10000)
-            .map_err(|e| format!("Failed to set cache size: {}", e))?;
-        conn.pragma_update(None, "temp_store", "memory")
-            .map_err(|e| format!("Failed to set temp store: {}", e))?;
-        conn.busy_timeout(std::time::Duration::from_millis(CONNECTION_TIMEOUT_MS))
-            .map_err(|e| format!("Failed to set busy timeout: {}", e))?;
-        Ok(conn)
+            .map_err(|e| format!("Failed to get events write connection: {}", e))
     }
 
     /// Get read connection from pool
     fn get_read_connection(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
-        let conn = self
-            .read_pool
+        self.read_pool
             .get()
-            .map_err(|e| format!("Failed to get events read connection: {}", e))?;
-        // Read-optimized PRAGMAs
-        conn.pragma_update(None, "query_only", "1")
-            .map_err(|e| format!("Failed to set query_only: {}", e))?;
-        conn.pragma_update(None, "cache_size", 20000)
-            .map_err(|e| format!("Failed to set cache size: {}", e))?;
-        // 256MB mmap if supported
-        let _ = conn.pragma_update(None, "mmap_size", 268435456i64);
-        conn.busy_timeout(std::time::Duration::from_millis(CONNECTION_TIMEOUT_MS))
-            .map_err(|e| format!("Failed to set busy timeout: {}", e))?;
-        Ok(conn)
+            .map_err(|e| format!("Failed to get events read connection: {}", e))
     }
 
     /// Insert a single event

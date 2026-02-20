@@ -315,7 +315,9 @@ pub(super) fn find_wsol_wrap_deposit_lamports(
 }
 
 /// Detect wrap deposit by looking for Token Program syncNative instructions and measuring lamport delta on that account index
-pub(super) fn find_wrap_deposit_via_sync_native(tx_data: &crate::rpc::TransactionDetails) -> Option<u64> {
+pub(super) fn find_wrap_deposit_via_sync_native(
+    tx_data: &crate::rpc::TransactionDetails,
+) -> Option<u64> {
     let meta = tx_data.meta.as_ref()?;
     let pre = &meta.pre_balances;
     let post = &meta.post_balances;
@@ -707,7 +709,9 @@ pub(super) fn find_largest_system_transfer_from_wallet_excluding_tips(
 }
 
 /// Lightweight instruction scan for MEV/Jito tips (outer + inner), returning SOL units
-pub(super) fn detect_mev_tips_from_instructions_light(tx_data: &crate::rpc::TransactionDetails) -> f64 {
+pub(super) fn detect_mev_tips_from_instructions_light(
+    tx_data: &crate::rpc::TransactionDetails,
+) -> f64 {
     use crate::transactions::program_ids::is_mev_tip_address;
     let mut total_lamports: u64 = 0;
     let mut consider_ix = |ix: &serde_json::Value| {
@@ -878,4 +882,3 @@ pub(super) fn sum_inner_wsol_transfers_ui_to_wallet(
     }
     total_ui
 }
-

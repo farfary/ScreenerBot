@@ -11,9 +11,9 @@
 /// - Error resilience with fallback mechanisms
 /// - Thread-safe price access for concurrent operations
 use crate::logger::{self, LogTag};
-use std::sync::LazyLock;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use std::sync::LazyLock;
 use std::sync::RwLock as StdRwLock;
 use std::time::{Duration, Instant};
 use tokio::sync::Notify;

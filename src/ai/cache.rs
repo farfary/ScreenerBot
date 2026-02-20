@@ -1,24 +1,28 @@
 use crate::ai::types::{AiDecision, Priority};
-use dashmap::DashMap;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 /// Cached AI decision entry
+#[derive(Clone)]
 struct CachedEntry {
     decision: AiDecision,
-    cached_at: Instant,
+    cached_at: std::time::Instant,
 }
 
-/// AI response cache with TTL and priority support
+/// AI response cache with TTL and priority support — bounded moka cache (max 5K entries).
 pub struct AiCache {
-    cache: DashMap<String, CachedEntry>,
+    cache: moka::sync::Cache<String, CachedEntry>,
     ttl: Duration,
 }
 
 impl AiCache {
     pub fn new(ttl_seconds: u64) -> Self {
+        let ttl = Duration::from_secs(ttl_seconds);
         Self {
-            cache: DashMap::new(),
-            ttl: Duration::from_secs(ttl_seconds),
+            cache: moka::sync::Cache::builder()
+                .max_capacity(5_000)
+                .time_to_live(ttl)
+                .build(),
+            ttl,
         }
     }
 
@@ -32,8 +36,7 @@ impl AiCache {
         let cache_key = format!("{}:{}", evaluation_type, mint);
         let entry = self.cache.get(&cache_key)?;
         if entry.cached_at.elapsed() > self.ttl {
-            drop(entry); // Release read lock before removing
-            self.cache.remove(&cache_key);
+            self.cache.invalidate(&cache_key);
             return None;
         }
 
@@ -47,24 +50,20 @@ impl AiCache {
             cache_key,
             CachedEntry {
                 decision,
-                cached_at: Instant::now(),
+                cached_at: std::time::Instant::now(),
             },
         );
     }
 
     /// Clear all cache entries
     pub fn clear(&self) {
-        self.cache.clear();
+        self.cache.invalidate_all();
     }
 
     /// Get cache stats
     pub fn stats(&self) -> (usize, usize) {
-        let total = self.cache.len();
-        let fresh = self
-            .cache
-            .iter()
-            .filter(|e| e.cached_at.elapsed() <= self.ttl)
-            .count();
-        (total, fresh)
+        let total = self.cache.entry_count() as usize;
+        // With moka TTL, all entries should be fresh (TTL handles eviction)
+        (total, total)
     }
 }

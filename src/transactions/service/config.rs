@@ -1,9 +1,7 @@
 // Service configuration, constants, and deferred retry queue
 
 use chrono::{DateTime, Utc};
-use std::collections::BTreeMap;
-use std::sync::{Arc, LazyLock};
-use tokio::sync::Mutex;
+use std::sync::LazyLock;
 
 use crate::transactions::types::DeferredRetry;
 use crate::transactions::utils::{NORMAL_CHECK_INTERVAL_SECS, RPC_BATCH_SIZE};
@@ -30,40 +28,55 @@ pub const RETRY_BASE_DELAY_SECS: u64 = 2;
 // DEFERRED RETRY QUEUE
 // =============================================================================
 
-/// Global deferred retry queue
-/// Transactions are added here when they fail due to temporary issues like RPC indexing delays
-pub static DEFERRED_RETRIES: LazyLock<Arc<Mutex<BTreeMap<String, DeferredRetry>>>> =
-    LazyLock::new(|| Arc::new(Mutex::new(BTreeMap::new())));
+/// Global deferred retry queue — bounded moka cache (max 1K entries, 5min TTL).
+/// Transactions are added here when they fail due to temporary issues like RPC indexing delays.
+pub static DEFERRED_RETRIES: LazyLock<moka::sync::Cache<String, DeferredRetry>> =
+    LazyLock::new(|| {
+        moka::sync::Cache::builder()
+            .max_capacity(1_000)
+            .time_to_live(std::time::Duration::from_secs(300))
+            .build()
+    });
+
+/// Parallel key index for DEFERRED_RETRIES — moka doesn't expose iter().
+/// Keys are added on insert and removed on invalidate/get-miss.
+pub static DEFERRED_RETRY_KEYS: LazyLock<dashmap::DashSet<String>> =
+    LazyLock::new(|| dashmap::DashSet::new());
+
+/// Get all deferred retry keys (for iteration since moka has no iter()).
+pub fn get_deferred_retry_keys() -> Vec<String> {
+    DEFERRED_RETRY_KEYS.iter().map(|k| k.clone()).collect()
+}
 
 /// Add a transaction to the deferred retry queue
 pub async fn defer_transaction_retry(signature: String, delay_secs: i64, reason: String) {
     let now = Utc::now();
-    let retry = DeferredRetry {
-        signature: signature.clone(),
-        next_retry_at: now + chrono::Duration::seconds(delay_secs),
-        attempts: 1,
-        current_delay_secs: delay_secs,
-        last_error: Some(reason.clone()),
-        first_seen: now,
-    };
-
-    let mut deferred = DEFERRED_RETRIES.lock().await;
 
     // Check if already exists, increment attempts if so
-    if let Some(existing) = deferred.get_mut(&signature) {
+    if let Some(mut existing) = DEFERRED_RETRIES.get(&signature) {
         existing.attempts += 1;
         existing.current_delay_secs = delay_secs * (existing.attempts as i64);
         existing.next_retry_at = now + chrono::Duration::seconds(existing.current_delay_secs);
         existing.last_error = Some(reason);
+        DEFERRED_RETRIES.insert(signature.clone(), existing);
+        DEFERRED_RETRY_KEYS.insert(signature);
     } else {
-        deferred.insert(signature, retry);
+        let retry = DeferredRetry {
+            signature: signature.clone(),
+            next_retry_at: now + chrono::Duration::seconds(delay_secs),
+            attempts: 1,
+            current_delay_secs: delay_secs,
+            last_error: Some(reason),
+            first_seen: now,
+        };
+        DEFERRED_RETRIES.insert(signature.clone(), retry);
+        DEFERRED_RETRY_KEYS.insert(signature);
     }
 }
 
 /// Get count of deferred retries
 pub async fn get_deferred_retries_count() -> usize {
-    let deferred = DEFERRED_RETRIES.lock().await;
-    deferred.len()
+    DEFERRED_RETRIES.entry_count() as usize
 }
 
 // =============================================================================

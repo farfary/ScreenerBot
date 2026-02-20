@@ -1,7 +1,7 @@
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
-use std::sync::LazyLock;
 use std::collections::HashSet;
+use std::sync::LazyLock;
 use std::sync::Mutex as StdMutex;
 
 /// Number of consecutive failures before marking a token as permanently failed for market data

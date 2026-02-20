@@ -18,8 +18,9 @@ use super::processing::run_transaction_service;
 // =============================================================================
 
 /// Global transaction service manager instance
-pub static GLOBAL_TRANSACTION_MANAGER: LazyLock<Arc<Mutex<Option<Arc<Mutex<TransactionsManager>>>>>>
-    = LazyLock::new(|| Arc::new(Mutex::new(None)));
+pub static GLOBAL_TRANSACTION_MANAGER: LazyLock<
+    Arc<Mutex<Option<Arc<Mutex<TransactionsManager>>>>>,
+> = LazyLock::new(|| Arc::new(Mutex::new(None)));
 
 /// Global service running flag
 static SERVICE_RUNNING: LazyLock<Arc<Mutex<bool>>> = LazyLock::new(|| Arc::new(Mutex::new(false)));

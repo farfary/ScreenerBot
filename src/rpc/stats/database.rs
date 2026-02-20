@@ -7,6 +7,7 @@ use rusqlite::{params, OptionalExtension};
 use std::path::{Path, PathBuf};
 
 use super::types::*;
+use crate::database;
 use crate::rpc::types::{CircuitState, ProviderKind};
 
 /// Database path for RPC stats
@@ -34,9 +35,10 @@ impl RpcStatsDatabase {
                 .map_err(|e| format!("Failed to create directory: {}", e))?;
         }
 
-        let manager = SqliteConnectionManager::file(path);
+        let manager = SqliteConnectionManager::file(path)
+            .with_init(|c| database::configure_connection(c, database::RPC_STATS_DB));
         let pool = Pool::builder()
-            .max_size(5)
+            .max_size(3)
             .build(manager)
             .map_err(|e| format!("Failed to create connection pool: {}", e))?;
 
@@ -58,13 +60,6 @@ impl RpcStatsDatabase {
 
         conn.execute_batch(
             r#"
-            -- Enable WAL mode for better concurrency
-            PRAGMA journal_mode = WAL;
-            PRAGMA synchronous = NORMAL;
-            PRAGMA cache_size = 10000;
-            PRAGMA temp_store = MEMORY;
-            PRAGMA busy_timeout = 30000;
-
             -- Sessions table
             CREATE TABLE IF NOT EXISTS sessions (
                 id TEXT PRIMARY KEY,

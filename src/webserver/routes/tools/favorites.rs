@@ -40,11 +40,7 @@ pub async fn get_favorites_list(
 /// Add a new tool favorite
 pub async fn add_favorite(Json(request): Json<AddToolFavoriteRequest>) -> Response {
     // Validate tool_type
-    let valid_types = [
-        "buy_multi",
-        "sell_multi",
-        "token_watch",
-    ];
+    let valid_types = ["buy_multi", "sell_multi", "token_watch"];
     if !valid_types.contains(&request.tool_type.as_str()) {
         return error_response(
             axum::http::StatusCode::BAD_REQUEST,

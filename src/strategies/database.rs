@@ -1,14 +1,15 @@
+use crate::database;
 use crate::logger::{self, LogTag};
 use crate::strategies::types::{
     EvaluationResult, RiskLevel, Strategy, StrategyPerformance, StrategyTemplate, StrategyType,
 };
 use chrono::{DateTime, Utc};
-use std::sync::LazyLock;
 use r2d2::{Pool, PooledConnection};
 use r2d2_sqlite::SqliteConnectionManager;
 use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult};
 use std::path::Path;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::LazyLock;
 
 // Static flag to track if database has been initialized
 static STRATEGIES_DB_INITIALIZED: LazyLock<AtomicBool> = LazyLock::new(|| AtomicBool::new(false));
@@ -122,9 +123,10 @@ CREATE TABLE IF NOT EXISTS schema_version (
 
 static DB_POOL: LazyLock<Pool<SqliteConnectionManager>> = LazyLock::new(|| {
     let db_path = crate::paths::get_strategies_db_path();
-    let manager = SqliteConnectionManager::file(&db_path);
+    let manager = SqliteConnectionManager::file(&db_path)
+        .with_init(|c| database::configure_connection(c, database::STRATEGIES_DB));
     Pool::builder()
-        .max_size(10)
+        .max_size(3)
         .build(manager)
         .expect("Failed to create strategies database pool")
 });
@@ -147,18 +149,6 @@ pub fn init_strategies_db() -> Result<(), String> {
     }
 
     let conn = get_connection()?;
-
-    // Enable WAL mode for better concurrency
-    conn.execute_batch(
-        "
-        PRAGMA journal_mode = WAL;
-        PRAGMA synchronous = NORMAL;
-        PRAGMA cache_size = 10000;
-        PRAGMA temp_store = memory;
-        PRAGMA busy_timeout = 30000;
-    ",
-    )
-    .map_err(|e| format!("Failed to set pragmas: {}", e))?;
 
     // Create version table first
     conn.execute_batch(SCHEMA_VERSION_TABLE)

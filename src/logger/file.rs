@@ -7,10 +7,10 @@
 //! - Thread-safe concurrent writes
 
 use chrono::Local;
-use std::sync::LazyLock;
 use std::fs::{self, File, OpenOptions};
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
+use std::sync::LazyLock;
 use std::sync::{Arc, Mutex};
 
 /// File logging configuration

@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use rusqlite::{params, params_from_iter, Row, types::FromSql};
+use rusqlite::{params, params_from_iter, types::FromSql, Row};
 use std::collections::HashMap;
 
 use crate::logger::{self, LogTag};
@@ -207,11 +207,20 @@ impl TokenDatabase {
         "#;
 
         // PERF: When require_market_data=true, only load tokens with market data
-        // This reduces initial load from 144k to ~56k tokens (60% reduction)
+        // AND exclude tokens with stale market data (>7 days old).
+        // This reduces initial load from ~172k to ~30-50k tokens.
+        // Stale tokens are dead tokens that will never pass filtering anyway —
+        // excluding them saves ~122 MB of memory per filter snapshot.
+        // Cutoff is pre-computed to avoid per-row strftime() calls in SQLite.
         let where_clause = if require_market_data {
-            " WHERE (d.mint IS NOT NULL OR g.mint IS NOT NULL)"
+            let cutoff_secs = chrono::Utc::now().timestamp() - (7 * 24 * 60 * 60);
+            format!(
+                " WHERE (d.mint IS NOT NULL OR g.mint IS NOT NULL) \
+                  AND COALESCE(d.market_data_last_fetched_at, g.market_data_last_fetched_at) > {}",
+                cutoff_secs
+            )
         } else {
-            ""
+            String::new()
         };
 
         let query = if limit == 0 {
@@ -850,7 +859,6 @@ impl TokenDatabase {
         self.get_tokens_no_market(limit, offset, sort_by, sort_direction)
     }
 
-
     fn get_optional_market_data(
         &self,
         mint: &str,
@@ -1133,7 +1141,11 @@ pub(super) fn assemble_token(
     }
 }
 
-pub(super) fn read_row_value<T: FromSql>(row: &Row<'_>, index: usize, field: &str) -> TokenResult<T> {
+pub(super) fn read_row_value<T: FromSql>(
+    row: &Row<'_>,
+    index: usize,
+    field: &str,
+) -> TokenResult<T> {
     row.get(index)
         .map_err(|e| TokenError::Database(format!("Failed to read {}: {}", field, e)))
 }

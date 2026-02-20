@@ -92,6 +92,9 @@ impl WalletValidator {
         let conn =
             Connection::open(db_path).map_err(|e| format!("Failed to open {}: {}", db_path, e))?;
 
+        // Note: We don't configure PRAGMAs here since this is a short-lived read-only validation
+        // operation. For better performance in future, consider using the database pool instead.
+
         let query = format!(
             "SELECT value FROM {} WHERE key = 'current_wallet'",
             metadata_table

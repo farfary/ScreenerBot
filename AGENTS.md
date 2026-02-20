@@ -157,7 +157,7 @@ This section provides detailed descriptions of every major module in the Screene
 
 ### Config (src/config/)
 
-Macro-driven via `config_struct!`. Schema in `schemas/` with embedded defaults; values live in `data/config.toml`. Access: `with_config()` (sync) or `get_config_clone()` (async). Hot-reloadable. Metadata system for UI generation. Never hardcode. Files: `macros.rs` (config_struct! macro), `schemas/` (all config structures), `utils.rs` (load/reload/access), `metadata.rs` (UI metadata). Key schemas: `trader.rs`, `positions.rs`, `filtering.rs`, `swaps.rs`, `tokens.rs`, `rpc.rs`, `sol_price.rs`, `summary.rs`, `events.rs`, `webserver.rs`, `services.rs`, `monitoring.rs`, `ohlcv.rs`, `ai.rs`, `telegram.rs`, `gui.rs` (GuiConfig: zoom_level, DashboardConfig with interface/startup/navigation/lockscreen), `holder_watch.rs` (HolderWatchConfig: holder monitoring with thresholds and notifications), `wallet.rs` (dashboard metrics intervals, API cache TTL).
+Macro-driven via `config_struct!`. Schema in `schemas/` with embedded defaults; values live in `data/config.toml`. Access: `with_config()` (sync) or `get_config_clone()` (async). Hot-reloadable. Metadata system for UI generation. Never hardcode. Files: `macros.rs` (config_struct! macro), `schemas/` (all config structures), `utils.rs` (load/reload/access), `metadata.rs` (UI metadata). Key schemas: `trader.rs`, `positions.rs`, `filtering.rs`, `swaps.rs`, `tokens.rs`, `rpc.rs`, `sol_price.rs`, `summary.rs`, `events.rs`, `webserver.rs`, `services.rs`, `monitoring.rs`, `ohlcv.rs`, `ai.rs`, `telegram.rs`, `gui.rs` (GuiConfig: zoom_level, DashboardConfig with interface/startup/navigation/lockscreen), `holder_watch.rs` (HolderWatchConfig: holder monitoring with thresholds and notifications), `wallet.rs` (dashboard metrics intervals, API cache TTL), `performance.rs` (PerformanceConfig: memory_profile, cache sizing, filter limits — Phase A structural only, Phase D wiring), `maintenance.rs` (MaintenanceConfig: retention periods, vacuum/checkpoint intervals — Phase A structural only, Phase D wiring).
 
 ### Pools (src/pools/)
 
@@ -182,6 +182,24 @@ Balance monitoring with historical snapshots in SQLite (`data/wallet.db`). Track
 ### Transactions (src/transactions/)
 
 Real-time monitoring via WebSocket + bootstrap. Comprehensive DEX transaction analysis. Files: `manager.rs` (TransactionsManager lifecycle), `service/` (config.rs, lifecycle.rs, bootstrap.rs, processing.rs, websocket.rs, health.rs), `analyzer/` (classification, swap detection, P&L calculation, patterns.rs for pattern detection and risk assessment — 6-step pipeline), `processor/` (core.rs, extraction.rs, analysis.rs, helpers.rs), `fetcher.rs` (RPC batching with 50-account limit), `verifier.rs` (position integration), `websocket.rs` (real-time streaming), `database/` (types.rs, schema.rs, operations.rs, maintenance.rs, global.rs), `debug.rs` (diagnostics), `types.rs` (Transaction, TransactionType, SwapPnLInfo, AtaOperation), `utils.rs` (helpers), `program_ids.rs` (DEX program ID constants).
+
+### Database (src/database/)
+
+Shared SQLite configuration system for ALL databases. Files: `configure.rs` — Centralized PRAGMA configuration with DbPreset enum (Hot: 20MB cache + 256MB mmap, Standard: 8MB cache, Cold: 2MB cache), DbConfig struct with per-database constants (16 total), `configure_connection()` function that applies all PRAGMAs via `with_init()` on r2d2 pools. Every database MUST use this module — no ad-hoc PRAGMAs. Per-database constants: TOKENS_DB, TRANSACTIONS_DB, EVENTS_WRITE_DB, EVENTS_READ_DB, ACTIONS_WRITE_DB, ACTIONS_READ_DB, POSITIONS_DB, WALLET_MONITOR_DB, OHLCVS_DB, TOOLS_DB, STRATEGIES_DB, WALLETS_DB, RPC_STATS_DB, AI_CHAT_DB, AI_DB, POOLS_DB. Pool sizes: Hot=4-5, Standard=2-4, Cold=1-3. jemalloc is the global allocator on non-MSVC platforms (feature flag: "jemalloc", default on).
+
+#### Database Maintenance (src/database/maintenance.rs)
+
+Automated SQLite maintenance module that prevents disk fragmentation. Runs on startup + periodic 6-hour intervals.
+
+**Features:**
+- **Auto-migration**: Detects databases with `auto_vacuum=NONE` and migrates them to `INCREMENTAL` mode on first run (requires full VACUUM to update file header).
+- **Incremental vacuum**: Runs `incremental_vacuum(500)` to reclaim up to 500 freelist pages per maintenance cycle.
+- **Multi-database coverage**: Maintains 13 databases: tokens, transactions, positions, wallet, events, pools, strategies, ohlcvs, actions, tools, ai, ai_chat, rpc_stats.
+
+**Phase C Results:**
+- `pools.db`: 729 MB → ~0 MB after VACUUM (99% freelist, 0 live rows).
+- `ohlcvs.db`: 354 MB → 175 MB (49% reduction).
+- All databases now use `auto_vacuum=INCREMENTAL` to prevent future fragmentation.
 
 ### Trader (src/trader/)
 
@@ -408,11 +426,62 @@ Debug flags: `--debug-rpc`, `--debug-transactions`, `--debug-pool-fetcher`, `--d
 
 Log files: Daily rotation in `logs/screenerbot_YYYY-MM-DD_HH-MM-SS.log`. 24h retention.
 
+### Cache Architecture
+
+All caches use `moka::sync::Cache` (v0.12, W-TinyLFU eviction algorithm, thread-safe, lock-free concurrent access). One exception: PRICE_HISTORY stays as DashMap with periodic cleanup (hot-path requires `get_mut` at 100s/sec which moka doesn't support).
+
+**Key characteristics:**
+- `.get()` returns `Option<V>` — clones the value, not a reference
+- `.invalidate_all()` instead of `.clear()`
+- `.run_pending_tasks()` before metrics/counts for accurate numbers (moka uses lazy eviction)
+- `moka::sync::Cache` in v0.12 does NOT have `.iter()` — use parallel DashSet key index when iteration needed (see DEFERRED_RETRY_KEYS pattern)
+
+**Cache inventory:**
+
+| Cache | File | Type | Cap | TTL | Notes |
+|-------|------|------|-----|-----|-------|
+| PRICE_CACHE | pools/cache.rs | DashMap+TTL | ∞/TTL | 30s | Pool price snapshots |
+| PRICE_HISTORY | pools/cache.rs | DashMap+cleanup | bounded | 2h cleanup | Price ticks, hot-path get_mut |
+| GLOBAL_KNOWN_SIGNATURES | transactions/utils.rs | moka | 50K | - | Dedup processed sigs |
+| DECIMALS_CACHE | tokens/decimals.rs | moka | 100K | - | Token decimal places |
+| TOKEN_2022_CACHE | tokens/decimals.rs | moka | 100K | - | Token-2022 flag |
+| FAILED_CACHE | tokens/decimals.rs | moka | 50K | 24h | Failed decimal fetches (Phase C) |
+| TOKEN_POOLS_CACHE | tokens/pool_data/cache.rs | moka | 5K | 120s | Pool snapshots |
+| POOL_PREFETCH_STATE | tokens/pool_data/cache.rs | moka | 5K | 60s | Prefetch debounce |
+| LAST_TOKEN_ACCOUNTS_CHECK | positions/verifier.rs | moka | 5K | 1h | Verification throttle |
+| DEFERRED_RETRIES | transactions/service/config.rs | moka+DashSet | 1K | 5min | Retry queue |
+| API_RESPONSE_CACHE | tokens/store/cache.rs | moka | 1K | 5min | API dedup (Phase C) |
+| AI_CACHE | ai/cache.rs | moka | 5K | configurable | AI response cache |
+| DEXSCREENER_CACHE | tokens/store.rs | moka | 2K | 30s | Market data |
+| GECKOTERMINAL_CACHE | tokens/store.rs | moka | 2K | 60s | Market data |
+| RUGCHECK_CACHE | tokens/store.rs | moka | 3K | 5min | Security data |
+
+**Design rationale:**
+- All caches bounded to prevent memory exhaustion
+- W-TinyLFU eviction balances recency + frequency automatically
+- TTL-based expiry for time-sensitive data (market prices, API responses)
+- DEFERRED_RETRIES uses parallel DEFERRED_RETRY_KEYS DashSet to track keys since moka has no `.iter()`
+
+### Memory Hot Spots (Phase C Optimized)
+
+**Phase C Results:**
+- **Stale token filter** — Reduced from ~172K → ~15.6K tokens (91% reduction) via 7-day cutoff on `market_data_last_fetched_at` field in token filtering.
+- **RSS Improvement** — Median RSS: 1011 MB → 375 MB (62% reduction from baseline). Target ≤400 MB: **MET**.
+- **Database maintenance** — Automated VACUUM operations (see Database Maintenance below) prevent disk fragmentation.
+
+Remaining considerations:
+- **Token filter load** — Now loads ~15.6K tokens every 180s (~22 MB per load, dramatically reduced from 246 MB). Temporary allocation freed after ~6s.
+- **jemalloc page retention** — After large temporary allocations, jemalloc keeps freed pages mapped. RSS appears elevated but memory is available. Configure `dirty_decay_ms` for faster return.
+
 ---
 
 ## Conventions
 
 Extend, don't duplicate; no `_v2`/`_compat` forks. Reuse constants (e.g., `SOL_MINT`, `WSOL_MINT` in `tokens/decimals.rs`); avoid magic numbers. Errors: return `Result<T, String>`; DB uses SqliteResult; typed errors in `src/errors/`. Pricing uses PriceResult and the single-pool invariant (highest-liquidity SOL pair only).
+
+### Database Configuration Rules
+
+ALL databases must use `database::configure_connection()` — never set PRAGMAs directly. For pool connections: `SqliteConnectionManager::file(path).with_init(|c| configure_connection(c, preset))`. For single connections (Mutex pattern): call `configure_connection()` once after `Connection::open()`. When re-opening a connection (e.g., ai/database.rs reopen), must re-apply configure_connection. Per-database constants: TOKENS_DB, TRANSACTIONS_DB, EVENTS_WRITE_DB, EVENTS_READ_DB, ACTIONS_WRITE_DB, ACTIONS_READ_DB, POSITIONS_DB, WALLET_MONITOR_DB, OHLCVS_DB, TOOLS_DB, STRATEGIES_DB, WALLETS_DB, RPC_STATS_DB, AI_CHAT_DB, AI_DB, POOLS_DB. Pool sizes: Hot=4-5, Standard=2-4, Cold=1-3. jemalloc is the global allocator on non-MSVC platforms (feature flag: "jemalloc", default on).
 
 ---
 
@@ -450,6 +519,26 @@ Extend, don't duplicate; no `_v2`/`_compat` forks. Reuse constants (e.g., `SOL_M
 - Creating duplicate helper functions instead of extending `utils.js`.
 - Creating new files prematurely instead of extending existing patterns.
 - NEVER leave "dust comments" in place of removed code — remove completely.
+
+### Cache Pitfalls
+
+- moka `.get()` clones the value — use `Arc<T>` for large types to avoid expensive clones.
+- moka sync Cache has no `.iter()` in v0.12 — use parallel DashSet key index if iteration is needed.
+- Call `.run_pending_tasks()` before `.entry_count()` for accurate counts (moka uses lazy eviction).
+- When migrating from HashMap to moka, replace `.clear()` with `.invalidate_all()`.
+- DEFERRED_RETRIES uses parallel DEFERRED_RETRY_KEYS DashSet to track keys since moka has no iter().
+
+### Database Pitfalls
+
+- NEVER set mmap_size > 256MB — causes RSS bloat (tokens.db had 30GB mmap before Phase A fix).
+- r2d2 pools recycle connections — PRAGMAs set on pool creation are LOST unless using `with_init()`.
+- `auto_vacuum=INCREMENTAL` must be set BEFORE first write to take effect on new databases.
+- **SQLite auto_vacuum pitfall**: Setting `PRAGMA auto_vacuum = INCREMENTAL` per-connection does NOT retroactively change existing databases. The database file header remains unchanged. Must run `VACUUM` after setting the pragma to convert the database to incremental mode. The maintenance module handles this migration automatically.
+- events.db and actions.db have dual pools (read + write) — both need separate configure_connection constants.
+- Cleanup functions exist but need periodic wiring: cleanup_stats() (72h retention), cleanup_old_actions() (30d retention).
+- Never manually VACUUM or modify production databases — all DB maintenance must be done by the bot code itself.
+- `FOREIGN KEY constraint failed` during actions cleanup is a known pre-existing issue (non-critical).
+- **Stale token filter**: Uses pre-computed Rust timestamp (not SQLite strftime) for performance when filtering tokens with `market_data_last_fetched_at` older than 7 days.
 - `DataTable` column definitions — use `id` property (not `key`) and `container` property (not `containerId`).
 - Frontend style hardcoding — never use inline styles or hardcode colors; use CSS variables from `foundation.css`.
 - Skipping lifecycle hooks — always implement proper `init/activate/deactivate/dispose` for page modules.

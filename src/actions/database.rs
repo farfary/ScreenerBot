@@ -3,6 +3,7 @@
 /// High-performance SQLite database for persistent action storage.
 /// Follows EventsDatabase pattern with split read/write pools.
 use super::types::{Action, ActionId, ActionState, ActionStep, ActionType, StepStatus};
+use crate::database;
 use crate::logger::{self, LogTag};
 use crate::utils::get_wallet_address;
 use chrono::{DateTime, Utc};
@@ -22,7 +23,7 @@ const MAX_ACTION_AGE_DAYS: i64 = 30;
 
 /// Connection pool configuration
 const WRITE_POOL_MAX_SIZE: u32 = 2;
-const READ_POOL_MAX_SIZE: u32 = 10;
+const READ_POOL_MAX_SIZE: u32 = 4;
 const POOL_MIN_IDLE: u32 = 1;
 const CONNECTION_TIMEOUT_MS: u64 = 30_000;
 
@@ -43,9 +44,11 @@ impl ActionsDatabase {
         let database_path = crate::paths::get_actions_db_path();
         let database_path_str = database_path.to_string_lossy().to_string();
 
-        // Configure connection managers (same file for both pools)
-        let write_manager = SqliteConnectionManager::file(&database_path);
-        let read_manager = SqliteConnectionManager::file(&database_path);
+        // Configure connection managers with centralized PRAGMAs
+        let write_manager = SqliteConnectionManager::file(&database_path)
+            .with_init(|c| database::configure_connection(c, database::ACTIONS_WRITE_DB));
+        let read_manager = SqliteConnectionManager::file(&database_path)
+            .with_init(|c| database::configure_connection(c, database::ACTIONS_READ_DB));
 
         // Create write pool
         let write_pool = Pool::builder()
@@ -83,18 +86,6 @@ impl ActionsDatabase {
     /// Initialize database schema with all tables and indexes
     async fn initialize_schema(&mut self) -> Result<(), String> {
         let conn = self.get_write_connection()?;
-
-        // Configure connection for optimal performance
-        conn.pragma_update(None, "journal_mode", "WAL")
-            .map_err(|e| format!("Failed to set journal mode: {}", e))?;
-        conn.pragma_update(None, "synchronous", "NORMAL")
-            .map_err(|e| format!("Failed to set synchronous mode: {}", e))?;
-        conn.pragma_update(None, "cache_size", 10000)
-            .map_err(|e| format!("Failed to set cache size: {}", e))?;
-        conn.pragma_update(None, "temp_store", "memory")
-            .map_err(|e| format!("Failed to set temp store: {}", e))?;
-        conn.busy_timeout(std::time::Duration::from_millis(30_000))
-            .map_err(|e| format!("Failed to set busy timeout: {}", e))?;
 
         // Create main actions table
         conn.execute(

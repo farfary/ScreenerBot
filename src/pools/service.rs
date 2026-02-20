@@ -14,11 +14,11 @@ use crate::events::{record_safe, Event, EventCategory, Severity};
 use crate::logger::{self, LogTag};
 use crate::rpc::get_rpc_client;
 
-use std::sync::LazyLock;
 use solana_sdk::pubkey::Pubkey;
 use std::collections::HashMap;
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::LazyLock;
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use tokio::sync::Notify;
@@ -30,19 +30,24 @@ const FETCH_INTERVAL_MS: u64 = 500;
 static SERVICE_RUNNING: AtomicBool = AtomicBool::new(false);
 
 // Thread-safe global state using Lazy + RwLock pattern
-static GLOBAL_SHUTDOWN_HANDLE: LazyLock<RwLock<Option<Arc<Notify>>>> = LazyLock::new(|| RwLock::new(None));
+static GLOBAL_SHUTDOWN_HANDLE: LazyLock<RwLock<Option<Arc<Notify>>>> =
+    LazyLock::new(|| RwLock::new(None));
 
 // =============================================================================
 // POOL MONITORING CONFIGURATION
 // =============================================================================
 
 // Debug override for token monitoring (used by debug tools)
-static DEBUG_TOKEN_OVERRIDE: LazyLock<RwLock<Option<Vec<String>>>> = LazyLock::new(|| RwLock::new(None));
+static DEBUG_TOKEN_OVERRIDE: LazyLock<RwLock<Option<Vec<String>>>> =
+    LazyLock::new(|| RwLock::new(None));
 
 // Service components (will be initialized when service starts)
-static POOL_DISCOVERY: LazyLock<RwLock<Option<Arc<PoolDiscovery>>>> = LazyLock::new(|| RwLock::new(None));
-static POOL_ANALYZER: LazyLock<RwLock<Option<Arc<PoolAnalyzer>>>> = LazyLock::new(|| RwLock::new(None));
-static ACCOUNT_FETCHER: LazyLock<RwLock<Option<Arc<AccountFetcher>>>> = LazyLock::new(|| RwLock::new(None));
+static POOL_DISCOVERY: LazyLock<RwLock<Option<Arc<PoolDiscovery>>>> =
+    LazyLock::new(|| RwLock::new(None));
+static POOL_ANALYZER: LazyLock<RwLock<Option<Arc<PoolAnalyzer>>>> =
+    LazyLock::new(|| RwLock::new(None));
+static ACCOUNT_FETCHER: LazyLock<RwLock<Option<Arc<AccountFetcher>>>> =
+    LazyLock::new(|| RwLock::new(None));
 static PRICE_CALCULATOR: LazyLock<RwLock<Option<Arc<PriceCalculator>>>> =
     LazyLock::new(|| RwLock::new(None));
 

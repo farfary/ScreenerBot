@@ -3,9 +3,9 @@
 //! Provides in-memory session token storage with expiration handling.
 //! Sessions are ephemeral and cleared on server restart.
 
-use std::sync::LazyLock;
 use rand::Rng;
 use std::collections::HashMap;
+use std::sync::LazyLock;
 use std::sync::RwLock;
 
 use crate::config;
@@ -20,7 +20,8 @@ pub struct Session {
 }
 
 /// Global session storage
-static SESSIONS: LazyLock<RwLock<HashMap<String, Session>>> = LazyLock::new(|| RwLock::new(HashMap::new()));
+static SESSIONS: LazyLock<RwLock<HashMap<String, Session>>> =
+    LazyLock::new(|| RwLock::new(HashMap::new()));
 
 /// Generate a cryptographically random 64-character alphanumeric session token
 pub fn generate_session_token() -> String {

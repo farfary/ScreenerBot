@@ -10,12 +10,12 @@ use std::collections::HashMap;
 use crate::logger::{self, LogTag};
 use crate::transactions::{types::*, utils::*};
 
+use super::operations::TransactionDatabase;
 use super::schema::DATABASE_SCHEMA_VERSION;
 use super::types::{
     DatabaseStats, IntegrityReport, TransactionCursor, TransactionListFilters,
     TransactionListResult, TransactionListRow, WalletFlowExportRow,
 };
-use super::operations::TransactionDatabase;
 
 // =============================================================================
 // IMPLEMENTATION - DATABASE STATISTICS AND MAINTENANCE
@@ -1223,4 +1223,3 @@ mod tests {
         assert!(TransactionDatabase::row_matches_filters(&row, &filters));
     }
 }
-

@@ -80,7 +80,8 @@ impl PromptBuilder {
                     .iter()
                     .map(|i| {
                         // Sanitize content: strip lines starting with "SYSTEM:" or "==="
-                        let sanitized = i.content
+                        let sanitized = i
+                            .content
                             .lines()
                             .filter(|line| {
                                 let trimmed = line.trim();
@@ -93,7 +94,7 @@ impl PromptBuilder {
                     .collect();
 
                 let mut combined = formatted.join("\n\n");
-                
+
                 // Limit total instruction content length
                 if combined.len() > MAX_INSTRUCTION_CONTENT_LENGTH {
                     combined.truncate(MAX_INSTRUCTION_CONTENT_LENGTH);

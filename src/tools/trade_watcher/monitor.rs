@@ -2,9 +2,9 @@
 //!
 //! Monitors pools for trades and triggers actions based on watch configuration.
 
-use std::sync::LazyLock;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
+use std::sync::LazyLock;
 use tokio::sync::RwLock;
 
 use super::types::{DetectedTrade, PoolSource, TradeMonitorStatus, WatchType};

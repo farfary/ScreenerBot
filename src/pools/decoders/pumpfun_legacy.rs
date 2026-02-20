@@ -198,7 +198,10 @@ impl PumpFunLegacyDecoder {
         if token_decimals > 18 {
             logger::error(
                 LogTag::PoolDecoder,
-                &format!("PumpFun bonding curve {} token decimals too large: {}", pool_account, token_decimals),
+                &format!(
+                    "PumpFun bonding curve {} token decimals too large: {}",
+                    pool_account, token_decimals
+                ),
             );
             return None;
         }

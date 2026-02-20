@@ -1,5 +1,7 @@
 use super::schemas::Config;
 use crate::logger::{self, LogTag};
+use solana_sdk::pubkey::Pubkey;
+use solana_sdk::signature::{Keypair, Signer};
 /// Configuration utilities - loading, reloading, and access helpers
 ///
 /// This module provides utility functions for working with the configuration system:
@@ -8,8 +10,6 @@ use crate::logger::{self, LogTag};
 /// - Thread-safe access helpers
 /// - File watching for automatic reloads
 use std::sync::OnceLock;
-use solana_sdk::pubkey::Pubkey;
-use solana_sdk::signature::{Keypair, Signer};
 use std::sync::RwLock;
 
 /// Global configuration instance

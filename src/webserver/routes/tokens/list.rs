@@ -1,10 +1,6 @@
 //! Token listing, stats, filtering, and search handlers
 
-use axum::{
-    extract::Query,
-    http::StatusCode,
-    Json,
-};
+use axum::{extract::Query, http::StatusCode, Json};
 use std::collections::HashMap;
 
 use super::types::*;

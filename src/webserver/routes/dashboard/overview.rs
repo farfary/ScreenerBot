@@ -18,9 +18,7 @@ use super::utils::format_uptime;
 
 /// GET /api/dashboard/overview
 /// Get comprehensive dashboard overview
-pub async fn get_dashboard_overview(
-    State(state): State<Arc<AppState>>,
-) -> Json<DashboardOverview> {
+pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<DashboardOverview> {
     // Return demo data if demo mode is enabled
     if demo::is_demo_mode() {
         return Json(demo::get_demo_dashboard_overview());
