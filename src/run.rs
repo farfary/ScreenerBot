@@ -410,7 +410,11 @@ fn register_all_services(manager: &mut ServiceManager) {
     );
 }
 
-/// Wait for shutdown signal (Ctrl+C, SIGTERM, SIGHUP, SIGQUIT on Unix)
+/// Wait for shutdown signal (Ctrl+C, SIGTERM, SIGQUIT on Unix)
+///
+/// NOTE: SIGHUP is intentionally NOT handled. SIGHUP is sent when a terminal
+/// disconnects (e.g., SSH session closes, nohup usage). A headless trading bot
+/// must survive terminal disconnects. Use SIGTERM or Ctrl+C to stop the bot.
 async fn wait_for_shutdown_signal() -> Result<(), String> {
     logger::info(
         LogTag::System,
@@ -426,15 +430,12 @@ async fn wait_for_shutdown_signal() -> Result<(), String> {
             signal(SignalKind::interrupt()).map_err(|e| format!("Failed to bind SIGINT: {}", e))?;
         let mut sigterm = signal(SignalKind::terminate())
             .map_err(|e| format!("Failed to bind SIGTERM: {}", e))?;
-        let mut sighup =
-            signal(SignalKind::hangup()).map_err(|e| format!("Failed to bind SIGHUP: {}", e))?;
         let mut sigquit =
             signal(SignalKind::quit()).map_err(|e| format!("Failed to bind SIGQUIT: {}", e))?;
 
         tokio::select! {
             _ = sigint.recv() => "SIGINT",
             _ = sigterm.recv() => "SIGTERM",
-            _ = sighup.recv() => "SIGHUP",
             _ = sigquit.recv() => "SIGQUIT",
         }
     };

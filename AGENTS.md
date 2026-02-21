@@ -445,6 +445,35 @@ Required elements: Full identifiers (never truncate mint addresses), contextual 
 
 Debug flags: `--debug-rpc`, `--debug-transactions`, `--debug-pool-fetcher`, `--debug-websocket`, `--debug-webserver`, `--debug-wallet`, `--debug-ohlcv`.
 
+### Running the Bot (headless / nohup)
+
+```bash
+# Standard headless run (survives terminal disconnect)
+nohup ./target/release/screenerbot > /tmp/screenerbot.log 2>&1 &
+echo $! > /tmp/screenerbot.pid
+
+# With debug logging
+nohup ./target/release/screenerbot --debug-webserver --debug-trader > /tmp/screenerbot.log 2>&1 &
+
+# Custom port
+nohup ./target/release/screenerbot --port 9000 --host 0.0.0.0 > /tmp/screenerbot.log 2>&1 &
+
+# Stop gracefully (SIGTERM)
+kill $(cat /tmp/screenerbot.pid)
+
+# Check status
+ps -p $(cat /tmp/screenerbot.pid) -o pid,rss,etime
+```
+
+**Signal handling:**
+- SIGINT (Ctrl+C) → graceful shutdown
+- SIGTERM (`kill <PID>`) → graceful shutdown
+- SIGQUIT → graceful shutdown
+- SIGHUP → **ignored** (bot survives terminal disconnect / nohup)
+- Second Ctrl+C during shutdown → immediate force exit
+
+**⚠️ Pitfall:** SIGHUP was previously treated as shutdown signal (fixed 2026-02-21). If running old builds, bot will die when terminal disconnects even with nohup.
+
 Log files: Daily rotation in `logs/screenerbot_YYYY-MM-DD_HH-MM-SS.log`. 24h retention.
 
 ### Cache Architecture
