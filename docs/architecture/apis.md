@@ -1,6 +1,6 @@
 # APIs Module — Architecture
 
-> ScreenerBot External API Clients — February 2026
+> ScreenerBot external HTTP integrations (market data, security analysis, token discovery, LLM providers) — February 2026
 
 ---
 
@@ -8,60 +8,159 @@
 
 1. [Overview](#1-overview)
 2. [File Structure](#2-file-structure)
-3. [API Manager](#3-api-manager)
-4. [Client Implementations](#4-client-implementations)
-5. [Rate Limiting](#5-rate-limiting)
-6. [Caching Strategy](#6-caching-strategy)
-7. [Module Connections](#7-module-connections)
+3. [Core Primitives](#3-core-primitives)
+4. [ApiManager (Global Singleton)](#4-apimanager-global-singleton)
+5. [Market / Discovery Clients](#5-market--discovery-clients)
+6. [Security Clients (Rugcheck)](#6-security-clients-rugcheck)
+7. [SOL Price Background Service](#7-sol-price-background-service)
+8. [LLM Providers Submodule](#8-llm-providers-submodule)
+9. [Error Handling & Observability](#9-error-handling--observability)
+10. [Module Connections](#10-module-connections)
 
 ---
 
 ## 1. Overview
 
-The APIs module manages all external (non-RPC) API clients: DexScreener, GeckoTerminal, Rugcheck, Jupiter, CoinGecko, and DefiLlama. Each client has independent rate limiting, error handling, and response parsing.
+The `apis` module is ScreenerBot's integration layer for **external HTTP APIs** (anything that is not Solana RPC):
 
-**Key characteristics:**
-- Singleton `ApiManager` aggregating all clients
-- Per-client and per-endpoint rate limiting
-- Typed response parsing (serde)
-- Fallback chains (e.g., price from DexScreener → GeckoTerminal → CoinGecko)
-- moka caches for frequently accessed data
+* **Market data / pool discovery**: DexScreener, GeckoTerminal
+* **Security**: Rugcheck
+* **Token discovery / trends**: Jupiter
+* **Reference datasets**: CoinGecko, DefiLlama
+* **AI providers**: multiple LLM backends (OpenAI, Anthropic, Groq, etc.)
 
-**41 files, ~10,422 lines**
+### Design goals
+
+* **One global instance** per API client (true global rate limiting and consistent stats).
+* **Centralized rate limiting** implemented in-process (per client or per endpoint).
+* **Per-client stats** (requests/success/failure/latency + last error) exposed to the dashboard.
+* **Strict enable/disable gating** via config so discovery features can be turned off cleanly.
+
+### Non-goals (by design)
+
+* **No shared response cache inside `apis/`**.
+  * Caching is done by caller modules (e.g. `tokens`, `filtering`, `pools`) using their own moka caches and DBs.
 
 ---
 
 ## 2. File Structure
 
-```
+```text
 src/apis/
-├── mod.rs              # Module declarations, ApiManager
-├── manager.rs          # ApiManager singleton
-├── dexscreener/        # DexScreener client (10 endpoints)
-│   ├── client.rs
-│   ├── types.rs
-│   └── rate_limiter.rs # Per-endpoint rate limiting
-├── geckoterminal/      # GeckoTerminal client (12 endpoints)
-│   ├── client.rs
+├── mod.rs                 Module root (re-exports, public entrypoints)
+├── manager.rs             ApiManager singleton (LazyLock<Arc<ApiManager>>)
+├── client.rs              HttpClient + RateLimiter primitives
+├── stats.rs               ApiStats + ApiStatsTracker (atomic counters + timestamps)
+├── sol_price.rs           SOL/USD price background task + global cache
+├── dexscreener/
+│   ├── mod.rs             DexScreener client (multi-endpoint rate limiting)
+│   └── types.rs           Serde response types + conversions
+├── geckoterminal/
+│   ├── mod.rs             GeckoTerminal client (per-client limiter)
+│   └── types.rs           Serde response types + conversions
+├── rugcheck/
+│   ├── mod.rs             Rugcheck client (returns ApiError)
+│   └── types.rs           Serde response types + flexible deserializers
+├── jupiter/
+│   ├── mod.rs             Jupiter discovery client
+│   └── types.rs           Serde types (JupiterToken, etc.)
+├── coingecko/
+│   ├── mod.rs             Coin list (platform addresses) client
 │   └── types.rs
-├── rugcheck/           # Rugcheck client (4 endpoints)
-│   ├── client.rs
+├── defillama/
+│   ├── mod.rs             Protocols + prices/current client
 │   └── types.rs
-├── jupiter/            # Jupiter client (token list, prices)
-│   ├── client.rs
-│   └── types.rs
-├── coingecko/          # CoinGecko client (price, market data)
-│   ├── client.rs
-│   └── types.rs
-├── defillama/          # DefiLlama client (TVL, protocol data)
-│   ├── client.rs
-│   └── types.rs
-└── helpers.rs          # Shared HTTP utilities
+└── llm/
+    ├── mod.rs             Provider enum + LlmClient trait + LlmManager singleton (OnceCell)
+    ├── types.rs           Provider-agnostic request/response DTOs
+    └── <provider>/...      Per-provider modules (openai/, anthropic/, groq/, ...)
 ```
 
 ---
 
-## 3. API Manager
+## 3. Core Primitives
+
+### 3.1 RateLimiter (requests per minute)
+
+**File:** `src/apis/client.rs`
+
+`RateLimiter` enforces **single-flight** external requests and a **minimum interval** derived from `max_per_minute`:
+
+```rust
+pub struct RateLimiter {
+    semaphore: Arc<Semaphore>,               // 1 concurrent request
+    last_request: Arc<Mutex<Option<Instant>>>,
+    min_interval: Duration,                  // 60s / max_per_minute
+    max_per_minute: usize,
+}
+```
+
+Usage pattern:
+
+```rust
+let guard = limiter.acquire().await?;
+let resp = reqwest_builder.send().await;
+drop(guard); // releases permit
+```
+
+Notes:
+* This is intentionally conservative (1 concurrent request) to avoid burst bans.
+* Some clients use **one limiter per client**, others (DexScreener) use **one limiter per endpoint**.
+
+### 3.2 HttpClient (reqwest wrapper)
+
+**File:** `src/apis/client.rs`
+
+`HttpClient` wraps a `reqwest::Client` configured with a timeout:
+
+```rust
+pub struct HttpClient {
+    client: Client,
+    timeout: Duration,
+}
+```
+
+Clients either:
+* Use `HttpClient` directly (`RugcheckClient`, `JupiterClient`, `CoinGeckoClient`, `DefiLlamaClient`), or
+* Use `reqwest::Client` directly and apply per-request timeout (`DexScreenerClient`, `GeckoTerminalClient`).
+
+### 3.3 ApiStatsTracker (per-client metrics)
+
+**File:** `src/apis/stats.rs`
+
+Each API client owns `Arc<ApiStatsTracker>` and records:
+
+* total/success/failed requests (atomic)
+* cache hit/miss counters (atomic; mostly used by callers, but network errors often record a miss)
+* last request/success timestamps
+* last error timestamp + message
+* rolling average latency (stored behind `RwLock<f64>`)
+
+```rust
+pub struct ApiStatsTracker {
+    total_requests: AtomicU64,
+    successful_requests: AtomicU64,
+    failed_requests: AtomicU64,
+    cache_hits: AtomicU64,
+    cache_misses: AtomicU64,
+    last_request_time: Arc<RwLock<Option<DateTime<Utc>>>>,
+    last_success_time: Arc<RwLock<Option<DateTime<Utc>>>>,
+    last_error: Arc<RwLock<Option<(DateTime<Utc>, String)>>>,
+    avg_response_time: Arc<RwLock<f64>>,
+}
+```
+
+Important behavior:
+* `record_error_with_event()` samples events (every ~10th failure) to avoid spamming the events DB.
+* Public/dashboard-facing stats are returned as `ApiStats { last_error_time, last_error_message, ... }`.
+
+---
+
+## 4. ApiManager (Global Singleton)
+
+**File:** `src/apis/manager.rs`
+
+`ApiManager` is the global aggregator for the non-LLM API clients:
 
 ```rust
 pub struct ApiManager {
@@ -74,135 +173,240 @@ pub struct ApiManager {
 }
 ```
 
-Global singleton accessed via:
-```rust
-pub fn api_manager() -> &'static ApiManager
-```
-
----
-
-## 4. Client Implementations
-
-### DexScreener
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `get_token_profiles()` | GET `/token-profiles/latest/v1` | Latest token profiles |
-| `get_token_boosts()` | GET `/token-boosts/latest/v1` | Boosted tokens |
-| `get_pair(chain, address)` | GET `/latest/dex/pairs/{chain}/{address}` | Single pair data |
-| `get_pairs_by_token(mint)` | GET `/latest/dex/tokens/{mint}` | All pairs for token |
-| `search_pairs(query)` | GET `/latest/dex/search?q={query}` | Search pairs |
-| `get_orders(mint)` | GET `/orders/v1/solana/{mint}` | Token orders |
-| `get_token_info(mint)` | GET `/token-profiles/v1/solana/{mint}` | Token metadata |
-
-**Rate limits:** 300 req/min global, per-endpoint limits for burst-prone endpoints.
-
-### GeckoTerminal
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `get_trending_pools(network)` | Trending pools | Market discovery |
-| `get_new_pools(network)` | New pools | Early detection |
-| `get_pool(network, address)` | Pool details | Price/volume data |
-| `get_pools_multi(addresses)` | Multiple pools | Batch lookup |
-| `get_token(network, address)` | Token info | Metadata |
-| `get_token_pools(address)` | Token's pools | Pool discovery |
-| `get_ohlcv(pool, timeframe)` | OHLCV candles | Chart data |
-| `get_trades(pool)` | Recent trades | Trade history |
-| `search(query)` | Search | Token/pool search |
-| `get_top_pools(network)` | Top pools | Volume leaders |
-| `get_network_info(network)` | Network info | Chain metadata |
-| `get_token_info(address)` | Extended token info | Full metadata |
-
-**Rate limit:** 30 req/min.
-
-### Rugcheck
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `get_token_report(mint)` | GET `/v1/tokens/{mint}/report` | Risk assessment |
-| `get_token_report_summary(mint)` | GET `/v1/tokens/{mint}/report/summary` | Quick risk score |
-| `get_token_locks(mint)` | GET `/v1/tokens/{mint}/locks` | LP lock status |
-| `get_recent_scams()` | GET `/v1/stats/recent-scams` | Known scam list |
-
-**Rate limit:** 60 req/min.
-
-### Jupiter
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `get_token_list()` | GET `/tokens` | All listed tokens |
-| `get_price(mints)` | GET `/price?ids=...` | Token prices (batch) |
-
-**Rate limit:** Unlimited (free tier) or configurable API key tier.
-
-### CoinGecko
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `get_sol_price()` | SOL price in USD | Portfolio valuation |
-| `get_token_price(ids)` | Token prices | Cross-reference |
-
-### DefiLlama
-
-| Endpoint | Method | Purpose |
-|----------|--------|---------|
-| `get_protocols()` | Protocol data | TVL comparison |
-| `get_token_prices(addresses)` | Token prices | Another price source |
-
----
-
-## 5. Rate Limiting
-
-### DexScreener (most complex)
-
-Per-endpoint rate limiters using GCRA:
+### 4.1 Singleton access
 
 ```rust
-pub struct DexScreenerRateLimiter {
-    global: Governor,              // 300/min
-    search: Governor,              // 20/min (search is expensive)
-    token: Governor,               // 60/min
-    pair: Governor,                // 120/min
+static GLOBAL_API_MANAGER: LazyLock<Arc<ApiManager>> =
+    LazyLock::new(|| Arc::new(ApiManager::new()));
+
+pub fn get_api_manager() -> Arc<ApiManager> {
+    GLOBAL_API_MANAGER.clone()
 }
 ```
 
-### Other Clients
+### 4.2 Enable/disable gating (config-driven)
 
-Simple per-client rate limiters:
+`ApiManager::new()` reads config (`get_config_clone()`) and computes `enabled` flags based on:
 
-| Client | Rate Limit | Implementation |
-|--------|-----------|----------------|
-| GeckoTerminal | 30/min | Governor |
-| Rugcheck | 60/min | Governor |
-| Jupiter | Unlimited / tier-based | Optional Governor |
-| CoinGecko | 10-50/min (plan dependent) | Governor |
-| DefiLlama | 50/min | Governor |
+* global discovery toggle: `cfg.tokens.discovery.enabled`
+* per-source toggles: `cfg.tokens.sources.<api>.enabled`
+* per-discovery toggles: `cfg.tokens.discovery.<api>.enabled`
+
+Example (DexScreener / GeckoTerminal):
+
+```rust
+let discovery_enabled = cfg.tokens.discovery.enabled;
+let dexscreener_enabled =
+    cfg.tokens.sources.dexscreener.enabled && discovery_enabled && cfg.tokens.discovery.dexscreener.enabled;
+```
+
+### 4.3 Initialization resilience
+
+Each client construction is guarded:
+
+* Try to create enabled client (with configured timeout/rate).
+* If construction fails, log a warning and create a **disabled** client with default constants.
+
+This ensures the bot can boot even if a particular client fails to initialize.
+
+### 4.4 Aggregated stats
+
+`ApiManager::get_all_stats()` calls `get_stats()` on every client and returns `ApiManagerStats` (serde-serializable).
 
 ---
 
-## 6. Stats & Tracking
+## 5. Market / Discovery Clients
 
-The APIs module includes `ApiStatsTracker` for monitoring API usage and performance per client. No response caching is done within the APIs module itself — caching is handled by caller modules (tokens, filtering, pools) using their own moka caches.
+### 5.1 DexScreener
+
+**Files:** `src/apis/dexscreener/mod.rs`, `src/apis/dexscreener/types.rs`  
+**Base URL:** `https://api.dexscreener.com`  
+**Default chain:** `"solana"`
+
+Key traits:
+* Uses **multiple** `RateLimiter`s: one per endpoint category (`limiter_token_pools`, `limiter_search`, ...).
+* Uses a shared `get_json()` helper that:
+  * enforces enabled flag,
+  * acquires limiter guard,
+  * sends request with timeout,
+  * records stats,
+  * records sampled error events,
+  * performs basic 429 backoff (`sleep(5s)`).
+
+Primary high-traffic methods:
+* `fetch_token_pools(token_address, chain_id)` — **ALL** pools for one token (`token-pairs/v1/...`)
+* `fetch_token_batch(addresses, chain_id)` — **best pair per token** for up to 30 tokens (`tokens/v1/...`)
+
+Other implemented endpoints (see module header in code for the authoritative list):
+* pair lookup, search, token profiles/boosts, orders, token info, supported chains
+
+### 5.2 GeckoTerminal
+
+**Files:** `src/apis/geckoterminal/mod.rs`, `src/apis/geckoterminal/types.rs`  
+**Base URL:** `https://api.geckoterminal.com/api/v2`  
+**Default network:** `"solana"`
+
+Key traits:
+* One `RateLimiter` per client instance (default 30/min).
+* `get_json()` helper records stats and performs simple 429 backoff (`sleep(10s)`).
+* Implements pool discovery + OHLCV/trades endpoints (see module header in code).
+
+### 5.3 Jupiter (discovery/trends)
+
+**Files:** `src/apis/jupiter/mod.rs`, `src/apis/jupiter/types.rs`  
+**Base URL:** `https://lite-api.jup.ag/tokens/v2`
+
+Key traits:
+* Uses `HttpClient`.
+* Returns `Result<T, crate::tokens::types::ApiError>`.
+* Records `record_cache_miss()` on request transport failures to reflect “no usable data”.
+
+Implemented endpoints:
+* `/recent`
+* `/toporganicscore/{interval}`
+* `/toptraded/{interval}`
+* `/toptrending/{interval}`
+
+### 5.4 CoinGecko (reference dataset)
+
+**Files:** `src/apis/coingecko/mod.rs`, `src/apis/coingecko/types.rs`  
+**Endpoint:** `/coins/list?include_platform=true`
+
+Key traits:
+* Uses a demo-tier API key from `COINGECKO_API_KEY` env var via header `x-cg-demo-api-key`.
+* Provides helpers to extract Solana addresses from the returned “platforms” map:
+  * `extract_solana_addresses()`
+  * `extract_solana_addresses_with_names()`
+
+### 5.5 DefiLlama (reference dataset)
+
+**Files:** `src/apis/defillama/mod.rs`, `src/apis/defillama/types.rs`  
+**Endpoints:** `/protocols` and `/prices/current/solana:{mint}`
+
+Provides helpers to:
+* fetch raw data (`fetch_protocols`, `fetch_token_price`),
+* extract candidate Solana addresses from protocol entries.
 
 ---
 
-## 7. Module Connections
+## 6. Security Clients (Rugcheck)
 
-```
-apis/
-├── config/         ← API keys, rate limit settings
-├── rpc/            ← NOT used (apis handles HTTP only)
-├── errors/         ← Error types
-└── tokens/cache    ← Shares data with token cache
+### 6.1 Rugcheck
+
+**Files:** `src/apis/rugcheck/mod.rs`, `src/apis/rugcheck/types.rs`  
+**Base URL:** `https://api.rugcheck.xyz`
+
+Key traits:
+* Uses `HttpClient` + `RateLimiter`.
+* Returns domain-layer `ApiError` (same type used by token discovery pipeline).
+* Explicitly handles “token not analyzed yet” cases:
+  * `404 Not Found` => `ApiError::NotFound`
+  * `400 Bad Request` with body containing `"not found"` => `ApiError::NotFound`
+* Contains a defensive extraction strategy for authority fields (Token2022 response shape differences):
+  * top-level authority fields may be objects; fallback to nested `token.*` fields.
+
+---
+
+## 7. SOL Price Background Service
+
+**File:** `src/apis/sol_price.rs`
+
+This is a special-case module living under `apis/` but acting as a **background service** that maintains a global SOL/USD cache:
+
+* Fetch URL: `https://lite-api.jup.ag/price/v3?ids=So11111111111111111111111111111111111111112`
+* Refresh interval: `PRICE_REFRESH_INTERVAL_SECS = 30`
+* Cache expiry: `CACHE_EXPIRY_SECS = 300`
+* Guardrails: rejects unrealistic changes (`MAX_PRICE_CHANGE_PERCENT = 50.0`)
+
+Global state:
+
+```rust
+static SOL_PRICE_CACHE: LazyLock<Arc<std::sync::RwLock<SolPriceData>>> = ...;
+static SERVICE_RUNNING: LazyLock<Arc<AtomicBool>> = ...;
 ```
 
-| Caller | Client | Purpose |
-|--------|--------|---------|
-| tokens | DexScreener, GeckoTerminal, Jupiter | Metadata enrichment |
-| filtering | Rugcheck, DexScreener, GeckoTerminal | Risk assessment |
-| pools | DexScreener, GeckoTerminal | Pool discovery, prices |
-| ohlcvs | GeckoTerminal | OHLCV candle data |
-| positions | DexScreener | Current price for P&L |
-| webserver | All | Dashboard data display |
-| trader | DexScreener | Pre-trade price checks |
+Service lifecycle entrypoints:
+* `start_sol_price_service(shutdown, monitor) -> JoinHandle`
+* `stop_sol_price_service()`
+
+Read APIs:
+* `get_sol_price() -> f64` (returns 0.0 if stale/invalid)
+* `get_sol_price_info() -> Option<SolPriceData>`
+
+---
+
+## 8. LLM Providers Submodule
+
+**Directory:** `src/apis/llm/`
+
+The LLM system is intentionally **not** part of `ApiManager`; it has its own singleton:
+
+* `LlmManager` stored in `static LLM_MANAGER: OnceCell<Arc<LlmManager>>`
+* Must be initialized once at startup via `init_llm_manager(manager)`
+* Access via `get_llm_manager()` (panics if not initialized) or `try_get_llm_manager()`
+
+### 8.1 Provider enum
+
+**File:** `src/apis/llm/mod.rs`
+
+```rust
+pub enum Provider {
+    OpenAi, Anthropic, Groq, DeepSeek, Gemini,
+    Ollama, Together, OpenRouter, Mistral, Assistant,
+}
+```
+
+### 8.2 Provider-agnostic DTOs
+
+**File:** `src/apis/llm/types.rs`
+
+* `ChatRequest { model, messages, temperature, max_tokens, response_format }`
+* `ChatResponse { content, usage, finish_reason, model, latency_ms }`
+
+### 8.3 LlmClient trait
+
+All provider implementations conform to:
+
+```rust
+#[async_trait]
+pub trait LlmClient {
+    fn provider(&self) -> Provider;
+    fn is_enabled(&self) -> bool;
+    async fn call(&self, request: ChatRequest) -> Result<ChatResponse, LlmError>;
+    async fn get_stats(&self) -> ApiStats;
+    fn rate_limit_info(&self) -> (usize, Duration);
+}
+```
+
+Providers use the same shared primitives (`RateLimiter`, `ApiStatsTracker`) and raw reqwest HTTP.
+
+---
+
+## 9. Error Handling & Observability
+
+### 9.1 Error types are not fully unified
+
+Today there are two patterns:
+
+* `Result<T, String>` (DexScreener, GeckoTerminal) — internal helpers build rich strings + record events.
+* `Result<T, ApiError>` (Rugcheck, Jupiter, CoinGecko, DefiLlama) — returns a shared domain error type.
+
+This is architectural debt (useful to know when adding new API clients).
+
+### 9.2 Event sampling
+
+`ApiStatsTracker::record_error_with_event()` logs an API error event only on a sampled cadence (based on `failed_requests`) to prevent high-frequency APIs from flooding the events DB.
+
+---
+
+## 10. Module Connections
+
+```text
+tokens/      -> api_manager().{dexscreener,geckoterminal,jupiter,...}  (enrichment + discovery)
+filtering/   -> api_manager().rugcheck + market lookups               (risk assessment)
+pools/       -> api_manager().dexscreener/geckoterminal               (pool discovery + refresh)
+ohlcvs/      -> api_manager().geckoterminal                           (candles)
+webserver/   -> api_manager().get_all_stats()                         (dashboard API stats)
+ai/          -> llm::{init_llm_manager,get_llm_manager}               (LLM calls)
+services/    -> sol_price::{start_sol_price_service,...}              (background price cache)
+```

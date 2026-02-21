@@ -401,7 +401,7 @@ fn register_all_services(manager: &mut ServiceManager) {
     // Background utility services
     manager.register(Box::new(UpdateCheckService));
 
-    let service_count = 22; // connectivity, events, transactions, sol_price, pool_discovery, pool_fetcher,
+    let service_count = 21; // connectivity, events, transactions, sol_price, pool_discovery, pool_fetcher,
                             // pool_calculator, pool_analyzer, pools, tokens, filtering, ohlcv,
                             // positions, wallet, rpc_stats, ata_cleanup, trader, webserver, ai, telegram, update_check
     logger::info(

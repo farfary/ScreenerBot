@@ -1,94 +1,131 @@
 # Services Module — Architecture
 
-> ScreenerBot Service Manager & Lifecycle — February 2026
+> ScreenerBot service lifecycle management (startup/shutdown ordering, metrics, cached health) — February 2026
 
 ---
 
 ## Table of Contents
 
 1. [Overview](#1-overview)
-2. [File Structure](#2-file-structure)
+2. [Where Services Live (File Structure)](#2-where-services-live-file-structure)
 3. [Service Trait](#3-service-trait)
-4. [ServiceManager](#4-servicemanager)
-5. [Startup Order](#5-startup-order)
-6. [Shutdown Sequence](#6-shutdown-sequence)
-7. [Registered Services](#7-registered-services)
-8. [Health & Metrics](#8-health--metrics)
-9. [Module Connections](#9-module-connections)
+4. [ServiceManager Core](#4-servicemanager-core)
+5. [Startup Flow (run.rs + ServiceManager::start_all)](#5-startup-flow-runrs--servicemanagerstart_all)
+6. [Startup Order Resolution](#6-startup-order-resolution)
+7. [Shutdown Flow (ServiceManager::stop_all)](#7-shutdown-flow-servicemanagerstop_all)
+8. [Hot-Start Newly Enabled Services](#8-hot-start-newly-enabled-services)
+9. [Health & Metrics (ServiceHealth / ServiceMetrics)](#9-health--metrics-servicehealth--servicemetrics)
+10. [Global Access + Cached Snapshots](#10-global-access--cached-snapshots)
+11. [Registered Services (Current)](#11-registered-services-current)
+12. [Pitfalls / Gotchas](#12-pitfalls--gotchas)
 
 ---
 
 ## 1. Overview
 
-The Services module manages lifecycle for all 20 background services: registration, dependency-aware startup, health monitoring, metrics collection, and graceful shutdown. Uses a Service trait with topological dependency resolution.
+ScreenerBot runs as a single process with many background tasks: WebSocket watchers, pool fetch loops, token discovery, trading monitors, API stats, etc.
 
-**Key characteristics:**
-- `Service` trait with async lifecycle methods
-- Topological sort for dependency-aware startup
-- 10-second per-service shutdown timeout
-- Global `GLOBAL_SERVICE_MANAGER` for webserver access
-- Hot reload: `start_newly_enabled()` for config changes
-- TaskMonitor per service for observability
-
-**23 files, ~3,807 lines**
+The `services` module provides:
+* A **common lifecycle** contract (`Service`) for all background subsystems.
+* A single **ServiceManager** that:
+  * registers services by name,
+  * determines a startup order,
+  * starts services and tracks their `JoinHandle`s,
+  * signals shutdown to all services,
+  * waits for all tasks to exit.
+* **Health + metrics** collection designed for the dashboard:
+  * per-service `ServiceHealth`,
+  * per-service `ServiceMetrics` (task activity via `tokio_metrics::TaskMonitor`),
+  * cached snapshots to avoid blocking HTTP handlers.
 
 ---
 
-## 2. File Structure
+## 2. Where Services Live (File Structure)
 
-```
+### 2.1 Core manager and shared types
+
+```text
 src/services/
-├── mod.rs              # ServiceManager (891 lines)
-├── health.rs           # Health monitoring
-├── metrics.rs          # Metrics collection
-└── implementations/    # 20 service implementations
-    ├── ai_service.rs
-    ├── ata_cleanup_service.rs
+├── mod.rs            Service trait + ServiceManager + global access helpers
+├── health.rs         ServiceHealth enum (healthy/degraded/unhealthy/starting/stopping)
+├── metrics.rs        ServiceMetrics + MetricsCollector (TaskMonitor + sysinfo)
+└── implementations/  Many Service implementations (but not all)
+    ├── mod.rs
     ├── events_service.rs
-    ├── filtering_service.rs
-    ├── ohlcv_service.rs
-    ├── pool_analyzer_service.rs
-    ├── pool_calculator_service.rs
-    ├── pool_discovery_service.rs
-    ├── pool_fetcher_service.rs
-    ├── pools_service.rs
-    ├── positions_service.rs
-    ├── rpc_stats_service.rs
-    ├── scheduled_ai_tasks_service.rs
+    ├── transactions_service.rs
     ├── sol_price_service.rs
     ├── tokens_service.rs
-    ├── transactions_service.rs
-    ├── update_check_service.rs
+    ├── filtering_service.rs
+    ├── ohlcv_service.rs
+    ├── positions_service.rs
     ├── wallet_service.rs
-    └── webserver_service.rs
+    ├── rpc_stats_service.rs
+    ├── ata_cleanup_service.rs
+    ├── webserver_service.rs
+    ├── ai_service.rs
+    ├── update_check_service.rs
+    └── pool_*_service.rs (discovery/fetcher/calculator/analyzer)
 ```
+
+### 2.2 Service implementations outside `src/services/`
+
+Not every `impl Service for ...` lives in `src/services/implementations/`.
+Examples (registered today):
+
+* `src/connectivity/service.rs` => `ConnectivityService` (`name() = "connectivity"`)
+* `src/telegram/service.rs` => `TelegramService` (`name() = "telegram"`)
+* `src/trader/service.rs` => `TraderService` (`name() = "trader"`)
+
+The single source of truth for **what is actually registered** is:
+* `src/run.rs` => `register_all_services(manager: &mut ServiceManager)`
 
 ---
 
 ## 3. Service Trait
 
+**File:** `src/services/mod.rs`
+
+Every service implements:
+
 ```rust
 #[async_trait]
 pub trait Service: Send + Sync {
     fn name(&self) -> &'static str;
-    fn priority(&self) -> i32 { 100 }              // Lower = starts earlier
+
+    // Lower starts earlier (and, by convention, stops later)
+    fn priority(&self) -> i32 { 100 }
+
     fn dependencies(&self) -> Vec<&'static str> { vec![] }
+
+    // Most services override this to respect initialization + config toggles.
     fn is_enabled(&self) -> bool { true }
-    async fn initialize(&mut self) -> Result<(), String>;
+
+    async fn initialize(&mut self) -> Result<(), String> { Ok(()) }
+
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
-        monitor: TaskMonitor,
+        monitor: tokio_metrics::TaskMonitor,
     ) -> Result<Vec<JoinHandle<()>>, String>;
-    async fn stop(&mut self) -> Result<(), String>;
-    async fn health(&self) -> ServiceHealth;
-    async fn metrics(&self) -> ServiceMetrics;
+
+    async fn stop(&mut self) -> Result<(), String> { Ok(()) }
+
+    async fn health(&self) -> ServiceHealth { ServiceHealth::Healthy }
+
+    async fn metrics(&self) -> ServiceMetrics { ServiceMetrics::default() }
 }
 ```
 
+Key architectural points:
+* `start()` returns **a vector of JoinHandles**; ServiceManager owns them and awaits them at shutdown.
+* `shutdown: Arc<Notify>` is the primary stop signal for long-running loops.
+* `monitor: TaskMonitor` is passed in so the spawned tasks can be wrapped with `monitor.instrument(...)`.
+
 ---
 
-## 4. ServiceManager
+## 4. ServiceManager Core
+
+**File:** `src/services/mod.rs`
 
 ```rust
 pub struct ServiceManager {
@@ -97,125 +134,263 @@ pub struct ServiceManager {
     shutdown: Arc<Notify>,
     metrics_collector: MetricsCollector,
     task_monitors: HashMap<&'static str, TaskMonitor>,
-    cached_health: Arc<RwLock<...>>,
-    cached_metrics: Arc<RwLock<...>>,
+    cached_health: Arc<RwLock<HashMap<&'static str, ServiceHealth>>>,
+    cached_metrics: Arc<RwLock<HashMap<&'static str, ServiceMetrics>>>,
 }
 ```
 
-**Global access:** `LazyLock<Arc<RwLock<Option<ServiceManager>>>>`
-
-### Key Methods
-
-| Method | Purpose |
-|--------|---------|
-| `register(service)` | Add service to registry |
-| `start_all()` | Resolve deps → init → start (topological order) |
-| `stop_all()` | Shutdown in reverse order |
-| `start_newly_enabled()` | Hot-start after config change |
-| `get_health_snapshot()` | All services' health |
-| `get_metrics_snapshot()` | All services' metrics |
+Important responsibilities:
+* **Registration**: `register(Box<dyn Service>)` stores by `service.name()`.
+* **Monitoring**: `get_task_monitor(name)` creates/stores a per-service `TaskMonitor`.
+* **Running set**: a service is considered “running” if it has an entry in `handles`.
 
 ---
 
-## 5. Startup Order
+## 5. Startup Flow (run.rs + ServiceManager::start_all)
 
-**Algorithm:** Topological sort with cycle detection
+### 5.1 Two boot modes: initialization vs normal
 
-1. Build dependency graph from `service.dependencies()`
-2. Validate all dependencies exist
-3. Detect circular dependencies → error
-4. DFS traversal produces topological order
-5. Within same dependency level, sort by `priority()`
-6. Initialize each service sequentially
-7. Start each service sequentially (spawns async tasks)
+**File:** `src/run.rs`
 
-**Timing:** Logs gaps >100ms between starts. Tracks total startup duration.
+Startup branches based on whether `config.toml` exists:
 
----
+* **No config.toml** => "initialization mode"
+  * `global::INITIALIZATION_COMPLETE = false`
+  * all services are registered, but most `is_enabled()` return false
+  * webserver is always enabled so the user can complete setup
 
-## 6. Shutdown Sequence
+* **Config.toml exists** => "normal mode"
+  * config is loaded/validated
+  * `global::INITIALIZATION_COMPLETE = true`
+  * services can start normally
 
+### 5.2 register_all_services()
+
+**File:** `src/run.rs`
+
+All services (currently used) are registered here via `manager.register(...)`.
+
+### 5.3 Global manager insertion (“take, mutate, put back”)
+
+**Files:** `src/services/mod.rs`, `src/run.rs`
+
+`init_global_service_manager(manager)` stores the ServiceManager in:
+
+```rust
+static GLOBAL_SERVICE_MANAGER: LazyLock<Arc<RwLock<Option<ServiceManager>>>> = ...;
 ```
+
+Then `run.rs` does:
+1) get the global `Arc<RwLock<Option<ServiceManager>>>`,
+2) `take()` the `ServiceManager` out of the `Option`,
+3) call `start_all()` (needs `&mut self`),
+4) put it back for webserver access.
+
+This pattern exists so webserver endpoints can read health/metrics through the global reference.
+
+### 5.4 ServiceManager::start_all()
+
+**File:** `src/services/mod.rs`
+
+High-level flow:
+
+```text
+start_all()
+├─ enabled_services = services.filter(|s| s.is_enabled())
+├─ ordered = resolve_startup_order(enabled_services)
+└─ for service_name in ordered:
+   ├─ monitor = get_task_monitor(service_name)
+   ├─ service.initialize().await
+   ├─ handles = service.start(shutdown.clone(), monitor.clone()).await
+   ├─ handles_map[service_name] = handles
+   └─ metrics_collector.start_monitoring(service_name, monitor, shutdown.clone())
+```
+
+Extra behavior worth knowing:
+* Logs gaps >100ms between services (`"Gap before 'X': Nms"`).
+* Uses `startup::mark_service_start(service_name)` and `startup::mark_service_ready(service_name)` to track readiness.
+
+---
+
+## 6. Startup Order Resolution
+
+**File:** `src/services/mod.rs` => `resolve_startup_order()`
+
+The algorithm has three steps:
+
+1) `validate_dependencies(services)`:
+   * checks that each declared dependency name exists in the `services` map
+   * **logs warnings only** (does not fail)
+
+2) DFS visit with cycle detection:
+   * detects circular dependencies via `visiting` set
+   * pushes visited names into `ordered`
+   * (missing dependency names are still visited and pushed; they will later be ignored at start time)
+
+3) **Sort by priority**:
+
+```rust
+ordered.sort_by_key(|name| self.services.get(name).map(|s| s.priority()).unwrap_or(100));
+```
+
+Implication:
+* Dependencies are effectively enforced by convention: a dependency must have a **lower** priority value than its dependents.
+
+---
+
+## 7. Shutdown Flow (ServiceManager::stop_all)
+
+**File:** `src/services/mod.rs`
+
+```text
 stop_all()
-├─ shutdown.notify_waiters()        # Signal all services
-├─ Reverse startup order            # LIFO (last started → first stopped)
-├─ For each service:
-│  ├─ service.stop()                # Graceful stop
-│  ├─ await handles (10s timeout)   # Wait for tasks
-│  └─ Log timeout/panic if needed
-└─ Return shutdown report
+├─ shutdown.notify_waiters()
+├─ ordered = resolve_startup_order(running_services)
+├─ ordered.reverse()                       (stop in reverse)
+└─ for service_name in ordered:
+   ├─ service.stop().await                 (best-effort; warning on error)
+   └─ await JoinHandles with timeout=10s each
 ```
 
-**10-second timeout** per service. Services that exceed are logged as warnings but don't block others.
+Task waiting behavior:
+* Each handle is awaited with `tokio::time::timeout(Duration::from_secs(10), handle)`.
+* Panics are logged as warnings.
+* Timeouts are logged, but shutdown continues (no single service can block shutdown forever).
 
 ---
 
-## 7. Registered Services
+## 8. Hot-Start Newly Enabled Services
 
-| Service | Priority | Dependencies | Purpose |
-|---------|----------|-------------|---------|
-| `tokens` | 10 | — | Token registry, loading, stale filter |
-| `pools` | 15 | tokens | Pool management |
-| `wallet` | 20 | — | Balance monitoring |
-| `positions` | 25 | tokens, pools | Position tracking |
-| `sol_price` | 30 | — | SOL/USD price |
-| `events` | 35 | — | Event recording |
-| `filtering` | 40 | tokens | Token filter engine |
-| `ohlcv` | 45 | tokens, pools | OHLCV candle data |
-| `pool_discovery` | 50 | pools | New pool detection |
-| `pool_fetcher` | 55 | pools | Pool data refresh |
-| `pool_analyzer` | 60 | pools | Pool analysis |
-| `pool_calculator` | 65 | pools | Pool calculations |
-| `transactions` | 70 | — | Transaction monitoring |
-| `rpc_stats` | 75 | — | RPC metrics |
-| `connectivity` | 80 | — | Endpoint health |
-| `ata_cleanup` | 85 | wallet | ATA garbage collection |
-| `telegram` | 50 | — | Telegram bot |
-| `ai` | 90 | — | AI engine |
-| `scheduled_ai` | 95 | ai | Scheduled AI tasks |
-| `webserver` | 100 | — | Dashboard HTTP server |
-| `update_check` | 100 | — | Version checking |
+**File:** `src/services/mod.rs` => `start_newly_enabled()`
+
+Purpose:
+* After config changes, start services whose `is_enabled()` flipped from false => true.
+
+Behavior:
+* idempotent: services already in `handles` are skipped
+* partial failures are collected and returned as `ServiceStartupReport`:
+  * `attempted`, `started`, `failures`, `already_running`, `total_enabled`, `duration_ms`
 
 ---
 
-## 8. Health & Metrics
+## 9. Health & Metrics (ServiceHealth / ServiceMetrics)
 
-### ServiceHealth
+### 9.1 ServiceHealth
+
+**File:** `src/services/health.rs`
 
 ```rust
-pub struct ServiceHealth {
-    pub name: String,
-    pub status: HealthStatus,          // Healthy, Degraded, Unhealthy
-    pub last_check: DateTime<Utc>,
-    pub details: Option<String>,
+pub enum ServiceHealth {
+    Healthy,
+    Degraded(String),
+    Unhealthy(String),
+    Starting,
+    Stopping,
 }
 ```
 
-### ServiceMetrics
+Meaning:
+* `Healthy` does not necessarily mean “enabled” (some services report `Healthy` when disabled by config).
+* `Starting` is used widely for “not ready yet” (e.g. tokens/transactions/positions readiness flags).
+
+### 9.2 ServiceMetrics
+
+**File:** `src/services/metrics.rs`
+
+`ServiceMetrics` intentionally separates:
+* **process-wide** CPU/memory (same for all services; one process),
+* **per-service async task activity** (TaskMonitor poll/idle metrics),
+* **service-specific operational counters** exposed via `custom_metrics`.
+
+Notable fields:
+* `task_count` (instrumented task count)
+* `total_polls`, `total_poll_duration_ns`, `total_idle_duration_ns`
+* derived cycle metrics (`cycles_per_second`, `avg_cycle_duration_ns`, etc.)
+* `uptime_seconds`
+* `operations_total`, `errors_total`, `custom_metrics: HashMap<String, f64>`
+
+The `activity_percent()` helper is a key dashboard metric:
+* activity = poll_time / (poll_time + idle_time)
+
+### 9.3 MetricsCollector
+
+**File:** `src/services/metrics.rs`
+
+Per service, ServiceManager calls:
 
 ```rust
-pub struct ServiceMetrics {
-    pub name: String,
-    pub task_count: usize,
-    pub uptime_seconds: u64,
-    pub custom: HashMap<String, Value>,
-}
+metrics_collector.start_monitoring(service_name, monitor, shutdown.clone()).await;
 ```
+
+This spawns a background collector task that:
+* polls `monitor.cumulative()` every 1s,
+* stores cumulative totals + deltas in an internal `HashMap`,
+* lets the dashboard compute “how busy a service is” without relying on OS threads.
+
+CPU/memory measurement:
+* uses `sysinfo::System::refresh_all()` inside `spawn_blocking` to avoid stalling the async runtime.
 
 ---
 
-## 9. Module Connections
+## 10. Global Access + Cached Snapshots
 
-```
-services/
-├── config/        ← is_enabled() checks
-├── logger/        ← Startup/shutdown logging
-├── events/        ← Service events recording
-└── all modules    ← Each service wraps a module's background work
-```
+**File:** `src/services/mod.rs`
 
-| Caller | Usage |
-|--------|-------|
-| main.rs | `start_all()` at startup, `stop_all()` at shutdown |
-| webserver | Health/metrics API endpoints |
-| config reload | `start_newly_enabled()` for dynamic services |
+The ServiceManager periodically refreshes cached health/metrics:
+
+* `init_global_service_manager(manager)` does an initial `manager.update_cache().await`
+* then spawns a background loop:
+  * every 5 seconds, calls `update_cache()` with a 3s timeout
+  * terminates automatically when global manager is cleared during shutdown
+
+For webserver handlers (hot path), use the cached variants:
+* `ServiceManager::get_health_cached()`
+* `ServiceManager::get_metrics_cached()`
+
+This avoids blocking HTTP threads on async health checks or sysinfo refresh.
+
+---
+
+## 11. Registered Services (Current)
+
+**File:** `src/run.rs` => `register_all_services()`
+
+Registered today (in registration order):
+
+| Service name | Type | Defined in | Notes |
+|-------------|------|------------|------|
+| `connectivity` | `ConnectivityService` | `src/connectivity/service.rs` | gated by init + `cfg.connectivity.enabled` |
+| `events` | `EventsService` | `src/services/implementations/events_service.rs` | gated by init + `cfg.events.enabled` |
+| `transactions` | `TransactionsService` | `src/services/implementations/transactions_service.rs` | starts global tx manager |
+| `sol_price` | `SolPriceService` | `src/services/implementations/sol_price_service.rs` | wraps `apis/sol_price.rs` |
+| `pool_discovery` | `PoolDiscoveryService` | `src/services/implementations/pool_discovery_service.rs` | depends on transactions + pool_helpers + filtering |
+| `pool_fetcher` | `PoolFetcherService` | `src/services/implementations/pool_fetcher_service.rs` | depends on transactions + pool_helpers + pool_discovery + filtering |
+| `pool_calculator` | `PoolCalculatorService` | `src/services/implementations/pool_calculator_service.rs` | depends on pool_helpers + pool_fetcher + filtering |
+| `pool_analyzer` | `PoolAnalyzerService` | `src/services/implementations/pool_analyzer_service.rs` | depends on pool_helpers + pool_fetcher + filtering |
+| `pool_helpers` | `PoolsService` | `src/services/implementations/pools_service.rs` | initializes pool components + helper tasks |
+| `tokens` | `TokensService` | `src/services/implementations/tokens_service.rs` | delegates to `tokens::service::TokensServiceNew` |
+| `filtering` | `FilteringService` | `src/services/implementations/filtering_service.rs` | periodic refresh + cleanup tasks |
+| `ohlcv` | `OhlcvService` | `src/services/implementations/ohlcv_service.rs` | starts OHLCV runtime + auto-populate from open positions |
+| `positions` | `PositionsService` | `src/services/implementations/positions_service.rs` | starts positions manager + verification worker |
+| `wallet` | `WalletService` | `src/services/implementations/wallet_service.rs` | wallet monitoring loops |
+| `rpc_stats` | `RpcStatsService` | `src/services/implementations/rpc_stats_service.rs` | auto-save stats DB |
+| `ata_cleanup` | `AtaCleanupService` | `src/services/implementations/ata_cleanup_service.rs` | starts ATA cleanup background tool |
+| `trader` | `TraderService` | `src/trader/service.rs` | automated trading monitors |
+| `webserver` | `WebserverService` | `src/services/implementations/webserver_service.rs` | **always enabled** (pre-init support) |
+| `ai` | `AiService` | `src/services/implementations/ai_service.rs` | enabled by config (background checks) |
+| `telegram` | `TelegramService` | `src/telegram/service.rs` | notifications + command polling |
+| `update_check` | `UpdateCheckService` | `src/services/implementations/update_check_service.rs` | periodic update checks |
+
+---
+
+## 12. Pitfalls / Gotchas
+
+1) **Missing dependencies do not fail startup.**  
+   `validate_dependencies()` only logs warnings. The DFS order can include dependency names that are not registered; start_all() will ignore unknown names.
+
+2) **Ordering is finally sorted by priority.**  
+   Dependencies only work if dependent services have higher priority values than their dependencies.
+
+3) **SIGHUP is intentionally ignored at the process level.**  
+   `run.rs` documents that terminal disconnects (SSH/nohup) must not stop a headless bot; use SIGTERM or Ctrl+C.
+

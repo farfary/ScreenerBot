@@ -50,13 +50,13 @@ Living documentation describing how each major system works. These docs are the 
 | [Transactions](architecture/transactions.md) | 412 | Transaction monitoring, analyzer pipeline, 10+ DEX detection |
 | **Data Sources** | | |
 | [RPC Module](architecture/rpc.md) | 301 | Multi-provider Solana RPC, circuit breaker, rate limiting |
-| [APIs Module](architecture/apis.md) | 208 | External API clients (DexScreener, GeckoTerminal, Rugcheck, etc.) |
+| [APIs Module](architecture/apis.md) | 412 | External HTTP clients + LLM providers + SOL price service |
 | **User Interface** | | |
 | [Webserver](architecture/webserver.md) | 307 | Dashboard REST API, authentication, 200+ endpoints |
-| [Telegram](architecture/telegram.md) | 221 | Telegram bot, notifications, remote trading control |
+| [Telegram](architecture/telegram.md) | 373 | Telegram bot: discovery, notifications, commands, sessions/2FA |
 | **System** | | |
 | [Config](architecture/config.md) | 272 | TOML configuration, macro system, hot reload, metadata |
-| [Services](architecture/services.md) | 221 | Service manager, dependency-aware lifecycle, 20 services |
+| [Services](architecture/services.md) | 396 | Service manager, lifecycle, cached health/metrics, registered services |
 | [Wallets](architecture/wallets.md) | 256 | Multi-wallet management, AES-256-GCM encryption |
 | [Infrastructure](architecture/infrastructure.md) | 328 | Database, errors, events, logger, connectivity, actions |
 
