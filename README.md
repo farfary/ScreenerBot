@@ -678,5 +678,4 @@ This project is licensed under the [Business Source License 1.1](LICENSE) (BSL 1
 
 - **Non-commercial use** is permitted
 - **Commercial use** (competing products or paid services) requires a separate license
-- The code converts to **Apache License 2.0** four years after publication
 - Contact [info@screenerbot.io](mailto:info@screenerbot.io) for alternative licensing
