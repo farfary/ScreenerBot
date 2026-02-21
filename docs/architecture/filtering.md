@@ -1,765 +1,1017 @@
-# Filtering System Documentation
+# Filtering Module Architecture
 
-## Overview
+## 1. Overview
 
-The Filtering System is ScreenerBot's token quality control mechanism that evaluates every discovered Solana token against configurable criteria before allowing it to proceed to trading. It tracks which tokens pass or fail filtering, why they were rejected, and provides comprehensive analytics for optimizing filter settings.
+The Filtering module evaluates discovered Solana tokens against configurable quality and security criteria before allowing them into the trading pipeline. It implements a sequential filter chain with early rejection, caching for query performance, and batch database operations for efficiency.
 
 **Key Capabilities:**
 
-- Multi-source validation (DexScreener, GeckoTerminal, RugCheck, Core/Meta filters)
-- Real-time rejection tracking with categorized reasons
-- Time-range analytics for understanding filtering patterns
-- Per-token rejection history with source attribution
-- Configurable thresholds for liquidity, age, security, and data quality
+- Multi-stage validation: Meta → OnChain → DexScreener → GeckoTerminal → Rugcheck → AI
+- Config-driven thresholds with hot-reload support
+- Cached snapshots with 180-second staleness threshold
+- Non-blocking queries with background refresh
+- Historical decision tracking (1000 recent pass/reject per category)
+- Real-time pool price overlay for sorting/display
+- Batch database operations (reduces 260k+ tasks to 4 per refresh)
 
-## Architecture
+## 2. Module Structure
 
-### Backend (Rust)
-
-#### Core Components
-
-**1. Filtering Engine** (`src/filtering/`)
-
-- `engine.rs` - Core filtering logic that evaluates tokens against all active sources
-- `sources/` - Individual filter implementations:
-  - `dexscreener.rs` - Token info, liquidity, volume validation
-  - `geckoterminal.rs` - Market data validation
-  - `rugcheck.rs` - Security checks (mint/freeze authority, top holder %)
-  - `meta.rs` - Cross-source meta filters (age, cooldown, decimals)
-- `store.rs` - Cached filtering snapshots with query API
-- `types.rs` - FilteringSnapshot, PassedToken, RejectedToken data structures
-
-**2. Database Layer** (`src/tokens/database.rs`)
-
-Two critical tables with **different semantics**:
-
-| Table             | Purpose                   | Semantic                                          | Use Case                                  |
-| ----------------- | ------------------------- | ------------------------------------------------- | ----------------------------------------- |
-| `update_tracking` | Current token state       | **Unique tokens** - one row per token             | "How many tokens are currently rejected?" |
-| `rejection_stats` | Hourly aggregated buckets | **Cumulative events** - rejection count over time | Historical trend analysis                 |
-
-**Schema: `update_tracking`**
-
-```sql
-CREATE TABLE update_tracking (
-    mint TEXT PRIMARY KEY,
-    last_rejection_reason TEXT,
-    last_rejection_source TEXT,
-    last_rejection_at INTEGER,
-    -- ... other tracking fields
-);
+```
+src/filtering/
+├── mod.rs              # Public API: refresh(), query_tokens(), get_filtered_mints()
+├── engine.rs           # Core pipeline: compute_snapshot(), apply_all_filters()
+├── store.rs            # Caching layer: FilteringStore with RwLock<Arc<Snapshot>>
+├── types.rs            # Data structures: FilteringSnapshot, FilteringQuery, enums
+└── sources/            # Filter implementations
+    ├── mod.rs          # FilterSource & FilterRejectionReason enums (145 variants)
+    ├── meta.rs         # Pre-filters: age, cooldown, decimals (runs FIRST)
+    ├── onchain.rs      # Scam detection: symbol analysis, authority checks, risk scoring
+    ├── dexscreener.rs  # Market data: liquidity, volume, txns, price changes (43 checks)
+    ├── geckoterminal.rs# Market data: alternative source validation (24 checks)
+    ├── rugcheck.rs     # Security: authorities, holders, LP lock, transfer fee (28 checks)
+    └── ai.rs           # LLM evaluation with confidence threshold (async)
 ```
 
-- Stores the **current state** of each token (rejected or passed)
-- One row per unique token mint address
-- Updated whenever a token's status changes
+## 3. Core Types
 
-**Schema: `rejection_stats`**
-
-```sql
-CREATE TABLE rejection_stats (
-    bucket_hour INTEGER NOT NULL,
-    reason TEXT NOT NULL,
-    source TEXT NOT NULL,
-    rejection_count INTEGER NOT NULL DEFAULT 0,
-    unique_tokens INTEGER NOT NULL DEFAULT 0,
-    first_seen INTEGER NOT NULL,
-    last_seen INTEGER NOT NULL,
-    PRIMARY KEY (bucket_hour, reason, source)
-);
-```
-
-- Aggregates rejection **events** into hourly buckets
-- Same token rejected multiple times → multiple counts
-- Used for historical trend analysis
-
-**CRITICAL:** Never mix these tables! `update_tracking` for UI token counts, `rejection_stats` for historical events.
-
-**3. Key Database Functions**
-
+### FilteringSnapshot
 ```rust
-// Get unique tokens currently rejected (from update_tracking)
-pub fn get_rejection_stats(&self) -> TokenResult<Vec<(String, String, i64)>>
-
-// Get unique tokens rejected in time range (from update_tracking with filter)
-pub fn get_rejection_stats_with_time_filter(
-    &self,
-    start_time: Option<i64>,
-    end_time: Option<i64>,
-) -> TokenResult<Vec<(String, String, i64)>>
-
-// Get cumulative rejection events in time range (from rejection_stats)
-pub fn get_rejection_stats_aggregated(
-    &self,
-    start_time: Option<i64>,
-    end_time: Option<i64>,
-) -> TokenResult<Vec<(String, String, i64)>>
-```
-
-**4. API Routes** (`src/webserver/routes/filtering.rs`)
-
-| Endpoint                         | Method  | Purpose                                               |
-| -------------------------------- | ------- | ----------------------------------------------------- |
-| `/api/filtering/stats`           | GET     | Current filtering snapshot (passed/rejected counts)   |
-| `/api/filtering/analytics`       | GET     | Comprehensive analytics with time range support       |
-| `/api/filtering/rejection-stats` | GET     | Rejection breakdown by reason/source                  |
-| `/api/filtering/rejected-tokens` | GET     | Paginated list of rejected tokens                     |
-| `/api/config/filtering`          | GET/PUT | Filtering configuration (thresholds, enabled filters) |
-
-**Note:** Recent rejections data is included in the `/api/filtering/analytics` response, not as a separate endpoint.
-
-**Analytics Query Parameters:**
-
-```
-?start_time=<unix_timestamp_seconds>&end_time=<unix_timestamp_seconds>
-```
-
-- Omit both → All-time snapshot of current state
-- Provide both → Unique tokens rejected in that time range
-
-### Frontend (JavaScript)
-
-#### Page Structure
-
-**Main Module:** `src/webserver/templates/scripts/pages/filtering.js`
-
-**State Management:**
-
-```javascript
-const state = {
-  config: null, // Filter configuration
-  draft: null, // Draft config (for editing)
-  stats: null, // Current filtering statistics
-  analytics: null, // Analytics data (with time range)
-  isLoadingAnalytics: false, // Loading state for analytics
-  analyticsRequestId: 0, // Race condition prevention
-  timeRange: {
-    // Time range filter
-    preset: "all", // "1h", "6h", "24h", "7d", "all", "custom"
-    startTime: null, // Unix timestamp (seconds)
-    endTime: null, // Unix timestamp (seconds)
-  },
-  activeTab: "status", // Current tab
-  // ... more fields
-};
-```
-
-#### Views (Tabs)
-
-**1. Status Tab** - Overview dashboard
-
-- Total scanned, passed, rejected counts
-- Pass/rejection rates
-- Rejection breakdown by category (pie chart style)
-
-**2. Analytics Tab** - Advanced analysis
-
-- Time range filter (1H, 6H, 24H, 7D, All, Custom)
-- Summary cards (scanned, passed, rejected)
-- Rejection by category breakdown
-- Rejection by source breakdown
-- Top rejection reasons table
-
-**3. Explorer Tab** - Tree view
-
-- Hierarchical view: Categories → Reasons → Individual tokens
-- Click a reason to see all tokens rejected for that reason
-- Paginated token list with mint address, symbol, timestamp
-
-**4. Config Tabs** (Core, DexScreener, GeckoTerminal, RugCheck)
-
-- Category-grouped filter settings
-- Enable/disable per source
-- Configurable thresholds (liquidity, age, etc.)
-- Import/export configuration
-
-#### Time Range Filtering
-
-**Presets:**
-
-```javascript
-const TIME_RANGE_PRESETS = {
-  "1h": { label: "1H", seconds: 60 * 60 },
-  "6h": { label: "6H", seconds: 6 * 60 * 60 },
-  "24h": { label: "24H", seconds: 24 * 60 * 60 },
-  "7d": { label: "7D", seconds: 7 * 24 * 60 * 60 },
-};
-```
-
-**Custom Range:**
-
-- Date/time pickers for start and end
-- Validation: start < end, end ≤ now
-- Persisted to `AppState` for session continuity
-
-**Loading Pattern:**
-
-```javascript
-async function setTimeRangePreset(preset) {
-  // Set time range based on preset
-  state.timeRange.preset = preset;
-  state.timeRange.startTime = preset === "all" ? null : now - seconds;
-  state.timeRange.endTime = preset === "all" ? null : now;
-
-  // Show loading state
-  state.isLoadingAnalytics = true;
-  render();
-
-  try {
-    await loadAnalytics();
-  } finally {
-    state.isLoadingAnalytics = false;
-    render();
-  }
+pub struct FilteringSnapshot {
+    pub updated_at: i64,                                        // Unix timestamp
+    pub filtered_mints: Vec<String>,                            // All passing tokens
+    pub passed_tokens: Vec<PassedToken>,                        // Top 1000 by time
+    pub rejected_mints: Vec<String>,                            // All failing tokens
+    pub rejected_tokens: Vec<RejectedToken>,                    // Top 1000 by time
+    pub tokens: HashMap<String, TokenEntry>,                    // Full token data + flags
+    pub blacklist_reasons: HashMap<String, Vec<BlacklistReasonInfo>>, // Multi-source blacklist
 }
 ```
 
-## Data Flow
-
-### Token Rejection Flow
-
-```
-1. Token discovered
-   ↓
-2. Filtering Engine evaluates token
-   ↓
-3a. PASSED → update_tracking: clear last_rejection_*
-   ↓
-4a. Add to passed tokens cache
-
-3b. REJECTED → update_tracking: set last_rejection_reason/source/at
-   ↓
-4b. rejection_stats: increment bucket count (hourly aggregation)
-   ↓
-5b. Add to rejected tokens cache
+### TokenEntry
+```rust
+pub struct TokenEntry {
+    pub token: Arc<Token>,              // Shared reference (saves 288MB via Arc wrapping)
+    pub has_pool_price: bool,           // Pre-computed flag
+    pub has_open_position: bool,        // Pre-computed flag
+    pub has_ohlcv: bool,                // Pre-computed flag
+    pub pair_created_at: Option<i64>,   // Blockchain or discovery timestamp
+    pub last_updated: Option<i64>,      // Last data update
+}
 ```
 
-### Analytics Request Flow
+### FilteringQuery
+```rust
+pub struct FilteringQuery {
+    pub view: FilteringView,            // Pool, All, Passed, Rejected, Blacklisted, etc.
+    pub search: Option<String>,         // Symbol/mint/name search
+    pub sort_key: TokenSortKey,         // PriceSol, LiquidityUsd, Volume24h, etc.
+    pub sort_direction: SortDirection,  // Asc or Desc
+    pub page: usize,                    // Page number (1-indexed)
+    pub page_size: usize,               // Items per page (max 200)
+    
+    // Range filters
+    pub min_liquidity: Option<f64>,
+    pub max_liquidity: Option<f64>,
+    pub min_volume: Option<f64>,
+    pub max_volume: Option<f64>,
+    pub min_risk_score: Option<u32>,
+    pub max_risk_score: Option<u32>,
+    pub min_holder_count: Option<u32>,
+    pub max_top_holder_percent: Option<f64>,
+    
+    // Boolean filters
+    pub with_pool_price: Option<bool>,
+    pub with_open_position: Option<bool>,
+    pub with_ohlcv: Option<bool>,
+    pub blacklisted: Option<bool>,
+    pub rejection_reason: Option<String>, // Filter by specific rejection
+}
+```
+
+### FilteringView Enum
+```rust
+pub enum FilteringView {
+    Pool,           // Tokens with pool prices
+    All,            // All tokens (bypasses snapshot, queries DB directly)
+    Passed,         // Passed filtering
+    Rejected,       // Failed filtering
+    Blacklisted,    // Manually blacklisted
+    Positions,      // With open positions
+    Recent,         // Recently updated
+    NoMarketData,   // No DexScreener/GeckoTerminal data
+}
+```
+
+### FilterSource Enum
+```rust
+pub enum FilterSource {
+    Core,           // Meta filters (age, cooldown, decimals)
+    OnChain,        // Symbol/authority analysis
+    DexScreener,    // DexScreener market data
+    GeckoTerminal,  // GeckoTerminal market data
+    Rugcheck,       // Security checks
+    Ai,             // LLM evaluation
+}
+```
+
+### FilterRejectionReason (145 variants)
+
+**Core (6 reasons):**
+- `NoDecimalsInDatabase` - Token decimals not cached
+- `TokenTooNew` - Age < min_token_age_minutes
+- `CooldownFiltered` - In position cooldown period
+- `DexScreenerDataMissing` - No DexScreener data available
+- `GeckoTerminalDataMissing` - No GeckoTerminal data available
+- `RugcheckDataMissing` - No Rugcheck data available
+
+**OnChain (6 reasons):**
+- `NumericSymbol` - Symbol is all digits
+- `EmptySymbol` - Symbol empty or whitespace
+- `SuspiciousSymbol` - Single non-alphabetic char
+- `KnownScamAuthority` - Freeze/update/mint authority on scam list
+- `ImmutableWithFreeze` - Immutable metadata + freeze authority
+- `HighRiskScore` - Combined risk score too high
+
+**AI (1 reason):**
+- `AiRejected { reason: String, confidence: f64, provider: String }` - LLM rejection
+
+**DexScreener (43 reasons):**
+- Token info: `DexNameMissing`, `DexSymbolMissing`, `DexLogoMissing`, `DexWebsiteMissing`
+- Transactions: `DexTransactions5mTooLow`, `DexTransactions1hTooLow`
+- Liquidity: `DexLiquidityZero`, `DexLiquidityTooLow`, `DexLiquidityTooHigh`
+- Market cap: `DexMarketCapTooLow`, `DexMarketCapTooHigh`
+- FDV: `DexFdvMissing`, `DexFdvTooLow`, `DexFdvTooHigh`
+- Volume: `DexVolume5mMissing/TooLow`, `DexVolume1hMissing/TooLow`, `DexVolume6hMissing/TooLow`, `DexVolume24hMissing/TooLow`
+- Price change: `DexPriceChange5m/1h/6h/24h TooLow/TooHigh`
+
+**GeckoTerminal (24 reasons):**
+- Liquidity: `GeckoLiquidityMissing`, `GeckoLiquidityTooLow`, `GeckoLiquidityTooHigh`
+- Market cap: `GeckoMarketCapMissing`, `GeckoMarketCapTooLow`, `GeckoMarketCapTooHigh`
+- Volume: `GeckoVolume5m/1h/24h Missing/TooLow`
+- Price change: `GeckoPriceChange5m/1h/24h TooLow/TooHigh`
+- Pool metrics: `GeckoPoolCountTooLow`, `GeckoPoolCountTooHigh`, `GeckoReserveTooLow`
+
+**Rugcheck (28 reasons):**
+- Status: `RugcheckRugged`, `RugcheckRiskScoreTooHigh`, `RugcheckDangerRisk`
+- Authorities: `RugcheckMintAuthority`, `RugcheckFreezeAuthority`
+- Holders: `RugcheckMinHolders`, `RugcheckTopHolderPercent`, `RugcheckTop3HoldersPercent`
+- Insiders: `RugcheckInsiderHoldersCount`, `RugcheckInsiderHoldersPercent`, `RugcheckGraphInsidersCount`
+- Creator: `RugcheckCreatorBalancePercent`
+- Transfer: `RugcheckTransferFeePresent`, `RugcheckTransferFeeTooHigh`, `RugcheckTransferFeeMissing`
+- LP: `RugcheckLpProvidersCount`, `RugcheckLpProvidersMissing`, `RugcheckLpLockPercentTooLow`
+
+## 4. Filtering Pipeline
 
 ```
-Frontend clicks time range preset
-   ↓
-JavaScript sets state.timeRange
-   ↓
-Fetch /api/filtering/analytics?start_time=X&end_time=Y
-   ↓
-Backend: get_rejection_stats_aggregated(start, end)
-   ↓
-Query rejection_stats WHERE bucket_hour BETWEEN start AND end
-   ↓
-Sum rejection counts per (reason, source)
-   ↓
-Return aggregated stats (Volume)
-   ↓
-Frontend renders analytics view
+┌─────────────────────────────────────────────────────────────────┐
+│  INPUT: Token Stream (56k tokens with market data)              │
+└───────────────────────────────┬─────────────────────────────────┘
+                                │
+                    ┌───────────▼────────────┐
+                    │  Batch Load Tokens     │
+                    │  (Preferred + Fallback)│
+                    └───────────┬────────────┘
+                                │
+                    ┌───────────▼────────────┐
+                    │  Arc<Token> Wrapping   │
+                    │  (Saves 288MB memory)  │
+                    └───────────┬────────────┘
+                                │
+              ┌─────────────────┼─────────────────┐
+              │                 │                 │
+        ┌─────▼─────┐   ┌──────▼──────┐   ┌─────▼─────┐
+        │Blacklist  │   │Priced Set   │   │Open       │
+        │3 Sources  │   │(Pools)      │   │Positions  │
+        └───────────┘   └─────────────┘   └───────────┘
+                                │
+                    ┌───────────▼────────────┐
+                    │  FOR EACH TOKEN:       │
+                    └───────────┬────────────┘
+                                │
+                    ┌───────────▼────────────┐
+                    │  [1] Meta Filter       │
+                    │  ✓ Decimals cached?    │
+                    │  ✓ Age >= threshold?   │
+                    │  ✓ Cooldown check      │
+                    └───────────┬────────────┘
+                                │ PASS
+                    ┌───────────▼────────────┐
+                    │  [2] OnChain Filter    │
+                    │  ✓ Symbol valid?       │
+                    │  ✓ Authority clean?    │
+                    │  ✓ Risk score OK?      │
+                    └───────────┬────────────┘
+                                │ PASS
+                    ┌───────────▼────────────┐
+                    │  [3] DexScreener       │
+                    │  (If data_source match)│
+                    │  ✓ Token info complete?│
+                    │  ✓ Liquidity in range? │
+                    │  ✓ Volume sufficient?  │
+                    │  ✓ Price change OK?    │
+                    └───────────┬────────────┘
+                                │ PASS
+                    ┌───────────▼────────────┐
+                    │  [4] GeckoTerminal     │
+                    │  (If data_source match)│
+                    │  ✓ Market data valid?  │
+                    │  ✓ Pool metrics OK?    │
+                    └───────────┬────────────┘
+                                │ PASS
+                    ┌───────────▼────────────┐
+                    │  [5] Rugcheck Filter   │
+                    │  ✓ Not rugged?         │
+                    │  ✓ Authorities clean?  │
+                    │  ✓ Holder distribution?│
+                    │  ✓ LP lock sufficient? │
+                    └───────────┬────────────┘
+                                │ PASS
+                    ┌───────────▼────────────┐
+                    │  [6] AI Filter (async) │
+                    │  ✓ LLM evaluation      │
+                    │  ✓ Confidence check    │
+                    │  ✓ Fallback on error   │
+                    └───────────┬────────────┘
+                                │
+                  ┌─────────────┴─────────────┐
+                  │                           │
+              PASS│                           │REJECT
+                  │                           │
+          ┌───────▼────────┐         ┌────────▼────────┐
+          │ passed_tokens  │         │rejected_tokens  │
+          │ filtered_mints │         │rejected_mints   │
+          └───────┬────────┘         └────────┬────────┘
+                  │                           │
+                  └───────────┬───────────────┘
+                              │
+                  ┌───────────▼────────────┐
+                  │ Build FilteringSnapshot│
+                  │ • Sort by time         │
+                  │ • Truncate to 1000     │
+                  │ • Build token entries  │
+                  │ • Attach blacklist     │
+                  └───────────┬────────────┘
+                              │
+              ┌───────────────┼───────────────┐
+              │               │               │
+    ┌─────────▼────┐  ┌──────▼──────┐  ┌────▼─────┐
+    │Clear         │  │Update       │  │Upsert    │
+    │Rejection     │  │Rejection    │  │Stats     │
+    │Status (pass) │  │Status (fail)│  │(hourly)  │
+    └──────────────┘  └─────────────┘  └──────────┘
+                              │
+                  ┌───────────▼────────────┐
+                  │  OUTPUT: Snapshot      │
+                  │  Cached in Store       │
+                  └────────────────────────┘
 ```
 
-## Configuration
+**Sequential Execution:** Token must pass ALL enabled filters. First rejection stops processing (short-circuit).
 
-### Filter Categories
+**Data Source Awareness:** DexScreener and GeckoTerminal checks only run if `token.data_source` matches the filter's expected source. This prevents false rejections when data comes from alternative source.
 
-**1. Meta Requirements** (Core)
+**Background Refresh:** Snapshot refresh spawns 4 batch database update tasks (fire-and-forget) and returns immediately. Tasks complete asynchronously.
 
-- `min_token_age_minutes` - Skip tokens newer than X minutes
-- `check_cooldown` - Skip tokens recently exited (cooldown period)
+## 5. Filter Sources
 
-**2. DexScreener Filters**
+### Meta Filters (Core)
+**Purpose:** Pre-filter checks that run before any external API calls
 
-- `require_name_and_symbol` - Token must have name and symbol
-- `require_logo_url` - Token must have logo URL
-- `min_liquidity_usd` / `max_liquidity_usd` - Liquidity bounds
-- `min_volume_24h_usd` - Minimum 24h trading volume
-- `min_price_change_24h` / `max_price_change_24h` - Price volatility bounds
+**Checks:**
+- **Decimals cached:** Token must have decimals in database (avoids N RPC calls)
+- **Token age:** Token age >= `min_token_age_minutes` (default: blocks tokens < 60 minutes old)
+- **Cooldown:** Token not in position cooldown period (configurable hours after exit)
 
-**3. GeckoTerminal Filters**
-
-- Similar to DexScreener but from different data source
-- Used as fallback/validation
-
-**4. RugCheck Filters** (Security)
-
-- `check_mint_authority` - Reject if mint authority present
-- `check_freeze_authority` - Reject if freeze authority present
-- `max_top_10_holder_percent` - Max % held by top 10 wallets
-
-### Configuration File
-
-**Location:** `data/config.toml`
-
-**Example:**
-
+**Config Keys:**
 ```toml
-[filtering]
-enabled = true
-
 [filtering.meta]
-enabled = true
+age_enabled = true
 min_token_age_minutes = 60
+cooldown_enabled = true
 check_cooldown = true
 cooldown_hours = 24
+```
 
+**Why First:** Meta checks are fast (database lookups) and eliminate tokens before expensive API validation.
+
+### OnChain Filters
+**Purpose:** Detect scams using on-chain metadata (no RPC calls required)
+
+**Checks:**
+1. **Numeric symbol:** Symbol is all digits (spam pattern)
+2. **Empty symbol:** Symbol empty or whitespace
+3. **Suspicious symbol:** Single non-alphabetic character
+4. **Known scam authority:** Freeze/update/mint authority on discovered scam list
+5. **Immutable + freeze:** Metadata immutable but freeze authority present (scam signal)
+6. **Risk score:** Combined score from multiple signals (capped at 100)
+
+**Risk Scoring:**
+- Numeric symbol: +30 points
+- Empty symbol: +25 points
+- Freeze authority: +10 points
+- Name == symbol: +15 points
+
+**Config Keys:**
+```toml
+[filtering.onchain]
+enabled = true
+symbol_numeric_enabled = true
+symbol_empty_enabled = true
+symbol_suspicious_enabled = true
+authority_check_enabled = true
+immutable_freeze_check_enabled = true
+risk_score_enabled = true
+max_risk_score = 50
+```
+
+**Authority Cache:** Uses `tokens::authority_cache::is_blocked_authority()` - auto-discovered scam authorities from previous rejections.
+
+### DexScreener Filters
+**Purpose:** Validate market quality using DexScreener API data
+
+**Checks (43 total):**
+
+**Token Info:**
+- Name, symbol, logo, website presence (configurable required fields)
+
+**Transaction Activity:**
+- 5-minute buy+sell totals
+- 1-hour buy+sell totals
+- (Only runs if `token.data_source == DataSource::DexScreener`)
+
+**Liquidity:**
+- Zero check (immediate reject)
+- Min/max range (configurable USD thresholds)
+
+**Market Cap:**
+- Min/max range
+
+**FDV (Fully Diluted Valuation):**
+- Missing data handling
+- Min/max range
+
+**Volume:**
+- 5m, 1h, 6h, 24h intervals
+- Each configurable: threshold > 0 disables check, None = missing error, low = too low
+
+**Price Change:**
+- 5m, 1h, 6h, 24h intervals
+- Min/max percentage ranges
+
+**Config Keys:**
+```toml
 [filtering.dexscreener]
 enabled = true
+token_info_enabled = true
 require_name_and_symbol = true
 require_logo_url = false
-min_liquidity_usd = 1000.0
-min_volume_24h_usd = 500.0
+require_website_url = false
 
+transactions_enabled = true
+min_transactions_5min = 10
+min_transactions_1h = 50
+
+liquidity_enabled = true
+min_liquidity_usd = 1000.0
+max_liquidity_usd = 500000.0
+
+volume_enabled = true
+min_volume_5m_usd = 100.0
+min_volume_1h_usd = 500.0
+min_volume_6h_usd = 2000.0
+min_volume_24h_usd = 5000.0
+
+price_change_enabled = true
+min_price_change_5m = -50.0
+max_price_change_5m = 200.0
+# ... similar for 1h, 6h, 24h
+```
+
+### GeckoTerminal Filters
+**Purpose:** Alternative market data validation (24 checks)
+
+**Checks:**
+- **Liquidity:** Missing/low/high (max > 0 enables high check)
+- **Market Cap:** Missing/low/high
+- **Volume:** 5m, 1h, 24h
+- **Price Change:** 5m, 1h, 24h
+- **Pool Count:** Min/max thresholds
+- **Reserve USD:** Minimum threshold
+
+**Data Source Guard:** Only runs if `token.data_source == DataSource::GeckoTerminal`
+
+**Config Keys:** Similar structure to DexScreener with `[filtering.geckoterminal]` section.
+
+### Rugcheck Filters
+**Purpose:** Security validation using Rugcheck API data (28 checks)
+
+**Checks:**
+
+**Status:**
+- Rugged flag (immediate reject)
+- Risk score threshold
+- Danger-level risk present
+
+**Authorities:**
+- Mint authority presence (configurable allowance)
+- Freeze authority presence (configurable allowance)
+
+**Holder Distribution:**
+- Minimum total holders
+- Top holder percentage (single wallet dominance)
+- Top 3 holders percentage (concentration risk)
+
+**Insider Analysis:**
+- Insider holders in top 10 (count + total %)
+- Graph insiders detected count
+
+**Creator:**
+- Creator balance percentage (rug risk)
+
+**Transfer Fee:**
+- Fee presence check (blocks if any fee detected)
+- Fee threshold (max allowed %)
+- Missing data handling (configurable strict mode)
+
+**LP (Liquidity Provider):**
+- Minimum LP provider count
+- Missing data error handling
+- LP lock percentage:
+  - Pump.fun tokens: lower threshold (50% default)
+  - Regular tokens: higher threshold (80% default)
+
+**Config Keys:**
+```toml
 [filtering.rugcheck]
 enabled = true
-check_mint_authority = true
-check_freeze_authority = true
-max_top_10_holder_percent = 50.0
+check_rugged = true
+risk_score_enabled = true
+max_risk_score = 500
+
+authority_enabled = true
+allow_mint_authority = false
+allow_freeze_authority = false
+
+holder_enabled = true
+min_holders = 50
+max_top_holder_percent = 30.0
+max_top_3_holder_percent = 50.0
+
+insider_enabled = true
+max_insider_holders_count = 3
+max_insider_holders_percent = 20.0
+max_graph_insiders_count = 2
+
+creator_enabled = true
+max_creator_balance_percent = 10.0
+
+transfer_fee_enabled = true
+block_any_transfer_fee = false
+max_transfer_fee_percent = 5.0
+transfer_fee_missing_strict = false
+
+lp_enabled = true
+min_lp_providers = 2
+lp_missing_error = true
+lp_lock_percent_enabled = true
+min_lp_lock_percent = 80.0
+min_lp_lock_percent_pumpfun = 50.0
 ```
 
-## Rejection Reasons
+**Pump.fun Detection:** Checks `token.token_type` field for "pump" string to apply alternative thresholds.
 
-### Category: data_quality
+### AI Filter
+**Purpose:** LLM-based token evaluation (async, runs LAST)
 
-| Reason               | Source      | Description                     |
-| -------------------- | ----------- | ------------------------------- |
-| `dex_data_missing`   | core        | No DexScreener data available   |
-| `gecko_data_missing` | core        | No GeckoTerminal data available |
-| `rug_data_missing`   | core        | No RugCheck data available      |
-| `dex_empty_name`     | dexscreener | Name field is empty             |
-| `dex_empty_symbol`   | dexscreener | Symbol field is empty           |
-| `dex_empty_logo`     | dexscreener | Logo URL is empty               |
-| `no_decimals`        | core        | Token decimals not in database  |
+**Checks:**
+1. AI engine availability (`try_get_ai_engine()`)
+2. AI filtering enabled in config
+3. Confidence threshold met
+4. Decision: "pass" vs "reject"
+5. Fallback handling on error/low confidence
 
-### Category: security
-
-| Reason                 | Source   | Description                                      |
-| ---------------------- | -------- | ------------------------------------------------ |
-| `rug_mint_authority`   | rugcheck | Mint authority is present (can mint more tokens) |
-| `rug_freeze_authority` | rugcheck | Freeze authority is present (can freeze wallets) |
-| `rug_top_holders`      | rugcheck | Top 10 holders exceed threshold                  |
-
-### Category: timing
-
-| Reason              | Source | Description                         |
-| ------------------- | ------ | ----------------------------------- |
-| `token_too_new`     | core   | Token age < min_token_age_minutes   |
-| `position_cooldown` | core   | Token in cooldown period after exit |
-
-### Category: liquidity
-
-| Reason                    | Source        | Description                   |
-| ------------------------- | ------------- | ----------------------------- |
-| `dex_liquidity_too_low`   | dexscreener   | Liquidity < min_liquidity_usd |
-| `dex_liquidity_too_high`  | dexscreener   | Liquidity > max_liquidity_usd |
-| `gecko_liquidity_too_low` | geckoterminal | Liquidity < min_liquidity_usd |
-
-### Category: volume
-
-| Reason                 | Source        | Description                     |
-| ---------------------- | ------------- | ------------------------------- |
-| `dex_volume_too_low`   | dexscreener   | 24h volume < min_volume_24h_usd |
-| `gecko_volume_too_low` | geckoterminal | 24h volume < min_volume_24h_usd |
-
-### Category: volatility
-
-| Reason                      | Source      | Description                       |
-| --------------------------- | ----------- | --------------------------------- |
-| `dex_price_change_too_low`  | dexscreener | 24h change < min_price_change_24h |
-| `dex_price_change_too_high` | dexscreener | 24h change > max_price_change_24h |
-
-## Cleanup & Maintenance
-
-### Automatic Cleanup (FilteringService)
-
-**Schedule:** Every 10 minutes
-
-**Tasks:**
-
-1. `cleanup_rejection_stats_async(24)` - Keep last 24 hours of hourly buckets
-2. `cleanup_rejection_history_async(24)` - Clean deprecated rejection_history table (if exists)
-
-**Why:** The `rejection_stats` table grows rapidly (~1 bucket per hour per reason per source). With 50+ unique reasons, this is ~1200 rows/hour. Cleanup prevents unbounded growth.
-
-### Manual Operations
-
-**Reset all rejections:**
-
-```sql
--- Clear current rejection state
-UPDATE update_tracking SET
-  last_rejection_reason = NULL,
-  last_rejection_source = NULL,
-  last_rejection_at = NULL;
-
--- Clear aggregated stats
-DELETE FROM rejection_stats;
+**Config Keys:**
+```toml
+[ai]
+enabled = true
+filtering_enabled = true
+filtering_min_confidence = 0.7
+filtering_fallback_pass = true  # Pass on error/low confidence if true
 ```
 
-**Export rejection data:**
+**Execution Model:**
+- Async (doesn't block pipeline)
+- Priority::Low (background processing)
+- Token serialized to JSON for LLM context
+- Fallback behavior configurable: pass or reject on uncertainty
 
-```bash
-sqlite3 data/tokens.db <<EOF
-.mode csv
-.headers on
-.output rejections_export.csv
-SELECT
-  ut.mint,
-  t.symbol,
-  ut.last_rejection_reason,
-  ut.last_rejection_source,
-  datetime(ut.last_rejection_at, 'unixepoch') as rejected_at
-FROM update_tracking ut
-LEFT JOIN tokens t ON ut.mint = t.mint
-WHERE ut.last_rejection_reason IS NOT NULL
-ORDER BY ut.last_rejection_at DESC;
-EOF
-```
+**Cross-module:** Uses `ai::try_get_ai_engine()` and `ai::types::EvaluationContext`.
 
-## Common Pitfalls & Best Practices
+## 6. Caching & Storage
 
-### 1. **NEVER Mix Data Sources**
-
-❌ **WRONG:**
-
+### FilteringStore Pattern
 ```rust
-// Don't use rejection_stats for UI counts
-let stats = get_rejection_stats_aggregated_async(None, None).await?;
-// This shows cumulative events, not unique tokens!
+pub struct FilteringStore {
+    snapshot: RwLock<Option<Arc<FilteringSnapshot>>>,  // Cached snapshot
+    refresh_in_progress: AtomicBool,                   // Refresh flag
+    refresh_lock: Mutex<()>,                           // Serialize refreshes
+}
 ```
 
-✅ **CORRECT:**
+**RwLock Strategy:**
+- Multiple concurrent readers (queries)
+- Single exclusive writer (refresh)
+- No reader blocking during reads
 
+**Arc Wrapper:**
+- Snapshot cloned cheaply (8-byte pointer copy)
+- Multiple consumers share same data
+- Inner Token also Arc-wrapped (saves 288MB)
+
+### Staleness Management
 ```rust
-// Use update_tracking for current unique token counts
-let stats = get_rejection_stats_with_time_filter_async(None, None).await?;
-// This shows unique tokens currently rejected
+const FILTER_CACHE_STALE_SECS: u64 = 180;  // 3 minutes
 ```
 
-### 2. **Race Conditions in Async JS**
+**Refresh Behavior:**
 
-❌ **WRONG:**
+1. **Query arrives** → `ensure_snapshot()` called
+2. **Snapshot exists?**
+   - Yes + fresh (< 180s old): Return immediately
+   - Yes + stale: Return current, spawn background refresh (non-blocking)
+   - No: Wait up to 30s for initial compute
+3. **Background refresh:**
+   - Check `refresh_in_progress` flag (fast atomic check)
+   - Acquire `refresh_lock` (serializes concurrent refresh attempts)
+   - Double-check flag (race condition guard)
+   - Call `compute_snapshot()`
+   - Swap new snapshot into RwLock (exclusive write)
+   - Clear flag
 
-```javascript
-async function refresh() {
-  const btn = document.querySelector("button");
-  btn.disabled = true;
-  await loadData();
-  btn.disabled = false; // btn may be stale after await!
-}
+**First Access:** Blocks up to 30 seconds with timeout on initial snapshot creation. Returns error if timeout exceeded.
+
+### Historical Limits
+```rust
+const MAX_DECISION_HISTORY: usize = 1000;
 ```
 
-✅ **CORRECT:**
+**Applied to:**
+- `passed_tokens`: Top 1000 by passed_time (descending)
+- `rejected_tokens`: Top 1000 by rejection_time (descending)
 
-```javascript
-async function refresh() {
-  state.isLoading = true;
-  render(); // Re-render disables button via state
+**Rationale:** Prevents unbounded memory growth while maintaining recent audit trail. Full lists available via `filtered_mints` and `rejected_mints` (no limit).
 
-  try {
-    await loadData();
-  } finally {
-    state.isLoading = false;
-    render(); // Re-render enables button
-  }
-}
+### Database Persistence
+
+**Batch Updates (4 concurrent tasks):**
+
+1. **Clear rejection status** (passed tokens):
+   ```sql
+   UPDATE tokens SET 
+     last_rejection_reason = NULL,
+     last_rejection_source = NULL,
+     last_rejection_at = NULL
+   WHERE mint IN (...)
+   ```
+
+2. **Update priority** (passed tokens):
+   ```sql
+   UPDATE tokens SET priority = 60 WHERE mint IN (...)
+   ```
+
+3. **Update rejection status** (failed tokens):
+   ```sql
+   UPDATE tokens SET
+     last_rejection_reason = ?,
+     last_rejection_source = ?,
+     last_rejection_at = ?
+   WHERE mint = ?
+   ```
+
+4. **Upsert rejection stats** (hourly aggregation):
+   ```sql
+   INSERT INTO rejection_stats (bucket_hour, reason, source, rejection_count, ...)
+   VALUES (?, ?, ?, ?)
+   ON CONFLICT (bucket_hour, reason, source) DO UPDATE ...
+   ```
+
+**Fire-and-Forget:** Tasks spawned with `tokio::spawn`, no await in compute_snapshot(). Snapshot returns immediately after spawning.
+
+**Stored Results:** `tokens::store_filtered_results()` persists snapshot metadata:
+- `passed`: filtered_mints
+- `rejected`: rejected_mints
+- `blacklisted`: from token.is_blacklisted flag
+- `with_pool_price`: has_pool_price entries
+- `open_positions`: has_open_position entries
+- `updated_at`: snapshot timestamp
+
+## 7. Query System
+
+### execute_query() Flow
+
+**Input:** `FilteringQuery` (view, search, filters, sort, pagination)
+
+**Output:** `FilteringQueryResult` (items, total_count, page, page_size, metadata)
+
+### View-Specific Handling
+
+**"All" View:**
+```rust
+// Bypasses snapshot, queries database directly with SQL pagination
+let tokens = get_all_tokens_optional_market_async(page, page_size, sort_key, sort_dir).await?;
+let total_count = count_tokens_async().await?;  // Fast count query
+```
+**Why:** "All" includes tokens with no market data (not in snapshot). Direct DB query ensures completeness.
+
+**"NoMarketData" View:**
+```rust
+// Queries tokens without DexScreener/GeckoTerminal data
+let tokens = get_tokens_no_market_async(page, page_size).await?;
 ```
 
-### 3. **Time Range Persistence**
+**Other Views (Pool, Passed, Rejected, Blacklisted, Positions, Recent):**
+```rust
+// 1. Get snapshot
+let snapshot = self.ensure_snapshot().await?;
 
-When persisting time range state, validate on restore:
-
-```javascript
-// On init, check for inconsistent state
-if (
-  state.timeRange.preset === "custom" &&
-  (!state.timeRange.startTime || !state.timeRange.endTime)
-) {
-  // Reset to "all" if custom preset but no times
-  state.timeRange.preset = "all";
-  state.timeRange.startTime = null;
-  state.timeRange.endTime = null;
-}
-```
-
-### 4. **Price Precision**
-
-Tokens can have 12+ decimals. Never use `{:.6}` formatting.
-
-```javascript
-// WRONG: May show 0.000000 for tiny prices
-const price = 0.00000000123;
-console.log(`Price: ${price.toFixed(6)}`); // "Price: 0.000000"
-
-// CORRECT: Use scientific notation for small numbers
-if (price < 1e-6) {
-  console.log(`Price: ${price.toExponential(2)}`); // "Price: 1.23e-9"
-} else {
-  console.log(`Price: ${price.toFixed(9)}`);
-}
-```
-
-### 5. **Loading States**
-
-Always use try/finally for loading flags:
-
-```javascript
-state.isLoadingAnalytics = true;
-render();
-
-try {
-  await loadAnalytics();
-} finally {
-  // CRITICAL: Always clear loading state, even on error
-  state.isLoadingAnalytics = false;
-  render();
-}
-```
-
-## Performance Considerations
-
-### Database Indexing
-
-**Existing Indexes:**
-
-```sql
-CREATE INDEX idx_rejection_stats_hour ON rejection_stats(bucket_hour DESC);
-```
-
-**Query Performance:**
-
-- `update_tracking` queries (unique tokens): ~10-50ms for 138K tokens
-- `rejection_stats` aggregation: ~5-20ms for 24h of data
-- Time range queries use `last_rejection_at` - no index needed (table scan is fast)
-
-### Frontend Optimization
-
-**Race Condition Prevention:**
-
-```javascript
-const state = {
-  analyticsRequestId: 0, // Incremented on each request
+// 2. Collect relevant tokens
+let mut entries: Vec<TokenEntry> = match view {
+    Pool => snapshot.tokens.values().filter(|e| e.has_pool_price).cloned().collect(),
+    Passed => snapshot.tokens.values().filter(|e| snapshot.filtered_mints.contains(&e.token.mint)).cloned().collect(),
+    Rejected => snapshot.tokens.values().filter(|e| snapshot.rejected_mints.contains(&e.token.mint)).cloned().collect(),
+    // ... other views
 };
 
-async function loadAnalytics() {
-  const thisRequestId = ++state.analyticsRequestId;
+// 3. Apply filters (search, liquidity, volume, risk, etc.)
+apply_filters(&mut entries, &query, &snapshot);
 
-  const data = await fetchAnalytics();
+// 4. Sort
+sort_tokens(&mut entries, &query);
 
-  // Discard stale responses
-  if (thisRequestId !== state.analyticsRequestId) {
-    return; // A newer request was made
-  }
+// 5. Paginate
+let total_count = entries.len();
+let start = (query.page - 1) * query.page_size;
+let items = entries.into_iter().skip(start).take(query.page_size).collect();
+```
 
-  state.analytics = data;
-  render();
+### Filter Application
+
+**Search (case-insensitive):**
+- `token.symbol` contains query
+- `token.mint` contains query
+- `token.name` contains query
+
+**Range Filters:**
+- `min_liquidity` / `max_liquidity`: Uses `token.liquidity_usd`
+- `min_volume` / `max_volume`: Uses `token.volume_24h_usd`
+- `min_risk_score` / `max_risk_score`: Uses `token.risk_score`
+- `min_holder_count`: Uses `token.holder_count`
+- `max_top_holder_percent`: Uses `token.top_10_holder_percent`
+
+**Boolean Filters:**
+- `with_pool_price`: Filters by `has_pool_price` flag
+- `with_open_position`: Filters by `has_open_position` flag
+- `with_ohlcv`: Filters by `has_ohlcv` flag
+- `blacklisted`: Filters by `token.is_blacklisted`
+- `rejection_reason`: Matches `token.last_rejection_reason`
+
+### Sorting
+
+**TokenSortKey variants:**
+- `Symbol`, `Mint`: String comparison
+- `PriceSol`: Real-time pool price via `pools::get_pool_price()` (fallback to token.price_sol)
+- `LiquidityUsd`, `Volume24h`, `Fdv`, `MarketCap`: Numeric field comparison
+- `PairCreatedAt`, `LastUpdated`, `FirstDiscoveredAt`: Timestamp comparison
+- `Txns5m`, `Txns1h`, `Txns6h`, `Txns24h`: Sum of buy_count + sell_count
+- `RiskScore`, `HolderCount`, `TopHolderPercent`: Security metrics
+
+**Pool Price Overlay:** For Pool view sorts, calls `pools::get_pool_price()` to get real-time price instead of stale token.price_sol.
+
+### Pagination
+
+**Max Page Size:** 200 items
+
+**Calculation:**
+```rust
+let start = (query.page - 1) * query.page_size;  // 0-indexed offset
+let items: Vec<Arc<Token>> = entries
+    .into_iter()
+    .skip(start)
+    .take(query.page_size)
+    .map(|e| e.token.clone())
+    .collect();
+```
+
+**Response Metadata:**
+```rust
+FilteringQueryResult {
+    items,
+    total_count,
+    page: query.page,
+    page_size: query.page_size,
+    total_pages: (total_count + query.page_size - 1) / query.page_size,
+    
+    // Derived sets (for UI indicators)
+    priced_mints: HashSet<String>,       // Tokens with pool prices
+    open_position_mints: HashSet<String>,// Tokens with open positions
+    ohlcv_mints: HashSet<String>,        // Tokens with OHLCV data
+    
+    // Rejection metadata (for filter dropdowns)
+    rejection_reasons: Vec<String>,      // Unique rejection reasons from DB
+    blacklist_reasons: HashMap<String, Vec<BlacklistReasonInfo>>,
 }
 ```
 
-**Debouncing:**
+## 8. Integration Points
 
-```javascript
-// Explorer tree filter (150ms debounce)
-filterExplorerTree: (query) => {
-  if (!window.filteringPage.debouncedFilterExplorerTree) {
-    window.filteringPage.debouncedFilterExplorerTree = Utils.debounce((q) => {
-      /* filter logic */
-    }, 150);
-  }
-  window.filteringPage.debouncedFilterExplorerTree(query);
+### tokens Module
+**Used by filtering:**
+- `get_all_tokens_for_filtering_async()` - Batch load tokens with market data (preferred + fallback)
+- `count_tokens_async()` - Fast count query for "All" view
+- `get_tokens_no_market_async()` - Tokens without market data for "NoMarketData" view
+- `list_blacklisted_tokens_async()` - Blacklist source #1
+- `get_rejection_stats_async()` - Unique rejection reasons for filter dropdowns
+- `store_filtered_results()` - Persist snapshot metadata
+- `batch_clear_rejection_status_async()` - Clear rejection fields for passed tokens
+- `batch_update_priority_async()` - Set priority=60 for passed tokens
+- `batch_update_rejection_status_async()` - Set rejection fields for failed tokens
+- `batch_upsert_rejection_stats_async()` - Aggregate hourly rejection stats
+- `authority_cache::is_blocked_authority()` - Scam authority detection
+
+**Data flow:**
+- Filtering reads Token structs with market data
+- Filtering writes rejection reasons, priority, filtered status back
+- Token.last_rejection_reason used in query filtering
+
+### pools Module
+**Used by filtering:**
+- `db::list_blacklisted_pools()` - Blacklist source #2 (by pool_id)
+- `db::list_blacklisted_accounts()` - Blacklist source #3 (by account_pubkey)
+- `get_available_tokens()` - Set of tokens with pool prices
+- `get_pool_price()` - Real-time price overlay for sorting/display
+
+**Data flow:**
+- Filtering checks if token has pool price (has_pool_price flag)
+- Filtering uses real-time pool price for accurate sorting
+
+### positions Module
+**Used by filtering:**
+- `get_open_mints()` - Set of tokens with open positions
+
+**Data flow:**
+- Filtering sets has_open_position flag for UI indicators
+- Positions view filters to tokens with open trades
+
+### config Module
+**Used by filtering:**
+- `with_config(|cfg| cfg.filtering.clone())` - Get current filter config during snapshot compute
+
+**Data flow:**
+- Config changes picked up on next refresh (hot-reload)
+- Each source reads its config section (meta, onchain, dexscreener, etc.)
+
+### events Module
+**Used by filtering:**
+- `record_sampling_event()` - Logs 1 in 10 token decisions for analytics
+
+**Data flow:**
+- Sampling reduces log volume (56k tokens → 5.6k events per refresh)
+- Events used for filter effectiveness analysis
+
+### ai Module
+**Used by filtering:**
+- `try_get_ai_engine()` - Get global AI engine instance
+- `ai::types::EvaluationContext` - Token evaluation request structure
+
+**Data flow:**
+- AI filter runs async at end of pipeline
+- Token serialized to JSON for LLM analysis
+- AI decision (pass/reject) with confidence score
+
+## 9. Performance Optimizations
+
+### Arc<Token> Wrapping
+**Problem:** Each token ~2KB. Cloning 56k tokens = 112MB per operation. Multiple concurrent queries = 290MB+ memory.
+
+**Solution:**
+```rust
+// Before processing
+let arc_tokens: Vec<Arc<Token>> = tokens.into_iter().map(Arc::new).collect();
+
+// During filtering
+let token_entry = TokenEntry {
+    token: arc_token.clone(),  // 8-byte pointer copy, not 2KB clone
+    // ... flags
 };
 ```
 
-## Troubleshooting
+**Impact:** Reduces memory from 290MB to 1.2MB for 56k tokens.
 
-### "Numbers don't match between views"
+### Batch Database Operations
+**Problem:** Original code spawned 260k+ tokio tasks (56k tokens × 4 DB operations each + 5.6k sampling events).
 
-**Symptom:** Analytics shows different counts than Explorer
+**Solution:** Collect all updates in vectors during filtering, spawn 4 batch tasks at end:
+```rust
+// Collect updates during loop
+let mut passed_mints = Vec::new();
+let mut rejected_updates = Vec::new();
+let mut stats = HashMap::new();
 
-**Cause:** Analytics may be using cached data with different time range
-
-**Fix:** Click Refresh button in footer to reload all data
-
-### "Loading spinner stuck"
-
-**Symptom:** Analytics shows "Loading..." indefinitely
-
-**Cause:** `isLoadingAnalytics` not cleared due to exception
-
-**Fix:**
-
-1. Check browser console for errors
-2. Reload page (state will reset)
-3. If persists, check backend logs for API errors
-
-### "Time range filter shows wrong data"
-
-**Symptom:** Custom time range returns unexpected counts
-
-**Cause 1:** Frontend sending milliseconds instead of seconds
-**Fix:** Backend expects Unix seconds. JavaScript `Date.now()` returns milliseconds, so convert:
-
-```javascript
-const unixSeconds = Math.floor(Date.now() / 1000);
-// NOT: Date.now() which gives milliseconds
-```
-
-**Cause 2:** Timezone issues with date picker
-**Fix:** Always use UTC for timestamps, convert to local for display
-
-### "Rejection count keeps growing"
-
-**Symptom:** `rejection_stats` table grows too large
-
-**Cause:** Cleanup task not running or disabled
-
-**Fix:**
-
-1. Check FilteringService is running: GET `/api/services`
-2. Verify cleanup interval in logs
-3. Manually cleanup: `DELETE FROM rejection_stats WHERE bucket_hour < ...`
-
-## API Examples
-
-### Get Current Filtering Snapshot
-
-```bash
-curl http://localhost:8080/api/filtering/analytics | jq
-```
-
-Response:
-
-```json
-{
-  "total_tokens": 138417,
-  "total_passed": 427,
-  "total_rejected": 137990,
-  "pass_rate": 0.3,
-  "rejection_rate": 99.7,
-  "by_category": [
-    {
-      "category": "data_quality",
-      "label": "Missing Data",
-      "count": 135006,
-      "percentage": 97.8,
-      "reasons": [...]
+for token in tokens {
+    match apply_all_filters(&token) {
+        Ok(_) => passed_mints.push(token.mint.clone()),
+        Err(reason) => {
+            rejected_updates.push((token.mint.clone(), reason.clone()));
+            *stats.entry(reason).or_insert(0) += 1;
+        }
     }
-  ]
+}
+
+// Spawn 4 batch tasks (fire-and-forget)
+tokio::spawn(batch_clear_rejection_status_async(passed_mints.clone()));
+tokio::spawn(batch_update_priority_async(passed_mints, 60));
+tokio::spawn(batch_update_rejection_status_async(rejected_updates));
+tokio::spawn(batch_upsert_rejection_stats_async(stats));
+```
+
+**Impact:** Reduces task scheduler overhead, improves refresh latency from 10s+ to 2-4s.
+
+### Stale Threshold + Background Refresh
+**Problem:** Refreshing 56k tokens takes 2-4 seconds. Blocking queries during refresh hurts UX.
+
+**Solution:**
+```rust
+pub async fn ensure_snapshot(&self) -> Result<Arc<FilteringSnapshot>> {
+    if let Some(snapshot) = self.snapshot.read().await.clone() {
+        // Have snapshot (even if stale) - return immediately
+        if self.is_snapshot_stale(&snapshot) && !self.refresh_in_progress.load(Ordering::Acquire) {
+            // Stale + not refreshing - spawn background refresh (non-blocking)
+            let store = self.clone();
+            tokio::spawn(async move { store.try_refresh_background().await });
+        }
+        return Ok(snapshot);
+    }
+    
+    // No snapshot - wait up to 30s for initial compute
+    self.try_refresh_with_timeout(Duration::from_secs(30)).await
 }
 ```
 
-### Get Time-Filtered Analytics
+**Impact:** Queries return in <1ms (stale read), refresh happens in background. Users see slightly stale data (< 3 min) instead of blocking.
 
-```bash
-# Last 24 hours (timestamps in Unix seconds)
-START=$(date -v-24H -u +%s)
-END=$(date -u +%s)
+### Fast Count Queries
+**Problem:** Counting 138k+ tokens in "All" view requires full scan.
 
-curl "http://localhost:8080/api/filtering/analytics?start_time=$START&end_time=$END" | jq
+**Solution:** Use database count query instead of loading all tokens:
+```rust
+FilteringView::All => {
+    let total_count = count_tokens_async().await?;  // SELECT COUNT(*) - fast
+    // Only load current page worth of tokens
+}
 ```
 
-### Get Rejected Tokens by Reason
+**Impact:** Pagination loads 50-200 items instead of 138k full list.
 
-```bash
-curl "http://localhost:8080/api/filtering/rejected-tokens?reason=dex_data_missing&limit=50" | jq
+### Snapshot Token HashMap
+**Problem:** Finding token by mint in query results requires O(n) scan.
+
+**Solution:** Pre-build HashMap during snapshot construction:
+```rust
+let mut token_entries = HashMap::with_capacity(tokens.len());
+for token in tokens {
+    token_entries.insert(token.mint.clone(), TokenEntry {
+        token: Arc::new(token),
+        has_pool_price: priced_set.contains(&token.mint),
+        has_open_position: open_position_set.contains(&token.mint),
+        has_ohlcv: ohlcv_set.contains(&token.mint),
+        // ... other fields
+    });
+}
 ```
 
-### Update Configuration
+**Impact:** O(1) token lookups during query execution, rejection reason matching, blacklist overlay.
 
-```bash
-curl -X PUT http://localhost:8080/api/config/filtering \
-  -H "Content-Type: application/json" \
-  -d '{
-    "meta": {
-      "enabled": true,
-      "min_token_age_minutes": 120
-    },
-    "dexscreener": {
-      "enabled": true,
-      "min_liquidity_usd": 5000
+## 10. Key Patterns & Pitfalls
+
+### Sequential Filter Chain
+**Pattern:** Filters evaluated in fixed order with short-circuit rejection.
+
+**Why:** Faster/cheaper filters run first:
+1. Meta (database lookups) - ~1ms
+2. OnChain (memory checks) - ~1μs
+3. DexScreener/GeckoTerminal (cached data) - ~10μs
+4. Rugcheck (cached data) - ~10μs
+5. AI (async LLM call) - ~500ms
+
+**Pitfall:** Order matters! Moving AI filter before Meta would cause 56k × 500ms = 28,000 seconds (7.7 hours) of LLM calls.
+
+### Config-Driven Enable/Disable
+**Pattern:** Each source and individual check has `enabled` flag:
+```rust
+if config.dexscreener.enabled {
+    if config.dexscreener.liquidity_enabled {
+        enforce_liquidity_threshold(token, config)?;
     }
-  }'
+}
 ```
 
-## Migration Notes
+**Why:** Allows granular control without code changes. Disable expensive checks during testing.
 
-### From rejection_history to rejection_stats (v0.1.108)
+**Pitfall:** Forgetting `enabled` checks causes all filters to run even when disabled in config.
 
-**Old Schema (Deprecated):**
+### Data Source Guards
+**Pattern:** Validate data source before applying metrics:
+```rust
+// DexScreener checks
+if token.data_source == DataSource::DexScreener {
+    enforce_transactions(token, config)?;
+}
 
-```sql
-CREATE TABLE rejection_history (
-    mint TEXT,
-    reason TEXT,
-    source TEXT,
-    rejected_at INTEGER
-);
--- One row per rejection event (unbounded growth)
+// GeckoTerminal checks
+if token.data_source == DataSource::GeckoTerminal {
+    enforce_pool_count(token, config)?;
+}
 ```
 
-**New Schema:**
+**Why:** Different sources provide different fields. GeckoTerminal has pool_count, DexScreener doesn't. Applying wrong checks causes false rejections.
 
-```sql
-CREATE TABLE rejection_stats (
-    bucket_hour INTEGER,
-    reason TEXT,
-    source TEXT,
-    rejection_count INTEGER,
-    PRIMARY KEY (bucket_hour, reason, source)
-);
--- One row per hour per reason (O(1) aggregation)
+**Pitfall:** Removing source guards causes "missing data" rejections for tokens with valid alternative source.
+
+### Batch Collect vs Spawn Pattern
+**Anti-pattern:**
+```rust
+// ❌ BAD: Spawns 260k+ tasks
+for token in tokens {
+    tokio::spawn(update_rejection_status(token.mint, reason));
+}
 ```
 
-**Migration:** No migration needed. Old table is ignored. Cleanup task removes old data automatically.
-
-### From Cumulative Events to Unique Tokens (v0.1.108)
-
-**Breaking Change:** Analytics endpoint semantics changed.
-
-**Before:**
-
-```javascript
-// Showed cumulative rejection events (2.5M+)
-total_rejected: 2524593;
+**Correct Pattern:**
+```rust
+// ✅ GOOD: Collect updates, spawn 4 batch tasks
+let mut updates = Vec::new();
+for token in tokens {
+    updates.push((token.mint, reason));
+}
+tokio::spawn(batch_update_rejection_status_async(updates));  // Single task
 ```
 
-**After:**
+**Why:** Tokio task spawning has overhead. 260k small tasks overwhelm scheduler. 4 batch tasks process same work efficiently.
 
-```javascript
-// Shows unique tokens currently rejected (~138K)
-total_rejected: 137990;
+### RwLock Read-Then-Write Race
+**Anti-pattern:**
+```rust
+// ❌ BAD: Race condition
+if self.snapshot.read().await.is_none() {
+    let snapshot = compute_snapshot().await?;
+    *self.snapshot.write().await = Some(Arc::new(snapshot));  // Another thread may have written
+}
 ```
 
-**Impact:** Charts/dashboards show more realistic numbers now.
+**Correct Pattern:**
+```rust
+// ✅ GOOD: Atomic flag + mutex + double-check
+if !self.refresh_in_progress.swap(true, Ordering::AcqRel) {
+    let _lock = self.refresh_lock.lock().await;
+    if self.snapshot.read().await.is_some() {
+        self.refresh_in_progress.store(false, Ordering::Release);
+        return Ok(self.snapshot.read().await.clone().unwrap());
+    }
+    // Compute snapshot...
+}
+```
 
-## Future Enhancements
+**Why:** Multiple concurrent refresh attempts waste CPU. Atomic flag + mutex + double-check prevents redundant work.
 
-### Planned Features
+### Snapshot Staleness vs Query Latency
+**Trade-off:** Fresh data (block queries during refresh) vs low latency (serve stale data).
 
-1. **Filter Effectiveness Metrics**
-   - Track how many filtered tokens would have been profitable
-   - A/B test different filter configurations
-   - Suggest optimal thresholds based on historical performance
+**ScreenerBot Choice:** Serve stale data up to 180 seconds, refresh in background.
 
-2. **Smart Filters**
-   - ML-based token quality scoring
-   - Pattern recognition for rug pulls
-   - Community-sourced filter rules
+**Rationale:** Token filtering changes slowly. 3-minute staleness acceptable for UX. Trading decisions use real-time pool prices (not snapshot data).
 
-3. **Advanced Analytics**
-   - Rejection trends over time (line charts)
-   - Filter impact analysis (which filters block the most?)
-   - Correlation analysis (liquidity vs rejection rate)
+**Pitfall:** Setting staleness too low (e.g., 10s) causes frequent refreshes, high CPU usage. Too high (e.g., 600s) causes users to see very outdated rejection counts.
 
-4. **Export/Import**
-   - ✅ Config export/import (implemented)
-   - TODO: Analytics export to CSV/JSON
-   - TODO: Filter preset library
+### Missing Data Handling
+**Inconsistent Pattern:** Some filters treat missing data as error, others as pass.
 
-### Performance Improvements
+**Examples:**
+- `DexVolume5mMissing` - Error if volume field is None but check enabled
+- `RugcheckTransferFeeMissing` - Only error if `transfer_fee_missing_strict` flag set
 
-- Materialized views for common queries
-- Background aggregation worker
-- Redis cache for analytics data
-- WebSocket push for real-time updates
+**Why:** Trade-off between strictness and false positives. Some metrics (volume) expected on all tokens. Others (transfer fee) may legitimately be missing.
+
+**Config Control:**
+```toml
+[filtering.rugcheck]
+transfer_fee_missing_strict = false  # Pass if transfer fee data unavailable
+lp_missing_error = true              # Reject if LP data unavailable
+```
+
+**Pitfall:** Strict missing data checks reject too many tokens. Lenient checks allow risky tokens through. Requires per-metric tuning based on data source reliability.
 
 ---
 
-**Last Updated:** January 7, 2026  
-**Version:** 0.1.108  
-**Author:** ScreenerBot Development Team
+**Document Version:** 1.0  
+**Last Updated:** January 2025  
+**Codebase Version:** 0.1.108+

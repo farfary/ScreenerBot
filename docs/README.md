@@ -24,7 +24,10 @@ docs/
     ├── 2025-jupiter-referral/
     ├── 2025-license-gating/
     ├── 2025-linux-x11/
-    └── 2026-02-memory/
+    ├── 2025-token-details/
+    ├── 2026-02-memory/
+    ├── 2026-02-onchain-filtering/
+    └── 2026-02-token-00-scam/
 ```
 
 ### 📐 Architecture
@@ -34,20 +37,15 @@ Living documentation describing how each major system works. These docs are the 
 | Document | Description |
 |----------|-------------|
 | [System Overview](architecture/overview.md) | High-level architecture, data flow, service startup order |
-| [Filtering Pipeline](architecture/filtering.md) | Token quality control — criteria, evaluation, snapshots |
+| [Tokens Module](architecture/tokens.md) | Token lifecycle, database schema, caching, market data, security pipelines |
+| [Filtering Pipeline](architecture/filtering.md) | Token quality control — filter chain, sources, caching, query system |
 | [Swap Routing](architecture/swaps.md) | Trait-based multi-DEX router architecture |
 | [Trading Strategies](architecture/strategies.md) | Condition-based strategy system |
 | [OHLCV Integration](architecture/ohlcv-strategy-integration.md) | Multi-timeframe data flow for strategy evaluation |
 | [Partial Sell & DCA](architecture/partial-sell-dca.md) | Position management: DCA entries, partial exits |
 | [Positions & Actions](architecture/positions.md) | Position lifecycle, entry/exit records |
 | [Startup Order](architecture/startup-order.md) | Service startup vs. user-facing workflow order |
-| [Token Details](architecture/token-details-improvements.md) | Token details dialog improvements |
 | [Webserver Port Conflict](architecture/webserver-port-conflict.md) | Port conflict detection and resolution |
-| [Port Conflict Implementation](architecture/webserver-port-conflict-implementation.md) | Port conflict implementation details |
-| [Port Conflict Solution](architecture/webserver-port-conflict-solution.md) | Port conflict solution design |
-| [Port Conflict Index](architecture/webserver-port-conflict-index.md) | Port conflict decision index |
-| [Port Conflict Quick Ref](architecture/webserver-port-conflict-quickref.md) | Port conflict quick reference |
-| [Port Conflict Summary](architecture/webserver-port-conflict-summary.md) | Port conflict solution summary |
 | [Workflow Order](architecture/workflow-order.md) | Service dependency resolution and startup sequencing |
 
 ### 🛠 Development
@@ -92,7 +90,10 @@ Historical deep-dive technical analyses. These are **immutable records** — the
 | [Jupiter Referral](investigations/2025-jupiter-referral/) | 2025 | Jupiter referral program research and implementation guide |
 | [License Gating](investigations/2025-license-gating/) | 2025 | License-gated initialization architecture design |
 | [Linux X11](investigations/2025-linux-x11/) | 2025 | Linux X11 dependency investigation for cross-platform builds |
+| [Token Details](investigations/2025-token-details/) | 2025 | Token details dialog improvement plan and gap analysis |
 | [Memory Optimization](investigations/2026-02-memory/) | Feb 2026 | Root cause analysis of 804MB+ startup RSS, 10-component architecture plan (56 research docs) |
+| [On-Chain Filtering](investigations/2026-02-onchain-filtering/) | Feb 2026 | On-chain scam detection: symbol analysis, authority reputation, risk scoring |
+| [Token "00" Scam](investigations/2026-02-token-00-scam/) | Feb 2026 | Investigation of scam tokens with "00" symbol pattern |
 
 ## Contributing Documentation
 
