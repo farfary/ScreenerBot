@@ -292,6 +292,10 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
     if account.owner == spl_token::id() {
         let mint_data = SplMint::unpack(&account.data)
             .map_err(|e| format!("Failed to unpack SPL Token mint: {}", e))?;
+
+        // Cache authority data as side effect (zero extra RPC cost)
+        cache_authorities_from_spl_mint(mint, &mint_data);
+
         return Ok(mint_data.decimals);
     }
 
@@ -299,6 +303,8 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
     if account.owner == spl_token_2022::id() {
         // First, try unpack via the Token-2022 Mint directly
         if let Ok(mint_data) = Mint2022::unpack(&account.data) {
+            // Cache authority data (Token-2022 has same fields)
+            cache_authorities_from_token2022_mint(mint, &mint_data);
             return Ok(mint_data.decimals);
         }
 
@@ -307,7 +313,10 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
         match spl_token_2022::extension::StateWithExtensionsOwned::<Mint2022>::unpack(
             account.data.clone(),
         ) {
-            Ok(state) => return Ok(state.base.decimals),
+            Ok(state) => {
+                cache_authorities_from_token2022_mint(mint, &state.base);
+                return Ok(state.base.decimals);
+            }
             Err(e) => {
                 return Err(format!(
                     "Failed to unpack Token-2022 mint with extensions: {}",
@@ -454,4 +463,57 @@ fn clear_failure(mint: &str) {
 
 fn is_marked_failure(mint: &str) -> bool {
     FAILED_CACHE.get(&mint.to_string()).is_some()
+}
+
+// ============================================================================
+// AUTHORITY CACHING — side effect of chain fetch, zero extra RPC cost
+// ============================================================================
+
+/// Extract and cache authority data from an SPL Token Mint struct
+fn cache_authorities_from_spl_mint(mint: &str, mint_data: &spl_token::state::Mint) {
+    use solana_program::program_option::COption;
+
+    let mint_authority = match mint_data.mint_authority {
+        COption::Some(pk) => Some(pk.to_string()),
+        COption::None => None,
+    };
+    let freeze_authority = match mint_data.freeze_authority {
+        COption::Some(pk) => Some(pk.to_string()),
+        COption::None => None,
+    };
+
+    crate::tokens::authority_cache::cache_mint_authorities(
+        mint,
+        crate::tokens::authority_cache::MintAuthorities {
+            mint_authority,
+            freeze_authority,
+            supply: mint_data.supply,
+        },
+    );
+}
+
+/// Extract and cache authority data from a Token-2022 Mint struct
+fn cache_authorities_from_token2022_mint(
+    mint: &str,
+    mint_data: &spl_token_2022::state::Mint,
+) {
+    use solana_program::program_option::COption;
+
+    let mint_authority = match mint_data.mint_authority {
+        COption::Some(pk) => Some(pk.to_string()),
+        COption::None => None,
+    };
+    let freeze_authority = match mint_data.freeze_authority {
+        COption::Some(pk) => Some(pk.to_string()),
+        COption::None => None,
+    };
+
+    crate::tokens::authority_cache::cache_mint_authorities(
+        mint,
+        crate::tokens::authority_cache::MintAuthorities {
+            mint_authority,
+            freeze_authority,
+            supply: mint_data.supply,
+        },
+    );
 }

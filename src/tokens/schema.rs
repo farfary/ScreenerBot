@@ -219,6 +219,21 @@ pub const CREATE_TABLES: &[&str] = &[
         PRIMARY KEY (bucket_hour, reason, source)
     )
     "#,
+    // Authority reputation — auto-growing scam authority detection
+    // Populated by background discovery task from filtering results
+    r#"
+    CREATE TABLE IF NOT EXISTS authority_reputation (
+        address TEXT PRIMARY KEY,
+        authority_type TEXT NOT NULL DEFAULT 'unknown',
+        total_token_count INTEGER NOT NULL DEFAULT 0,
+        flagged_token_count INTEGER NOT NULL DEFAULT 0,
+        confidence REAL NOT NULL DEFAULT 0.0,
+        is_blocked INTEGER NOT NULL DEFAULT 0,
+        source TEXT NOT NULL DEFAULT 'auto',
+        first_seen_at INTEGER NOT NULL,
+        last_updated_at INTEGER NOT NULL
+    )
+    "#,
 ];
 
 /// All CREATE INDEX statements
@@ -284,6 +299,10 @@ pub const CREATE_INDEXES: &[&str] = &[
     
     // Partial index for active (non-blacklisted) tokens by priority (common query pattern)
     "CREATE INDEX IF NOT EXISTS idx_tracking_active_priority ON update_tracking(priority DESC, market_data_last_updated_at ASC) WHERE last_rejection_at IS NULL",
+
+    // Authority reputation indexes (for auto-discovery queries)
+    "CREATE INDEX IF NOT EXISTS idx_authority_rep_blocked ON authority_reputation(is_blocked) WHERE is_blocked = 1",
+    "CREATE INDEX IF NOT EXISTS idx_authority_rep_confidence ON authority_reputation(confidence DESC)",
 ];
 
 /// ALTER TABLE statements for schema migrations (existing databases)

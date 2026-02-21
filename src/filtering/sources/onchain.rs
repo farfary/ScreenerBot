@@ -35,15 +35,20 @@ pub fn evaluate(token: &Token, config: &OnChainFilters) -> Result<(), FilterReje
         }
     }
 
-    // H4: Known scam authority detection (freeze authority)
+    // H4: Known scam authority detection (auto-discovered, no hardcoding)
     if config.reject_known_scam_authorities {
         if let Some(ref freeze_auth) = token.freeze_authority {
-            if is_known_scam_authority(freeze_auth) {
+            if crate::tokens::authority_cache::is_blocked_authority(freeze_auth) {
                 return Err(FilterRejectionReason::OnChainKnownScamAuthority);
             }
         }
         if let Some(ref update_auth) = token.update_authority {
-            if is_known_scam_authority(update_auth) {
+            if crate::tokens::authority_cache::is_blocked_authority(update_auth) {
+                return Err(FilterRejectionReason::OnChainKnownScamAuthority);
+            }
+        }
+        if let Some(ref mint_auth) = token.mint_authority {
+            if crate::tokens::authority_cache::is_blocked_authority(mint_auth) {
                 return Err(FilterRejectionReason::OnChainKnownScamAuthority);
             }
         }
@@ -78,21 +83,6 @@ fn is_numeric_only_symbol(symbol: &str) -> bool {
 /// Check if symbol is empty or whitespace/null-padded
 fn is_empty_or_whitespace(symbol: &str) -> bool {
     symbol.is_empty() || symbol.trim().is_empty() || symbol.trim_matches('\0').trim().is_empty()
-}
-
-/// Known scam authorities discovered from on-chain investigation.
-/// These wallets have deployed hundreds of scam tokens with fake metadata.
-const KNOWN_SCAM_AUTHORITIES: &[&str] = &[
-    // "00" scam factory — freeze authority
-    "9N2kn1C8sYM3PrTJ4DY5q7R4uaLXVkrc8C23JR1e6pWW",
-    // "00" scam factory — update authority
-    "4wTRxzhv8HZZPW6YgrPcrZEwtDTC4RvKjKzZVHbzGAxL",
-    // Secondary scam factory — freeze + update authority
-    "Cvz4Lmrjb8HtAMHMEMqeaDPjdGoi6Uhv2QLbAbizF2D6",
-];
-
-fn is_known_scam_authority(authority: &str) -> bool {
-    KNOWN_SCAM_AUTHORITIES.contains(&authority)
 }
 
 /// Compute a combined risk score from multiple weak signals.

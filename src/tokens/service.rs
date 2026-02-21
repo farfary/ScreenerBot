@@ -95,6 +95,37 @@ impl Service for TokensServiceNew {
             ),
         );
 
+        // Load blocked authorities from DB into memory cache
+        {
+            let db_for_auth = self.db.as_ref().unwrap().clone();
+            match tokio::task::spawn_blocking(move || db_for_auth.load_blocked_authorities())
+                .await
+            {
+                Ok(Ok(blocked)) => {
+                    let count = blocked.len();
+                    crate::tokens::authority_cache::refresh_blocked_from_db(blocked);
+                    if count > 0 {
+                        logger::info(
+                            LogTag::Tokens,
+                            &format!("Loaded {} blocked authorities from DB", count),
+                        );
+                    }
+                }
+                Ok(Err(e)) => {
+                    logger::warning(
+                        LogTag::Tokens,
+                        &format!("Failed to load blocked authorities: {}", e),
+                    );
+                }
+                Err(e) => {
+                    logger::warning(
+                        LogTag::Tokens,
+                        &format!("Failed to spawn authority load task: {}", e),
+                    );
+                }
+            }
+        }
+
         logger::info(
             LogTag::Tokens,
             &format!("Service initialized with database at {}", db_path.display()),
@@ -147,8 +178,69 @@ impl Service for TokensServiceNew {
         handles.push(discovery_handle);
 
         // Start cleanup loop (hourly)
-        let cleanup_handle = cleanup::start_cleanup_loop(db.clone(), shutdown);
+        let cleanup_handle = cleanup::start_cleanup_loop(db.clone(), shutdown.clone());
         handles.push(cleanup_handle);
+
+        // Start authority reputation discovery loop (every 5 minutes)
+        let auth_db = db.clone();
+        let auth_shutdown = shutdown;
+        let auth_handle = tokio::spawn(async move {
+            // Wait 60s before first run to let other systems warm up
+            tokio::select! {
+                _ = auth_shutdown.notified() => return,
+                _ = tokio::time::sleep(std::time::Duration::from_secs(60)) => {}
+            }
+
+            let interval = std::time::Duration::from_secs(300); // 5 minutes
+            loop {
+                // Run authority discovery analysis
+                let db_clone = auth_db.clone();
+                match tokio::task::spawn_blocking(move || {
+                    db_clone.run_authority_discovery(5, 0.8)
+                })
+                .await
+                {
+                    Ok(Ok(newly_blocked)) => {
+                        if newly_blocked > 0 {
+                            logger::info(
+                                LogTag::Filtering,
+                                &format!(
+                                    "Authority discovery: {} new blocked authorities",
+                                    newly_blocked
+                                ),
+                            );
+                        }
+                        // Refresh in-memory blocked set from DB
+                        let db_reload = auth_db.clone();
+                        if let Ok(Ok(blocked)) = tokio::task::spawn_blocking(move || {
+                            db_reload.load_blocked_authorities()
+                        })
+                        .await
+                        {
+                            crate::tokens::authority_cache::refresh_blocked_from_db(blocked);
+                        }
+                    }
+                    Ok(Err(e)) => {
+                        logger::warning(
+                            LogTag::Filtering,
+                            &format!("Authority discovery error: {}", e),
+                        );
+                    }
+                    Err(e) => {
+                        logger::warning(
+                            LogTag::Filtering,
+                            &format!("Authority discovery task panic: {}", e),
+                        );
+                    }
+                }
+
+                tokio::select! {
+                    _ = auth_shutdown.notified() => break,
+                    _ = tokio::time::sleep(interval) => {}
+                }
+            }
+        });
+        handles.push(auth_handle);
 
         logger::info(
             LogTag::Tokens,

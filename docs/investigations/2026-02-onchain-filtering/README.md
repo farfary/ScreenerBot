@@ -314,3 +314,53 @@ From the "00" token investigation:
 - Release build: `cargo build --release` ✅
 - API: `onchain` config visible in `/api/config/filtering` ✅
 - Dashboard: On-Chain tab renders correctly with all 7 settings ✅
+
+---
+
+## Phase H3: Authority Auto-Discovery System (IMPLEMENTED)
+
+**Date:** 2026-02-21
+**Status:** ✅ IMPLEMENTED AND TESTED
+
+### Problem
+H2's hardcoded `KNOWN_SCAM_AUTHORITIES` list was brittle — new scam factories would bypass detection.
+Manual maintenance is not sustainable for an automated trading system.
+
+### Solution: Auto-Growing Authority Reputation
+
+**Architecture:**
+1. **Authority Cache Enrichment** (`authority_cache.rs`) — extracts freeze/mint authority from SPL Mint during existing `decimals.rs` chain fetch (zero extra RPC cost)
+2. **Authority Reputation Table** (`authority_reputation` in tokens.db) — persists reputation scores: address, type, total/flagged token counts, confidence, blocked status
+3. **Background Discovery Task** (every 5 minutes) — SQL-based analysis joining `security_rugcheck` with `update_tracking` to find authorities whose tokens get rejected
+4. **In-Memory Blocked Set** (`ArcSwap<DashSet<String>>`) — atomic swap for race-free O(1) lookups during filtering hot path
+
+**Auto-Discovery Algorithm:**
+- Groups tokens by freeze/mint/update authority from `security_rugcheck` table
+- Cross-references with `update_tracking.last_rejection_at` to identify rejected tokens
+- Computes confidence = flagged_tokens / total_tokens per authority
+- Blocks if: confidence ≥ 0.8 AND total_tokens ≥ 5
+- Starts empty, learns from scratch — no hardcoded seeds
+
+**Key Design Decisions:**
+- ArcSwap (not DashSet.clear+insert) to prevent race conditions during refresh
+- Removed ALL hardcoded scam addresses
+- Authority data from SPL Mint cached as side effect of decimals fetch
+- Token struct assembly falls back to authority_cache when Rugcheck data unavailable
+
+**Files Created/Modified:**
+- `src/tokens/authority_cache.rs` — NEW: MintAuthorities struct, blocked set, cache API
+- `src/tokens/database/authority.rs` — NEW: DB operations + discovery SQL
+- `src/tokens/decimals.rs` — MODIFIED: Added cache_authorities_from_spl_mint/token2022 helpers
+- `src/tokens/database/assembly.rs` — MODIFIED: Authority cache fallback for token struct
+- `src/tokens/service.rs` — MODIFIED: Startup loading + background discovery task
+- `src/tokens/schema.rs` — MODIFIED: Added authority_reputation table + indexes
+- `src/filtering/sources/onchain.rs` — MODIFIED: Replaced hardcoded list with cache lookup
+- `Cargo.toml` — Added arc-swap dependency
+
+**Test Results:**
+- Startup: loads blocked authorities from DB (persisted from previous runs)
+- First discovery cycle (after 60s warmup): found 7-9 scam authorities automatically
+- Subsequent cycles: stable at 8 blocked, new discoveries increment
+- Authority data populates from decimals chain fetch (verified in logs)
+- Race-free refresh verified (ArcSwap atomic swap)
+- Clean release build ✅

@@ -13,6 +13,7 @@
 /// - types.rs: Core domain types
 ///
 /// Note: API clients in crate::apis module
+pub mod authority_cache;
 pub mod cleanup;
 pub mod database;
 pub mod decimals;

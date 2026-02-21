@@ -1015,8 +1015,21 @@ pub(super) fn assemble_token(
     let security_ref = security.as_ref();
 
     let token_type = security_ref.and_then(|sec| sec.token_type.clone());
-    let mint_authority = security_ref.and_then(|sec| sec.mint_authority.clone());
-    let freeze_authority = security_ref.and_then(|sec| sec.freeze_authority.clone());
+
+    // Authority data: primary from Rugcheck, fallback from SPL Mint authority cache
+    let (mint_authority, freeze_authority) = {
+        let rc_mint = security_ref.and_then(|sec| sec.mint_authority.clone());
+        let rc_freeze = security_ref.and_then(|sec| sec.freeze_authority.clone());
+        if rc_mint.is_some() || rc_freeze.is_some() {
+            (rc_mint, rc_freeze)
+        } else if let Some(cached) =
+            crate::tokens::authority_cache::get_cached(&metadata.mint)
+        {
+            (cached.mint_authority, cached.freeze_authority)
+        } else {
+            (None, None)
+        }
+    };
     let update_authority = security_ref.and_then(|sec| sec.update_authority.clone());
     let is_mutable = security_ref.and_then(|sec| sec.is_mutable);
     let security_score = security_ref.and_then(|sec| sec.score);
@@ -1175,8 +1188,21 @@ pub(super) fn assemble_token_without_market_data(
     let security_ref = security.as_ref();
 
     let token_type = security_ref.and_then(|sec| sec.token_type.clone());
-    let mint_authority = security_ref.and_then(|sec| sec.mint_authority.clone());
-    let freeze_authority = security_ref.and_then(|sec| sec.freeze_authority.clone());
+
+    // Authority data: primary from Rugcheck, fallback from SPL Mint authority cache
+    let (mint_authority, freeze_authority) = {
+        let rc_mint = security_ref.and_then(|sec| sec.mint_authority.clone());
+        let rc_freeze = security_ref.and_then(|sec| sec.freeze_authority.clone());
+        if rc_mint.is_some() || rc_freeze.is_some() {
+            (rc_mint, rc_freeze)
+        } else if let Some(cached) =
+            crate::tokens::authority_cache::get_cached(&metadata.mint)
+        {
+            (cached.mint_authority, cached.freeze_authority)
+        } else {
+            (None, None)
+        }
+    };
     let update_authority = security_ref.and_then(|sec| sec.update_authority.clone());
     let is_mutable = security_ref.and_then(|sec| sec.is_mutable);
     let security_score = security_ref.and_then(|sec| sec.score);

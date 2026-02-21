@@ -69,6 +69,7 @@ tokio-metrics = "0.4"
 
 # Essential dependencies
 anyhow = "1.0"
+arc-swap = "1.7"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
