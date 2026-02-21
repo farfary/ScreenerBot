@@ -204,8 +204,8 @@ ScreenerBot is a professional-grade trading automation platform for Solana DeFi.
 │ • Tool-calling   │ │ • Bot commands   │ │ • 30s refresh    │ │ • Auto-notify    │
 │ • Scheduled tasks│ │ • Inline actions │ │ • USD conversion │ │ • Release notes  │
 └──────────────────┘ └──────────────────┘ └──────────────────┘ └──────────────────┘
-                                    │
-                                    ▼
+                                        │││
+                                         ▼
 ┌─────────────────────────────────────────────────────────────────────────────────────┐
 │                                 Web Dashboard                                       │
 │           Axum REST API • Real-time Updates • 20 Pages • Hot-reload Config          │
