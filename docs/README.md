@@ -57,7 +57,7 @@ Living documentation describing how each major system works. These docs are the 
 | **System** | | |
 | [Config](architecture/config.md) | 272 | TOML configuration, macro system, hot reload, metadata |
 | [Services](architecture/services.md) | 396 | Service manager, lifecycle, cached health/metrics, registered services |
-| [Wallets](architecture/wallets.md) | 256 | Multi-wallet management, AES-256-GCM encryption |
+| [Wallets](architecture/wallets.md) | 670 | Multi-wallet key storage (wallets.db) + wallet monitoring (wallet.db) |
 | [Infrastructure](architecture/infrastructure.md) | 328 | Database, errors, events, logger, connectivity, actions |
 
 ### 🛠 Development
