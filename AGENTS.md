@@ -123,8 +123,9 @@ screenerbot::config::load_config().expect("Failed to load config");
 | System | Entry Point | Doc |
 |--------|------------|-----|
 | Configuration | `src/config/` — `config_struct!` macro | [docs/architecture/overview.md](docs/architecture/overview.md) |
-| Pool Discovery | `src/pools/discovery.rs` | [docs/architecture/overview.md](docs/architecture/overview.md) |
+| Tokens | `src/tokens/service.rs` — lifecycle, caching, DB | [docs/architecture/tokens.md](docs/architecture/tokens.md) |
 | Token Filtering | `src/filtering/engine.rs` | [docs/architecture/filtering.md](docs/architecture/filtering.md) |
+| Pool Discovery | `src/pools/discovery.rs` | [docs/architecture/overview.md](docs/architecture/overview.md) |
 | Swap Execution | `src/swaps/router.rs` | [docs/architecture/swaps.md](docs/architecture/swaps.md) |
 | Trading Engine | `src/trader/` (entry.rs, exit.rs) | [docs/development/trader-overview.md](docs/development/trader-overview.md) |
 | Strategies | `src/strategies/engine.rs` | [docs/architecture/strategies.md](docs/architecture/strategies.md) |
