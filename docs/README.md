@@ -49,7 +49,7 @@ Living documentation describing how each major system works. These docs are the 
 | [Swap Routing](architecture/swaps.md) | 338 | Multi-DEX router architecture, fee collection, fallback chain |
 | [Transactions](architecture/transactions.md) | 412 | Transaction monitoring, analyzer pipeline, 10+ DEX detection |
 | **Data Sources** | | |
-| [RPC Module](architecture/rpc.md) | 301 | Multi-provider Solana RPC, circuit breaker, rate limiting |
+| [RPC Module](architecture/rpc.md) | 587 | Multi-provider Solana RPC, circuit breaker, rate limiting |
 | [APIs Module](architecture/apis.md) | 412 | External HTTP clients + LLM providers + SOL price service |
 | **User Interface** | | |
 | [Webserver](architecture/webserver.md) | 307 | Dashboard REST API, authentication, 200+ endpoints |
