@@ -36,7 +36,7 @@ Living documentation describing how each major system works. These docs are the 
 
 | Document | Lines | Description |
 |----------|-------|-------------|
-| [System Overview](architecture/overview.md) | 8048 | High-level architecture, data flow, full system reference |
+| [System Overview](architecture/overview.md) | 273 | High-level system map, reading order, module connections |
 | **Core Trading** | | |
 | [Tokens Module](architecture/tokens.md) | 1998 | Token lifecycle, database schema, caching, market data, security |
 | [Pools Module](architecture/pools.md) | 910 | Pool discovery, DEX decoders, price calculation, swap integration |
