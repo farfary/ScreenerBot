@@ -1,626 +1,814 @@
-# OHLCV-Strategy Integration Architecture
+# OHLCV Module Architecture
 
-**Systematic & Fundamental Design for Performance-Optimized Data Flow**
+> ScreenerBot OHLCV Candle Data, Aggregation & Strategy Integration — February 2026
 
----
-
-## EXECUTIVE SUMMARY
-
-This document defines the complete architectural redesign for integrating OHLCV data with the strategy evaluation system.
-
-**Implementation Status**: ✅ **PHASES 1-3 COMPLETE - PRODUCTION READY**
-
-**Development Stage Priorities**:
-
-- **No Config System**: All parameters hardcoded as constants in Rust files ✅
-- **No Backward Compatibility**: Fresh start - deleted all legacy code ✅
-- **No Tests Required**: Focus on implementation, validation through runtime ✅
-- **Systematic & Fundamental**: Every change solves root cause, not symptoms ✅
-
-**Achieved Goals**:
-
-- ✅ **Performance**: Sub-1ms cached lookups, 200-500ms on-demand builds
-- ✅ **Correctness**: Type-safe data flow with zero conversions
-- ✅ **Maintainability**: Single source of truth, clean separation of concerns
-- ✅ **Scalability**: On-demand building handles unlimited concurrent tokens
-- ✅ **Self-Healing**: Automatic cache warming through normal operation
+The OHLCV module provides candlestick (Open, High, Low, Close, Volume) data for tokens by fetching from external APIs (GeckoTerminal), aggregating across 7 timeframes, caching in a three-tier system, persisting to SQLite, and delivering data to strategies via `TimeframeBundle`. It manages pool selection with automatic failover, gap detection with backfill, priority-based fetch scheduling, and activity-driven resource allocation.
 
 ---
 
-## CORE ARCHITECTURAL PRINCIPLES (IMPLEMENTED)
+## Table of Contents
 
-### 1. **On-Demand Building Pattern** ✅
-
-Strategy evaluation fetches from cache. Cache miss triggers immediate build. No background workers needed.
-
-### 2. **Type Unification** ✅
-
-One canonical `Candle` type used across all modules. No conversions in hot paths. Zero overhead.
-
-### 3. **Multi-Timeframe Bundle** ✅
-
-Strategies receive ALL 7 timeframes in a single structure. Conditions select what they need via helper.
-
-### 4. **Cache-First with Fallback** ✅
-
-OHLCV service checks cache first. On miss, builds immediately and stores. Self-warming system.
-
-### 5. **LRU Priority Management** ✅
-
-Frequently accessed tokens stay cached. Inactive tokens auto-evict. No manual tracking needed.
+1. [Module Overview](#1-module-overview)
+2. [Core Data Types](#2-core-data-types)
+3. [Service Lifecycle](#3-service-lifecycle)
+4. [Monitor](#4-monitor)
+5. [Fetcher](#5-fetcher)
+6. [Aggregator](#6-aggregator)
+7. [Caching Layer](#7-caching-layer)
+8. [Database Layer](#8-database-layer)
+9. [Gap Detection & Backfill](#9-gap-detection--backfill)
+10. [Pool Manager](#10-pool-manager)
+11. [Priority System](#11-priority-system)
+12. [API Surface](#12-api-surface)
+13. [Configuration](#13-configuration)
+14. [Integration Points](#14-integration-points)
+15. [Performance Patterns](#15-performance-patterns)
+16. [Error Handling](#16-error-handling)
 
 ---
 
-## MODULE REDESIGN
+## 1. Module Overview
 
-### **Module 1: OHLCV Types Unification**
+### Purpose
 
-**Location**: `src/ohlcvs/types.rs`
+The OHLCV module provides the historical and real-time price data that strategies need for signal generation. It:
 
-**Changes Required**:
+- Fetches OHLCV candle data from GeckoTerminal API
+- Supports 7 timeframes: 1m, 5m, 15m, 1h, 4h, 12h, 1d
+- Aggregates base timeframe (1m) into higher timeframes
+- Manages pool selection per token with failover and health tracking
+- Detects gaps in data and schedules backfill
+- Delivers data as `TimeframeBundle` (100 candles per timeframe per token)
+- Priority-based scheduling: open positions fetched every 30s, inactive every 15min
 
-1. **Rename `OhlcvDataPoint` → `Candle`**
-   - This becomes the universal candle type
-   - Remove `strategies::types::Candle` (duplicate)
-   - Update all OHLCV module internals to use `Candle`
+### File Structure
 
-2. **Add `Multi-Timeframe Bundle` Type**
+```
+src/ohlcvs/
+├── mod.rs          — Public API re-exports (126 lines)
+├── types.rs        — Candle, Timeframe, TimeframeBundle, Priority, errors (598 lines)
+├── service.rs      — Service singleton, public API functions (772 lines)
+├── monitor.rs      — Background monitoring loop, telemetry (1600+ lines)
+├── fetcher.rs      — GeckoTerminal API client, rate limiting (460+ lines)
+├── aggregator.rs   — Timeframe aggregation, resampling, VWAP (150 lines)
+├── cache.rs        — Three-tier LRU cache (332 lines)
+├── database.rs     — SQLite persistence (900+ lines)
+├── gaps.rs         — Gap detection and filling (438 lines)
+├── manager.rs      — Pool management and failover (440+ lines)
+└── priorities.rs   — Priority calculation, activity scoring (192 lines)
+```
 
-   ```
-   TimeframeBundle {
-       mint: String,
-       pool_address: String,
-       timestamp: DateTime<Utc>,  // When bundle was created
+**Total:** 11 Rust source files, ~6,600 lines of code.
 
-       // All timeframes pre-loaded
-       m1: Vec<Candle>,   // 1-minute (100 candles = 100 min)
-       m5: Vec<Candle>,   // 5-minute (100 candles = 8.3 hours)
-       m15: Vec<Candle>,  // 15-minute (100 candles = 25 hours)
-       h1: Vec<Candle>,   // 1-hour (100 candles = 4.2 days)
-       h4: Vec<Candle>,   // 4-hour (100 candles = 16.7 days)
-       h12: Vec<Candle>,  // 12-hour (100 candles = 50 days)
-       d1: Vec<Candle>,   // 1-day (100 candles = 100 days)
+### Key Capabilities
 
-       // Metadata
-       freshness_seconds: u64,  // Age of oldest data
-       cache_hit: bool,         // Was this from cache?
-   }
-   ```
-
-3. **Remove Unnecessary Fields from Candle**
-   - No mint, pool_address, source in Candle (moves to bundle level)
-   - Keep only: timestamp, open, high, low, close, volume
-
-4. **Export Unified Types**
-   - `pub use ohlcvs::types::{Candle, TimeframeBundle};` everywhere
-   - Strategies import from ohlcvs, not own types
-
-**Rationale**: Single type definition eliminates conversion overhead and type confusion. Bundle pattern provides all timeframes with one cache lookup.
+- **7 timeframes** — 1m, 5m, 15m, 1h, 4h, 12h, 1d
+- **100-candle bundles** — Each timeframe delivers up to 100 candles (`BUNDLE_CANDLE_COUNT`)
+- **Three-tier caching** — Hot (memory, 100 tokens) → Database → API fetch
+- **Priority scheduling** — Critical (30s), High (60s), Medium (5m), Low (15m)
+- **Activity-driven** — Position opens, chart views, data requests adjust priority
+- **Pool failover** — Automatic pool rotation when API returns errors
+- **Gap detection** — Identifies and fills data discontinuities
+- **Backfill** — Historical data fetching with retry and completion tracking
 
 ---
 
-### **Module 2: OHLCV Service Cache Extension**
+## 2. Core Data Types
 
-**Location**: `src/ohlcvs/service.rs`
-
-**Changes Required**:
-
-1. **Add Bundle Cache Layer**
-   - New cache: `HashMap<String, (TimeframeBundle, Instant)>`
-   - Key: mint address only (default pool implied)
-   - **Hardcoded Constants**:
-     ```rust
-     const BUNDLE_CACHE_TTL_SECONDS: u64 = 30;
-     const BUNDLE_CACHE_MAX_SIZE: usize = 150;
-     const BUNDLE_CANDLE_COUNT: usize = 100;
-     ```
-   - LRU eviction when > MAX_SIZE
-
-2. **New Public API Method**
-
-   ```
-   get_timeframe_bundle(mint: &str) -> OhlcvResult<Option<TimeframeBundle>>
-   ```
-
-   - Returns bundle if cached and fresh (< TTL)
-   - Returns None if stale or missing (triggers on-demand build)
-   - NEVER blocks on fetch (trader can't wait)
-
-3. **Build Bundle Method**
-
-   ```
-   build_timeframe_bundle(mint: &str) -> OhlcvResult<TimeframeBundle>
-   ```
-
-   - Fetches all 7 timeframes in parallel
-   - Uses hardcoded BUNDLE_CANDLE_COUNT (100) per timeframe
-   - Returns complete bundle
-
-4. **Store Bundle Method**
-
-   ```
-   store_bundle(mint: String, bundle: TimeframeBundle) -> OhlcvResult<()>
-   ```
-
-   - Takes bundle by value (no unnecessary clone)
-   - LRU eviction when > MAX_SIZE
-   - Updates cache timestamp
-
-5. **Background Bundle Builder Task**
-   - **Hardcoded Constants**:
-     ```rust
-     const BUNDLE_REFRESH_INTERVAL_SECONDS: u64 = 5;
-     const PARALLEL_FETCH_LIMIT: usize = 10;
-     ```
-   - Runs every BUNDLE_REFRESH_INTERVAL_SECONDS
-   - For each tracked token:
-     - Fetches all 7 timeframes in parallel (limit: PARALLEL_FETCH_LIMIT)
-     - Builds bundle with hardcoded BUNDLE_CANDLE_COUNT (100) per timeframe
-     - Stores in bundle cache
-   - Priority order: open positions → entry candidates → others
-
-6. **Delete Legacy Code**
-   - Remove all blocking `get_ohlcv_data()` calls from trader paths
-   - Keep single non-blocking version for webserver/debug tools only
-   - Delete any config-driven behavior (all constants hardcoded)
-
-**Rationale**: Bundle cache provides instant access to all timeframes. Background refresh ensures freshness without blocking evaluation. Hardcoded constants eliminate config complexity.
-
----
-
-### **Module 3: OHLCV Monitor Enhancement** [✅ SUPERSEDED - NOT NEEDED]
-
-**Status**: This module is not needed - on-demand building eliminates all requirements for monitoring infrastructure.
-
-**Why Skipped**:
-
-- Token tracking registry → Replaced by LRU cache
-- Registration API → Not needed, on-demand building works immediately
-- Priority-based refresh → LRU cache naturally prioritizes frequently accessed tokens
-- Background worker → Eliminated by on-demand building pattern
-
----
-
-### **Module 4: Strategies Module Adaptation** [✅ COMPLETE]
-
-**Status**: All changes implemented in Phase 1.
-
-**Completed Changes**:
-
-- ✅ EvaluationContext now has `timeframe_bundle: Option<TimeframeBundle>`
-- ✅ All 5 condition evaluators use `get_candles_from_context()` helper
-- ✅ DEFAULT_TIMEFRAME="5m" used as fallback
-- ✅ Conditions work with unified Candle type from bundle
-
----
-
-### **Module 5: Trader Evaluator Enhancement** [✅ COMPLETE]
-
-**Status**: All changes implemented in Phase 3 with superior on-demand approach.
-
-**Completed Changes**:
-
-- ✅ Entry evaluator prefetches bundle with `get_timeframe_bundle()`
-- ✅ Cache miss triggers immediate on-demand build
-- ✅ Built bundle automatically stored in cache
-- ✅ Exit evaluator has same OHLCV prefetch logic
-- ✅ Graceful handling when bundle unavailable (continues with None)
-- ✅ Market data enrichment from tokens/pools modules
-
-**Actual Implementation Pattern**:
+### Candle (`types.rs`)
 
 ```rust
-// Try cache first
-let timeframe_bundle = match get_timeframe_bundle(token_mint).await {
-    Some(bundle) => Some(bundle),
-    None => {
-        // Cache miss - build on demand
-        match build_timeframe_bundle(token_mint).await {
-            Ok(bundle) => {
-                store_bundle(token_mint.to_string(), bundle.clone()).await;
-                Some(bundle)
-            }
-            Err(e) => {
-                logger::debug(LogTag::Ohlcv, &format!("Failed to build bundle for {}: {}", token_mint, e));
-                None
-            }
-        }
-    }
-};
+pub struct Candle {
+    pub timestamp: i64,   // Unix timestamp (start of candle)
+    pub open: f64,
+    pub high: f64,
+    pub low: f64,
+    pub close: f64,
+    pub volume: f64,
+}
+```
+
+**Methods:**
+- `new(timestamp, open, high, low, close, volume)` — Constructor
+- `is_valid()` → bool — Validates: high ≥ low, open/close within [low, high]
+
+### Timeframe (`types.rs`)
+
+```rust
+pub enum Timeframe {
+    Minute1, Minute5, Minute15,
+    Hour1, Hour4, Hour12, Day1,
+}
+```
+
+**Methods:**
+| Method | Purpose | Example |
+|--------|---------|---------|
+| `to_seconds()` | Duration in seconds | Minute5 → 300 |
+| `to_api_param()` | GeckoTerminal endpoint | Minute1 → "minute" |
+| `to_api_params()` | Endpoint + aggregate value | Minute5 → ("minute", 5) |
+| `max_candles_30d()` | Max candles in 30 days | Minute1 → 43200 |
+| `backfill_priority()` | Fetch order (1=first) | Minute1 → 1 |
+| `all()` | All 7 variants | [Minute1, ..., Day1] |
+| `from_str(s)` | Parse string | "5m" → Minute5 |
+| `as_str()` | Display string | Minute5 → "5m" |
+
+### TimeframeBundle (`types.rs`)
+
+**The main data structure consumed by strategies:**
+
+```rust
+pub const BUNDLE_CANDLE_COUNT: usize = 100;
+
+pub struct TimeframeBundle {
+    pub mint: String,
+    pub pool_address: String,
+    pub timestamp: DateTime<Utc>,
+    pub m1: Vec<Candle>,    // 100 most recent 1-minute candles
+    pub m5: Vec<Candle>,    // 100 most recent 5-minute candles
+    pub m15: Vec<Candle>,   // 100 most recent 15-minute candles
+    pub h1: Vec<Candle>,    // 100 most recent 1-hour candles
+    pub h4: Vec<Candle>,    // 100 most recent 4-hour candles
+    pub h12: Vec<Candle>,   // 100 most recent 12-hour candles
+    pub d1: Vec<Candle>,    // 100 most recent daily candles
+}
+```
+
+**Methods:**
+- `new(mint, pool_address)` — Empty bundle
+- `get_timeframe(timeframe_str)` → `Option<&Vec<Candle>>` — Get candles by string key
+- `is_complete()` → bool — All timeframes have data
+- `is_fresh(max_age_seconds)` → bool — Check bundle age
+- `total_candles()` → usize — Sum across all timeframes
+
+### Priority (`types.rs`)
+
+```rust
+pub enum Priority {
+    Critical,  // 30s interval — open positions
+    High,      // 60s interval — user viewing
+    Medium,    // 300s (5m) — watched tokens
+    Low,       // 900s (15m) — inactive
+}
+```
+
+### TokenOhlcvConfig (`types.rs`)
+
+Per-token monitoring configuration:
+
+```rust
+pub struct TokenOhlcvConfig {
+    pub mint: String,
+    pub priority: Priority,
+    pub fetch_interval_seconds: u64,
+    pub source: String,
+    pub is_active: bool,
+    pub last_fetch: Option<DateTime<Utc>>,
+    pub last_success: Option<DateTime<Utc>>,
+    pub consecutive_failures: u32,
+    pub consecutive_empty_fetches: u32,
+    pub pool_discovery_failures: u32,
+    pub last_pool_discovery: Option<DateTime<Utc>>,
+    pub backfill_complete: bool,
+    pub pools: Vec<PoolConfig>,
+    pub default_pool: Option<String>,
+}
+```
+
+**Methods:**
+- `mark_fetch()` — Record fetch attempt
+- `get_default_pool()` / `get_best_pool()` — Pool selection
+- `mark_activity()` — Reset empty fetch counter
+- `mark_empty_fetch()` — Increment empty counter
+- `calculate_adjusted_interval()` — Dynamic interval based on failures
+- `should_retry_pool_discovery()` — Exponential backoff for pool discovery
+
+### PoolConfig (`types.rs`)
+
+```rust
+pub struct PoolConfig {
+    pub address: String,
+    pub dex: String,
+    pub liquidity: f64,
+    pub consecutive_failures: u32,
+    pub is_default: bool,
+    pub last_success: Option<DateTime<Utc>>,
+}
+```
+
+### OhlcvError (`types.rs`)
+
+```rust
+pub enum OhlcvError {
+    DatabaseError(String),
+    ApiError(String),
+    RateLimitExceeded,
+    PoolNotFound(String),
+    InvalidTimeframe(String),
+    DataGap { start: i64, end: i64 },
+    CacheError(String),
+    NotFound(String),
+}
 ```
 
 ---
 
-### **Module 6: Trader Monitor Integration** [✅ NOT NEEDED - SKIPPED]
+## 3. Service Lifecycle
 
-**Status**: This module is not needed - on-demand building eliminates all monitor integration requirements.
+### Singleton Pattern (`service.rs`)
 
-**Why Skipped**:
+The OHLCV service uses `OnceCell` for singleton initialization:
 
-- Token registration → Not needed, on-demand building works immediately
-- Position tracking → LRU cache naturally keeps active tokens cached
-- Bundle readiness checks → On-demand build happens instantly on first access
-- Background coordination → Eliminated entirely
+```rust
+pub struct OhlcvService;
 
----
-
-3. **Simplification Benefits**
-   - Zero config parsing overhead
-   - No runtime configuration errors
-   - Constants can be optimized by compiler
-   - Clear performance characteristics
-   - Easy to find and modify behavior
-
-**Rationale**: Hardcoded constants eliminate config complexity, improve performance through compile-time optimization, and make system behavior explicit and predictable.
-
----
-
-## DATA FLOW DIAGRAMS
-
-### Actual Implementation Flow (Phases 1-3)
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Strategy Evaluator                        │
-│         (Entry/Exit - needs OHLCV for conditions)           │
-└──────────────────────────┬──────────────────────────────────┘
-                           │
-                           ▼
-                 get_timeframe_bundle(mint)
-                           │
-                  ┌────────┴────────┐
-                  │                 │
-              Cache Hit         Cache Miss
-              (< 1ms)          (200-500ms)
-                  │                 │
-                  ▼                 ▼
-          Return Bundle    build_timeframe_bundle()
-                                    │
-                           ┌────────┴────────┐
-                           │                 │
-                    Fetch 7 timeframes   Build bundle
-                    in parallel          from data
-                           │                 │
-                           └────────┬────────┘
-                                    │
-                                    ▼
-                          store_bundle() → Cache
-                                    │
-                                    ▼
-                            Return Bundle
-
-Strategy evaluates with bundle → Returns decision
+impl OhlcvService {
+    pub async fn initialize() -> OhlcvResult<()>
+    pub async fn start(shutdown: watch::Receiver<bool>) -> OhlcvResult<()>
+}
 ```
 
-**Key Properties**:
+### Initialization Flow
 
-- ✅ Self-sufficient: No external coordination
-- ✅ Stateless: No tracking registry needed
-- ✅ Instant: First use builds immediately
-- ✅ Fast: Subsequent uses < 1ms from cache
-- ✅ Self-healing: Cache warms naturally
-- ✅ Race-safe: Duplicate concurrent builds prevented
+```
+OhlcvService::initialize()
+  → Create data directory
+  → Initialize OhlcvDatabase (SQLite)
+  → Initialize OhlcvCache (three-tier)
+  → Initialize OhlcvFetcher (API client)
+  → Initialize PoolManager (pool selection)
+  → Initialize GapManager (gap detection)
+  → Store all in global OnceCell
 
----
-
-## PERFORMANCE ANALYSIS (ACTUAL RESULTS)
-
-### Measured Performance Metrics
-
-**Bundle Operations**:
-
-- Cache lookup (hit): < 1ms ✅
-- On-demand build (miss): 200-500ms ✅
-- Parallel fetch: 7 timeframes simultaneously ✅
-- Cache store: < 1ms ✅
-
-**Strategy Evaluation**:
-
-- With cached bundle: ~1ms overhead ✅
-- With on-demand build: ~200-500ms first time ✅
-- Total evaluation: < 60ms (within existing 5s timeout) ✅
-
-**Memory Footprint**:
-
-- Per bundle: ~56 KB (700 candles × 80 bytes) ✅
-- Max cache: ~8.4 MB (150 tokens × 56 KB) ✅
-- LRU eviction: Automatic at 150 tokens ✅
-- Actual usage: Scales with active tokens only ✅
-
-**Cache Characteristics**:
-
-- TTL: 30 seconds (configurable constant)
-- Natural warming: Through normal evaluation
-- Self-cleaning: LRU eviction of cold tokens
-- Zero coordination: No background workers needed
+OhlcvService::start(shutdown)
+  → Create OhlcvMonitor with all components
+  → Start monitor background task
+  → Monitor runs fetch loops per priority level
+```
 
 ---
 
-## FAILURE MODES & HANDLING (IMPLEMENTED)
+## 4. Monitor
 
-### Scenario 1: OHLCV Database Empty
+### OhlcvMonitor (`monitor.rs`)
 
-**Impact**: On-demand build has no data to fetch
-**Handling**: ✅ Implemented
+The main orchestrator — 1600+ lines managing fetch scheduling, data flow, and telemetry.
 
-- Returns empty vectors for all timeframes
-- Strategy evaluates with empty bundle
-- Non-OHLCV conditions still work
-- Debug log indicates no data available
+```rust
+pub struct OhlcvMonitor {
+    db: Arc<OhlcvDatabase>,
+    cache: Arc<OhlcvCache>,
+    fetcher: Arc<OhlcvFetcher>,
+    pool_manager: Arc<PoolManager>,
+    gap_manager: Arc<GapManager>,
+    configs: RwLock<HashMap<String, TokenOhlcvConfig>>,
+    // ... metrics atomics
+}
+```
 
-### Scenario 2: Bundle Build Fails
+### Monitor Flow (per token)
 
-**Impact**: Error during parallel fetch or processing
-**Handling**: ✅ Implemented
+```
+┌──────────────────────────────────────────────┐
+│         Monitor Fetch Cycle (per token)        │
+├──────────────────────────────────────────────┤
+│  1. Check priority → determine interval        │
+│  2. Select pool (PoolManager)                  │
+│  3. Fetch 1m candles (OhlcvFetcher)            │
+│  4. Aggregate to higher timeframes             │
+│  5. Store in database                          │
+│  6. Update cache                               │
+│  7. Detect gaps → schedule backfill            │
+│  8. Update telemetry                           │
+└──────────────────────────────────────────────┘
+```
 
-- Evaluator receives None for timeframe_bundle
-- Strategy proceeds without OHLCV data
-- Debug log with error details
-- Non-OHLCV conditions continue to work
+### Aggregated Timeframes
 
-### Scenario 3: Cache Memory Pressure
+```rust
+const AGGREGATED_TIMEFRAMES: [Timeframe; 6] = [
+    Timeframe::Minute5, Timeframe::Minute15,
+    Timeframe::Hour1, Timeframe::Hour4,
+    Timeframe::Hour12, Timeframe::Day1,
+];
+```
 
-**Impact**: Cache grows beyond 150 tokens
-**Handling**: ✅ Implemented
+1-minute is the base timeframe fetched from API. All higher timeframes are aggregated from 1m data.
 
-- LRU eviction removes oldest bundle
-- Next access rebuilds on-demand
-- No manual intervention needed
-- Debug log shows eviction
+### Token Management
 
-### Scenario 4: Strategy Evaluation Timeout
+| Method | Purpose |
+|--------|---------|
+| `add_token(mint, priority)` | Start monitoring a token |
+| `remove_token(mint)` | Stop monitoring |
+| `update_priority(mint, priority)` | Change fetch frequency |
+| `record_activity(mint, activity_type)` | Adjust priority on user action |
+| `force_refresh(mint)` | Immediate fetch |
 
-**Impact**: Evaluation exceeds 5s timeout
-**Handling**: ✅ Already handled by existing timeout
+### Telemetry
 
-- Timeout kills evaluation
-- Returns None (no trade decision)
-- Event logged for tracking
-- On-demand build (~500ms) fits within timeout
-
----
-
-## IMPLEMENTATION PHASING
-
-### Phase 1: Type Unification & Cleanup (0.5 day) [✅ COMPLETE]
-
-- ✅ **DONE**: Rename OhlcvDataPoint → Candle in ohlcvs module
-- ✅ **DONE**: Update all ohlcvs internals to use Candle
-- ✅ **DONE**: Export unified types from ohlcvs/mod.rs
-- ✅ **DONE**: Create TimeframeBundle type with all 7 timeframes
-- ✅ **DONE**: Add BUNDLE_CANDLE_COUNT constant (100 candles per timeframe)
-- ✅ **DONE**: **DELETE** duplicate Candle from strategies module
-- ✅ **DONE**: **DELETE** all OhlcvData and related legacy types
-- ✅ **DONE**: Update EvaluationContext to use timeframe_bundle
-- ✅ **DONE**: Update all 5 condition evaluators (candle_size, volume_spike, consecutive_candles, price_to_ma, price_breakout)
-- ✅ **DONE**: Add temporary get_candles_from_context() helper with DEFAULT_TIMEFRAME
-- ✅ **DONE**: Update webserver routes/strategies.rs test endpoint
-- ✅ **DONE**: Clean compilation with zero errors
-
-### Phase 2: Bundle Cache & Service (1.5 days) [✅ COMPLETE]
-
-- ✅ **DONE**: Add hardcoded constants in service.rs (BUNDLE_CACHE_TTL_SECONDS=30, BUNDLE_CACHE_MAX_SIZE=150, BUNDLE_CANDLE_COUNT=100, PARALLEL_FETCH_LIMIT=10, BUNDLE_REFRESH_INTERVAL_SECONDS=5)
-- ✅ **DONE**: Implement bundle_cache HashMap<String, (TimeframeBundle, Instant)> in OhlcvServiceImpl
-- ✅ **DONE**: Add get_timeframe_bundle() method (non-blocking, returns None if stale/missing)
-- ✅ **DONE**: Create build_timeframe_bundle() method with parallel fetching of all 7 timeframes
-- ✅ **DONE**: Add store_bundle() method with LRU eviction when cache > BUNDLE_CACHE_MAX_SIZE
-- ✅ **DONE**: Export public API in mod.rs (get_timeframe_bundle, build_timeframe_bundle, store_bundle)
-- ✅ **DONE**: Clean compilation with zero errors
-- **NOTE**: Background worker task will be added when needed (Phase 3+ integration)
-
-### Phase 3: Trader Integration (1 day) [✅ COMPLETE]
-
-- ✅ **DONE**: Add OHLCV prefetch in entry evaluator (src/trader/evaluators/strategies.rs)
-- ✅ **DONE**: Add OHLCV prefetch in exit evaluator
-- ✅ **DONE**: Remove hardcoded None passing for timeframe_bundle
-- ✅ **DONE**: Handle missing bundles gracefully (debug log, continue without OHLCV)
-- ✅ **DONE**: Non-blocking cache-only access via get_timeframe_bundle()
-- ✅ **DONE**: On-demand bundle building when cache miss occurs
-- ✅ **DONE**: Automatic cache storage after on-demand build
-- ✅ **DONE**: Clean compilation with zero errors
-- **RESULT**: Fully self-sufficient system - no background worker needed for basic operation
-
-### Phase 4: Monitor Enhancement & Background Worker (OPTIONAL - NOT NEEDED)
-
-- **SKIP**: Token tracking registry not needed - on-demand building works perfectly
-- **SKIP**: Background worker not needed - cache naturally warms up through evaluation
-- **SKIP**: Priority-based refresh not needed - LRU cache handles this automatically
-- **REASON**: On-demand bundle building eliminates need for complex monitoring infrastructure
-- **BENEFIT**: Simpler architecture, fewer moving parts, self-healing system
-
-### Phase 5: Strategy Timeframe Configuration (0.5 day) [READY TO START]
-
-- **TODO**: Add timeframe field to Strategy database model
-- **TODO**: Update webserver strategy UI to select timeframe
-- **TODO**: Update condition evaluators to read strategy.timeframe
-- **TODO**: Keep DEFAULT_TIMEFRAME="5m" as fallback when not specified
-
-### Phase 6: Testing & Production Readiness (0.5 day)
-
-- **TODO**: Run bot with OHLCV-based strategies enabled
-- **TODO**: Monitor bundle cache hit rates via logs
-- **TODO**: Verify on-demand building works correctly (200-500ms first build)
-- **TODO**: Confirm cache reuse works (< 1ms subsequent lookups)
-- **TODO**: Test with multiple tokens and positions
-- **TODO**: Validate memory stays under 10 MB for OHLCV system
-
-**Total Estimated Time**: 5 days focused development (reduced by removing tests, config, backward compatibility)
+```rust
+pub struct MonitorTelemetrySnapshot {
+    pub active_tokens: usize,
+    pub total_fetches: u64,
+    pub total_errors: u64,
+    pub cache_hits: u64,
+    pub cache_misses: u64,
+    pub data_points_stored: u64,
+    pub gaps_detected: u64,
+    pub gaps_filled: u64,
+    pub average_fetch_latency_ms: f64,
+    // ... per-priority breakdowns
+}
+```
 
 ---
 
-## DEVELOPMENT STAGE APPROACH
+## 5. Fetcher
 
-### No Backward Compatibility
+### OhlcvFetcher (`fetcher.rs`)
 
-- **DELETE** all old `get_ohlcv_data()` implementations not needed
-- **DELETE** old type definitions (OhlcvData, old Candle)
-- **DELETE** any compatibility layers or fallback logic
-- **RECREATE** databases from scratch if needed
-- **BREAK** existing strategies - they will be rewritten
-- Fresh start means clean, simple code
+Fetches candle data from GeckoTerminal API with rate limiting.
 
-### No Testing Infrastructure
+```rust
+const RATE_LIMIT_WINDOW: Duration = Duration::from_secs(60);
+const MAX_CANDLES_PER_REQUEST: usize = 1000;
 
-- Validation through runtime observation
-- Use debug logging extensively
-- Monitor with webserver debug endpoints
-- Fix issues as they appear in development
-- Performance validation through actual bot runs
+pub struct OhlcvFetcher {
+    rate_limiter: Arc<RwLock<RateLimiter>>,
+    metrics: Arc<FetcherMetrics>,
+}
+```
 
-### Implementation Strategy
+### Fetch Methods
 
-- Make changes module by module
-- Run bot after each phase
-- Observe behavior, fix issues immediately
-- No formal testing phase - continuous validation
-- Database recreation acceptable at any point
-
----
-
-## OBSERVABILITY (NO FORMAL METRICS)
-
-### Runtime Observation via Logging
-
-- Bundle cache hits/misses (debug level)
-- Bundle build times (info level if > 500ms)
-- Bundle freshness warnings (warn level if > 60s)
-- Missing bundle counts per cycle (debug level)
-- Strategy evaluation timing (debug level)
-
-### Debug Endpoints (Webserver)
-
-- `GET /api/ohlcv/bundle/:mint` - View cached bundle
-- `GET /api/ohlcv/tracked-tokens` - List registered tokens by priority
-- `GET /api/ohlcv/cache-stats` - Bundle cache statistics
-- `GET /api/strategies/evaluation-stats` - OHLCV usage in evaluations
-
-**No Formal Metrics System**: Use logs + webserver endpoints for development-stage observation
-
----
-
-## SECURITY & STABILITY CONSIDERATIONS
+| Method | Purpose |
+|--------|---------|
+| `fetch_ohlcv(pool, timeframe, limit)` | Standard candle fetch |
+| `fetch_with_aggregate(pool, timeframe, aggregate, limit)` | Fetch with aggregation parameter |
+| `fetch_immediate(pool, timeframe)` | Bypass queue, immediate fetch |
+| `fetch_historical(pool, timeframe, before_timestamp)` | Historical backfill |
 
 ### Rate Limiting
 
-- Bundle builder respects API rate limits
-- Maximum 1 bundle build per token per 5 seconds
-- Parallel fetches limited to 10 concurrent
-- Backoff on 429 responses (already implemented)
+- Per-minute rate limit window
+- Tracks calls and respects GeckoTerminal API limits
+- `average_latency_ms()` and `calls_per_minute()` metrics
+- Historical fetch has `MAX_ATTEMPTS = 500` for deep backfill
 
-### Data Validation
+### API Integration
 
-- Validate candle consistency (high >= low, etc.)
-- Reject bundles with > 50% invalid candles
-- Log data quality issues
-- Fall back to previous bundle if new one invalid
-
-### Error Isolation
-
-- OHLCV errors never crash trader
-- Missing bundles handled gracefully
-- Strategies work without OHLCV (degraded mode)
-- Monitor failures don't block evaluations
-
-### Resource Limits
-
-- Maximum 150 tokens in bundle cache
-- Maximum 700 candles per bundle (100 per timeframe)
-- Maximum 5 MB memory for OHLCV system
-- Automatic cleanup of stale registrations
+GeckoTerminal OHLCV endpoint:
+- Base timeframe: `/ohlcv/minute?pool={address}`
+- Aggregated: `/ohlcv/{timeframe}?pool={address}&aggregate={value}`
+- Returns up to 1000 candles per request
 
 ---
 
-## SUCCESS CRITERIA (ACHIEVED)
+## 6. Aggregator
 
-### Functional Requirements
+### OhlcvAggregator (`aggregator.rs`)
 
-✅ All 5 OHLCV condition evaluators work with unified Candle type
-✅ Entry evaluations use on-demand bundle building
-✅ Exit evaluations use on-demand bundle building  
-✅ System handles unlimited concurrent tokens (LRU cache manages memory)
-✅ Graceful degradation when OHLCV unavailable (proceeds with None)
+Stateless aggregation utility:
 
-### Performance Requirements
+```rust
+pub struct OhlcvAggregator;
 
-✅ Bundle cache hit: < 1ms
-✅ Bundle build (miss): 200-500ms  
-✅ Memory usage: ~56 KB per bundle, max 8.4 MB cache
-✅ No evaluation timeouts (500ms build fits in 5s timeout)
-✅ Zero API call overhead on cache hits
+impl OhlcvAggregator {
+    pub fn aggregate(candles_1m: &[Candle], target: Timeframe) -> Vec<Candle>
+    pub fn validate_aggregated(data: &[Candle]) -> bool
+    pub fn expected_candles(from, to, timeframe) -> usize
+    pub fn detect_gaps(data: &[Candle], timeframe) -> Vec<(i64, i64)>
+    pub fn interpolate_gaps(data: &[Candle], timeframe) -> Vec<Candle>
+    pub fn resample(data: &[Candle], from: Timeframe, to: Timeframe) -> Vec<Candle>
+    pub fn calculate_vwap(data: &[Candle]) -> Option<f64>
+}
+```
 
-### Stability Requirements
+### Aggregation Logic
 
-✅ Zero crashes from OHLCV errors (graceful None handling)
-✅ Zero trader blocks (non-blocking cache-first approach)
-✅ Self-healing through on-demand building
-✅ Automatic recovery from failures (rebuilds on next access)
+`aggregate(candles_1m, target_timeframe)`:
+1. Group 1m candles by target timeframe boundaries
+2. For each group: open = first.open, close = last.close, high = max, low = min, volume = sum
+3. Validate result ordering and OHLC constraints
 
----
+### Additional Utilities
 
-## SYSTEMATIC & FUNDAMENTAL PRINCIPLES
-
-### What Makes This Design Systematic
-
-1. **Single Type Definition**: Candle type unified across all modules - no conversions ever
-2. **Single Cache Layer**: TimeframeBundle as atomic unit - all timeframes together
-3. **Single Update Path**: On-demand build → Cache → Trader - linear, self-healing flow
-4. **Single Build Method**: build_timeframe_bundle() serves all needs - no special cases
-5. **Single Priority System**: LRU cache naturally prioritizes frequently accessed tokens
-
-### What Makes This Design Fundamental
-
-1. **Root Cause Solution**: On-demand building eliminates cold-start problem (not background worker band-aid)
-2. **Type System Enforcement**: Rust compiler prevents wrong data flow (not runtime checks)
-3. **Cache Invalidation**: Time-based TTL (30s) handles staleness (not complex logic)
-4. **Self-Healing**: Cache misses automatically rebuild and store (not manual intervention)
-5. **Graceful Degradation**: Missing data returns None and continues (not error that stops everything)
-
-### Why On-Demand Building is Superior to Background Workers
-
-**Traditional Background Worker Approach** (Rejected):
-
-- ❌ Complex: Separate registration/unregistration API
-- ❌ Stateful: Must track which tokens need monitoring
-- ❌ Coordination: Monitors and traders must stay synchronized
-- ❌ Cold Start: New tokens have no data until next cycle
-- ❌ Memory Waste: Pre-builds bundles for tokens that may never be evaluated
-
-**On-Demand Building Approach** (Implemented):
-
-- ✅ Simple: Cache miss triggers build automatically
-- ✅ Stateless: No tracking needed, works immediately
-- ✅ Self-Contained: Each evaluator handles its own needs
-- ✅ Instant Warm: First evaluation builds bundle on the spot
-- ✅ Memory Efficient: Only builds bundles actually needed
-
-**Performance Comparison**:
-
-- First evaluation: ~200-500ms (build + evaluate)
-- Subsequent evaluations: < 1ms (cached lookup)
-- Cache naturally warms up for frequently evaluated tokens
-- Infrequently evaluated tokens don't waste memory
-
-### Development Stage Benefits
-
-- **No Config**: Constants hardcoded = zero runtime parsing, zero configuration errors
-- **No Tests**: Runtime validation = faster iteration, find real issues not test issues
-- **No Backward Compatibility**: Delete old code = clean codebase, no technical debt
-- **No Migration**: Fresh start = optimal design not constrained by history
-- **No Background Workers**: On-demand building = simpler, self-healing, zero coordination
+- **VWAP:** Volume-Weighted Average Price across candles
+- **Gap detection:** Identifies missing candle periods
+- **Interpolation:** Fills small gaps with interpolated candles
+- **Resampling:** Convert between arbitrary timeframes
 
 ---
 
-## FINAL NOTES
+## 7. Caching Layer
 
-This architecture solves all identified problems systematically and fundamentally:
+### OhlcvCache (`cache.rs`)
 
-1. ✅ **OHLCV data flows to strategies** - via TimeframeBundle in EvaluationContext
-2. ✅ **Type compatibility** - Candle type unified, no conversions
-3. ✅ **Performance maintained** - Prefetch + cache, sub-1ms bundle access
-4. ✅ **Market data enriched** - From tokens/pools modules, complete data
-5. ✅ **Position tracking integrated** - Explicit registration, highest priority
-6. ✅ **All timeframes available** - Bundle contains all 7 timeframes
-7. ✅ **Clean separation** - Monitor/Service/Trader never directly coupled
-8. ✅ **Zero config complexity** - All parameters hardcoded as constants
+Three-tier caching system:
 
-**The design is systematic, fundamental, and optimized for development-stage rapid iteration.**
+```rust
+const HOT_CACHE_MAX_TOKENS: usize = 100;
+const HOT_CACHE_RETENTION_HOURS: i64 = 24;
+
+pub struct OhlcvCache {
+    hot: RwLock<HashMap<String, CacheEntry>>,
+    hits: AtomicU64,
+    misses: AtomicU64,
+}
+```
+
+### Cache Tiers
+
+```
+Tier 1: Hot Cache (in-memory)
+  → HashMap<mint, CacheEntry>
+  → Max 100 tokens
+  → 24-hour retention
+  → LRU eviction when full
+
+Tier 2: Database (SQLite)
+  → ohlcv_candles table
+  → Full history (retention_days config)
+  → Queried on cache miss
+
+Tier 3: API (GeckoTerminal)
+  → Fetched on DB miss
+  → Rate-limited
+  → Results populate both Tier 1 and Tier 2
+```
+
+### Cache API
+
+| Method | Purpose |
+|--------|---------|
+| `get(mint, timeframe, limit)` | Read from hot cache |
+| `put(mint, timeframe, candles)` | Write to hot cache |
+| `invalidate(mint)` | Remove token from cache |
+| `clear()` | Clear entire cache |
+| `hit_rate()` | Cache effectiveness metric |
+| `size()` | Number of cached tokens |
+| `cleanup_expired()` | Remove stale entries |
+
+---
+
+## 8. Database Layer
+
+### Schema (`database.rs`)
+
+**4 SQLite tables:**
+
+**ohlcv_pools** — Pool configurations per token:
+```sql
+CREATE TABLE IF NOT EXISTS ohlcv_pools (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    mint TEXT NOT NULL,
+    pool_address TEXT NOT NULL,
+    dex TEXT NOT NULL,
+    liquidity REAL NOT NULL DEFAULT 0.0,
+    consecutive_failures INTEGER DEFAULT 0,
+    is_default INTEGER DEFAULT 0,
+    last_success TEXT,
+    UNIQUE(mint, pool_address)
+)
+```
+
+**ohlcv_candles** — Candle data (main storage):
+```sql
+CREATE TABLE IF NOT EXISTS ohlcv_candles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    mint TEXT NOT NULL,
+    pool_address TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
+    timestamp INTEGER NOT NULL,
+    open REAL NOT NULL,
+    high REAL NOT NULL,
+    low REAL NOT NULL,
+    close REAL NOT NULL,
+    volume REAL NOT NULL,
+    UNIQUE(mint, pool_address, timeframe, timestamp)
+)
+```
+
+**ohlcv_gaps** — Gap tracking per timeframe:
+```sql
+CREATE TABLE IF NOT EXISTS ohlcv_gaps (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    mint TEXT NOT NULL,
+    pool_address TEXT NOT NULL,
+    timeframe TEXT NOT NULL,
+    start_timestamp INTEGER NOT NULL,
+    end_timestamp INTEGER NOT NULL,
+    filled INTEGER DEFAULT 0,
+    detected_at TEXT, filled_at TEXT
+)
+```
+
+**ohlcv_monitor_config** — Per-token monitoring config:
+```sql
+CREATE TABLE IF NOT EXISTS ohlcv_monitor_config (
+    mint TEXT PRIMARY KEY,
+    priority TEXT NOT NULL,
+    fetch_interval_seconds INTEGER NOT NULL DEFAULT 60,
+    source TEXT NOT NULL DEFAULT 'manual',
+    is_active INTEGER NOT NULL DEFAULT 1,
+    last_fetch TEXT, last_success TEXT,
+    consecutive_failures INTEGER DEFAULT 0,
+    backfill_complete INTEGER DEFAULT 0
+)
+```
+
+### OhlcvDatabase API
+
+| Category | Key Methods |
+|----------|-------------|
+| Pool CRUD | `upsert_pool`, `delete_pool`, `get_pools`, `mark_pool_failure/success` |
+| Candle I/O | `insert_candles_batch`, `get_candles` (with time range, limit, order) |
+| Gap tracking | `insert_gap`, `get_unfilled_gaps`, `mark_gap_filled`, `get_gap_aggregate` |
+| Config | `upsert_monitor_config`, `get_monitor_config`, `get_all_active_configs` |
+| Backfill | `is_backfill_complete`, `mark_backfill_complete`, `mark_all_backfills_complete` |
+| Cleanup | `cleanup_old_data(retention_days)`, `cleanup_filled_gaps(retention_days)` |
+| Stats | `get_data_point_count`, `has_data_for_mint`, `get_mints_with_data`, `get_pool_count`, `get_token_count` |
+
+---
+
+## 9. Gap Detection & Backfill
+
+### GapManager (`gaps.rs`)
+
+Detects and fills discontinuities in candle data:
+
+```rust
+pub struct GapManager {
+    db: Arc<OhlcvDatabase>,
+    fetcher: Arc<OhlcvFetcher>,
+}
+```
+
+### Detection Flow
+
+1. Load candles for token/pool/timeframe from DB
+2. Walk through candles, check timestamp continuity
+3. If gap > expected interval → record gap (start, end timestamps)
+4. Store in `ohlcv_gaps` table
+
+### Backfill Flow
+
+1. Query `get_unfilled_gaps()` for pending gaps
+2. For each gap: `fetch_historical(pool, timeframe, end_timestamp)`
+3. Insert fetched candles via `insert_candles_batch()`
+4. Mark gap as filled: `mark_gap_filled()`
+5. If no data returned → mark gap filled anyway (data unavailable)
+
+### Backfill Completion Tracking
+
+Per-token, per-timeframe backfill tracking:
+- `is_backfill_complete(mint, timeframe)` — Check if historical fill done
+- `mark_backfill_complete(mint, timeframe)` — Mark one timeframe done
+- `mark_all_backfills_complete(mint)` — Mark all timeframes done
+
+---
+
+## 10. Pool Manager
+
+### PoolManager (`manager.rs`)
+
+Manages pool selection and health for OHLCV fetching:
+
+```rust
+pub struct PoolManager {
+    db: Arc<OhlcvDatabase>,
+}
+```
+
+### Pool Selection
+
+```rust
+pub async fn select_pool_for_fetch(mint) -> OhlcvResult<Option<(String, bool)>>
+```
+
+Returns `(pool_address, is_default)`:
+1. Try default pool first
+2. If default unhealthy → try best pool (highest liquidity, fewest failures)
+3. If no pools → trigger pool discovery
+
+### Pool Discovery
+
+```rust
+pub async fn discover_pools(mint) -> OhlcvResult<Vec<PoolConfig>>
+```
+
+Discovers pools for a token from token module's cached pool data. Registers discovered pools in DB.
+
+### Health Tracking
+
+| Method | Purpose |
+|--------|---------|
+| `mark_failure(mint, pool)` | Increment failure count |
+| `mark_success(mint, pool)` | Reset failure count, update last_success |
+| `check_pool_health(mint)` | Get health status per pool |
+| `reset_pool_failures(mint, pool)` | Manual reset |
+
+**Health rule:** `is_healthy()` = `consecutive_failures < 5`
+
+### Pool Stats
+
+```rust
+pub struct PoolStats {
+    pub total_pools: usize,
+    pub healthy_pools: usize,
+    pub default_pool: Option<String>,
+    pub best_pool: Option<String>,
+}
+```
+
+---
+
+## 11. Priority System
+
+### PriorityManager (`priorities.rs`)
+
+Stateless priority calculation:
+
+```rust
+pub struct PriorityManager;
+
+impl PriorityManager {
+    pub fn calculate_priority_score(config: &TokenOhlcvConfig) -> u32
+    pub fn priority_from_score(score: u32) -> Priority
+    pub fn calculate_fetch_interval(config: &TokenOhlcvConfig) -> Duration
+    pub fn should_throttle(config: &TokenOhlcvConfig) -> bool
+    pub fn throttle_multiplier(consecutive_empty_fetches: u32) -> f64
+    pub fn get_recommended_action(config: &TokenOhlcvConfig) -> RecommendedAction
+    pub fn update_priority_on_activity(config: &mut TokenOhlcvConfig, activity: ActivityType)
+    pub fn calculate_batch_size(priority: Priority) -> usize
+    pub fn get_fetch_timeout(priority: Priority) -> Duration
+    pub fn should_retry(priority: Priority, attempt: u32) -> bool
+    pub fn retry_delay(attempt: u32) -> Duration
+}
+```
+
+### Activity Types
+
+```rust
+pub enum ActivityType {
+    PositionOpened,   // → Critical priority
+    PositionClosed,   // → High (downgrade from Critical)
+    TokenViewed,      // → Medium (if was Low)
+    ChartViewed,      // → Medium/High upgrade
+    DataRequested,    // → High (immediate)
+}
+```
+
+### Recommended Actions
+
+```rust
+pub enum RecommendedAction {
+    FetchNow,           // Data needed immediately
+    FetchSoon,          // Within next interval
+    WaitForInterval,    // Normal scheduling
+    ReduceFrequency,    // Too many empty fetches
+    PauseAndRetry,      // Consecutive failures, back off
+    RemoveToken,        // Persistent failures, remove from monitoring
+}
+```
+
+### Throttling
+
+- `should_throttle()` — Returns true if token has too many consecutive empty fetches
+- `throttle_multiplier()` — 1.0× for 0 empty, 2.0× for 3+, 4.0× for 10+
+- Prevents wasting API calls on tokens with no trading activity
+
+---
+
+## 12. API Surface
+
+### Service API (`service.rs`)
+
+**Data Access:**
+| Function | Signature | Purpose |
+|----------|-----------|---------|
+| `get_ohlcv_data(mint, timeframe, limit)` | `async -> OhlcvResult<Vec<Candle>>` | Get candles |
+| `get_timeframe_bundle(mint)` | `async -> OhlcvResult<Option<TimeframeBundle>>` | Get full bundle from cache |
+| `build_timeframe_bundle(mint)` | `async -> OhlcvResult<TimeframeBundle>` | Build bundle from DB |
+| `store_bundle(mint, bundle)` | `async -> OhlcvResult<()>` | Store bundle in cache |
+| `get_available_pools(mint)` | `async -> OhlcvResult<Vec<PoolMetadata>>` | List pools |
+| `get_data_gaps(mint, timeframe)` | `async -> OhlcvResult<Vec<(i64, i64)>>` | Get unfilled gaps |
+| `has_data(mint)` | `async -> OhlcvResult<bool>` | Check data availability |
+| `get_mints_with_data(mints)` | `async -> OhlcvResult<HashSet<String>>` | Batch availability check |
+| `get_all_tokens_with_status()` | `async -> OhlcvResult<Vec<OhlcvTokenStatus>>` | All monitored tokens |
+
+**Monitoring Control:**
+| Function | Purpose |
+|----------|---------|
+| `add_token_monitoring(mint, priority)` | Start monitoring |
+| `remove_token_monitoring(mint)` | Stop monitoring |
+| `update_token_priority(mint, priority)` | Change priority |
+| `record_activity(mint, activity_type)` | Record user activity |
+| `request_refresh(mint)` | Force immediate fetch |
+
+**Metrics:**
+| Function | Purpose |
+|----------|---------|
+| `get_metrics()` | Overall OHLCV metrics |
+| `get_monitor_stats()` | Monitor telemetry snapshot |
+
+---
+
+## 13. Configuration
+
+OHLCV config options (via `config_struct!` macro):
+
+| Field | Type | Default | Purpose |
+|-------|------|---------|---------|
+| `retention_days` | i64 | 30 | How long to keep candle data |
+| `enable_ohlcv` | bool | true | Master enable/disable |
+| `max_monitored_tokens` | usize | 50 | Max tokens to actively monitor |
+| `api_rate_limit_per_minute` | u32 | 30 | GeckoTerminal API rate limit |
+
+---
+
+## 14. Integration Points
+
+### Strategies → OHLCV
+
+Strategies consume `TimeframeBundle` for signal generation:
+- `get_timeframe_bundle(mint)` — Get cached bundle (fast)
+- `build_timeframe_bundle(mint)` — Build fresh from DB
+- Strategies access specific timeframes: `bundle.get_timeframe("5m")`
+
+### Positions → OHLCV
+
+Position lifecycle events adjust monitoring priority:
+- Position opened → `record_activity(mint, PositionOpened)` → Critical priority
+- Position closed → `record_activity(mint, PositionClosed)` → High priority
+
+### Pools → OHLCV
+
+Pool module provides:
+- Pool data for OHLCV discovery (`discover_pools`)
+- Real-time pool prices (separate from candle data)
+
+### Dashboard → OHLCV
+
+The webserver exposes OHLCV data:
+- Chart data endpoints return `TimeframeBundle`
+- Token detail views trigger `record_activity(DataRequested)`
+
+---
+
+## 15. Performance Patterns
+
+### Three-Tier Cache Strategy
+
+Hot cache (100 tokens, in-memory) handles repeated reads. DB handles historical queries. API is the fallback of last resort with rate limiting.
+
+### Priority-Based Scheduling
+
+Critical tokens (open positions) get 30s refresh. Low-priority tokens get 15m. This allocates API budget where it matters most.
+
+### Batch Insert
+
+`insert_candles_batch()` uses SQLite `INSERT OR REPLACE` in transactions for bulk efficiency.
+
+### Throttle on Empty
+
+Tokens with no trading activity get progressively longer intervals via `throttle_multiplier()`, preventing wasted API calls.
+
+### Chunk-Based Queries
+
+`get_mints_with_data()` uses `CHUNK_SIZE = 512` for SQL IN clauses to avoid SQLite parameter limits.
+
+---
+
+## 16. Error Handling
+
+### OhlcvError Variants
+
+| Variant | Cause | Recovery |
+|---------|-------|----------|
+| `DatabaseError` | SQLite failure | Log, continue from cache |
+| `ApiError` | GeckoTerminal API failure | Retry with backoff |
+| `RateLimitExceeded` | API rate limit hit | Wait, retry next interval |
+| `PoolNotFound` | No pool for token | Trigger pool discovery |
+| `InvalidTimeframe` | Bad timeframe string | Return error to caller |
+| `DataGap` | Missing candle data | Schedule backfill |
+| `CacheError` | Cache operation failed | Bypass cache, query DB |
+| `NotFound` | Token not monitored | Return error to caller |
+
+### Error Classification (`monitor.rs`)
+
+```rust
+fn classify_ohlcv_error(error: &OhlcvError) -> (&'static str, Severity)
+```
+
+Classifies errors by severity for logging and telemetry.
+
+### Pool Failover
+
+When a pool fails:
+1. Increment `consecutive_failures`
+2. If `>= 5` failures → pool marked unhealthy
+3. Next fetch selects next best pool
+4. If all pools unhealthy → trigger pool discovery
+5. Success resets failure counter

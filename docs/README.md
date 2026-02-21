@@ -39,11 +39,12 @@ Living documentation describing how each major system works. These docs are the 
 | [System Overview](architecture/overview.md) | High-level architecture, data flow, service startup order |
 | [Tokens Module](architecture/tokens.md) | Token lifecycle, database schema, caching, market data, security pipelines |
 | [Filtering Pipeline](architecture/filtering.md) | Token quality control — filter chain, sources, caching, query system |
+| [Pools Module](architecture/pools.md) | Pool discovery, DEX decoders, price calculation, swap integration |
 | [Swap Routing](architecture/swaps.md) | Trait-based multi-DEX router architecture |
 | [Trading Strategies](architecture/strategies.md) | Condition-based strategy system |
-| [OHLCV Integration](architecture/ohlcv-strategy-integration.md) | Multi-timeframe data flow for strategy evaluation |
+| [OHLCV Module](architecture/ohlcv-strategy-integration.md) | Candle data fetching, aggregation, caching, strategy integration |
 | [Partial Sell & DCA](architecture/partial-sell-dca.md) | Position management: DCA entries, partial exits |
-| [Positions & Actions](architecture/positions.md) | Position lifecycle, entry/exit records |
+| [Positions Module](architecture/positions.md) | Position lifecycle, state machine, verification, PnL tracking |
 | [Startup Order](architecture/startup-order.md) | Service startup vs. user-facing workflow order |
 | [Webserver Port Conflict](architecture/webserver-port-conflict.md) | Port conflict detection and resolution |
 | [Workflow Order](architecture/workflow-order.md) | Service dependency resolution and startup sequencing |

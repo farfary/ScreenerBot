@@ -125,7 +125,7 @@ screenerbot::config::load_config().expect("Failed to load config");
 | Configuration | `src/config/` — `config_struct!` macro | [docs/architecture/overview.md](docs/architecture/overview.md) |
 | Tokens | `src/tokens/service.rs` — lifecycle, caching, DB | [docs/architecture/tokens.md](docs/architecture/tokens.md) |
 | Token Filtering | `src/filtering/engine.rs` | [docs/architecture/filtering.md](docs/architecture/filtering.md) |
-| Pool Discovery | `src/pools/discovery.rs` | [docs/architecture/overview.md](docs/architecture/overview.md) |
+| Pool Discovery | `src/pools/service.rs` — pricing, decoders, swap | [docs/architecture/pools.md](docs/architecture/pools.md) |
 | Swap Execution | `src/swaps/router.rs` | [docs/architecture/swaps.md](docs/architecture/swaps.md) |
 | Trading Engine | `src/trader/monitors/` (entry.rs, exit.rs) | [docs/development/trader-overview.md](docs/development/trader-overview.md) |
 | Strategies | `src/strategies/engine.rs` | [docs/architecture/strategies.md](docs/architecture/strategies.md) |
@@ -179,7 +179,8 @@ When submitting PRs:
 1. **Reference the relevant architecture doc** that describes the system you're changing.
 2. **Describe what changed and why** — not just "fixed bug".
 3. **If adding a new system**: Create an architecture doc in `docs/architecture/`.
-4. **If doing deep analysis**: Create an investigation folder in `docs/investigations/YYYY-MM-topic/`.
+4. **Architecture doc max length**: 2000 lines per file. No exceptions.
+5. **If doing deep analysis**: Create an investigation folder in `docs/investigations/YYYY-MM-topic/`.
 5. **Update `docs/README.md`** index if you add new docs.
 6. **No sensitive content**: No API keys, tokens, passwords, server IPs, or deployment configs.
 7. **Build passes**: `cargo build --release` must succeed.
