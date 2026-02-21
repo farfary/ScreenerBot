@@ -208,6 +208,20 @@ Automated SQLite maintenance module that prevents disk fragmentation. Runs on st
 - WAL checkpoint prevents unbounded WAL file growth during high-write workloads.
 - Configurable maintenance intervals allow tuning based on workload patterns.
 
+**Phase E (SQLite Robustness):**
+- `unlock_notify` feature added to rusqlite — concurrent connections now block/retry on BUSY instead of immediate failure.
+- All r2d2 pools set `idle_timeout(None)` + `max_lifetime(None)` — prevents connection recycling that can lose PRAGMA state.
+- `shrink_to_fit()` added after token loading — reclaims Vec over-allocation (~18 MB).
+
+**jemalloc Tuning (optional):**
+For production deployments, set the `MALLOC_CONF` environment variable before starting the bot:
+```
+MALLOC_CONF=dirty_decay_ms:5000,muzzy_decay_ms:5000,narenas:4 ./screenerbot
+```
+- `dirty_decay_ms:5000` — returns dirty pages to OS after 5s (default 10s)
+- `muzzy_decay_ms:5000` — returns muzzy pages after 5s (default 10s)
+- `narenas:4` — limits jemalloc arenas to 4 (reduces per-arena overhead)
+
 ### Trader (src/trader/)
 
 Orchestrates automated and manual trading with monitors (`entry.rs`, `exit.rs`) handling orchestration; evaluators (entry/exit/DCA/strategies with priority safety gates — exit evaluators split into individual files: `exit_roi.rs`, `exit_stop_loss.rs`, `exit_time.rs`, `exit_trailing.rs`); executors (buy/sell/DCA); `safety/` (loss_limit.rs for period-based loss protection, blacklist.rs for auto-blacklisting, cooldown.rs for trade cooldowns, limits.rs for position/exposure limits, risk.rs for risk assessment), `manual/`, `config.rs` + `constants.rs` for runtime knobs, `controller.rs`, `service.rs` (depends on pools + tokens), and `types.rs`.
@@ -543,7 +557,7 @@ ALL databases must use `database::configure_connection()` — never set PRAGMAs 
 ### Database Pitfalls
 
 - NEVER set mmap_size > 256MB — causes RSS bloat (tokens.db had 30GB mmap before Phase A fix).
-- r2d2 pools recycle connections — PRAGMAs set on pool creation are LOST unless using `with_init()`.
+- r2d2 pools: set `idle_timeout(None)` + `max_lifetime(None)` on ALL pools. SQLite WAL mode needs persistent connections — default r2d2 recycling (10min/30min) drops PRAGMA state. PRAGMAs set on pool creation via `with_init()` are re-applied on new connections, but recycling adds unnecessary overhead and risk.
 - `auto_vacuum=INCREMENTAL` must be set BEFORE first write to take effect on new databases.
 - WAL checkpoint `TRUNCATE` mode resets WAL file to zero bytes — prevents unbounded growth but runs exclusively (briefly blocks writers).
 - Maintenance intervals enforced: `vacuum_interval_secs` ≥ 1 hour (3600s), `wal_checkpoint_interval_secs` ≥ 5 minutes (300s).
@@ -554,6 +568,7 @@ ALL databases must use `database::configure_connection()` — never set PRAGMAs 
 - Never manually VACUUM or modify production databases — all DB maintenance must be done by the bot code itself.
 - `FOREIGN KEY constraint failed` during actions cleanup is a known pre-existing issue (non-critical).
 - **Stale token filter**: Uses pre-computed Rust timestamp (not SQLite strftime) for performance when filtering tokens with `market_data_last_fetched_at` older than 7 days.
+- **rusqlite `unlock_notify`**: Feature MUST be enabled in Cargo.toml alongside `bundled`. Without it, concurrent connections get immediate SQLITE_BUSY errors instead of blocking/retrying.
 - `DataTable` column definitions — use `id` property (not `key`) and `container` property (not `containerId`).
 - Frontend style hardcoding — never use inline styles or hardcode colors; use CSS variables from `foundation.css`.
 - Skipping lifecycle hooks — always implement proper `init/activate/deactivate/dispose` for page modules.

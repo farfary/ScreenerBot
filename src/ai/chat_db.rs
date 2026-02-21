@@ -80,6 +80,8 @@ pub fn init_chat_db() -> Result<Pool<SqliteConnectionManager>, String> {
     // Create connection pool
     let pool = Pool::builder()
         .max_size(3)
+        .idle_timeout(None)    // SQLite: keep connections alive (WAL stability)
+        .max_lifetime(None)    // SQLite: no connection recycling
         .build(manager)
         .map_err(|e| format!("Failed to create connection pool: {}", e))?;
 
@@ -646,7 +648,12 @@ mod tests {
 
     fn setup_test_pool() -> Pool<SqliteConnectionManager> {
         let manager = SqliteConnectionManager::memory();
-        let pool = Pool::builder().max_size(1).build(manager).unwrap();
+        let pool = Pool::builder()
+            .max_size(1)
+            .idle_timeout(None)    // SQLite: keep connections alive (WAL stability)
+            .max_lifetime(None)    // SQLite: no connection recycling
+            .build(manager)
+            .unwrap();
 
         let conn = pool.get().unwrap();
         initialize_schema(&conn).unwrap();

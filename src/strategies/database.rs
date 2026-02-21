@@ -127,6 +127,8 @@ static DB_POOL: LazyLock<Pool<SqliteConnectionManager>> = LazyLock::new(|| {
         .with_init(|c| database::configure_connection(c, database::STRATEGIES_DB));
     Pool::builder()
         .max_size(3)
+        .idle_timeout(None)    // SQLite: keep connections alive (WAL stability)
+        .max_lifetime(None)    // SQLite: no connection recycling
         .build(manager)
         .expect("Failed to create strategies database pool")
 });

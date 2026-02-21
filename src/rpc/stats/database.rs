@@ -39,6 +39,8 @@ impl RpcStatsDatabase {
             .with_init(|c| database::configure_connection(c, database::RPC_STATS_DB));
         let pool = Pool::builder()
             .max_size(3)
+            .idle_timeout(None)    // SQLite: keep connections alive (WAL stability)
+            .max_lifetime(None)    // SQLite: no connection recycling
             .build(manager)
             .map_err(|e| format!("Failed to create connection pool: {}", e))?;
 

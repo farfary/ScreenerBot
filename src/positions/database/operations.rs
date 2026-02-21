@@ -34,6 +34,8 @@ impl PositionsDatabase {
         let pool = Pool::builder()
             .max_size(5)
             .min_idle(Some(1))
+            .idle_timeout(None)    // SQLite: keep connections alive (WAL stability)
+            .max_lifetime(None)    // SQLite: no connection recycling
             .build(manager)
             .map_err(|e| format!("Failed to create positions connection pool: {}", e))?;
 

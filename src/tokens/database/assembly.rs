@@ -852,6 +852,7 @@ impl TokenDatabase {
             tokens.push(token);
         }
 
+        tokens.shrink_to_fit(); // reclaim over-allocated Vec capacity
         Ok(tokens)
     }
 

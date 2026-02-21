@@ -89,7 +89,7 @@ tokio-tungstenite = { version = "0.21", features = ["connect", "rustls-tls-nativ
 openssl = { version = "0.10", features = ["vendored"], optional = true }
 
 # Database with bundled sqlite for faster builds
-rusqlite = { version = "0.37", features = ["bundled"] }
+rusqlite = { version = "0.37", features = ["bundled", "unlock_notify"] }
 r2d2 = "0.8"
 r2d2_sqlite = "0.31"
 

@@ -281,6 +281,8 @@ static DB_POOL: LazyLock<Pool<SqliteConnectionManager>> = LazyLock::new(|| {
         .max_size(POOL_MAX_SIZE)
         .min_idle(Some(POOL_MIN_IDLE))
         .connection_timeout(std::time::Duration::from_millis(CONNECTION_TIMEOUT_MS))
+        .idle_timeout(None)    // SQLite: keep connections alive (WAL stability)
+        .max_lifetime(None)    // SQLite: no connection recycling
         .build(manager)
         .expect("Failed to create tools database pool")
 });
