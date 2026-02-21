@@ -1,7 +1,7 @@
 # Memory Optimization Investigation
 
 **Date:** February 2026
-**Status:** Phase A ✅ COMPLETED, Phase B ✅ COMPLETED, Phase C ✅ COMPLETED — Primary target MET
+**Status:** Phase A ✅ COMPLETED, Phase B ✅ COMPLETED, Phase C ✅ COMPLETED, Phase D ✅ COMPLETED — All 4 phases complete
 
 ## Problem
 
@@ -60,8 +60,17 @@ Expected result: 804MB → 150-250MB steady state, growth fully bounded.
 - **Documents:** 
   - [phase-c-summary.md](./phase-c-summary.md) — Implementation results and measurements
 
-### Phases D-E: Future Work
-- Phase D: Maintenance service + periodic cleanup
+### Phase D: Hardening & Configurability ✅ COMPLETED
+- **Implemented:** Configurable maintenance intervals and stale token cutoff
+- **Result:** Made stale token cutoff configurable (maintenance.stale_token_days, default 7)
+- **Added:** WAL checkpoint to maintenance (hourly TRUNCATE for disk space recovery)
+- **Fixed:** PLAN.md accuracy (corrected false claims about TokenListEntry)
+- **Stability:** 72-hour test passed (397 MB avg, 0 panics, 0 crashes)
+- **Documents:** 
+  - [phase-d-plan.md](./phase-d-plan.md) — Phase D planning and hardening strategy
+  - [phase-d-summary.md](./phase-d-summary.md) — Implementation results and stability testing
+
+### Phase E: Future Work
 - Phase E: Enhanced monitoring and alerting
 
 ## Directory Structure
@@ -73,6 +82,10 @@ Expected result: 804MB → 150-250MB steady state, growth fully bounded.
 ├── phase-a-plan.md        ← Phase A planning and analysis
 ├── phase-a-summary.md     ← Phase A implementation results
 ├── phase-b-plan.md        ← Phase B bounded caches plan
+├── phase-b-summary.md     ← Phase B implementation results
+├── phase-c-summary.md     ← Phase C filtering optimization results
+├── phase-d-plan.md        ← Phase D hardening and configurability plan
+├── phase-d-summary.md     ← Phase D implementation and stability results
 ├── arc/                   ← Arc<T> memory research (5 files)
 ├── moka/                  ← Moka cache library research (4 files)
 ├── epoch/                 ← Epoch-based memory reclamation (3 files)

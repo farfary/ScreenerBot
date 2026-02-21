@@ -189,17 +189,24 @@ Shared SQLite configuration system for ALL databases. Files: `configure.rs` — 
 
 #### Database Maintenance (src/database/maintenance.rs)
 
-Automated SQLite maintenance module that prevents disk fragmentation. Runs on startup + periodic 6-hour intervals.
+Automated SQLite maintenance module that prevents disk fragmentation. Runs on startup + configurable periodic intervals.
 
 **Features:**
 - **Auto-migration**: Detects databases with `auto_vacuum=NONE` and migrates them to `INCREMENTAL` mode on first run (requires full VACUUM to update file header).
 - **Incremental vacuum**: Runs `incremental_vacuum(500)` to reclaim up to 500 freelist pages per maintenance cycle.
+- **WAL checkpoint**: Runs `PRAGMA wal_checkpoint(TRUNCATE)` to prevent WAL file growth by resetting it to zero bytes after flushing to main database file.
 - **Multi-database coverage**: Maintains 13 databases: tokens, transactions, positions, wallet, events, pools, strategies, ohlcvs, actions, tools, ai, ai_chat, rpc_stats.
+- **Configurable intervals**: `maintenance.vacuum_interval_secs` (default: 6h, minimum: 1h) and `maintenance.wal_checkpoint_interval_secs` (default: 30min, minimum: 5min).
+- **Interleaved execution**: Uses `tokio::select!` to run vacuum and WAL checkpoint timers concurrently without blocking.
 
 **Phase C Results:**
 - `pools.db`: 729 MB → ~0 MB after VACUUM (99% freelist, 0 live rows).
 - `ohlcvs.db`: 354 MB → 175 MB (49% reduction).
 - All databases now use `auto_vacuum=INCREMENTAL` to prevent future fragmentation.
+
+**Phase D Improvements:**
+- WAL checkpoint prevents unbounded WAL file growth during high-write workloads.
+- Configurable maintenance intervals allow tuning based on workload patterns.
 
 ### Trader (src/trader/)
 
@@ -469,6 +476,11 @@ All caches use `moka::sync::Cache` (v0.12, W-TinyLFU eviction algorithm, thread-
 - **RSS Improvement** — Median RSS: 1011 MB → 375 MB (62% reduction from baseline). Target ≤400 MB: **MET**.
 - **Database maintenance** — Automated VACUUM operations (see Database Maintenance below) prevent disk fragmentation.
 
+**Stale token configuration:**
+- `maintenance.stale_token_days` (default: 7) — Controls which tokens the filtering engine loads from database based on `market_data_last_fetched_at` timestamp.
+- Set to `0` to disable filtering (loads all tokens, ~278K+, for testing or when fresh data not available).
+- Reduces memory footprint and filtering compute time by excluding tokens with stale market data.
+
 Remaining considerations:
 - **Token filter load** — Now loads ~15.6K tokens every 180s (~22 MB per load, dramatically reduced from 246 MB). Temporary allocation freed after ~6s.
 - **jemalloc page retention** — After large temporary allocations, jemalloc keeps freed pages mapped. RSS appears elevated but memory is available. Configure `dirty_decay_ms` for faster return.
@@ -533,6 +545,9 @@ ALL databases must use `database::configure_connection()` — never set PRAGMAs 
 - NEVER set mmap_size > 256MB — causes RSS bloat (tokens.db had 30GB mmap before Phase A fix).
 - r2d2 pools recycle connections — PRAGMAs set on pool creation are LOST unless using `with_init()`.
 - `auto_vacuum=INCREMENTAL` must be set BEFORE first write to take effect on new databases.
+- WAL checkpoint `TRUNCATE` mode resets WAL file to zero bytes — prevents unbounded growth but runs exclusively (briefly blocks writers).
+- Maintenance intervals enforced: `vacuum_interval_secs` ≥ 1 hour (3600s), `wal_checkpoint_interval_secs` ≥ 5 minutes (300s).
+- `stale_token_days=0` disables stale filtering — loads all 278K+ tokens from database (high memory, long filter compute).
 - **SQLite auto_vacuum pitfall**: Setting `PRAGMA auto_vacuum = INCREMENTAL` per-connection does NOT retroactively change existing databases. The database file header remains unchanged. Must run `VACUUM` after setting the pragma to convert the database to incremental mode. The maintenance module handles this migration automatically.
 - events.db and actions.db have dual pools (read + write) — both need separate configure_connection constants.
 - Cleanup functions exist but need periodic wiring: cleanup_stats() (72h retention), cleanup_old_actions() (30d retention).

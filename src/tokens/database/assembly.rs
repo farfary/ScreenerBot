@@ -207,18 +207,26 @@ impl TokenDatabase {
         "#;
 
         // PERF: When require_market_data=true, only load tokens with market data
-        // AND exclude tokens with stale market data (>7 days old).
-        // This reduces initial load from ~172k to ~30-50k tokens.
+        // AND exclude tokens with stale market data (configurable, default 7 days).
+        // This reduces initial load from ~172k to ~15-30k tokens.
         // Stale tokens are dead tokens that will never pass filtering anyway —
         // excluding them saves ~122 MB of memory per filter snapshot.
         // Cutoff is pre-computed to avoid per-row strftime() calls in SQLite.
+        // Configure via maintenance.stale_token_days (0 = include all).
         let where_clause = if require_market_data {
-            let cutoff_secs = chrono::Utc::now().timestamp() - (7 * 24 * 60 * 60);
-            format!(
-                " WHERE (d.mint IS NOT NULL OR g.mint IS NOT NULL) \
-                  AND COALESCE(d.market_data_last_fetched_at, g.market_data_last_fetched_at) > {}",
-                cutoff_secs
-            )
+            let stale_days =
+                crate::config::with_config(|cfg| cfg.maintenance.stale_token_days);
+            let mut clause =
+                " WHERE (d.mint IS NOT NULL OR g.mint IS NOT NULL)".to_string();
+            if stale_days > 0 {
+                let cutoff_secs =
+                    chrono::Utc::now().timestamp() - (stale_days as i64 * 24 * 60 * 60);
+                clause.push_str(&format!(
+                    " AND COALESCE(d.market_data_last_fetched_at, g.market_data_last_fetched_at) > {}",
+                    cutoff_secs
+                ));
+            }
+            clause
         } else {
             String::new()
         };

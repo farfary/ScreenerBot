@@ -3,7 +3,7 @@
 > **STATUS: Phase A ✅ COMPLETED, Phase B ✅ COMPLETED, Phase C ✅ COMPLETED — See phase-a-summary.md, phase-b-summary.md, phase-b-test-results.md**
 > Phase A: SQLite standardization + jemalloc + cleanup wiring.
 > Phase B: All 14 unbounded caches bounded with moka. Memory now stable (not growing).
-> Phase C: TokenListEntry + incremental filtering implemented. RSS 1011→371 MB avg, 375 MB median, 483 MB peak. Tokens loaded 172K→15.6K (91% reduction). Target ≤400 MB ✅ MET.
+> Phase C: Unbounded caches bounded (API_RESPONSE, FAILED_CACHE), DB auto-vacuum maintenance, stale token SQL filter (7-day cutoff). RSS 1011→371 MB avg, 375 MB median, 483 MB peak. Tokens loaded 172K→15.6K (91% reduction). Target ≤400 MB ✅ MET.
 > Phase D+ not yet started.
 > This document serves as the master reference for the memory optimization project.
 
@@ -22,9 +22,10 @@ This plan was built iteratively (v1-v13). **Later versions supersede earlier one
 | **v13** | ~5594-5906 | Non-DB memory deep-dive, corrected Token size, 14 new gaps |
 
 ### Known Stale Content in v1-v9 (do NOT implement as-is):
-- **"FilterToken"** → replaced by **TokenListEntry** in v10. All FilterToken code/tests/phases are superseded.
+- **"FilterToken"** → replaced by **TokenListEntry** in v10. All FilterToken code/tests/phases are superseded. **UPDATE**: TokenListEntry was NOT implemented in Phase C. We used stale SQL filter instead (see line 1368).
+- **Phase C "TokenListEntry + incremental filtering"** → NOT IMPLEMENTED. Actual Phase C: unbounded caches bounded, DB maintenance, stale SQL filter. See lines 1368-1407 for what was actually done.
 - **Token size "~1,390 bytes"** → corrected to **~2,200 bytes** (78 fields) in v13. Filtering snapshot is ~120MB steady (not 238MB).
-- **"171K tokens"** → corrected to **~56K tokens** loaded for filtering (only those with market data).
+- **"171K tokens"** → corrected to **~56K tokens** loaded for filtering (only those with market data). **UPDATE**: After Phase C stale filter, now ~15.6K tokens (91% reduction).
 - **Gap #7 "r2d2 has NO idle_timeout"** → corrected: r2d2 HAS idle_timeout (10min). Real fix: add with_init().
 - **Phase A step A5** → cleanup_old_actions moved to Phase D (MaintenanceService) per v11.
 - **Column "blacklisted_at"** → actual column is **"added_at"** (verified in schema.rs line 155).
@@ -35,7 +36,7 @@ This plan was built iteratively (v1-v13). **Later versions supersede earlier one
 |---------|-------------|
 | v7 | Verified FETCH_LOCKS and COMPUTATION_FAILURES are BOUNDED (not leaks) |
 | v9 | Column name correction (added_at not blacklisted_at) |
-| v10 | FilterToken → TokenListEntry (Option D). ~550 bytes, 45 fields. |
+| v10 | FilterToken → TokenListEntry (Option D). ~550 bytes, 45 fields. NOT IMPLEMENTED. |
 | v11 | 12 file/phase corrections. Phase C simplified to 7 files. |
 | v12 | Preset workload justification. Scheduling pattern specified. |
 | v13 | Token size 2,200 bytes. DB vs non-DB split (60/40). 14 new gaps. 31 cache inventory. |
@@ -1365,31 +1366,46 @@ Phase B — Bounded Caches (LOW-MEDIUM RISK):
   VERIFICATION: Run bot for 24h, verify no cache exceeds configured max.
   ROLLBACK: Revert moka migration per-cache. Each cache is independent — can roll back individually.
 
-Phase C — FilterToken + Incremental Filtering ✅ COMPLETED:
-  C1. Define FilterToken struct with only filter-needed fields [Component 3] ✅ DONE
-  C2. Create optimized SQL query for FilterToken loading ✅ DONE
-  C3. Update all filter sources (dexscreener, geckoterminal, rugcheck, meta) to use FilterToken ✅ DONE
-  C4. Update AI filter source: use FilterToken for pre-check, get_full_token() for analysis ✅ DONE
-  C5. Implement incremental delta query (WHERE updated_at > last_refresh) [Component 2] ✅ DONE
-  C6. Implement snapshot merge logic (update/insert/remove) ✅ DONE (C5 covers this)
-  C7. Filtering refresh interval from resolved profile (300s/180s/120s) [Component 10] (DEFERRED)
-  C8. Add config change → full refresh trigger (DEFERRED)
-  C9. Add SQL pre-filtering for simple numeric thresholds [Component 9] (DEFERRED)
+Phase C — Unbounded Caches, DB Maintenance & Stale Token Filter ✅ COMPLETED:
+  
+  ⚠️ **ACTUAL VS PLANNED**: Phase C plan below (C1-C9) prescribed TokenListEntry + incremental filtering.
+  These were NOT IMPLEMENTED. We took a fundamentally different (and better) approach:
+  - Stale token SQL filter (7-day WHERE clause) achieved 91% reduction → BETTER than TokenListEntry
+  - TokenListEntry would save ~23 MB (15.6K × 450 bytes). Stale filter saved ~122 MB.
+  - C1/C2 below are now "DEFERRED INDEFINITELY — diminished ROI after stale filter"
+  
+  WHAT WE ACTUALLY DID:
+  C1. API_RESPONSE_CACHE → moka (1K cap, 5min TTL) — bounded an unbounded cache ✅ DONE
+  C2. FAILED_CACHE → moka (50K cap, 24h TTL) — bounded an unbounded cache ✅ DONE
+  C3. Database auto-vacuum maintenance module (maintenance.rs) — one-time migration + periodic vacuum ✅ DONE
+  C4. jemalloc tuning documentation (comment in main.rs) ✅ DONE
+  C5. Stale token SQL WHERE filter (7-day cutoff on market_data_last_fetched_at) ✅ DONE
+      → Reduces tokens from 172K to 15.6K (91% reduction, ~122 MB saved)
+  
+  ORIGINAL PLAN (NOT IMPLEMENTED):
+  C1. Define FilterToken struct with only filter-needed fields [Component 3] ⏸️ DEFERRED
+  C2. Create optimized SQL query for FilterToken loading ⏸️ DEFERRED
+  C3. Update all filter sources (dexscreener, geckoterminal, rugcheck, meta) to use FilterToken ⏸️ DEFERRED
+  C4. Update AI filter source: use FilterToken for pre-check, get_full_token() for analysis ⏸️ DEFERRED
+  C5. Implement incremental delta query (WHERE updated_at > last_refresh) [Component 2] ⏸️ DEFERRED
+  C6. Implement snapshot merge logic (update/insert/remove) ⏸️ DEFERRED
+  C7. Filtering refresh interval from resolved profile (300s/180s/120s) [Component 10] ⏸️ DEFERRED
+  C8. Add config change → full refresh trigger ⏸️ DEFERRED
+  C9. Add SQL pre-filtering for simple numeric thresholds [Component 9] ⏸️ DEFERRED
   
   RESULTS ACHIEVED:
   - RSS Memory: 1011 MB → 371 MB avg, 375 MB median, 483 MB peak (63% reduction)
-  - Tokens Loaded: 172K → 15.6K (91% reduction)
+  - Tokens Loaded: 172K → 15.6K (91% reduction via stale SQL filter)
   - Target ≤400 MB: ✅ MET (375 MB median, 483 MB peak both under target)
   - Disk Space Reclaimed: pools.db 729→0 MB, ohlcvs.db 354→175 MB (945 MB total recovered)
-  - All core tasks C1-C5 completed successfully
-  - Implementation used TokenListEntry (per v10 specification)
-  - Incremental filtering implemented with optimized SQL queries
+  - All 5 actual tasks (C1-C5) completed successfully
+  - Still using full Token struct with Arc<Token> (not TokenListEntry)
+  - Still using full refresh every 3 min (not incremental filtering)
   
-  EXPECTED IMPACT: 238 MB → 14-60 MB baseline, 476 MB → 70-120 MB peak.
-  Profile-aware: Low profile refreshes less often, High more aggressively.
-  VERIFICATION: ✅ VERIFIED — 24h test run completed successfully.
-  ROLLBACK: Revert to full-reload compute_snapshot(). FilterToken can be reverted to full Token.
-  Incremental and FilterToken are independent — can roll back either without the other.
+  EXPECTED IMPACT (from original plan): 238 MB → 14-60 MB baseline, 476 MB → 70-120 MB peak.
+  ACTUAL IMPACT (from stale filter): Better than planned — stale filter alone saved ~122 MB.
+  VERIFICATION: ✅ VERIFIED — 10-minute test run completed successfully. RSS target achieved.
+  ROLLBACK: Revert stale SQL filter by removing WHERE clause in assembly.rs.
 
 Phase D — Maintenance Service (MEDIUM RISK):
   D1. Create MaintenanceService implementing Service trait [Component 5]
@@ -2893,62 +2909,81 @@ C9: SQL pre-filtering
 
 **REVISED Phase C ordering (3 sub-phases):**
 
-```
-Phase C1 — FilterToken ✅ COMPLETED (MEDIUM RISK, biggest single-phase memory win, 5 steps)
+⚠️ **NOTE**: The sections below (Phase C1, C2, C3) describe the ORIGINAL PLAN for TokenListEntry + incremental filtering. 
+These were NOT IMPLEMENTED. See lines 1368-1410 for what was actually done in Phase C.
 
-  C1. Audit all filter source field access ✅ DONE
+```
+Phase C1 — FilterToken ⏸️ DEFERRED INDEFINITELY (MEDIUM RISK, 5 steps)
+
+  ⚠️ **NOT IMPLEMENTED — bypassed by stale SQL filter (C5 actual)**
+  
+  The stale token SQL filter achieved BETTER results than FilterToken would have:
+  - FilterToken would save ~23 MB (15.6K tokens × 450 bytes vs 2,200 bytes)
+  - Stale filter saved ~122 MB by reducing tokens from 172K to 15.6K (91% reduction)
+  - With only 15.6K tokens loaded, the ROI of TokenListEntry is now minimal
+  
+  ORIGINAL PLAN (not implemented):
+
+  C1. Audit all filter source field access ⏸️ DEFERRED
       - Mechanically grep each filter source for token.field_name accesses
       - Produce definitive field list (not estimated ~35, exact count)
       - Document which source uses which field
 
-  C2. Define FilterToken struct with audited fields ✅ DONE
+  C2. Define FilterToken struct with audited fields ⏸️ DEFERRED
       - Comment block at top: field → source mapping
       - sizeof check: verify ~350 bytes or actual size
       - Implemented as TokenListEntry per v10 specification
 
-  C3. Create optimized SQL query for FilterToken loading ✅ DONE
+  C3. Create optimized SQL query for FilterToken loading ⏸️ DEFERRED
       - SELECT only FilterToken columns (skip security_risks JSON, top_holders, websites, socials)
       - Simpler JOINs (skip tables not needed for FilterToken fields)
       - Benchmark: time for full load before/after
 
-  C4. Update all filter sources (dexscreener, geckoterminal, rugcheck, meta) to use FilterToken ✅ DONE
+  C4. Update all filter sources (dexscreener, geckoterminal, rugcheck, meta) to use FilterToken ⏸️ DEFERRED
       - Compile-time safety: if a source references a missing field, build fails
 
-  C5. Update AI filter source: FilterToken pre-check, get_full_token() for LLM analysis ✅ DONE
+  C5. Update AI filter source: FilterToken pre-check, get_full_token() for LLM analysis ⏸️ DEFERRED
       - AI runs LAST (after all other filters). Typically 2.8K-5.6K tokens reach AI.
       - For each: single-row indexed DB lookup (~2ms) to get full Token for LLM prompt
       - Acceptable: AI is rate-limited anyway (50 req/min)
 
-  VERIFY: ✅ VERIFIED — Filtering snapshot size dropped from ~238MB to minimal baseline.
-  ROLLBACK: Revert FilterToken → use full Token. Independent of incremental.
+  VERIFY: ⏸️ NOT VERIFIED — Phase not implemented.
+  ROLLBACK: N/A — nothing to roll back.
 
-Phase C2 — Incremental Filtering ✅ COMPLETED (MEDIUM-HIGH RISK, 5 steps)
+Phase C2 — Incremental Filtering ⏸️ DEFERRED INDEFINITELY (MEDIUM-HIGH RISK, 5 steps)
 
-  C6. Implement incremental delta query (WHERE updated_at > last_refresh) ✅ DONE
+  ⚠️ **NOT IMPLEMENTED — bypassed by stale SQL filter (C5 actual)**
+  
+  The stale token SQL filter eliminated the need for incremental filtering:
+  - With 91% of tokens filtered out (172K → 15.6K), full refresh is now lightweight
+  - Full refresh of 15.6K tokens every 3 min has negligible performance impact
+  - Incremental filtering would add significant complexity for minimal gain
+  
+  ORIGINAL PLAN (not implemented):
+
+  C6. Implement incremental delta query (WHERE updated_at > last_refresh) ⏸️ DEFERRED
       - Query tokens where update_tracking.market_data_last_updated_at > last_refresh_timestamp
       - Also query new tokens (first_discovered_at > last_refresh)
       - Also query newly blacklisted (blacklisted_at > last_refresh)
-      - Achieved 91% reduction in tokens loaded per refresh (172K → 15.6K)
 
-  C7. Implement snapshot merge logic (update/insert/remove) ✅ DONE
+  C7. Implement snapshot merge logic (update/insert/remove) ⏸️ DEFERRED
       - Clone existing snapshot's HashMap (Arc pointers only, ~8MB)
       - Apply: updated tokens re-evaluated, new tokens added if pass, blacklisted removed
       - Build new FilteringSnapshot from modified HashMap
       - Swap atomically via existing Arc+RwLock pattern
 
-  C8. Add safety nets: ✅ DONE
+  C8. Add safety nets: ⏸️ DEFERRED
       - Full refresh every 30 min (catches drift)
       - If delta > 50% of total → auto full refresh
       - Config change → immediate full refresh
       - Fallback: if incremental fails, do full refresh + log warning
 
-  C9. Filtering refresh interval from resolved profile (300s/180s/120s) (DEFERRED to Phase E)
+  C9. Filtering refresh interval from resolved profile (300s/180s/120s) ⏸️ DEFERRED
 
-  C10. Add config change → full refresh trigger (DEFERRED to Phase E)
+  C10. Add config change → full refresh trigger ⏸️ DEFERRED
 
-  VERIFY: ✅ VERIFIED — 24h test run completed. Snapshot size stable. Delta counts logged.
-  Pass/reject counts match between incremental and full-refresh runs.
-  ROLLBACK: Revert to full-reload compute_snapshot(). Independent of FilterToken.
+  VERIFY: ⏸️ NOT VERIFIED — Phase not implemented.
+  ROLLBACK: N/A — nothing to roll back.
 
 Phase C3 — SQL Pre-Filtering (LOW PRIORITY — OPTIONAL/DEFER)
 
@@ -3386,6 +3421,9 @@ These files currently have ad-hoc PRAGMA blocks. Each gets: remove PRAGMAs → a
 
 ### 📁 PHASE C1 — FilterToken (5 files CREATED/MODIFIED)
 
+⚠️ **NOT IMPLEMENTED**: The file list below describes the ORIGINAL PLAN for Phase C1 (FilterToken/TokenListEntry).
+This was NOT implemented. See phase-c-summary.md for what was actually done (C1-C5: cache migrations, DB maintenance, stale filter).
+
 | File | Lines | Action | What Changes |
 |------|-------|--------|-------------|
 | ✨ `src/filtering/filter_token.rs` | NEW | ✨ CREATE | FilterToken struct (~35 fields) + SQL query builder |
@@ -3407,6 +3445,9 @@ These files currently have ad-hoc PRAGMA blocks. Each gets: remove PRAGMAs → a
 ---
 
 ### 📁 PHASE C2 — Incremental Filtering (3 files CREATED/MODIFIED)
+
+⚠️ **NOT IMPLEMENTED**: The file list below describes the ORIGINAL PLAN for Phase C2 (incremental filtering).
+This was NOT implemented. See phase-c-summary.md for what was actually done.
 
 | File | Lines | Action | What Changes |
 |------|-------|--------|-------------|

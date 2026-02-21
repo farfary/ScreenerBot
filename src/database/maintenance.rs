@@ -3,6 +3,7 @@
 //! This module handles:
 //! - Auto-vacuum mode migration (one-time conversion from NONE to INCREMENTAL)
 //! - Periodic incremental vacuum to reclaim free pages
+//! - Periodic WAL checkpoint to prevent unbounded WAL file growth
 //! - Monitoring and logging of database health
 //!
 //! ## Background
@@ -12,8 +13,11 @@
 //! but existing databases retained their original mode (0 = NONE). This causes free pages
 //! to accumulate indefinitely (e.g., pools.db at 729 MB with 0 rows).
 //!
+//! WAL (Write-Ahead Logging) files grow with writes and are only reset via checkpoint.
+//! Without periodic checkpoints, WAL files can grow to hundreds of MB on a 24/7 bot.
+//!
 //! This module performs a one-time migration then maintains all databases via
-//! periodic incremental vacuum operations.
+//! periodic incremental vacuum and WAL checkpoint operations.
 
 use rusqlite::Connection;
 use std::path::{Path, PathBuf};
@@ -217,6 +221,70 @@ pub fn run_incremental_vacuum(path: &Path, pages: u32) -> Result<u64, String> {
 }
 
 // =============================================================================
+// WAL CHECKPOINT
+// =============================================================================
+
+/// Runs a WAL checkpoint on a database to prevent unbounded WAL file growth.
+///
+/// Uses TRUNCATE mode which checkpoints all frames, resets the WAL file to zero
+/// bytes, and ensures the WAL file doesn't grow indefinitely on long-running bots.
+///
+/// ## Arguments
+///
+/// * `path` - Path to the database file
+///
+/// ## Returns
+///
+/// - `Ok(())` on success
+/// - `Err(String)` if the checkpoint failed
+///
+/// ## Notes
+///
+/// - TRUNCATE mode requires exclusive access briefly; busy_timeout handles contention
+/// - This is lightweight compared to VACUUM — typically completes in milliseconds
+/// - Only meaningful for databases using WAL journal mode
+pub fn run_wal_checkpoint(path: &Path) -> Result<(), String> {
+    let conn = Connection::open(path).map_err(|e| {
+        format!(
+            "Failed to open database {}: {}",
+            path.display(),
+            e
+        )
+    })?;
+
+    conn.pragma_update(None, "busy_timeout", 5000)
+        .map_err(|e| format!("Failed to set busy_timeout: {}", e))?;
+
+    // Check journal mode — only checkpoint WAL databases
+    let journal_mode: String = conn
+        .pragma_query_value(None, "journal_mode", |row| row.get(0))
+        .map_err(|e| format!("Failed to query journal_mode: {}", e))?;
+
+    if journal_mode.to_lowercase() != "wal" {
+        return Ok(()); // Not in WAL mode, nothing to do
+    }
+
+    // TRUNCATE mode: checkpoint all frames and reset WAL file to zero bytes
+    let start = std::time::Instant::now();
+    conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")
+        .map_err(|e| format!("WAL checkpoint failed: {}", e))?;
+    let elapsed = start.elapsed();
+
+    if elapsed.as_millis() > 100 {
+        logger::info(
+            LogTag::System,
+            &format!(
+                "WAL checkpoint on {} took {:.2}s",
+                path.display(),
+                elapsed.as_secs_f64()
+            ),
+        );
+    }
+
+    Ok(())
+}
+
+// =============================================================================
 // BACKGROUND MAINTENANCE TASK
 // =============================================================================
 
@@ -226,13 +294,15 @@ pub fn run_incremental_vacuum(path: &Path, pages: u32) -> Result<u64, String> {
 ///
 /// 1. Waits 60 seconds after startup (avoid interfering with initialization)
 /// 2. One-time: runs `ensure_auto_vacuum_mode()` on all databases (migration)
-/// 3. Periodic (every 6 hours): runs `run_incremental_vacuum(500)` on all databases
+/// 3. Periodic: runs WAL checkpoint (default: every 1h) and incremental vacuum
+///    (default: every 6h) on all databases. Intervals are read from config.
 ///
 /// ## Operation
 ///
 /// - All SQLite operations run in `spawn_blocking` to avoid blocking async runtime
 /// - Each database is processed independently (errors are logged but don't stop processing)
 /// - Timing and results are logged for monitoring
+/// - Uses `tokio::select!` to interleave two different interval timers
 ///
 /// ## Call this from startup sequence
 ///
@@ -242,9 +312,20 @@ pub fn run_incremental_vacuum(path: &Path, pages: u32) -> Result<u64, String> {
 /// tokio::spawn(start_db_maintenance_task());
 /// ```
 pub async fn start_maintenance_task() {
+    // Read config intervals (with sane minimums)
+    let (vacuum_secs, wal_secs) = crate::config::with_config(|cfg| {
+        let vacuum = cfg.maintenance.vacuum_interval_secs.max(3600); // min 1h
+        let wal = cfg.maintenance.wal_checkpoint_interval_secs.max(300); // min 5min
+        (vacuum, wal)
+    });
+
     logger::info(
         LogTag::System,
-        "Database maintenance task started (60s delay before first run)",
+        &format!(
+            "Database maintenance task started (60s delay, vacuum every {}h, WAL checkpoint every {}m)",
+            vacuum_secs / 3600,
+            wal_secs / 60
+        ),
     );
 
     // Wait for system initialization
@@ -300,61 +381,116 @@ pub async fn start_maintenance_task() {
         ),
     );
 
-    // Phase 2: Periodic incremental vacuum (every 6 hours)
-    let mut interval = tokio::time::interval(Duration::from_secs(6 * 60 * 60));
-    interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+    // Phase 2: Periodic maintenance with two timers
+    let mut vacuum_interval = tokio::time::interval(Duration::from_secs(vacuum_secs));
+    vacuum_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    let mut wal_interval = tokio::time::interval(Duration::from_secs(wal_secs));
+    wal_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     loop {
-        interval.tick().await;
-
-        logger::info(
-            LogTag::System,
-            "Running periodic incremental vacuum on all databases",
-        );
-
-        let db_paths = get_all_db_paths();
-        let mut total_freed: u64 = 0;
-        let mut successful = 0;
-
-        for (name, path) in db_paths {
-            let name_clone = name.clone();
-            let path_clone = path.clone();
-
-            match tokio::task::spawn_blocking(move || run_incremental_vacuum(&path_clone, 500))
-                .await
-            {
-                Ok(Ok(freed)) => {
-                    total_freed += freed;
-                    if freed > 0 {
-                        logger::info(
-                            LogTag::System,
-                            &format!("✓ {} freed {} pages", name, freed),
-                        );
-                    }
-                    successful += 1;
-                }
-                Ok(Err(e)) => {
-                    logger::warning(
-                        LogTag::System,
-                        &format!("✗ Failed to vacuum {}: {}", name, e),
-                    );
-                }
-                Err(e) => {
-                    logger::warning(
-                        LogTag::System,
-                        &format!("✗ Task panic during vacuum of {}: {}", name_clone, e),
-                    );
-                }
+        tokio::select! {
+            _ = vacuum_interval.tick() => {
+                run_vacuum_cycle().await;
+            }
+            _ = wal_interval.tick() => {
+                run_wal_cycle().await;
             }
         }
+    }
+}
 
-        logger::info(
+/// Runs incremental vacuum on all databases.
+async fn run_vacuum_cycle() {
+    logger::info(
+        LogTag::System,
+        "Running periodic incremental vacuum on all databases",
+    );
+
+    let db_paths = get_all_db_paths();
+    let mut total_freed: u64 = 0;
+    let mut successful = 0;
+
+    for (name, path) in db_paths {
+        let name_clone = name.clone();
+        let path_clone = path.clone();
+
+        match tokio::task::spawn_blocking(move || run_incremental_vacuum(&path_clone, 500))
+            .await
+        {
+            Ok(Ok(freed)) => {
+                total_freed += freed;
+                if freed > 0 {
+                    logger::info(
+                        LogTag::System,
+                        &format!("✓ {} freed {} pages", name, freed),
+                    );
+                }
+                successful += 1;
+            }
+            Ok(Err(e)) => {
+                logger::warning(
+                    LogTag::System,
+                    &format!("✗ Failed to vacuum {}: {}", name, e),
+                );
+            }
+            Err(e) => {
+                logger::warning(
+                    LogTag::System,
+                    &format!("✗ Task panic during vacuum of {}: {}", name_clone, e),
+                );
+            }
+        }
+    }
+
+    logger::info(
+        LogTag::System,
+        &format!(
+            "Incremental vacuum cycle complete: {} databases processed, {} pages freed ({:.2} MB)",
+            successful,
+            total_freed,
+            (total_freed as f64 * 4.0) / 1024.0
+        ),
+    );
+}
+
+/// Runs WAL checkpoint on all databases.
+async fn run_wal_cycle() {
+    let db_paths = get_all_db_paths();
+    let mut successful = 0;
+    let mut errors = 0;
+
+    for (name, path) in db_paths {
+        let name_clone = name.clone();
+        let path_clone = path.clone();
+
+        match tokio::task::spawn_blocking(move || run_wal_checkpoint(&path_clone)).await {
+            Ok(Ok(())) => {
+                successful += 1;
+            }
+            Ok(Err(e)) => {
+                logger::warning(
+                    LogTag::System,
+                    &format!("✗ WAL checkpoint failed for {}: {}", name, e),
+                );
+                errors += 1;
+            }
+            Err(e) => {
+                logger::warning(
+                    LogTag::System,
+                    &format!("✗ Task panic during WAL checkpoint of {}: {}", name_clone, e),
+                );
+                errors += 1;
+            }
+        }
+    }
+
+    if errors > 0 {
+        logger::warning(
             LogTag::System,
             &format!(
-                "Incremental vacuum cycle complete: {} databases processed, {} pages freed ({:.2} MB)",
-                successful,
-                total_freed,
-                (total_freed as f64 * 4.0) / 1024.0
+                "WAL checkpoint cycle: {} ok, {} errors",
+                successful, errors
             ),
         );
     }

@@ -22,6 +22,11 @@ config_struct! {
         /// OHLCV candle retention in days (0 = keep forever).
         ohlcv_retention_days: u32 = 90,
 
+        /// Tokens without market data updates older than this are excluded
+        /// from the filter engine to save memory. 0 = include all tokens.
+        /// At 7 days, this typically reduces token count by ~90%.
+        stale_token_days: u32 = 7,
+
         /// WAL checkpoint interval in seconds.
         wal_checkpoint_interval_secs: u64 = 3600,
 
