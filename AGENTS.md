@@ -2,6 +2,8 @@
 
 > **This file is for AI coding agents** (an LLM provider, Cursor, Windsurf, Cline, etc.) that assist contributors working on ScreenerBot. If you are an AI agent, follow these instructions before taking any action.
 
+> **IMPORTANT: This file contains INSTRUCTIONS ONLY — not development history.** Do not write implementation logs, phase completion notes, commit histories, or "what was done" narratives here. This file tells agents HOW to work, not WHAT was done. Development history belongs in `docs/investigations/` or session files. When updating this file, add only: rules, pitfalls, file locations, patterns, and architectural guidance.
+
 ## Before You Do Anything
 
 **MANDATORY: Read the docs first.**
@@ -317,46 +319,20 @@ OnChainFilters {
 
 ##### Authority Reputation System
 
-**Purpose:** Auto-growing scam authority detection — learns from scratch with NO hardcoded scam addresses. Discovers malicious authorities by cross-referencing token rejection patterns.
+Auto-growing scam authority detection. Starts empty, learns from rejection patterns — NO hardcoded scam addresses.
 
-**Architecture:**
+**How it works:** Background task (every 5min) queries `authority_reputation` SQLite table, groups tokens by freeze/mint/update authority, cross-references with rejection data. Blocks authority if confidence ≥ 0.8 AND total_tokens ≥ 5.
 
-1. **Authority Reputation System** — Auto-discovery of scam authorities:
-   - New `authority_reputation` SQLite table in `tokens.db` with schema: `address`, `authority_type` (freeze/mint/update), `total_tokens`, `flagged_tokens`, `confidence`, `is_blocked`, `first_seen`, `last_seen`
-   - Starts empty on first run — learns patterns dynamically from rejection data
-   - Background discovery task runs every 5 minutes via Tokio interval
-   - Groups tokens by freeze/mint/update authority, cross-references with `rejected_mints` table
-   - Calculates confidence score: `flagged_tokens / total_tokens` (0.0 to 1.0)
-   - Blocks authority if confidence ≥ 0.8 AND total_tokens ≥ 5 (configurable thresholds)
-   - In-memory blocked authorities set via `ArcSwap<DashSet>` for race-free O(1) lookups during filtering
-   - Auto-unblocks if confidence drops below threshold on next discovery cycle
+**Key files:**
+- `src/tokens/authority_cache.rs` — In-memory blocked set (`ArcSwap<DashSet>`, O(1) lookup)
+- `src/tokens/database/authority.rs` — DB persistence + discovery SQL
+- `src/tokens/decimals.rs` — Extracts authority data from SPL Mint during existing fetch (zero extra RPC)
+- `src/filtering/sources/onchain.rs` — Calls `is_blocked_authority()` during filtering
 
-2. **Authority Cache Enrichment** — Zero extra RPC cost:
-   - `authority_cache.rs` — New module for mint authority caching with `ArcSwap<DashMap>` for thread-safe access
-   - `decimals.rs` enhanced to extract `freeze_authority` + `mint_authority` from SPL Mint account during existing chain fetch
-   - Populates authority cache as side effect when fetching decimals — no additional RPC calls required
-   - Token struct assembly in `sources/onchain.rs` falls back to authority cache when Rugcheck data unavailable
-   - Cache persists across token evaluations, reducing redundant authority lookups
-
-3. **Integration Flow:**
-   - Discovery task updates SQLite → loads blocked set into memory via `ArcSwap::store()`
-   - On-chain filter calls `is_authority_blocked()` from `authority_cache.rs` during token evaluation
-   - If blocked authority detected → immediate rejection with `OnChainKnownScamAuthority` reason
-   - Authority metadata saved during decimal fetch → enriches future token analyses
-
-**Key Files:**
-
-- `src/tokens/authority_cache.rs` — In-memory authority cache + blocked set (ArcSwap<DashSet<String>>)
-- `src/tokens/database/authority.rs` — DB persistence (`insert_authority_observation`, `get_blocked_authorities`, `discover_scam_authorities`)
-- `src/tokens/decimals.rs` — Enhanced with `extract_freeze_authority_from_mint()` and `extract_mint_authority_from_mint()` helpers
-- `src/filtering/sources/onchain.rs` — Uses dynamic authority cache via `is_authority_blocked()` (no hardcoded list)
-- `src/tokens/db.rs` — Discovery task spawned in `spawn_authority_discovery_task()`, runs every 5 minutes
-
-**Performance:** O(1) authority lookups via `DashSet` during filtering. Discovery task runs in background with minimal impact (single SQL aggregate query + set swap).
-
-**Configuration:** Uses existing `OnChainFilters::check_scam_authorities` flag — no new config needed. Thresholds hardcoded for now (confidence ≥ 0.8, total_tokens ≥ 5) but designed for future config exposure.
-
-**Pitfall:** ArcSwap used for blocked authorities set to prevent race conditions during periodic refresh — never use clear+insert pattern on shared sets. Always build new set and swap atomically via `ArcSwap::store()`.
+**Pitfalls:**
+- Use `ArcSwap::store()` for atomic set replacement — never `DashSet.clear()` + insert (race condition)
+- Authority cache populated as side effect of decimals fetch — do not add separate RPC calls
+- Token assembly falls back to authority_cache when Rugcheck data unavailable
 
 ### Swaps (src/swaps/)
 
