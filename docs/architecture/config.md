@@ -1,6 +1,6 @@
 # Config Module — Architecture
 
-> ScreenerBot TOML Configuration System — February 2026
+> ScreenerBot TOML configuration + UI metadata system — February 2026
 
 ---
 
@@ -8,265 +8,471 @@
 
 1. [Overview](#1-overview)
 2. [File Structure](#2-file-structure)
-3. [Core Types](#3-core-types)
-4. [Config Macro System](#4-config-macro-system)
-5. [Loading & Hot Reload](#5-loading--hot-reload)
-6. [Config Sections](#6-config-sections)
-7. [Access Patterns](#7-access-patterns)
-8. [Metadata System](#8-metadata-system)
-9. [Module Connections](#9-module-connections)
+3. [Schema Definition Model (`config_struct!`)](#3-schema-definition-model-config_struct)
+4. [Root `Config` Composition](#4-root-config-composition)
+5. [Global Storage + Access Patterns](#5-global-storage--access-patterns)
+6. [Load / Reload / Persistence Flows](#6-load--reload--persistence-flows)
+7. [Validation Model](#7-validation-model)
+8. [UI Metadata System](#8-ui-metadata-system)
+9. [GUI Migration: Navigation Tabs](#9-gui-migration-navigation-tabs)
+10. [Wallet Credentials + Keypair Access](#10-wallet-credentials--keypair-access)
+11. [Webserver Integration](#11-webserver-integration)
+12. [Module Connections](#12-module-connections)
 
 ---
 
 ## 1. Overview
 
-The Config module provides strongly-typed TOML-based configuration with macro-driven definitions, hot reload, and UI metadata. All 23 config sections are defined declaratively with defaults, validation, and rendering hints.
+The `config` module is ScreenerBot's **single source of truth** for runtime settings.
 
-**Key characteristics:**
-- TOML file storage (`data/config.toml`)
-- `OnceLock<RwLock<Config>>` for thread-safe global access
-- `config_struct!` macro auto-generates struct + Default + serde + metadata
-- Hot reload with validation (atomic replacement)
-- Field metadata for dashboard UI rendering (labels, hints, min/max, categories)
-- Encrypted wallet credentials in config file
+It provides:
 
-**27 files, ~5,805 lines**
+- A strongly typed Rust `Config` struct (plus many nested section structs)
+- Serialization/deserialization to a user-editable **TOML file** (`data/config.toml`)
+- A global, thread-safe in-memory instance (`OnceLock<RwLock<Config>>`)
+- A **metadata system** so the web dashboard can render config forms automatically
+- Hot reload helpers (reload + validate + atomic replace)
+
+### Design goals
+
+- **Zero repetition**: default values, serde defaults, and UI metadata are declared once in schema
+  definitions and code is generated via macros.
+- **Stable, typed reads**: most modules should read config via `with_config(|cfg| ...)`.
+- **Hot reload**: config changes can be applied without restarting the process.
+- **UI-driven editing**: the backend can expose field metadata (labels, hints, min/max, categories)
+  to the dashboard renderer.
+
+### Non-goals (current implementation)
+
+- No automatic file watcher inside the `config` module.
+  - Reload happens only when explicitly triggered (e.g. webserver route calls `reload_config()`).
 
 ---
 
 ## 2. File Structure
 
-```
+```text
 src/config/
-├── mod.rs              # Module exports
-├── macros.rs           # config_struct! macro (110 lines)
-├── metadata.rs         # FieldMetadata, FieldType, visibility (417 lines)
-├── utils.rs            # Loading, reload, access, wallet mgmt (839 lines)
-└── schemas/            # 23 config section definitions
-    ├── mod.rs           # Root Config struct
-    ├── filtering.rs     # Token filtering rules (969 lines, largest)
-    ├── ai.rs            # AI providers & analysis (439 lines)
-    ├── trader.rs        # Trading parameters (340 lines)
-    ├── rpc.rs           # RPC providers (256 lines)
-    ├── tokens.rs        # Token tracking (254 lines)
-    ├── gui.rs           # GUI/dashboard (238 lines)
-    ├── swaps.rs         # Swap routing (203 lines)
-    ├── telegram.rs      # Telegram bot (186 lines)
-    ├── wallet.rs        # Wallet addresses (140 lines)
-    ├── positions.rs     # Position management (122 lines)
-    ├── events.rs        # Event recording (121 lines)
-    ├── ohlcv.rs         # OHLCV data (104 lines)
-    ├── webserver.rs     # Webserver/headless (103 lines)
-    ├── pools.rs         # Pool discovery (102 lines)
-    ├── connectivity.rs  # Connectivity monitoring (84 lines)
-    ├── holder_watch.rs  # Holder watch tool (74 lines)
-    ├── strategies.rs    # Strategies (50 lines)
-    ├── maintenance.rs   # Data retention (33 lines)
-    ├── performance.rs   # Memory/cache sizing (27 lines)
-    ├── monitoring.rs    # System monitoring (10 lines)
-    ├── sol_price.rs     # SOL price (10 lines)
-    └── services.rs      # Services (10 lines)
+├── mod.rs              Public API + re-exports
+├── macros.rs           `config_struct!` macro (struct + Default + metadata generator)
+├── metadata.rs         Field metadata types + `field_metadata!` helper + metadata collection
+├── utils.rs            Load/reload/save + access helpers + validation + wallet key helpers
+└── schemas/
+    ├── mod.rs          Root `Config` struct + section module wiring
+    ├── trader.rs       Trading settings (large; most validation targets this)
+    ├── filtering.rs    Filtering settings (large; many UI fields)
+    ├── rpc.rs          RPC provider selection + URLs + rate limiting
+    ├── gui.rs          Dashboard settings + navigation tabs migration logic
+    ├── webserver.rs    Webserver/auth config
+    ├── telegram.rs     Telegram bot settings
+    ├── tokens.rs       Token tracking settings
+    ├── pools.rs        Pool discovery settings
+    ├── positions.rs    Position management settings
+    ├── ohlcv.rs        OHLCV retention/fetch settings
+    ├── sol_price.rs    SOL price service config
+    ├── ai.rs           AI providers + cache toggles
+    ├── services.rs     Service toggles
+    ├── events.rs       Event recording toggles
+    ├── connectivity.rs Connectivity monitor config
+    ├── wallet.rs       Wallet UX-related config (not key material)
+    ├── ...             (other smaller schema files)
 ```
 
 ---
 
-## 3. Core Types
+## 3. Schema Definition Model (`config_struct!`)
 
-### Root Config
+**Core macro:** `src/config/macros.rs`
+
+All config section structs (including root `Config`) are defined with:
 
 ```rust
-pub struct Config {
-    wallet_encrypted: String,
-    wallet_nonce: String,
-    rpc: RpcConfig,
-    trader: TraderConfig,
-    positions: PositionsConfig,
-    filtering: FilteringConfig,
-    swaps: SwapsConfig,
-    tokens: TokensConfig,
-    pools: PoolsConfig,
-    sol_price: SolPriceConfig,
-    events: EventsConfig,
-    services: ServicesConfig,
-    monitoring: MonitoringConfig,
-    connectivity: ConnectivityMonitoringConfig,
-    ohlcv: OhlcvConfig,
-    wallet: WalletConfig,
-    strategies: StrategiesConfig,
-    gui: GuiConfig,
-    webserver: WebserverConfig,
-    telegram: TelegramConfig,
-    holder_watch: HolderWatchConfig,
-    ai: AiConfig,
-    performance: PerformanceConfig,
-    maintenance: MaintenanceConfig,
+config_struct! {
+  pub struct TraderConfig {
+    // Optional doc comments are captured as metadata docs
+    /// Maximum simultaneous positions
+    #[metadata(field_metadata! {
+      label: "Max Open Positions",
+      hint: "Maximum simultaneous positions",
+      min: 1, max: 100,
+      category: "Core Trading",
+    })]
+    max_open_positions: u32 = 5,
+  }
 }
 ```
 
-### Global Access
+### What the macro generates
+
+For every `config_struct! { struct X { ... } }`, the macro generates:
+
+1. A struct with `#[derive(Debug, Clone, Serialize, Deserialize)]` and `#[serde(default)]`
+2. An `impl Default for X` using the inline defaults
+3. `FieldTypeInfo` and `NestedMetadata` trait impls used by the metadata system
+4. An `X::field_metadata() -> SectionMetadata` constructor that:
+   - captures default values
+   - captures doc comments as `docs`
+   - applies optional `#[metadata(...)]` extras (via `field_metadata!`)
+   - recursively attaches `children` metadata for nested object fields
+
+### Serde defaults behavior
+
+Because the generated struct has `#[serde(default)]`:
+
+- Missing fields in TOML will be filled using `Default::default()` for the struct.
+- This is how the system supports forward-compatible schema growth without breaking older configs.
+
+---
+
+## 4. Root `Config` Composition
+
+**File:** `src/config/schemas/mod.rs`
+
+The root struct is also generated via `config_struct!` and contains:
+
+- two top-level encrypted wallet credential fields:
+  - `wallet_encrypted: String`
+  - `wallet_nonce: String`
+- plus nested section structs (RPC, trader, filtering, webserver, etc.)
+
+At a high level, the root config looks like:
+
+```text
+Config
+├── wallet_encrypted + wallet_nonce      (encrypted key material; base64 strings)
+├── rpc                                 (RPC providers + limits)
+├── trader                              (core trading)
+├── positions                           (position lifecycle settings)
+├── filtering                            (token filtering)
+├── swaps                               (swap execution settings)
+├── tokens                              (token tracking)
+├── pools                               (pool discovery)
+├── sol_price                           (SOL price service)
+├── events                              (event recording)
+├── services                            (service toggles)
+├── monitoring                          (system monitoring)
+├── connectivity                        (connectivity monitor)
+├── ohlcv                               (OHLCV retention/fetch)
+├── wallet                              (wallet UX; not key material)
+├── strategies                          (strategy toggles/settings)
+├── gui                                 (dashboard UI + navigation)
+├── webserver                           (HTTP API/auth)
+├── telegram                            (bot token/chat id/options)
+├── holder_watch                        (tool settings)
+├── ai                                  (LLM + AI tooling settings)
+├── performance                         (cache/memory knobs)
+└── maintenance                         (retention + vacuum scheduling)
+```
+
+---
+
+## 5. Global Storage + Access Patterns
+
+**Global instance:** `src/config/utils.rs`
 
 ```rust
 pub static CONFIG: OnceLock<RwLock<Config>> = OnceLock::new();
 ```
 
----
+Important details:
 
-## 4. Config Macro System
+- `OnceLock` means config is initialized once via `load_config_*` and thereafter mutated via
+  `reload_config_*` or `update_config_section`.
+- The lock is a `std::sync::RwLock` (not `tokio::sync::RwLock`), so reads/writes are synchronous
+  and should stay small/fast.
 
-### `config_struct!` Macro
-
-Defines a config section in one declaration — generates struct, Default, serde, and metadata:
+### Recommended read path: `with_config`
 
 ```rust
-config_struct! {
-    pub struct TraderConfig {
-        enabled: bool = false,
-        max_open_positions: u32 = 5,
-        trade_size_sol: f64 = 0.1,
-        // ... more fields
-    }
+pub fn with_config<F, R>(f: F) -> R
+where
+  F: FnOnce(&Config) -> R
+```
+
+This acquires a read lock and runs the closure, returning its value.
+
+### Async-safe read path: `get_config_clone`
+
+```rust
+pub fn get_config_clone() -> Config {
+  with_config(|cfg| cfg.clone())
 }
 ```
 
-**Auto-generates:**
-- `pub struct TraderConfig { ... }` with `#[serde(default)]`
-- `impl Default for TraderConfig` with specified defaults
-- `FieldTypeInfo` trait implementation
-- `NestedMetadata` trait for UI rendering
+This is intended for holding config across `.await` points without keeping a lock.
 
-### `field_metadata!` Macro
+### Write path: `update_config_section`
 
-Adds UI metadata to fields:
+```rust
+pub fn update_config_section<F>(update_fn: F, save_to_disk: bool) -> Result<(), String>
+where
+  F: FnOnce(&mut Config)
+```
+
+Key behavior:
+
+- Acquires a write lock and runs `update_fn(&mut config)`
+- Releases lock
+- Optionally persists via `save_config(None)` (does not hold the lock while writing)
+
+**Important:** `update_config_section` does not call `validate_config()` internally; validation is
+the responsibility of the caller.
+
+---
+
+## 6. Load / Reload / Persistence Flows
+
+All path defaults come from the `paths` module:
+
+- `paths::get_config_path()` -> `.../data/config.toml`
+
+### 6.1 Initial load: `load_config_from_path`
+
+**File:** `src/config/utils.rs`
+
+High-level behavior:
+
+1. If TOML file exists:
+   - `std::fs::read_to_string(path)`
+   - `toml::from_str::<Config>(&contents)`
+2. Else:
+   - log warning
+   - use `Config::default()`
+3. Always run a GUI migration helper:
+   - `ensure_all_tabs_present(cfg.gui.dashboard.navigation.tabs)`
+4. Store into global `CONFIG` via `CONFIG.set(RwLock::new(config))`
+
+Notes:
+
+- `load_config_from_path` does **not** call `validate_config()`.
+- It will fail if called twice (OnceLock already set); use reload APIs instead.
+
+### 6.2 Hot reload: `reload_config_from_path`
+
+Hot reload does:
+
+1. Read TOML
+2. Parse to `Config`
+3. Run `ensure_all_tabs_present(...)`
+4. `validate_config(&new_config)?`
+5. Acquire write lock and atomically replace the entire `Config`
+
+This means reload is "all-or-nothing": if parse or validation fails, the in-memory config is not
+changed.
+
+### 6.3 Persistence: `save_config` vs `save_config_to_file`
+
+There are two main persistence helpers:
+
+1. `save_config(path: Option<&str>)`
+   - Serializes the in-memory config (`toml::to_string_pretty`)
+   - Writes with `std::fs::write`
+   - Does not create parent directories
+   - Does not set file permissions
+   - Does not validate
+
+2. `save_config_to_file(config: &Config, path: &str, set_global: bool)`
+   - Validates config before writing (`validate_config(config)?`)
+   - Ensures parent directory exists
+   - Writes TOML
+   - On Unix: sets `0600` permissions (rw-------)
+   - Optionally initializes or reloads the global CONFIG
+
+---
+
+## 7. Validation Model
+
+Validation lives in `src/config/utils.rs` as:
+
+```rust
+pub fn validate_config(config: &Config) -> Result<(), String>
+```
+
+### 7.1 What is validated?
+
+Validation is currently focused on:
+
+- trader core invariants (e.g. `max_open_positions > 0`, trade size finite and > 0)
+- conditional DCA constraints (thresholds, sizes, counts)
+- ROI exit constraints (finite and > 0)
+- time override constraints (unit must parse, max 30 days, loss threshold bounds)
+- stop loss bounds
+- positions constraints (cooldowns, partial exit bounds, trailing stop bounds, etc.)
+
+### 7.2 When validation is applied
+
+- Applied on reload (`reload_config_from_path`)
+- Applied on save-to-file helper used during initialization (`save_config_to_file`)
+- Not applied by default on:
+  - initial `load_config_from_path`
+  - `update_config_section` (unless caller validates)
+  - `save_config`
+
+This is important when designing webserver config mutations: callers should validate before
+persisting/using config changes.
+
+---
+
+## 8. UI Metadata System
+
+Metadata exists so the backend can describe how a config field should be rendered in the dashboard.
+
+**Primary file:** `src/config/metadata.rs`
+
+### 8.1 Core types
+
+```rust
+pub enum FieldType {
+  Boolean,
+  Number,
+  Integer,
+  Array,
+  String,
+  Object,
+}
+
+pub struct FieldMetadata {
+  pub field_type: FieldType,
+  pub item_type: Option<FieldType>,
+  pub label: Option<&'static str>,
+  pub hint: Option<&'static str>,
+  pub unit: Option<&'static str>,
+  pub impact: Option<&'static str>,
+  pub category: Option<&'static str>,
+  pub visibility: Option<&'static str>,   // derived ("primary" | "secondary" | "technical")
+  pub min: Option<f64>,
+  pub max: Option<f64>,
+  pub step: Option<f64>,
+  pub placeholder: Option<&'static str>,
+  pub docs: Option<&'static str>,
+  pub default: Option<serde_json::Value>,
+  pub children: Option<SectionMetadata>,
+  pub hidden: Option<bool>,
+}
+```
+
+### 8.2 Metadata extras: `field_metadata!` macro
+
+Schema definitions can attach metadata extras via:
 
 ```rust
 #[metadata(field_metadata! {
-    label: "Max Open Positions",
-    hint: "Maximum simultaneous positions",
-    min: 1, max: 100,
-    unit: "positions",
-    impact: "critical",
-    category: "Core Trading",
+  label: "Max Open Positions",
+  hint: "Maximum simultaneous positions",
+  min: 1, max: 100,
+  category: "Core Trading",
 })]
-max_open_positions: u32 = 5,
 ```
+
+This expands to a `FieldMetadataExtras` value, which is consumed by the `config_struct!` macro when
+building field metadata.
+
+### 8.3 How metadata is collected for the UI
+
+`collect_config_metadata() -> ConfigMetadata` builds a map of section metadata for a curated set of
+sections (not every schema is rendered in the UI).
+
+As of this code version it includes:
+
+```text
+rpc, trader, positions, filtering, swaps, tokens, sol_price, events,
+services, monitoring, ohlcv, webserver, telegram, ai
+```
+
+During collection:
+
+- fields marked `hidden` are filtered out
+- `visibility` is derived from `category` (see `derive_visibility`)
+- nested `children` fields are also filtered for hidden values
 
 ---
 
-## 5. Loading & Hot Reload
+## 9. GUI Migration: Navigation Tabs
 
-### Load Sequence
-
-```
-load_config()
-  → get_config_path()              // data/config.toml
-  → fs::read_to_string(path)      // Read TOML
-  → toml::from_str::<Config>()    // Parse with serde
-  → ensure_all_tabs_present()     // GUI migration
-  → CONFIG.set(RwLock::new(cfg))  // Store global
-```
-
-### Hot Reload
-
-```
-reload_config()
-  → Read + parse new TOML
-  → validate_config(&new_cfg)     // Strict validation
-  → CONFIG.write() = new_cfg      // Atomic replace
-```
-
-- Old config preserved on validation failure
-- All readers block during write, see new values after
-- Used by dashboard config editor
-
----
-
-## 6. Config Sections
-
-| Section | Fields | Key Settings |
-|---------|--------|-------------|
-| `rpc` | ~15 | Provider URLs, selection strategy, rate limits |
-| `trader` | ~40+ | enabled, max_positions, trade_size, ROI, DCA, stop-loss, time-override |
-| `positions` | ~20 | Cooldown, partial exits, trailing stop, loss blacklist |
-| `filtering` | ~50+ | DexScreener rules, token age, holders, security, on-chain |
-| `swaps` | ~25 | Jupiter/GMGN routers, slippage tiers, priority fees |
-| `tokens` | ~15 | Cache TTL, blacklist, metadata settings |
-| `pools` | ~10 | Discovery intervals, analysis settings |
-| `ai` | ~30+ | Provider (OpenAI/Anthropic/Groq), filtering, analysis, cache |
-| `gui` | ~20 | Zoom, dashboard theme, lockscreen, navigation tabs |
-| `telegram` | ~25 | Bot token, chat_id, notifications, rate limiting |
-| `events` | ~15 | Recording toggles per category |
-| `webserver` | ~10 | Port, host, CORS |
-| `maintenance` | ~5 | Retention periods, vacuum schedule |
-| `performance` | ~5 | Memory profile, cache sizing |
-| `connectivity` | ~8 | Health check intervals, thresholds |
-| Others | ~5 each | ohlcv, sol_price, monitoring, services, strategies, wallet, holder_watch |
-
----
-
-## 7. Access Patterns
-
-### Read (Most Common)
+Both load and reload run a GUI-specific migration step:
 
 ```rust
-use crate::config::with_config;
-
-let max = with_config(|cfg| cfg.trader.max_open_positions);
+config.gui.dashboard.navigation.tabs =
+  ensure_all_tabs_present(config.gui.dashboard.navigation.tabs);
 ```
 
-### Read for Async (Clone)
+`ensure_all_tabs_present(...)` is defined in `src/config/schemas/gui.rs` and currently performs:
 
-```rust
-let cfg = get_config_clone();
-// Safe to use across .await points
-tokio::time::sleep(dur).await;
-let val = cfg.trader.trade_size_sol;
-```
+- migration: tab id `"wallet"` -> `"wallets"`
+- forcing icons/labels from defaults (only order/enabled are user-controlled)
+- adding missing default tabs (e.g. new "tools" tab) while preserving user order as much as
+  possible
 
-### Write
-
-```rust
-update_config_section(|cfg| {
-    cfg.trader.max_open_positions = 10;
-}, true /* save_to_disk */)?;
-```
+This keeps older configs compatible when UI tabs are renamed/added.
 
 ---
 
-## 8. Metadata System
+## 10. Wallet Credentials + Keypair Access
 
-Each field carries rendering metadata for the dashboard:
+The root config stores wallet credentials as:
 
-```rust
-pub struct FieldMetadata {
-    pub label: String,
-    pub hint: Option<String>,
-    pub unit: Option<String>,
-    pub min: Option<f64>,
-    pub max: Option<f64>,
-    pub step: Option<f64>,
-    pub impact: Option<String>,       // critical/high/medium/low
-    pub category: Option<String>,
-    pub visibility: Visibility,       // primary/secondary/technical
-    pub field_type: FieldType,
-}
-```
+- `wallet_encrypted`
+- `wallet_nonce`
 
-Used by webserver config routes to auto-render configuration UI.
+These are produced by `secure_storage` encryption helpers (AES-256-GCM with machine-derived key).
+
+### 10.1 Sync-friendly keypair access: `get_wallet_keypair()`
+
+`config::get_wallet_keypair()` is a sync API that bridges into the multi-wallet system when
+possible:
+
+- If there is a running tokio runtime:
+  - uses `tokio::task::block_in_place` and `handle.block_on(async { ... })`
+  - prefers `wallets::get_main_keypair()` if `wallets::is_initialized().await`
+  - else falls back to legacy config decrypt (`get_wallet_keypair_from_config()`)
+- If there is no runtime (early startup):
+  - falls back to legacy config decrypt
+
+Related helpers:
+
+- `get_wallet_pubkey() -> Pubkey`
+- `get_wallet_pubkey_string() -> String`
+
+### 10.2 Reset to defaults while preserving credentials
+
+`reset_config_to_defaults_preserving_credentials()`:
+
+- captures `(wallet_encrypted, wallet_nonce, rpc.urls)`
+- constructs a fresh `Config::default()`
+- restores the preserved values if present
+- validates
+- replaces config and forces save-to-disk
 
 ---
 
-## 9. Module Connections
+## 11. Webserver Integration
 
-```
+The config module is heavily used by the webserver:
+
+- Most routes read settings via `with_config(|cfg| ...)`.
+- Some routes mutate settings via `update_config_section(..., save_to_disk = true)`.
+- Config UI endpoints use `collect_config_metadata()` to render forms dynamically.
+- "Reload config" operations call `config::reload_config()` (parse + validate + atomic swap).
+
+Primary webserver config route area:
+
+- `src/webserver/routes/config/**`
+
+---
+
+## 12. Module Connections
+
+```text
 config/
-└── (standalone — no dependencies)
+├── paths/            config.toml path + data directory
+├── secure_storage/   wallet credential encryption/decryption
+├── wallets/          preferred main wallet key source (multi-wallet system)
+└── webserver/        config read/write + metadata APIs
 ```
 
-| Caller | Usage |
-|--------|-------|
-| All modules | `with_config()` for settings |
-| webserver/config | Full CRUD API + metadata |
-| services | Check `is_enabled()` flags |
-| trader | Trading parameters |
-| filtering | Filter rules |
-| rpc | Provider configuration |
+### Pitfalls / gotchas
+
+- `load_config_from_path` does not validate; only reload/save-to-file does.
+- `update_config_section` does not validate; callers should validate before applying changes.
+- Some config values are secrets (wallet_encrypted, telegram bot token, API keys); protect
+  `data/config.toml` accordingly (Unix permissions are set by `save_config_to_file`).

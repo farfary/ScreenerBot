@@ -55,7 +55,7 @@ Living documentation describing how each major system works. These docs are the 
 | [Webserver](architecture/webserver.md) | 307 | Dashboard REST API, authentication, 200+ endpoints |
 | [Telegram](architecture/telegram.md) | 373 | Telegram bot: discovery, notifications, commands, sessions/2FA |
 | **System** | | |
-| [Config](architecture/config.md) | 272 | TOML configuration, macro system, hot reload, metadata |
+| [Config](architecture/config.md) | 478 | TOML configuration, macro system, hot reload, metadata |
 | [Services](architecture/services.md) | 396 | Service manager, lifecycle, cached health/metrics, registered services |
 | [Wallets](architecture/wallets.md) | 670 | Multi-wallet key storage (wallets.db) + wallet monitoring (wallet.db) |
 | [Infrastructure](architecture/infrastructure.md) | 328 | Database, errors, events, logger, connectivity, actions |
