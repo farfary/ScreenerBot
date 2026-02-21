@@ -556,6 +556,10 @@ async fn apply_all_filters(
 ) -> Result<(), FilterRejectionReason> {
     sources::meta::evaluate(token, config).await?;
 
+    // On-chain scam detection — fast, zero-cost, catches obvious scams
+    // before we waste API calls on external sources
+    sources::onchain::evaluate(token, &config.onchain)?;
+
     // PERF: The batch load already fetches preferred source + fallback.
     // If data_source is DexScreener or GeckoTerminal, that data is already loaded.
     // If data_source is Unknown, neither source has data - no point in extra DB queries.

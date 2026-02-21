@@ -4,12 +4,14 @@ pub mod ai;
 pub mod dexscreener;
 pub mod geckoterminal;
 pub mod meta;
+pub mod onchain;
 pub mod rugcheck;
 
 /// High level origin for a filtering rejection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FilterSource {
     Core,
+    OnChain,
     DexScreener,
     GeckoTerminal,
     Rugcheck,
@@ -20,6 +22,7 @@ impl FilterSource {
     pub fn as_str(&self) -> &'static str {
         match self {
             FilterSource::Core => "core",
+            FilterSource::OnChain => "onchain",
             FilterSource::DexScreener => "dexscreener",
             FilterSource::GeckoTerminal => "geckoterminal",
             FilterSource::Rugcheck => "rugcheck",
@@ -38,6 +41,14 @@ pub enum FilterRejectionReason {
     DexScreenerDataMissing,
     GeckoTerminalDataMissing,
     RugcheckDataMissing,
+
+    // On-chain scam detection (no external API needed)
+    OnChainNumericSymbol,
+    OnChainEmptySymbol,
+    OnChainSuspiciousSymbol,
+    OnChainKnownScamAuthority,
+    OnChainImmutableWithFreeze,
+    OnChainHighRiskScore,
 
     // AI filtering
     AiRejected {
@@ -142,6 +153,18 @@ impl FilterRejectionReason {
             FilterRejectionReason::DexScreenerDataMissing => "dex_data_missing".to_string(),
             FilterRejectionReason::GeckoTerminalDataMissing => "gecko_data_missing".to_string(),
             FilterRejectionReason::RugcheckDataMissing => "rug_data_missing".to_string(),
+            FilterRejectionReason::OnChainNumericSymbol => "onchain_numeric_symbol".to_string(),
+            FilterRejectionReason::OnChainEmptySymbol => "onchain_empty_symbol".to_string(),
+            FilterRejectionReason::OnChainSuspiciousSymbol => {
+                "onchain_suspicious_symbol".to_string()
+            }
+            FilterRejectionReason::OnChainKnownScamAuthority => {
+                "onchain_known_scam_authority".to_string()
+            }
+            FilterRejectionReason::OnChainImmutableWithFreeze => {
+                "onchain_immutable_with_freeze".to_string()
+            }
+            FilterRejectionReason::OnChainHighRiskScore => "onchain_high_risk_score".to_string(),
             FilterRejectionReason::AiRejected { .. } => "ai_rejected".to_string(),
             FilterRejectionReason::DexScreenerEmptyName => "dex_empty_name".to_string(),
             FilterRejectionReason::DexScreenerEmptySymbol => "dex_empty_symbol".to_string(),
@@ -318,6 +341,18 @@ impl FilterRejectionReason {
                 "GeckoTerminal data missing".to_string()
             }
             FilterRejectionReason::RugcheckDataMissing => "Rugcheck data missing".to_string(),
+            FilterRejectionReason::OnChainNumericSymbol => "Numeric-only symbol (scam)".to_string(),
+            FilterRejectionReason::OnChainEmptySymbol => "Empty symbol (scam)".to_string(),
+            FilterRejectionReason::OnChainSuspiciousSymbol => {
+                "Suspicious symbol (scam)".to_string()
+            }
+            FilterRejectionReason::OnChainKnownScamAuthority => {
+                "Known scam authority".to_string()
+            }
+            FilterRejectionReason::OnChainImmutableWithFreeze => {
+                "Immutable + freeze authority (scam)".to_string()
+            }
+            FilterRejectionReason::OnChainHighRiskScore => "On-chain high risk score".to_string(),
             FilterRejectionReason::DexScreenerEmptyName => "Empty name".to_string(),
             FilterRejectionReason::DexScreenerEmptySymbol => "Empty symbol".to_string(),
             FilterRejectionReason::DexScreenerEmptyLogoUrl => "Empty logo URL".to_string(),
@@ -486,6 +521,12 @@ impl FilterRejectionReason {
             | FilterRejectionReason::DexScreenerDataMissing
             | FilterRejectionReason::GeckoTerminalDataMissing
             | FilterRejectionReason::RugcheckDataMissing => FilterSource::Core,
+            FilterRejectionReason::OnChainNumericSymbol
+            | FilterRejectionReason::OnChainEmptySymbol
+            | FilterRejectionReason::OnChainSuspiciousSymbol
+            | FilterRejectionReason::OnChainKnownScamAuthority
+            | FilterRejectionReason::OnChainImmutableWithFreeze
+            | FilterRejectionReason::OnChainHighRiskScore => FilterSource::OnChain,
             FilterRejectionReason::DexScreenerEmptyName
             | FilterRejectionReason::DexScreenerEmptySymbol
             | FilterRejectionReason::DexScreenerEmptyLogoUrl

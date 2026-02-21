@@ -55,6 +55,67 @@ ScreenerBot/
 └── AGENTS.md               # This file
 ```
 
+## Data Folder Paths
+
+ScreenerBot stores runtime data (config, databases, logs, cache) in a platform-specific data directory.
+
+### Resolution Order (from `src/paths.rs`)
+1. `dirs::data_local_dir()` — primary
+2. `dirs::data_dir()` — fallback
+3. `dirs::home_dir()` — final fallback
+
+### Platform Paths
+| Platform | Path |
+|----------|------|
+| macOS | `~/Library/Application Support/ScreenerBot/` |
+| Windows | `%LOCALAPPDATA%\ScreenerBot\` |
+| Linux | `$XDG_DATA_HOME/ScreenerBot/` (fallback: `~/.local/share/ScreenerBot/`) |
+
+### Directory Structure
+```
+ScreenerBot/
+├── data/                          # Config + databases
+│   ├── config.toml               # Main configuration
+│   ├── tokens.db                 # Token metadata + cache (largest DB, ~264MB)
+│   ├── ohlcvs.db                 # OHLCV price data (90-day retention)
+│   ├── rpc_stats.db              # RPC call statistics (72h retention)
+│   ├── pools.db                  # Liquidity pool data
+│   ├── transactions.db           # Transaction history
+│   ├── positions.db              # Trading positions
+│   ├── wallet.db                 # Wallet state
+│   ├── events.db                 # System events
+│   ├── strategies.db             # Trading strategies
+│   ├── actions.db                # Action history
+│   ├── tools.db                  # Tool state
+│   ├── ai.db                     # AI analysis data
+│   ├── ai_chat.db                # AI chat history
+│   └── cache_pool/               # Pool discovery cache files
+├── logs/
+│   └── latest.log                # Current session log
+└── analysis-exports/             # Exported analysis data
+```
+
+### Accessing in Code
+```rust
+// Base data directory
+let base = screenerbot::paths::get_data_directory();
+
+// Specific database paths
+let tokens_db = screenerbot::paths::get_tokens_db_path();
+let pools_db = screenerbot::paths::get_pools_db_path();
+// ... etc for each database
+
+// Ensure all directories exist
+screenerbot::paths::ensure_all_directories().ok();
+```
+
+### For Debug Binaries
+Always init paths before accessing data:
+```rust
+screenerbot::paths::ensure_all_directories().ok();
+screenerbot::config::load_config().expect("Failed to load config");
+```
+
 ## Architecture Quick Reference
 
 | System | Entry Point | Doc |
@@ -169,7 +230,90 @@ Unified token database (6 tables: tokens, market_dexscreener, market_geckotermin
 
 ### Filtering (src/filtering/)
 
-Token filtering engine with multiple criteria sources. Cached snapshots with query API. Tracks passed/rejected tokens with detailed reasons. Files: `engine.rs` (compute_snapshot with concurrent processing), `sources/` (dexscreener.rs, geckoterminal.rs, rugcheck.rs, meta.rs filters), `store.rs` (global FilteringStore with snapshot cache), `types.rs` (FilteringSnapshot, PassedToken, RejectedToken, FilteringQuery).
+Token filtering engine with multiple criteria sources. Cached snapshots with query API. Tracks passed/rejected tokens with detailed reasons. Files: `engine.rs` (compute_snapshot with concurrent processing), `sources/` (dexscreener.rs, geckoterminal.rs, rugcheck.rs, meta.rs, onchain.rs, ai.rs filters), `store.rs` (global FilteringStore with snapshot cache), `types.rs` (FilteringSnapshot, PassedToken, RejectedToken, FilteringQuery).
+
+#### Filtering Pipeline Order
+
+The filtering engine evaluates tokens in a specific order optimized for efficiency and cost reduction:
+
+1. **Meta Filter** (`sources/meta.rs`) — Core checks: decimals validation, token age, cooldown periods
+2. **On-Chain Filter** (`sources/onchain.rs`) — Fast scam detection using on-chain data (NO external APIs)
+3. **DexScreener** (`sources/dexscreener.rs`) — Market data validation (liquidity, volume, price changes)
+4. **GeckoTerminal** (`sources/geckoterminal.rs`) — Alternative market data source
+5. **Rugcheck** (`sources/rugcheck.rs`) — Security analysis (authorities, holder distribution)
+6. **AI Filter** (`sources/ai.rs`) — LLM-powered analysis (runs LAST, only on tokens that passed all other filters)
+
+**Rationale:** On-chain filter runs early (after meta, before external APIs) to catch obvious scams without wasting API calls or credits on DexScreener/GeckoTerminal/Rugcheck/AI.
+
+#### FilterSource Enum
+
+All filter rejections are attributed to a source via the `FilterSource` enum (`sources/mod.rs`):
+
+```rust
+pub enum FilterSource {
+    Core,        // Meta filters (age, decimals, cooldown)
+    OnChain,     // On-chain scam detection
+    DexScreener, // DexScreener market data filters
+    GeckoTerminal, // GeckoTerminal market data filters
+    Rugcheck,    // Rugcheck security filters
+    Ai,          // AI-powered filtering
+}
+```
+
+Each source has a corresponding rejection reason enum variant and config section.
+
+#### On-Chain Scam Filter
+
+**Purpose:** Detects scam tokens using ONLY on-chain data (Metaplex metadata + SPL mint authorities) — no external APIs, zero cost, instant results.
+
+**Pipeline Position:** Runs AFTER meta filter, BEFORE DexScreener/GeckoTerminal/Rugcheck — catches obvious scams early before wasting API calls on external sources.
+
+**Heuristics:**
+
+1. **H1: Numeric-only symbols** — Rejects symbols like "00", "123", "420", "999" (classic scam pattern)
+2. **H2: Empty/whitespace symbols** — Rejects tokens with empty or whitespace-only symbols
+3. **H3: Single-char suspicious symbols** — Single-character symbols (configurable, disabled by default via `allow_single_char_symbols`)
+4. **H4: Known scam authorities** — Hardcoded list of known scam wallet addresses (mint/freeze/metadata authorities)
+5. **H5: Immutable metadata + freeze authority** — Dangerous combo: can't update metadata but CAN freeze tokens
+6. **H6: Combined risk scoring** — Weighted scoring of multiple weak signals (numeric symbol + questionable authorities + metadata issues) — rejects when score ≥ threshold
+
+**Configuration:** `OnChainFilters` in `filtering.rs` config schema:
+
+```rust
+OnChainFilters {
+    enabled: true,              // Master switch
+    reject_numeric_symbols: true,
+    reject_empty_symbols: true,
+    allow_single_char_symbols: true,  // false = H3 enabled
+    check_scam_authorities: true,
+    risk_score_threshold: 60,   // 0-100 scale for H6
+    // ... scam authority lists
+}
+```
+
+**Rejection Reasons:** Six variants in `FilterRejectionReason` enum:
+
+- `OnChainNumericSymbol` (H1)
+- `OnChainEmptySymbol` (H2)
+- `OnChainSuspiciousSymbol` (H3)
+- `OnChainKnownScamAuthority` (H4)
+- `OnChainImmutableWithFreeze` (H5)
+- `OnChainHighRiskScore` (H6)
+
+**Dashboard UI:** Filtering page → On-Chain tab with 3 analysis categories:
+
+1. **Symbol Analysis** — H1, H2, H3 stats with examples
+2. **Authority Analysis** — H4 stats with known scam wallet detection
+3. **Risk Scoring** — H6 score distribution histogram + high-risk token examples
+
+**Files:**
+
+- `src/filtering/sources/onchain.rs` — Core filter logic with `evaluate()` function
+- `src/config/schemas/filtering.rs` — `OnChainFilters` config struct
+- `src/filtering/sources/mod.rs` — `FilterSource::OnChain` enum variant + rejection reasons
+- `src/debug_bins/debug_onchain_filter.rs` — Debug binary for testing filter standalone: `cargo run --bin debug_onchain_filter <MINT_ADDRESS>`
+
+**Performance:** Extremely fast (microseconds per token) — uses cached Metaplex metadata already in database, no RPC calls or external API requests. Typical rejection rate: 5-15% of tokens filtered before expensive API calls.
 
 ### Swaps (src/swaps/)
 

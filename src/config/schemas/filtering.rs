@@ -860,6 +860,84 @@ config_struct! {
 }
 
 // ============================================================================
+// ON-CHAIN SCAM FILTERING CONFIGURATION
+// ============================================================================
+
+config_struct! {
+    /// On-chain scam detection — filters tokens using blockchain data
+    /// (metadata, authorities, supply) without any external API calls.
+    /// Runs BEFORE DexScreener/GeckoTerminal/Rugcheck to catch obvious scams early.
+    pub struct OnChainFilters {
+        #[metadata(field_metadata! {
+            label: "Enable On-Chain Filters",
+            hint: "Master switch for on-chain scam detection",
+            impact: "critical",
+            category: "Source Control",
+        })]
+        enabled: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Reject Numeric Symbols",
+            hint: "Filter tokens with digit-only symbols (e.g. '00', '123')",
+            impact: "high",
+            category: "Symbol Analysis",
+        })]
+        reject_numeric_symbols: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Reject Empty Symbols",
+            hint: "Filter tokens with empty or whitespace-only symbols",
+            impact: "high",
+            category: "Symbol Analysis",
+        })]
+        reject_empty_symbols: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Reject Single-Char Symbols",
+            hint: "Filter tokens with suspicious single-character symbols",
+            impact: "medium",
+            category: "Symbol Analysis",
+        })]
+        reject_single_char_symbols: bool = false,
+
+        #[metadata(field_metadata! {
+            label: "Reject Known Scam Authorities",
+            hint: "Block tokens created by known scam wallet addresses",
+            impact: "critical",
+            category: "Authority Analysis",
+        })]
+        reject_known_scam_authorities: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Reject Immutable + Freeze",
+            hint: "Block tokens with immutable metadata AND freeze authority (scam pattern)",
+            impact: "high",
+            category: "Authority Analysis",
+        })]
+        reject_immutable_with_freeze: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Enable Combined Risk Score",
+            hint: "Use weighted scoring from multiple signals to detect scams",
+            impact: "high",
+            category: "Risk Scoring",
+        })]
+        combined_risk_enabled: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Max Combined Risk Score",
+            hint: "Reject tokens with combined risk score >= this value (0-100)",
+            min: 0,
+            max: 100,
+            step: 5,
+            impact: "high",
+            category: "Risk Scoring",
+        })]
+        max_combined_risk_score: u32 = 60,
+    }
+}
+
+// ============================================================================
 // MAIN FILTERING CONFIGURATION (Orchestrates All Sources)
 // ============================================================================
 
@@ -903,6 +981,14 @@ config_struct! {
         min_token_age_minutes: i64 = 60,
 
         // Source-specific configs (nested)
+        #[metadata(field_metadata! {
+            label: "On-Chain Filters",
+            hint: "Scam detection using blockchain data (no external APIs)",
+            impact: "critical",
+            category: "Data Sources",
+        })]
+        onchain: OnChainFilters = OnChainFilters::default(),
+
         #[metadata(field_metadata! {
             label: "DexScreener Filters",
             hint: "Market data filtering from DexScreener",
