@@ -1,353 +1,383 @@
-# Strategy System Implementation Summary
+# Strategies Module — Architecture
 
-## Overview
+> ScreenerBot Rule-Based Strategy Evaluation Engine — February 2026
 
-Successfully implemented Phase 1 of the Advanced Trading Strategy System for ScreenerBot. The system provides a flexible, component-based framework for defining, evaluating, and managing trading strategies without hardcoding trading logic.
+---
 
-## What Was Implemented
+## Table of Contents
 
-### Core Components
+1. [Overview](#1-overview)
+2. [File Structure](#2-file-structure)
+3. [Core Data Types](#3-core-data-types)
+4. [Evaluation Engine](#4-evaluation-engine)
+5. [Condition System](#5-condition-system)
+6. [Built-in Conditions](#6-built-in-conditions)
+7. [Database Schema](#7-database-schema)
+8. [Data Flow](#8-data-flow)
+9. [Module Connections](#9-module-connections)
+10. [Configuration](#10-configuration)
 
-#### 1. **Type System** (`src/strategies/types.rs`)
+---
 
-- `Strategy` - Main strategy definition with metadata, rules, and parameters
-- `RuleTree` - Tree structure supporting logical operators (AND/OR/NOT)
-- `Condition` - Individual condition with type and parameters
-- `Parameter` - Parameter with value, defaults, and validation constraints
-- `EvaluationContext` - Context data passed during evaluation
-- `EvaluationResult` - Result of strategy evaluation with timing and confidence
+## 1. Overview
 
-#### 2. **Database Layer** (`src/strategies/db.rs`)
+The Strategies module provides a composable, rule-based evaluation engine for trading entry and exit signals. Strategies are defined as recursive rule trees combining logical operators (AND/OR/NOT) with condition leaf nodes. The engine evaluates strategies against real-time market data, OHLCV candles, and position state.
 
-- SQLite database with connection pooling (r2d2)
-- Tables: `strategies`, `strategy_performance`, `strategy_assignments`, `strategy_templates`, `strategy_backtests`
-- CRUD operations for strategies
-- Performance tracking and metrics
-- Position-to-strategy assignments
+**Key characteristics:**
+- Recursive rule tree with short-circuit evaluation
+- 8 built-in condition types (extensible via `ConditionEvaluator` trait)
+- Per-evaluation caching with context fingerprinting
+- Timeout protection (50ms default per strategy)
+- Performance tracking in SQLite
+- Entry and exit strategies evaluated independently
 
-#### 3. **Condition Library** (`src/strategies/conditions/`)
+---
 
-Implemented 5 foundational conditions:
+## 2. File Structure
 
-- **PriceThreshold** - Check if price is above/below target value
-- **PriceMovement** - Check if price moved by % in timeframe
-- **RelativeToMA** - Check price position relative to moving average
-- **LiquidityDepth** - Check pool liquidity level
-- **PositionAge** - Check how long position has been open
+```
+src/strategies/
+├── mod.rs                    # Public API, global engine lifecycle
+├── types.rs                  # Strategy, RuleTree, Condition, Parameter, enums
+├── engine.rs                 # StrategyEngine — evaluation, caching, validation
+├── database.rs               # SQLite persistence (6 tables, r2d2 pool)
+└── conditions/
+    ├── mod.rs                # ConditionEvaluator trait, ConditionRegistry, helpers
+    ├── candle_size.rs        # CandleSize — body/wick pattern detection
+    ├── consecutive_candles.rs # ConsecutiveCandles — momentum streak detection
+    ├── liquidity_level.rs    # LiquidityLevel — pool safety threshold
+    ├── position_holding_time.rs # PositionHoldingTime — time-based exit
+    ├── price_breakout.rs     # PriceBreakout — support/resistance break
+    ├── price_change_percent.rs # PriceChangePercent — historical price movement
+    ├── price_to_ma.rs        # PriceToMA — moving average proximity
+    └── volume_spike.rs       # VolumeSpike — trading activity detection
+```
 
-Each condition implements:
+**13 files, ~2,889 lines**
 
-- `ConditionEvaluator` trait
-- Parameter validation
-- JSON schema for UI generation
-- Async evaluation
+---
 
-#### 4. **Evaluation Engine** (`src/strategies/engine.rs`)
+## 3. Core Data Types
 
-- Recursive rule tree evaluation with short-circuit logic
-- Evaluation caching (5-second TTL by default)
-- Timeout protection (50ms default)
-- Condition registry for extensibility
-- Strategy validation without execution
+### Strategy (`types.rs`)
 
-#### 5. **Public API** (`src/strategies/mod.rs`)
-
-Key functions for trader integration:
+Top-level definition stored in database:
 
 ```rust
-// Initialize system with config
-pub async fn init_strategy_system(config: EngineConfig) -> Result<(), String>
-
-// Evaluate entry strategies for a token
-pub async fn evaluate_entry_strategies(
-    token_mint: &str,
-    current_price: f64,
-    market_data: Option<MarketData>,
-    ohlcv_data: Option<OhlcvData>,
-) -> Result<Option<String>, String>
-
-// Evaluate exit strategies for a position
-pub async fn evaluate_exit_strategies(
-    token_mint: &str,
-    current_price: f64,
-    position_data: PositionData,
-    market_data: Option<MarketData>,
-    ohlcv_data: Option<OhlcvData>,
-) -> Result<Option<String>, String>
-
-// Validate strategy without execution
-pub async fn validate_strategy(strategy: &Strategy) -> Result<(), String>
-
-// Clear evaluation cache
-pub async fn clear_evaluation_cache() -> Result<(), String>
-
-// Get condition schemas for UI
-pub async fn get_condition_schemas() -> Result<serde_json::Value, String>
-```
-
-#### 6. **Configuration** (`src/config/schemas/strategies.rs`)
-
-Added to `data/config.toml`:
-
-```toml
-[strategies]
-enabled = true
-evaluation_timeout_ms = 50
-cache_ttl_seconds = 5
-max_concurrent_evaluations = 10
-```
-
-#### 7. **Debug Tool** (`src/bin/debug_strategies.rs`)
-
-CLI tool for testing and management:
-
-```bash
-debug_strategies init              # Initialize database
-debug_strategies list              # List all strategies
-debug_strategies create-example    # Create example strategies
-debug_strategies validate <id>     # Validate strategy
-debug_strategies test-evaluate     # Test evaluation
-debug_strategies schemas           # Show condition schemas
-```
-
-## Database Schema
-
-### strategies
-
-```sql
-- id (TEXT PRIMARY KEY)
-- name, description, type (ENTRY/EXIT)
-- enabled, priority
-- rules_json, parameters_json
-- created_at, updated_at, author, version
-```
-
-### strategy_performance
-
-```sql
-- id, strategy_id, execution_time_ms
-- result, confidence, details_json
-- token_mint, execution_timestamp, trade_id
-```
-
-### strategy_assignments
-
-```sql
-- position_id, strategy_id
-- assigned_at
-```
-
-### strategy_templates
-
-```sql
-- id, name, description, category
-- risk_level, rules_json, parameters_json
-- created_at, updated_at, author
-```
-
-### strategy_backtests
-
-```sql
-- id, strategy_id
-- start_time, end_time
-- total_trades, win_trades, loss_trades
-- total_profit_sol, results_json
-```
-
-## Example Strategies Created
-
-### 1. Simple Price Threshold Entry
-
-```json
-{
-  "name": "Simple Price Threshold Entry",
-  "type": "ENTRY",
-  "rules": {
-    "condition": {
-      "type": "PriceThreshold",
-      "parameters": {
-        "value": 0.00001,
-        "comparison": "ABOVE"
-      }
-    }
-  }
+pub struct Strategy {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub strategy_type: StrategyType,        // Entry | Exit
+    pub enabled: bool,
+    pub priority: i32,                      // Lower = evaluated first
+    pub timeframe: String,                  // "1m", "5m", "15m", "1h", "4h", "12h", "1d"
+    pub rules: RuleTree,                    // Recursive condition tree
+    pub parameters: HashMap<String, serde_json::Value>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub author: Option<String>,
+    pub version: i32,
 }
 ```
 
-### 2. Momentum Entry with Liquidity Check
+### RuleTree (`types.rs`)
 
-```json
-{
-  "name": "Momentum Entry with Liquidity Check",
-  "type": "ENTRY",
-  "rules": {
-    "operator": "AND",
-    "conditions": [
-      {
-        "condition": {
-          "type": "LiquidityDepth",
-          "parameters": {
-            "threshold": 50.0,
-            "comparison": "GREATER_THAN"
-          }
-        }
-      },
-      {
-        "condition": {
-          "type": "PriceMovement",
-          "parameters": {
-            "timeframe": "5m",
-            "percentage": 5.0,
-            "direction": "UP"
-          }
-        }
-      }
-    ]
-  }
-}
-```
-
-## Testing Results
-
-✅ **All tests passed:**
-
-- Database initialization successful
-- Strategy creation and retrieval working
-- Strategy validation functioning correctly
-- Evaluation engine executing with proper caching
-- Condition library evaluating correctly
-- Debug tool fully operational
-
-## Integration Points
-
-### For Trader Module
-
-Replace hardcoded entry/exit logic in `trader.rs`:
+Recursive tree structure for composing conditions:
 
 ```rust
-// In entry monitor
-if let Some(strategy_id) = strategies::evaluate_entry_strategies(
-    &token_mint,
-    current_price,
-    Some(market_data),
-    Some(ohlcv_data),
-).await? {
-    // Strategy signaled entry
-    log(LogTag::Trader, "INFO",
-        &format!("Entry signal from strategy: {}", strategy_id));
-    // Execute entry logic...
-}
-
-// In position monitor
-if let Some(strategy_id) = strategies::evaluate_exit_strategies(
-    &token_mint,
-    current_price,
-    position_data,
-    Some(market_data),
-    Some(ohlcv_data),
-).await? {
-    // Strategy signaled exit
-    log(LogTag::Trader, "INFO",
-        &format!("Exit signal from strategy: {}", strategy_id));
-    // Execute exit logic...
+pub struct RuleTree {
+    pub operator: Option<LogicalOperator>,  // AND | OR | NOT (branch nodes)
+    pub conditions: Option<Vec<RuleTree>>,  // Children (branch nodes)
+    pub condition: Option<Condition>,       // Leaf node
 }
 ```
 
-## What's Not Yet Implemented
+**Methods:** `leaf(condition)`, `branch(operator, children)`, `is_leaf()`, `is_branch()`
 
-Still remaining from the strategy-plan.md:
+### Condition (`types.rs`)
 
-1. **Webserver Routes** - REST API endpoints for CRUD operations
-2. **Frontend UI** - Visual strategy builder with drag-and-drop
-3. **Additional Conditions** - More technical indicators and patterns
-4. **Backtesting System** - Historical strategy testing framework
-5. **Strategy Templates** - Pre-built strategy library
-6. **A/B Testing** - Compare multiple strategies
-7. **Advanced Analytics** - Performance dashboards
-
-## Next Steps
-
-### Immediate (Week 1-2)
-
-1. Add webserver routes for strategy management
-2. Integrate with trader.rs entry/exit monitors
-3. Add more condition types (RSI, Bollinger Bands, etc.)
-
-### Short-term (Week 3-4)
-
-4. Build frontend UI for strategy management
-5. Implement visual strategy builder
-6. Add strategy templates library
-
-### Medium-term (Week 5-8)
-
-7. Implement backtesting framework
-8. Add performance analytics dashboard
-9. Create strategy composition mechanisms
-
-## Architecture Notes
-
-- **No Service Required**: Strategy system doesn't need a background service - it's a library called by trader.rs
-- **Async Recursion**: Used Box::pin for recursive rule tree evaluation
-- **Caching**: 5-second TTL cache to avoid repeated evaluations
-- **Validation**: Separate validation from evaluation for safety
-- **Extensibility**: Condition registry allows adding new conditions without modifying core engine
-- **Performance**: 50ms timeout per evaluation to prevent blocking
-
-## Files Modified/Created
-
-### Created
-
-- `src/strategies/mod.rs`
-- `src/strategies/types.rs`
-- `src/strategies/db.rs`
-- `src/strategies/engine.rs`
-- `src/strategies/conditions/mod.rs`
-- `src/strategies/conditions/price_threshold.rs`
-- `src/strategies/conditions/price_movement.rs`
-- `src/strategies/conditions/relative_to_ma.rs`
-- `src/strategies/conditions/liquidity_depth.rs`
-- `src/strategies/conditions/position_age.rs`
-- `src/config/schemas/strategies.rs`
-- `src/bin/debug_strategies.rs`
-
-### Modified
-
-- `src/lib.rs` - Added strategies module
-- `src/config/schemas/mod.rs` - Added strategies config
-- `data/config.toml` - Added [strategies] section
-
-## Usage Example
-
-```bash
-# Initialize database
-./target/debug/debug_strategies init
-
-# Create example strategies
-./target/debug/debug_strategies create-example
-
-# List all strategies
-./target/debug/debug_strategies list
-
-# Validate a strategy
-./target/debug/debug_strategies validate example-price-threshold
-
-# Test evaluation
-./target/debug/debug_strategies test-evaluate
-
-# View all condition schemas
-./target/debug/debug_strategies schemas
+```rust
+pub struct Condition {
+    pub condition_type: String,             // e.g., "PriceChangePercent"
+    pub parameters: HashMap<String, Parameter>,
+}
 ```
 
-## Performance Characteristics
+### Parameter (`types.rs`)
 
-- **Evaluation Time**: < 1ms for simple conditions, < 5ms for complex trees
-- **Cache Hit Rate**: High for frequently evaluated tokens
-- **Database Operations**: Connection pooling with 10 max connections
-- **Memory Usage**: Minimal - strategies stored in DB, evaluated on-demand
+```rust
+pub struct Parameter {
+    pub value: serde_json::Value,
+    pub default: serde_json::Value,
+    pub constraints: Option<ParameterConstraints>,
+}
 
-## Conclusion
+pub struct ParameterConstraints {
+    pub min: Option<f64>,
+    pub max: Option<f64>,
+    pub options: Option<Vec<serde_json::Value>>,
+    pub format: Option<String>,
+}
+```
 
-Phase 1 implementation is **complete and functional**. The foundation is solid and extensible. The system successfully replaces hardcoded trading logic with a flexible, component-based strategy framework that can be managed, tested, and optimized independently.
+### Enums
 
-Ready for integration with trader.rs and expansion with additional features.
+| Enum | Variants | Usage |
+|------|----------|-------|
+| `StrategyType` | `Entry`, `Exit` | Strategy classification |
+| `LogicalOperator` | `And`, `Or`, `Not` | Rule tree branching |
+| `RiskLevel` | `Low`, `Medium`, `High` | Template classification |
+
+### Evaluation Types
+
+```rust
+pub struct EvaluationContext {
+    pub token_mint: String,
+    pub current_price: Option<f64>,
+    pub position_data: Option<PositionData>,    // Exit strategies only
+    pub market_data: Option<MarketData>,
+    pub timeframe_bundle: Option<TimeframeBundle>,
+    pub strategy_timeframe: String,
+}
+
+pub struct PositionData {
+    pub entry_price: f64,
+    pub entry_time: DateTime<Utc>,
+    pub current_size_sol: f64,
+    pub unrealized_profit_pct: Option<f64>,
+    pub position_age_hours: f64,
+}
+
+pub struct MarketData {
+    pub liquidity_sol: Option<f64>,
+    pub volume_24h: Option<f64>,
+    pub market_cap: Option<f64>,
+    pub holder_count: Option<u32>,
+    pub token_age_hours: Option<f64>,
+}
+
+pub struct EvaluationResult {
+    pub strategy_id: String,
+    pub result: bool,                   // true = trigger signal
+    pub confidence: f64,
+    pub execution_time_ms: u64,
+    pub details: HashMap<String, serde_json::Value>,
+}
+```
+
+---
+
+## 4. Evaluation Engine
+
+### Global State (`mod.rs`)
+
+```rust
+static STRATEGY_ENGINE: LazyLock<Arc<RwLock<Option<StrategyEngine>>>> = ...;
+```
+
+### Public API (`mod.rs`)
+
+| Function | Purpose |
+|----------|---------|
+| `init_strategy_system(config)` | Initialize engine, DB, condition registry |
+| `evaluate_entry_strategies(mint, price, market, bundle)` | Evaluate all enabled entry strategies, return first match |
+| `evaluate_exit_strategies(mint, price, position, market, bundle)` | Evaluate all enabled exit strategies, return first match |
+| `validate_strategy(strategy)` | Validate rule tree structure and condition parameters |
+| `clear_evaluation_cache()` | Flush cached evaluations |
+| `get_condition_schemas()` | Return JSON schemas for all registered conditions |
+
+### StrategyEngine (`engine.rs`)
+
+```rust
+pub struct StrategyEngine {
+    condition_registry: Arc<ConditionRegistry>,
+    evaluation_cache: Arc<RwLock<HashMap<String, CachedEvaluation>>>,
+    config: EngineConfig,
+}
+
+pub struct EngineConfig {
+    pub evaluation_timeout_ms: u64,     // Default: 50ms
+    pub cache_ttl_seconds: u64,         // Default: 5s
+    pub max_concurrent_evaluations: usize, // Default: 10
+}
+```
+
+### Evaluation Logic
+
+1. Get enabled strategies ordered by priority (ascending)
+2. For each strategy:
+   - Build `EvaluationContext` from inputs
+   - Compute cache key via `context_fingerprint()` (hash of token + price + market + position)
+   - Check cache → return cached result if TTL valid
+   - Evaluate rule tree recursively:
+     - **Leaf node:** Look up `ConditionEvaluator` in registry → `evaluate(condition, context)`
+     - **AND branch:** Short-circuit on first `false`
+     - **OR branch:** Short-circuit on first `true`
+     - **NOT branch:** Invert single child result
+   - Cache result, record to `strategy_performance` table
+3. Return first strategy that evaluates to `true`, or `None`
+
+---
+
+## 5. Condition System
+
+### ConditionEvaluator Trait (`conditions/mod.rs`)
+
+```rust
+#[async_trait]
+pub trait ConditionEvaluator: Send + Sync {
+    fn condition_type(&self) -> &'static str;
+    async fn evaluate(&self, condition: &Condition, context: &EvaluationContext) -> Result<bool, String>;
+    fn validate(&self, condition: &Condition) -> Result<(), String>;
+    fn parameter_schema(&self) -> serde_json::Value;
+}
+```
+
+### ConditionRegistry (`conditions/mod.rs`)
+
+```rust
+pub struct ConditionRegistry {
+    evaluators: HashMap<String, Box<dyn ConditionEvaluator>>,
+}
+```
+
+**Methods:** `new()` (registers all 8 built-ins), `register()`, `get()`, `list_types()`, `get_all_schemas()`
+
+### Helper Functions
+
+| Function | Purpose |
+|----------|---------|
+| `get_candles_from_context(ctx)` | Extract candles from TimeframeBundle for strategy timeframe |
+| `get_candles_for_timeframe(ctx, tf)` | Extract candles for specific or overridden timeframe |
+| `get_param_f64(condition, name)` | Extract f64 parameter with error |
+| `get_param_string(condition, name)` | Extract string parameter with error |
+| `get_param_bool(condition, name)` | Extract bool parameter with error |
+| `get_param_string_optional(condition, name)` | Extract optional string parameter |
+| `validate_timeframe_param(condition)` | Validate timeframe parameter value |
+
+---
+
+## 6. Built-in Conditions
+
+| # | Type | Parameters | Logic |
+|---|------|-----------|-------|
+| 1 | **CandleSize** | `pattern` (LARGE_BODY/SMALL_BODY/LONG_UPPER_WICK/LONG_LOWER_WICK), `threshold` (10-100%), `timeframe` | Candle body/wick ratio analysis |
+| 2 | **ConsecutiveCandles** | `direction` (GREEN/RED), `count` (2-20), `minimum_change` (0.1-50%), `timeframe` | Count consecutive candles matching direction |
+| 3 | **LiquidityLevel** | `threshold` (0-100,000 SOL), `comparison` (GT/GTE/LT/LTE) | Compare pool liquidity to threshold |
+| 4 | **PositionHoldingTime** | `hours` (0-720), `comparison` (GT/LT/GTE/LTE) | Position age check (exit only) |
+| 5 | **PriceBreakout** | `lookback` (2-100), `direction` (UPWARD/DOWNWARD), `confirmation` (0-20%), `timeframe` | Price above period high or below period low with confirmation |
+| 6 | **PriceChangePercent** | `percentage` (0.1-1000%), `direction` (ABOVE/BELOW/WITHIN), `time_value`, `time_unit` (SEC/MIN/HR), `timeframe` | Historical price change comparison |
+| 7 | **PriceToMA** | `period` (2-200), `position` (ABOVE/BELOW/WITHIN), `distance` (0.1-100%), `timeframe` | SMA proximity check |
+| 8 | **VolumeSpike** | `lookback` (2-100), `multiplier` (1.0-50.0x), `timeframe` | Volume ratio vs average |
+
+All conditions support optional `timeframe` parameter to override the strategy's default timeframe.
+
+---
+
+## 7. Database Schema
+
+**Database:** `strategies.db` (SQLite, WAL mode, r2d2 pool, max 3 connections)
+
+### Tables
+
+| Table | Purpose | Key Columns |
+|-------|---------|-------------|
+| `strategies` | Strategy definitions | `id` PK, `name`, `type` (ENTRY/EXIT), `enabled`, `priority`, `timeframe`, `rules_json`, `parameters_json` |
+| `strategy_performance` | Evaluation history | `strategy_id` FK, `result` (0/1), `execution_time_ms`, `token_mint`, `execution_timestamp` |
+| `strategy_assignments` | Position → strategy mapping | `position_id` + `strategy_id` composite PK |
+| `strategy_templates` | Reusable templates | `id` PK, `category`, `risk_level` (LOW/MEDIUM/HIGH), `rules_json` |
+| `strategy_backtests` | Backtest results | `strategy_id` FK, `total_trades`, `win_trades`, `total_profit_sol` |
+| `schema_version` | Migration tracking | `version` |
+
+### Key DB Functions
+
+| Function | Purpose |
+|----------|---------|
+| `init_strategies_db()` | Create tables and indices |
+| `insert_strategy(strategy)` | Persist new strategy |
+| `update_strategy(strategy)` | Update existing strategy |
+| `delete_strategy(id)` | Remove strategy |
+| `get_strategy(id)` | Fetch single strategy |
+| `get_all_strategies()` | Fetch all strategies |
+| `get_enabled_strategies(type)` | Fetch enabled strategies by type |
+| `has_enabled_strategies(type)` | Check if any enabled strategies exist |
+| `record_evaluation(result, mint)` | Log evaluation to performance table |
+| `get_strategy_performance(id)` | Get aggregate performance stats |
+| `assign_strategy_to_position(pos_id, strat_id)` | Link position to entry strategy |
+| `get_position_strategies(pos_id)` | Get strategies linked to position |
+
+---
+
+## 8. Data Flow
+
+### Entry Signal Flow
+
+```
+Trader Module (every 3s)
+  └─ evaluate_entry_strategies(mint, price, market_data, timeframe_bundle)
+       │
+       ├─ get_enabled_strategies(StrategyType::Entry)  [from DB, ordered by priority]
+       │
+       └─ For each strategy (priority order):
+            ├─ Build EvaluationContext
+            │   ├─ token_mint, current_price
+            │   ├─ market_data (liquidity, volume, market_cap, holders)
+            │   ├─ timeframe_bundle (OHLCV candles for all timeframes)
+            │   └─ strategy_timeframe (from Strategy.timeframe)
+            │
+            ├─ Check cache (context fingerprint hash)
+            │   └─ Return cached if TTL < 5s
+            │
+            └─ evaluate_rule_tree(strategy.rules, context)
+                 ├─ LEAF: registry.get(condition_type).evaluate(condition, context)
+                 │        └─ get_candles_for_timeframe() → apply condition logic
+                 │
+                 └─ BRANCH: apply AND/OR/NOT with short-circuit
+                      ├─ AND: false on first false
+                      ├─ OR: true on first true
+                      └─ NOT: invert child
+
+Result: Some(strategy_id) → Trigger buy | None → Continue scanning
+```
+
+### Exit Signal Flow
+
+Same as entry, but:
+- Uses `StrategyType::Exit`
+- `EvaluationContext` includes `PositionData` (entry_price, position_age, unrealized PnL)
+- Conditions like `PositionHoldingTime` use position data
+
+---
+
+## 9. Module Connections
+
+```
+strategies/
+├── ohlcvs/        ← TimeframeBundle, Candle (candle data for conditions)
+├── trader/        ← STRATEGY_CACHE_MAX_ENTRIES constant; trader calls evaluate_*()
+├── positions/     ← PositionData for exit evaluation; strategy_assignments table
+└── config/        ← EngineConfig parameters
+```
+
+| Connection | Direction | What |
+|-----------|-----------|------|
+| trader → strategies | Caller | `evaluate_entry_strategies()`, `evaluate_exit_strategies()` |
+| strategies → ohlcvs | Data | `TimeframeBundle.get_timeframe()` for candle data |
+| strategies → positions DB | Write | `assign_strategy_to_position()` after entry |
+| trader → strategies | Constant | `STRATEGY_CACHE_MAX_ENTRIES` for cache eviction |
+
+---
+
+## 10. Configuration
+
+### Engine Constants
+
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| Evaluation timeout | 50ms | Max time per strategy evaluation |
+| Cache TTL | 5s | Evaluation cache lifetime |
+| Max concurrent evaluations | 10 | Parallelism limit |
+| DB pool size | 3 | SQLite connection pool |
+| Schema version | 1 | Migration tracking |
+| Valid timeframes | 1m, 5m, 15m, 1h, 4h, 12h, 1d | Supported timeframe strings |

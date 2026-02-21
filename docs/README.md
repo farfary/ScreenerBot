@@ -34,20 +34,31 @@ docs/
 
 Living documentation describing how each major system works. These docs are the source of truth for system behavior and should be updated when the code changes.
 
-| Document | Description |
-|----------|-------------|
-| [System Overview](architecture/overview.md) | High-level architecture, data flow, service startup order |
-| [Tokens Module](architecture/tokens.md) | Token lifecycle, database schema, caching, market data, security pipelines |
-| [Filtering Pipeline](architecture/filtering.md) | Token quality control — filter chain, sources, caching, query system |
-| [Pools Module](architecture/pools.md) | Pool discovery, DEX decoders, price calculation, swap integration |
-| [Swap Routing](architecture/swaps.md) | Trait-based multi-DEX router architecture |
-| [Trading Strategies](architecture/strategies.md) | Condition-based strategy system |
-| [OHLCV Module](architecture/ohlcv-strategy-integration.md) | Candle data fetching, aggregation, caching, strategy integration |
-| [Partial Sell & DCA](architecture/partial-sell-dca.md) | Position management: DCA entries, partial exits |
-| [Positions Module](architecture/positions.md) | Position lifecycle, state machine, verification, PnL tracking |
-| [Startup Order](architecture/startup-order.md) | Service startup vs. user-facing workflow order |
-| [Webserver Port Conflict](architecture/webserver-port-conflict.md) | Port conflict detection and resolution |
-| [Workflow Order](architecture/workflow-order.md) | Service dependency resolution and startup sequencing |
+| Document | Lines | Description |
+|----------|-------|-------------|
+| [System Overview](architecture/overview.md) | 8048 | High-level architecture, data flow, full system reference |
+| **Core Trading** | | |
+| [Tokens Module](architecture/tokens.md) | 1998 | Token lifecycle, database schema, caching, market data, security |
+| [Pools Module](architecture/pools.md) | 910 | Pool discovery, DEX decoders, price calculation, swap integration |
+| [Positions Module](architecture/positions.md) | 805 | Position lifecycle, state machine, verification, PnL tracking |
+| [OHLCV Module](architecture/ohlcvs.md) | 814 | Candle data fetching, aggregation, caching, strategy integration |
+| [Trader Engine](architecture/trader.md) | 534 | Dual monitors, entry pipeline, priority exits, safety system |
+| [Trading Strategies](architecture/strategies.md) | 383 | Condition-based strategy system, rule tree, evaluation engine |
+| [Filtering Pipeline](architecture/filtering.md) | 1017 | Token quality control — filter chain, sources, caching, query system |
+| **Execution** | | |
+| [Swap Routing](architecture/swaps.md) | 338 | Multi-DEX router architecture, fee collection, fallback chain |
+| [Transactions](architecture/transactions.md) | 288 | Transaction monitoring, signing, sending, parser pipeline |
+| **Data Sources** | | |
+| [RPC Module](architecture/rpc.md) | 301 | Multi-provider Solana RPC, circuit breaker, rate limiting |
+| [APIs Module](architecture/apis.md) | 216 | External API clients (DexScreener, GeckoTerminal, Rugcheck, etc.) |
+| **User Interface** | | |
+| [Webserver](architecture/webserver.md) | 307 | Dashboard REST API, authentication, 200+ endpoints |
+| [Telegram](architecture/telegram.md) | 221 | Telegram bot, notifications, remote trading control |
+| **System** | | |
+| [Config](architecture/config.md) | 272 | TOML configuration, macro system, hot reload, metadata |
+| [Services](architecture/services.md) | 221 | Service manager, dependency-aware lifecycle, 20 services |
+| [Wallets](architecture/wallets.md) | 256 | Multi-wallet management, AES-256-GCM encryption |
+| [Infrastructure](architecture/infrastructure.md) | 325 | Database, errors, events, logger, connectivity, actions |
 
 ### 🛠 Development
 

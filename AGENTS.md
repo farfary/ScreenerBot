@@ -122,17 +122,24 @@ screenerbot::config::load_config().expect("Failed to load config");
 
 | System | Entry Point | Doc |
 |--------|------------|-----|
-| Configuration | `src/config/` — `config_struct!` macro | [docs/architecture/overview.md](docs/architecture/overview.md) |
+| Configuration | `src/config/` — `config_struct!` macro | [docs/architecture/config.md](docs/architecture/config.md) |
 | Tokens | `src/tokens/service.rs` — lifecycle, caching, DB | [docs/architecture/tokens.md](docs/architecture/tokens.md) |
 | Token Filtering | `src/filtering/engine.rs` | [docs/architecture/filtering.md](docs/architecture/filtering.md) |
 | Pool Discovery | `src/pools/service.rs` — pricing, decoders, swap | [docs/architecture/pools.md](docs/architecture/pools.md) |
 | Swap Execution | `src/swaps/router.rs` | [docs/architecture/swaps.md](docs/architecture/swaps.md) |
-| Trading Engine | `src/trader/monitors/` (entry.rs, exit.rs) | [docs/development/trader-overview.md](docs/development/trader-overview.md) |
+| Trading Engine | `src/trader/monitors/` (entry.rs, exit.rs) | [docs/architecture/trader.md](docs/architecture/trader.md) |
 | Strategies | `src/strategies/engine.rs` | [docs/architecture/strategies.md](docs/architecture/strategies.md) |
-| OHLCV Data | `src/ohlcvs/monitor.rs` | [docs/architecture/ohlcv-strategy-integration.md](docs/architecture/ohlcv-strategy-integration.md) |
+| OHLCV Data | `src/ohlcvs/monitor.rs` | [docs/architecture/ohlcvs.md](docs/architecture/ohlcvs.md) |
 | Positions | `src/positions/state.rs` | [docs/architecture/positions.md](docs/architecture/positions.md) |
-| Service Manager | `src/services/mod.rs` | [docs/architecture/startup-order.md](docs/architecture/startup-order.md) |
-| Dashboard | `src/webserver/` | [docs/architecture/overview.md](docs/architecture/overview.md) |
+| Transactions | `src/transactions/` — send, confirm, parse | [docs/architecture/transactions.md](docs/architecture/transactions.md) |
+| RPC | `src/rpc/client.rs` — multi-provider, circuit breaker | [docs/architecture/rpc.md](docs/architecture/rpc.md) |
+| External APIs | `src/apis/manager.rs` — DexScreener, GeckoTerminal, etc. | [docs/architecture/apis.md](docs/architecture/apis.md) |
+| Wallets | `src/wallets/manager.rs` — encryption, multi-wallet | [docs/architecture/wallets.md](docs/architecture/wallets.md) |
+| Service Manager | `src/services/mod.rs` — lifecycle, dependencies | [docs/architecture/services.md](docs/architecture/services.md) |
+| Dashboard | `src/webserver/` — Axum, 200+ endpoints | [docs/architecture/webserver.md](docs/architecture/webserver.md) |
+| Telegram | `src/telegram/` — notifications, commands | [docs/architecture/telegram.md](docs/architecture/telegram.md) |
+| Infrastructure | database, errors, events, logger, connectivity, actions | [docs/architecture/infrastructure.md](docs/architecture/infrastructure.md) |
+| System Overview | Full system reference | [docs/architecture/overview.md](docs/architecture/overview.md) |
 
 ## Coding Conventions
 
