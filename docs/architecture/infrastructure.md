@@ -88,7 +88,7 @@ pub enum ScreenerBotError {
 }
 ```
 
-### BlockchainError (44 variants)
+### BlockchainError (23 variants)
 
 Solana-specific errors: `BlockNotFound`, `SlotBehind`, `BlockhashExpired`, `AccountNotFound`, `InsufficientBalance`, `TransactionDropped`, `InstructionError`, `ContractViolation`, `ProgramError`, etc.
 
@@ -123,7 +123,8 @@ pub struct Event {
     severity: Severity,              // Info, Warn, Error, Debug
     mint: Option<String>,
     reference_id: Option<String>,    // tx sig, pool addr
-    payload: Value,                  // JSON
+    message_short: Option<String>,   // Brief human-readable summary
+    json_payload: Option<Value>,     // Structured JSON data
 }
 ```
 
@@ -161,7 +162,7 @@ record(event) → mpsc::channel → Writer Task → batch(100 or 1s) → SQLite
 
 **Files:** `mod.rs`, `core.rs`, `format.rs`, `config.rs`, `file.rs`, `tags.rs`, `levels.rs`, `special.rs`
 
-Structured logging with 40+ module tags, CLI-configurable debug flags, and daily file rotation.
+Structured logging with 49 module tags, CLI-configurable debug flags, and timestamp-based file rotation.
 
 ### Log Levels
 
@@ -169,9 +170,9 @@ Structured logging with 40+ module tags, CLI-configurable debug flags, and daily
 Error → Warning → Info → Debug → Verbose
 ```
 
-### Log Tags (40+)
+### Log Tags (49 variants)
 
-`System`, `Api`, `Trader`, `Tokens`, `Pool`, `Connectivity`, `Rpc`, `Swap`, `Position`, `Wallet`, `Security`, `Filtering`, `Ohlcv`, `Tools`, etc.
+`System`, `Api`, `Trader`, `Tokens`, `Pool`, `Connectivity`, `Rpc`, `Swap`, `Position`, `Wallet`, `Security`, `Filtering`, `Ohlcv`, `Tools`, `Config`, `Event`, `Telegram`, `Transaction`, `Strategy`, `Action`, `Service`, etc.
 
 ### CLI Integration
 
@@ -195,7 +196,8 @@ screenerbot --quiet           # Suppress warnings
 
 ### File Rotation
 
-Daily logs → `logs/<YYYYMMDD>.log`
+Timestamp-based logs → `logs/screenerbot_YYYY-MM-DD_HH-MM-SS.log`  
+Retention: 24 hours with max 7 files.
 
 ---
 
@@ -253,6 +255,7 @@ pub struct Action {
     id: ActionId,
     action_type: ActionType,        // SwapBuy, SwapSell, CloseLong, etc.
     entity_id: String,              // mint or position ID
+    wallet_address: Option<String>, // wallet involved
     state: ActionState,
     steps: Vec<ActionStep>,
     current_step_index: usize,
@@ -267,7 +270,7 @@ pub struct Action {
 ```rust
 pub enum ActionState {
     InProgress { current_step, progress_pct, total_steps },
-    Completed { duration_ms },
+    Completed,
     Failed { reason, step_index },
     Cancelled,
 }
@@ -285,7 +288,7 @@ pub enum ActionState {
 
 ### Database
 
-**Tables:** `actions` + `action_steps` in `actions.db`  
+**Tables:** `actions` (with `wallet_address`, `state_data`, `duration_ms`, `created_at`, `updated_at` columns) + `action_steps` in `actions.db`  
 **Cleanup:** Delete >30 days old.
 
 ---

@@ -181,17 +181,9 @@ Simple per-client rate limiters:
 
 ---
 
-## 6. Caching Strategy
+## 6. Stats & Tracking
 
-Each client caches responses using moka:
-
-| Cache | TTL | Max Entries | Purpose |
-|-------|-----|-------------|---------|
-| Token profiles | 5 min | 10,000 | DexScreener metadata |
-| Pair data | 30s | 5,000 | Price data (short TTL) |
-| Risk reports | 1 hour | 5,000 | Rugcheck assessments |
-| Token list | 1 hour | 1 | Jupiter full token list |
-| SOL price | 30s | 1 | CoinGecko SOL/USD |
+The APIs module includes `ApiStatsTracker` for monitoring API usage and performance per client. No response caching is done within the APIs module itself — caching is handled by caller modules (tokens, filtering, pools) using their own moka caches.
 
 ---
 

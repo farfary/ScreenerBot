@@ -40,7 +40,7 @@ src/strategies/
 ├── mod.rs                    # Public API, global engine lifecycle
 ├── types.rs                  # Strategy, RuleTree, Condition, Parameter, enums
 ├── engine.rs                 # StrategyEngine — evaluation, caching, validation
-├── database.rs               # SQLite persistence (6 tables, r2d2 pool)
+├── database.rs               # SQLite persistence (5 tables + schema_version, r2d2 pool)
 └── conditions/
     ├── mod.rs                # ConditionEvaluator trait, ConditionRegistry, helpers
     ├── candle_size.rs        # CandleSize — body/wick pattern detection

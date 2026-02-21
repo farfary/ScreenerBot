@@ -47,10 +47,10 @@ Living documentation describing how each major system works. These docs are the 
 | [Filtering Pipeline](architecture/filtering.md) | 1017 | Token quality control — filter chain, sources, caching, query system |
 | **Execution** | | |
 | [Swap Routing](architecture/swaps.md) | 338 | Multi-DEX router architecture, fee collection, fallback chain |
-| [Transactions](architecture/transactions.md) | 288 | Transaction monitoring, signing, sending, parser pipeline |
+| [Transactions](architecture/transactions.md) | 412 | Transaction monitoring, analyzer pipeline, 10+ DEX detection |
 | **Data Sources** | | |
 | [RPC Module](architecture/rpc.md) | 301 | Multi-provider Solana RPC, circuit breaker, rate limiting |
-| [APIs Module](architecture/apis.md) | 216 | External API clients (DexScreener, GeckoTerminal, Rugcheck, etc.) |
+| [APIs Module](architecture/apis.md) | 208 | External API clients (DexScreener, GeckoTerminal, Rugcheck, etc.) |
 | **User Interface** | | |
 | [Webserver](architecture/webserver.md) | 307 | Dashboard REST API, authentication, 200+ endpoints |
 | [Telegram](architecture/telegram.md) | 221 | Telegram bot, notifications, remote trading control |
@@ -58,7 +58,7 @@ Living documentation describing how each major system works. These docs are the 
 | [Config](architecture/config.md) | 272 | TOML configuration, macro system, hot reload, metadata |
 | [Services](architecture/services.md) | 221 | Service manager, dependency-aware lifecycle, 20 services |
 | [Wallets](architecture/wallets.md) | 256 | Multi-wallet management, AES-256-GCM encryption |
-| [Infrastructure](architecture/infrastructure.md) | 325 | Database, errors, events, logger, connectivity, actions |
+| [Infrastructure](architecture/infrastructure.md) | 328 | Database, errors, events, logger, connectivity, actions |
 
 ### 🛠 Development
 
