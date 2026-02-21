@@ -1,6 +1,6 @@
 # Swaps Module — Architecture
 
-> ScreenerBot Multi-Router Swap Execution System — February 2026
+> ScreenerBot multi-router quoting + swap execution with fallback (Jupiter primary, GMGN optional fallback, Raydium stub) — February 2026
 
 ---
 
@@ -9,330 +9,488 @@
 1. [Overview](#1-overview)
 2. [File Structure](#2-file-structure)
 3. [Core Types](#3-core-types)
-4. [Router Trait](#4-router-trait)
-5. [Router Registry](#5-router-registry)
-6. [Router Implementations](#6-router-implementations)
-7. [Operations — Quote & Execute](#7-operations--quote--execute)
-8. [Fee Collection](#8-fee-collection)
-9. [Error Handling & Fallback](#9-error-handling--fallback)
-10. [Module Connections](#10-module-connections)
+4. [Router Trait (`SwapRouter`)](#4-router-trait-swaprouter)
+5. [Router Registry (`RouterRegistry`)](#5-router-registry-routerregistry)
+6. [Quote Selection (`get_best_quote`)](#6-quote-selection-get_best_quote)
+7. [Swap Execution + Fallback (`execute_swap_with_fallback`)](#7-swap-execution--fallback-execute_swap_with_fallback)
+8. [Special Quote Flow: Opening Positions (`get_best_quote_for_opening`)](#8-special-quote-flow-opening-positions-get_best_quote_for_opening)
+9. [Router Implementations](#9-router-implementations)
+10. [Fee Collection (Jupiter Referral)](#10-fee-collection-jupiter-referral)
+11. [Error Handling + Retryability](#11-error-handling--retryability)
+12. [Module Connections](#12-module-connections)
 
 ---
 
 ## 1. Overview
 
-The Swaps module provides a trait-based, multi-router swap architecture with concurrent quote fetching and automatic fallback chains. It abstracts over multiple DEX aggregators (Jupiter, GMGN, Raydium stub) behind a unified `SwapRouter` trait.
+The `swaps` module is the execution layer that turns:
 
-**Key characteristics:**
-- Concurrent quote fetching from all enabled routers
-- Best-quote selection (highest output amount)
-- Automatic fallback on retryable errors
-- Hardcoded 0.5% referral fee (Jupiter only) — **revenue source**
-- Token2022 detection to skip fees when incompatible
-- GMGN retry with exponential backoff (3 attempts)
+- "I want to trade X SOL into token Y"
+
+into:
+
+- a best-route quote (aggregator-specific)
+- a signed Solana transaction submission
+- a confirmed signature (or an actionable structured error)
+
+Key design points in the current implementation:
+
+- Multiple routers implement the same `SwapRouter` trait.
+- Quotes are fetched from all enabled routers concurrently and the best quote is selected by output amount.
+- Swap execution starts with the router that produced the quote and can fall back to other enabled routers if the error is classified as retryable.
+- Jupiter fee collection is intentionally hardcoded (0.5% referral) and is a revenue source.
 
 ---
 
 ## 2. File Structure
 
-```
+```text
 src/swaps/
-├── mod.rs           # Re-exports, calculate_partial_amount()
-├── types.rs         # RouterType enum, ExitType enum, custom deserializers
-├── router.rs        # SwapRouter trait, QuoteRequest, Quote, SwapResult, SwapMode
-├── operations.rs    # get_best_quote(), execute_swap_with_fallback()
-├── registry.rs      # RouterRegistry singleton, fallback chain logic
+├── mod.rs                 module exports + `calculate_partial_amount()`
+├── router.rs              `SwapRouter` trait + core quote/execute types
+├── registry.rs            `RouterRegistry` + global OnceLock accessor
+├── operations.rs          high-level orchestration (quote selection + fallback execution)
+├── types.rs               shared enums + serde helpers used by routers
 └── routers/
-    ├── mod.rs       # Router sub-module exports
-    ├── jupiter.rs   # Jupiter DEX router (priority 0, primary)
-    ├── gmgn.rs      # GMGN router (priority 1, secondary)
-    └── raydium.rs   # Raydium router (priority 2, stub/disabled)
+    ├── mod.rs             router exports
+    ├── jupiter.rs         Jupiter router (primary; referral fee collection)
+    ├── gmgn.rs            GMGN router (optional; anti-MEV, retry loop, connectivity gated)
+    └── raydium.rs         Raydium stub (not implemented)
 ```
-
-**9 files, ~1,688 lines**
 
 ---
 
 ## 3. Core Types
 
-### QuoteRequest (`router.rs`)
+**File:** `src/swaps/router.rs`
 
-Immutable request passed to all routers:
+### 3.1 `QuoteRequest`
+
+Immutable input passed to routers:
 
 ```rust
 pub struct QuoteRequest {
-    pub input_mint: String,
-    pub output_mint: String,
-    pub input_amount: u64,
-    pub wallet_address: String,
-    pub slippage_pct: f64,
-    pub swap_mode: SwapMode,
+  pub input_mint: String,
+  pub output_mint: String,
+  pub input_amount: u64,
+  pub wallet_address: String,
+  pub slippage_pct: f64,
+  pub swap_mode: SwapMode,
 }
 ```
 
-### Quote (`router.rs`)
+`slippage_pct` is expressed as a percentage (e.g. `1.0` = 1%).
 
-Router-agnostic quote response:
+### 3.2 `SwapMode`
+
+```rust
+pub enum SwapMode {
+  ExactIn,
+  ExactOut,
+}
+```
+
+Routers typically serialize this as `"ExactIn"` / `"ExactOut"` via `SwapMode::as_str()`.
+
+### 3.3 `Quote`
+
+Router-agnostic quote representation:
 
 ```rust
 pub struct Quote {
-    pub router_id: String,
-    pub router_name: String,
-    pub input_mint: String,
-    pub output_mint: String,
-    pub input_amount: u64,
-    pub output_amount: u64,
-    pub price_impact_pct: f64,
-    pub fee_lamports: u64,
-    pub slippage_bps: u16,
-    pub route_plan: String,
-    pub swap_mode: SwapMode,
-    pub wallet_address: String,
-    pub execution_data: Vec<u8>,     // Serialized router-specific data for swap step
+  pub router_id: String,
+  pub router_name: String,
+  pub input_mint: String,
+  pub output_mint: String,
+  pub input_amount: u64,
+  pub output_amount: u64,
+  pub price_impact_pct: f64,
+  pub fee_lamports: u64,
+  pub slippage_bps: u16,
+  pub route_plan: String,
+  pub swap_mode: SwapMode,
+  pub wallet_address: String,
+  pub execution_data: Vec<u8>,
 }
 ```
 
-### SwapResult (`router.rs`)
+`execution_data` is intentionally opaque:
 
-Execution outcome:
+- Jupiter stores the raw JSON quote response bytes (to preserve all fields needed by `/swap`).
+- GMGN stores a serialized `SwapData` struct (quote + raw tx + metadata).
+
+`fee_lamports` is also router-specific in practice:
+
+- Jupiter currently sets it to `0` (referral fee is applied via Jupiter's platform fee mechanism).
+- GMGN sets it to `swap_data.raw_tx.prioritization_fee_lamports` (priority fee, not a DEX fee).
+
+### 3.4 `SwapResult`
 
 ```rust
 pub struct SwapResult {
-    pub success: bool,
-    pub router_id: String,
-    pub router_name: String,
-    pub transaction_signature: String,
-    pub input_amount: u64,
-    pub output_amount: u64,
-    pub price_impact_pct: f64,
-    pub fee_lamports: u64,
-    pub execution_time_ms: u64,
-    pub effective_price_sol: Option<f64>,
+  pub success: bool,
+  pub router_id: String,
+  pub router_name: String,
+  pub transaction_signature: String,
+  pub input_amount: u64,
+  pub output_amount: u64,
+  pub price_impact_pct: f64,
+  pub fee_lamports: u64,
+  pub execution_time_ms: u64,
+  pub effective_price_sol: Option<f64>,
 }
 ```
 
-### Enums
+### 3.5 Shared swap enums + helpers
 
-| Enum | Variants | Location |
-|------|----------|----------|
-| `SwapMode` | `ExactIn`, `ExactOut` | `router.rs` |
-| `RouterType` | `GMGN`, `Jupiter` | `types.rs` |
-| `ExitType` | `Full`, `Partial { percentage: f64 }` | `types.rs` |
+**File:** `src/swaps/types.rs`
+
+- `RouterType`: currently `{ GMGN, Jupiter }` (used by other layers)
+- `ExitType`: `{ Full, Partial { percentage } }` (used by positions/trader)
+- custom deserializers used by GMGN:
+  - `deserialize_string_or_number`
+  - `deserialize_optional_string_or_number`
+
+**File:** `src/swaps/mod.rs`
+
+`calculate_partial_amount(total_amount, percentage)` is used for partial exits:
+
+- returns 0 if `total_amount == 0` or `percentage <= 0`
+- returns `total_amount` if `percentage >= 100`
+- otherwise returns `min(total_amount, floor(total_amount * percentage/100))`
 
 ---
 
-## 4. Router Trait
+## 4. Router Trait (`SwapRouter`)
+
+**File:** `src/swaps/router.rs`
+
+All swap routers implement:
 
 ```rust
 #[async_trait]
 pub trait SwapRouter: Send + Sync {
-    fn id(&self) -> &'static str;
-    fn name(&self) -> &'static str;
-    fn is_enabled(&self) -> bool;           // Reads from config
-    fn priority(&self) -> u8;               // Lower = higher priority
-    async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote, ScreenerBotError>;
-    async fn execute_swap(&self, token: &Token, quote: &Quote) -> Result<SwapResult, ScreenerBotError>;
+  fn id(&self) -> &'static str;        // "jupiter", "gmgn", "raydium"
+  fn name(&self) -> &'static str;      // UI/log name
+  fn is_enabled(&self) -> bool;        // config gate
+  fn priority(&self) -> u8;            // 0 = primary, higher = fallback order
+  async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote, ScreenerBotError>;
+  async fn execute_swap(&self, token: &Token, quote: &Quote) -> Result<SwapResult, ScreenerBotError>;
 }
 ```
 
+Router IDs are used end-to-end:
+
+- quoted router ID is stored in `Quote.router_id`
+- execution uses `registry.get_router(&quote.router_id)` to find the router again
+
 ---
 
-## 5. Router Registry
+## 5. Router Registry (`RouterRegistry`)
 
-### Singleton (`registry.rs`)
+**File:** `src/swaps/registry.rs`
+
+The registry is the only place where routers are assembled into the system.
+
+### 5.1 Construction
+
+```rust
+pub fn new() -> Self {
+  routers: vec![
+    Arc::new(JupiterRouter::new()),
+    Arc::new(GmgnRouter::new()),
+    Arc::new(RaydiumRouter::new()),
+  ]
+}
+```
+
+### 5.2 Global singleton
 
 ```rust
 static REGISTRY: OnceLock<RouterRegistry> = OnceLock::new();
 
-pub struct RouterRegistry {
-    routers: Vec<Arc<dyn SwapRouter>>,
+pub fn get_registry() -> &'static RouterRegistry {
+  REGISTRY.get_or_init(|| RouterRegistry::new())
 }
 ```
 
-**Created with:** Jupiter (priority 0), GMGN (priority 1), Raydium (priority 2)
+### 5.3 Enabled routers and fallback chain
 
-### Methods
+Key methods:
 
-| Method | Purpose |
-|--------|---------|
-| `get_registry()` | Singleton accessor |
-| `enabled_routers()` | Filter to enabled only |
-| `get_router(id)` | Lookup by ID string |
-| `get_primary_router()` | Lowest priority enabled router |
-| `get_fallback_chain(failed_id)` | Enabled routers except failed, sorted by priority |
-| `has_enabled_routers()` | Boolean check |
-| `all_routers()` | All routers including disabled |
+- `enabled_routers()`: filters by `router.is_enabled()`
+- `get_primary_router()`: min by `priority()`
+- `get_router(id)`: lookup by router id string
+- `get_fallback_chain(failed_router_id)`:
+  - filters enabled routers excluding the failed id
+  - sorts by `priority()` (lowest first)
 
 ---
 
-## 6. Router Implementations
+## 6. Quote Selection (`get_best_quote`)
 
-### Jupiter Router (`routers/jupiter.rs`) — Priority 0
+**File:** `src/swaps/operations.rs`
 
-**Primary router.** Uses Jupiter Swap API v1.
+`get_best_quote(request)`:
 
-#### Constants (HARDCODED — revenue source, NOT configurable)
+1. Reads enabled routers from registry.
+2. Spawns quote requests to each router concurrently using `future::join_all(...)`.
+3. Drops failed quotes (logs warning) and keeps successful quotes.
+4. Picks the quote with highest `output_amount`.
 
-```
-JUPITER_API_BASE        = "https://api.jup.ag"
-REFERRAL_FEE_BPS        = 50                    // 0.5%
-REFERRAL_TOKEN_ACCOUNT_WSOL = "9yiZThTzanryu3mg1VVu6Qy4HiqKhydCAUqcasLHPxWB"
-REFERRAL_TOKEN_ACCOUNT_USDC = "3kmcF3DFGFRKXeC5v5AMzwpsdj2Uc3Z7a5KrojtWv2GW"
-```
+Important behavior:
 
-#### Quote Flow
-
-1. Check input/output mints for Token2022 via RPC
-2. Build `JupiterQuoteRequest`:
-   - `platformFeeBps = 50` (or None if Token2022)
-3. POST `https://api.jup.ag/swap/v1/quote` with API key header
-4. Parse response: `outAmount`, `priceImpactPct`, `routePlan`
-5. Store raw JSON response as `execution_data`
-
-#### Swap Flow
-
-1. Deserialize stored JSON quote response
-2. Select fee account (WSOL or USDC based on output mint)
-3. Build `JupiterSwapRequest`:
-   - `quoteResponse` = stored JSON
-   - `feeAccount` = referral account (None if Token2022)
-   - `prioritizationFeeLamports` from config
-4. POST `https://api.jup.ag/swap/v1/swap`
-5. Extract base64 `swapTransaction`
-6. `sign_send_and_confirm_transaction_simple(base64_tx)`
-
-#### Token2022 Handling
-
-If either input or output mint is Token2022:
-- Skip `platformFeeBps` in quote (prevents `IncorrectTokenProgramID`)
-- Skip `feeAccount` in swap request
-
-### GMGN Router (`routers/gmgn.rs`) — Priority 1
-
-**Secondary/fallback router.** Uses GMGN API.
-
-#### Constants
-
-```
-GMGN_QUOTE_API    = "https://gmgn.ai/defi/router/v1/sol/tx/get_swap_route"
-QUOTE_TIMEOUT_SECS = 15
-RETRY_ATTEMPTS      = 3
-```
-
-#### Quote Flow
-
-1. Check connectivity (internet + RPC)
-2. Build URL with query params: `token_in`, `token_out`, `in_amount`, `from_address`, `slippage`, `fee`, `is_anti_mev`, `partner`
-3. **Retry logic:** 3 attempts, exponential backoff (1s, 2s, 3s)
-4. Detect "no route" (code `40000402`) — fail immediately, no retry
-5. Parse `SwapData` (includes quote + pre-built raw transaction)
-
-#### Swap Flow
-
-1. Deserialize `SwapData` from `execution_data`
-2. `sign_send_and_confirm_transaction_simple(swap_data.raw_tx.swap_transaction)`
-3. Record swap event
-
-### Raydium Router (`routers/raydium.rs`) — Priority 2
-
-**Stub.** Returns `Err("Raydium router not implemented yet")` for both quote and swap.
+- If no routers are enabled, it returns a configuration error.
+- If all routers fail, it returns `ScreenerBotError::api_error("All routers failed to provide quotes")`.
 
 ---
 
-## 7. Operations — Quote & Execute
+## 7. Swap Execution + Fallback (`execute_swap_with_fallback`)
 
-### `get_best_quote(request)` → `operations.rs`
+**File:** `src/swaps/operations.rs`
 
-1. Get all enabled routers from registry
-2. Fetch quotes from ALL routers **concurrently** (`futures::join_all`)
-3. Log timing and comparison for each router
-4. Select quote with **highest `output_amount`**
+`execute_swap_with_fallback(token, quote)`:
 
-### `get_best_quote_for_opening(request, symbol)` → `operations.rs`
+### 7.1 Force-stop gate
 
-Wraps `get_best_quote()` with no-route detection:
-- If "no route" error → blacklist token
-- Detects: "no route", "400 Bad Request", Jupiter-specific errors
+Before doing anything:
 
-### `execute_swap_with_fallback(token, quote)` → `operations.rs`
+- if `global::is_force_stopped()` is true, it returns an internal error:
+  `"Trading halted - Force stop is active"`
 
-1. Try primary router's `execute_swap()`
-2. On **retryable** error → enter fallback chain:
-   - Get fallback routers (sorted by priority, excluding failed)
-   - For each: fetch fresh quote → execute swap
-   - Return first success or original error
-3. Check force-stop flag before each attempt
+### 7.2 Primary attempt
 
----
+1. Resolve the router from the quote:
+   - `primary = registry.get_router(&quote.router_id)`
+2. Call:
+   - `primary.execute_swap(token, &quote)`
 
-## 8. Fee Collection
+If it succeeds:
 
-**Jupiter only.** GMGN and Raydium do not collect fees.
+- returns `SwapResult` with `execution_time_ms` filled in.
 
-| Parameter | Value |
-|-----------|-------|
-| Fee rate | 50 BPS (0.5%) |
-| WSOL fee account | `9yiZThTzanryu3mg1VVu6Qy4HiqKhydCAUqcasLHPxWB` |
-| USDC fee account | `3kmcF3DFGFRKXeC5v5AMzwpsdj2Uc3Z7a5KrojtWv2GW` |
-| Jupiter's share | 20% |
-| ScreenerBot's share | 80% |
-| Token2022 | Fees skipped (prevents transaction failure) |
+### 7.3 Fallback attempt (only for retryable errors)
 
-**Mechanism:**
-- `platformFeeBps` in quote request → Jupiter deducts from output
-- `feeAccount` in swap request → fees deposited to referral token account
+If `primary.execute_swap(...)` returns an error:
+
+- if `is_retryable_error(...)` is false → fail immediately (non-retryable)
+- otherwise → attempt fallbacks:
+  - `fallbacks = registry.get_fallback_chain(&quote.router_id)`
+
+For each fallback router:
+
+1. Build a new `QuoteRequest` based on the original quote.
+   - reconstructed slippage uses `slippage_pct = (quote.slippage_bps as f64) / 100.0`
+2. Fetch a fresh quote from the fallback router.
+3. Execute the swap using the fallback router and its fresh quote.
+
+If all fallbacks fail, `execute_swap_with_fallback` returns the original primary error.
 
 ---
 
-## 9. Error Handling & Fallback
+## 8. Special Quote Flow: Opening Positions (`get_best_quote_for_opening`)
 
-### Retryable Error Categories
+**File:** `src/swaps/operations.rs`
 
-| Error Type | Retryable | Action |
-|-----------|-----------|--------|
-| `Network` | ✅ | Fallback to next router |
-| `RpcProvider` | ✅ | Fallback to next router |
-| `RateLimit` | ✅ | Fallback to next router |
-| All others | ❌ | Return error immediately |
+`get_best_quote_for_opening(request, token_symbol)` wraps `get_best_quote(...)` and adds
+"no route" failure tracking:
 
-### Fallback Chain Priority
+- It detects "no route" by string matching on the error message (e.g. `"no route"`, `"Jupiter API error: 400"`).
+- On detected no-route errors it blacklists the non-SOL mint via:
+  - `tokens::cleanup::blacklist_token(output_mint, "NoRoute", &db)`
 
-| Priority | Router | Role |
-|----------|--------|------|
-| 0 | Jupiter | Primary |
-| 1 | GMGN | First fallback |
-| 2 | Raydium | Second fallback (stub) |
+This is best-effort:
 
-### GMGN-Specific Retry
-
-- 3 attempts with exponential backoff (1s, 2s, 3s delays)
-- "No route" errors (code `40000402`) fail immediately without retry
+- it ignores blacklist errors (`let _ = blacklist_token(...)`) because quote failures should not crash the bot.
 
 ---
 
-## 10. Module Connections
+## 9. Router Implementations
 
-```
-swaps/
-├── config/          ← Router enable/disable, API keys, slippage, priority fees
-├── rpc/             ← Token2022 detection, transaction signing/sending
-├── tokens/          ← Token struct for execute_swap()
-├── connectivity/    ← GMGN pre-checks (internet + RPC available)
-├── events/          ← Record swap events for dashboard
-├── errors/          ← ScreenerBotError types
-└── actions/         ← calculate_partial_amount() used by positions
-```
+Routers live under `src/swaps/routers/*`.
 
-| Caller | Function | Purpose |
-|--------|----------|---------|
-| trader/executors | `get_best_quote()` → `execute_swap_with_fallback()` | Trade execution |
-| trader/executors | `get_best_quote_for_opening()` | Entry with blacklist on no-route |
-| positions | `calculate_partial_amount()` | Partial exit amount calculation |
+### 9.1 Jupiter router (primary)
 
-### Utility Function
+**File:** `src/swaps/routers/jupiter.rs`
+
+Enabling:
+
+- `is_enabled()` reads `cfg.swaps.jupiter.enabled` (default true)
+
+API key model:
+
+- The header `x-api-key` is always sent.
+- The key is read from `cfg.swaps.jupiter.api_key`.
+- If missing, a placeholder `"YOUR_JUPITER_API_KEY"` is used (this is intentional and will typically fail until configured).
+
+#### 9.1.1 Quote flow (GET `/swap/v1/quote`)
+
+1. Compute slippage bps:
+   - `slippage_bps = ((slippage_pct * 100.0).round() as u16).max(1)`
+2. Token2022 detection:
+   - calls `tokens::decimals::is_token_2022(mint)` for input and output
+   - if either is Token2022:
+     - skip platform fee (`platformFeeBps = None`)
+3. Build `JupiterQuoteRequest` and send:
+   - `GET https://api.jup.ag/swap/v1/quote`
+   - query params include `inputMint`, `outputMint`, `amount`, `slippageBps`, `swapMode`, and optional `platformFeeBps`
+4. Read the response body as text.
+5. Parse a limited struct (`JupiterQuoteResponse`) to extract:
+   - `outAmount` (output amount)
+   - `priceImpactPct`
+   - `routePlan` (converted to a human-readable label chain)
+6. Store the *raw* JSON bytes as `Quote.execution_data`.
+
+#### 9.1.2 Swap flow (POST `/swap/v1/swap`)
+
+1. Deserialize `Quote.execution_data` into `serde_json::Value` (quoteResponse).
+2. Token2022 detection is repeated (current implementation does not carry it from quote).
+3. Referral fee account selection:
+   - if Token2022: `feeAccount = None`
+   - otherwise `feeAccount` is selected based on whether input/output is WSOL or USDC
+4. Build `JupiterSwapRequest` including:
+   - `userPublicKey`
+   - `quoteResponse`
+   - `dynamicComputeUnitLimit = cfg.swaps.jupiter.dynamic_compute_unit_limit`
+   - `prioritizationFeeLamports = cfg.swaps.jupiter.default_priority_fee`
+   - `feeAccount` (optional)
+5. Send:
+   - `POST https://api.jup.ag/swap/v1/swap`
+   - JSON body, `Content-Type: application/json`, `x-api-key` header
+6. Parse `swapTransaction` (base64 string).
+7. Submit via RPC:
+   - `rpc_client.sign_send_and_confirm_transaction_simple(&swapTransaction)`
+
+### 9.2 GMGN router (optional fallback)
+
+**File:** `src/swaps/routers/gmgn.rs`
+
+Enabling:
+
+- `is_enabled()` reads `cfg.swaps.gmgn.enabled` (default false)
+
+Connectivity gate:
+
+- GMGN refuses to quote/execute when either `internet` or `rpc` endpoints are unhealthy:
+  - `connectivity::check_endpoints_healthy(&["internet", "rpc"])`
+
+#### 9.2.1 Quote flow (GET `GMGN_QUOTE_API`)
+
+Endpoint:
+
+- `GMGN_QUOTE_API = "https://gmgn.ai/defi/router/v1/sol/tx/get_swap_route"`
+
+Query string includes:
+
+- `token_in_address`
+- `token_out_address`
+- `in_amount`
+- `from_address`
+- `slippage`
+- `swap_mode`
+- `fee` (from `cfg.swaps.gmgn.fee_sol`)
+- `is_anti_mev` (from `cfg.swaps.gmgn.anti_mev`)
+- `partner` (from `cfg.swaps.gmgn.partner`)
+
+Retry loop:
+
+- attempts: 3
+- request timeout: 15s
+- delay between attempts: 1s, 2s, 3s (linear backoff)
+
+No-route detection:
+
+- if response JSON contains:
+  - `code == 40000402`
+  - or `msg` contains `"no route"`
+- then it returns an API error immediately (no more retries).
+
+The parsed output (`SwapData`) contains:
+
+- `quote` (amounts, impact, route plan, ...)
+- `raw_tx.swapTransaction` (base64 tx string)
+
+The router stores `SwapData` as JSON in `Quote.execution_data`.
+
+#### 9.2.2 Swap flow
+
+1. Deserialize `Quote.execution_data` into `SwapData`.
+2. Send transaction via RPC:
+   - `sign_send_and_confirm_transaction_simple(&swap_data.raw_tx.swap_transaction)`
+3. Record swap event:
+   - `events::record_swap_event(...)`
+
+### 9.3 Raydium router (stub)
+
+**File:** `src/swaps/routers/raydium.rs`
+
+- `get_quote` and `execute_swap` return `ScreenerBotError::internal_error("Raydium router not implemented yet")`.
+
+---
+
+## 10. Fee Collection (Jupiter Referral)
+
+**File:** `src/swaps/routers/jupiter.rs`
+
+Fee collection is intentionally hardcoded and not configurable:
+
+- `REFERRAL_FEE_BPS = 50` (0.5%)
+
+Jupiter fee mechanics used:
+
+- Quote request includes `platformFeeBps` (unless Token2022).
+- Swap request includes `feeAccount` (unless Token2022).
+
+Token2022 handling:
+
+- If either side of the swap is Token2022:
+  - platform fee is skipped
+  - fee account is skipped
+
+This avoids failures like `IncorrectTokenProgramID` when Jupiter attempts to collect fees
+on Token2022 mints.
+
+---
+
+## 11. Error Handling + Retryability
+
+**File:** `src/swaps/operations.rs`
+
+Fallback is only attempted for errors classified as retryable:
 
 ```rust
-pub fn calculate_partial_amount(total_amount: u64, percentage: f64) -> u64
+matches!(
+  error,
+  ScreenerBotError::Network(_)
+    | ScreenerBotError::RpcProvider(_)
+    | ScreenerBotError::RateLimit(_)
+)
 ```
 
-Calculates token amount for partial exits: `(total * percentage / 100.0) as u64`
+Everything else is treated as non-retryable and fails immediately.
+
+Routers can also implement internal retry logic (GMGN does).
+
+---
+
+## 12. Module Connections
+
+The swaps module depends on:
+
+- `config` (`cfg.swaps.*` for router enablement + per-router parameters)
+- `rpc` (`sign_send_and_confirm_transaction_simple`)
+- `tokens`:
+  - Jupiter uses `tokens::decimals::is_token_2022` to decide fee compatibility
+  - opening quote helper can blacklist tokens on no-route failures
+- `connectivity`:
+  - GMGN is gated on internet+rpc health
+- `events`:
+  - GMGN records swap events (`record_swap_event`)
+- `global`:
+  - force-stop gate prevents swap execution when trading is halted
+
+The swaps module is used by:
+
+- positions lifecycle (enter/exit)
+- trader engine (automated entry/exit)
+- manual trading endpoints (webserver / telegram)

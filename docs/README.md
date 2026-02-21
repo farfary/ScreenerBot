@@ -46,7 +46,7 @@ Living documentation describing how each major system works. These docs are the 
 | [Trading Strategies](architecture/strategies.md) | 383 | Condition-based strategy system, rule tree, evaluation engine |
 | [Filtering Pipeline](architecture/filtering.md) | 1017 | Token quality control — filter chain, sources, caching, query system |
 | **Execution** | | |
-| [Swap Routing](architecture/swaps.md) | 338 | Multi-DEX router architecture, fee collection, fallback chain |
+| [Swap Routing](architecture/swaps.md) | 496 | Multi-router quote+execute, fallback chain, Jupiter referral fee |
 | [Transactions](architecture/transactions.md) | 412 | Transaction monitoring, analyzer pipeline, 10+ DEX detection |
 | **Data Sources** | | |
 | [RPC Module](architecture/rpc.md) | 587 | Multi-provider Solana RPC, circuit breaker, rate limiting |
