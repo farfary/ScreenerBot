@@ -101,3 +101,50 @@ ScreenerBot used 1,011 MB+ RSS during operation with ~275K tokens. This investig
 5. **r2d2 pools**: `idle_timeout(None)` + `max_lifetime(None)` for SQLite WAL stability
 6. **unlock_notify**: Required for concurrent SQLite access without BUSY errors
 7. TokenListEntry and incremental filtering deferred indefinitely (diminished ROI)
+
+## Real-World Test Results (2026-02-21)
+
+### 15-Minute Full Test (all services active)
+- Bot version: 0.1.110, commit b6a2fe3d (Phase E + SIGHUP fix)
+- Test: 15 minutes with nohup, all services active, discovery + OHLCV + pool analysis + market data
+
+RSS Memory Over Time:
+| Time | RSS (MB) | Notes |
+|------|----------|-------|
+| T+0 | 321 | Startup, 18,191 tokens loaded |
+| T+2 | 287 | Post-GC settling |
+| T+5 | 444 | Discovery active, market data fetching |
+| T+8 | 442 | Market data processing |
+| T+10 | 461 | Peak |
+| T+15 | 422 | Settled steady state |
+
+- Average RSS: 396 MB
+- Peak RSS: 461 MB
+- Token growth: 18,191 → 18,496 (305 new tokens, ~1,220/hour)
+- Discovery: 12 cycles, ~75s interval, ~27 new per cycle
+- Errors: 3 total (1 transient connectivity, 2 GeckoTerminal 429 rate limit)
+- Shutdown: 76 seconds (4 services timed out: sol_price, transactions, webserver, connectivity)
+- No crashes, no SIGHUP issues, no BUSY errors, no panics
+
+### Key Insight: Brief Test vs Full Run
+- Brief startup-only tests showed 246-253 MB RSS
+- Full 15-min test with all services: 396 MB average, 422 MB settled
+- Difference: ~170 MB from active services (market data caches, HTTP clients, WebSocket connections)
+- The 400 MB target is borderline — bot may exceed it under full load
+
+### Database Sizes (post-test)
+| Database | Size |
+|----------|------|
+| tokens.db | 266 MB |
+| ohlcvs.db | 175 MB |
+| rpc_stats.db | 161 MB |
+| transactions.db | 2.9 MB |
+| wallet.db | 864 KB |
+| pools.db | 96 KB |
+| Total data dir | 669 MB |
+
+### Token Name "00" Investigation
+- Tokens with symbol "00" are real on-chain Solana scam tokens, NOT a backend or frontend bug
+- The `view=all` query returns 278K tokens including all DB entries (scams, dead tokens, etc.)
+- The default filtered view returns only priced/active tokens (0 in this test since pool prices weren't calculated yet)
+- Frontend correctly renders whatever symbol the chain provides
