@@ -38,7 +38,7 @@ Living documentation describing how each major system works. These docs are the 
 |----------|-------|-------------|
 | [System Overview](architecture/overview.md) | 273 | High-level system map, reading order, module connections |
 | **Core Trading** | | |
-| [Tokens Module](architecture/tokens.md) | 1998 | Token lifecycle, database schema, caching, market data, security |
+| [Tokens Module](architecture/tokens.md) | 1936 | Token lifecycle, database schema, caching, market data, security |
 | [Pools Module](architecture/pools.md) | 910 | Pool discovery, DEX decoders, price calculation, swap integration |
 | [Positions Module](architecture/positions.md) | 805 | Position lifecycle, state machine, verification, PnL tracking |
 | [OHLCV Module](architecture/ohlcvs.md) | 814 | Candle data fetching, aggregation, caching, strategy integration |

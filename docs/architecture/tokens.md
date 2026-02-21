@@ -1,20 +1,20 @@
 # Tokens Module Architecture
 
 **Status:** Production  
-**Scale:** 281K+ tokens tracked, 10 database tables, 40+ source files  
+**Scale:** 281K+ tokens tracked, 11 database tables, 40+ source files  
 **Last Updated:** February 2026
 
 ---
 
 ## 1. Overview
 
-The Tokens module is the data foundation of ScreenerBot. It discovers tokens from 8+ external sources, enriches them with market data (prices, volumes, liquidity) from DexScreener and GeckoTerminal, security analysis from Rugcheck, and aggregated pool data. It maintains priority-based scheduling for continuous updates, implements multi-layer caching, and integrates with the filtering system to provide clean, validated token datasets for trading decisions.
+The Tokens module is the data foundation of ScreenerBot. It discovers tokens from multiple external sources, enriches them with market data (DexScreener + optional GeckoTerminal on-demand), security analysis from Rugcheck, and aggregated pool snapshot data. It maintains state-based scheduling for continuous updates, implements multi-layer caching, and integrates with the filtering system to provide clean, validated token datasets for trading decisions.
 
 **Key Capabilities:**
 - Multi-source token discovery (DexScreener, GeckoTerminal, Rugcheck, Jupiter, CoinGecko, DefiLlama)
-- Dual-source market data pipeline with configurable preference and fallback
+- Market data from DexScreener + GeckoTerminal (assembly selects preferred source + fallback; GeckoTerminal mainly via discovery/force-update due to rate limits)
 - Security assessment via Rugcheck with authority reputation tracking
-- Priority-based update scheduling (5s to 30s intervals based on token importance)
+- State-based update loops (5s to 30s for market data; plus a separate security loop)
 - Multi-tier caching (memory + DB + API) with negative caching and stale fallback
 - Authority reputation system that auto-discovers and blocks scam factories
 - Integration with filtering module for rejection tracking and analytics
@@ -42,7 +42,7 @@ src/tokens/
 ├── priorities.rs                # Priority enum (100→10), update interval mapping
 │
 ├── database/
-│   ├── schema.rs                # 10 tables + 30+ indexes, schema initialization
+│   ├── schema.rs                # 11 tables + 30+ indexes, schema initialization
 │   ├── metadata.rs              # Token identity CRUD (mint, symbol, name, decimals)
 │   ├── market.rs                # Market data CRUD (DexScreener + GeckoTerminal)
 │   ├── security.rs              # Security data CRUD (Rugcheck)
@@ -57,7 +57,7 @@ src/tokens/
 │
 ├── market/
 │   ├── mod.rs                   # Market data orchestration
-│   ├── dexscreener.rs           # DexScreener API (batch 50, 300/min, txns data)
+│   ├── dexscreener.rs           # DexScreener API (batch 30, 300/min, txns data)
 │   └── geckoterminal.rs         # GeckoTerminal API (30/min, pool_count data)
 │
 ├── pool_data/
@@ -74,7 +74,7 @@ src/tokens/
 │   ├── mod.rs                   # Update orchestration
 │   ├── core.rs                  # update_token(), update_batch(), force_update()
 │   ├── rate_limiter.rs          # RateLimitCoordinator (separate semaphores per API)
-│   └── loops.rs                 # 3 priority-based update loops (critical/high/low)
+│   └── loops.rs                 # State-based update loops (security/uninitialized/pool_sync/open_position/pool_tracked/filter_passed/background)
 │
 └── discovery.rs                 # Discovery loop (60s), 8+ sources, normalization
 ```
@@ -83,151 +83,125 @@ src/tokens/
 
 ## 3. Core Types
 
-### Token Struct (types.rs)
+Canonical type definitions live in:
 
-70+ fields grouped by category:
+- `src/tokens/types.rs` (Token, DataSource, MarketDataBundle, TokenPoolsSnapshot/Info/Sources, RugcheckData, TokenError, ApiError, ...)
+- `src/tokens/priorities.rs` (Priority enum and its integer mapping)
+
+### 3.1 `Token` (primary snapshot)
+
+`Token` is the **primary assembled token snapshot** served to the filtering pipeline, webserver, trader, and tools.
+
+Important notes:
+
+- In Rust, timestamps are `chrono::DateTime<Utc>`.
+- In SQLite, timestamps are stored as `INTEGER` (Unix seconds) and converted during assembly.
+- Token-2022 detection is **not stored on `Token`**; it is cached in `tokens/decimals.rs` (`TOKEN_2022_CACHE`).
+
+Key fields (non-exhaustive, but type-accurate):
 
 ```rust
+use chrono::{DateTime, Utc};
+
 pub struct Token {
-    // Identity (6 fields)
     pub mint: String,
     pub symbol: String,
     pub name: String,
     pub decimals: u8,
-    pub is_token_2022: bool,
-    pub token_type: String,
-
-    // Timestamps (5 fields)
-    pub first_discovered_at: Option<i64>,
-    pub metadata_last_fetched_at: Option<i64>,
-    pub market_data_last_fetched_at: Option<i64>,
-    pub security_data_last_fetched_at: Option<i64>,
-    pub blockchain_created_at: Option<i64>,
-
-    // Market Data (20+ fields)
-    pub price_usd: Option<f64>,
-    pub price_sol: Option<f64>,
-    pub market_cap: Option<f64>,
-    pub fdv: Option<f64>,
-    pub liquidity_usd: Option<f64>,
-    pub volume_5m/1h/6h/24h: Option<f64>,
-    pub price_change_5m/1h/6h/24h: Option<f64>,
-    pub txns_5m/1h/6h/24h_buys: Option<i64>,
-    pub txns_5m/1h/6h/24h_sells: Option<i64>,
-    pub pool_count: Option<i64>,
-    pub reserve_in_usd: Option<f64>,
-
-    // Pair Metadata (5 fields)
-    pub pair_address: Option<String>,
-    pub dex: Option<String>,
-    pub quote_token: Option<String>,
-    pub base_token: Option<String>,
-    pub pool_created_at: Option<i64>,
-
-    // Security (15+ fields)
-    pub security_score: Option<f64>,          // 0-100, HIGHER = MORE RISKY
-    pub security_score_normalised: Option<f64>,
-    pub security_level: Option<String>,       // Safe|Good|Moderate|Risky|Dangerous
-    pub mint_authority: Option<String>,
-    pub freeze_authority: Option<String>,
-    pub update_authority: Option<String>,
-    pub is_mutable: Option<bool>,
-    pub is_rugged: Option<bool>,
-    pub risks: Vec<SecurityRisk>,
-    pub holders: Vec<TokenHolder>,
-    pub creator_balance_pct: Option<f64>,
-    pub top_10_holders_pct: Option<f64>,
-    pub transfer_fee_pct: Option<f64>,
-
-    // Images (2 fields)
-    pub image_url: Option<String>,
-    pub header_image_url: Option<String>,
-
-    // Metadata (3 fields)
     pub data_source: DataSource,
-    pub websites: Vec<WebsiteLink>,
-    pub socials: Vec<SocialLink>,
+
+    pub first_discovered_at: DateTime<Utc>,
+    pub blockchain_created_at: Option<DateTime<Utc>>,
+    pub metadata_last_fetched_at: DateTime<Utc>,
+    pub decimals_last_fetched_at: DateTime<Utc>,
+    pub market_data_last_fetched_at: DateTime<Utc>,
+    pub security_data_last_fetched_at: Option<DateTime<Utc>>,
+    pub pool_price_last_calculated_at: DateTime<Utc>,
+    pub pool_price_last_used_pool: Option<String>,
+
+    pub price_usd: f64,
+    pub price_sol: f64,
+    pub price_native: String,
+
+    // Rugcheck normalized risk score (0-100; HIGHER = MORE RISKY)
+    pub security_score_normalised: Option<i32>,
+    pub is_rugged: bool,
+
+    pub is_blacklisted: bool,
+    pub priority: Priority,
 }
 ```
 
-### Priority Enum
+Other notable `Token` fields (see `src/tokens/types.rs` for the canonical list):
 
-```rust
-pub enum Priority {
-    OpenPosition    = 100,  // Active trades: 5s update interval
-    PoolTracked     = 75,   // Tracked by pool service: 7s
-    FilterPassed    = 60,   // Passed filters: 8s
-    Uninitialized   = 55,   // New tokens: 10s
-    Stale           = 40,   // Data getting old: 15s
-    Standard        = 25,   // Regular refresh: 20s
-    Background      = 10,   // Oldest tokens: 30s
-}
-```
+- Market metrics: `market_cap`, `fdv`, `liquidity_usd`
+- Timeframed changes/volumes: `price_change_m5/h1/h6/h24`, `volume_m5/h1/h6/h24`
+- Activity: `txns_*` buy/sell counts (DexScreener)
+- Pool metrics: `pool_count`, `reserve_in_usd`
+- Links: `websites`, `socials`
+- Security: authorities, Rugcheck scores, `security_risks`, holders, transfer-fee fields
+- Bot state: `is_blacklisted`, `priority`, plus last filtering rejection metadata (`last_rejection_*`)
 
-### Enum Types
+### 3.2 `Priority` (update scheduling)
 
-```rust
-pub enum DataSource {
-    DexScreener,
-    GeckoTerminal,
-    Rugcheck,
-    Unknown,
-}
+`Priority` is a state-based enum used for token update scheduling:
 
-pub enum ApiError {
-    NetworkError(String),
-    RateLimitExceeded,
-    InvalidResponse(String),
-    NotFound,
-    Timeout,
-    Disabled,
-}
+- `OpenPosition` (100), `PoolTracked` (75), `FilterPassed` (60), `Uninitialized` (55),
+  `Stale` (40), `Standard` (25), `Background` (10)
 
-pub enum TokenError {
-    Database(String),
-    Api(String),
-    RateLimit,
-    NotFound,
-    InvalidMint,
-    Blacklisted(String),
-    PartialFailure(Vec<(String, ApiError)>),
-}
+See: `src/tokens/priorities.rs`.
 
-pub enum SecurityLevel {
-    Safe,        // Score 80-100 (confusing naming: high score = safe in display)
-    Good,        // Score 60-79
-    Moderate,    // Score 40-59
-    Risky,       // Score 20-39
-    Dangerous,   // Score 0-19 (actually means good for filtering)
-}
-```
+### 3.3 `DataSource` (market selection)
 
-### Composite Types
+`DataSource` indicates which API’s market data is currently selected during assembly:
+
+- `DexScreener`, `GeckoTerminal`, `Rugcheck`, `Unknown`
+
+### 3.4 Market bundles
 
 ```rust
 pub struct MarketDataBundle {
     pub dexscreener: Option<DexScreenerData>,
     pub geckoterminal: Option<GeckoTerminalData>,
 }
+```
 
-pub struct SecurityBundle {
-    pub rugcheck: Option<RugcheckData>,
-    pub authorities: Option<MintAuthorities>,  // Fallback from RPC
-    pub combined_score: f64,
-}
+### 3.5 Pool snapshots
 
-pub struct TokenPoolsSnapshot {
-    pub pools: Vec<TokenPoolInfo>,
-    pub canonical_pool_address: Option<String>,
-    pub pool_data_last_fetched_at: Option<i64>,
+Pool snapshots are normalized and aggregated across sources, and keep raw payloads for debugging/UI.
+
+```rust
+use chrono::{DateTime, Utc};
+use serde_json::Value;
+
+pub struct TokenPoolSources {
+    pub dexscreener: Option<Value>,
+    pub geckoterminal: Option<Value>,
 }
 
 pub struct TokenPoolInfo {
     pub pool_address: String,
-    pub dex: String,
+    pub dex: Option<String>,
+    pub base_mint: String,
+    pub quote_mint: String,
+    pub is_sol_pair: bool,
     pub liquidity_usd: Option<f64>,
-    pub volume_24h: Option<f64>,
-    pub sources_json: Option<String>,  // Raw API payload for debugging
+    pub liquidity_token: Option<f64>,
+    pub liquidity_sol: Option<f64>,
+    pub volume_h24: Option<f64>,
+    pub price_usd: Option<f64>,
+    pub price_sol: Option<f64>,
+    pub price_native: Option<String>,
+    pub sources: TokenPoolSources,
+    pub pool_data_last_fetched_at: DateTime<Utc>,
+    pub pool_data_first_seen_at: DateTime<Utc>,
+}
+
+pub struct TokenPoolsSnapshot {
+    pub mint: String,
+    pub pools: Vec<TokenPoolInfo>,
+    pub canonical_pool_address: Option<String>,
+    pub pool_data_last_fetched_at: DateTime<Utc>,
 }
 ```
 
@@ -235,7 +209,7 @@ pub struct TokenPoolInfo {
 
 ## 4. Database Schema
 
-**10 Tables, 30+ Indexes**
+**11 Tables, 30+ Indexes**
 
 ### tokens (core metadata)
 ```sql
@@ -244,9 +218,10 @@ CREATE TABLE tokens (
     symbol TEXT,
     name TEXT,
     decimals INTEGER,
-    first_discovered_at INTEGER,
-    metadata_last_fetched_at INTEGER,
-    blockchain_created_at INTEGER
+    first_discovered_at INTEGER NOT NULL,
+    blockchain_created_at INTEGER,
+    metadata_last_fetched_at INTEGER NOT NULL,
+    decimals_last_fetched_at INTEGER NOT NULL
 );
 -- Indexes: discovered, blockchain_created, metadata_fetched, 
 --          symbol COLLATE NOCASE, name COLLATE NOCASE, discovery_mint composite
@@ -256,7 +231,7 @@ CREATE TABLE tokens (
 ```sql
 -- Stores: price_usd, price_sol, price_native, market_cap, fdv, liquidity_usd
 --         volume_5m/1h/6h/24h, price_change_*, txns_* (buys/sells)
---         pair_address, dex, quote_token, images, pair_blockchain_created_at
+--         pair_address, chain_id, dex_id, url, image_url, header_image_url, pair_blockchain_created_at
 -- Indexes: last_fetch, first_fetch, liquidity DESC
 ```
 
@@ -271,12 +246,22 @@ CREATE TABLE tokens (
 ### token_pools (aggregated pools)
 ```sql
 CREATE TABLE token_pools (
-    mint TEXT,
-    pool_address TEXT,
+    mint TEXT NOT NULL,
+    pool_address TEXT NOT NULL,
     dex TEXT,
+    base_mint TEXT NOT NULL,
+    quote_mint TEXT NOT NULL,
+    is_sol_pair INTEGER NOT NULL,
     liquidity_usd REAL,
-    volume_24h REAL,
-    sources_json TEXT,  -- JSON blob: [{source: "dexscreener", data: {...}}]
+    liquidity_token REAL,
+    liquidity_sol REAL,
+    volume_h24 REAL,
+    price_usd REAL,
+    price_sol REAL,
+    price_native TEXT,
+    sources_json TEXT,
+    pool_data_last_fetched_at INTEGER NOT NULL,
+    pool_data_first_seen_at INTEGER NOT NULL,
     PRIMARY KEY (mint, pool_address)
 );
 -- No txns: Pool aggregation, not tracking
@@ -390,7 +375,10 @@ CREATE TABLE authority_reputation (
            │
            ▼
   [2] ENRICHMENT
-      ├─ Market Data: DexScreener (batch 50, 300/min) or GeckoTerminal (30/min)
+      ├─ Market Data:
+      │   ├─ DexScreener: scheduled updates (batch <=30, 300/min) + txns fields
+      │   ├─ GeckoTerminal: discovery + force_update_token (30/min)
+      │   ├─ Assembly: chooses preferred source + fallback (cfg.tokens.preferred_market_data_source)
       │   ├─ Prices: USD, SOL, native
       │   ├─ Volumes: 5m, 1h, 6h, 24h
       │   ├─ Changes: 5m, 1h, 6h, 24h
@@ -422,9 +410,9 @@ CREATE TABLE authority_reputation (
            ▼
   [4] MONITORING
       ├─ Priority scheduling: OpenPosition (5s) → Background (30s)
-      ├─ Update loops: 3 groups (critical/high/low)
+      ├─ Update loops: 7 state-based loops (security, uninitialized, pool_sync, open_position, pool_tracked, filter_passed, background)
       ├─ Rate limiting: Separate semaphores per API
-      ├─ Error tracking: 5+ errors = permanent failure
+      ├─ Error tracking: permanent after 3 consecutive "not listed" market failures (others retry)
       └─ Force updates: API endpoint for on-demand refresh
            │
            ▼
@@ -438,7 +426,7 @@ CREATE TABLE authority_reputation (
 **Phase Details:**
 
 - **Discovery:** Tokens appear from external sources, deduplicated, blacklist-checked, inserted to DB
-- **Enrichment:** Market data fetched (dual-source), decimals resolved (RPC), security analyzed (Rugcheck), pools aggregated
+- **Enrichment:** Market data stored (DexScreener + optional GeckoTerminal), decimals resolved (RPC), security analyzed (Rugcheck), pools aggregated
 - **Filtering:** External module applies 30+ rules, rejected tokens tracked, authority reputation updated
 - **Monitoring:** Continuous updates via priority-based scheduling, rate-limited, error-tracked
 - **Cleanup:** Authority-based blacklisting (hourly), scam factory auto-discovery (5 mins), history retention
@@ -463,14 +451,18 @@ initialize()
 start()
   ├─ Create RateLimitCoordinator (shared across all loops)
   ├─ Store globally for force_update API
-  ├─ Start 7 background tasks:
-  │   ├─ [1] Rate Limiter Refill (60s interval)
-  │   ├─ [2] Critical Priority Loop (5s interval, Priority 100)
-  │   ├─ [3] High Priority Loop (8s interval, Priority 60-75)
-  │   ├─ [4] Low Priority Loop (20s interval, Priority < 60)
-  │   ├─ [5] Discovery Loop (60s interval, 8+ sources)
-  │   ├─ [6] Cleanup Loop (3600s interval, blacklist enforcement)
-  │   └─ [7] Authority Discovery (300s interval, auto-block scams)
+  ├─ Start update loops (updates::start_update_loop) — 7 tasks:
+  │   ├─ [1] Security loop (cfg.tokens.update_intervals.security_seconds, default 60s)
+  │   ├─ [2] Uninitialized seed loop (10s, fixed)
+  │   ├─ [3] Pool priority sync loop (5s, fixed)
+  │   ├─ [4] PoolTracked loop (cfg.tokens.update_intervals.pool_tracked_seconds, default 7s)
+  │   ├─ [5] OpenPosition loop (cfg.tokens.update_intervals.open_position_seconds, default 5s)
+  │   ├─ [6] FilterPassed loop (cfg.tokens.update_intervals.filter_passed_seconds, default 8s)
+  │   └─ [7] Background loop (cfg.tokens.update_intervals.background_seconds, default 30s)
+  ├─ [8] Rate Limiter Refill (60s interval)
+  ├─ [9] Discovery Loop (60s interval, sources per config)
+  ├─ [10] Cleanup Loop (3600s interval, blacklist enforcement)
+  ├─ [11] Authority Discovery (300s interval, auto-block scams)
   └─ Mark TOKENS_SYSTEM_READY = true
 
 stop()
@@ -478,44 +470,53 @@ stop()
   └─ Clear global database reference
 ```
 
-**7 Background Tasks:**
+**Background tasks (current):**
 
-1. **Rate Limiter Refill**
-   - Interval: 60 seconds
-   - Purpose: Replenish rate limit permits for all APIs
-   - Details: Calls `refill_all()` on RateLimitCoordinator
+1. **Security loop** (Rugcheck one-time fetch)
+   - Interval: `cfg.tokens.update_intervals.security_seconds` (default 60s)
+   - Purpose: Fetch Rugcheck data for tokens that don’t have it yet (1 token per cycle)
 
-2. **Critical Priority Loop**
-   - Interval: 5 seconds
-   - Targets: Priority 100 (OpenPosition)
-   - Reason: Active trades require real-time market data
+2. **Uninitialized seed loop**
+   - Interval: 10 seconds (fixed)
+   - Purpose: Seed market data for tokens without any market data (batch updates)
 
-3. **High Priority Loop**
-   - Interval: 8 seconds
-   - Targets: Priority 60-75 (FilterPassed, PoolTracked)
-   - Reason: Good tokens and tracked pools need frequent updates
+3. **Pool priority sync loop**
+   - Interval: 5 seconds (fixed)
+   - Purpose: Sync Pool service tracked mints into `Priority::PoolTracked` and demote after timeout
 
-4. **Low Priority Loop**
-   - Interval: 20-30 seconds
-   - Targets: Priority < 60 (Stale, Standard, Background)
-   - Reason: Background refresh for oldest tokens
+4. **OpenPosition loop**
+   - Interval: `cfg.tokens.update_intervals.open_position_seconds` (default 5s)
+   - Purpose: Keep tokens with active positions fresh
 
-5. **Discovery Loop**
-   - Interval: 60 seconds
-   - Initial Delay: 10 seconds
-   - Sources: DexScreener, GeckoTerminal, Rugcheck, Jupiter, CoinGecko, DefiLlama
-   - Skip Condition: Tools active (reduces RPC contention)
+5. **PoolTracked loop**
+   - Interval: `cfg.tokens.update_intervals.pool_tracked_seconds` (default 7s)
+   - Purpose: Keep pool-tracked tokens fresh
 
-6. **Cleanup Loop**
-   - Interval: 3600 seconds (hourly)
+6. **FilterPassed loop**
+   - Interval: `cfg.tokens.update_intervals.filter_passed_seconds` (default 8s)
+   - Purpose: Keep filter-passed tokens fresh
+
+7. **Background loop**
+   - Interval: `cfg.tokens.update_intervals.background_seconds` (default 30s)
+   - Purpose: Refresh oldest non-blacklisted tokens in background
+
+8. **Rate limiter refill**
+   - Interval: 60 seconds (fixed)
+   - Purpose: Adds a new minute of API permits (`RateLimitCoordinator::refill_all()`)
+   - Note: unused permits accumulate (token-bucket with effectively unbounded burst capacity)
+
+9. **Discovery loop**
+   - Interval: 60 seconds (fixed), initial delay 10 seconds
+   - Sources: Driven by `cfg.tokens.discovery.*` per-provider/per-endpoint toggles
+   - Skip Condition: Tools active (reducing RPC contention)
+
+10. **Cleanup loop**
+   - Interval: 3600 seconds (fixed)
    - Purpose: Enforce authority-based blacklist
-   - Criteria: mint_authority OR freeze_authority present
 
-7. **Authority Discovery**
-   - Interval: 300 seconds (5 minutes)
-   - Warmup Delay: 60 seconds
-   - Purpose: Auto-discover scam authorities, block entire factories
-   - Criteria: confidence >= 0.8, total_tokens >= 5
+11. **Authority discovery**
+   - Interval: 300 seconds (fixed), warmup delay 60 seconds
+   - Purpose: Auto-discover scam authorities and refresh the in-memory blocked set from DB
 
 **Startup Preloading:**
 
@@ -628,8 +629,8 @@ every 60 seconds:
 ### DexScreener Pipeline
 
 **Endpoints:**
-- Single: `GET /v1/tokens/{mint}` (deprecated, use batch)
-- Batch: `GET /v1/tokens/dexscreener:{mint1},{mint2},...` (50 per request)
+- Batch (market data): `GET /tokens/v1/solana/{mint1},{mint2},...` (max 30 per request)
+- Full pools for one token: `GET /token-pairs/v1/solana/{tokenAddress}`
 
 **Rate Limits:**
 - Batch: 300/min
@@ -643,7 +644,7 @@ every 60 seconds:
 fetch_dexscreener_data_batch(mints: Vec<String>)
   ├─ Acquire permit from RateLimitCoordinator (300/min budget)
   ├─ Check cache (30s TTL) → return if hit
-  ├─ Call API: GET /v1/tokens/dexscreener:{ids} (batch 50)
+  ├─ Call API: GET /tokens/v1/solana/{ids_csv} (batch <=30)
   ├─ Parse response → Vec<DexScreenerPool>
   ├─ Extract per mint:
   │   ├─ Prices: price_usd, price_sol, price_native
@@ -913,50 +914,33 @@ get_token_pools_snapshot(mint)
 
 ### Canonicalization Algorithm
 
-**Scoring factors:**
+Canonical selection is implemented in `tokens/pool_data/operations.rs`:
+
+- Pools are merged/deduplicated by `pool_address` (`ingest_pool_entry` + `merge_pool_info`).
+- Canonical selection (`choose_canonical_pool`) considers **SOL-paired pools only**.
+- Primary metric: `calculate_pool_metric(pool)` where:
+  - `liquidity_sol` > `liquidity_usd` > `volume_h24` (first non-`None`)
+- Tie-breaker when metrics are equal: higher `volume_h24`.
+
+This ensures the canonical pool is the most liquid SOL pair, with volume as a tie-breaker.
 
 ```rust
-fn score_pool(pool: &TokenPoolInfo) -> f64 {
-    let mut score = 0.0;
-    
-    // Primary: Liquidity (most important)
-    if let Some(liq) = pool.liquidity_usd {
-        score += liq * 100.0;  // High weight
-    }
-    
-    // Secondary: Volume (activity indicator)
-    if let Some(vol) = pool.volume_24h {
-        score += vol * 10.0;  // Medium weight
-    }
-    
-    // Tertiary: SOL pair preference (standard trading pair)
-    if pool.quote_token == "SOL" || pool.base_token == "SOL" {
-        score += 10000.0;  // Bonus for SOL pair
-    }
-    
-    // Quaternary: Recency (if timestamp available)
-    if let Some(created) = pool.created_at {
-        let age_hours = (now - created) / 3600;
-        if age_hours < 24 {
-            score += 1000.0;  // Bonus for new pools
-        }
-    }
-    
-    score
+// utils.rs
+fn calculate_pool_metric(pool: &TokenPoolInfo) -> f64 {
+    pool.liquidity_sol
+        .or(pool.liquidity_usd)
+        .or(pool.volume_h24)
+        .unwrap_or(0.0)
 }
 
-fn choose_canonical_pool(pools: Vec<TokenPoolInfo>) -> Option<String> {
+// operations.rs (simplified)
+fn choose_canonical_pool(pools: &[TokenPoolInfo]) -> Option<String> {
     pools.iter()
-        .max_by(|a, b| score_pool(a).partial_cmp(&score_pool(b)).unwrap())
+        .filter(|p| p.is_sol_pair)
+        .max_by(|a, b| calculate_pool_metric(a).partial_cmp(&calculate_pool_metric(b)).unwrap())
         .map(|p| p.pool_address.clone())
 }
 ```
-
-**Heuristics:**
-- Prefer high liquidity pools (most tradeable)
-- Prefer high volume pools (active trading)
-- Prefer SOL pairs (standard, less slippage)
-- Prefer newer pools if similar liquidity (fresher data)
 
 ### Storage & Caching
 
@@ -973,11 +957,24 @@ replace_token_pools(snapshot: TokenPoolsSnapshot)
 **Cache Strategy (pool_data/cache.rs):**
 
 ```rust
-POOL_CACHE {
+TOKEN_POOLS_CACHE {
     type: Moka sync cache,
-    capacity: 1000 entries,
-    TTL: 60 seconds,
-    stale_fallback: true  // Critical feature
+    max_capacity: 5000 entries,
+    time_to_live: 120 seconds,         // cache retention
+    freshness_ttl: 60 seconds,         // "fresh" check (TOKEN_POOLS_TTL_SECS)
+    stale_fallback: true               // persisted snapshot + allow_stale path
+}
+
+POOL_REFRESH_INFLIGHT {
+    type: AsyncMutex<HashMap<mint, Notify>>,
+    purpose: single-flight refresh per mint (avoid duplicate refresh storms)
+}
+
+POOL_PREFETCH_STATE {
+    type: Moka sync cache,
+    max_capacity: 5000 entries,
+    time_to_live: 60 seconds,
+    purpose: debounce background refresh scheduling
 }
 
 get_snapshot(mint)
@@ -1007,50 +1004,40 @@ get_snapshot_allow_stale(mint)
 
 ### Core Update Functions
 
-**update_token(mint, db, coordinator):**
+**update_token(mint, db, coordinator):** (scheduled market update)
 
 ```rust
 update_token(mint: String, db: &TokenDatabase, coordinator: &RateLimitCoordinator)
-  ├─ Fetch market data (DexScreener primary, respects preference config)
-  ├─ Fetch security data (Rugcheck)
-  ├─ Parallel execution (both can run simultaneously)
-  ├─ Store to DB:
-  │   ├─ upsert_dexscreener_data() or upsert_geckoterminal_data()
-  │   └─ upsert_rugcheck_data()
-  ├─ Update tracking:
-  │   ├─ market_data_last_updated: now
-  │   ├─ security_data_last_updated: now
-  │   ├─ market_error_count: +1 if failed
-  │   └─ security_error_count: +1 if failed
-  └─ Return UpdateResult {
-      success: bool,
-      market_data: Option<Result<...>>,
-      security_data: Option<Result<...>>,
-      failures: Vec<(String, ApiError)>
-  }
+  ├─ Acquire DexScreener batch permit (1 request budget)
+  ├─ Fetch market data (DexScreener only)
+  ├─ Mark market_data_updated on success
+  └─ Return UpdateResult { mint, successes, failures }
+
+Note: Security data (Rugcheck) is fetched by a separate loop (`update_security_data`) and is not part of every market update cycle.
 ```
 
 **update_tokens_batch(mints, db, coordinator):**
 
 ```rust
 update_tokens_batch(mints: Vec<String>, ...)
-  ├─ Split into chunks of 50 (DexScreener batch limit)
-  ├─ Fetch market batch (single API call per 50 mints)
-  ├─ Fetch security individual (parallel, rate-limited)
-  ├─ Transaction-based DB updates (all or nothing)
-  ├─ Update tracking for all tokens
-  └─ Return count of successful updates
+  ├─ Filter out in-flight mints (shared across loops)
+  ├─ Fetch DexScreener market batch (single API call per <=30 mints)
+  ├─ Mark market_data_updated for tokens with market data
+  └─ Return Vec<UpdateResult> (one per mint)
 ```
 
 **force_update_token(mint, db, coordinator):**
 
 ```rust
 force_update_token(mint: String, ...)
-  ├─ Bypass normal scheduling queue
-  ├─ Acquire rate limit permit (respects coordinator)
-  ├─ Fetch market + security immediately
-  ├─ Store to DB
-  └─ Return UpdateResult
+  ├─ Bypass normal scheduling queue (user-initiated)
+  ├─ Fetch in parallel (tokio::join!):
+  │   ├─ DexScreener (market)
+  │   ├─ GeckoTerminal (market)
+  │   └─ Rugcheck (security)
+  ├─ Consume permits only on success (permit.forget())
+  ├─ Mark market_data_updated if any market source succeeds
+  └─ Return UpdateResult { successes, failures }
   
 // Used by:
 // - Token detail page (user-triggered refresh)
@@ -1064,15 +1051,21 @@ force_update_token(mint: String, ...)
 
 ```rust
 pub struct RateLimitCoordinator {
-    dexscreener_batch: Semaphore,     // 300/min
-    dexscreener_profiles: Semaphore,  // 60/min
-    dexscreener_boosts: Semaphore,    // 60/min
-    dexscreener_pools: Semaphore,     // 300/min
-    geckoterminal: Semaphore,         // 30/min (configurable)
-    rugcheck: Semaphore,              // 60/min (configurable)
-    
-    // Budgets for refill
-    budgets: HashMap<String, u32>,
+    // DexScreener endpoints (separate limits per endpoint)
+    dexscreener_batch_sem: Arc<Semaphore>,     // 300/min
+    dexscreener_profiles_sem: Arc<Semaphore>,  // 60/min
+    dexscreener_boosts_sem: Arc<Semaphore>,    // 60/min
+    dexscreener_pools_sem: Arc<Semaphore>,     // 300/min
+    dexscreener_batch_budget: usize,
+    dexscreener_profiles_budget: usize,
+    dexscreener_boosts_budget: usize,
+    dexscreener_pools_budget: usize,
+
+    // Other API endpoints (budgets can be overridden by config)
+    geckoterminal_sem: Arc<Semaphore>,         // default 30/min
+    rugcheck_sem: Arc<Semaphore>,              // default 60/min
+    geckoterminal_budget: usize,
+    rugcheck_budget: usize,
 }
 
 // Separate semaphores prevent blocking:
@@ -1084,89 +1077,57 @@ pub struct RateLimitCoordinator {
 **Refill Mechanism:**
 
 ```rust
-// Background task every 60 seconds:
 refill_all()
-  ├─ For each semaphore:
-  │   ├─ Calculate used permits: budget - available
-  │   ├─ Add back used permits: semaphore.add_permits(used)
-  │   └─ Result: Full budget restored
-  └─ Log refill stats
+  ├─ Add budgets back to each semaphore once per minute
+  └─ Note: unused permits accumulate (carryover burst behavior)
 ```
 
-**Acquire Patterns:**
-
-```rust
-// Blocking acquire (waits for permit):
-coordinator.acquire_dexscreener_batch().await?;
-
-// Try acquire (non-blocking, returns error if unavailable):
-coordinator.try_acquire_rugcheck()?;
-
-// Acquire with timeout:
-timeout(Duration::from_secs(30), coordinator.acquire_geckoterminal()).await?;
-```
+Permits are only consumed when requests succeed (`permit.forget()`); on error the permit is dropped and returns to the semaphore.
 
 ### Update Loops
 
-**3 Priority Groups (updates/loops.rs):**
+**State-based update loops (updates/loops.rs):**
 
 ```rust
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         UPDATE LOOPS                                    │
 └─────────────────────────────────────────────────────────────────────────┘
 
-CRITICAL PRIORITY LOOP (5s interval)
-  ├─ Targets: Priority >= 100 (OpenPosition)
-  ├─ Query: ORDER BY priority DESC, market_data_last_updated ASC LIMIT 50
-  ├─ Reason: Active trades need real-time updates
-  └─ Max rate: ~12 per minute
+SECURITY LOOP (cfg.tokens.update_intervals.security_seconds, default 60s)
+  ├─ Targets: tokens without Rugcheck data (1 token per cycle)
+  └─ Purpose: one-time security fetch to avoid large backlogs
 
-HIGH PRIORITY LOOP (8s interval)
-  ├─ Targets: Priority 60-75 (FilterPassed, PoolTracked)
-  ├─ Query: ORDER BY priority DESC, market_data_last_updated ASC LIMIT 50
-  ├─ Reason: Good tokens and tracked pools need frequent updates
-  └─ Max rate: ~7.5 per minute
+UNINITIALIZED SEED LOOP (10s fixed)
+  ├─ Targets: tokens without market data (batch size 30)
+  └─ Purpose: seed market data quickly after discovery
 
-LOW PRIORITY LOOP (20s interval)
-  ├─ Targets: Priority < 60 (Stale, Standard, Background)
-  ├─ Query: ORDER BY priority DESC, market_data_last_updated ASC LIMIT 50
-  ├─ Reason: Background refresh for oldest tokens
-  └─ Max rate: ~3 per minute
+POOL PRIORITY SYNC LOOP (5s fixed)
+  ├─ Targets: pools::get_available_tokens()
+  └─ Purpose: promote/demote PoolTracked priority based on pool service state
+
+OPEN POSITION LOOP (cfg.tokens.update_intervals.open_position_seconds, default 5s)
+  ├─ Targets: Priority::OpenPosition (limit ~200)
+  └─ Updates: chunks of 30 via update_tokens_batch (join_all for concurrency)
+
+POOL TRACKED LOOP (cfg.tokens.update_intervals.pool_tracked_seconds, default 7s)
+  ├─ Targets: Priority::PoolTracked (limit ~200; process up to ~90)
+  └─ Updates: chunks of 30 via update_tokens_batch
+
+FILTER PASSED LOOP (cfg.tokens.update_intervals.filter_passed_seconds, default 8s)
+  ├─ Targets: Priority::FilterPassed (limit ~200; process up to ~60)
+  └─ Updates: chunks of 30 via update_tokens_batch
+
+BACKGROUND LOOP (cfg.tokens.update_intervals.background_seconds, default 30s)
+  ├─ Targets: oldest non-blacklisted tokens (limit 30)
+  └─ Updates: one batch via update_tokens_batch
 ```
 
-**Loop Logic:**
+All loops share the same invariants:
 
-```rust
-loop {
-    // 1. Query tokens by priority + staleness
-    let tokens = query_tokens_for_update(priority_range, limit: 50);
-    
-    // 2. Batch update (50 per DexScreener call)
-    let results = update_tokens_batch(tokens, db, coordinator);
-    
-    // 3. Update tracking for all
-    for (mint, result) in results {
-        update_tracking_info(mint, result);
-    }
-    
-    // 4. Sleep until next interval
-    sleep(interval).await;
-    
-    // 5. Repeat until shutdown
-    if !TOKENS_SYSTEM_READY.load() { break; }
-}
-```
-
-**Stale Data Handling:**
-
-```rust
-// In query:
-WHERE market_data_last_updated < (now - stale_threshold)
-  OR market_data_last_updated IS NULL
-
-// Stale threshold: configurable (default 15 minutes)
-// If token hasn't updated in 15+ mins → priority bumped to Stale (40)
-```
+- They skip work while tools are active (`are_tools_active()`) to reduce RPC contention.
+- They avoid duplicate fetches using a shared in-flight set across loops.
+- They batch market updates in chunks of **30** for the DexScreener `/tokens/v1` limit.
+- They avoid wasting resources on permanently-not-listed tokens via the market failure handler.
 
 ### Error Tracking
 
@@ -1182,33 +1143,24 @@ last_error_at: INTEGER
 
 **Error Threshold:**
 
-```rust
-if market_error_count >= 5 {
-    // Mark as permanent failure
-    // Stop retrying updates
-    // Log: "Token {mint} has 5+ market errors, skipping"
-    return;
-}
-```
+**Permanent failure threshold (market data):**
 
-**Error Types:**
+Market failures are classified in `updates/helpers.rs`:
 
-```rust
-enum ApiError {
-    NetworkError(String),    // Transient, retry
-    RateLimitExceeded,       // Transient, retry after refill
-    InvalidResponse(String), // Permanent, stop retrying
-    NotFound,                // Permanent, stop retrying
-    Timeout,                 // Transient, retry
-    Disabled,                // Config-based, skip
-}
-```
+- If **all** failures are "not listed" style → `error_type="not_listed"`
+- Otherwise → `error_type="temporary"`
+
+Tokens are marked permanently failed for market updates when:
+
+- `error_type == "not_listed"` AND `error_count >= 3` (`PERMANENT_FAILURE_THRESHOLD`)
+
+This prevents wasting budget on mints that will never have market data.
 
 ---
 
 ## 12. Caching Architecture
 
-**7 Cache Layers:**
+**Core caches (by subsystem):**
 
 ### Memory Caches
 
@@ -1244,7 +1196,7 @@ Impact: Avoid repeated expensive RPC calls for invalid/burned tokens
 ```rust
 Type: Moka sync cache
 Capacity: 100,000 entries
-TTL: Infinite (refreshed from DB)
+TTL: Infinite
 Population: Side effect of decimals.rs RPC calls (zero extra cost)
 Usage: Filtering checks authorities without DB/RPC
 ```
@@ -1289,12 +1241,13 @@ Purpose: Cache security data (updates infrequently)
 Rationale: Security assessments rarely change, longer cache acceptable
 ```
 
-**9. POOL_CACHE (pool_data/cache.rs)**
+**9. TOKEN_POOLS_CACHE (pool_data/cache.rs)**
 ```rust
 Type: Moka sync cache
-Capacity: 1,000 entries
-TTL: 60 seconds
-Stale Fallback: Yes (critical feature)
+Capacity: 5,000 entries
+TTL (retention): 120 seconds
+Freshness: 60 seconds (snapshot considered "fresh")
+Stale Fallback: Yes (persisted snapshot + allow_stale path)
 Purpose: Cache aggregated pool snapshots
 Usage: Pool service, trading decisions
 ```
@@ -1333,24 +1286,15 @@ match fetch_decimals_from_rpc(&mint).await {
 
 **Stale Fallback Pattern:**
 ```rust
-// Problem: API downtime breaks pool tracking
-// Solution: Accept stale data if fresh fetch fails
+// Problem: API downtime breaks pool snapshot retrieval
+// Solution: Allow a stale persisted snapshot when a fresh refresh fails
 
-match fetch_fresh_pools(&mint).await {
-    Ok(pools) => {
-        POOL_CACHE.insert(mint, pools.clone());
-        Ok(pools)
-    }
-    Err(e) => {
-        // Try DB for stale data
-        if let Ok(stale) = get_token_pools(&mint) {
-            warn!("Using stale pool data for {}", mint);
-            Ok(stale) // Better than nothing
-        } else {
-            Err(e)
-        }
-    }
-}
+// tokens::pool_data::cache.rs
+get_snapshot_allow_stale(mint)
+  ├─ use fresh in-memory cache if available
+  ├─ otherwise attempt refresh from APIs
+  │   └─ on refresh error: return persisted snapshot if available
+  └─ store snapshot back into cache when possible
 ```
 
 **ArcSwap Pattern (authority_cache.rs):**
@@ -1858,17 +1802,11 @@ last_rejection_at                // Filtering result
 blockchain_created_at            // From on-chain data
 ```
 
-**5. Error Threshold for Permanent Failure**
-```rust
-// Pattern: Stop retrying after N failures
-fn should_update_token(tracking: &UpdateTrackingInfo) -> bool {
-    if tracking.market_error_count >= 5 {
-        log::debug!("Skipping {}: 5+ errors", tracking.mint);
-        return false;  // Permanent failure, stop wasting resources
-    }
-    true
-}
-```
+**5. Permanent failure guard (market data)**
+
+- Implemented in `updates/helpers.rs::handle_market_failure()`
+- Only `"not_listed"` market failures contribute to permanent status
+- Threshold: `PERMANENT_FAILURE_THRESHOLD = 3`
 
 ### Common Pitfalls
 
@@ -1975,9 +1913,9 @@ let tokens = get_all_tokens_for_filtering_async().await?;
 **Tokens Module = Data Foundation**
 
 - **Discovery:** 8+ sources → 281K+ tokens tracked
-- **Enrichment:** Dual-source market data + security analysis + pool aggregation
-- **Scheduling:** Priority-based updates (5s-30s) based on token importance
-- **Caching:** 10-layer cache hierarchy (memory + DB + API)
+- **Enrichment:** Market data (DexScreener + optional GeckoTerminal) + Rugcheck security + pool snapshot aggregation
+- **Scheduling:** State-based update loops (5s-30s market loops + separate security loop)
+- **Caching:** Multiple bounded caches (memory + DB + API) with negative caching and stale fallback
 - **Integration:** Powers filtering, pool tracking, trading decisions
 - **Performance:** Batch operations, negative caching, stale fallback, N+1 prevention
 - **Resilience:** Error tracking, rate limiting, fallback strategies
@@ -1985,12 +1923,12 @@ let tokens = get_all_tokens_for_filtering_async().await?;
 
 **Key Metrics:**
 - 281,000+ tokens tracked
-- 10 database tables, 30+ indexes
+- 11 database tables, 30+ indexes
 - 40+ source files
 - 8+ discovery sources
-- 3 update loops (critical/high/low priority)
-- 7 background tasks
-- 10 cache layers
+- 7 update loops (state-based)
+- 11 background tasks (current)
+- Multiple bounded caches (decimals/market/security/pools/authorities + snapshot stores)
 - 50+ async API wrappers
 
 ---
