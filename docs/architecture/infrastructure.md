@@ -1,328 +1,807 @@
 # Infrastructure Modules — Architecture
 
-> ScreenerBot Foundation: Database, Errors, Events, Logger, Connectivity, Actions — February 2026
+> ScreenerBot foundation: SQLite tuning + maintenance, structured errors, persistent events, logging, connectivity monitoring, and action progress tracking — February 2026
 
 ---
 
 ## Table of Contents
 
 1. [Overview](#1-overview)
-2. [Database](#2-database)
-3. [Errors](#3-errors)
-4. [Events](#4-events)
-5. [Logger](#5-logger)
-6. [Connectivity](#6-connectivity)
-7. [Actions](#7-actions)
-8. [Initialization Order](#8-initialization-order)
+2. [Database (`database`)](#2-database-database)
+3. [Errors (`errors`)](#3-errors-errors)
+4. [Events (`events`)](#4-events-events)
+5. [Logger (`logger`)](#5-logger-logger)
+6. [Connectivity (`connectivity`)](#6-connectivity-connectivity)
+7. [Actions (`actions`)](#7-actions-actions)
+8. [Initialization Order (where these start)](#8-initialization-order-where-these-start)
 9. [Cross-Module Dependencies](#9-cross-module-dependencies)
 
 ---
 
 ## 1. Overview
 
-Six foundational modules that all other modules depend on. Grouped here because each is small (2-8 files) but essential.
+ScreenerBot has a set of "infrastructure" modules that everything else builds on.
 
-| Module | Files | Lines | Purpose |
-|--------|-------|-------|---------|
-| database | 3 | 643 | SQLite PRAGMA config, vacuum, WAL |
-| errors | 2 | 1,407 | Error type hierarchy |
-| events | 4 | 2,604 | Persistent event recording |
-| logger | 8 | 1,506 | Structured logging |
-| connectivity | 13 | 1,678 | Endpoint health monitoring |
-| actions | 5 | 2,073 | Trade progress tracking |
+These modules are not "business logic" (tokens, pools, trader, swaps, ...), but they are
+critical because they define:
+
+- how *every* SQLite database connection is configured (PRAGMAs, cache, WAL)
+- how long-running processes keep databases healthy (vacuum/checkpoint cycles)
+- how errors are represented and categorized
+- how the bot persists an "audit trail" of important state changes (events)
+- how logs are formatted, filtered, and written to disk
+- how external endpoints are monitored (internet, RPC, APIs)
+- how multi-step operations expose progress to the dashboard (actions + SSE)
+
+This doc groups these foundations together because they frequently interact:
+
+- Connectivity uses Events to record endpoint state transitions.
+- Actions are stored in SQLite (via Database PRAGMAs) and streamed to Webserver via SSE.
+- Logger is used by every other module (including infrastructure itself).
 
 ---
 
-## 2. Database
+## 2. Database (`database`)
 
-**Files:** `mod.rs`, `configure.rs`, `maintenance.rs`
+**Files:**
 
-Provides SQLite connection configuration and maintenance — not a database itself, but the shared PRAGMA setup used by all 13 databases.
+- `src/database/mod.rs`
+- `src/database/configure.rs`
+- `src/database/maintenance.rs`
 
-### DbPreset
+The `database` module is *not* a database. It provides:
 
-| Preset | Cache Pages | mmap | Used By |
-|--------|------------|------|---------|
-| `Hot` | 5000 | 256 MB | tokens.db, transactions.db |
-| `Standard` | 2000 | 0 | events.db, actions.db, positions.db, etc. |
-| `Cold` | 500 | 0 | tools.db, strategies.db, rpc_stats.db |
+1. **Standardized SQLite connection PRAGMAs** (`configure_connection`)
+2. **Per-database tuning presets** (`DbPreset`, `DbConfig`, and `*_DB` constants)
+3. A **global background maintenance loop** that fixes and maintains databases on disk
+   (auto-vacuum migration, incremental vacuum, WAL checkpoint).
 
-### PRAGMA Configuration
+### 2.1 Why `with_init()` matters (r2d2 + SQLite)
 
-Applied to every connection via r2d2 `with_init()`:
+ScreenerBot uses `r2d2_sqlite::SqliteConnectionManager` pools for most databases.
+
+SQLite PRAGMAs are **connection-local state**.
+If you only run PRAGMAs once during DB initialization, recycled connections can
+silently drift from the expected config.
+
+Because of that, every pool is created as:
+
+```rust
+SqliteConnectionManager::file(&path)
+  .with_init(|c| database::configure_connection(c, database::SOME_DB_CONST))
+```
+
+This guarantees that **every connection checkout** applies the same baseline settings.
+
+### 2.2 Workload presets: `DbPreset` + `DbConfig`
+
+**File:** `src/database/configure.rs`
+
+`DbPreset` captures "how hot" a database is expected to be:
+
+- `Hot` — high-frequency reads/writes (e.g., tokens, transactions)
+- `Standard` — moderate traffic (events, actions, positions, wallet monitor, ohlcvs)
+- `Cold` — infrequent access (tools, strategies, wallets list, rpc_stats, AI DBs)
+
+`DbConfig` = `{ preset, cache_size override, mmap_size override }`:
+
+- `cache_size` is expressed in **pages** (SQLite default page size is typically 4KB)
+- `mmap_size` is expressed in **bytes**
+
+### 2.3 Standard PRAGMAs applied to *every* connection
+
+**File:** `src/database/configure.rs`
+
+`configure_connection(conn, cfg)` applies:
 
 ```sql
 PRAGMA journal_mode = WAL;
-PRAGMA synchronous = NORMAL;
-PRAGMA cache_size = -{preset_value};
-PRAGMA mmap_size = {preset_value};
-PRAGMA temp_store = MEMORY;
+PRAGMA synchronous  = NORMAL;
+PRAGMA cache_size   = <pages>;
+PRAGMA temp_store   = MEMORY;
+PRAGMA mmap_size    = <bytes>;
+PRAGMA foreign_keys = 1;
 PRAGMA busy_timeout = 5000;
+PRAGMA auto_vacuum  = INCREMENTAL;
 ```
 
-### Maintenance
+Notes:
 
-| Task | Interval | Purpose |
-|------|----------|---------|
-| WAL checkpoint (TRUNCATE) | 1 hour | Prevent WAL growth |
-| Incremental vacuum | 6 hours | Reclaim freed pages |
-| Auto-vacuum mode | Once (migration) | Enable INCREMENTAL mode |
+- `cache_size` is set as a **page count** (not negative KiB form).
+- `auto_vacuum=INCREMENTAL` here configures the connection, but the auto-vacuum mode
+  is ultimately stored in the database file header; existing DBs can require a one-time
+  conversion (see maintenance task).
+
+### 2.4 Per-database configuration constants
+
+**File:** `src/database/configure.rs`
+
+The module defines DB-specific configs used by each database pool.
+Examples:
+
+- `TOKENS_DB: Hot`
+- `TRANSACTIONS_DB: Hot` (+ cache override)
+- `EVENTS_WRITE_DB` / `EVENTS_READ_DB` (split pools; read side enables mmap)
+- `ACTIONS_WRITE_DB` / `ACTIONS_READ_DB`
+- `WALLET_MONITOR_DB` (Standard + mmap)
+- `RPC_STATS_DB`, `AI_DB`, `AI_CHAT_DB` (Cold)
+
+This keeps tuning decisions centralized and consistent across the codebase.
+
+### 2.5 Global database maintenance loop
+
+**File:** `src/database/maintenance.rs`
+
+`start_maintenance_task()` runs forever and performs two categories of work:
+
+#### 2.5.1 Path discovery (only operate on DBs that exist)
+
+`get_all_db_paths()` returns a fixed set of "known databases" and filters to those
+whose files currently exist on disk:
+
+- `tokens.db`
+- `transactions.db`
+- `positions.db`
+- `wallet.db`
+- `events.db`
+- `pools.db`
+- `strategies.db`
+- `ohlcvs.db`
+- `actions.db`
+- `tools.db`
+- `ai.db`
+- `ai_chat.db`
+- `rpc_stats.db` (resolved as `data_directory/rpc_stats.db`)
+
+#### 2.5.2 One-time auto-vacuum migration
+
+After a 60s startup delay, the task runs `ensure_auto_vacuum_mode(path)` on every DB:
+
+1. Reads `PRAGMA auto_vacuum`:
+   - `0 = NONE`, `1 = FULL`, `2 = INCREMENTAL`
+2. If the DB is not already `INCREMENTAL`:
+   - sets `PRAGMA auto_vacuum = 2`
+   - runs a full `VACUUM;` rewrite to convert the database file header
+
+This is intentionally heavy and runs only once per startup cycle.
+
+#### 2.5.3 Periodic maintenance cycles (two independent timers)
+
+After migration, two `tokio::time::interval(...)` loops run concurrently using
+`tokio::select!`:
+
+- **Incremental vacuum cycle**:
+  - interval: `cfg.maintenance.vacuum_interval_secs` (min 1 hour enforced)
+  - runs `run_incremental_vacuum(path, 500)` per DB
+    - 500 pages ~= ~2MB (assuming 4KB pages)
+- **WAL checkpoint cycle**:
+  - interval: `cfg.maintenance.wal_checkpoint_interval_secs` (min 5 minutes enforced)
+  - runs `run_wal_checkpoint(path)` per DB
+    - only performs a checkpoint if `journal_mode == wal`
+    - uses `wal_checkpoint = TRUNCATE` to reset the WAL file to ~0 bytes
+
+All heavy SQLite work is run via `spawn_blocking` to avoid stalling the async runtime.
 
 ---
 
-## 3. Errors
+## 3. Errors (`errors`)
 
-**Files:** `mod.rs` (456 lines), `blockchain.rs` (894 lines)
+**Files:**
 
-### ScreenerBotError (Top-Level)
+- `src/errors/mod.rs`
+- `src/errors/blockchain.rs`
+
+ScreenerBot uses structured errors so that:
+
+- logs can present human-friendly messages (`Display`)
+- retry/handling decisions can be made based on *type*, not string matching
+- Solana-specific failures (confirmation timeouts, blockhash expired, instruction error)
+  are represented explicitly
+
+### 3.1 Top-level error type: `ScreenerBotError`
+
+**File:** `src/errors/mod.rs`
 
 ```rust
 pub enum ScreenerBotError {
-    Blockchain(BlockchainError),
-    Network(NetworkError),
-    RpcProvider(RpcProviderError),
-    Configuration(ConfigurationError),
-    Data(DataError),
-    Position(PositionError),
-    RateLimit(RateLimitError),
+  Blockchain(BlockchainError),
+  Network(NetworkError),
+  RpcProvider(RpcProviderError),
+  Configuration(ConfigurationError),
+  Data(DataError),
+  Position(PositionError),
+  RateLimit(RateLimitError),
 }
 ```
 
-### BlockchainError (23 variants)
+All variants implement `Display` and the enum implements `std::error::Error`.
 
-Solana-specific errors: `BlockNotFound`, `SlotBehind`, `BlockhashExpired`, `AccountNotFound`, `InsufficientBalance`, `TransactionDropped`, `InstructionError`, `ContractViolation`, `ProgramError`, etc.
+### 3.2 Error conversions (migration convenience)
 
-### Builder Functions
+**File:** `src/errors/mod.rs`
 
-```rust
-ScreenerBotError::invalid_amount(msg)
-ScreenerBotError::network_error(msg)
-ScreenerBotError::signing_error(msg)
-ScreenerBotError::api_error(msg)
-ScreenerBotError::insufficient_balance(msg)
-```
+To reduce boilerplate during migration from older string-based errors:
 
-All implement `Display` for human-readable logging.
+- `From<String>` and `From<&str>` map to `NetworkError::Generic`
+- `From<reqwest::Error>` maps to `NetworkError::Generic { message: ... }`
+- `From<serde_json::Error>` maps to `DataError::ParseError { data_type: "JSON", ... }`
 
----
+### 3.3 Builder helpers (backward-compatible constructors)
 
-## 4. Events
+**File:** `src/errors/mod.rs`
 
-**Files:** `mod.rs`, `database.rs`, `maintenance.rs`, `types.rs`
+`impl ScreenerBotError { ... }` includes helpers like:
 
-Persistent event recording system with 15 categories, broadcast channel for real-time SSE, and 30-day retention.
+- `invalid_amount(amount, reason)`
+- `network_error(message)`
+- `api_error(message)` (maps to `RpcProviderError::Generic`)
+- `insufficient_balance(message)` (maps to `BlockchainError::InsufficientBalance` with placeholders)
 
-### Event Structure
+These are migration helpers: they preserve old callsites while moving toward structured types.
 
-```rust
-pub struct Event {
-    id: Option<i64>,
-    event_time: DateTime<Utc>,
-    category: EventCategory,
-    subtype: Option<String>,
-    severity: Severity,              // Info, Warn, Error, Debug
-    mint: Option<String>,
-    reference_id: Option<String>,    // tx sig, pool addr
-    message_short: Option<String>,   // Brief human-readable summary
-    json_payload: Option<Value>,     // Structured JSON data
-}
-```
+### 3.4 Solana-specific structured failures (`blockchain.rs`)
 
-### EventCategory (15 types)
+**File:** `src/errors/blockchain.rs`
 
-`Swap`, `Transaction`, `Pool`, `Token`, `System`, `Position`, `Wallet`, `Trader`, `Ohlcv`, `Rpc`, `Api`, `Security`, `Connectivity`, `Filtering`, `ScheduledTask`
+This file goes beyond a flat enum and includes a classification system:
 
-### Architecture
+- `FailureType`: `Permanent | Temporary | Uncertain`
+- `SolanaTransactionError`: decoded, structured transaction error details
+- `BlockchainError`: strongly typed Solana failure cases
+- additional metadata models:
+  - `CommitmentLevel`
+  - `CongestionLevel`
+  - `ErrorSeverity`
+  - `RecoveryStrategy`
 
-```
-record(event) → mpsc::channel → Writer Task → batch(100 or 1s) → SQLite
-                                     ↓
-                              broadcast::channel → SSE subscribers
-```
+Key design point:
 
-### Public API
-
-| Function | Purpose |
-|----------|---------|
-| `init()` | Create DB, start writer task |
-| `record(event)` | Non-blocking queue |
-| `recent(category, limit)` | Query by category |
-| `by_mint(mint, limit)` | Query by token |
-| `subscribe()` | Broadcast receiver for SSE |
-| `cleanup_old_events()` | Delete >30 days |
-
-### Database
-
-**Table:** `events` in `events.db`  
-**Indexes:** `event_time`, `(category, event_time)`, `mint`, `reference_id`
+- `BlockchainError` has methods like `get_severity()` that allow higher-level systems
+  (transaction verification, retries, swap execution) to make consistent decisions.
 
 ---
 
-## 5. Logger
+## 4. Events (`events`)
 
-**Files:** `mod.rs`, `core.rs`, `format.rs`, `config.rs`, `file.rs`, `tags.rs`, `levels.rs`, `special.rs`
+**Files:**
 
-Structured logging with 49 module tags, CLI-configurable debug flags, and timestamp-based file rotation.
+- `src/events/mod.rs`
+- `src/events/types.rs`
+- `src/events/database.rs`
+- `src/events/maintenance.rs`
 
-### Log Levels
+Events are an "audit log" of structured state changes (trades, transactions, filtering decisions,
+connectivity transitions, system warnings, ...).
 
+Events complement (but do not replace) `logger`:
+
+- **Logger**: optimized for human reading and realtime debugging.
+- **Events**: optimized for persistence, querying, metrics, and dashboard display.
+
+### 4.1 Global event system: storage + fanout
+
+**File:** `src/events/mod.rs`
+
+Core global components:
+
+- `EVENTS_DB: OnceLock<Arc<EventsDatabase>>`
+- `EVENT_WRITER: LazyLock<Arc<Mutex<Option<EventWriter>>>>`
+  - wraps an `mpsc::Sender<Event>` + join handle for the writer task
+- `EVENTS_BROADCAST_TX: OnceLock<broadcast::Sender<Event>>`
+- `EVENTS_CACHE: LazyLock<Arc<RwLock<VecDeque<Event>>>>` (recent-events ring buffer)
+
+Capacity limits (important for memory safety under load):
+
+- incoming channel: `EVENT_CHANNEL_CAPACITY = 10000`
+- broadcast channel: `broadcast::channel::<Event>(5000)`
+- in-memory cache: `EVENTS_CACHE_CAPACITY = 5000`
+
+### 4.2 Initialization (`events::init`)
+
+`events::init()`:
+
+1. Creates `EventsDatabase::new()` (events.db with split pools)
+2. Sets `EVENTS_DB`
+3. Creates the broadcast channel and sets `EVENTS_BROADCAST_TX`
+4. Creates `mpsc::channel(EVENT_CHANNEL_CAPACITY)`
+5. Spawns `event_writer_task(receiver, db)`
+
+If `events::init()` is called multiple times, it short-circuits (idempotent).
+
+In the normal bot startup path, `events::init()` is invoked by `EventsService`
+(`src/services/implementations/events_service.rs`). That service is only enabled when:
+
+- `global::is_initialization_complete() == true`
+- `cfg.events.enabled == true`
+
+So in initialization mode (no configured bot yet), the events system is typically not started.
+
+### 4.3 Recording API: `record` vs `record_safe`
+
+**File:** `src/events/mod.rs`
+
+- `record(event) -> Result<(), String>`
+  - If `cfg.events.enabled == false`, it returns `Ok(())` silently.
+  - Otherwise it sends to the writer channel (awaits send).
+- `record_safe(event)`
+  - Same config gating
+  - Logs a warning if recording fails instead of propagating the error.
+
+This is intentional: event recording should never bring down a trading bot.
+
+### 4.4 Writer pipeline (batching + cache + broadcast)
+
+**File:** `src/events/mod.rs`
+
+The writer task batches:
+
+- `BATCH_SIZE = 100`
+- `BATCH_TIMEOUT_MS = 1000`
+
+Pseudo-flow:
+
+```text
+record() -> mpsc::Sender<Event> -> event_writer_task()
+  - collect until 100 events OR 1s timeout
+  - db.insert_events(&mut batch)
+  - push_to_cache_and_broadcast(batch)
 ```
-Error → Warning → Info → Debug → Verbose
+
+Important nuance:
+
+- `push_to_cache_and_broadcast` runs even if DB insertion fails.
+  This keeps realtime UI/broadcast behavior consistent, but can cause divergence
+  between the dashboard live stream and the persisted DB during failures.
+  (The DB insertion error is logged by the writer task.)
+
+### 4.5 Database schema and indexes (`events.db`)
+
+**File:** `src/events/database.rs`
+
+Table:
+
+```sql
+CREATE TABLE events (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  event_time    TEXT NOT NULL,
+  category      TEXT NOT NULL,
+  subtype       TEXT,
+  severity      TEXT NOT NULL,
+  mint          TEXT,
+  reference_id  TEXT,
+  message_short TEXT,
+  json_payload  TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
 ```
 
-### Log Tags (49 variants)
+Indexes include:
 
-`System`, `Api`, `Trader`, `Tokens`, `Pool`, `Connectivity`, `Rpc`, `Swap`, `Position`, `Wallet`, `Security`, `Filtering`, `Ohlcv`, `Tools`, `Config`, `Event`, `Telegram`, `Transaction`, `Strategy`, `Action`, `Service`, etc.
+- category + time desc: `idx_events_category_time`
+- severity + time desc: `idx_events_severity_time`
+- `reference_id`, `mint`, `created_at`
+- keyset helpers: `id desc`, plus composite indexes for pagination/filters
 
-### CLI Integration
+Insert behavior details:
 
-```bash
-screenerbot --debug-trader    # Enable debug for trader tag
-screenerbot --verbose         # All verbose output
-screenerbot --quiet           # Suppress warnings
-```
+- `json_payload` is stored as a JSON string.
+- `message_short` is derived from `payload["message"]` and truncated to 240 chars.
 
-### Public API
+Retention:
 
-| Function | Purpose |
-|----------|---------|
-| `init()` | Parse CLI args, init file logging |
-| `error(tag, msg)` | Always shown |
-| `warning(tag, msg)` | Default shown |
-| `info(tag, msg)` | Standard |
-| `debug(tag, msg)` | Only with --debug-{tag} |
-| `verbose(tag, msg)` | Only with --verbose |
-| `flush()` | Force disk write |
+- DB cleanup uses `MAX_EVENT_AGE_DAYS = 30` (in `database.rs`).
 
-### File Rotation
+### 4.6 Maintenance + category gating
 
-Timestamp-based logs → `logs/screenerbot_YYYY-MM-DD_HH-MM-SS.log`  
-Retention: 24 hours with max 7 files.
+**File:** `src/events/maintenance.rs`
+
+The maintenance layer provides:
+
+1. A background cleanup task (every 6 hours) that:
+   - calls `db.cleanup_old_events()`
+   - logs DB stats (total, last 24h, size)
+2. Per-category recording functions:
+   - `record_swap_event`, `record_transaction_event`, `record_connectivity_event`, ...
+3. Per-category enable/disable:
+   - `cfg.events.enabled` gate
+   - and per-category flags like `cfg.events.record_swap`, `cfg.events.record_rpc`, ...
+
+This allows reducing event volume in production while keeping the event system available.
 
 ---
 
-## 6. Connectivity
+## 5. Logger (`logger`)
 
-**Files:** `mod.rs`, `types.rs`, `state.rs`, `service.rs`, `monitor.rs`, `monitors/` (7 monitors)
+**Files:**
 
-Tracks health of external endpoints: RPC, DexScreener, GeckoTerminal, Jupiter, Rugcheck, GMGN, Internet.
+- `src/logger/mod.rs`
+- `src/logger/config.rs`
+- `src/logger/core.rs`
+- `src/logger/levels.rs`
+- `src/logger/tags.rs`
+- `src/logger/format.rs`
+- `src/logger/file.rs`
+- `src/logger/special.rs`
 
-### EndpointHealth
+Logger is the realtime human-facing output system.
 
-```rust
-pub enum EndpointHealth {
-    Healthy { latency_ms, last_check },
-    Degraded { latency_ms, reason, last_check },
-    Unhealthy { reason, last_check, consecutive_failures },
-    Unknown,
-}
+Key properties:
+
+- per-tag Debug/Verbose gating from CLI flags
+- structured prefix formatting (time + tag + level)
+- word-wrapping for long lines
+- dual output: console + log file
+
+### 5.1 Logger initialization
+
+**File:** `src/logger/mod.rs`
+
+`logger::init()` does:
+
+1. `config::init_from_args()` — parse CLI flags into the runtime config
+2. `file::init_file_logging()` — create the log file and initialize the file logger
+
+### 5.2 Levels and filtering rules
+
+**Files:**
+
+- `src/logger/levels.rs`
+- `src/logger/core.rs`
+- `src/logger/config.rs`
+
+Log levels are ordered by increasing verbosity:
+
+```text
+Error (0) < Warning (1) < Info (2) < Debug (3) < Verbose (4)
 ```
 
-### EndpointCriticality
+Filtering is implemented in `core::should_log(tag, level)`:
 
-| Level | Meaning | Examples |
-|-------|---------|---------|
-| `Critical` | Bot cannot trade without | RPC |
-| `Important` | Degraded experience | DexScreener, Jupiter |
-| `Optional` | Nice to have | GeckoTerminal, GMGN |
+- `Error` is always logged.
+- Otherwise, a global threshold is applied:
+  - default is `Info` (meaning Info/Warning/Error are shown)
+  - `--quiet` sets threshold to `Warning`
+  - `--verbose` sets threshold to `Verbose`
+- `Debug` requires `--debug-<module>` for that tag.
+- `Verbose` requires `--verbose` OR `--verbose-<module>` for that tag.
 
-### Monitors
+### 5.3 CLI flag parsing and tag mapping
 
-7 endpoint-specific monitors polling every 30s. Each implements `EndpointMonitor` trait.
+**File:** `src/logger/config.rs`
 
-### Public API
+Logger scans raw command-line args and maps flags like:
 
-| Function | Purpose |
-|----------|---------|
-| `is_endpoint_healthy(name)` | Boolean check |
-| `are_critical_endpoints_healthy()` | All critical OK? |
-| `get_fallback_strategy(name)` | UseCache/UseAlternative/Skip/Fail |
+- `--debug-tokens`
+- `--debug-pool-service`
+- `--verbose-rpc`
 
-**No database** — all in-memory via `Arc<RwLock<HashMap>>`.
+into internal tag keys (strings like `tokens`, `pool_service`, `rpc`, ...).
+
+This mapping is intentionally centralized to avoid every module needing to know about CLI parsing.
+
+### 5.4 Formatting and stdout behavior
+
+**File:** `src/logger/format.rs`
+
+Formatting includes:
+
+- optional time prefix (enabled), optional date prefix (disabled)
+- fixed-width tag + level blocks for alignment
+- word wrapping to `MAX_LINE_LENGTH = 155`
+- continuation lines aligned under the message area
+
+Broken pipe handling:
+
+- if stdout write/flush returns `ErrorKind::BrokenPipe`, the process exits(0)
+  (useful when piping output to tools like `head`).
+
+### 5.5 File logging: rotation, retention, `latest.log`
+
+**File:** `src/logger/file.rs`
+
+On startup, the file logger creates a unique log file:
+
+- `screenerbot_YYYY-MM-DD_HH-MM-SS.log`
+
+It also creates/updates `latest.log`:
+
+- Unix: symlink to the current run's log file
+- Windows: hard link (or file copy fallback)
+
+Retention policy:
+
+- delete logs older than `LOG_RETENTION_HOURS = 24`
+- also enforce `MAX_LOG_FILES = 7` (safety bound)
+
+Concurrency model:
+
+- uses a global `LazyLock<Arc<Mutex<Option<FileLogger>>>>`
+- uses `try_lock()` on write:
+  - if busy, the message is dropped and a drop counter increments
+
+Write strategy:
+
+- logs are written through a `BufWriter` (4KB buffer)
+- `FLUSH_INTERVAL_WRITES = 1` currently flushes every write (debug-friendly, higher I/O)
+- cleanup runs every `CLEANUP_INTERVAL_WRITES = 1000` writes via a spawned task
 
 ---
 
-## 7. Actions
+## 6. Connectivity (`connectivity`)
 
-**Files:** `mod.rs`, `types.rs`, `state.rs`, `database.rs`, `broadcast.rs`
+**Files:**
 
-Tracks multi-step trade operations (buy/sell) with step-by-step progress for dashboard display.
+- `src/connectivity/mod.rs`
+- `src/connectivity/types.rs`
+- `src/connectivity/state.rs`
+- `src/connectivity/monitor.rs`
+- `src/connectivity/service.rs`
+- `src/connectivity/monitors/*`
 
-### Action Structure
+Connectivity is the "external dependency health" system.
 
-```rust
-pub struct Action {
-    id: ActionId,
-    action_type: ActionType,        // SwapBuy, SwapSell, CloseLong, etc.
-    entity_id: String,              // mint or position ID
-    wallet_address: Option<String>, // wallet involved
-    state: ActionState,
-    steps: Vec<ActionStep>,
-    current_step_index: usize,
-    started_at: DateTime<Utc>,
-    completed_at: Option<DateTime<Utc>>,
-    metadata: Value,
-}
-```
+It answers questions like:
 
-### ActionState
+- Is the internet reachable?
+- Are any RPC providers currently healthy?
+- Should we use cache / skip / fail when a third-party API is degraded?
 
-```rust
-pub enum ActionState {
-    InProgress { current_step, progress_pct, total_steps },
-    Completed,
-    Failed { reason, step_index },
-    Cancelled,
-}
-```
+Connectivity is a `ServiceManager` service:
 
-### Public API
+- name: `connectivity`
+- priority: 5 (starts early)
+- enabled only after initialization completes (`global::is_initialization_complete()`)
 
-| Function | Purpose |
-|----------|---------|
-| `register_action(action)` | Start tracking |
-| `update_step(id, idx, status)` | Update progress |
-| `complete_action_success(id)` | Mark done |
-| `complete_action_failed(id, reason)` | Mark failed |
-| `subscribe()` | Broadcast for SSE |
+### 6.1 Core types
 
-### Database
+**File:** `src/connectivity/types.rs`
 
-**Tables:** `actions` (with `wallet_address`, `state_data`, `duration_ms`, `created_at`, `updated_at` columns) + `action_steps` in `actions.db`  
-**Cleanup:** Delete >30 days old.
+- `EndpointCriticality`:
+  - `Critical` (bot should pause if down; e.g. internet, rpc)
+  - `Important` (warn + degraded mode; e.g. DexScreener, Jupiter)
+  - `Optional` (fallback silently; e.g. Rugcheck)
+- `EndpointHealth`:
+  - `Healthy { latency_ms, last_check }`
+  - `Degraded { latency_ms, reason, last_check }`
+  - `Unhealthy { reason, last_check, last_success, consecutive_failures }`
+  - `Unknown`
+- `FallbackStrategy`:
+  - `UseCache { max_age_secs }`
+  - `UseAlternative { endpoint_name }`
+  - `Skip`
+  - `Fail`
+- `HealthCheckResult`:
+  - `success(latency_ms)`
+  - `degraded(latency_ms, reason)`
+  - `failure(error)`
+
+### 6.2 Global state model (hysteresis: failure vs recovery threshold)
+
+**File:** `src/connectivity/state.rs`
+
+`ConnectivityState` stores:
+
+- current health per endpoint
+- criticality and fallback strategy per endpoint
+- consecutive failures and consecutive successes per endpoint
+
+Update logic (high level):
+
+- On **success**:
+  - increment successes
+  - only once `successes >= recovery_threshold`:
+    - reset failures to 0
+    - set `Healthy` (or `Degraded` if a warning reason is present)
+  - otherwise remain in the previous state (still "recovering")
+- On **failure**:
+  - increment failures
+  - reset successes to 0
+  - only once `failures >= failure_threshold`:
+    - set `Unhealthy { ... }` and record last_success from previous health state
+
+This prevents flapping when an endpoint alternates between success/failure.
+
+### 6.3 Endpoint monitors (`EndpointMonitor` trait)
+
+**File:** `src/connectivity/monitor.rs`
+
+Each endpoint implements:
+
+- `name() -> &'static str`
+- `criticality() -> EndpointCriticality`
+- `fallback_strategy() -> Option<FallbackStrategy>`
+- `is_enabled() -> bool`
+- `check_health() -> HealthCheckResult`
+
+### 6.4 ConnectivityService loop and event recording
+
+**File:** `src/connectivity/service.rs`
+
+Startup:
+
+- constructs a list of monitors (internet, rpc, dexscreener, geckoterminal, rugcheck, gmgn, jupiter)
+- registers endpoint metadata in global state
+- sets `global::CONNECTIVITY_SYSTEM_READY = true`
+
+Run loop:
+
+- interval: `cfg.connectivity.check_interval_secs`
+- sequentially runs each monitor's `check_health()`
+- calls `state::update_health(...)` using:
+  - `cfg.connectivity.failure_threshold`
+  - `cfg.connectivity.recovery_threshold`
+
+Logging and events:
+
+- The service compares the *previous* health kind vs the *new* health kind and only logs/records
+  an event on **state transitions**.
+- Events are emitted via `events::record_connectivity_event(...)` with `Severity` derived from
+  endpoint criticality.
+
+Critical endpoint failure handling:
+
+- After each cycle, it checks `state::get_unhealthy_critical_endpoints()`.
+- If any critical endpoints are unhealthy, it logs an error and records a system-level
+  `"critical_endpoints_unhealthy"` connectivity event.
 
 ---
 
-## 8. Initialization Order
+## 7. Actions (`actions`)
 
-```
-1. logger::init()           — Before anything logs
-2. database maintenance     — Background vacuum/WAL task
-3. events::init()           — DB + writer task
-4. actions::init_database() — DB + sync incomplete
-5. ConnectivityService      — Spawn monitors
-6. All services ready       — Can log, record, track
-```
+**Files:**
+
+- `src/actions/mod.rs`
+- `src/actions/types.rs`
+- `src/actions/state.rs`
+- `src/actions/database.rs`
+- `src/actions/broadcast.rs`
+
+Actions are the dashboard-facing "operation progress" system.
+
+They exist because many bot operations are multi-step and asynchronous:
+
+- swap buy/sell
+- position open/close
+- DCA (add to position)
+- manual orders
+
+The UI needs to show:
+
+- what is currently happening
+- which step is in progress
+- step-level errors
+- progress percentage
+
+### 7.1 Core model: `Action` + steps
+
+**File:** `src/actions/types.rs`
+
+`Action` includes:
+
+- `id: ActionId` (String)
+- `action_type: ActionType`
+- `entity_id: String` (mint, position id, etc.)
+- `state: ActionState` (in_progress/completed/failed/cancelled)
+- `steps: Vec<ActionStep>`
+- timestamps: `started_at`, `completed_at`
+- `metadata: serde_json::Value` (UI-friendly context)
+
+Step updates update:
+
+- step timestamps (`started_at`, `completed_at`)
+- action-level `progress_pct` (derived from count of completed steps)
+
+### 7.2 Storage architecture: DB is source of truth, HashMap is hot cache
+
+**File:** `src/actions/state.rs`
+
+Global state:
+
+- `ACTIVE_ACTIONS: HashMap<ActionId, Action>` (in-memory hot cache)
+- `ACTIONS_DB: RwLock<Option<ActionsDatabase>>` (initialized via `init_database()`)
+
+Startup sync:
+
+- `sync_from_db()` loads recent incomplete actions from SQLite and populates the HashMap.
+
+### 7.3 Dual-write update pattern (DB → memory → broadcast)
+
+Most state transitions follow this pattern:
+
+1. write to DB (fail fast if DB write fails)
+2. update in-memory HashMap
+3. broadcast update for realtime UI
+
+Examples:
+
+- `register_action(action)`:
+  - inserts into DB first; returns `Err` if DB insert fails
+- `update_step(...)`:
+  - DB update must succeed or it returns `false` (no broadcast)
+
+Completion nuance:
+
+- `complete_action_success/failed/cancel` update memory first, then update DB.
+- If DB update fails, it logs an error but does not revert in-memory state.
+
+This is a deliberate tradeoff: keep the UI responsive, but surface persistence failures.
+
+### 7.4 Persistence: `actions.db` schema
+
+**File:** `src/actions/database.rs`
+
+Tables:
+
+- `actions` (one row per action)
+- `action_steps` (one row per step, unique by `(action_id, step_index)`)
+
+The DB uses split pools (read/write) and is configured using `database::configure_connection`
+like other SQLite databases.
+
+Retention:
+
+- DB cleanup uses a 30-day policy (`cleanup_old_actions(RETENTION_DAYS)`).
+
+### 7.5 Broadcast channel + SSE integration
+
+**File:** `src/actions/broadcast.rs`
+
+- `broadcast::channel(1000)` fanout for action updates
+- `subscribe()` returns a `broadcast::Receiver<ActionUpdate>`
+
+Webserver integration:
+
+- `src/webserver/routes/actions.rs` exposes `GET /api/actions/stream`
+  which subscribes and streams updates via SSE.
+
+### 7.6 Cleanup tasks (DB + memory)
+
+**File:** `src/actions/state.rs`
+
+`spawn_cleanup_task()`:
+
+- waits 5 minutes after startup
+- runs every 24 hours:
+  - deletes DB rows older than 30 days
+  - evicts completed/failed/cancelled actions from memory when `completed_at` is older than 24h
+
+This prevents the in-memory HashMap from growing unbounded over a long-running bot.
+
+---
+
+## 8. Initialization Order (where these start)
+
+The authoritative startup sequence is split between:
+
+- `src/main.rs` (CLI entrypoint: banner, `logger::init()`, `config::load_config()`, panic hook)
+- `src/run.rs` (service-based runtime orchestration)
+
+Key points relevant to infrastructure:
+
+- `logger::init()` is called in `src/main.rs` before `run_bot()` / `run.rs` executes.
+- `actions::init_database()` is called in normal mode startup (before services start).
+- `actions::sync_from_db()` runs at startup to restore incomplete actions into memory (requires `init_database()` first).
+- `actions::spawn_cleanup_task()` runs regardless of whether actions are actively used.
+- `tokio::spawn(database::start_db_maintenance_task())` starts centralized SQLite maintenance.
+- `EventsService` will initialize `events::init()` (and start event DB maintenance) only when initialization is complete and `cfg.events.enabled == true`.
+- `ConnectivityService` is a ServiceManager service, but it will only start after initialization
+  completes and `cfg.connectivity.enabled == true`.
 
 ---
 
 ## 9. Cross-Module Dependencies
 
-```
-              LOGGER (foundation)
-              ↓ used by all
-    ┌─────────┼─────────┐
-    ↓         ↓         ↓
- DATABASE   ERRORS   CONNECTIVITY
- (PRAGMAs)  (types)  (health)
-    ↓         ↓
-  EVENTS    ACTIONS
-  (record)  (tracking)
-```
+These infrastructure modules are widely depended on:
 
-- **Logger**: All modules call `logger::{error,info,debug}(tag, msg)`
-- **Database**: All DB modules call `configure_connection()` in r2d2 pools
-- **Errors**: All services return `Result<T, ScreenerBotError>`
-- **Events**: Dashboard subscribes for real-time SSE
-- **Actions**: Dashboard subscribes for progress updates
-- **Connectivity**: Services check `is_endpoint_healthy()` before operations
+- `database` is used by every `*_database.rs` implementation that creates SQLite pools.
+- `errors` is used across RPC, swapping, transaction verification, wallet parsing, and more.
+- `events` is used by:
+  - connectivity (endpoint transition events)
+  - swaps/transactions (trade events)
+  - security/filtering (risk and rejection events)
+  - scheduled tasks (maintenance and background systems)
+- `logger` is used by everything.
+- `connectivity` is consulted by API clients and background services for fallback decisions.
+- `actions` is used by:
+  - swaps and positions to publish step-by-step progress
+  - webserver (SSE stream + active/history tables)
