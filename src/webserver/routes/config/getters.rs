@@ -99,6 +99,26 @@ pub async fn get_tokens_config() -> Response {
     success_response(data)
 }
 
+/// GET /api/config/pools - Get pools configuration
+pub async fn get_pools_config() -> Response {
+    let data = config::with_config(|cfg| ConfigResponse {
+        data: cfg.pools.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    });
+
+    success_response(data)
+}
+
+/// GET /api/config/maintenance - Get maintenance configuration
+pub async fn get_maintenance_config() -> Response {
+    let data = config::with_config(|cfg| ConfigResponse {
+        data: cfg.maintenance.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    });
+
+    success_response(data)
+}
+
 /// GET /api/config/sol_price - Get SOL price service configuration
 pub async fn get_sol_price_config() -> Response {
     let data = config::with_config(|cfg| ConfigResponse {
@@ -237,6 +257,8 @@ where
             "FilteringConfig" => serde_json::to_value(&cfg.filtering).ok(),
             "SwapsConfig" => serde_json::to_value(&cfg.swaps).ok(),
             "TokensConfig" => serde_json::to_value(&cfg.tokens).ok(),
+            "PoolsConfig" => serde_json::to_value(&cfg.pools).ok(),
+            "MaintenanceConfig" => serde_json::to_value(&cfg.maintenance).ok(),
             "RpcConfig" => serde_json::to_value(&cfg.rpc).ok(),
             "SolPriceConfig" => serde_json::to_value(&cfg.sol_price).ok(),
             "EventsConfig" => serde_json::to_value(&cfg.events).ok(),
@@ -312,6 +334,26 @@ where
                 config::update_config_section(
                     |cfg| {
                         cfg.tokens = new_config;
+                    },
+                    true,
+                )?;
+            }
+            "PoolsConfig" => {
+                let new_config: config::PoolsConfig = serde_json::from_value(section_json)
+                    .map_err(|e| format!("Invalid PoolsConfig: {}", e))?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.pools = new_config;
+                    },
+                    true,
+                )?;
+            }
+            "MaintenanceConfig" => {
+                let new_config: config::MaintenanceConfig = serde_json::from_value(section_json)
+                    .map_err(|e| format!("Invalid MaintenanceConfig: {}", e))?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.maintenance = new_config;
                     },
                     true,
                 )?;

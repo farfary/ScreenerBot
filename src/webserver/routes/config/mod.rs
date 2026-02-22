@@ -21,10 +21,10 @@ pub mod types;
 // Re-export handler functions for use by the router
 use getters::{
     get_ai_config, get_config_metadata, get_events_config, get_filtering_config, get_full_config,
-    get_gui_config, get_gui_defaults, get_monitoring_config, get_ohlcv_config,
-    get_positions_config, get_rpc_config, get_services_config, get_sol_price_config,
-    get_summary_config, get_swaps_config, get_telegram_config, get_tokens_config,
-    get_trader_config, patch_any_config,
+    get_gui_config, get_gui_defaults, get_maintenance_config, get_monitoring_config,
+    get_ohlcv_config, get_pools_config, get_positions_config, get_rpc_config,
+    get_services_config, get_sol_price_config, get_summary_config, get_swaps_config,
+    get_telegram_config, get_tokens_config, get_trader_config, patch_any_config,
 };
 use import_export::{export_config, import_config, import_config_preview};
 use operations::{get_config_diff, reload_config_from_disk, reset_config_to_defaults};
@@ -46,6 +46,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/config/filtering", get(get_filtering_config))
         .route("/config/swaps", get(get_swaps_config))
         .route("/config/tokens", get(get_tokens_config))
+        .route("/config/pools", get(get_pools_config))
+        .route("/config/maintenance", get(get_maintenance_config))
         .route("/config/sol_price", get(get_sol_price_config))
         .route("/config/summary", get(get_summary_config))
         .route("/config/events", get(get_events_config))
@@ -77,6 +79,14 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route(
             "/config/tokens",
             patch(patch_any_config::<config::TokensConfig>),
+        )
+        .route(
+            "/config/pools",
+            patch(patch_any_config::<config::PoolsConfig>),
+        )
+        .route(
+            "/config/maintenance",
+            patch(patch_any_config::<config::MaintenanceConfig>),
         )
         .route("/config/rpc", patch(patch_any_config::<config::RpcConfig>))
         .route(

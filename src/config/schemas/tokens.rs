@@ -106,8 +106,34 @@ config_struct! {
 config_struct! {
     /// Full API configuration for a data source
     pub struct SourceApiConfig {
+        #[metadata(field_metadata! {
+            label: "Enabled",
+            hint: "Enable or disable this data source",
+            impact: "high",
+            category: "Sources",
+        })]
         enabled: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Rate Limit (req/min)",
+            hint: "Maximum API requests per minute to this source",
+            impact: "medium",
+            category: "Sources",
+            min: 1.0,
+            max: 300.0,
+            step: 1.0,
+        })]
         rate_limit_per_minute: u32 = 60,
+
+        #[metadata(field_metadata! {
+            label: "Timeout (seconds)",
+            hint: "HTTP request timeout in seconds",
+            impact: "low",
+            category: "Sources",
+            min: 1.0,
+            max: 60.0,
+            step: 1.0,
+        })]
         timeout_seconds: u64 = 10,
     }
 }
@@ -115,7 +141,23 @@ config_struct! {
 config_struct! {
     /// DexScreener source configuration (rate limit fixed in code)
     pub struct DexscreenerSourceConfig {
+        #[metadata(field_metadata! {
+            label: "Enabled",
+            hint: "Enable or disable DexScreener as a data source",
+            impact: "high",
+            category: "Sources",
+        })]
         enabled: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Timeout (seconds)",
+            hint: "HTTP request timeout for DexScreener API calls",
+            impact: "low",
+            category: "Sources",
+            min: 1.0,
+            max: 60.0,
+            step: 1.0,
+        })]
         timeout_seconds: u64 = 10,
     }
 }
@@ -123,6 +165,12 @@ config_struct! {
 config_struct! {
     /// Enable/disable toggle for a specific source
     pub struct SourceToggleConfig {
+        #[metadata(field_metadata! {
+            label: "Enabled",
+            hint: "Enable or disable this source",
+            impact: "high",
+            category: "Sources",
+        })]
         enabled: bool = true,
     }
 }
@@ -233,53 +281,208 @@ config_struct! {
 
 config_struct! {
     pub struct DexscreenerDiscoveryConfig {
+        #[metadata(field_metadata! {
+            label: "Enabled",
+            hint: "Master toggle for DexScreener discovery endpoints",
+            impact: "high",
+            category: "Discovery",
+        })]
         enabled: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Latest Profiles",
+            hint: "Discover tokens with recently created DexScreener profiles",
+            impact: "medium",
+            category: "Discovery",
+        })]
         latest_profiles_enabled: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Latest Boosts",
+            hint: "Discover tokens with recent boost purchases on DexScreener",
+            impact: "medium",
+            category: "Discovery",
+        })]
         latest_boosts_enabled: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Top Boosts",
+            hint: "Discover tokens with the most active boosts on DexScreener",
+            impact: "medium",
+            category: "Discovery",
+        })]
         top_boosts_enabled: bool = true,
     }
 }
 
 config_struct! {
     pub struct GeckoDiscoveryConfig {
+        #[metadata(field_metadata! {
+            label: "Enabled",
+            hint: "Master toggle for GeckoTerminal discovery endpoints",
+            impact: "high",
+            category: "Discovery",
+        })]
         enabled: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "New Pools",
+            hint: "Discover tokens from newly created liquidity pools",
+            impact: "medium",
+            category: "Discovery",
+        })]
         new_pools_enabled: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Recently Updated",
+            hint: "Discover tokens with recent price/volume activity",
+            impact: "medium",
+            category: "Discovery",
+        })]
         recently_updated_enabled: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Trending",
+            hint: "Discover trending tokens on GeckoTerminal",
+            impact: "medium",
+            category: "Discovery",
+        })]
         trending_enabled: bool = true,
     }
 }
 
 config_struct! {
     pub struct RugcheckDiscoveryConfig {
+        #[metadata(field_metadata! {
+            label: "Enabled",
+            hint: "Master toggle for Rugcheck discovery endpoints",
+            impact: "high",
+            category: "Discovery",
+        })]
         enabled: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "New Tokens",
+            hint: "Discover newly listed tokens from Rugcheck",
+            impact: "medium",
+            category: "Discovery",
+        })]
         new_tokens_enabled: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Recent",
+            hint: "Discover recently analyzed tokens on Rugcheck",
+            impact: "medium",
+            category: "Discovery",
+        })]
         recent_enabled: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Trending",
+            hint: "Discover trending tokens on Rugcheck",
+            impact: "medium",
+            category: "Discovery",
+        })]
         trending_enabled: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Verified",
+            hint: "Discover verified/audited tokens from Rugcheck",
+            impact: "medium",
+            category: "Discovery",
+        })]
         verified_enabled: bool = true,
     }
 }
 
 config_struct! {
     pub struct JupiterDiscoveryConfig {
+        #[metadata(field_metadata! {
+            label: "Enabled",
+            hint: "Master toggle for Jupiter discovery endpoints",
+            impact: "high",
+            category: "Discovery",
+        })]
         enabled: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Recent",
+            hint: "Discover recently listed tokens on Jupiter",
+            impact: "medium",
+            category: "Discovery",
+        })]
         recent_enabled: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Top Organic",
+            hint: "Discover tokens with highest organic trading activity",
+            impact: "medium",
+            category: "Discovery",
+        })]
         top_organic_enabled: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Top Traded",
+            hint: "Discover most traded tokens by volume on Jupiter",
+            impact: "medium",
+            category: "Discovery",
+        })]
         top_traded_enabled: bool = true,
+
+        #[metadata(field_metadata! {
+            label: "Top Trending",
+            hint: "Discover trending tokens on Jupiter aggregator",
+            impact: "medium",
+            category: "Discovery",
+        })]
         top_trending_enabled: bool = true,
     }
 }
 
 config_struct! {
     pub struct CoingeckoDiscoveryConfig {
+        #[metadata(field_metadata! {
+            label: "Enabled",
+            hint: "Enable CoinGecko as a discovery source (requires API key for higher rate limits)",
+            impact: "medium",
+            category: "Discovery",
+        })]
         enabled: bool = false,
+
+        #[metadata(field_metadata! {
+            label: "Markets",
+            hint: "Discover tokens from CoinGecko Solana markets listing",
+            impact: "medium",
+            category: "Discovery",
+        })]
         markets_enabled: bool = false,
+
+        #[metadata(field_metadata! {
+            label: "API Key",
+            hint: "CoinGecko API key for higher rate limits (optional, free tier works without key)",
+            impact: "low",
+            category: "Discovery",
+        })]
         api_key: Option<String> = None,
     }
 }
 
 config_struct! {
     pub struct DefillamaDiscoveryConfig {
+        #[metadata(field_metadata! {
+            label: "Enabled",
+            hint: "Enable DeFiLlama as a discovery source for established protocols",
+            impact: "low",
+            category: "Discovery",
+        })]
         enabled: bool = false,
+
+        #[metadata(field_metadata! {
+            label: "Protocols",
+            hint: "Discover tokens from DeFiLlama protocol listings",
+            impact: "low",
+            category: "Discovery",
+        })]
         protocols_enabled: bool = false,
     }
 }

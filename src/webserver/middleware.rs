@@ -194,16 +194,33 @@ pub async fn initialization_gate(request: Request, next: Next) -> Response {
 /// - Browser validates freshness but can cache if unchanged
 pub async fn cache_control(request: Request, next: Next) -> Response {
     let path = request.uri().path().to_string();
+    let has_version = request
+        .uri()
+        .query()
+        .map_or(false, |q| q.contains("v="));
     let mut response = next.run(request).await;
 
     let headers = response.headers_mut();
 
-    // Static assets - aggressive caching (immutable, 1 year)
-    if path.starts_with("/scripts/") || path.starts_with("/assets/") || path.starts_with("/fonts/")
+    // Static assets with version hash - aggressive caching (immutable, 1 year)
+    if has_version
+        && (path.starts_with("/scripts/")
+            || path.starts_with("/assets/")
+            || path.starts_with("/fonts/"))
     {
         headers.insert(
             header::CACHE_CONTROL,
             "public, max-age=31536000, immutable".parse().unwrap(),
+        );
+    }
+    // Static assets without version hash - short cache with revalidation
+    else if path.starts_with("/scripts/")
+        || path.starts_with("/assets/")
+        || path.starts_with("/fonts/")
+    {
+        headers.insert(
+            header::CACHE_CONTROL,
+            "public, max-age=3600, must-revalidate".parse().unwrap(),
         );
     }
     // API endpoints - no caching
