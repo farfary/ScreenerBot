@@ -189,6 +189,13 @@ All heavy SQLite work is run via `spawn_blocking` to avoid stalling the async ru
 **Files:**
 
 - `src/errors/mod.rs`
+- `src/errors/error.rs`
+- `src/errors/network.rs`
+- `src/errors/rpc_provider.rs`
+- `src/errors/configuration.rs`
+- `src/errors/data.rs`
+- `src/errors/position.rs`
+- `src/errors/rate_limit.rs`
 - `src/errors/blockchain.rs`
 
 ScreenerBot uses structured errors so that:
@@ -198,12 +205,15 @@ ScreenerBot uses structured errors so that:
 - Solana-specific failures (confirmation timeouts, blockhash expired, instruction error)
   are represented explicitly
 
-### 3.1 Top-level error type: `ScreenerBotError`
+### 3.1 Top-level error type: `crate::Error`
 
-**File:** `src/errors/mod.rs`
+**Files:**
+
+- `src/errors/error.rs` (definition)
+- `src/errors/mod.rs` (re-exports + backwards-compat alias)
 
 ```rust
-pub enum ScreenerBotError {
+pub enum Error {
   Blockchain(BlockchainError),
   Network(NetworkError),
   RpcProvider(RpcProviderError),
@@ -214,11 +224,16 @@ pub enum ScreenerBotError {
 }
 ```
 
+For ergonomics, the crate also provides:
+
+- `pub type Result<T> = std::result::Result<T, Error>;` (re-exported as `crate::Result<T>`)
+- `pub type ScreenerBotError = Error;` (compat alias — prefer `crate::Error`)
+
 All variants implement `Display` and the enum implements `std::error::Error`.
 
 ### 3.2 Error conversions (migration convenience)
 
-**File:** `src/errors/mod.rs`
+**File:** `src/errors/error.rs`
 
 To reduce boilerplate during migration from older string-based errors:
 
@@ -228,9 +243,9 @@ To reduce boilerplate during migration from older string-based errors:
 
 ### 3.3 Builder helpers (backward-compatible constructors)
 
-**File:** `src/errors/mod.rs`
+**File:** `src/errors/error.rs`
 
-`impl ScreenerBotError { ... }` includes helpers like:
+`impl Error { ... }` includes helpers like:
 
 - `invalid_amount(amount, reason)`
 - `network_error(message)`

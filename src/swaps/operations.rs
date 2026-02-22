@@ -1,7 +1,7 @@
 /// Core Swap Operations - High-level swap functions
 /// Provides get_best_quote() and execute_swap_with_fallback()
 use crate::constants::SOL_MINT;
-use crate::errors::ScreenerBotError;
+use crate::{Error, Result};
 use crate::logger::{self, LogTag};
 use crate::swaps::registry::get_registry;
 use crate::swaps::router::{Quote, QuoteRequest, SwapResult};
@@ -16,12 +16,12 @@ use std::time::Instant;
 /// Get best quote from all enabled routers (concurrent)
 /// Fetches quotes from all enabled routers simultaneously
 /// Returns the quote with highest output amount
-pub async fn get_best_quote(request: QuoteRequest) -> Result<Quote, ScreenerBotError> {
+pub async fn get_best_quote(request: QuoteRequest) -> Result<Quote> {
     let registry = get_registry();
     let enabled = registry.enabled_routers();
 
     if enabled.is_empty() {
-        return Err(ScreenerBotError::configuration_error(
+        return Err(Error::configuration_error(
             "No swap routers enabled in config",
         ));
     }
@@ -75,7 +75,7 @@ pub async fn get_best_quote(request: QuoteRequest) -> Result<Quote, ScreenerBotE
     let elapsed = start.elapsed();
 
     if quotes.is_empty() {
-        return Err(ScreenerBotError::api_error(
+        return Err(Error::api_error(
             "All routers failed to provide quotes",
         ));
     }
@@ -109,10 +109,10 @@ pub async fn get_best_quote(request: QuoteRequest) -> Result<Quote, ScreenerBotE
 pub async fn execute_swap_with_fallback(
     token: &Token,
     quote: Quote,
-) -> Result<SwapResult, ScreenerBotError> {
+) -> Result<SwapResult> {
     // Block swap execution during force stop
     if crate::global::is_force_stopped() {
-        return Err(ScreenerBotError::internal_error(
+        return Err(Error::internal_error(
             "Trading halted - Force stop is active",
         ));
     }
@@ -120,9 +120,9 @@ pub async fn execute_swap_with_fallback(
     let registry = get_registry();
 
     // Get primary router
-    let primary = registry.get_router(&quote.router_id).ok_or_else(|| {
-        ScreenerBotError::internal_error(format!("Router {} not found", quote.router_id))
-    })?;
+    let primary = registry
+        .get_router(&quote.router_id)
+        .ok_or_else(|| Error::internal_error(format!("Router {} not found", quote.router_id)))?;
 
     logger::info(
         LogTag::Swap,
@@ -265,12 +265,10 @@ pub async fn execute_swap_with_fallback(
 // ============================================================================
 
 /// Check if error is retryable (network/transient issues)
-fn is_retryable_error(error: &ScreenerBotError) -> bool {
+fn is_retryable_error(error: &Error) -> bool {
     matches!(
         error,
-        ScreenerBotError::Network(_)
-            | ScreenerBotError::RpcProvider(_)
-            | ScreenerBotError::RateLimit(_)
+        Error::Network(_) | Error::RpcProvider(_) | Error::RateLimit(_)
     )
 }
 
@@ -283,7 +281,7 @@ fn is_retryable_error(error: &ScreenerBotError) -> bool {
 pub async fn get_best_quote_for_opening(
     request: QuoteRequest,
     token_symbol: &str,
-) -> Result<Quote, ScreenerBotError> {
+) -> Result<Quote> {
     match get_best_quote(request.clone()).await {
         Ok(quote) => Ok(quote),
         Err(e) => {

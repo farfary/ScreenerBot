@@ -1,5 +1,5 @@
 use crate::constants::TOKEN_2022_PROGRAM_ID;
-use crate::errors::ScreenerBotError;
+use crate::{Error, Result};
 use crate::logger::{self, LogTag};
 use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::utils::{format_mint_for_log, get_wallet_address};
@@ -16,7 +16,7 @@ use std::str::FromStr;
 /// Public function to manually close all empty ATAs for the configured wallet
 /// Note: ATA cleanup is now handled automatically by background service (see ata_cleanup.rs)
 /// This function is kept for manual cleanup or emergency situations
-pub async fn cleanup_all_empty_atas() -> Result<(u32, Vec<String>), ScreenerBotError> {
+pub async fn cleanup_all_empty_atas() -> Result<(u32, Vec<String>)> {
     logger::info(
         LogTag::Wallet,
         "Manual ATA cleanup triggered (normally handled by background service)",
@@ -26,16 +26,16 @@ pub async fn cleanup_all_empty_atas() -> Result<(u32, Vec<String>), ScreenerBotE
 }
 
 /// Checks wallet balance for SOL
-pub async fn get_sol_balance(wallet_address: &str) -> Result<f64, ScreenerBotError> {
+pub async fn get_sol_balance(wallet_address: &str) -> Result<f64> {
     let rpc_client = get_rpc_client();
     rpc_client
         .get_sol_balance(wallet_address)
         .await
-        .map_err(ScreenerBotError::from)
+        .map_err(Error::from)
 }
 
 /// Checks wallet balance for a specific token (SINGLE ACCOUNT ONLY - use get_total_token_balance for exits)
-pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, ScreenerBotError> {
+pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64> {
     logger::debug(
         LogTag::Wallet,
         &format!(
@@ -89,7 +89,7 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
                     e
                 ),
             );
-            Err(ScreenerBotError::from(e))
+            Err(Error::from(e))
         }
     }
 }
@@ -98,7 +98,7 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64, 
 pub async fn get_total_token_balance(
     wallet_address: &str,
     mint: &str,
-) -> Result<u64, ScreenerBotError> {
+) -> Result<u64> {
     logger::debug(
         LogTag::Wallet,
         &format!(
@@ -159,12 +159,12 @@ pub async fn get_total_token_balance(
 /// Gets all token accounts for a wallet
 pub async fn get_all_token_accounts(
     wallet_address: &str,
-) -> Result<Vec<crate::rpc::TokenAccountInfo>, ScreenerBotError> {
+) -> Result<Vec<crate::rpc::TokenAccountInfo>> {
     let rpc_client = get_rpc_client();
     rpc_client
         .get_all_token_accounts_str(wallet_address)
         .await
-        .map_err(ScreenerBotError::from)
+        .map_err(Error::from)
 }
 
 /// Closes a single empty ATA (Associated Token Account) for a specific mint
@@ -172,7 +172,7 @@ pub async fn get_all_token_accounts(
 pub async fn close_single_ata(
     wallet_address: &str,
     mint: &str,
-) -> Result<String, ScreenerBotError> {
+) -> Result<String> {
     logger::info(
         LogTag::Wallet,
         &format!(
@@ -230,7 +230,7 @@ pub async fn close_single_ata(
         None => {
             let error_msg = format!("No empty ATA found for mint {}", mint);
             logger::warning(LogTag::Wallet, &error_msg);
-            Err(ScreenerBotError::invalid_amount(
+            Err(Error::invalid_amount(
                 error_msg.clone(),
                 "No empty ATA found".to_string(),
             ))
@@ -243,7 +243,7 @@ pub async fn close_single_ata(
 /// Returns the number of accounts closed and total signatures
 pub async fn close_all_empty_atas(
     wallet_address: &str,
-) -> Result<(u32, Vec<String>), ScreenerBotError> {
+) -> Result<(u32, Vec<String>)> {
     logger::info(
         LogTag::Wallet,
         "Checking for empty token accounts to close...",
@@ -350,7 +350,7 @@ pub async fn close_all_empty_atas(
 pub async fn close_token_account(
     mint: &str,
     wallet_address: &str,
-) -> Result<String, ScreenerBotError> {
+) -> Result<String> {
     close_token_account_with_context(mint, wallet_address, false).await
 }
 
@@ -359,7 +359,7 @@ pub async fn close_token_account_with_context(
     mint: &str,
     wallet_address: &str,
     recently_sold: bool,
-) -> Result<String, ScreenerBotError> {
+) -> Result<String> {
     logger::info(
         LogTag::Wallet,
         &format!(
@@ -434,13 +434,13 @@ pub async fn close_token_account_with_context(
                                 balance, max_checks
                             ),
                         );
-                        return Err(ScreenerBotError::invalid_amount(
+                        return Err(Error::invalid_amount(
                             balance.to_string(),
                             format!(
-                  "Cannot close token account - still has {} tokens after {} balance checks",
-                  balance,
-                  max_checks
-                ),
+                   "Cannot close token account - still has {} tokens after {} balance checks",
+                   balance,
+                   max_checks
+                 ),
                         ));
                     }
                 }
@@ -623,12 +623,12 @@ pub async fn close_token_account_with_context(
 async fn get_associated_token_account(
     wallet_address: &str,
     mint: &str,
-) -> Result<String, ScreenerBotError> {
+) -> Result<String> {
     let rpc_client = get_rpc_client();
     rpc_client
         .get_associated_token_account(wallet_address, mint)
         .await
-        .map_err(ScreenerBotError::from)
+        .map_err(Error::from)
 }
 
 /// Closes ATA using proper Solana SDK for real ATA closing
@@ -637,7 +637,7 @@ async fn close_ata(
     token_account: &str,
     mint: &str,
     is_token_2022: bool,
-) -> Result<String, ScreenerBotError> {
+) -> Result<String> {
     logger::debug(
         LogTag::Wallet,
         &format!(
@@ -710,7 +710,7 @@ async fn build_and_send_close_instruction(
     wallet_address: &str,
     token_account: &str,
     is_token_2022: bool,
-) -> Result<String, ScreenerBotError> {
+) -> Result<String> {
     logger::debug(
         LogTag::Wallet,
         &format!(
@@ -730,14 +730,14 @@ async fn build_and_send_close_instruction(
     );
 
     let owner_pubkey = Pubkey::from_str(wallet_address).map_err(|e| {
-        ScreenerBotError::invalid_amount(
+        Error::invalid_amount(
             format!("Invalid wallet address: {}", e),
             "Wallet validation failed".to_string(),
         )
     })?;
 
     let token_account_pubkey = Pubkey::from_str(token_account).map_err(|e| {
-        ScreenerBotError::invalid_amount(
+        Error::invalid_amount(
             format!("Invalid token account: {}", e),
             "Token account validation failed".to_string(),
         )
@@ -750,7 +750,7 @@ async fn build_and_send_close_instruction(
     );
 
     let keypair = crate::config::get_wallet_keypair().map_err(|e| {
-        ScreenerBotError::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {
+        Error::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {
             error: format!("Failed to load wallet keypair: {}", e),
         })
     })?;
@@ -781,7 +781,7 @@ async fn build_and_send_close_instruction(
             &[],
         )
         .map_err(|e| {
-            ScreenerBotError::Blockchain(crate::errors::BlockchainError::InvalidInstruction {
+            Error::Blockchain(crate::errors::BlockchainError::InvalidInstruction {
                 signature: "unknown".to_string(),
                 instruction_index: 0,
                 reason: format!("Failed to build close instruction: {}", e),
@@ -823,7 +823,7 @@ async fn build_and_send_close_instruction(
     let recent_blockhash = rpc_client
         .get_latest_blockhash()
         .await
-        .map_err(ScreenerBotError::from)?;
+        .map_err(Error::from)?;
 
     logger::debug(
         LogTag::Wallet,
@@ -863,7 +863,7 @@ async fn build_and_send_close_instruction(
         .send_and_confirm_signed_transaction(&transaction)
         .await
         .map(|sig| sig.to_string())
-        .map_err(ScreenerBotError::from);
+        .map_err(Error::from);
 
     match &result {
         Ok(signature) => {
@@ -892,11 +892,11 @@ async fn build_and_send_close_instruction(
 fn build_token_2022_close_instruction(
     token_account: &Pubkey,
     owner: &Pubkey,
-) -> Result<Instruction, ScreenerBotError> {
+) -> Result<Instruction> {
     // Token-2022 uses the same close account instruction format as SPL Token
     // but with different program ID
     let token_2022_program_id = Pubkey::from_str(TOKEN_2022_PROGRAM_ID).map_err(|e| {
-        ScreenerBotError::Blockchain(crate::errors::BlockchainError::InvalidAccountData {
+        Error::Blockchain(crate::errors::BlockchainError::InvalidAccountData {
             signature: "unknown".to_string(),
             account: TOKEN_2022_PROGRAM_ID.to_string(),
             expected_owner: "Program ID".to_string(),

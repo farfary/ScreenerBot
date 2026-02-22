@@ -3,18 +3,18 @@
 //! This module provides helpers for WebSocket-based Solana RPC subscriptions.
 
 use crate::config;
-use crate::errors::ScreenerBotError;
+use crate::{Error, Result};
 use crate::rpc::provider::derive_websocket_url;
 
 /// Get the WebSocket URL from the primary configured RPC endpoint
 ///
 /// Converts the first RPC URL from config to a WebSocket URL.
 /// Returns an error if no RPC URLs are configured.
-pub fn get_websocket_url() -> Result<String, ScreenerBotError> {
+pub fn get_websocket_url() -> Result<String> {
     let rpc_urls = config::with_config(|cfg| cfg.rpc.urls.clone());
 
     if rpc_urls.is_empty() {
-        return Err(ScreenerBotError::Configuration(
+        return Err(Error::Configuration(
             crate::errors::ConfigurationError::Generic {
                 message: "No RPC URLs configured".to_string(),
             },
@@ -30,9 +30,9 @@ pub fn get_websocket_url() -> Result<String, ScreenerBotError> {
 /// # Examples
 /// - `https://api.mainnet-beta.solana.com` -> `wss://api.mainnet-beta.solana.com`
 /// - `http://localhost:8899` -> `ws://localhost:8899`
-pub fn get_websocket_url_from_http(http_url: &str) -> Result<String, ScreenerBotError> {
+pub fn get_websocket_url_from_http(http_url: &str) -> Result<String> {
     derive_websocket_url(http_url).ok_or_else(|| {
-        ScreenerBotError::Configuration(crate::errors::ConfigurationError::Generic {
+        Error::Configuration(crate::errors::ConfigurationError::Generic {
             message: format!("Failed to convert HTTP URL to WebSocket: {}", http_url),
         })
     })

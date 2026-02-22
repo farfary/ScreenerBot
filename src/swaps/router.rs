@@ -1,5 +1,5 @@
-use crate::errors::ScreenerBotError;
 use crate::tokens::Token;
+use crate::Result;
 /// Router Trait - Unified swap router interface
 /// All swap routers (Jupiter, GMGN, Raydium) must implement this trait
 use async_trait::async_trait;
@@ -27,14 +27,14 @@ pub trait SwapRouter: Send + Sync {
     fn priority(&self) -> u8;
 
     /// Get quote from this router
-    async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote, ScreenerBotError>;
+    async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote>;
 
     /// Execute swap using quote from this router
     async fn execute_swap(
         &self,
         token: &Token,
         quote: &Quote,
-    ) -> Result<SwapResult, ScreenerBotError>;
+    ) -> Result<SwapResult>;
 }
 
 // ============================================================================

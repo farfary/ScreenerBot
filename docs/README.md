@@ -46,7 +46,7 @@ Living documentation describing how each major system works. These docs are the 
 | [Trading Strategies](architecture/strategies.md) | 383 | Condition-based strategy system, rule tree, evaluation engine |
 | [Filtering Pipeline](architecture/filtering.md) | 1043 | Token quality control — filter chain, sources, caching, query system |
 | **Execution** | | |
-| [Swap Routing](architecture/swaps.md) | 496 | Multi-router quote+execute, fallback chain, Jupiter referral fee |
+| [Swap Routing](architecture/swaps.md) | 494 | Multi-router quote+execute, fallback chain, Jupiter referral fee |
 | [Transactions](architecture/transactions.md) | 416 | Transaction monitoring, analyzer pipeline, 10+ DEX detection |
 | **Data Sources** | | |
 | [RPC Module](architecture/rpc.md) | 587 | Multi-provider Solana RPC, circuit breaker, rate limiting |
@@ -58,7 +58,7 @@ Living documentation describing how each major system works. These docs are the 
 | [Config](architecture/config.md) | 478 | TOML configuration, macro system, hot reload, metadata |
 | [Services](architecture/services.md) | 396 | Service manager, lifecycle, cached health/metrics, registered services |
 | [Wallets](architecture/wallets.md) | 670 | Multi-wallet key storage (wallets.db) + wallet monitoring (wallet.db) |
-| [Infrastructure](architecture/infrastructure.md) | 807 | SQLite tuning+maintenance, errors, events, logging, connectivity, actions |
+| [Infrastructure](architecture/infrastructure.md) | 822 | SQLite tuning+maintenance, errors, events, logging, connectivity, actions |
 
 ### 🛠 Development
 

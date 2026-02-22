@@ -94,7 +94,7 @@ pub async fn execute_best_swap(
     output_mint: &str,
     input_amount: u64,  // Absolute amount only, no percentage
     quote: UnifiedQuote,
-) -> Result<SwapResult, ScreenerBotError>
+) -> Result<SwapResult>
 ```
 
 ### 1.3 Transactions Module Assessment
@@ -422,7 +422,7 @@ CREATE INDEX idx_position_entries_timestamp ON position_entries(timestamp);
       input_amount: u64,
       quote: UnifiedQuote,
       exit_type: Option<ExitType>,  // NEW
-  ) -> Result<SwapResult, ScreenerBotError>
+  ) -> Result<SwapResult>
 
   pub enum ExitType {
       Full,
@@ -820,7 +820,7 @@ pub enum ExitType {
 
 ```rust
 pub fn calculate_partial_amount(total: u64, pct: f64) -> u64;
-pub fn get_partial_exit_quote(...) -> Result<UnifiedQuote, ScreenerBotError>;
+pub fn get_partial_exit_quote(...) -> Result<UnifiedQuote>;
 ```
 
 ---

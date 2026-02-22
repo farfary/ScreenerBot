@@ -10,6 +10,8 @@ pub mod connectivity;
 pub mod constants;
 pub mod database;
 pub mod errors;
+pub use errors::Error;
+pub type Result<T> = std::result::Result<T, Error>;
 pub mod events;
 pub mod features;
 pub mod filtering;

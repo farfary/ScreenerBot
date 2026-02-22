@@ -174,8 +174,8 @@ pub trait SwapRouter: Send + Sync {
   fn name(&self) -> &'static str;      // UI/log name
   fn is_enabled(&self) -> bool;        // config gate
   fn priority(&self) -> u8;            // 0 = primary, higher = fallback order
-  async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote, ScreenerBotError>;
-  async fn execute_swap(&self, token: &Token, quote: &Quote) -> Result<SwapResult, ScreenerBotError>;
+  async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote>;
+  async fn execute_swap(&self, token: &Token, quote: &Quote) -> Result<SwapResult>;
 }
 ```
 
@@ -241,7 +241,7 @@ Key methods:
 Important behavior:
 
 - If no routers are enabled, it returns a configuration error.
-- If all routers fail, it returns `ScreenerBotError::api_error("All routers failed to provide quotes")`.
+- If all routers fail, it returns `Error::api_error("All routers failed to provide quotes")`.
 
 ---
 
@@ -424,7 +424,7 @@ The router stores `SwapData` as JSON in `Quote.execution_data`.
 
 **File:** `src/swaps/routers/raydium.rs`
 
-- `get_quote` and `execute_swap` return `ScreenerBotError::internal_error("Raydium router not implemented yet")`.
+- `get_quote` and `execute_swap` return `Error::internal_error("Raydium router not implemented yet")`.
 
 ---
 
@@ -461,9 +461,7 @@ Fallback is only attempted for errors classified as retryable:
 ```rust
 matches!(
   error,
-  ScreenerBotError::Network(_)
-    | ScreenerBotError::RpcProvider(_)
-    | ScreenerBotError::RateLimit(_)
+  Error::Network(_) | Error::RpcProvider(_) | Error::RateLimit(_)
 )
 ```
 

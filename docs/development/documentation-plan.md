@@ -1079,7 +1079,7 @@ rg "match program_kind" src/pools/calculator.rs -A 50
 ```bash
 # Commands to run:
 ls src/errors/
-rg "ScreenerBotError\|BlockchainError" src/errors/ -A 15
+rg "Error|ScreenerBotError|BlockchainError" src/errors/ -A 15
 rg "are_critical_endpoints_healthy" src/connectivity/ -A 10
 rg "error!\|Err\(" src/ --type rust | head -100
 ```

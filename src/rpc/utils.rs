@@ -3,7 +3,6 @@
 //! Common utilities for RPC operations.
 
 use crate::constants::LAMPORTS_PER_SOL;
-use crate::errors::ScreenerBotError;
 use crate::logger::{self, LogTag};
 use solana_sdk::pubkey::Pubkey;
 use std::str::FromStr;
@@ -60,7 +59,7 @@ pub const DEFAULT_ATA_RENT_LAMPORTS: u64 = 2_039_280;
 /// Get ATA rent with caching (10-second TTL)
 ///
 /// Attempts to fetch from chain, uses cache, falls back to default.
-pub async fn get_ata_rent_lamports() -> Result<u64, ScreenerBotError> {
+pub async fn get_ata_rent_lamports() -> crate::Result<u64> {
     // Check cache first
     {
         let cache = match ATA_RENT_CACHE.try_lock() {

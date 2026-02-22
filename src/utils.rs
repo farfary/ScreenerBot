@@ -1,7 +1,7 @@
 use crate::constants::TOKEN_2022_PROGRAM_ID;
 use crate::errors::blockchain::{parse_structured_solana_error, BlockchainError};
 use crate::errors::parse_solana_error;
-use crate::errors::ScreenerBotError;
+use crate::Error;
 use crate::logger::{self, LogTag};
 use crate::rpc::{get_rpc_client, RpcClientMethods};
 use chrono::{DateTime, Utc};
@@ -153,9 +153,9 @@ pub use crate::swaps::SwapResult;
 
 /// Get the wallet address from the main wallet private key in config
 /// This replaces the swaps::get_wallet_address dependency
-pub fn get_wallet_address() -> Result<String, ScreenerBotError> {
+pub fn get_wallet_address() -> crate::Result<String> {
     crate::config::get_wallet_pubkey_string().map_err(|e| {
-        ScreenerBotError::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {
+        Error::Configuration(crate::errors::ConfigurationError::InvalidPrivateKey {
             error: format!("Failed to load wallet address: {}", e),
         })
     })

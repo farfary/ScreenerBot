@@ -34,7 +34,6 @@ use futures::stream::{self, StreamExt};
 use screenerbot::arguments::set_cmd_args;
 use screenerbot::config::with_config;
 use screenerbot::constants::SOL_MINT;
-use screenerbot::errors::ScreenerBotError;
 use screenerbot::logger::{self as logger, LogTag};
 use screenerbot::rpc::{get_rpc_client, init_rpc_client, TokenAccountInfo};
 use screenerbot::swaps::{execute_best_swap, get_best_quote};

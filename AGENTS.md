@@ -168,7 +168,7 @@ screenerbot::config::load_config().expect("Failed to load config");
 - **Config access**: Always use `with_config()` or `get_config_clone()` — never hardcode values.
 - **Config sections**: Must use `config_struct!` macro (see `src/config/macros.rs`).
 - **Database**: SQLite via rusqlite + r2d2. Use `with_init()` for PRAGMA settings.
-- **Error handling**: Use `ScreenerBotError` variants from `src/errors/`.
+- **Error handling**: Use `crate::Error` + `crate::Result<T>` from `src/errors/` (compat alias `ScreenerBotError` exists but prefer `Error`).
 - **Logging**: Use `error!()`, `warning!()`, `info!()`, `debug!()`, `verbose!()` with `LogTag`.
 - **Services**: Implement `Service` trait, register in `src/services/implementations/`.
 - **Global state**: Check `src/global.rs` for startup flags before accessing services.
@@ -542,7 +542,17 @@ Operation progress tracking with real-time SSE broadcasting to dashboard. Tracks
 
 ### Errors (src/errors/)
 
-Structured error types with blockchain-aware parsing. Files: `mod.rs` (ScreenerBotError enum: Blockchain, Network, RpcProvider, Configuration, Data, Position, RateLimit), `blockchain.rs` (BlockchainError, parse_solana_error(), parse_structured_solana_error(), CommitmentLevel).
+Structured error types with blockchain-aware parsing. Files:
+
+- `mod.rs` (re-exports + `ScreenerBotError = Error` alias)
+- `error.rs` (`Error` enum + `Result<T>` alias + migration helpers/builders)
+- `network.rs` (`NetworkError`)
+- `rpc_provider.rs` (`RpcProviderError`)
+- `configuration.rs` (`ConfigurationError`)
+- `data.rs` (`DataError`)
+- `position.rs` (`PositionError`)
+- `rate_limit.rs` (`RateLimitError`)
+- `blockchain.rs` (`BlockchainError`, `parse_solana_error()`, `parse_structured_solana_error()`, `CommitmentLevel`, retry/severity helpers)
 
 ### Global (src/global.rs)
 

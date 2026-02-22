@@ -202,7 +202,7 @@ pub async fn get_rpc_url() -> String {
 /// Get WebSocket URL derived from primary RPC
 ///
 /// Converts the primary HTTP RPC URL to its WebSocket equivalent.
-pub fn get_ws_url() -> Result<String, crate::errors::ScreenerBotError> {
+pub fn get_ws_url() -> crate::Result<String> {
     websocket::get_websocket_url()
 }
 

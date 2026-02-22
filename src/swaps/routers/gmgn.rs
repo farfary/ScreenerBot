@@ -1,7 +1,7 @@
 /// GMGN Router - Self-contained implementation with direct API integration
 use crate::config::with_config;
 use crate::constants::SOL_MINT;
-use crate::errors::ScreenerBotError;
+use crate::{Error, Result};
 use crate::logger::{self, LogTag};
 use crate::rpc::RpcClientMethods;
 use crate::swaps::router::{Quote, QuoteRequest, SwapResult, SwapRouter};
@@ -112,11 +112,11 @@ impl GmgnRouter {
         from_address: &str,
         slippage: f64,
         swap_mode: &str,
-    ) -> Result<SwapData, ScreenerBotError> {
+    ) -> Result<SwapData> {
         if let Some(unhealthy) =
             crate::connectivity::check_endpoints_healthy(&["internet", "rpc"]).await
         {
-            return Err(ScreenerBotError::connectivity_error(format!(
+            return Err(Error::connectivity_error(format!(
                 "Cannot fetch GMGN quote - Unhealthy endpoints: {}",
                 unhealthy
             )));
@@ -174,7 +174,7 @@ impl GmgnRouter {
                         let response_text = match response.text().await {
                             Ok(t) => t,
                             Err(e) => {
-                                last_error = Some(ScreenerBotError::invalid_response(format!(
+                                last_error = Some(Error::invalid_response(format!(
                                     "Failed to get response text: {}",
                                     e
                                 )));
@@ -196,12 +196,12 @@ impl GmgnRouter {
                                                 code, msg_opt
                                             ),
                                         );
-                                        return Err(ScreenerBotError::api_error(format!(
+                                        return Err(Error::api_error(format!(
                                             "GMGN no route: {} (code {})",
                                             msg_opt, code
                                         )));
                                     } else {
-                                        last_error = Some(ScreenerBotError::api_error(format!(
+                                        last_error = Some(Error::api_error(format!(
                                             "GMGN API error: {} - {}",
                                             code, msg_opt
                                         )));
@@ -226,33 +226,33 @@ impl GmgnRouter {
                                         );
                                         return Ok(data);
                                     } else {
-                                        last_error = Some(ScreenerBotError::invalid_response(
+                                        last_error = Some(Error::invalid_response(
                                             "GMGN API returned empty data".to_string(),
                                         ));
                                     }
                                 } else {
-                                    last_error = Some(ScreenerBotError::api_error(format!(
+                                    last_error = Some(Error::api_error(format!(
                                         "GMGN API error: {} - {}",
                                         api_response.code, api_response.msg
                                     )));
                                 }
                             }
                             Err(e) => {
-                                last_error = Some(ScreenerBotError::invalid_response(format!(
+                                last_error = Some(Error::invalid_response(format!(
                                     "GMGN API JSON parse error: {}",
                                     e
                                 )));
                             }
                         }
                     } else {
-                        last_error = Some(ScreenerBotError::api_error(format!(
+                        last_error = Some(Error::api_error(format!(
                             "GMGN API HTTP error: {}",
                             response.status()
                         )));
                     }
                 }
                 Err(e) => {
-                    last_error = Some(ScreenerBotError::network_error(e.to_string()));
+                    last_error = Some(Error::network_error(e.to_string()));
                 }
             }
 
@@ -263,7 +263,7 @@ impl GmgnRouter {
         }
 
         Err(last_error.unwrap_or_else(|| {
-            ScreenerBotError::api_error("All GMGN retry attempts failed".to_string())
+            Error::api_error("All GMGN retry attempts failed".to_string())
         }))
     }
 
@@ -273,11 +273,11 @@ impl GmgnRouter {
         input_mint: &str,
         output_mint: &str,
         swap_data: SwapData,
-    ) -> Result<String, ScreenerBotError> {
+    ) -> Result<String> {
         if let Some(unhealthy) =
             crate::connectivity::check_endpoints_healthy(&["internet", "rpc"]).await
         {
-            return Err(ScreenerBotError::connectivity_error(format!(
+            return Err(Error::connectivity_error(format!(
                 "Cannot send GMGN transaction - Unhealthy endpoints: {}",
                 unhealthy
             )));
@@ -371,7 +371,7 @@ impl SwapRouter for GmgnRouter {
         1
     }
 
-    async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote, ScreenerBotError> {
+    async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote> {
         let swap_data = self
             .fetch_gmgn_quote_internal(
                 &request.input_mint,
@@ -384,7 +384,7 @@ impl SwapRouter for GmgnRouter {
             .await?;
 
         let output_amount = swap_data.quote.out_amount.parse::<u64>().map_err(|e| {
-            ScreenerBotError::parse_error(format!("Failed to parse output_amount: {}", e))
+            Error::parse_error(format!("Failed to parse output_amount: {}", e))
         })?;
 
         let price_impact = swap_data
@@ -394,7 +394,7 @@ impl SwapRouter for GmgnRouter {
             .unwrap_or(0.0);
 
         let execution_data = serde_json::to_vec(&swap_data).map_err(|e| {
-            ScreenerBotError::internal_error(format!("Swap data serialization failed: {}", e))
+            Error::internal_error(format!("Swap data serialization failed: {}", e))
         })?;
 
         Ok(Quote {
@@ -418,11 +418,11 @@ impl SwapRouter for GmgnRouter {
         &self,
         token: &Token,
         quote: &Quote,
-    ) -> Result<SwapResult, ScreenerBotError> {
+    ) -> Result<SwapResult> {
         let start = Instant::now();
 
         let swap_data: SwapData = serde_json::from_slice(&quote.execution_data).map_err(|e| {
-            ScreenerBotError::internal_error(format!("Swap data deserialization failed: {}", e))
+            Error::internal_error(format!("Swap data deserialization failed: {}", e))
         })?;
 
         let signature = self
