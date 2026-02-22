@@ -52,7 +52,7 @@ Living documentation describing how each major system works. These docs are the 
 | [RPC Module](architecture/rpc.md) | 600 | Multi-provider Solana RPC, circuit breaker, rate limiting |
 | [APIs Module](architecture/apis.md) | 412 | External HTTP clients + LLM providers + SOL price service |
 | **User Interface** | | |
-| [Webserver](architecture/webserver.md) | 701 | Axum server lifecycle, middleware gates, embedded assets, headless auth |
+| [Webserver](architecture/webserver.md) | 1052 | Axum server lifecycle, middleware gates, embedded assets, headless auth, performance patterns |
 | [Telegram](architecture/telegram.md) | 364 | Telegram bot: discovery, notifications, commands, sessions/2FA |
 | **System** | | |
 | [Config](architecture/config.md) | 478 | TOML configuration, macro system, hot reload, metadata |

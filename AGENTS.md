@@ -629,6 +629,27 @@ Backend: Response types inline in route files — no separate models folder. Eac
 
 Frontend: Pages load as ES modules. Pure HTML in `pages/*.html`, no inline scripts/styles. All helpers in `core/utils.js` — never duplicate.
 
+**Performance Patterns:**
+- Status endpoints: `/api/status/services` and `/api/status/metrics` use targeted collector functions, NOT `gather_status_snapshot()`. Only `/api/status` uses the full snapshot.
+- Dashboard overview uses SQL aggregation (`get_period_trading_stats`) — never load all closed positions into memory.
+- Trader stats uses `get_closed_positions_since()` for time-bounded DB queries.
+- Position detail uses `tokio::join!` for parallel async calls.
+- Transaction collector uses `tokio::join!` for parallel DB queries.
+- Cache-control: static assets (`/scripts/*`, `/assets/*`, `/fonts/*`) get `immutable, max-age=31536000`. API endpoints get `no-store`. HTML pages get `no-cache`.
+
+### Performance Patterns
+
+**Rule: Always use `tokio::join!` for independent async calls** — Never sequential await. When fetching multiple pieces of data that don't depend on each other, run them in parallel:
+```rust
+let (data1, data2, data3) = tokio::join!(fetch1(), fetch2(), fetch3());
+```
+
+**Rule: Push filtering/aggregation to SQL** — Never load all records then filter in Rust. Use WHERE clauses, aggregation functions (COUNT, SUM, AVG), and LIMIT in queries. O(1) memory is better than O(n).
+
+**Rule: Use targeted data fetching** — If you only need services status, don't run a full system snapshot. Call the specific collector function you need (e.g., `get_services_status()` not `gather_status_snapshot()`).
+
+**Rule: Cache immutable resources aggressively** — Compile-time embedded assets don't change between builds. Set `Cache-Control: public, immutable, max-age=31536000` for static assets. Only dynamic API responses need `no-store`.
+
 ### Dashboard Design System
 
 Dark theme colors: `bg-primary=#0d1117`, `bg-secondary=#161b22`, `border-color=#30363d`, `text-primary=#e6edf3`, `success=#3fb950`, `error=#f85149`. Always use CSS variables from `foundation.css`.
@@ -840,6 +861,8 @@ ALL databases must use `database::configure_connection()` — never set PRAGMAs 
 - AI engine singleton — `try_get_ai_engine()` returns Option (safe), `get_ai_engine()` panics if not initialized.
 - AI response parsing — use `with_json_mode()` on ChatRequest and `validate_json_response()`.
 - AI cache priority — High bypasses cache (trading), Medium uses recent (trailing stop), Low always uses cache (filtering).
+- Loading all closed positions from DB is O(n) memory — use SQL aggregation for stats (`get_period_trading_stats`).
+- `gather_status_snapshot()` runs 9+ parallel queries — only call it when you need ALL the data (e.g., `/api/status`). Use targeted collectors for specific needs (`get_services_status()`, `get_metrics_status()`).
 
 ---
 
