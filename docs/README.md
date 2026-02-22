@@ -44,7 +44,7 @@ Living documentation describing how each major system works. These docs are the 
 | [OHLCV Module](architecture/ohlcvs.md) | 814 | Candle data fetching, aggregation, caching, strategy integration |
 | [Trader Engine](architecture/trader.md) | 534 | Dual monitors, entry pipeline, priority exits, safety system |
 | [Trading Strategies](architecture/strategies.md) | 383 | Condition-based strategy system, rule tree, evaluation engine |
-| [Filtering Pipeline](architecture/filtering.md) | 1017 | Token quality control — filter chain, sources, caching, query system |
+| [Filtering Pipeline](architecture/filtering.md) | 1043 | Token quality control — filter chain, sources, caching, query system |
 | **Execution** | | |
 | [Swap Routing](architecture/swaps.md) | 496 | Multi-router quote+execute, fallback chain, Jupiter referral fee |
 | [Transactions](architecture/transactions.md) | 412 | Transaction monitoring, analyzer pipeline, 10+ DEX detection |

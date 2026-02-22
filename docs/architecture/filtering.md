@@ -23,7 +23,7 @@ src/filtering/
 ├── store.rs            # Caching layer: FilteringStore with RwLock<Arc<Snapshot>>
 ├── types.rs            # Data structures: FilteringSnapshot, FilteringQuery, enums
 └── sources/            # Filter implementations
-    ├── mod.rs          # FilterSource & FilterRejectionReason enums (145 variants)
+    ├── mod.rs          # FilterSource & FilterRejectionReason enums (~100 variants)
     ├── meta.rs         # Pre-filters: age, cooldown, decimals (runs FIRST)
     ├── onchain.rs      # Scam detection: symbol analysis, authority checks, risk scoring
     ├── dexscreener.rs  # Market data: liquidity, volume, txns, price changes (43 checks)
@@ -36,8 +36,11 @@ src/filtering/
 
 ### FilteringSnapshot
 ```rust
+use chrono::{DateTime, Utc};
+use std::collections::HashMap;
+
 pub struct FilteringSnapshot {
-    pub updated_at: i64,                                        // Unix timestamp
+    pub updated_at: DateTime<Utc>,                              // Snapshot timestamp
     pub filtered_mints: Vec<String>,                            // All passing tokens
     pub passed_tokens: Vec<PassedToken>,                        // Top 1000 by time
     pub rejected_mints: Vec<String>,                            // All failing tokens
@@ -49,13 +52,16 @@ pub struct FilteringSnapshot {
 
 ### TokenEntry
 ```rust
+use chrono::{DateTime, Utc};
+use std::sync::Arc;
+
 pub struct TokenEntry {
-    pub token: Arc<Token>,              // Shared reference (saves 288MB via Arc wrapping)
+    pub token: Arc<Token>,              // Shared reference (avoids cloning large Token structs per snapshot)
     pub has_pool_price: bool,           // Pre-computed flag
     pub has_open_position: bool,        // Pre-computed flag
     pub has_ohlcv: bool,                // Pre-computed flag
     pub pair_created_at: Option<i64>,   // Blockchain or discovery timestamp
-    pub last_updated: Option<i64>,      // Last data update
+    pub last_updated: DateTime<Utc>,    // Last data update (snapshot-derived)
 }
 ```
 
@@ -72,17 +78,15 @@ pub struct FilteringQuery {
     // Range filters
     pub min_liquidity: Option<f64>,
     pub max_liquidity: Option<f64>,
-    pub min_volume: Option<f64>,
-    pub max_volume: Option<f64>,
-    pub min_risk_score: Option<u32>,
-    pub max_risk_score: Option<u32>,
-    pub min_holder_count: Option<u32>,
-    pub max_top_holder_percent: Option<f64>,
+    pub min_volume_24h: Option<f64>,
+    pub max_volume_24h: Option<f64>,
+    pub max_risk_score: Option<i32>,
+    pub min_unique_holders: Option<i32>,
     
     // Boolean filters
-    pub with_pool_price: Option<bool>,
-    pub with_open_position: Option<bool>,
-    pub with_ohlcv: Option<bool>,
+    pub has_pool_price: Option<bool>,
+    pub has_open_position: Option<bool>,
+    pub has_ohlcv: Option<bool>,
     pub blacklisted: Option<bool>,
     pub rejection_reason: Option<String>, // Filter by specific rejection
 }
@@ -114,7 +118,7 @@ pub enum FilterSource {
 }
 ```
 
-### FilterRejectionReason (145 variants)
+### FilterRejectionReason (~100 variants)
 
 **Core (6 reasons):**
 - `NoDecimalsInDatabase` - Token decimals not cached
@@ -125,40 +129,40 @@ pub enum FilterSource {
 - `RugcheckDataMissing` - No Rugcheck data available
 
 **OnChain (6 reasons):**
-- `NumericSymbol` - Symbol is all digits
-- `EmptySymbol` - Symbol empty or whitespace
-- `SuspiciousSymbol` - Single non-alphabetic char
-- `KnownScamAuthority` - Freeze/update/mint authority on scam list
-- `ImmutableWithFreeze` - Immutable metadata + freeze authority
-- `HighRiskScore` - Combined risk score too high
+- `OnChainNumericSymbol` - Symbol is all digits
+- `OnChainEmptySymbol` - Symbol empty or whitespace
+- `OnChainSuspiciousSymbol` - Single non-alphabetic char
+- `OnChainKnownScamAuthority` - Freeze/update/mint authority in blocked set
+- `OnChainImmutableWithFreeze` - Immutable metadata + freeze authority
+- `OnChainHighRiskScore` - Combined risk score too high
 
 **AI (1 reason):**
-- `AiRejected { reason: String, confidence: f64, provider: String }` - LLM rejection
+- `AiRejected { reason: String, confidence: u8, provider: String }` - LLM rejection
 
-**DexScreener (43 reasons):**
-- Token info: `DexNameMissing`, `DexSymbolMissing`, `DexLogoMissing`, `DexWebsiteMissing`
-- Transactions: `DexTransactions5mTooLow`, `DexTransactions1hTooLow`
-- Liquidity: `DexLiquidityZero`, `DexLiquidityTooLow`, `DexLiquidityTooHigh`
-- Market cap: `DexMarketCapTooLow`, `DexMarketCapTooHigh`
-- FDV: `DexFdvMissing`, `DexFdvTooLow`, `DexFdvTooHigh`
-- Volume: `DexVolume5mMissing/TooLow`, `DexVolume1hMissing/TooLow`, `DexVolume6hMissing/TooLow`, `DexVolume24hMissing/TooLow`
-- Price change: `DexPriceChange5m/1h/6h/24h TooLow/TooHigh`
+**DexScreener:**
+- Token info: `DexScreenerEmptyName`, `DexScreenerEmptySymbol`, `DexScreenerEmptyLogoUrl`, `DexScreenerEmptyWebsiteUrl`
+- Transactions: `DexScreenerInsufficientTransactions5Min`, `DexScreenerInsufficientTransactions1H`
+- Liquidity: `DexScreenerZeroLiquidity`, `DexScreenerInsufficientLiquidity`, `DexScreenerLiquidityTooHigh`
+- Market cap: `DexScreenerMarketCapTooLow`, `DexScreenerMarketCapTooHigh`
+- FDV: `DexScreenerFdvMissing`, `DexScreenerFdvTooLow`, `DexScreenerFdvTooHigh`
+- Volume: `DexScreenerVolumeMissing`, `DexScreenerVolumeTooLow`, plus timeframe-specific `DexScreenerVolume{5m,1h,6h}*`
+- Price change: `DexScreenerPriceChange*` (timeframe-specific TooLow/TooHigh/Missing variants)
 
-**GeckoTerminal (24 reasons):**
-- Liquidity: `GeckoLiquidityMissing`, `GeckoLiquidityTooLow`, `GeckoLiquidityTooHigh`
-- Market cap: `GeckoMarketCapMissing`, `GeckoMarketCapTooLow`, `GeckoMarketCapTooHigh`
-- Volume: `GeckoVolume5m/1h/24h Missing/TooLow`
-- Price change: `GeckoPriceChange5m/1h/24h TooLow/TooHigh`
-- Pool metrics: `GeckoPoolCountTooLow`, `GeckoPoolCountTooHigh`, `GeckoReserveTooLow`
+**GeckoTerminal:**
+- Liquidity: `GeckoTerminalLiquidityMissing`, `GeckoTerminalLiquidityTooLow`, `GeckoTerminalLiquidityTooHigh`
+- Market cap: `GeckoTerminalMarketCapMissing`, `GeckoTerminalMarketCapTooLow`, `GeckoTerminalMarketCapTooHigh`
+- Volume: `GeckoTerminalVolume{5m,1h,24h}Missing/TooLow`
+- Price change: `GeckoTerminalPriceChange{5m,1h,24h}TooLow/TooHigh/Missing`
+- Pool metrics: `GeckoTerminalPoolCountTooLow`, `GeckoTerminalPoolCountTooHigh`, `GeckoTerminalReserveTooLow`
 
-**Rugcheck (28 reasons):**
-- Status: `RugcheckRugged`, `RugcheckRiskScoreTooHigh`, `RugcheckDangerRisk`
-- Authorities: `RugcheckMintAuthority`, `RugcheckFreezeAuthority`
-- Holders: `RugcheckMinHolders`, `RugcheckTopHolderPercent`, `RugcheckTop3HoldersPercent`
-- Insiders: `RugcheckInsiderHoldersCount`, `RugcheckInsiderHoldersPercent`, `RugcheckGraphInsidersCount`
-- Creator: `RugcheckCreatorBalancePercent`
+**Rugcheck:**
+- Status: `RugcheckRuggedToken`, `RugcheckRiskScoreTooHigh`, `RugcheckRiskLevelDanger`
+- Authorities: `RugcheckMintAuthorityBlocked`, `RugcheckFreezeAuthorityBlocked`
+- Holders: `RugcheckNotEnoughHolders`, `RugcheckTopHolderTooHigh`, `RugcheckTop3HoldersTooHigh`
+- Insiders: `RugcheckInsiderHolderCount`, `RugcheckInsiderTotalPct`, `RugcheckGraphInsidersTooHigh`
+- Creator: `RugcheckCreatorBalanceTooHigh`
 - Transfer: `RugcheckTransferFeePresent`, `RugcheckTransferFeeTooHigh`, `RugcheckTransferFeeMissing`
-- LP: `RugcheckLpProvidersCount`, `RugcheckLpProvidersMissing`, `RugcheckLpLockPercentTooLow`
+- LP: `RugcheckLpProvidersTooLow`, `RugcheckLpProvidersMissing`, `RugcheckLpLockTooLow`
 
 ## 4. Filtering Pipeline
 
@@ -173,8 +177,8 @@ pub enum FilterSource {
                     └───────────┬────────────┘
                                 │
                     ┌───────────▼────────────┐
-                    │  Arc<Token> Wrapping   │
-                    │  (Saves 288MB memory)  │
+                     │  Arc<Token> Wrapping   │
+                     │  (Avoids Token clones) │
                     └───────────┬────────────┘
                                 │
               ┌─────────────────┼─────────────────┐
@@ -268,7 +272,13 @@ pub enum FilterSource {
 
 **Sequential Execution:** Token must pass ALL enabled filters. First rejection stops processing (short-circuit).
 
-**Data Source Awareness:** DexScreener and GeckoTerminal checks only run if `token.data_source` matches the filter's expected source. This prevents false rejections when data comes from alternative source.
+**Data source awareness (and N+1 avoidance):**
+
+- The batch load already assembles each `Token` using **preferred + fallback** market sources and sets `token.data_source`.
+- Filtering does **not** perform per-token DB/API fetches to load the other market source (avoids N+1 queries).
+- If a source filter is enabled but `token.data_source` does not match, the engine rejects with `*DataMissing`:
+  - DexScreener enabled + `token.data_source != DexScreener` → `DexScreenerDataMissing`
+  - GeckoTerminal enabled + `token.data_source != GeckoTerminal` → `GeckoTerminalDataMissing`
 
 **Background Refresh:** Snapshot refresh spawns 4 batch database update tasks (fire-and-forget) and returns immediately. Tasks complete asynchronously.
 
@@ -284,12 +294,11 @@ pub enum FilterSource {
 
 **Config Keys:**
 ```toml
-[filtering.meta]
+[filtering]
 age_enabled = true
 min_token_age_minutes = 60
 cooldown_enabled = true
 check_cooldown = true
-cooldown_hours = 24
 ```
 
 **Why First:** Meta checks are fast (database lookups) and eliminate tokens before expensive API validation.
@@ -309,19 +318,20 @@ cooldown_hours = 24
 - Numeric symbol: +30 points
 - Empty symbol: +25 points
 - Freeze authority: +10 points
+- Immutable metadata with other signals: +10 points
 - Name == symbol: +15 points
 
 **Config Keys:**
 ```toml
 [filtering.onchain]
 enabled = true
-symbol_numeric_enabled = true
-symbol_empty_enabled = true
-symbol_suspicious_enabled = true
-authority_check_enabled = true
-immutable_freeze_check_enabled = true
-risk_score_enabled = true
-max_risk_score = 50
+reject_numeric_symbols = true
+reject_empty_symbols = true
+reject_single_char_symbols = false
+reject_known_scam_authorities = true
+reject_immutable_with_freeze = true
+combined_risk_enabled = true
+max_combined_risk_score = 60
 ```
 
 **Authority Cache:** Uses `tokens::authority_cache::is_blocked_authority()` - auto-discovered scam authorities from previous rejections.
@@ -376,15 +386,15 @@ min_liquidity_usd = 1000.0
 max_liquidity_usd = 500000.0
 
 volume_enabled = true
-min_volume_5m_usd = 100.0
-min_volume_1h_usd = 500.0
-min_volume_6h_usd = 2000.0
-min_volume_24h_usd = 5000.0
+min_volume_5m = 100.0
+min_volume_1h = 500.0
+min_volume_6h = 2000.0
+min_volume_24h = 5000.0
 
 price_change_enabled = true
-min_price_change_5m = -50.0
-max_price_change_5m = 200.0
-# ... similar for 1h, 6h, 24h
+min_price_change_m5 = -50.0
+max_price_change_m5 = 200.0
+# ... similar keys exist for h1/h6/h24
 ```
 
 ### GeckoTerminal Filters
@@ -444,38 +454,55 @@ max_price_change_5m = 200.0
 ```toml
 [filtering.rugcheck]
 enabled = true
-check_rugged = true
-risk_score_enabled = true
-max_risk_score = 500
 
-authority_enabled = true
+# Risk score (raw Rugcheck score; lower = safer)
+risk_score_enabled = true
+max_risk_score = 10000
+
+# Authorities
+authority_checks_enabled = true
+require_authorities_safe = true
 allow_mint_authority = false
 allow_freeze_authority = false
 
-holder_enabled = true
-min_holders = 50
-max_top_holder_percent = 30.0
-max_top_3_holder_percent = 50.0
+# Risk level
+risk_level_enabled = true
+block_danger_level = true
 
-insider_enabled = true
-max_insider_holders_count = 3
-max_insider_holders_percent = 20.0
-max_graph_insiders_count = 2
+# Holders / concentration
+holder_distribution_enabled = true
+min_unique_holders = 50
+max_top_holder_pct = 40.0
+max_top_3_holders_pct = 60.0
 
-creator_enabled = true
-max_creator_balance_percent = 10.0
+# LP lock
+lp_lock_enabled = true
+min_pumpfun_lp_lock_pct = 50.0
+min_regular_lp_lock_pct = 50.0
 
+# Rugged flag
+rugged_check_enabled = true
+block_rugged_tokens = true
+
+# Insiders
+graph_insiders_enabled = true
+max_graph_insiders = 3
+insider_holder_checks_enabled = true
+max_insider_holders_in_top_10 = 2
+max_insider_total_pct = 20.0
+
+# Creator
+creator_balance_enabled = true
+max_creator_balance_pct = 10.0
+
+# LP providers
+lp_providers_enabled = true
+min_lp_providers = 3
+
+# Transfer fee (Token-2022)
 transfer_fee_enabled = true
-block_any_transfer_fee = false
-max_transfer_fee_percent = 5.0
-transfer_fee_missing_strict = false
-
-lp_enabled = true
-min_lp_providers = 2
-lp_missing_error = true
-lp_lock_percent_enabled = true
-min_lp_lock_percent = 80.0
-min_lp_lock_percent_pumpfun = 50.0
+block_transfer_fee_tokens = false
+max_transfer_fee_pct = 5.0
 ```
 
 **Pump.fun Detection:** Checks `token.token_type` field for "pump" string to apply alternative thresholds.
@@ -526,7 +553,7 @@ pub struct FilteringStore {
 **Arc Wrapper:**
 - Snapshot cloned cheaply (8-byte pointer copy)
 - Multiple consumers share same data
-- Inner Token also Arc-wrapped (saves 288MB)
+- Inner Token also Arc-wrapped (prevents N×Token clones per query)
 
 ### Staleness Management
 ```rust
@@ -663,15 +690,14 @@ let items = entries.into_iter().skip(start).take(query.page_size).collect();
 
 **Range Filters:**
 - `min_liquidity` / `max_liquidity`: Uses `token.liquidity_usd`
-- `min_volume` / `max_volume`: Uses `token.volume_24h_usd`
-- `min_risk_score` / `max_risk_score`: Uses `token.risk_score`
-- `min_holder_count`: Uses `token.holder_count`
-- `max_top_holder_percent`: Uses `token.top_10_holder_percent`
+- `min_volume_24h` / `max_volume_24h`: Uses `token.volume_h24`
+- `max_risk_score`: Uses `token.security_score` (raw Rugcheck risk; higher = more risky)
+- `min_unique_holders`: Uses `token.total_holders`
 
 **Boolean Filters:**
-- `with_pool_price`: Filters by `has_pool_price` flag
-- `with_open_position`: Filters by `has_open_position` flag
-- `with_ohlcv`: Filters by `has_ohlcv` flag
+- `has_pool_price`: Filters by `has_pool_price` flag
+- `has_open_position`: Filters by `has_open_position` flag
+- `has_ohlcv`: Filters by `has_ohlcv` flag
 - `blacklisted`: Filters by `token.is_blacklisted`
 - `rejection_reason`: Matches `token.last_rejection_reason`
 
@@ -681,9 +707,10 @@ let items = entries.into_iter().skip(start).take(query.page_size).collect();
 - `Symbol`, `Mint`: String comparison
 - `PriceSol`: Real-time pool price via `pools::get_pool_price()` (fallback to token.price_sol)
 - `LiquidityUsd`, `Volume24h`, `Fdv`, `MarketCap`: Numeric field comparison
-- `PairCreatedAt`, `LastUpdated`, `FirstDiscoveredAt`: Timestamp comparison
+- `PriceChangeH1`, `PriceChangeH24`: Numeric field comparison
+- `MarketDataLastFetchedAt`, `FirstDiscoveredAt`, `MetadataLastFetchedAt`, `BlockchainCreatedAt`, `PoolPriceLastCalculatedAt`: Timestamp comparison
 - `Txns5m`, `Txns1h`, `Txns6h`, `Txns24h`: Sum of buy_count + sell_count
-- `RiskScore`, `HolderCount`, `TopHolderPercent`: Security metrics
+- `RiskScore`: Security metric (Rugcheck risk score)
 
 **Pool Price Overlay:** For Pool view sorts, calls `pools::get_pool_price()` to get real-time price instead of stale token.price_sol.
 
@@ -694,11 +721,10 @@ let items = entries.into_iter().skip(start).take(query.page_size).collect();
 **Calculation:**
 ```rust
 let start = (query.page - 1) * query.page_size;  // 0-indexed offset
-let items: Vec<Arc<Token>> = entries
+let items: Vec<Token> = entries
     .into_iter()
     .skip(start)
     .take(query.page_size)
-    .map(|e| e.token.clone())
     .collect();
 ```
 
@@ -791,7 +817,7 @@ FilteringQueryResult {
 ## 9. Performance Optimizations
 
 ### Arc<Token> Wrapping
-**Problem:** Each token ~2KB. Cloning 56k tokens = 112MB per operation. Multiple concurrent queries = 290MB+ memory.
+**Problem:** Each `Token` is ~2KB. Cloning `N` tokens is ~`N * 2KB` of transient memory per operation (e.g. 56k → ~112MB).
 
 **Solution:**
 ```rust
@@ -805,7 +831,7 @@ let token_entry = TokenEntry {
 };
 ```
 
-**Impact:** Reduces memory from 290MB to 1.2MB for 56k tokens.
+**Impact:** Reduces per-operation memory from **O(N × size(Token))** to **O(N × size(Arc pointer))** (e.g. ~112MB → ~0.4MB for 56k tokens, plus container overhead).
 
 ### Batch Database Operations
 **Problem:** Original code spawned 260k+ tokio tasks (56k tokens × 4 DB operations each + 5.6k sampling events).
