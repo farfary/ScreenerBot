@@ -11,13 +11,17 @@ export const SECTION_DISPLAY_ORDER = [
   "swaps",
   "tokens",
   "pools",
+  "wallet",
   "sol_price",
   "telegram",
   "ai",
+  "strategies",
+  "holder_watch",
   "events",
   "webserver",
   "services",
   "monitoring",
+  "performance",
   "maintenance",
   "ohlcv",
   "summary",
@@ -31,6 +35,7 @@ export const SECTION_LABEL_OVERRIDES = {
   swaps: "Swaps",
   tokens: "Tokens",
   pools: "Pools",
+  wallet: "Wallet",
   sol_price: "SOL Price",
   events: "Events",
   webserver: "Webserver",
@@ -41,6 +46,9 @@ export const SECTION_LABEL_OVERRIDES = {
   summary: "Summary",
   telegram: "Telegram",
   ai: "Assistant",
+  strategies: "Strategies",
+  holder_watch: "Holder Watch",
+  performance: "Performance",
 };
 
 /**
@@ -235,24 +243,24 @@ export function deepEqual(a, b) {
  * @returns {{ total: number, critical: number, performance: number }}
  */
 export function summarizeSectionFields(fields = {}) {
-  const entries = Object.values(fields);
-  const summary = {
-    total: entries.length,
-    critical: 0,
-    performance: 0,
-  };
+  const summary = { total: 0, critical: 0, performance: 0 };
 
-  for (const field of entries) {
-    const impact = (field.impact || "").toLowerCase();
-    if (impact === "critical") {
-      summary.critical += 1;
-    }
-    const category = (field.category || "").toLowerCase();
-    if (category.includes("performance")) {
-      summary.performance += 1;
+  function countRecursive(fieldMap) {
+    for (const field of Object.values(fieldMap)) {
+      const children = field.children || field.fields;
+      if (children && Object.keys(children).length > 0) {
+        countRecursive(children);
+      } else {
+        summary.total += 1;
+        const impact = (field.impact || "").toLowerCase();
+        if (impact === "critical") summary.critical += 1;
+        const category = (field.category || "").toLowerCase();
+        if (category.includes("performance")) summary.performance += 1;
+      }
     }
   }
 
+  countRecursive(fields);
   return summary;
 }
 

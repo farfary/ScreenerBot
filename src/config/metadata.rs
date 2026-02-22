@@ -303,6 +303,10 @@ pub fn collect_config_metadata() -> ConfigMetadata {
     map.insert("webserver", super::WebserverConfig::field_metadata());
     map.insert("telegram", super::TelegramConfig::field_metadata());
     map.insert("ai", super::AiConfig::field_metadata());
+    map.insert("strategies", super::StrategiesConfig::field_metadata());
+    map.insert("holder_watch", super::HolderWatchConfig::field_metadata());
+    map.insert("wallet", super::WalletConfig::field_metadata());
+    map.insert("performance", super::PerformanceConfig::field_metadata());
 
     for section in map.values_mut() {
         section.retain(|_, field| !field.hidden.unwrap_or(false));

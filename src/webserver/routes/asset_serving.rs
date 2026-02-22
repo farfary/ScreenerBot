@@ -3,6 +3,39 @@ use axum::{
     http::{header as http_header, StatusCode},
     response::{IntoResponse, Response},
 };
+use regex::Regex;
+use std::sync::LazyLock;
+
+/// Rewrite ES module import paths to include the asset version query parameter.
+/// This ensures browser module cache is busted on version changes.
+fn version_js_imports(js: &str) -> String {
+    static RE: LazyLock<Regex> = LazyLock::new(|| {
+        Regex::new(r#"(from\s+["'])([^"']+\.js)(["'])"#).unwrap()
+    });
+
+    let version = crate::version::get_version();
+    let ts = option_env!("ASSET_VERSION_TS").unwrap_or("0");
+    let ver = format!("{}-{}", version, ts);
+
+    RE.replace_all(js, |caps: &regex::Captures| {
+        format!("{}{}?v={}{}", &caps[1], &caps[2], ver, &caps[3])
+    })
+    .into_owned()
+}
+
+/// Serve a JS module with versioned imports
+fn serve_js(content: &str) -> Response {
+    let versioned = version_js_imports(content);
+    (
+        StatusCode::OK,
+        [(
+            http_header::CONTENT_TYPE,
+            "application/javascript; charset=utf-8",
+        )],
+        versioned,
+    )
+        .into_response()
+}
 
 /// Serve core JavaScript modules
 pub async fn get_core_script(axum::extract::Path(file): axum::extract::Path<String>) -> Response {
@@ -31,15 +64,7 @@ pub async fn get_core_script(axum::extract::Path(file): axum::extract::Path<Stri
     };
 
     match content {
-        Some(js) => (
-            StatusCode::OK,
-            [(
-                http_header::CONTENT_TYPE,
-                "application/javascript; charset=utf-8",
-            )],
-            js,
-        )
-            .into_response(),
+        Some(js) => serve_js(js),
         None => (StatusCode::NOT_FOUND, "Script not found").into_response(),
     }
 }
@@ -90,15 +115,7 @@ pub async fn get_page_script(axum::extract::Path(file): axum::extract::Path<Stri
     };
 
     match content {
-        Some(js) => (
-            StatusCode::OK,
-            [(
-                http_header::CONTENT_TYPE,
-                "application/javascript; charset=utf-8",
-            )],
-            js,
-        )
-            .into_response(),
+        Some(js) => serve_js(js),
         None => (StatusCode::NOT_FOUND, "Script not found").into_response(),
     }
 }
@@ -167,15 +184,7 @@ pub async fn get_ui_script(axum::extract::Path(file): axum::extract::Path<String
     };
 
     match content {
-        Some(js) => (
-            StatusCode::OK,
-            [(
-                http_header::CONTENT_TYPE,
-                "application/javascript; charset=utf-8",
-            )],
-            js,
-        )
-            .into_response(),
+        Some(js) => serve_js(js),
         None => (StatusCode::NOT_FOUND, "Script not found").into_response(),
     }
 }

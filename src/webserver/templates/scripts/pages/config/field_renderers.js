@@ -21,6 +21,7 @@ export const SECTION_ICONS = {
   swaps: "icon-repeat",
   tokens: "icon-coins",
   pools: "icon-database",
+  wallet: "icon-wallet",
   sol_price: "icon-sun",
   events: "icon-radio",
   webserver: "icon-network",
@@ -31,6 +32,9 @@ export const SECTION_ICONS = {
   summary: "icon-file-text",
   telegram: "icon-send",
   ai: "icon-bot-message-square",
+  strategies: "icon-brain",
+  holder_watch: "icon-eye",
+  performance: "icon-gauge",
 };
 
 /**

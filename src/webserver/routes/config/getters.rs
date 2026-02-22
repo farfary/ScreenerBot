@@ -222,6 +222,42 @@ pub async fn get_ai_config() -> Response {
     success_response(data)
 }
 
+/// GET /api/config/strategies - Get strategies configuration
+pub async fn get_strategies_config() -> Response {
+    let data = config::with_config(|cfg| ConfigResponse {
+        data: cfg.strategies.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    });
+    success_response(data)
+}
+
+/// GET /api/config/holder_watch - Get holder watch configuration
+pub async fn get_holder_watch_config() -> Response {
+    let data = config::with_config(|cfg| ConfigResponse {
+        data: cfg.holder_watch.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    });
+    success_response(data)
+}
+
+/// GET /api/config/wallet - Get wallet configuration
+pub async fn get_wallet_config() -> Response {
+    let data = config::with_config(|cfg| ConfigResponse {
+        data: cfg.wallet.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    });
+    success_response(data)
+}
+
+/// GET /api/config/performance - Get performance configuration
+pub async fn get_performance_config() -> Response {
+    let data = config::with_config(|cfg| ConfigResponse {
+        data: cfg.performance.clone(),
+        timestamp: chrono::Utc::now().to_rfc3339(),
+    });
+    success_response(data)
+}
+
 /// GET /api/config/metadata - Get configuration metadata for UI rendering
 pub async fn get_config_metadata() -> Response {
     let response = ConfigMetadataResponse {
@@ -268,6 +304,10 @@ where
             "GuiConfig" => serde_json::to_value(&cfg.gui).ok(),
             "TelegramConfig" => serde_json::to_value(&cfg.telegram).ok(),
             "AiConfig" => serde_json::to_value(&cfg.ai).ok(),
+            "StrategiesConfig" => serde_json::to_value(&cfg.strategies).ok(),
+            "HolderWatchConfig" => serde_json::to_value(&cfg.holder_watch).ok(),
+            "WalletConfig" => serde_json::to_value(&cfg.wallet).ok(),
+            "PerformanceConfig" => serde_json::to_value(&cfg.performance).ok(),
             _ => None,
         });
 
@@ -444,6 +484,49 @@ where
                 config::update_config_section(
                     |cfg| {
                         cfg.ai = new_config;
+                    },
+                    true,
+                )?;
+            }
+            "StrategiesConfig" => {
+                let new_config: config::StrategiesConfig =
+                    serde_json::from_value(section_json)
+                        .map_err(|e| format!("Invalid StrategiesConfig: {}", e))?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.strategies = new_config;
+                    },
+                    true,
+                )?;
+            }
+            "HolderWatchConfig" => {
+                let new_config: config::HolderWatchConfig =
+                    serde_json::from_value(section_json)
+                        .map_err(|e| format!("Invalid HolderWatchConfig: {}", e))?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.holder_watch = new_config;
+                    },
+                    true,
+                )?;
+            }
+            "WalletConfig" => {
+                let new_config: config::WalletConfig = serde_json::from_value(section_json)
+                    .map_err(|e| format!("Invalid WalletConfig: {}", e))?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.wallet = new_config;
+                    },
+                    true,
+                )?;
+            }
+            "PerformanceConfig" => {
+                let new_config: config::PerformanceConfig =
+                    serde_json::from_value(section_json)
+                        .map_err(|e| format!("Invalid PerformanceConfig: {}", e))?;
+                config::update_config_section(
+                    |cfg| {
+                        cfg.performance = new_config;
                     },
                     true,
                 )?;
