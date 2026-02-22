@@ -17,6 +17,25 @@ Before modifying code, creating files, researching, reviewing pull requests, wri
 
 Only after reading the relevant docs should you look at source code files.
 
+## Start + End Doc Review (MANDATORY)
+
+For **every task** (bug fix, feature, refactor, performance work), treat architecture docs as a first-class artifact.
+
+### At the start of the task
+
+1. Identify which modules are affected (tokens/filtering/pools/trader/positions/transactions/webserver/etc).
+2. Read the relevant `docs/architecture/*.md` docs for those modules (and `docs/architecture/overview.md` if it is a cross-cutting change).
+3. Decide what *must* change in docs if the code changes (capture this mentally; do not start coding blind).
+
+### At the end of the task (before saying "done")
+
+1. Re-read the same architecture docs and update them to match the new behavior (no guessing).
+2. Update `docs/README.md` line counts for every modified/added architecture doc:
+   ```bash
+   wc -l docs/architecture/*.md | sort -n
+   ```
+3. Enforce the hard rule: **max 2000 lines per architecture doc** (split if necessary).
+
 ## Repository Structure
 
 ```
