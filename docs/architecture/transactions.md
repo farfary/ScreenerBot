@@ -30,9 +30,9 @@ The Transactions module monitors wallet activity via WebSocket (`logsSubscribe`)
 - Multi-stage analyzer pipeline: classify → balance → DEX detect → P&L → ATA analysis
 - 10+ DEX protocol recognition (Jupiter, Raydium, Orca, Meteora, PumpFun, etc.)
 - Jito MEV tip detection (8 hardcoded tip addresses)
-- Deferred retry queue with exponential backoff for failed fetches
+- Deferred retry queue (in-memory bounded cache) with backoff for temporary RPC/indexing failures
 - 7-table SQLite schema with 14 performance indexes
-- Pending transaction tracking via `Arc<Mutex<HashMap>>`
+- Pending transaction tracking via `Arc<Mutex<HashMap>>` + known signatures via bounded moka cache + DB persistence
 
 **34 files across 4 subdirectories + root files**
 
@@ -144,7 +144,7 @@ pub enum TransactionType {
     SolTransfer { amount: f64, from: String, to: String },
     TokenTransfer { mint: String, amount: f64, from: String, to: String },
     AtaClose { recovered_sol: f64, token_mint: String },
-    Other { description: String, details: Option<String> },
+    Other { description: String, details: String },
 }
 ```
 
@@ -164,10 +164,10 @@ pub enum TransactionStatus {
 ```rust
 pub struct TokenTransfer {
     pub mint: String,
+    pub amount: f64,
     pub from: String,
     pub to: String,
-    pub amount: f64,
-    pub decimals: u8,
+    pub program_id: String,
 }
 
 pub struct FeeBreakdown {
@@ -357,9 +357,12 @@ fetch_transaction_details_with_retry(signature)
 ### Deferred Retry Queue (`service/processing.rs`)
 
 For transactions that fail analysis (e.g., missing data):
-- Exponential backoff: `5 × 2^(attempts-1)` seconds
+- Stored in-memory (`service/config.rs`):
+  - `DEFERRED_RETRIES`: moka cache (max 1K entries, 5min TTL)
+  - `DEFERRED_RETRY_KEYS`: DashSet for iteration (moka has no `iter()`)
+- Backoff: linear (`current_delay_secs = base_delay_secs * attempts`)
+  - Example for RPC indexing delays (base=5s): 5s → 10s → 15s
 - Max attempts: 3
-- Stored in `deferred_retries` DB table
 
 ### Bootstrap Backfill (`service/bootstrap.rs`)
 
@@ -372,6 +375,7 @@ On startup, fetches recent historical transactions:
 ## 11. Database Schema
 
 **Database:** `transactions.db`
+**Schema version:** 4 (`database/schema.rs`)
 
 ### Tables (7)
 
@@ -380,7 +384,7 @@ On startup, fetches recent historical transactions:
 | `raw_transactions` | Blockchain data (signature, slot, block_time, status, fee, raw JSON) |
 | `processed_transactions` | Analysis results (type, direction, swap info, ATA ops, cached analysis) |
 | `known_signatures` | Signature dedup tracking |
-| `deferred_retries` | Failed analysis retry queue (signature, next_retry_at, attempts, delay) |
+| `deferred_retries` | Retry metadata table (schema exists; runtime retry queue is in-memory) |
 | `pending_transactions` | Pending tx tracking (signature, added_at, check_count) |
 | `db_metadata` | Version/config tracking |
 | `bootstrap_state` | Resume cursor for historical backfill |

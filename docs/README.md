@@ -47,7 +47,7 @@ Living documentation describing how each major system works. These docs are the 
 | [Filtering Pipeline](architecture/filtering.md) | 1043 | Token quality control — filter chain, sources, caching, query system |
 | **Execution** | | |
 | [Swap Routing](architecture/swaps.md) | 496 | Multi-router quote+execute, fallback chain, Jupiter referral fee |
-| [Transactions](architecture/transactions.md) | 412 | Transaction monitoring, analyzer pipeline, 10+ DEX detection |
+| [Transactions](architecture/transactions.md) | 416 | Transaction monitoring, analyzer pipeline, 10+ DEX detection |
 | **Data Sources** | | |
 | [RPC Module](architecture/rpc.md) | 587 | Multi-provider Solana RPC, circuit breaker, rate limiting |
 | [APIs Module](architecture/apis.md) | 412 | External HTTP clients + LLM providers + SOL price service |
