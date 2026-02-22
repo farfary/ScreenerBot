@@ -42,16 +42,44 @@ The webserver supports two distinct security models depending on how the bot is 
 
 ```text
 src/webserver/
-├── mod.rs                    public exports (`start_server`, `shutdown`, ...)
+├── mod.rs                    public exports (`start_server`, `shutdown`, `test_port_binding`)
 ├── server.rs                 axum server lifecycle + port selection + graceful shutdown
 ├── middleware.rs             request gates (security/auth/init) + cache-control
+├── assets/                   embedded dashboard assets (CSS/JS/fonts/images)
 ├── routes/                   axum routers and handlers (HTML + `/api/*`)
-│   ├── mod.rs                router composition: pages + assets + `nest("/api", ...)`
-│   ├── asset_serving.rs      `/scripts/*` + `/assets/*` handlers (all embedded)
-│   ├── status.rs             `/api/health`, `/api/status`, metrics snapshots
+│   ├── mod.rs                router composition: pages + assets + `nest("/api", api_routes())`
 │   ├── actions.rs            `/api/actions/*` + SSE stream
+│   ├── ai/                   AI assistant API (`/api/ai/*`)
+│   ├── asset_serving.rs      `/scripts/*` + `/assets/*` handlers (all embedded)
 │   ├── auth/                 headless auth API (`/api/auth/*`)
-│   └── ...                   feature routers (tokens, filtering, trader, ...)
+│   ├── billboard.rs          dashboard billboard / announcements
+│   ├── blacklist.rs          blacklist API (`/api/blacklist*`)
+│   ├── config/               config API (`/api/config*`)
+│   ├── connectivity.rs       connectivity routes (`/api/connectivity/*`)
+│   ├── dashboard/            dashboard API routes (merged under `/api/*`)
+│   ├── events.rs             event log API (`/api/events*`)
+│   ├── features.rs           feature flags (`/api/features/*`)
+│   ├── filtering/            filtering API (`/api/filtering*`)
+│   ├── header.rs             header state API (merged under `/api/*`)
+│   ├── initialization.rs     initialization routes (`/api/initialization/*`)
+│   ├── lockscreen.rs         lockscreen routes (`/api/lockscreen/*`)
+│   ├── ohlcv.rs              OHLCV routes (`/api/ohlcv*`)
+│   ├── positions/            positions API (`/api/positions*`)
+│   ├── services.rs           `/api/services` health + metrics endpoints
+│   ├── status.rs             `/api/health`, `/api/status`, metrics snapshots
+│   ├── strategies/           strategies API (`/api/strategies/*`)
+│   ├── system.rs             system endpoints (`/api/system/*`)
+│   ├── telegram.rs           Telegram integration (`/api/telegram/*`)
+│   ├── tokens/               tokens API (`/api/tokens*`)
+│   ├── tools/                tools API (`/api/tools/*`)
+│   ├── trader/               auto trader API (`/api/trader/*`)
+│   ├── trading.rs            trading operations (`/api/trading/*`)
+│   ├── transactions.rs       transactions API (`/api/transactions/*`)
+│   ├── ui_state.rs           UI state sync (merged under `/api/*`)
+│   ├── updates.rs            update checker API (`/api/updates*`)
+│   ├── wallet.rs             active wallet endpoints (merged under `/api/*`)
+│   └── wallets/              wallets API (`/api/wallets/*`)
+├── templates/                HTML templates / partials (embedded)
 ├── templates.rs              HTML rendering + injection (token/port/asset version)
 ├── embeds.rs                 `include_str!`/`include_bytes!` for all embedded assets
 ├── utils.rs                  `success_response` / `error_response` helpers
@@ -59,8 +87,7 @@ src/webserver/
 ├── session.rs                headless session token store (in-memory)
 ├── totp.rs                   TOTP utilities (secret generation + verify + QR)
 ├── snapshot/                 status snapshot collectors + caching
-├── demo.rs / demo_data.rs    dashboard demo-mode fake data (screenshots/marketing)
-└── ...
+└── demo.rs / demo_data.rs    dashboard demo-mode fake data (screenshots/marketing)
 ```
 
 Service integration entrypoint (outside this module):

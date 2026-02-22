@@ -35,6 +35,7 @@ For **every task** (bug fix, feature, refactor, performance work), treat archite
    wc -l docs/architecture/*.md | sort -n
    ```
 3. Enforce the hard rule: **max 2000 lines per architecture doc** (split if necessary).
+4. Never use `...` placeholders in architecture docs (file trees, module lists, route module lists) to hide undocumented modules — always enumerate every entry or split docs.
 
 ## Repository Structure
 
