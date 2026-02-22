@@ -621,11 +621,11 @@ Services receive TaskMonitor in `start()`. Wrap spawned tasks with `monitor.inst
 
 Macro-driven via `config_struct!`. Values in `data/config.toml`. Access: `with_config(|cfg| cfg.section.field)` (sync), `get_config_clone()` (async). Hot reload: `reload_config()` or `POST /api/config/reload`. Never hardcode values or create `_v2` versions.
 
-The config page currently has 16 sections: rpc, trader, positions, filtering, swaps, tokens, pools, sol_price, telegram, ai, events, webserver, services, monitoring, maintenance, ohlcv.
+The config page currently has 20 sections: rpc, trader, positions, filtering, swaps, tokens, pools, wallet, sol_price, telegram, ai, strategies, holder_watch, events, webserver, services, monitoring, performance, maintenance, ohlcv.
 
 **Adding New Config Sections:**
 
-Each new config section requires changes in multiple locations:
+Each new config section requires 7 things wired:
 - GET route + PATCH route in `routes/config/mod.rs`
 - Getter function in `getters.rs`
 - PATCH handler case with `type_name` matching
@@ -633,7 +633,12 @@ Each new config section requires changes in multiple locations:
 - Sidebar entry in `utils.js` (add to `SECTION_DISPLAY_ORDER` + `SECTION_LABEL_OVERRIDES`)
 - Icon in `field_renderers.js` (add to `SECTION_ICONS`)
 
+Sidebar field counts use recursive leaf-field counting via `countRecursive()` in `utils.js`.
+
 For nested config structs, add `#[metadata(field_metadata!{...})]` on ALL leaf fields to enable auto-rendering. Without field metadata, nested objects render as collapsed JSON blobs instead of proper form fields.
+
+**Hardcoded Constants (NEVER make configurable):**
+- Jupiter referral fee: `REFERRAL_FEE_BPS=50` and referral token accounts are hardcoded in `src/swaps/routers/jupiter.rs`
 
 ### RPC Client Rules
 
@@ -648,6 +653,15 @@ SQLite DBs in `data/*.db`. All append-only. Access via module helpers (e.g., `po
 Backend: Response types inline in route files — no separate models folder. Each route is self-contained. Use `success_response()`/`error_response()` from `webserver/utils.rs`. Config UI metadata-driven.
 
 Frontend: Pages load as ES modules. Pure HTML in `pages/*.html`, no inline scripts/styles. All helpers in `core/utils.js` — never duplicate.
+
+**ES Module Cache Busting:**
+- `version_js_imports()` in `src/webserver/routes/asset_serving.rs` rewrites all JS `import from` paths to include `?v=VERSION-TIMESTAMP` at serve time
+- `serve_js()` helper serves all JS files through the versioning pipeline
+- `ASSET_VERSION_TS` is generated per-build in build.rs via SystemTime epoch seconds
+- Cache-control strategy: URLs with `?v=` get `immutable, max-age=1yr`; without `?v=` get `must-revalidate, max-age=1hr`; API → `no-cache`; HTML → `no-cache`
+
+**Build System:**
+- `build.rs` recursively watches all files in `src/webserver/templates/` individually (directory-level `rerun-if-changed` only watches listing, not content changes)
 
 **Performance Patterns:**
 - Status endpoints: `/api/status/services` and `/api/status/metrics` use targeted collector functions, NOT `gather_status_snapshot()`. Only `/api/status` uses the full snapshot.
@@ -828,6 +842,7 @@ ALL databases must use `database::configure_connection()` — never set PRAGMAs 
 - Creating duplicate helper functions instead of extending `utils.js`.
 - Creating new files prematurely instead of extending existing patterns.
 - NEVER leave "dust comments" in place of removed code — remove completely.
+- `cargo:rerun-if-changed=directory/` only watches the directory listing (adds/removes), NOT file content changes inside. Must list individual files recursively.
 
 ### Cache Pitfalls
 
