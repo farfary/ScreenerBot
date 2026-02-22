@@ -20,7 +20,7 @@ use crate::{
     wallet::{get_current_wallet_status, get_snapshot_token_balances},
 };
 
-pub(super) fn collect_service_status_snapshot() -> ServiceStatusSnapshot {
+pub fn collect_service_status_snapshot() -> ServiceStatusSnapshot {
     let now = Utc::now();
     let all_ready = are_core_services_ready();
     let pending = get_pending_services();
@@ -600,7 +600,21 @@ pub(super) async fn collect_transactions_snapshot() -> Option<TransactionsStatus
             }
         }
 
-        match db.get_successful_transactions_count().await {
+        let (
+            successful_count_result,
+            failed_count_result,
+            bootstrap_state_result,
+            newest_sig_result,
+            oldest_sig_result,
+        ) = tokio::join!(
+            db.get_successful_transactions_count(),
+            db.get_failed_transactions_count(),
+            db.get_bootstrap_state(),
+            db.get_newest_known_signature(),
+            db.get_oldest_known_signature()
+        );
+
+        match successful_count_result {
             Ok(count) => stats.successful_transactions_count = count,
             Err(err) => logger::warning(
                 LogTag::Webserver,
@@ -608,7 +622,7 @@ pub(super) async fn collect_transactions_snapshot() -> Option<TransactionsStatus
             ),
         }
 
-        match db.get_failed_transactions_count().await {
+        match failed_count_result {
             Ok(count) => stats.failed_transactions_count = count,
             Err(err) => logger::warning(
                 LogTag::Webserver,
@@ -616,7 +630,7 @@ pub(super) async fn collect_transactions_snapshot() -> Option<TransactionsStatus
             ),
         }
 
-        match db.get_bootstrap_state().await {
+        match bootstrap_state_result {
             Ok(state) => {
                 bootstrap_snapshot = Some(TransactionBootstrapSnapshot {
                     full_history_completed: state.full_history_completed,
@@ -629,7 +643,7 @@ pub(super) async fn collect_transactions_snapshot() -> Option<TransactionsStatus
             ),
         }
 
-        match db.get_newest_known_signature().await {
+        match newest_sig_result {
             Ok(sig) => newest_signature = sig,
             Err(err) => logger::warning(
                 LogTag::Webserver,
@@ -637,7 +651,7 @@ pub(super) async fn collect_transactions_snapshot() -> Option<TransactionsStatus
             ),
         }
 
-        match db.get_oldest_known_signature().await {
+        match oldest_sig_result {
             Ok(sig) => oldest_signature = sig,
             Err(err) => logger::warning(
                 LogTag::Webserver,

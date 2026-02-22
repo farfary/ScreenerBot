@@ -178,29 +178,49 @@ pub async fn initialization_gate(request: Request, next: Next) -> Response {
 
 /// Cache control middleware
 ///
-/// Adds Cache-Control headers to prevent WebView/browser caching of static resources.
-/// This ensures fresh CSS, JS, and HTML are always fetched, especially important for:
-/// - Electron WebView which caches aggressively
-/// - Development mode where styles/scripts change frequently
+/// Adds appropriate Cache-Control headers based on resource type:
 ///
-/// Header values:
-/// - `no-cache`: Force revalidation with server before using cached copy
-/// - `no-store`: Don't store any version in cache
-/// - `must-revalidate`: After expiration, must check with server
-/// - `max-age=0`: Consider stale immediately
+/// **Static assets** (`/scripts/*`, `/assets/*`, `/fonts/*`):
+/// - These are compile-time embedded resources that only change on new builds
+/// - Use aggressive caching: `public, max-age=31536000, immutable`
+/// - Reduces bandwidth and improves page load performance
+///
+/// **API endpoints** (`/api/*`):
+/// - Dynamic data that must never be cached
+/// - Use `no-cache, no-store, must-revalidate, max-age=0`
+///
+/// **HTML pages** (everything else):
+/// - Allow conditional caching with `no-cache`
+/// - Browser validates freshness but can cache if unchanged
 pub async fn cache_control(request: Request, next: Next) -> Response {
+    let path = request.uri().path().to_string();
     let mut response = next.run(request).await;
 
-    // Add cache control headers to prevent caching
     let headers = response.headers_mut();
-    headers.insert(
-        header::CACHE_CONTROL,
-        "no-cache, no-store, must-revalidate, max-age=0"
-            .parse()
-            .unwrap(),
-    );
-    headers.insert(header::PRAGMA, "no-cache".parse().unwrap());
-    headers.insert(header::EXPIRES, "0".parse().unwrap());
+
+    // Static assets - aggressive caching (immutable, 1 year)
+    if path.starts_with("/scripts/") || path.starts_with("/assets/") || path.starts_with("/fonts/")
+    {
+        headers.insert(
+            header::CACHE_CONTROL,
+            "public, max-age=31536000, immutable".parse().unwrap(),
+        );
+    }
+    // API endpoints - no caching
+    else if path.starts_with("/api/") {
+        headers.insert(
+            header::CACHE_CONTROL,
+            "no-cache, no-store, must-revalidate, max-age=0"
+                .parse()
+                .unwrap(),
+        );
+        headers.insert(header::PRAGMA, "no-cache".parse().unwrap());
+        headers.insert(header::EXPIRES, "0".parse().unwrap());
+    }
+    // HTML pages - conditional caching
+    else {
+        headers.insert(header::CACHE_CONTROL, "no-cache".parse().unwrap());
+    }
 
     response
 }

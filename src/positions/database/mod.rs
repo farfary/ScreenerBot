@@ -26,9 +26,10 @@ pub use global::{
 // Re-export convenience functions
 pub use convenience::{
     delete_position_by_id, force_database_sync, get_closed_positions,
-    get_closed_positions_count_since, get_entry_history, get_exit_history, get_metadata,
-    get_open_positions, get_period_trading_stats, get_position_by_id, get_position_by_mint,
-    get_recent_closed_positions_for_mint, get_token_snapshot, get_token_snapshots,
-    load_all_positions, save_entry_record, save_exit_record, save_position, save_token_snapshot,
-    set_metadata, update_position, update_position_price_fields,
+    get_closed_positions_count_since, get_closed_positions_since, get_entry_history,
+    get_exit_history, get_metadata, get_open_positions, get_period_trading_stats,
+    get_position_by_id, get_position_by_mint, get_recent_closed_positions_for_mint,
+    get_token_snapshot, get_token_snapshots, load_all_positions, save_entry_record,
+    save_exit_record, save_position, save_token_snapshot, set_metadata, update_position,
+    update_position_price_fields,
 };

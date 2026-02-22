@@ -746,6 +746,39 @@ impl PositionsDatabase {
         Ok(positions)
     }
 
+    /// Get closed positions since a specific date (have exit_time >= since)
+    pub async fn get_closed_positions_since(
+        &self,
+        since: DateTime<Utc>,
+    ) -> Result<Vec<Position>, String> {
+        let conn = self.get_connection()?;
+        let wallet_address = crate::utils::get_wallet_address().map_err(|e| e.to_string())?;
+
+        let query = format!(
+      "SELECT {} FROM positions WHERE wallet_address = ?1 AND transaction_exit_verified = 1 AND datetime(exit_time) >= datetime(?2) ORDER BY exit_time DESC",
+      POSITION_SELECT_COLUMNS
+    );
+
+        let mut stmt = conn
+            .prepare(&query)
+            .map_err(|e| format!("Failed to prepare closed positions since query: {}", e))?;
+
+        let since_str = since.to_rfc3339();
+        let position_iter = stmt
+            .query_map(params![wallet_address, since_str], |row| {
+                self.row_to_position(row)
+            })
+            .map_err(|e| format!("Failed to execute closed positions since query: {}", e))?;
+
+        let mut positions = Vec::new();
+        for position_result in position_iter {
+            positions
+                .push(position_result.map_err(|e| format!("Failed to parse position row: {}", e))?);
+        }
+
+        Ok(positions)
+    }
+
     /// Count closed positions since the provided timestamp
     pub async fn count_closed_positions_since(&self, since: DateTime<Utc>) -> Result<i64, String> {
         let conn = self.get_connection()?;

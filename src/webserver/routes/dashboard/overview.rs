@@ -42,40 +42,30 @@ pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<
 
     // Get positions summary
     let open_positions = positions::get_db_open_positions().await.unwrap_or_default();
-    let closed_positions = positions::get_db_closed_positions()
-        .await
-        .unwrap_or_default();
 
     let total_invested_sol: f64 = open_positions.iter().map(|p| p.entry_size_sol).sum();
 
-    let total_pnl: f64 = closed_positions
-        .iter()
-        .filter_map(|p| {
-            if let (Some(sol_received), entry_size) = (p.sol_received, p.entry_size_sol) {
-                Some(sol_received - entry_size)
-            } else {
-                None
-            }
-        })
-        .sum();
+    // Use SQL aggregation for closed positions stats (optimized)
+    let epoch_start = chrono::DateTime::parse_from_rfc3339("1970-01-01T00:00:00Z")
+        .unwrap()
+        .with_timezone(&chrono::Utc);
+    let all_time_stats = positions::get_period_trading_stats(epoch_start, None)
+        .await
+        .unwrap_or_else(|_| positions::PeriodTradingStats {
+            buys: 0,
+            sells: 0,
+            profit_sol: 0.0,
+            loss_sol: 0.0,
+            net_pnl_sol: 0.0,
+            drawdown_percent: 0.0,
+            win_rate: 0.0,
+        });
 
-    // Calculate win rate
-    let win_rate = if closed_positions.len() > 0 {
-        let profitable = closed_positions
-            .iter()
-            .filter(|p| {
-                if let (Some(entry), Some(exit)) = (p.effective_entry_price, p.effective_exit_price)
-                {
-                    exit > entry
-                } else {
-                    false
-                }
-            })
-            .count();
-        ((profitable as f64) / (closed_positions.len() as f64)) * 100.0
-    } else {
-        0.0
-    };
+    let total_pnl = all_time_stats.net_pnl_sol;
+    let win_rate = all_time_stats.win_rate;
+    let closed_positions_count = positions::get_db_closed_positions_count_since(epoch_start)
+        .await
+        .unwrap_or(0);
 
     // Get open position details
     let open_position_details: Vec<OpenPositionDetail> = open_positions
@@ -103,9 +93,9 @@ pub async fn get_dashboard_overview(State(state): State<Arc<AppState>>) -> Json<
         .collect();
 
     let positions_summary = PositionsSummary {
-        total_positions: (open_positions.len() + closed_positions.len()) as i64,
+        total_positions: (open_positions.len() as i64 + closed_positions_count),
         open_positions: open_positions.len() as i64,
-        closed_positions: closed_positions.len() as i64,
+        closed_positions: closed_positions_count,
         total_invested_sol,
         total_pnl,
         win_rate,

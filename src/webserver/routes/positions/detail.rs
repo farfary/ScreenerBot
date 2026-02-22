@@ -18,11 +18,13 @@ pub async fn get_position_details(Path(key): Path<String>) -> Response {
             let mint = &position.mint;
 
             // Fetch all data concurrently for better performance
-            let detail = map_position_to_detail(&position).await;
+            let (detail, transactions, state_history, (entries, exits)) = tokio::join!(
+                map_position_to_detail(&position),
+                build_transaction_summaries(&position),
+                load_state_history_entries(&position),
+                load_entry_exit_history(&position)
+            );
             let executions = build_execution_rows(&position);
-            let transactions = build_transaction_summaries(&position).await;
-            let state_history = load_state_history_entries(&position).await;
-            let (entries, exits) = load_entry_exit_history(&position).await;
 
             // Fetch token data from database
             let token_data = tokens::database::get_full_token_async(mint)

@@ -29,13 +29,14 @@ pub async fn get_trader_stats() -> Response {
     // Calculate locked SOL (use total_size_sol for DCA support)
     let locked_sol: f64 = open_positions.iter().map(|p| p.total_size_sol).sum();
 
-    // Query closed positions from database for statistics
-    let closed_positions = {
+    // Query closed positions from database for statistics (optimized - 30 days only)
+    let thirty_days_ago = chrono::Utc::now() - chrono::Duration::days(30);
+    let recent_closed = {
         let db_ref = positions::db::get_positions_database().await.ok();
         if let Some(db_arc) = db_ref {
             let db_guard = db_arc.lock().await;
             if let Some(db) = db_guard.as_ref() {
-                db.get_closed_positions()
+                db.get_closed_positions_since(thirty_days_ago)
                     .await
                     .unwrap_or_else(|_| Vec::new())
             } else {
@@ -45,19 +46,6 @@ pub async fn get_trader_stats() -> Response {
             Vec::new()
         }
     };
-
-    // Filter to last 30 days
-    let thirty_days_ago = chrono::Utc::now() - chrono::Duration::days(30);
-    let recent_closed: Vec<_> = closed_positions
-        .into_iter()
-        .filter(|p| {
-            if let Some(exit_time) = p.exit_time {
-                exit_time >= thirty_days_ago
-            } else {
-                false
-            }
-        })
-        .collect();
 
     let total_trades = recent_closed.len();
 

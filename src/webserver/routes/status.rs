@@ -7,7 +7,8 @@ use crate::{
     logger::{self, LogTag},
     webserver::{
         snapshot::{
-            gather_status_snapshot, ServiceStatusSnapshot, StatusSnapshot, SystemMetricsSnapshot,
+            collect_service_status_snapshot, gather_status_snapshot, get_cached_system_metrics,
+            StatusSnapshot,
         },
         state::AppState,
         utils::success_response,
@@ -65,7 +66,7 @@ async fn system_status() -> Response {
 async fn service_status() -> Response {
     logger::info(LogTag::Webserver, "Fetching service status snapshot");
 
-    let services: ServiceStatusSnapshot = gather_status_snapshot().await.services;
+    let services = collect_service_status_snapshot();
     success_response(services)
 }
 
@@ -73,6 +74,6 @@ async fn service_status() -> Response {
 async fn system_metrics() -> Response {
     logger::info(LogTag::Webserver, "Fetching system metrics snapshot");
 
-    let metrics: SystemMetricsSnapshot = gather_status_snapshot().await.metrics;
+    let metrics = get_cached_system_metrics().await;
     success_response(metrics)
 }

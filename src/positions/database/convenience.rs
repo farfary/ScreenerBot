@@ -188,6 +188,15 @@ pub async fn get_closed_positions() -> Result<Vec<Position>, String> {
     }
 }
 
+/// Get closed positions since a specific date
+pub async fn get_closed_positions_since(since: DateTime<Utc>) -> Result<Vec<Position>, String> {
+    let db_guard = GLOBAL_POSITIONS_DB.lock().await;
+    match db_guard.as_ref() {
+        Some(db) => db.get_closed_positions_since(since).await,
+        None => Err("Positions database not initialized".to_string()),
+    }
+}
+
 /// Count closed positions since the provided UTC timestamp
 pub async fn get_closed_positions_count_since(since: DateTime<Utc>) -> Result<i64, String> {
     let db_guard = GLOBAL_POSITIONS_DB.lock().await;

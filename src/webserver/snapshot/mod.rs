@@ -16,8 +16,8 @@ use crate::{
 // Re-export public types
 pub use types::*;
 
-// Re-export public collector function
-pub use collectors::get_cached_system_metrics;
+// Re-export public collector functions
+pub use collectors::{collect_service_status_snapshot, get_cached_system_metrics};
 
 const MAX_WALLET_TOKENS: usize = 128;
 const MAX_PENDING_QUEUE_SAMPLE: usize = 10;
