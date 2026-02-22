@@ -505,6 +505,12 @@ ServiceManager with dependency resolution, priority-based startup (topological s
 
 Axum REST API + embedded dashboard. Files: `server.rs` (start/shutdown), `state.rs` (AppState with service accessors), `routes/` (31 route modules), `snapshot/` (data collectors), `utils.rs` (success_response, error_response), `embeds.rs` (all include_str! constants), `templates.rs` (rendering functions), `middleware.rs` (security_gate, initialization_gate, cache_control, auth_gate), `session.rs` (in-memory session tokens), `totp.rs` (TOTP 2FA), `demo.rs` + `demo_data.rs` (demo mode).
 
+**Middleware Cache-Control Strategy:**
+- Version-aware caching: URLs with `?v=` query parameter get `public, immutable, max-age=31536000` (1-year cache)
+- Unversioned scripts/assets get `public, max-age=3600, must-revalidate` (1-hour revalidation)
+- API endpoints: `no-cache, no-store, must-revalidate`
+- HTML pages: `no-cache` (allows conditional requests with ETag/Last-Modified)
+
 **Dashboard Pages (20):** dashboard, positions, tokens, filtering, transactions, strategies, ohlcv, config, ai, telegram, events, connectivity, wallets, tools, updates, about, lockscreen, splash, login, onboarding/setup.
 
 **Dashboard CSS Architecture:**
@@ -614,6 +620,20 @@ Services receive TaskMonitor in `start()`. Wrap spawned tasks with `monitor.inst
 ### Config System
 
 Macro-driven via `config_struct!`. Values in `data/config.toml`. Access: `with_config(|cfg| cfg.section.field)` (sync), `get_config_clone()` (async). Hot reload: `reload_config()` or `POST /api/config/reload`. Never hardcode values or create `_v2` versions.
+
+The config page currently has 16 sections: rpc, trader, positions, filtering, swaps, tokens, pools, sol_price, telegram, ai, events, webserver, services, monitoring, maintenance, ohlcv.
+
+**Adding New Config Sections:**
+
+Each new config section requires changes in multiple locations:
+- GET route + PATCH route in `routes/config/mod.rs`
+- Getter function in `getters.rs`
+- PATCH handler case with `type_name` matching
+- Metadata registration in `src/config/metadata.rs`
+- Sidebar entry in `utils.js` (add to `SECTION_DISPLAY_ORDER` + `SECTION_LABEL_OVERRIDES`)
+- Icon in `field_renderers.js` (add to `SECTION_ICONS`)
+
+For nested config structs, add `#[metadata(field_metadata!{...})]` on ALL leaf fields to enable auto-rendering. Without field metadata, nested objects render as collapsed JSON blobs instead of proper form fields.
 
 ### RPC Client Rules
 
