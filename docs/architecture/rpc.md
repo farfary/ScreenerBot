@@ -493,8 +493,21 @@ This layer:
 - maps typed inputs/outputs to/from JSON-RPC
 - parses responses into Solana SDK types (e.g. `Account`, `Hash`, `Signature`)
 - provides convenience helpers for common patterns (token accounts, confirmations, batching)
+- returns `crate::Result<T>` (which is `Result<T, crate::Error>`)
 
-Key method families:
+### 10.1 Error handling
+
+All `RpcClientMethods` trait methods return `crate::Result<T>`.
+
+Errors are structured:
+
+- **`Error::Rpc(RpcError)`** — when the underlying RPC manager operation fails (network, rate limit, provider error, timeout, etc.)
+- **`Error::Data(DataError::ParseError{...})`** — when response parsing fails (e.g., invalid base64, missing fields, malformed JSON)
+- **`Error::Data(DataError::InvalidFormat{...})`** — when response format is unexpected
+
+This replaces the older `Result<T, String>` pattern, providing better error discrimination for callers.
+
+### 10.2 Key method families:
 
 - account reads (`get_account`, `get_multiple_accounts`, commitments)
 - balance reads (`get_sol_balance`, token balances)

@@ -55,17 +55,25 @@ impl Service for TokensServiceNew {
         vec!["events", "transactions", "pools"]
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         // Initialize database (schema initialized automatically in new())
         let db_path = crate::paths::get_tokens_db_path();
-        let db = TokenDatabase::new(&db_path.to_string_lossy())
-            .map_err(|e| format!("Failed to create database: {}", e))?;
+        let db = TokenDatabase::new(&db_path.to_string_lossy()).map_err(|e| {
+            crate::Error::Service(crate::errors::ServiceError::Initialize {
+                service: "tokens_new".to_string(),
+                message: format!("Failed to create database: {}", e),
+            })
+        })?;
 
         let db_arc = Arc::new(db);
 
         // Initialize global database for decimals module and other components
-        crate::tokens::database::init_global_database(db_arc.clone())
-            .map_err(|e| format!("Failed to init global database: {}", e))?;
+        crate::tokens::database::init_global_database(db_arc.clone()).map_err(|e| {
+            crate::Error::Service(crate::errors::ServiceError::Initialize {
+                service: "tokens_new".to_string(),
+                message: format!("Failed to init global database: {}", e),
+            })
+        })?;
 
         self.db = Some(db_arc.clone());
 
@@ -75,8 +83,18 @@ impl Service for TokensServiceNew {
         let all_decimals =
             tokio::task::spawn_blocking(move || db_arc.get_all_tokens_with_decimals())
                 .await
-                .map_err(|e| format!("Failed to spawn decimals preload task: {}", e))?
-                .map_err(|e| format!("Failed to fetch decimals from database: {}", e))?;
+                .map_err(|e| {
+                    crate::Error::Service(crate::errors::ServiceError::Initialize {
+                        service: "tokens_new".to_string(),
+                        message: format!("Failed to spawn decimals preload task: {}", e),
+                    })
+                })?
+                .map_err(|e| {
+                    crate::Error::Service(crate::errors::ServiceError::Initialize {
+                        service: "tokens_new".to_string(),
+                        message: format!("Failed to fetch decimals from database: {}", e),
+                    })
+                })?;
 
         let mut preloaded_count = 0;
         for (mint, decimals) in all_decimals {
@@ -98,8 +116,7 @@ impl Service for TokensServiceNew {
         // Load blocked authorities from DB into memory cache
         {
             let db_for_auth = self.db.as_ref().unwrap().clone();
-            match tokio::task::spawn_blocking(move || db_for_auth.load_blocked_authorities())
-                .await
+            match tokio::task::spawn_blocking(move || db_for_auth.load_blocked_authorities()).await
             {
                 Ok(Ok(blocked)) => {
                     let count = blocked.len();
@@ -137,8 +154,17 @@ impl Service for TokensServiceNew {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String> {
-        let db = self.db.as_ref().ok_or("Database not initialized")?.clone();
+    ) -> crate::Result<Vec<JoinHandle<()>>> {
+        let db = self
+            .db
+            .as_ref()
+            .ok_or_else(|| {
+                crate::Error::Service(crate::errors::ServiceError::Start {
+                    service: "tokens_new".to_string(),
+                    message: "Database not initialized".to_string(),
+                })
+            })?
+            .clone();
 
         // TODO: Wire up metrics instrumentation
         logger::warning(
@@ -195,10 +221,8 @@ impl Service for TokensServiceNew {
             loop {
                 // Run authority discovery analysis
                 let db_clone = auth_db.clone();
-                match tokio::task::spawn_blocking(move || {
-                    db_clone.run_authority_discovery(5, 0.8)
-                })
-                .await
+                match tokio::task::spawn_blocking(move || db_clone.run_authority_discovery(5, 0.8))
+                    .await
                 {
                     Ok(Ok(newly_blocked)) => {
                         if newly_blocked > 0 {
@@ -252,7 +276,7 @@ impl Service for TokensServiceNew {
         Ok(handles)
     }
 
-    async fn stop(&mut self) -> Result<(), String> {
+    async fn stop(&mut self) -> crate::Result<()> {
         logger::info(LogTag::Tokens, "Service stopping...");
         // On stop, mark as not ready
         TOKENS_SYSTEM_READY.store(false, std::sync::atomic::Ordering::SeqCst);

@@ -1,11 +1,11 @@
 /// Core Swap Operations - High-level swap functions
 /// Provides get_best_quote() and execute_swap_with_fallback()
 use crate::constants::SOL_MINT;
-use crate::{Error, Result};
 use crate::logger::{self, LogTag};
 use crate::swaps::registry::get_registry;
 use crate::swaps::router::{Quote, QuoteRequest, SwapResult};
 use crate::tokens::Token;
+use crate::{Error, Result};
 use futures::future;
 use std::time::Instant;
 
@@ -75,9 +75,7 @@ pub async fn get_best_quote(request: QuoteRequest) -> Result<Quote> {
     let elapsed = start.elapsed();
 
     if quotes.is_empty() {
-        return Err(Error::api_error(
-            "All routers failed to provide quotes",
-        ));
+        return Err(Error::api_error("All routers failed to provide quotes"));
     }
 
     // Select best quote (highest output)
@@ -106,10 +104,7 @@ pub async fn get_best_quote(request: QuoteRequest) -> Result<Quote> {
 
 /// Execute swap with automatic fallback on failure
 /// Tries primary router, falls back to others by priority on retryable errors
-pub async fn execute_swap_with_fallback(
-    token: &Token,
-    quote: Quote,
-) -> Result<SwapResult> {
+pub async fn execute_swap_with_fallback(token: &Token, quote: Quote) -> Result<SwapResult> {
     // Block swap execution during force stop
     if crate::global::is_force_stopped() {
         return Err(Error::internal_error(
@@ -266,10 +261,11 @@ pub async fn execute_swap_with_fallback(
 
 /// Check if error is retryable (network/transient issues)
 fn is_retryable_error(error: &Error) -> bool {
-    matches!(
-        error,
-        Error::Network(_) | Error::RpcProvider(_) | Error::RateLimit(_)
-    )
+    match error {
+        Error::Rpc(e) => e.is_retryable(),
+        Error::Network(_) | Error::RpcProvider(_) | Error::RateLimit(_) => true,
+        _ => false,
+    }
 }
 
 // ============================================================================

@@ -6,6 +6,7 @@
 use crate::ai::engine::AiEngine;
 use crate::ai::types::{EvaluationContext, Priority};
 use crate::config::with_config;
+use crate::errors::ServiceError;
 use crate::logger::{self, LogTag};
 use crate::positions::state::POSITIONS;
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
@@ -44,10 +45,14 @@ impl Service for AiService {
         with_config(|cfg| cfg.ai.enabled && cfg.ai.background_check_enabled)
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         // Get global AI engine instance (should be initialized already)
-        let engine = crate::ai::try_get_ai_engine()
-            .ok_or("AI engine not initialized - call init_ai_engine() first")?;
+        let engine = crate::ai::try_get_ai_engine().ok_or_else(|| {
+            crate::Error::Service(ServiceError::Initialize {
+                service: self.name().to_string(),
+                message: "AI engine not initialized - call init_ai_engine() first".to_string(),
+            })
+        })?;
         self.ai_engine = Some(engine);
         logger::info(LogTag::System, "AI service initialized");
         Ok(())
@@ -57,8 +62,13 @@ impl Service for AiService {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String> {
-        let engine = self.ai_engine.clone().ok_or("AI engine not initialized")?;
+    ) -> crate::Result<Vec<JoinHandle<()>>> {
+        let engine = self.ai_engine.clone().ok_or_else(|| {
+            crate::Error::Service(ServiceError::Start {
+                service: self.name().to_string(),
+                message: "AI engine not initialized".to_string(),
+            })
+        })?;
 
         // Spawn background check worker
         let handle = tokio::spawn(monitor.instrument(background_check_loop(engine, shutdown)));
@@ -66,7 +76,7 @@ impl Service for AiService {
         Ok(vec![handle])
     }
 
-    async fn stop(&mut self) -> Result<(), String> {
+    async fn stop(&mut self) -> crate::Result<()> {
         logger::info(LogTag::System, "AI service stopped");
         Ok(())
     }

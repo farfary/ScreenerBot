@@ -1,3 +1,5 @@
+//! Wallet service — monitors wallet balances, token holdings, and flow tracking.
+
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -5,12 +7,6 @@ use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
 pub struct WalletService;
-
-impl Default for WalletService {
-    fn default() -> Self {
-        Self
-    }
-}
 
 #[async_trait]
 impl Service for WalletService {
@@ -30,7 +26,7 @@ impl Service for WalletService {
         crate::global::is_initialization_complete()
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         Ok(())
     }
 
@@ -38,7 +34,7 @@ impl Service for WalletService {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String> {
+    ) -> crate::Result<Vec<JoinHandle<()>>> {
         let handle = crate::wallet::start_wallet_monitoring_service(shutdown, monitor).await;
 
         Ok(vec![handle])

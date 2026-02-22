@@ -6,6 +6,7 @@
 
 use crate::ai::{chat_db, scheduled_db, ChatRequest, ToolMode};
 use crate::config::with_config;
+use crate::errors::ServiceError;
 use crate::events::{record_scheduled_task_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
@@ -49,7 +50,7 @@ impl Service for ScheduledAiTasksService {
         with_config(|cfg| cfg.ai.enabled && cfg.ai.scheduled_tasks_enabled)
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         logger::info(LogTag::System, "Scheduled AI tasks service initialized");
         Ok(())
     }
@@ -58,7 +59,7 @@ impl Service for ScheduledAiTasksService {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String> {
+    ) -> crate::Result<Vec<JoinHandle<()>>> {
         let completed = Arc::clone(&self.tasks_completed);
         let failed = Arc::clone(&self.tasks_failed);
 
@@ -68,7 +69,7 @@ impl Service for ScheduledAiTasksService {
         Ok(vec![handle])
     }
 
-    async fn stop(&mut self) -> Result<(), String> {
+    async fn stop(&mut self) -> crate::Result<()> {
         logger::info(LogTag::System, "Scheduled AI tasks service stopped");
         Ok(())
     }
@@ -202,19 +203,25 @@ async fn execute_scheduled_task(
     pool: &Arc<r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>>,
     task: &scheduled_db::ScheduledTask,
     timeout_secs: u64,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     // Create hidden chat session for this run
     let session_title = format!(
         "[Auto] {} - {}",
         task.name,
         chrono::Utc::now().format("%Y-%m-%d %H:%M")
     );
-    let session_id = chat_db::create_hidden_session(pool, &session_title)
-        .map_err(|e| format!("Failed to create session: {}", e))?;
+    let session_id = chat_db::create_hidden_session(pool, &session_title).map_err(|e| {
+        crate::Error::Service(ServiceError::Generic {
+            message: format!("Failed to create session: {}", e),
+        })
+    })?;
 
     // Record run start
-    let run_id = scheduled_db::record_run_start(pool, task.id, Some(session_id))
-        .map_err(|e| format!("Failed to record run start: {}", e))?;
+    let run_id = scheduled_db::record_run_start(pool, task.id, Some(session_id)).map_err(|e| {
+        crate::Error::Service(ServiceError::Generic {
+            message: format!("Failed to record run start: {}", e),
+        })
+    })?;
 
     let start_time = std::time::Instant::now();
 
@@ -263,11 +270,18 @@ async fn execute_scheduled_task(
                 None, // no error
                 duration_ms,
             )
-            .map_err(|e| format!("Failed to record run completion: {}", e))?;
+            .map_err(|e| {
+                crate::Error::Service(ServiceError::Generic {
+                    message: format!("Failed to record run completion: {}", e),
+                })
+            })?;
 
             // Update task counters
-            scheduled_db::update_task_after_run(pool, task.id, true)
-                .map_err(|e| format!("Failed to update task: {}", e))?;
+            scheduled_db::update_task_after_run(pool, task.id, true).map_err(|e| {
+                crate::Error::Service(ServiceError::Generic {
+                    message: format!("Failed to update task: {}", e),
+                })
+            })?;
 
             // Send Telegram notification if configured
             if task.notify_telegram && task.notify_on_success {
@@ -326,7 +340,9 @@ async fn execute_scheduled_task(
                 Severity::Warn,
             );
 
-            Err(error_msg)
+            Err(crate::Error::Service(ServiceError::Generic {
+                message: error_msg,
+            }))
         }
         Err(_) => {
             // Timeout
@@ -368,7 +384,9 @@ async fn execute_scheduled_task(
                 Severity::Warn,
             );
 
-            Err(error_msg)
+            Err(crate::Error::Service(ServiceError::Generic {
+                message: error_msg,
+            }))
         }
     }
 }
@@ -455,6 +473,6 @@ pub async fn execute_scheduled_task_public(
     pool: &Arc<r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>>,
     task: &crate::ai::scheduled_db::ScheduledTask,
     timeout_secs: u64,
-) -> Result<(), String> {
+) -> crate::Result<()> {
     execute_scheduled_task(pool, task, timeout_secs).await
 }

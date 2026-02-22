@@ -347,7 +347,7 @@ impl Service for ConnectivityService {
         cfg.connectivity.enabled
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         logger::info(LogTag::Connectivity, "Initializing connectivity service");
 
         // Register all monitors with global state
@@ -388,7 +388,7 @@ impl Service for ConnectivityService {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String> {
+    ) -> crate::Result<Vec<JoinHandle<()>>> {
         logger::info(LogTag::Connectivity, "Starting connectivity service");
 
         let cfg = get_config_clone();
@@ -427,7 +427,7 @@ impl Service for ConnectivityService {
         Ok(vec![handle])
     }
 
-    async fn stop(&mut self) -> Result<(), String> {
+    async fn stop(&mut self) -> crate::Result<()> {
         logger::info(LogTag::Connectivity, "Connectivity service stopped");
 
         // Record service stop event

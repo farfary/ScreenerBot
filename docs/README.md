@@ -49,7 +49,7 @@ Living documentation describing how each major system works. These docs are the 
 | [Swap Routing](architecture/swaps.md) | 494 | Multi-router quote+execute, fallback chain, Jupiter referral fee |
 | [Transactions](architecture/transactions.md) | 416 | Transaction monitoring, analyzer pipeline, 10+ DEX detection |
 | **Data Sources** | | |
-| [RPC Module](architecture/rpc.md) | 587 | Multi-provider Solana RPC, circuit breaker, rate limiting |
+| [RPC Module](architecture/rpc.md) | 600 | Multi-provider Solana RPC, circuit breaker, rate limiting |
 | [APIs Module](architecture/apis.md) | 412 | External HTTP clients + LLM providers + SOL price service |
 | **User Interface** | | |
 | [Webserver](architecture/webserver.md) | 701 | Axum server lifecycle, middleware gates, embedded assets, headless auth |
@@ -58,7 +58,7 @@ Living documentation describing how each major system works. These docs are the 
 | [Config](architecture/config.md) | 478 | TOML configuration, macro system, hot reload, metadata |
 | [Services](architecture/services.md) | 396 | Service manager, lifecycle, cached health/metrics, registered services |
 | [Wallets](architecture/wallets.md) | 670 | Multi-wallet key storage (wallets.db) + wallet monitoring (wallet.db) |
-| [Infrastructure](architecture/infrastructure.md) | 833 | SQLite tuning+maintenance, errors, events, logging, connectivity, actions |
+| [Infrastructure](architecture/infrastructure.md) | 836 | SQLite tuning+maintenance, errors, events, logging, connectivity, actions |
 
 ### 🛠 Development
 

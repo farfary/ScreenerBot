@@ -884,7 +884,7 @@ impl AccountFetcher {
                 ))
                 .await;
 
-                return Err(e);
+                return Err(e.to_string());
             }
         };
 

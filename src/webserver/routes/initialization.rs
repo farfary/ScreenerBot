@@ -617,7 +617,10 @@ async fn start_remaining_services() -> Result<services::ServiceStartupReport, St
         .ok_or("ServiceManager not initialized".to_string())?;
 
     // Start newly enabled services
-    let report = manager.start_newly_enabled().await?;
+    let report = manager
+        .start_newly_enabled()
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(report)
 }

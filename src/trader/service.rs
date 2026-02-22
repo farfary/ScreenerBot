@@ -45,7 +45,7 @@ impl Service for TraderService {
             "pool_discovery",
             "pool_fetcher",
             "pool_calculator",
-            "pool_helpers",
+            "pools",
             "tokens",
             "filtering",
         ]
@@ -55,8 +55,13 @@ impl Service for TraderService {
         crate::global::is_initialization_complete()
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
-        super::init_trader_system().await?;
+    async fn initialize(&mut self) -> crate::Result<()> {
+        super::init_trader_system().await.map_err(|e| {
+            crate::Error::Service(crate::errors::ServiceError::Initialize {
+                service: "trader".to_string(),
+                message: e,
+            })
+        })?;
         Ok(())
     }
 
@@ -64,7 +69,7 @@ impl Service for TraderService {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String> {
+    ) -> crate::Result<Vec<JoinHandle<()>>> {
         logger::info(LogTag::Trader, "Starting Trader Service...");
 
         record_trader_event(
@@ -157,7 +162,7 @@ impl Service for TraderService {
         Ok(vec![handle])
     }
 
-    async fn stop(&mut self) -> Result<(), String> {
+    async fn stop(&mut self) -> crate::Result<()> {
         logger::info(LogTag::Trader, "Stopping Trader Service...");
 
         record_trader_event(

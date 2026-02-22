@@ -1,3 +1,5 @@
+//! Webserver service — runs the HTTP dashboard and API server.
+
 use crate::logger::{self, LogTag};
 use crate::services::{log_service_notice, Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
@@ -29,7 +31,7 @@ impl Service for WebserverService {
         true
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         // Enable demo mode if --dashboard-demo flag is present
         if crate::arguments::is_dashboard_demo_enabled() {
             crate::webserver::demo::enable_demo_mode();
@@ -45,7 +47,7 @@ impl Service for WebserverService {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String> {
+    ) -> crate::Result<Vec<JoinHandle<()>>> {
         logger::debug(
             LogTag::System,
             "[PRE-FLIGHT] Webserver service start() called",
@@ -97,7 +99,10 @@ impl Service for WebserverService {
                     e
                 ),
             );
-            return Err(format!("Failed to bind webserver port: {}", e));
+            return Err(crate::Error::Service(crate::errors::ServiceError::Start {
+                service: "webserver".to_string(),
+                message: format!("Failed to bind webserver port: {}", e),
+            }));
         }
 
         logger::debug(

@@ -25,4 +25,3 @@ impl std::fmt::Display for ConfigurationError {
 }
 
 impl std::error::Error for ConfigurationError {}
-

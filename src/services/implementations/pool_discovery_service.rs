@@ -1,3 +1,6 @@
+//! Pool discovery service — discovers new liquidity pools from on-chain transactions.
+
+use crate::errors::ServiceError;
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
@@ -6,12 +9,6 @@ use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
 pub struct PoolDiscoveryService;
-
-impl Default for PoolDiscoveryService {
-    fn default() -> Self {
-        Self
-    }
-}
 
 #[async_trait]
 impl Service for PoolDiscoveryService {
@@ -24,14 +21,14 @@ impl Service for PoolDiscoveryService {
     }
 
     fn dependencies(&self) -> Vec<&'static str> {
-        vec!["transactions", "pool_helpers", "filtering"]
+        vec!["transactions", "pools", "filtering"]
     }
 
     fn is_enabled(&self) -> bool {
         crate::global::is_initialization_complete()
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         logger::debug(
             LogTag::PoolService,
             "Initializing pool discovery service...",
@@ -43,12 +40,16 @@ impl Service for PoolDiscoveryService {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String> {
+    ) -> crate::Result<Vec<JoinHandle<()>>> {
         logger::debug(LogTag::PoolService, "Starting pool discovery service...");
 
         // Get the PoolDiscovery component from global state
-        let discovery = crate::pools::get_pool_discovery()
-            .ok_or("PoolDiscovery component not initialized".to_string())?;
+        let discovery = crate::pools::get_pool_discovery().ok_or_else(|| {
+            crate::Error::Service(ServiceError::Start {
+                service: self.name().to_string(),
+                message: "PoolDiscovery component not initialized".to_string(),
+            })
+        })?;
 
         // Spawn discovery task (instrumented) - component tracks its own metrics
         let handle = tokio::spawn(monitor.instrument(async move {
@@ -63,7 +64,7 @@ impl Service for PoolDiscoveryService {
         Ok(vec![handle])
     }
 
-    async fn stop(&mut self) -> Result<(), String> {
+    async fn stop(&mut self) -> crate::Result<()> {
         logger::debug(
             LogTag::PoolService,
             "Pool discovery service stopping (via shutdown signal)",

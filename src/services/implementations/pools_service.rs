@@ -1,3 +1,5 @@
+//! Pools parent service — initializes pool components and runs helper background tasks.
+
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
@@ -10,7 +12,7 @@ pub struct PoolsService;
 #[async_trait]
 impl Service for PoolsService {
     fn name(&self) -> &'static str {
-        "pool_helpers"
+        "pools"
     }
 
     fn priority(&self) -> i32 {
@@ -26,20 +28,25 @@ impl Service for PoolsService {
         crate::global::is_initialization_complete()
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         logger::info(
             LogTag::PoolService,
-            &"Initializing pool components...".to_string(),
+            "Initializing pool components...",
         );
 
         // Initialize all pool components (database, cache, RPC, components)
         crate::pools::initialize_pool_components()
             .await
-            .map_err(|e| format!("Failed to initialize pool components: {:?}", e))?;
+            .map_err(|e| {
+                crate::Error::Service(crate::errors::ServiceError::Initialize {
+                    service: "pools".to_string(),
+                    message: format!("Failed to initialize pool components: {:?}", e),
+                })
+            })?;
 
         logger::info(
             LogTag::PoolService,
-            &"Pool components initialized".to_string(),
+            "Pool components initialized",
         );
         Ok(())
     }
@@ -48,10 +55,10 @@ impl Service for PoolsService {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String> {
+    ) -> crate::Result<Vec<JoinHandle<()>>> {
         logger::info(
             LogTag::PoolService,
-            &"Starting pool helper tasks...".to_string(),
+            "Starting pool helper tasks...",
         );
 
         // Start helper background tasks (health monitor, database cleanup, gap cleanup)
@@ -70,13 +77,16 @@ impl Service for PoolsService {
         Ok(handles)
     }
 
-    async fn stop(&mut self) -> Result<(), String> {
-        logger::info(LogTag::PoolService, &"Stopping pool service...".to_string());
+    async fn stop(&mut self) -> crate::Result<()> {
+        logger::info(LogTag::PoolService, "Stopping pool service...");
 
         // Stop pool service gracefully
-        crate::pools::stop_pool_service(5)
-            .await
-            .map_err(|e| format!("Failed to stop pool service: {:?}", e))?;
+        crate::pools::stop_pool_service(5).await.map_err(|e| {
+            crate::Error::Service(crate::errors::ServiceError::Stop {
+                service: "pools".to_string(),
+                message: format!("Failed to stop pool service: {:?}", e),
+            })
+        })?;
 
         Ok(())
     }

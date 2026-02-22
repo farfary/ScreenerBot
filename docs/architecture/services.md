@@ -100,15 +100,15 @@ pub trait Service: Send + Sync {
     // Most services override this to respect initialization + config toggles.
     fn is_enabled(&self) -> bool { true }
 
-    async fn initialize(&mut self) -> Result<(), String> { Ok(()) }
+    async fn initialize(&mut self) -> crate::Result<()> { Ok(()) }
 
     async fn start(
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String>;
+    ) -> crate::Result<Vec<JoinHandle<()>>>;
 
-    async fn stop(&mut self) -> Result<(), String> { Ok(()) }
+    async fn stop(&mut self) -> crate::Result<()> { Ok(()) }
 
     async fn health(&self) -> ServiceHealth { ServiceHealth::Healthy }
 
@@ -363,11 +363,11 @@ Registered today (in registration order):
 | `events` | `EventsService` | `src/services/implementations/events_service.rs` | gated by init + `cfg.events.enabled` |
 | `transactions` | `TransactionsService` | `src/services/implementations/transactions_service.rs` | starts global tx manager |
 | `sol_price` | `SolPriceService` | `src/services/implementations/sol_price_service.rs` | wraps `apis/sol_price.rs` |
-| `pool_discovery` | `PoolDiscoveryService` | `src/services/implementations/pool_discovery_service.rs` | depends on transactions + pool_helpers + filtering |
-| `pool_fetcher` | `PoolFetcherService` | `src/services/implementations/pool_fetcher_service.rs` | depends on transactions + pool_helpers + pool_discovery + filtering |
-| `pool_calculator` | `PoolCalculatorService` | `src/services/implementations/pool_calculator_service.rs` | depends on pool_helpers + pool_fetcher + filtering |
-| `pool_analyzer` | `PoolAnalyzerService` | `src/services/implementations/pool_analyzer_service.rs` | depends on pool_helpers + pool_fetcher + filtering |
-| `pool_helpers` | `PoolsService` | `src/services/implementations/pools_service.rs` | initializes pool components + helper tasks |
+| `pool_discovery` | `PoolDiscoveryService` | `src/services/implementations/pool_discovery_service.rs` | depends on transactions + pools + filtering |
+| `pool_fetcher` | `PoolFetcherService` | `src/services/implementations/pool_fetcher_service.rs` | depends on transactions + pools + pool_discovery + filtering |
+| `pool_calculator` | `PoolCalculatorService` | `src/services/implementations/pool_calculator_service.rs` | depends on pools + pool_fetcher + filtering |
+| `pool_analyzer` | `PoolAnalyzerService` | `src/services/implementations/pool_analyzer_service.rs` | depends on pools + pool_fetcher + filtering |
+| `pools` | `PoolsService` | `src/services/implementations/pools_service.rs` | initializes pool components + helper tasks |
 | `tokens` | `TokensService` | `src/services/implementations/tokens_service.rs` | delegates to `tokens::service::TokensServiceNew` |
 | `filtering` | `FilteringService` | `src/services/implementations/filtering_service.rs` | periodic refresh + cleanup tasks |
 | `ohlcv` | `OhlcvService` | `src/services/implementations/ohlcv_service.rs` | starts OHLCV runtime + auto-populate from open positions |

@@ -1,3 +1,5 @@
+//! Transactions service — monitors on-chain transactions for the configured wallet.
+
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use solana_sdk::signer::Signer;
@@ -25,7 +27,7 @@ impl Service for TransactionsService {
         crate::global::is_initialization_complete()
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         Ok(())
     }
 
@@ -33,16 +35,25 @@ impl Service for TransactionsService {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String> {
+    ) -> crate::Result<Vec<JoinHandle<()>>> {
         // Get wallet pubkey from config
-        let wallet_pubkey = crate::config::get_wallet_pubkey()
-            .map_err(|e| format!("Failed to load wallet: {}", e))?;
+        let wallet_pubkey = crate::config::get_wallet_pubkey().map_err(|e| {
+            crate::Error::Service(crate::errors::ServiceError::Start {
+                service: "transactions".to_string(),
+                message: format!("Failed to load wallet: {}", e),
+            })
+        })?;
 
         // Start global transaction service and capture handle (passing monitor)
         let handle =
             crate::transactions::service::start_global_transaction_service(wallet_pubkey, monitor)
                 .await
-                .map_err(|e| format!("Failed to start transactions service: {}", e))?;
+                .map_err(|e| {
+                    crate::Error::Service(crate::errors::ServiceError::Start {
+                        service: "transactions".to_string(),
+                        message: format!("Failed to start transactions service: {}", e),
+                    })
+                })?;
 
         // Return service handle so ServiceManager can wait for graceful shutdown
         Ok(vec![handle])

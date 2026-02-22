@@ -248,10 +248,3 @@ impl From<reqwest::Error> for RpcError {
         }
     }
 }
-
-/// Convert RpcError to String
-impl From<RpcError> for String {
-    fn from(err: RpcError) -> Self {
-        err.to_string()
-    }
-}

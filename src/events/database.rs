@@ -55,8 +55,8 @@ impl EventsDatabase {
             .max_size(WRITE_POOL_MAX_SIZE)
             .min_idle(Some(POOL_MIN_IDLE))
             .connection_timeout(std::time::Duration::from_millis(CONNECTION_TIMEOUT_MS))
-            .idle_timeout(None)    // SQLite: keep connections alive (WAL stability)
-            .max_lifetime(None)    // SQLite: no connection recycling
+            .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
+            .max_lifetime(None) // SQLite: no connection recycling
             .build(write_manager)
             .map_err(|e| format!("Failed to create events write pool: {}", e))?;
 
@@ -65,8 +65,8 @@ impl EventsDatabase {
             .max_size(READ_POOL_MAX_SIZE)
             .min_idle(Some(POOL_MIN_IDLE))
             .connection_timeout(std::time::Duration::from_millis(CONNECTION_TIMEOUT_MS))
-            .idle_timeout(None)    // SQLite: keep connections alive (WAL stability)
-            .max_lifetime(None)    // SQLite: no connection recycling
+            .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
+            .max_lifetime(None) // SQLite: no connection recycling
             .build(read_manager)
             .map_err(|e| format!("Failed to create events read pool: {}", e))?;
 

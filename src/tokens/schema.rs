@@ -293,10 +293,10 @@ pub const CREATE_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_rejection_history_time ON rejection_history(rejected_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_rejection_history_reason_time ON rejection_history(reason, rejected_at DESC)",
     "CREATE INDEX IF NOT EXISTS idx_rejection_history_mint ON rejection_history(mint)",
-    
+
     // Unique constraint to prevent duplicate rejection history entries
     "CREATE UNIQUE INDEX IF NOT EXISTS idx_rejection_history_unique ON rejection_history(mint, source, rejected_at)",
-    
+
     // Partial index for active (non-blacklisted) tokens by priority (common query pattern)
     "CREATE INDEX IF NOT EXISTS idx_tracking_active_priority ON update_tracking(priority DESC, market_data_last_updated_at ASC) WHERE last_rejection_at IS NULL",
 

@@ -50,7 +50,10 @@ pub fn get_all_db_paths() -> Vec<(String, PathBuf)> {
         ("ai.db", paths::get_ai_db_path()),
         ("ai_chat.db", paths::get_ai_chat_db_path()),
         // rpc_stats.db uses its own path function (not in paths module)
-        ("rpc_stats.db", paths::get_data_directory().join("rpc_stats.db")),
+        (
+            "rpc_stats.db",
+            paths::get_data_directory().join("rpc_stats.db"),
+        ),
     ];
 
     candidates
@@ -88,13 +91,8 @@ pub fn get_all_db_paths() -> Vec<(String, PathBuf)> {
 /// This is I/O heavy (full VACUUM) and should only run during the initial
 /// maintenance cycle, not on every periodic run.
 pub fn ensure_auto_vacuum_mode(path: &Path) -> Result<bool, String> {
-    let conn = Connection::open(path).map_err(|e| {
-        format!(
-            "Failed to open database {}: {}",
-            path.display(),
-            e
-        )
-    })?;
+    let conn = Connection::open(path)
+        .map_err(|e| format!("Failed to open database {}: {}", path.display(), e))?;
 
     // Configure connection for safe operation
     conn.pragma_update(None, "busy_timeout", 5000)
@@ -169,13 +167,8 @@ pub fn ensure_auto_vacuum_mode(path: &Path) -> Result<bool, String> {
 /// - Batch size controls I/O impact (500 pages = ~2 MB)
 /// - Only works if auto_vacuum mode is INCREMENTAL
 pub fn run_incremental_vacuum(path: &Path, pages: u32) -> Result<u64, String> {
-    let conn = Connection::open(path).map_err(|e| {
-        format!(
-            "Failed to open database {}: {}",
-            path.display(),
-            e
-        )
-    })?;
+    let conn = Connection::open(path)
+        .map_err(|e| format!("Failed to open database {}: {}", path.display(), e))?;
 
     // Configure connection
     conn.pragma_update(None, "busy_timeout", 5000)
@@ -244,13 +237,8 @@ pub fn run_incremental_vacuum(path: &Path, pages: u32) -> Result<u64, String> {
 /// - This is lightweight compared to VACUUM — typically completes in milliseconds
 /// - Only meaningful for databases using WAL journal mode
 pub fn run_wal_checkpoint(path: &Path) -> Result<(), String> {
-    let conn = Connection::open(path).map_err(|e| {
-        format!(
-            "Failed to open database {}: {}",
-            path.display(),
-            e
-        )
-    })?;
+    let conn = Connection::open(path)
+        .map_err(|e| format!("Failed to open database {}: {}", path.display(), e))?;
 
     conn.pragma_update(None, "busy_timeout", 5000)
         .map_err(|e| format!("Failed to set busy_timeout: {}", e))?;
@@ -415,16 +403,11 @@ async fn run_vacuum_cycle() {
         let name_clone = name.clone();
         let path_clone = path.clone();
 
-        match tokio::task::spawn_blocking(move || run_incremental_vacuum(&path_clone, 500))
-            .await
-        {
+        match tokio::task::spawn_blocking(move || run_incremental_vacuum(&path_clone, 500)).await {
             Ok(Ok(freed)) => {
                 total_freed += freed;
                 if freed > 0 {
-                    logger::info(
-                        LogTag::System,
-                        &format!("✓ {} freed {} pages", name, freed),
-                    );
+                    logger::info(LogTag::System, &format!("✓ {} freed {} pages", name, freed));
                 }
                 successful += 1;
             }
@@ -478,7 +461,10 @@ async fn run_wal_cycle() {
             Err(e) => {
                 logger::warning(
                     LogTag::System,
-                    &format!("✗ Task panic during WAL checkpoint of {}: {}", name_clone, e),
+                    &format!(
+                        "✗ Task panic during WAL checkpoint of {}: {}",
+                        name_clone, e
+                    ),
                 );
                 errors += 1;
             }
@@ -488,10 +474,7 @@ async fn run_wal_cycle() {
     if errors > 0 {
         logger::warning(
             LogTag::System,
-            &format!(
-                "WAL checkpoint cycle: {} ok, {} errors",
-                successful, errors
-            ),
+            &format!("WAL checkpoint cycle: {} ok, {} errors", successful, errors),
         );
     }
 }

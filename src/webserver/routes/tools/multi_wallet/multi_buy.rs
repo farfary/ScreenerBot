@@ -80,7 +80,7 @@ pub async fn preview_multi_buy(Json(request): Json<MultiBuyPreviewRequest>) -> R
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 "RPC_ERROR",
                 "Failed to get wallet balance",
-                Some(&e),
+                Some(&e.to_string()),
             );
         }
     };

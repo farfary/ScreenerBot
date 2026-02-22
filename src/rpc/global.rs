@@ -25,7 +25,7 @@ static RPC_CLIENT: OnceLock<RpcClient> = OnceLock::new();
 ///
 /// This initializes the RpcManager-based client. Called automatically
 /// on first access via `get_rpc_client()`.
-pub fn init_rpc_client() -> Result<&'static RpcClient, String> {
+pub fn init_rpc_client() -> crate::Result<&'static RpcClient> {
     // Check if already initialized
     if let Some(client) = RPC_CLIENT.get() {
         return Ok(client);

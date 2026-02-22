@@ -1,9 +1,9 @@
 use crate::constants::TOKEN_2022_PROGRAM_ID;
 use crate::errors::blockchain::{parse_structured_solana_error, BlockchainError};
 use crate::errors::parse_solana_error;
-use crate::Error;
 use crate::logger::{self, LogTag};
 use crate::rpc::{get_rpc_client, RpcClientMethods};
+use crate::Error;
 use chrono::{DateTime, Utc};
 use solana_sdk::pubkey::Pubkey;
 use std::fs;

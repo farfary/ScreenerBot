@@ -38,4 +38,3 @@ impl std::fmt::Display for DataError {
 }
 
 impl std::error::Error for DataError {}
-

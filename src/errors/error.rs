@@ -2,6 +2,7 @@ use super::{
     BlockchainError, ConfigurationError, DataError, DatabaseError, InternalError, IoError,
     NetworkError, PositionError, RateLimitError, RpcProviderError, ServiceError,
 };
+use crate::rpc::errors::RpcError;
 
 /// Top-level error type for ScreenerBot.
 ///
@@ -13,6 +14,9 @@ pub enum Error {
 
     // Network connectivity errors
     Network(NetworkError),
+
+    // RPC client operation errors
+    Rpc(RpcError),
 
     // RPC provider issues
     RpcProvider(RpcProviderError),
@@ -50,6 +54,7 @@ impl std::fmt::Display for Error {
         match self {
             Error::Blockchain(e) => write!(f, "Blockchain Error: {}", e),
             Error::Network(e) => write!(f, "Network Error: {}", e),
+            Error::Rpc(e) => write!(f, "RPC Error: {}", e),
             Error::RpcProvider(e) => write!(f, "RPC Provider Error: {}", e),
             Error::Database(e) => write!(f, "Database Error: {}", e),
             Error::Service(e) => write!(f, "Service Error: {}", e),
@@ -66,22 +71,8 @@ impl std::fmt::Display for Error {
 impl std::error::Error for Error {}
 
 // =============================================================================
-// Conversions (migration convenience)
+// Conversions from standard library and external types
 // =============================================================================
-
-impl From<String> for Error {
-    fn from(err: String) -> Self {
-        Error::Network(NetworkError::Generic { message: err })
-    }
-}
-
-impl From<&str> for Error {
-    fn from(err: &str) -> Self {
-        Error::Network(NetworkError::Generic {
-            message: err.to_string(),
-        })
-    }
-}
 
 impl From<reqwest::Error> for Error {
     fn from(err: reqwest::Error) -> Self {
@@ -127,6 +118,12 @@ impl From<tokio::task::JoinError> for Error {
 impl From<tokio::time::error::Elapsed> for Error {
     fn from(err: tokio::time::error::Elapsed) -> Self {
         Error::Internal(InternalError::from(err))
+    }
+}
+
+impl From<RpcError> for Error {
+    fn from(err: RpcError) -> Self {
+        Error::Rpc(err)
     }
 }
 

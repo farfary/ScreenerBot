@@ -3,8 +3,8 @@
 //! This module provides helpers for WebSocket-based Solana RPC subscriptions.
 
 use crate::config;
-use crate::{Error, Result};
 use crate::rpc::provider::derive_websocket_url;
+use crate::{Error, Result};
 
 /// Get the WebSocket URL from the primary configured RPC endpoint
 ///

@@ -1,3 +1,5 @@
+//! OHLCV service — manages candlestick data collection, caching, and gap-filling for monitored tokens.
+
 use crate::logger::{self, LogTag};
 use crate::ohlcvs::{ActivityType, Priority};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
@@ -12,12 +14,6 @@ use tokio::time::{sleep, Duration};
 /// Manages multi-timeframe OHLCV data with priority-based monitoring.
 /// Provides intelligent caching, gap detection, and multi-pool support.
 pub struct OhlcvService;
-
-impl Default for OhlcvService {
-    fn default() -> Self {
-        Self
-    }
-}
 
 #[async_trait]
 impl Service for OhlcvService {
@@ -37,10 +33,15 @@ impl Service for OhlcvService {
         crate::global::is_initialization_complete()
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         crate::ohlcvs::OhlcvService::initialize()
             .await
-            .map_err(|e| format!("Failed to initialize OHLCV service: {}", e))?;
+            .map_err(|e| {
+                crate::Error::Service(crate::errors::ServiceError::Initialize {
+                    service: "ohlcv".to_string(),
+                    message: format!("Failed to initialize OHLCV service: {}", e),
+                })
+            })?;
         Ok(())
     }
 
@@ -48,10 +49,15 @@ impl Service for OhlcvService {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String> {
+    ) -> crate::Result<Vec<JoinHandle<()>>> {
         let mut handles = crate::ohlcvs::OhlcvService::start(shutdown.clone(), monitor.clone())
             .await
-            .map_err(|e| format!("Failed to start OHLCV runtime: {}", e))?;
+            .map_err(|e| {
+                crate::Error::Service(crate::errors::ServiceError::Start {
+                    service: "ohlcv".to_string(),
+                    message: format!("Failed to start OHLCV runtime: {}", e),
+                })
+            })?;
 
         let autop_monitor = monitor.clone();
         let autop_shutdown = shutdown.clone();

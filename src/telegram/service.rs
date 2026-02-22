@@ -71,7 +71,7 @@ impl Service for TelegramService {
         vec![] // No dependencies
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         let config = with_config(|c| c.telegram.clone());
 
         if !config.enabled {
@@ -120,7 +120,7 @@ impl Service for TelegramService {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String> {
+    ) -> crate::Result<Vec<JoinHandle<()>>> {
         let config = with_config(|c| c.telegram.clone());
 
         if !config.enabled || config.bot_token.is_empty() {
@@ -182,7 +182,7 @@ impl Service for TelegramService {
         Ok(handles)
     }
 
-    async fn stop(&mut self) -> Result<(), String> {
+    async fn stop(&mut self) -> crate::Result<()> {
         logger::info(LogTag::Telegram, "Telegram service shutting down");
 
         // Send shutdown notification if possible
@@ -254,14 +254,19 @@ pub async fn get_bot_state() -> BotState {
 }
 
 /// Start discovery mode
-pub async fn start_discovery_mode() -> Result<(), String> {
+pub async fn start_discovery_mode() -> crate::Result<()> {
     // Update state
     let service = TELEGRAM_SERVICE.write().await;
     *service.state.write().await = BotState::Discovery;
     drop(service);
 
     // Start discovery
-    discovery::start_discovery().await
+    discovery::start_discovery().await.map_err(|e| {
+        crate::Error::Service(crate::errors::ServiceError::Start {
+            service: "telegram".to_string(),
+            message: e,
+        })
+    })
 }
 
 /// Stop discovery mode

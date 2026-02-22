@@ -1,3 +1,5 @@
+//! Positions service — manages open trading position tracking and state machine.
+
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -24,7 +26,7 @@ impl Service for PositionsService {
         crate::global::is_initialization_complete()
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         // Positions system initialization happens in start
         Ok(())
     }
@@ -33,10 +35,15 @@ impl Service for PositionsService {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String> {
+    ) -> crate::Result<Vec<JoinHandle<()>>> {
         let handle = crate::positions::start_positions_manager_service(shutdown.clone(), monitor)
             .await
-            .map_err(|e| format!("Failed to start positions service: {}", e))?;
+            .map_err(|e| {
+                crate::Error::Service(crate::errors::ServiceError::Start {
+                    service: "positions".to_string(),
+                    message: format!("Failed to start positions service: {}", e),
+                })
+            })?;
 
         // Return verification_worker handle so ServiceManager can wait for graceful shutdown
         Ok(vec![handle])

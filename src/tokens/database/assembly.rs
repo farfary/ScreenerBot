@@ -214,10 +214,8 @@ impl TokenDatabase {
         // Cutoff is pre-computed to avoid per-row strftime() calls in SQLite.
         // Configure via maintenance.stale_token_days (0 = include all).
         let where_clause = if require_market_data {
-            let stale_days =
-                crate::config::with_config(|cfg| cfg.maintenance.stale_token_days);
-            let mut clause =
-                " WHERE (d.mint IS NOT NULL OR g.mint IS NOT NULL)".to_string();
+            let stale_days = crate::config::with_config(|cfg| cfg.maintenance.stale_token_days);
+            let mut clause = " WHERE (d.mint IS NOT NULL OR g.mint IS NOT NULL)".to_string();
             if stale_days > 0 {
                 let cutoff_secs =
                     chrono::Utc::now().timestamp() - (stale_days as i64 * 24 * 60 * 60);
@@ -1022,9 +1020,7 @@ pub(super) fn assemble_token(
         let rc_freeze = security_ref.and_then(|sec| sec.freeze_authority.clone());
         if rc_mint.is_some() || rc_freeze.is_some() {
             (rc_mint, rc_freeze)
-        } else if let Some(cached) =
-            crate::tokens::authority_cache::get_cached(&metadata.mint)
-        {
+        } else if let Some(cached) = crate::tokens::authority_cache::get_cached(&metadata.mint) {
             (cached.mint_authority, cached.freeze_authority)
         } else {
             (None, None)
@@ -1195,9 +1191,7 @@ pub(super) fn assemble_token_without_market_data(
         let rc_freeze = security_ref.and_then(|sec| sec.freeze_authority.clone());
         if rc_mint.is_some() || rc_freeze.is_some() {
             (rc_mint, rc_freeze)
-        } else if let Some(cached) =
-            crate::tokens::authority_cache::get_cached(&metadata.mint)
-        {
+        } else if let Some(cached) = crate::tokens::authority_cache::get_cached(&metadata.mint) {
             (cached.mint_authority, cached.freeze_authority)
         } else {
             (None, None)

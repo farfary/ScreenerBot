@@ -42,7 +42,7 @@ pub trait Service: Send + Sync {
     }
 
     /// Initialize the service
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         Ok(())
     }
 
@@ -51,10 +51,10 @@ pub trait Service: Send + Sync {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String>;
+    ) -> crate::Result<Vec<JoinHandle<()>>>;
 
     /// Stop the service
-    async fn stop(&mut self) -> Result<(), String> {
+    async fn stop(&mut self) -> crate::Result<()> {
         Ok(())
     }
 
@@ -180,7 +180,7 @@ pub struct ServiceManager {
 }
 
 impl ServiceManager {
-    pub async fn new() -> Result<Self, String> {
+    pub async fn new() -> crate::Result<Self> {
         Ok(Self {
             services: HashMap::new(),
             handles: HashMap::new(),
@@ -207,7 +207,7 @@ impl ServiceManager {
     }
 
     /// Start all enabled services in dependency and priority order
-    pub async fn start_all(&mut self) -> Result<(), String> {
+    pub async fn start_all(&mut self) -> crate::Result<()> {
         let total_registered = self.services.len();
 
         // Filter enabled services with debug logging
@@ -348,7 +348,7 @@ impl ServiceManager {
     /// Start services that are now enabled (after initialization)
     /// This method is idempotent - skips services that are already running
     /// Handles topological sorting and collects partial failures
-    pub async fn start_newly_enabled(&mut self) -> Result<ServiceStartupReport, String> {
+    pub async fn start_newly_enabled(&mut self) -> crate::Result<ServiceStartupReport> {
         logger::info(
             LogTag::System,
             "Starting newly enabled services after initialization",
@@ -539,7 +539,7 @@ impl ServiceManager {
     }
 
     /// Stop all services in reverse priority order
-    pub async fn stop_all(&mut self) -> Result<(), String> {
+    pub async fn stop_all(&mut self) -> crate::Result<()> {
         let running_services: Vec<&'static str> = self.handles.keys().copied().collect();
         let shutdown_begin = format!("running={} debug_system=on", running_services.len());
         log_service_startup_phase("shutdown_begin", Some(&shutdown_begin));
@@ -626,10 +626,7 @@ impl ServiceManager {
     }
 
     /// Resolve service startup order with dependency validation
-    fn resolve_startup_order(
-        &self,
-        services: &[&'static str],
-    ) -> Result<Vec<&'static str>, String> {
+    fn resolve_startup_order(&self, services: &[&'static str]) -> crate::Result<Vec<&'static str>> {
         use std::collections::HashSet;
 
         // First, validate all dependencies exist
@@ -645,15 +642,18 @@ impl ServiceManager {
             ordered: &mut Vec<&'static str>,
             visited: &mut HashSet<&'static str>,
             visiting: &mut HashSet<&'static str>,
-        ) -> Result<(), String> {
+        ) -> crate::Result<()> {
             if visited.contains(name) {
                 return Ok(());
             }
 
             if visiting.contains(name) {
-                return Err(format!(
-                    "Circular dependency detected for service: {}",
-                    name
+                return Err(crate::Error::Service(
+                    crate::errors::ServiceError::Dependency {
+                        service: name.to_string(),
+                        dependency: "circular".to_string(),
+                        message: format!("Circular dependency detected for service: {}", name),
+                    },
                 ));
             }
 
@@ -689,7 +689,7 @@ impl ServiceManager {
     }
 
     /// Validate that all declared dependencies exist as registered services
-    fn validate_dependencies(&self, services: &[&'static str]) -> Result<(), String> {
+    fn validate_dependencies(&self, services: &[&'static str]) -> crate::Result<()> {
         let registered: std::collections::HashSet<&str> = self.services.keys().copied().collect();
         let mut missing_deps: Vec<String> = Vec::new();
 

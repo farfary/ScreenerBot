@@ -272,12 +272,13 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
 
     // Fetch account data
     let account_opt = rpc_client.get_account(&mint_pubkey).await.map_err(|e| {
-        if e.contains("could not find account") || e.contains("Account not found") {
+        let e_str = e.to_string();
+        if e_str.contains("could not find account") || e_str.contains("Account not found") {
             "Account not found".to_string()
-        } else if e.contains("429") || e.to_lowercase().contains("rate limit") {
-            format!("Rate limited: {}", e)
+        } else if e_str.contains("429") || e_str.to_lowercase().contains("rate limit") {
+            format!("Rate limited: {}", e_str)
         } else {
-            format!("Failed to fetch account: {}", e)
+            format!("Failed to fetch account: {}", e_str)
         }
     })?;
 
@@ -493,10 +494,7 @@ fn cache_authorities_from_spl_mint(mint: &str, mint_data: &spl_token::state::Min
 }
 
 /// Extract and cache authority data from a Token-2022 Mint struct
-fn cache_authorities_from_token2022_mint(
-    mint: &str,
-    mint_data: &spl_token_2022::state::Mint,
-) {
+fn cache_authorities_from_token2022_mint(mint: &str, mint_data: &spl_token_2022::state::Mint) {
     use solana_program::program_option::COption;
 
     let mint_authority = match mint_data.mint_authority {

@@ -1,3 +1,6 @@
+//! Pool fetcher service — fetches and updates pool account data via RPC.
+
+use crate::errors::ServiceError;
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
@@ -6,12 +9,6 @@ use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
 pub struct PoolFetcherService;
-
-impl Default for PoolFetcherService {
-    fn default() -> Self {
-        Self
-    }
-}
 
 #[async_trait]
 impl Service for PoolFetcherService {
@@ -26,7 +23,7 @@ impl Service for PoolFetcherService {
     fn dependencies(&self) -> Vec<&'static str> {
         vec![
             "transactions",
-            "pool_helpers",
+            "pools",
             "pool_discovery",
             "filtering",
         ]
@@ -36,7 +33,7 @@ impl Service for PoolFetcherService {
         crate::global::is_initialization_complete()
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         logger::info(
             LogTag::PoolService,
             &"Initializing pool fetcher service...".to_string(),
@@ -48,15 +45,19 @@ impl Service for PoolFetcherService {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String> {
+    ) -> crate::Result<Vec<JoinHandle<()>>> {
         logger::info(
             LogTag::PoolService,
             &"Starting pool fetcher service...".to_string(),
         );
 
         // Get the AccountFetcher component from global state
-        let fetcher = crate::pools::get_account_fetcher()
-            .ok_or("AccountFetcher component not initialized".to_string())?;
+        let fetcher = crate::pools::get_account_fetcher().ok_or_else(|| {
+            crate::Error::Service(ServiceError::Start {
+                service: self.name().to_string(),
+                message: "AccountFetcher component not initialized".to_string(),
+            })
+        })?;
 
         // Spawn fetcher task
         let handle = tokio::spawn(monitor.instrument(async move {
@@ -71,7 +72,7 @@ impl Service for PoolFetcherService {
         Ok(vec![handle])
     }
 
-    async fn stop(&mut self) -> Result<(), String> {
+    async fn stop(&mut self) -> crate::Result<()> {
         logger::info(
             LogTag::PoolService,
             &"Pool fetcher service stopping (via shutdown signal)".to_string(),

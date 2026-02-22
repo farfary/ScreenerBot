@@ -1,3 +1,5 @@
+//! Token filtering service — periodic filter refresh and history cleanup.
+
 use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
@@ -59,14 +61,14 @@ impl Service for FilteringService {
 
     fn dependencies(&self) -> Vec<&'static str> {
         // Note: tokens service handles all token data including store, discovery, and security
-        vec!["tokens", "pool_helpers"]
+        vec!["tokens", "pools"]
     }
 
     fn is_enabled(&self) -> bool {
         crate::global::is_initialization_complete()
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         // Don't refresh during init - it blocks startup for 20+ seconds with 11k tokens
         // The background task will do the first refresh immediately after start
         Ok(())
@@ -76,7 +78,7 @@ impl Service for FilteringService {
         &mut self,
         shutdown: Arc<tokio::sync::Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<tokio::task::JoinHandle<()>>, String> {
+    ) -> crate::Result<Vec<tokio::task::JoinHandle<()>>> {
         let operations = Arc::clone(&self.operations);
         let errors = Arc::clone(&self.errors);
 
@@ -254,7 +256,7 @@ impl Service for FilteringService {
         Ok(vec![handle, cleanup_handle])
     }
 
-    async fn stop(&mut self) -> Result<(), String> {
+    async fn stop(&mut self) -> crate::Result<()> {
         Ok(())
     }
 

@@ -174,7 +174,10 @@ pub async fn transfer_token(
     let mut instructions = Vec::new();
 
     // Check if destination ATA exists, create if not
-    let dest_account = rpc_client.get_account(&dest_ata).await?;
+    let dest_account = rpc_client
+        .get_account(&dest_ata)
+        .await
+        .map_err(|e| e.to_string())?;
     if dest_account.is_none() {
         instructions.push(
             spl_associated_token_account::instruction::create_associated_token_account(

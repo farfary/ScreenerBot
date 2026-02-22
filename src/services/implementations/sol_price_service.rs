@@ -1,3 +1,5 @@
+//! SOL price service — tracks real-time SOL/USD price for portfolio valuation.
+
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -24,7 +26,7 @@ impl Service for SolPriceService {
         crate::global::is_initialization_complete()
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         Ok(())
     }
 
@@ -32,10 +34,15 @@ impl Service for SolPriceService {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String> {
+    ) -> crate::Result<Vec<JoinHandle<()>>> {
         let handle = crate::sol_price::start_sol_price_service(shutdown.clone(), monitor)
             .await
-            .map_err(|e| format!("Failed to start SOL price service: {}", e))?;
+            .map_err(|e| {
+                crate::Error::Service(crate::errors::ServiceError::Start {
+                    service: "sol_price".to_string(),
+                    message: format!("Failed to start SOL price service: {}", e),
+                })
+            })?;
 
         // Return price_task handle so ServiceManager can wait for graceful shutdown
         Ok(vec![handle])

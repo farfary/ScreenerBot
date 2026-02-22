@@ -1,4 +1,5 @@
 use crate::database;
+use crate::errors::{DatabaseError, Error};
 use crate::logger::{self, LogTag};
 use crate::strategies::types::{
     EvaluationResult, RiskLevel, Strategy, StrategyPerformance, StrategyTemplate, StrategyType,
@@ -127,17 +128,15 @@ static DB_POOL: LazyLock<Pool<SqliteConnectionManager>> = LazyLock::new(|| {
         .with_init(|c| database::configure_connection(c, database::STRATEGIES_DB));
     Pool::builder()
         .max_size(3)
-        .idle_timeout(None)    // SQLite: keep connections alive (WAL stability)
-        .max_lifetime(None)    // SQLite: no connection recycling
+        .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
+        .max_lifetime(None) // SQLite: no connection recycling
         .build(manager)
         .expect("Failed to create strategies database pool")
 });
 
 /// Get a connection from the pool
-fn get_connection() -> Result<PooledConnection<SqliteConnectionManager>, String> {
-    DB_POOL
-        .get()
-        .map_err(|e| format!("Failed to get database connection: {}", e))
+fn get_connection() -> crate::Result<PooledConnection<SqliteConnectionManager>> {
+    DB_POOL.get().map_err(Into::into)
 }
 
 // =============================================================================
@@ -145,7 +144,7 @@ fn get_connection() -> Result<PooledConnection<SqliteConnectionManager>, String>
 // =============================================================================
 
 /// Initialize the strategies database with all schemas
-pub fn init_strategies_db() -> Result<(), String> {
+pub fn init_strategies_db() -> crate::Result<()> {
     if STRATEGIES_DB_INITIALIZED.load(Ordering::Relaxed) {
         return Ok(());
     }
@@ -153,42 +152,30 @@ pub fn init_strategies_db() -> Result<(), String> {
     let conn = get_connection()?;
 
     // Create version table first
-    conn.execute_batch(SCHEMA_VERSION_TABLE)
-        .map_err(|e| format!("Failed to create version table: {}", e))?;
+    conn.execute_batch(SCHEMA_VERSION_TABLE)?;
 
     // Check current schema version
-    let current_version: Option<u32> = conn
-        .query_row(
+    let current_version: Option<u32> =
+        conn.query_row(
             "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1",
             [],
             |row| row.get(0),
         )
-        .optional()
-        .map_err(|e| format!("Failed to check schema version: {}", e))?;
+        .optional()?;
 
     if current_version.is_none() || current_version.unwrap() < STRATEGIES_SCHEMA_VERSION {
         // Create all tables
-        conn.execute_batch(SCHEMA_STRATEGIES)
-            .map_err(|e| format!("Failed to create strategies table: {}", e))?;
-
-        conn.execute_batch(SCHEMA_STRATEGY_PERFORMANCE)
-            .map_err(|e| format!("Failed to create performance table: {}", e))?;
-
-        conn.execute_batch(SCHEMA_STRATEGY_ASSIGNMENTS)
-            .map_err(|e| format!("Failed to create assignments table: {}", e))?;
-
-        conn.execute_batch(SCHEMA_STRATEGY_TEMPLATES)
-            .map_err(|e| format!("Failed to create templates table: {}", e))?;
-
-        conn.execute_batch(SCHEMA_STRATEGY_BACKTESTS)
-            .map_err(|e| format!("Failed to create backtests table: {}", e))?;
+        conn.execute_batch(SCHEMA_STRATEGIES)?;
+        conn.execute_batch(SCHEMA_STRATEGY_PERFORMANCE)?;
+        conn.execute_batch(SCHEMA_STRATEGY_ASSIGNMENTS)?;
+        conn.execute_batch(SCHEMA_STRATEGY_TEMPLATES)?;
+        conn.execute_batch(SCHEMA_STRATEGY_BACKTESTS)?;
 
         // Update version
         conn.execute(
             "INSERT INTO schema_version (version, applied_at) VALUES (?1, ?2)",
             params![STRATEGIES_SCHEMA_VERSION, Utc::now().to_rfc3339()],
-        )
-        .map_err(|e| format!("Failed to update schema version: {}", e))?;
+        )?;
 
         logger::info(
             LogTag::System,
@@ -208,14 +195,11 @@ pub fn init_strategies_db() -> Result<(), String> {
 // =============================================================================
 
 /// Insert a new strategy
-pub fn insert_strategy(strategy: &Strategy) -> Result<(), String> {
+pub fn insert_strategy(strategy: &Strategy) -> crate::Result<()> {
     let conn = get_connection()?;
 
-    let rules_json = serde_json::to_string(&strategy.rules)
-        .map_err(|e| format!("Failed to serialize rules: {}", e))?;
-
-    let parameters_json = serde_json::to_string(&strategy.parameters)
-        .map_err(|e| format!("Failed to serialize parameters: {}", e))?;
+    let rules_json = serde_json::to_string(&strategy.rules)?;
+    let parameters_json = serde_json::to_string(&strategy.parameters)?;
 
     conn.execute(
         "INSERT INTO strategies (id, name, description, type, enabled, priority, timeframe, rules_json, parameters_json, created_at, updated_at, author, version)
@@ -235,8 +219,7 @@ pub fn insert_strategy(strategy: &Strategy) -> Result<(), String> {
             strategy.author,
             strategy.version,
         ],
-    )
-    .map_err(|e| format!("Failed to insert strategy: {}", e))?;
+    )?;
 
     logger::info(
         LogTag::System,
@@ -250,40 +233,38 @@ pub fn insert_strategy(strategy: &Strategy) -> Result<(), String> {
 }
 
 /// Update an existing strategy
-pub fn update_strategy(strategy: &Strategy) -> Result<(), String> {
+pub fn update_strategy(strategy: &Strategy) -> crate::Result<()> {
     let conn = get_connection()?;
 
-    let rules_json = serde_json::to_string(&strategy.rules)
-        .map_err(|e| format!("Failed to serialize rules: {}", e))?;
+    let rules_json = serde_json::to_string(&strategy.rules)?;
+    let parameters_json = serde_json::to_string(&strategy.parameters)?;
 
-    let parameters_json = serde_json::to_string(&strategy.parameters)
-        .map_err(|e| format!("Failed to serialize parameters: {}", e))?;
-
-    let rows_affected = conn
-        .execute(
-            "UPDATE strategies 
+    let rows_affected = conn.execute(
+        "UPDATE strategies 
              SET name = ?2, description = ?3, type = ?4, enabled = ?5, priority = ?6, 
                  timeframe = ?7, rules_json = ?8, parameters_json = ?9, updated_at = ?10, author = ?11, version = ?12
              WHERE id = ?1",
-            params![
-                strategy.id,
-                strategy.name,
-                strategy.description,
-                strategy.strategy_type.to_string(),
-                strategy.enabled,
-                strategy.priority,
-                strategy.timeframe,
-                rules_json,
-                parameters_json,
-                strategy.updated_at.to_rfc3339(),
-                strategy.author,
-                strategy.version,
-            ],
-        )
-        .map_err(|e| format!("Failed to update strategy: {}", e))?;
+        params![
+            strategy.id,
+            strategy.name,
+            strategy.description,
+            strategy.strategy_type.to_string(),
+            strategy.enabled,
+            strategy.priority,
+            strategy.timeframe,
+            rules_json,
+            parameters_json,
+            strategy.updated_at.to_rfc3339(),
+            strategy.author,
+            strategy.version,
+        ],
+    )?;
 
     if rows_affected == 0 {
-        return Err(format!("Strategy not found: {}", strategy.id));
+        return Err(Error::Database(DatabaseError::Query {
+            operation: "update_strategy".to_string(),
+            message: format!("Strategy not found: {}", strategy.id),
+        }));
     }
 
     logger::info(
@@ -298,15 +279,17 @@ pub fn update_strategy(strategy: &Strategy) -> Result<(), String> {
 }
 
 /// Delete a strategy
-pub fn delete_strategy(strategy_id: &str) -> Result<(), String> {
+pub fn delete_strategy(strategy_id: &str) -> crate::Result<()> {
     let conn = get_connection()?;
 
-    let rows_affected = conn
-        .execute("DELETE FROM strategies WHERE id = ?1", params![strategy_id])
-        .map_err(|e| format!("Failed to delete strategy: {}", e))?;
+    let rows_affected =
+        conn.execute("DELETE FROM strategies WHERE id = ?1", params![strategy_id])?;
 
     if rows_affected == 0 {
-        return Err(format!("Strategy not found: {}", strategy_id));
+        return Err(Error::Database(DatabaseError::Query {
+            operation: "delete_strategy".to_string(),
+            message: format!("Strategy not found: {}", strategy_id),
+        }));
     }
 
     logger::info(
@@ -318,7 +301,7 @@ pub fn delete_strategy(strategy_id: &str) -> Result<(), String> {
 }
 
 /// Get a strategy by ID
-pub fn get_strategy(strategy_id: &str) -> Result<Option<Strategy>, String> {
+pub fn get_strategy(strategy_id: &str) -> crate::Result<Option<Strategy>> {
     let conn = get_connection()?;
 
     let result = conn
@@ -336,8 +319,7 @@ pub fn get_strategy(strategy_id: &str) -> Result<Option<Strategy>, String> {
                 Ok((rules_json, parameters_json, type_str, created_at_str, updated_at_str, row.get(0)?, row.get(1)?, row.get(2)?, row.get(4)?, row.get(5)?, row.get(6)?, row.get(11)?, row.get(12)?))
             },
         )
-        .optional()
-        .map_err(|e| format!("Failed to get strategy: {}", e))?;
+        .optional()?;
 
     match result {
         Some((
@@ -355,20 +337,23 @@ pub fn get_strategy(strategy_id: &str) -> Result<Option<Strategy>, String> {
             author,
             version,
         )) => {
-            let rules = serde_json::from_str(&rules_json)
-                .map_err(|e| format!("Failed to deserialize rules: {}", e))?;
-            let parameters = serde_json::from_str(&parameters_json)
-                .map_err(|e| format!("Failed to deserialize parameters: {}", e))?;
+            let rules = serde_json::from_str(&rules_json)?;
+            let parameters = serde_json::from_str(&parameters_json)?;
             let strategy_type = match type_str.as_str() {
                 "ENTRY" => StrategyType::Entry,
                 "EXIT" => StrategyType::Exit,
-                _ => return Err(format!("Invalid strategy type: {}", type_str)),
+                _ => {
+                    return Err(Error::Database(DatabaseError::Query {
+                        operation: "get_strategy".to_string(),
+                        message: format!("Invalid strategy type: {}", type_str),
+                    }))
+                }
             };
             let created_at = DateTime::parse_from_rfc3339(&created_at_str)
-                .map_err(|e| format!("Failed to parse created_at: {}", e))?
+                .map_err(|e| Error::parse_error(format!("Failed to parse created_at: {}", e)))?
                 .with_timezone(&Utc);
             let updated_at = DateTime::parse_from_rfc3339(&updated_at_str)
-                .map_err(|e| format!("Failed to parse updated_at: {}", e))?
+                .map_err(|e| Error::parse_error(format!("Failed to parse updated_at: {}", e)))?
                 .with_timezone(&Utc);
 
             Ok(Some(Strategy {
@@ -392,15 +377,13 @@ pub fn get_strategy(strategy_id: &str) -> Result<Option<Strategy>, String> {
 }
 
 /// Get all strategies
-pub fn get_all_strategies() -> Result<Vec<Strategy>, String> {
+pub fn get_all_strategies() -> crate::Result<Vec<Strategy>> {
     let conn = get_connection()?;
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, name, description, type, enabled, priority, timeframe, rules_json, parameters_json, created_at, updated_at, author, version
+    let mut stmt = conn.prepare(
+        "SELECT id, name, description, type, enabled, priority, timeframe, rules_json, parameters_json, created_at, updated_at, author, version
              FROM strategies ORDER BY priority ASC, name ASC",
-        )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+    )?;
 
     let strategies = stmt
         .query_map([], |row| {
@@ -425,10 +408,8 @@ pub fn get_all_strategies() -> Result<Vec<Strategy>, String> {
                 row.get(11)?,
                 row.get(12)?,
             ))
-        })
-        .map_err(|e| format!("Failed to query strategies: {}", e))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect strategies: {}", e))?;
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
 
     let mut result = Vec::new();
     for (
@@ -447,20 +428,18 @@ pub fn get_all_strategies() -> Result<Vec<Strategy>, String> {
         version,
     ) in strategies
     {
-        let rules = serde_json::from_str(&rules_json)
-            .map_err(|e| format!("Failed to deserialize rules for {}: {}", id, e))?;
-        let parameters = serde_json::from_str(&parameters_json)
-            .map_err(|e| format!("Failed to deserialize parameters for {}: {}", id, e))?;
+        let rules = serde_json::from_str(&rules_json)?;
+        let parameters = serde_json::from_str(&parameters_json)?;
         let strategy_type = match type_str.as_str() {
             "ENTRY" => StrategyType::Entry,
             "EXIT" => StrategyType::Exit,
             _ => continue,
         };
         let created_at = DateTime::parse_from_rfc3339(&created_at_str)
-            .map_err(|e| format!("Failed to parse created_at for {}: {}", id, e))?
+            .map_err(|e| Error::parse_error(format!("Failed to parse created_at for {}: {}", id, e)))?
             .with_timezone(&Utc);
         let updated_at = DateTime::parse_from_rfc3339(&updated_at_str)
-            .map_err(|e| format!("Failed to parse updated_at for {}: {}", id, e))?
+            .map_err(|e| Error::parse_error(format!("Failed to parse updated_at for {}: {}", id, e)))?
             .with_timezone(&Utc);
 
         result.push(Strategy {
@@ -484,30 +463,26 @@ pub fn get_all_strategies() -> Result<Vec<Strategy>, String> {
 }
 
 /// Check if any enabled strategies exist for a given type (lightweight check)
-pub fn has_enabled_strategies(strategy_type: StrategyType) -> Result<bool, String> {
+pub fn has_enabled_strategies(strategy_type: StrategyType) -> crate::Result<bool> {
     let conn = get_connection()?;
 
-    let count: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM strategies WHERE type = ?1 AND enabled = 1",
-            params![strategy_type.to_string()],
-            |row| row.get(0),
-        )
-        .map_err(|e| format!("Failed to check strategies count: {}", e))?;
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM strategies WHERE type = ?1 AND enabled = 1",
+        params![strategy_type.to_string()],
+        |row| row.get(0),
+    )?;
 
     Ok(count > 0)
 }
 
 /// Get enabled strategies by type
-pub fn get_enabled_strategies(strategy_type: StrategyType) -> Result<Vec<Strategy>, String> {
+pub fn get_enabled_strategies(strategy_type: StrategyType) -> crate::Result<Vec<Strategy>> {
     let conn = get_connection()?;
 
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, name, description, type, enabled, priority, timeframe, rules_json, parameters_json, created_at, updated_at, author, version
+    let mut stmt = conn.prepare(
+        "SELECT id, name, description, type, enabled, priority, timeframe, rules_json, parameters_json, created_at, updated_at, author, version
              FROM strategies WHERE type = ?1 AND enabled = 1 ORDER BY priority ASC, name ASC",
-        )
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+    )?;
 
     let strategies = stmt
         .query_map(params![strategy_type.to_string()], |row| {
@@ -532,10 +507,8 @@ pub fn get_enabled_strategies(strategy_type: StrategyType) -> Result<Vec<Strateg
                 row.get(11)?,
                 row.get(12)?,
             ))
-        })
-        .map_err(|e| format!("Failed to query strategies: {}", e))?
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to collect strategies: {}", e))?;
+        })?
+        .collect::<Result<Vec<_>, _>>()?;
 
     let mut result = Vec::new();
     for (
@@ -554,20 +527,18 @@ pub fn get_enabled_strategies(strategy_type: StrategyType) -> Result<Vec<Strateg
         version,
     ) in strategies
     {
-        let rules = serde_json::from_str(&rules_json)
-            .map_err(|e| format!("Failed to deserialize rules for {}: {}", id, e))?;
-        let parameters = serde_json::from_str(&parameters_json)
-            .map_err(|e| format!("Failed to deserialize parameters for {}: {}", id, e))?;
+        let rules = serde_json::from_str(&rules_json)?;
+        let parameters = serde_json::from_str(&parameters_json)?;
         let strategy_type = match type_str.as_str() {
             "ENTRY" => StrategyType::Entry,
             "EXIT" => StrategyType::Exit,
             _ => continue,
         };
         let created_at = DateTime::parse_from_rfc3339(&created_at_str)
-            .map_err(|e| format!("Failed to parse created_at for {}: {}", id, e))?
+            .map_err(|e| Error::parse_error(format!("Failed to parse created_at for {}: {}", id, e)))?
             .with_timezone(&Utc);
         let updated_at = DateTime::parse_from_rfc3339(&updated_at_str)
-            .map_err(|e| format!("Failed to parse updated_at for {}: {}", id, e))?
+            .map_err(|e| Error::parse_error(format!("Failed to parse updated_at for {}: {}", id, e)))?
             .with_timezone(&Utc);
 
         result.push(Strategy {
@@ -595,11 +566,10 @@ pub fn get_enabled_strategies(strategy_type: StrategyType) -> Result<Vec<Strateg
 // =============================================================================
 
 /// Record strategy evaluation result
-pub fn record_evaluation(result: &EvaluationResult, token_mint: &str) -> Result<(), String> {
+pub fn record_evaluation(result: &EvaluationResult, token_mint: &str) -> crate::Result<()> {
     let conn = get_connection()?;
 
-    let details_json = serde_json::to_string(&result.details)
-        .map_err(|e| format!("Failed to serialize details: {}", e))?;
+    let details_json = serde_json::to_string(&result.details)?;
 
     conn.execute(
         "INSERT INTO strategy_performance (strategy_id, execution_time_ms, result, confidence, details_json, token_mint, execution_timestamp)
@@ -613,14 +583,15 @@ pub fn record_evaluation(result: &EvaluationResult, token_mint: &str) -> Result<
             token_mint,
             Utc::now().to_rfc3339(),
         ],
-    )
-    .map_err(|e| format!("Failed to record evaluation: {}", e))?;
+    )?;
 
     Ok(())
 }
 
 /// Get performance statistics for a strategy
-pub fn get_strategy_performance(strategy_id: &str) -> Result<Option<StrategyPerformance>, String> {
+pub fn get_strategy_performance(
+    strategy_id: &str,
+) -> crate::Result<Option<StrategyPerformance>> {
     let conn = get_connection()?;
 
     let result = conn
@@ -641,8 +612,7 @@ pub fn get_strategy_performance(strategy_id: &str) -> Result<Option<StrategyPerf
                 Ok((total, successful, avg_time, last_eval_str))
             },
         )
-        .optional()
-        .map_err(|e| format!("Failed to get performance: {}", e))?;
+        .optional()?;
 
     match result {
         Some((total_evaluations, successful_signals, avg_execution_time_ms, last_eval_str)) => {
@@ -651,7 +621,7 @@ pub fn get_strategy_performance(strategy_id: &str) -> Result<Option<StrategyPerf
             }
 
             let last_evaluation = DateTime::parse_from_rfc3339(&last_eval_str)
-                .map_err(|e| format!("Failed to parse timestamp: {}", e))?
+                .map_err(|e| Error::parse_error(format!("Failed to parse timestamp: {}", e)))?
                 .with_timezone(&Utc);
 
             Ok(Some(StrategyPerformance {
@@ -671,32 +641,28 @@ pub fn get_strategy_performance(strategy_id: &str) -> Result<Option<StrategyPerf
 // =============================================================================
 
 /// Assign a strategy to a position
-pub fn assign_strategy_to_position(position_id: &str, strategy_id: &str) -> Result<(), String> {
+pub fn assign_strategy_to_position(position_id: &str, strategy_id: &str) -> crate::Result<()> {
     let conn = get_connection()?;
 
     conn.execute(
         "INSERT OR REPLACE INTO strategy_assignments (position_id, strategy_id, assigned_at)
          VALUES (?1, ?2, ?3)",
         params![position_id, strategy_id, Utc::now().to_rfc3339()],
-    )
-    .map_err(|e| format!("Failed to assign strategy: {}", e))?;
+    )?;
 
     Ok(())
 }
 
 /// Get strategies assigned to a position
-pub fn get_position_strategies(position_id: &str) -> Result<Vec<String>, String> {
+pub fn get_position_strategies(position_id: &str) -> crate::Result<Vec<String>> {
     let conn = get_connection()?;
 
-    let mut stmt = conn
-        .prepare("SELECT strategy_id FROM strategy_assignments WHERE position_id = ?1")
-        .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+    let mut stmt =
+        conn.prepare("SELECT strategy_id FROM strategy_assignments WHERE position_id = ?1")?;
 
     let strategies = stmt
-        .query_map(params![position_id], |row| row.get(0))
-        .map_err(|e| format!("Failed to query assignments: {}", e))?
-        .collect::<Result<Vec<String>, _>>()
-        .map_err(|e| format!("Failed to collect assignments: {}", e))?;
+        .query_map(params![position_id], |row| row.get(0))?
+        .collect::<Result<Vec<String>, _>>()?;
 
     Ok(strategies)
 }

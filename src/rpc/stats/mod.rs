@@ -43,7 +43,7 @@ pub struct StatsManager {
 
 impl StatsManager {
     /// Create new stats manager
-    pub async fn new() -> Result<Self, String> {
+    pub async fn new() -> crate::Result<Self> {
         let enabled = crate::config::with_config(|cfg| cfg.rpc.stats_enabled);
 
         let db = Arc::new(RpcStatsDatabase::new()?);
@@ -70,7 +70,7 @@ impl StatsManager {
     }
 
     /// Create with existing database
-    pub async fn with_database(db: Arc<RpcStatsDatabase>) -> Result<Self, String> {
+    pub async fn with_database(db: Arc<RpcStatsDatabase>) -> crate::Result<Self> {
         let enabled = crate::config::with_config(|cfg| cfg.rpc.stats_enabled);
 
         let session_id = format!(

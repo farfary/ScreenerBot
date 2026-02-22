@@ -1,8 +1,8 @@
 use crate::constants::TOKEN_2022_PROGRAM_ID;
-use crate::{Error, Result};
 use crate::logger::{self, LogTag};
 use crate::rpc::{get_rpc_client, RpcClientMethods};
 use crate::utils::{format_mint_for_log, get_wallet_address};
+use crate::{Error, Result};
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::{
     instruction::{AccountMeta, Instruction},
@@ -95,10 +95,7 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64> 
 }
 
 /// Get TOTAL token balance across ALL token accounts for a mint (USE FOR EXITS TO SELL ALL)
-pub async fn get_total_token_balance(
-    wallet_address: &str,
-    mint: &str,
-) -> Result<u64> {
+pub async fn get_total_token_balance(wallet_address: &str, mint: &str) -> Result<u64> {
     logger::debug(
         LogTag::Wallet,
         &format!(
@@ -169,10 +166,7 @@ pub async fn get_all_token_accounts(
 
 /// Closes a single empty ATA (Associated Token Account) for a specific mint
 /// Returns the transaction signature if successful
-pub async fn close_single_ata(
-    wallet_address: &str,
-    mint: &str,
-) -> Result<String> {
+pub async fn close_single_ata(wallet_address: &str, mint: &str) -> Result<String> {
     logger::info(
         LogTag::Wallet,
         &format!(
@@ -241,9 +235,7 @@ pub async fn close_single_ata(
 /// Closes all empty ATAs (Associated Token Accounts) for a wallet
 /// This reclaims the rent SOL (~0.002 SOL per account) from all empty token accounts
 /// Returns the number of accounts closed and total signatures
-pub async fn close_all_empty_atas(
-    wallet_address: &str,
-) -> Result<(u32, Vec<String>)> {
+pub async fn close_all_empty_atas(wallet_address: &str) -> Result<(u32, Vec<String>)> {
     logger::info(
         LogTag::Wallet,
         "Checking for empty token accounts to close...",
@@ -347,10 +339,7 @@ pub async fn close_all_empty_atas(
 /// * `mint` - The token mint address
 /// * `wallet_address` - The wallet address
 /// * `recently_sold` - Optional flag indicating if tokens were recently sold (enables longer wait times)
-pub async fn close_token_account(
-    mint: &str,
-    wallet_address: &str,
-) -> Result<String> {
+pub async fn close_token_account(mint: &str, wallet_address: &str) -> Result<String> {
     close_token_account_with_context(mint, wallet_address, false).await
 }
 
@@ -620,10 +609,7 @@ pub async fn close_token_account_with_context(
 }
 
 /// Gets the associated token account address for a wallet and mint
-async fn get_associated_token_account(
-    wallet_address: &str,
-    mint: &str,
-) -> Result<String> {
+async fn get_associated_token_account(wallet_address: &str, mint: &str) -> Result<String> {
     let rpc_client = get_rpc_client();
     rpc_client
         .get_associated_token_account(wallet_address, mint)

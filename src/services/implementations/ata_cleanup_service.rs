@@ -1,3 +1,5 @@
+//! ATA (Associated Token Account) cleanup service — reclaims rent from unused token accounts.
+
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -24,7 +26,7 @@ impl Service for AtaCleanupService {
         crate::global::is_initialization_complete()
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         Ok(())
     }
 
@@ -32,7 +34,7 @@ impl Service for AtaCleanupService {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String> {
+    ) -> crate::Result<Vec<JoinHandle<()>>> {
         let handle = tokio::spawn(monitor.instrument(async move {
             crate::tools::ata_cleanup::start_ata_cleanup_service(shutdown).await;
         }));

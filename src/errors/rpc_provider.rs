@@ -46,4 +46,3 @@ impl std::fmt::Display for RpcProviderError {
 }
 
 impl std::error::Error for RpcProviderError {}
-

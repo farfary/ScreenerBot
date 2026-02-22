@@ -311,7 +311,7 @@ async fn initialize_system() -> Result<(), String> {
   logger::info(LogTag::System, "Strategy system initialized successfully");
 
   // 4. Create service manager
-  let mut service_manager = ServiceManager::new().await?;
+  let mut service_manager = ServiceManager::new().await.map_err(|e| e.to_string())?;
 
   logger::info(LogTag::System, "Service manager created");
 
@@ -333,7 +333,7 @@ async fn initialize_system() -> Result<(), String> {
 
   // 8. Start all enabled services
   logger::info(LogTag::System, "Starting services...");
-  service_manager.start_all().await?;
+  service_manager.start_all().await.map_err(|e| e.to_string())?;
 
   // 9. Put it back for other components
   {

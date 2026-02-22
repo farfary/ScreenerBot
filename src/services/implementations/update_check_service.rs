@@ -32,7 +32,7 @@ impl Service for UpdateCheckService {
         crate::global::is_initialization_complete()
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         Ok(())
     }
 
@@ -40,7 +40,7 @@ impl Service for UpdateCheckService {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String> {
+    ) -> crate::Result<Vec<JoinHandle<()>>> {
         let handle = crate::version::start_update_check_service(shutdown, monitor);
         Ok(vec![handle])
     }

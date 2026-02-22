@@ -39,7 +39,10 @@ pub async fn get_ata_rent_from_chain() -> Result<u64, String> {
     let client = get_rpc_client();
 
     // ATA data size is 165 bytes
-    client.get_minimum_balance_for_rent_exemption(165).await
+    client
+        .get_minimum_balance_for_rent_exemption(165)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 /// Cached ATA rent information

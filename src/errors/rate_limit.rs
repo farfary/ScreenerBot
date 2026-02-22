@@ -34,4 +34,3 @@ impl std::fmt::Display for RateLimitError {
 }
 
 impl std::error::Error for RateLimitError {}
-

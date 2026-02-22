@@ -1,9 +1,9 @@
 /// Raydium Router Implementation (Stub)
 /// Placeholder for future Raydium direct swap support
 use crate::config::with_config;
-use crate::{Error, Result};
 use crate::swaps::router::{Quote, QuoteRequest, SwapResult, SwapRouter};
 use crate::tokens::Token;
+use crate::{Error, Result};
 use async_trait::async_trait;
 
 // ============================================================================
@@ -37,18 +37,10 @@ impl SwapRouter for RaydiumRouter {
     }
 
     async fn get_quote(&self, _request: &QuoteRequest) -> Result<Quote> {
-        Err(Error::internal_error(
-            "Raydium router not implemented yet",
-        ))
+        Err(Error::internal_error("Raydium router not implemented yet"))
     }
 
-    async fn execute_swap(
-        &self,
-        _token: &Token,
-        _quote: &Quote,
-    ) -> Result<SwapResult> {
-        Err(Error::internal_error(
-            "Raydium router not implemented yet",
-        ))
+    async fn execute_swap(&self, _token: &Token, _quote: &Quote) -> Result<SwapResult> {
+        Err(Error::internal_error("Raydium router not implemented yet"))
     }
 }

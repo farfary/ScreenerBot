@@ -69,8 +69,8 @@ impl TransactionDatabase {
 
         let pool = Pool::builder()
             .max_size(5)
-            .idle_timeout(None)    // SQLite: keep connections alive (WAL stability)
-            .max_lifetime(None)    // SQLite: no connection recycling
+            .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
+            .max_lifetime(None) // SQLite: no connection recycling
             .build(manager)
             .map_err(|e| format!("Failed to create connection pool: {}", e))?;
 

@@ -18,7 +18,9 @@ pub enum InternalError {
 impl std::fmt::Display for InternalError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            InternalError::InvariantViolation { message } => write!(f, "Invariant violation: {message}"),
+            InternalError::InvariantViolation { message } => {
+                write!(f, "Invariant violation: {message}")
+            }
             InternalError::TaskJoin { message } => write!(f, "Task join error: {message}"),
             InternalError::Timeout { message } => write!(f, "Timeout: {message}"),
             InternalError::Generic { message } => write!(f, "{message}"),
@@ -43,4 +45,3 @@ impl From<tokio::time::error::Elapsed> for InternalError {
         }
     }
 }
-

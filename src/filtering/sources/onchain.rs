@@ -30,7 +30,12 @@ pub fn evaluate(token: &Token, config: &OnChainFilters) -> Result<(), FilterReje
     // H3: Suspicious single-char symbols (often spam)
     if config.reject_single_char_symbols {
         let trimmed = token.symbol.trim();
-        if trimmed.chars().count() == 1 && !trimmed.chars().next().map_or(false, |c| c.is_ascii_alphabetic()) {
+        if trimmed.chars().count() == 1
+            && !trimmed
+                .chars()
+                .next()
+                .map_or(false, |c| c.is_ascii_alphabetic())
+        {
             return Err(FilterRejectionReason::OnChainSuspiciousSymbol);
         }
     }

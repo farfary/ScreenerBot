@@ -129,7 +129,7 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
         global::INITIALIZATION_COMPLETE.store(false, std::sync::atomic::Ordering::SeqCst);
 
         // Create service manager with only webserver enabled
-        let mut service_manager = ServiceManager::new().await?;
+        let mut service_manager = ServiceManager::new().await.map_err(|e| e.to_string())?;
         logger::info(LogTag::System, "Service manager initialized");
 
         // Register all services (but only webserver will be enabled)
@@ -149,7 +149,10 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
         };
 
         // Start only enabled services (webserver only in pre-init mode)
-        service_manager.start_all().await?;
+        service_manager
+            .start_all()
+            .await
+            .map_err(|e| e.to_string())?;
 
         // Put it back for webserver access
         {
@@ -301,7 +304,7 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
         }
 
         // 9. Create service manager
-        let mut service_manager = ServiceManager::new().await?;
+        let mut service_manager = ServiceManager::new().await.map_err(|e| e.to_string())?;
 
         logger::info(LogTag::System, "Service manager initialized");
 
@@ -322,7 +325,10 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
         };
 
         // 13. Start all enabled services
-        service_manager.start_all().await?;
+        service_manager
+            .start_all()
+            .await
+            .map_err(|e| e.to_string())?;
 
         // 14. Put it back for webserver access
         {
@@ -353,7 +359,10 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
             .ok_or("ServiceManager was already taken during shutdown")?
     };
 
-    service_manager.stop_all().await?;
+    service_manager
+        .stop_all()
+        .await
+        .map_err(|e| e.to_string())?;
 
     logger::info(LogTag::System, "ScreenerBot shut down successfully");
 

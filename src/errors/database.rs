@@ -14,9 +14,13 @@ pub enum DatabaseError {
 impl std::fmt::Display for DatabaseError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            DatabaseError::Connection { message } => write!(f, "Database connection error: {message}"),
+            DatabaseError::Connection { message } => {
+                write!(f, "Database connection error: {message}")
+            }
             DatabaseError::Sqlite { message } => write!(f, "SQLite error: {message}"),
-            DatabaseError::Migration { message } => write!(f, "Database migration error: {message}"),
+            DatabaseError::Migration { message } => {
+                write!(f, "Database migration error: {message}")
+            }
             DatabaseError::Query { operation, message } => {
                 write!(f, "Database query error (op={operation}): {message}")
             }
@@ -42,4 +46,3 @@ impl From<r2d2::Error> for DatabaseError {
         }
     }
 }
-

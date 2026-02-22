@@ -59,4 +59,3 @@ impl std::fmt::Display for NetworkError {
 }
 
 impl std::error::Error for NetworkError {}
-

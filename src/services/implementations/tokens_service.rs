@@ -1,3 +1,6 @@
+//! Tokens service — orchestrates token discovery, metadata updates, and stale token cleanup.
+
+use crate::errors::ServiceError;
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
 use std::sync::Arc;
@@ -34,7 +37,7 @@ impl Service for TokensService {
         crate::global::is_initialization_complete()
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         let mut service = crate::tokens::service::TokensServiceNew::default();
         service.initialize().await?;
         self.orchestrator = Some(service);
@@ -45,18 +48,20 @@ impl Service for TokensService {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String> {
+    ) -> crate::Result<Vec<JoinHandle<()>>> {
         let mut handles = Vec::new();
-        if let Some(orchestrator) = &mut self.orchestrator {
-            let mut orch_handles = orchestrator.start(shutdown, monitor).await?;
-            handles.append(&mut orch_handles);
-        } else {
-            return Err("Tokens orchestrator not initialized".into());
-        }
+        let orchestrator = self.orchestrator.as_mut().ok_or_else(|| {
+            crate::Error::Service(ServiceError::Start {
+                service: "tokens".to_string(),
+                message: "Tokens orchestrator not initialized".to_string(),
+            })
+        })?;
+        let mut orch_handles = orchestrator.start(shutdown, monitor).await?;
+        handles.append(&mut orch_handles);
         Ok(handles)
     }
 
-    async fn stop(&mut self) -> Result<(), String> {
+    async fn stop(&mut self) -> crate::Result<()> {
         Ok(())
     }
 

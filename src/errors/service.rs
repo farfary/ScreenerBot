@@ -4,11 +4,26 @@
 
 #[derive(Debug, Clone)]
 pub enum ServiceError {
-    Initialize { service: String, message: String },
-    Start { service: String, message: String },
-    Stop { service: String, message: String },
-    Dependency { service: String, dependency: String, message: String },
-    Generic { message: String },
+    Initialize {
+        service: String,
+        message: String,
+    },
+    Start {
+        service: String,
+        message: String,
+    },
+    Stop {
+        service: String,
+        message: String,
+    },
+    Dependency {
+        service: String,
+        dependency: String,
+        message: String,
+    },
+    Generic {
+        message: String,
+    },
 }
 
 impl std::fmt::Display for ServiceError {
@@ -39,4 +54,3 @@ impl std::fmt::Display for ServiceError {
 }
 
 impl std::error::Error for ServiceError {}
-

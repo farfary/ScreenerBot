@@ -8,6 +8,7 @@ use std::path::{Path, PathBuf};
 
 use super::types::*;
 use crate::database;
+use crate::errors::{DatabaseError, Error};
 use crate::rpc::types::{CircuitState, ProviderKind};
 
 /// Database path for RPC stats
@@ -22,27 +23,25 @@ pub struct RpcStatsDatabase {
 
 impl RpcStatsDatabase {
     /// Create/open database
-    pub fn new() -> Result<Self, String> {
+    pub fn new() -> crate::Result<Self> {
         let db_path = get_rpc_stats_db_path();
         Self::open(&db_path)
     }
 
     /// Open database at specific path
-    pub fn open(path: &Path) -> Result<Self, String> {
+    pub fn open(path: &Path) -> crate::Result<Self> {
         // Ensure parent directory exists
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create directory: {}", e))?;
+            std::fs::create_dir_all(parent)?;
         }
 
         let manager = SqliteConnectionManager::file(path)
             .with_init(|c| database::configure_connection(c, database::RPC_STATS_DB));
         let pool = Pool::builder()
             .max_size(3)
-            .idle_timeout(None)    // SQLite: keep connections alive (WAL stability)
-            .max_lifetime(None)    // SQLite: no connection recycling
-            .build(manager)
-            .map_err(|e| format!("Failed to create connection pool: {}", e))?;
+            .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
+            .max_lifetime(None) // SQLite: no connection recycling
+            .build(manager)?;
 
         let db = Self { pool };
         db.initialize_schema()?;
@@ -50,14 +49,12 @@ impl RpcStatsDatabase {
     }
 
     /// Get connection from pool
-    fn conn(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
-        self.pool
-            .get()
-            .map_err(|e| format!("Failed to get connection: {}", e))
+    fn conn(&self) -> crate::Result<PooledConnection<SqliteConnectionManager>> {
+        self.pool.get().map_err(Into::into)
     }
 
     /// Initialize database schema
-    fn initialize_schema(&self) -> Result<(), String> {
+    fn initialize_schema(&self) -> crate::Result<()> {
         let conn = self.conn()?;
 
         conn.execute_batch(
@@ -141,45 +138,41 @@ impl RpcStatsDatabase {
                 FOREIGN KEY (provider_id) REFERENCES providers(id)
             );
             "#,
-        )
-        .map_err(|e| format!("Failed to initialize schema: {}", e))?;
+        )?;
 
         Ok(())
     }
 
     /// Start new session
-    pub fn start_session(&self, session_id: &str) -> Result<(), String> {
+    pub fn start_session(&self, session_id: &str) -> crate::Result<()> {
         let conn = self.conn()?;
 
         // Mark all previous sessions as not current
-        conn.execute("UPDATE sessions SET is_current = 0", [])
-            .map_err(|e| format!("Failed to update sessions: {}", e))?;
+        conn.execute("UPDATE sessions SET is_current = 0", [])?;
 
         // Insert new session
         conn.execute(
             "INSERT INTO sessions (id, started_at, is_current) VALUES (?1, ?2, 1)",
             params![session_id, Utc::now().to_rfc3339()],
-        )
-        .map_err(|e| format!("Failed to insert session: {}", e))?;
+        )?;
 
         Ok(())
     }
 
     /// End current session
-    pub fn end_session(&self, session_id: &str) -> Result<(), String> {
+    pub fn end_session(&self, session_id: &str) -> crate::Result<()> {
         let conn = self.conn()?;
 
         conn.execute(
             "UPDATE sessions SET ended_at = ?1, is_current = 0 WHERE id = ?2",
             params![Utc::now().to_rfc3339(), session_id],
-        )
-        .map_err(|e| format!("Failed to end session: {}", e))?;
+        )?;
 
         Ok(())
     }
 
     /// Get current session ID
-    pub fn get_current_session(&self) -> Result<Option<String>, String> {
+    pub fn get_current_session(&self) -> crate::Result<Option<String>> {
         let conn = self.conn()?;
 
         conn.query_row(
@@ -188,7 +181,7 @@ impl RpcStatsDatabase {
             |row| row.get(0),
         )
         .optional()
-        .map_err(|e| format!("Failed to get session: {}", e))
+        .map_err(Into::into)
     }
 
     /// Register or update provider
@@ -198,7 +191,7 @@ impl RpcStatsDatabase {
         url_masked: &str,
         kind: ProviderKind,
         priority: u8,
-    ) -> Result<(), String> {
+    ) -> crate::Result<()> {
         let conn = self.conn()?;
 
         conn.execute(
@@ -212,14 +205,13 @@ impl RpcStatsDatabase {
                 updated_at = datetime('now')
             "#,
             params![id, url_masked, kind.to_string(), priority as i64],
-        )
-        .map_err(|e| format!("Failed to upsert provider: {}", e))?;
+        )?;
 
         Ok(())
     }
 
     /// Record RPC call
-    pub fn record_call(&self, session_id: &str, record: &RpcCallRecord) -> Result<(), String> {
+    pub fn record_call(&self, session_id: &str, record: &RpcCallRecord) -> crate::Result<()> {
         let conn = self.conn()?;
 
         conn.execute(
@@ -243,8 +235,7 @@ impl RpcStatsDatabase {
                 record.was_rate_limited as i32,
                 record.timestamp.to_rfc3339(),
             ],
-        )
-        .map_err(|e| format!("Failed to record call: {}", e))?;
+        )?;
 
         // Update session totals
         if record.success {
@@ -265,28 +256,24 @@ impl RpcStatsDatabase {
     }
 
     /// Batch record calls (more efficient)
-    pub fn record_calls(&self, session_id: &str, records: &[RpcCallRecord]) -> Result<(), String> {
+    pub fn record_calls(&self, session_id: &str, records: &[RpcCallRecord]) -> crate::Result<()> {
         if records.is_empty() {
             return Ok(());
         }
 
         let mut conn = self.conn()?;
-        let tx = conn
-            .transaction()
-            .map_err(|e| format!("Failed to start transaction: {}", e))?;
+        let tx = conn.transaction()?;
 
         {
-            let mut stmt = tx
-                .prepare(
-                    r#"
+            let mut stmt = tx.prepare(
+                r#"
                 INSERT INTO calls (
                     session_id, provider_id, method, success, latency_ms,
                     error_code, error_message, was_retried, retry_count,
                     was_rate_limited, timestamp
                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
                 "#,
-                )
-                .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+            )?;
 
             for record in records {
                 stmt.execute(params![
@@ -301,8 +288,7 @@ impl RpcStatsDatabase {
                     record.retry_count as i32,
                     record.was_rate_limited as i32,
                     record.timestamp.to_rfc3339(),
-                ])
-                .map_err(|e| format!("Failed to insert record: {}", e))?;
+                ])?;
             }
         }
 
@@ -316,8 +302,7 @@ impl RpcStatsDatabase {
         )
         .ok();
 
-        tx.commit()
-            .map_err(|e| format!("Failed to commit transaction: {}", e))?;
+        tx.commit()?;
 
         Ok(())
     }
@@ -333,7 +318,7 @@ impl RpcStatsDatabase {
         current_rate_limit: u32,
         base_rate_limit: u32,
         last_error: Option<&str>,
-    ) -> Result<(), String> {
+    ) -> crate::Result<()> {
         let conn = self.conn()?;
 
         conn.execute(
@@ -362,14 +347,13 @@ impl RpcStatsDatabase {
                 base_rate_limit as i64,
                 last_error,
             ],
-        )
-        .map_err(|e| format!("Failed to update health: {}", e))?;
+        )?;
 
         Ok(())
     }
 
     /// Get session stats
-    pub fn get_session_stats(&self, session_id: &str) -> Result<Option<SessionStats>, String> {
+    pub fn get_session_stats(&self, session_id: &str) -> crate::Result<Option<SessionStats>> {
         let conn = self.conn()?;
 
         conn.query_row(
@@ -401,7 +385,7 @@ impl RpcStatsDatabase {
             },
         )
         .optional()
-        .map_err(|e| format!("Failed to get session stats: {}", e))
+        .map_err(Into::into)
     }
 
     /// Get calls per minute for last N minutes
@@ -409,7 +393,7 @@ impl RpcStatsDatabase {
         &self,
         session_id: &str,
         minutes: u32,
-    ) -> Result<Vec<TimeBucketStats>, String> {
+    ) -> crate::Result<Vec<TimeBucketStats>> {
         let conn = self.conn()?;
         let cutoff = Utc::now() - ChronoDuration::minutes(minutes as i64);
 
@@ -430,28 +414,25 @@ impl RpcStatsDatabase {
                 GROUP BY minute
                 ORDER BY minute DESC
                 "#,
-            )
-            .map_err(|e| format!("Failed to prepare query: {}", e))?;
+            )?;
 
-        let rows = stmt
-            .query_map(params![session_id, cutoff.to_rfc3339()], |row| {
-                let minute_str: String = row.get(0)?;
-                let bucket_start = DateTime::parse_from_rfc3339(&minute_str)
-                    .map(|dt| dt.with_timezone(&Utc))
-                    .unwrap_or_else(|_| Utc::now());
+        let rows = stmt.query_map(params![session_id, cutoff.to_rfc3339()], |row| {
+            let minute_str: String = row.get(0)?;
+            let bucket_start = DateTime::parse_from_rfc3339(&minute_str)
+                .map(|dt| dt.with_timezone(&Utc))
+                .unwrap_or_else(|_| Utc::now());
 
-                Ok(TimeBucketStats {
-                    bucket_start,
-                    call_count: row.get::<_, i64>(1)? as u64,
-                    success_count: row.get::<_, i64>(2)? as u64,
-                    error_count: row.get::<_, i64>(3)? as u64,
-                    rate_limit_count: row.get::<_, i64>(4)? as u64,
-                    latency_sum_ms: row.get::<_, i64>(5)? as u64,
-                    latency_min_ms: row.get::<_, Option<i64>>(6)?.map(|v| v as u64),
-                    latency_max_ms: row.get::<_, Option<i64>>(7)?.map(|v| v as u64),
-                })
+            Ok(TimeBucketStats {
+                bucket_start,
+                call_count: row.get::<_, i64>(1)? as u64,
+                success_count: row.get::<_, i64>(2)? as u64,
+                error_count: row.get::<_, i64>(3)? as u64,
+                rate_limit_count: row.get::<_, i64>(4)? as u64,
+                latency_sum_ms: row.get::<_, i64>(5)? as u64,
+                latency_min_ms: row.get::<_, Option<i64>>(6)?.map(|v| v as u64),
+                latency_max_ms: row.get::<_, Option<i64>>(7)?.map(|v| v as u64),
             })
-            .map_err(|e| format!("Failed to query: {}", e))?;
+        })?;
 
         let mut results = Vec::new();
         for row in rows {
@@ -468,12 +449,11 @@ impl RpcStatsDatabase {
         &self,
         session_id: &str,
         limit: u32,
-    ) -> Result<Vec<MethodStats>, String> {
+    ) -> crate::Result<Vec<MethodStats>> {
         let conn = self.conn()?;
 
-        let mut stmt = conn
-            .prepare(
-                r#"
+        let mut stmt = conn.prepare(
+            r#"
                 SELECT 
                     method,
                     COUNT(*) as total_calls,
@@ -485,28 +465,25 @@ impl RpcStatsDatabase {
                 ORDER BY total_calls DESC
                 LIMIT ?2
                 "#,
-            )
-            .map_err(|e| format!("Failed to prepare query: {}", e))?;
+        )?;
 
-        let rows = stmt
-            .query_map(params![session_id, limit], |row| {
-                let total_calls: i64 = row.get(1)?;
-                let total_errors: i64 = row.get(2)?;
-                let success_rate = if total_calls > 0 {
-                    100.0 * (total_calls - total_errors) as f64 / total_calls as f64
-                } else {
-                    100.0
-                };
+        let rows = stmt.query_map(params![session_id, limit], |row| {
+            let total_calls: i64 = row.get(1)?;
+            let total_errors: i64 = row.get(2)?;
+            let success_rate = if total_calls > 0 {
+                100.0 * (total_calls - total_errors) as f64 / total_calls as f64
+            } else {
+                100.0
+            };
 
-                Ok(MethodStats {
-                    method: row.get(0)?,
-                    total_calls: total_calls as u64,
-                    total_errors: total_errors as u64,
-                    avg_latency_ms: row.get(3)?,
-                    success_rate,
-                })
+            Ok(MethodStats {
+                method: row.get(0)?,
+                total_calls: total_calls as u64,
+                total_errors: total_errors as u64,
+                avg_latency_ms: row.get(3)?,
+                success_rate,
             })
-            .map_err(|e| format!("Failed to query: {}", e))?;
+        })?;
 
         let mut results = Vec::new();
         for row in rows {
@@ -519,16 +496,14 @@ impl RpcStatsDatabase {
     }
 
     /// Cleanup old data (retention)
-    pub fn cleanup(&self, retention_hours: u64) -> Result<u64, String> {
+    pub fn cleanup(&self, retention_hours: u64) -> crate::Result<u64> {
         let conn = self.conn()?;
         let cutoff = Utc::now() - ChronoDuration::hours(retention_hours as i64);
 
-        let deleted = conn
-            .execute(
-                "DELETE FROM calls WHERE timestamp < ?1",
-                params![cutoff.to_rfc3339()],
-            )
-            .map_err(|e| format!("Failed to cleanup: {}", e))?;
+        let deleted = conn.execute(
+            "DELETE FROM calls WHERE timestamp < ?1",
+            params![cutoff.to_rfc3339()],
+        )?;
 
         // Also cleanup old minute buckets
         conn.execute(
@@ -541,7 +516,7 @@ impl RpcStatsDatabase {
     }
 
     /// Get total call count for session
-    pub fn get_total_calls(&self, session_id: &str) -> Result<u64, String> {
+    pub fn get_total_calls(&self, session_id: &str) -> crate::Result<u64> {
         let conn = self.conn()?;
 
         conn.query_row(
@@ -550,11 +525,11 @@ impl RpcStatsDatabase {
             |row| row.get::<_, i64>(0),
         )
         .map(|v| v as u64)
-        .map_err(|e| format!("Failed to get total calls: {}", e))
+        .map_err(Into::into)
     }
 
     /// Get average latency for session
-    pub fn get_avg_latency(&self, session_id: &str) -> Result<f64, String> {
+    pub fn get_avg_latency(&self, session_id: &str) -> crate::Result<f64> {
         let conn = self.conn()?;
 
         conn.query_row(
@@ -563,7 +538,7 @@ impl RpcStatsDatabase {
             |row| row.get::<_, Option<f64>>(0),
         )
         .map(|v| v.unwrap_or(0.0))
-        .map_err(|e| format!("Failed to get avg latency: {}", e))
+        .map_err(Into::into)
     }
 }
 

@@ -1,12 +1,12 @@
 /// Jupiter Router Implementation
 /// Uses api.jup.ag with referral fees for revenue and optional user API key for rate limits
 use crate::config::with_config;
-use crate::{Error, Result};
 use crate::logger::{self, LogTag};
 use crate::rpc::RpcClientMethods;
 use crate::swaps::router::{Quote, QuoteRequest, SwapMode, SwapResult, SwapRouter};
 use crate::tokens::decimals::is_token_2022;
 use crate::tokens::Token;
+use crate::{Error, Result};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -262,9 +262,7 @@ impl SwapRouter for JupiterRouter {
             .query(&quote_req)
             .send()
             .await
-            .map_err(|e| {
-                Error::network_error(format!("Jupiter quote request failed: {}", e))
-            })?;
+            .map_err(|e| Error::network_error(format!("Jupiter quote request failed: {}", e)))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -279,15 +277,14 @@ impl SwapRouter for JupiterRouter {
         }
 
         // Get raw response text first - we need to preserve ALL fields for the swap request
-        let response_text = response.text().await.map_err(|e| {
-            Error::network_error(format!("Failed to read Jupiter response: {}", e))
-        })?;
+        let response_text = response
+            .text()
+            .await
+            .map_err(|e| Error::network_error(format!("Failed to read Jupiter response: {}", e)))?;
 
         // Parse into our limited struct just to extract key values
-        let quote_response: JupiterQuoteResponse =
-            serde_json::from_str(&response_text).map_err(|e| {
-                Error::parse_error(format!("Jupiter quote parse failed: {}", e))
-            })?;
+        let quote_response: JupiterQuoteResponse = serde_json::from_str(&response_text)
+            .map_err(|e| Error::parse_error(format!("Jupiter quote parse failed: {}", e)))?;
 
         let output_amount = quote_response
             .out_amount
@@ -339,18 +336,12 @@ impl SwapRouter for JupiterRouter {
         })
     }
 
-    async fn execute_swap(
-        &self,
-        _token: &Token,
-        quote: &Quote,
-    ) -> Result<SwapResult> {
+    async fn execute_swap(&self, _token: &Token, quote: &Quote) -> Result<SwapResult> {
         let start = Instant::now();
 
         // Deserialize quote response
         let quote_response: serde_json::Value = serde_json::from_slice(&quote.execution_data)
-            .map_err(|e| {
-                Error::internal_error(format!("Quote deserialization failed: {}", e))
-            })?;
+            .map_err(|e| Error::internal_error(format!("Quote deserialization failed: {}", e)))?;
 
         // Check if either token is Token2022 - Jupiter cannot collect fees on Token2022
         // Skip fee account for Token2022 tokens to avoid IncorrectTokenProgramID error
@@ -407,9 +398,7 @@ impl SwapRouter for JupiterRouter {
             .json(&swap_req)
             .send()
             .await
-            .map_err(|e| {
-                Error::network_error(format!("Jupiter swap request failed: {}", e))
-            })?;
+            .map_err(|e| Error::network_error(format!("Jupiter swap request failed: {}", e)))?;
 
         if !response.status().is_success() {
             let status = response.status();
@@ -432,9 +421,7 @@ impl SwapRouter for JupiterRouter {
         let signature = rpc_client
             .sign_send_and_confirm_transaction_simple(&swap_response.swap_transaction)
             .await
-            .map_err(|e| {
-                Error::network_error(format!("Transaction send failed: {}", e))
-            })?;
+            .map_err(|e| Error::network_error(format!("Transaction send failed: {}", e)))?;
 
         let elapsed = start.elapsed();
 

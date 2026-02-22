@@ -123,24 +123,24 @@ pub trait RpcClientMethods {
     fn get_account(
         &self,
         pubkey: &Pubkey,
-    ) -> impl std::future::Future<Output = Result<Option<Account>, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<Option<Account>>> + Send;
 
     fn get_account_with_commitment(
         &self,
         pubkey: &Pubkey,
         commitment: CommitmentLevel,
-    ) -> impl std::future::Future<Output = Result<Option<Account>, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<Option<Account>>> + Send;
 
     fn get_multiple_accounts(
         &self,
         pubkeys: &[Pubkey],
-    ) -> impl std::future::Future<Output = Result<Vec<Option<Account>>, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<Vec<Option<Account>>>> + Send;
 
     // Balance methods
     fn get_sol_balance(
         &self,
         wallet: &str,
-    ) -> impl std::future::Future<Output = Result<f64, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<f64>> + Send;
 
     /// Get token balance for a specific token account address
     ///
@@ -148,7 +148,7 @@ pub trait RpcClientMethods {
     fn get_token_account_balance(
         &self,
         token_account: &str,
-    ) -> impl std::future::Future<Output = Result<f64, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<f64>> + Send;
 
     /// Get token balance for a wallet address and mint
     ///
@@ -159,56 +159,55 @@ pub trait RpcClientMethods {
         &self,
         wallet_address: &str,
         mint: &str,
-    ) -> impl std::future::Future<Output = Result<u64, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<u64>> + Send;
 
     // Blockhash methods
-    fn get_latest_blockhash(
-        &self,
-    ) -> impl std::future::Future<Output = Result<Hash, String>> + Send;
+    fn get_latest_blockhash(&self)
+        -> impl std::future::Future<Output = crate::Result<Hash>> + Send;
 
     fn get_latest_blockhash_with_commitment(
         &self,
         commitment: CommitmentLevel,
-    ) -> impl std::future::Future<Output = Result<(Hash, u64), String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<(Hash, u64)>> + Send;
 
     // Block height
-    fn get_block_height(&self) -> impl std::future::Future<Output = Result<u64, String>> + Send;
+    fn get_block_height(&self) -> impl std::future::Future<Output = crate::Result<u64>> + Send;
 
     // Transaction methods
     fn send_transaction(
         &self,
         transaction: &VersionedTransaction,
-    ) -> impl std::future::Future<Output = Result<Signature, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<Signature>> + Send;
 
     fn get_transaction(
         &self,
         signature: &Signature,
     ) -> impl std::future::Future<
-        Output = Result<Option<EncodedConfirmedTransactionWithStatusMeta>, String>,
+        Output = crate::Result<Option<EncodedConfirmedTransactionWithStatusMeta>>,
     > + Send;
 
     fn get_signature_statuses(
         &self,
         signatures: &[Signature],
-    ) -> impl std::future::Future<Output = Result<Vec<Option<TransactionStatus>>, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<Vec<Option<TransactionStatus>>>> + Send;
 
     // Token account methods
     fn get_token_accounts_by_owner(
         &self,
         owner: &Pubkey,
-    ) -> impl std::future::Future<Output = Result<Vec<(Pubkey, Account)>, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<Vec<(Pubkey, Account)>>> + Send;
 
     // Slot
-    fn get_slot(&self) -> impl std::future::Future<Output = Result<u64, String>> + Send;
+    fn get_slot(&self) -> impl std::future::Future<Output = crate::Result<u64>> + Send;
 
     // Rent
     fn get_minimum_balance_for_rent_exemption(
         &self,
         data_len: usize,
-    ) -> impl std::future::Future<Output = Result<u64, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<u64>> + Send;
 
     // Health
-    fn get_health(&self) -> impl std::future::Future<Output = Result<(), String>> + Send;
+    fn get_health(&self) -> impl std::future::Future<Output = crate::Result<()>> + Send;
 
     // URL access
     fn url(&self) -> impl std::future::Future<Output = String> + Send;
@@ -225,7 +224,7 @@ pub trait RpcClientMethods {
         &self,
         transaction_base64: &str,
         keypair: &Keypair,
-    ) -> impl std::future::Future<Output = Result<Signature, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<Signature>> + Send;
 
     /// Sign, send, and confirm a transaction
     ///
@@ -237,13 +236,13 @@ pub trait RpcClientMethods {
         keypair: &Keypair,
         commitment: CommitmentLevel,
         timeout: Duration,
-    ) -> impl std::future::Future<Output = Result<Signature, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<Signature>> + Send;
 
     /// Send an already-serialized transaction (raw bytes as base64)
     fn send_raw_transaction(
         &self,
         transaction_base64: &str,
-    ) -> impl std::future::Future<Output = Result<Signature, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<Signature>> + Send;
 
     /// Confirm a transaction with timeout
     ///
@@ -253,7 +252,7 @@ pub trait RpcClientMethods {
         signature: &Signature,
         commitment: CommitmentLevel,
         timeout: Duration,
-    ) -> impl std::future::Future<Output = Result<bool, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<bool>> + Send;
 
     // =========================================================================
     // Token Account Utility Methods
@@ -263,13 +262,13 @@ pub trait RpcClientMethods {
     fn get_all_token_accounts(
         &self,
         owner: &Pubkey,
-    ) -> impl std::future::Future<Output = Result<Vec<TokenAccountInfo>, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<Vec<TokenAccountInfo>>> + Send;
 
     /// Check if a mint is Token-2022 by checking account owner
     fn is_token_2022_mint(
         &self,
         mint: &Pubkey,
-    ) -> impl std::future::Future<Output = Result<bool, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<bool>> + Send;
 
     /// Get associated token address for a wallet and mint
     ///
@@ -296,7 +295,7 @@ pub trait RpcClientMethods {
     fn get_all_token_accounts_str(
         &self,
         owner: &str,
-    ) -> impl std::future::Future<Output = Result<Vec<TokenAccountInfo>, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<Vec<TokenAccountInfo>>> + Send;
 
     /// Check if a TOKEN ACCOUNT (not mint) is Token-2022 by checking owner program
     ///
@@ -304,7 +303,7 @@ pub trait RpcClientMethods {
     fn is_token_account_token_2022(
         &self,
         token_account: &str,
-    ) -> impl std::future::Future<Output = Result<bool, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<bool>> + Send;
 
     /// Get associated token account address for wallet and mint (async, returns String)
     ///
@@ -314,7 +313,7 @@ pub trait RpcClientMethods {
         &self,
         wallet_address: &str,
         mint: &str,
-    ) -> impl std::future::Future<Output = Result<String, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<String>> + Send;
 
     /// Send and confirm a signed Transaction (not VersionedTransaction)
     ///
@@ -322,7 +321,7 @@ pub trait RpcClientMethods {
     fn send_and_confirm_signed_transaction(
         &self,
         transaction: &solana_sdk::transaction::Transaction,
-    ) -> impl std::future::Future<Output = Result<Signature, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<Signature>> + Send;
 
     // =========================================================================
     // Transaction History Methods
@@ -337,7 +336,7 @@ pub trait RpcClientMethods {
         address: &Pubkey,
         limit: Option<usize>,
         before: Option<&Signature>,
-    ) -> impl std::future::Future<Output = Result<Vec<SignatureInfo>, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<Vec<SignatureInfo>>> + Send;
 
     /// Batch get multiple transactions by signatures
     ///
@@ -347,7 +346,7 @@ pub trait RpcClientMethods {
         &self,
         signatures: &[Signature],
     ) -> impl std::future::Future<
-        Output = Result<Vec<Option<EncodedConfirmedTransactionWithStatusMeta>>, String>,
+        Output = crate::Result<Vec<Option<EncodedConfirmedTransactionWithStatusMeta>>>,
     > + Send;
 
     // =========================================================================
@@ -362,7 +361,7 @@ pub trait RpcClientMethods {
         &self,
         program_id: &Pubkey,
         filters: Option<Vec<RpcFilterType>>,
-    ) -> impl std::future::Future<Output = Result<Vec<(Pubkey, Account)>, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<Vec<(Pubkey, Account)>>> + Send;
 
     /// Get program accounts with full configuration options
     ///
@@ -374,7 +373,7 @@ pub trait RpcClientMethods {
         encoding: Option<&str>,
         data_slice: Option<(usize, usize)>,
         commitment: Option<CommitmentLevel>,
-    ) -> impl std::future::Future<Output = Result<Vec<(Pubkey, Account)>, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<Vec<(Pubkey, Account)>>> + Send;
 
     // =========================================================================
     // Token Supply Methods
@@ -384,7 +383,7 @@ pub trait RpcClientMethods {
     fn get_token_supply(
         &self,
         mint: &Pubkey,
-    ) -> impl std::future::Future<Output = Result<TokenSupply, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<TokenSupply>> + Send;
 
     /// Get the largest token holders for a mint
     ///
@@ -392,7 +391,7 @@ pub trait RpcClientMethods {
     fn get_token_largest_accounts(
         &self,
         mint: &Pubkey,
-    ) -> impl std::future::Future<Output = Result<Vec<RpcTokenAccountBalance>, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<Vec<RpcTokenAccountBalance>>> + Send;
 
     // =========================================================================
     // Statistics and Health Methods
@@ -422,7 +421,7 @@ pub trait RpcClientMethods {
     fn sign_and_send_with_main_wallet(
         &self,
         transaction_base64: &str,
-    ) -> impl std::future::Future<Output = Result<Signature, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<Signature>> + Send;
 
     /// Sign, send, and confirm a transaction with the main wallet
     ///
@@ -432,7 +431,7 @@ pub trait RpcClientMethods {
         transaction_base64: &str,
         commitment: CommitmentLevel,
         timeout: Duration,
-    ) -> impl std::future::Future<Output = Result<Signature, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<Signature>> + Send;
 
     // =========================================================================
     // Convenience Aliases
@@ -446,7 +445,7 @@ pub trait RpcClientMethods {
         wallet_pubkey: &Pubkey,
         limit: usize,
         before: Option<&str>,
-    ) -> impl std::future::Future<Output = Result<Vec<SignatureInfo>, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<Vec<SignatureInfo>>> + Send;
 
     /// Get transaction details (returns TransactionDetails type)
     ///
@@ -454,7 +453,7 @@ pub trait RpcClientMethods {
     fn get_transaction_details(
         &self,
         signature: &str,
-    ) -> impl std::future::Future<Output = Result<crate::rpc::types::TransactionDetails, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<crate::rpc::types::TransactionDetails>> + Send;
 
     /// Sign, send and confirm transaction with main wallet (simple API)
     ///
@@ -463,18 +462,40 @@ pub trait RpcClientMethods {
     fn sign_send_and_confirm_transaction_simple(
         &self,
         transaction_base64: &str,
-    ) -> impl std::future::Future<Output = Result<Signature, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<Signature>> + Send;
 
     /// Sign, send and confirm with explicit keypair
     fn sign_send_and_confirm_with_keypair(
         &self,
         transaction_base64: &str,
         keypair: &Keypair,
-    ) -> impl std::future::Future<Output = Result<Signature, String>> + Send;
+    ) -> impl std::future::Future<Output = crate::Result<Signature>> + Send;
+}
+
+// =============================================================================
+// Helper functions for error conversion
+// =============================================================================
+
+/// Convert a string error message into a DataError::ParseError
+#[inline]
+fn parse_err(data_type: &str, error: &str) -> crate::Error {
+    crate::Error::Data(crate::errors::DataError::ParseError {
+        data_type: data_type.to_string(),
+        error: error.to_string(),
+    })
+}
+
+/// Convert a string error message into a DataError::InvalidFormat
+#[inline]
+fn format_err(expected: &str, received: &str) -> crate::Error {
+    crate::Error::Data(crate::errors::DataError::InvalidFormat {
+        expected: expected.to_string(),
+        received: received.to_string(),
+    })
 }
 
 impl RpcClientMethods for RpcClient {
-    async fn get_account(&self, pubkey: &Pubkey) -> Result<Option<Account>, String> {
+    async fn get_account(&self, pubkey: &Pubkey) -> crate::Result<Option<Account>> {
         self.get_account_with_commitment(pubkey, CommitmentLevel::Confirmed)
             .await
     }
@@ -483,7 +504,7 @@ impl RpcClientMethods for RpcClient {
         &self,
         pubkey: &Pubkey,
         commitment: CommitmentLevel,
-    ) -> Result<Option<Account>, String> {
+    ) -> crate::Result<Option<Account>> {
         let params = serde_json::json!([
             pubkey.to_string(),
             {
@@ -492,11 +513,7 @@ impl RpcClientMethods for RpcClient {
             }
         ]);
 
-        let result = self
-            .manager
-            .execute_raw("getAccountInfo", params)
-            .await
-            .map_err(|e| e.to_string())?;
+        let result = self.manager.execute_raw("getAccountInfo", params).await?;
 
         // Parse the response
         let value = result.get("value");
@@ -511,7 +528,7 @@ impl RpcClientMethods for RpcClient {
     async fn get_multiple_accounts(
         &self,
         pubkeys: &[Pubkey],
-    ) -> Result<Vec<Option<Account>>, String> {
+    ) -> crate::Result<Vec<Option<Account>>> {
         if pubkeys.is_empty() {
             return Ok(Vec::new());
         }
@@ -532,13 +549,12 @@ impl RpcClientMethods for RpcClient {
             let result = self
                 .manager
                 .execute_raw("getMultipleAccounts", params)
-                .await
-                .map_err(|e| e.to_string())?;
+                .await?;
 
             let values = result
                 .get("value")
                 .and_then(|v| v.as_array())
-                .ok_or("Invalid response: missing value array")?;
+                .ok_or_else(|| parse_err("response", "missing value array"))?;
 
             for value in values {
                 if value.is_null() {
@@ -552,31 +568,26 @@ impl RpcClientMethods for RpcClient {
         Ok(all_accounts)
     }
 
-    async fn get_sol_balance(&self, wallet: &str) -> Result<f64, String> {
+    async fn get_sol_balance(&self, wallet: &str) -> crate::Result<f64> {
         let params = serde_json::json!([wallet]);
 
-        let result = self
-            .manager
-            .execute_raw("getBalance", params)
-            .await
-            .map_err(|e| e.to_string())?;
+        let result = self.manager.execute_raw("getBalance", params).await?;
 
         let lamports = result
             .get("value")
             .and_then(|v| v.as_u64())
-            .ok_or("Invalid balance response")?;
+            .ok_or_else(|| parse_err("balance", "invalid response format"))?;
 
         Ok(lamports as f64 / 1_000_000_000.0)
     }
 
-    async fn get_token_account_balance(&self, token_account: &str) -> Result<f64, String> {
+    async fn get_token_account_balance(&self, token_account: &str) -> crate::Result<f64> {
         let params = serde_json::json!([token_account]);
 
         let result = self
             .manager
             .execute_raw("getTokenAccountBalance", params)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
         let ui_amount = result
             .get("value")
@@ -587,7 +598,7 @@ impl RpcClientMethods for RpcClient {
         Ok(ui_amount)
     }
 
-    async fn get_token_balance(&self, wallet_address: &str, mint: &str) -> Result<u64, String> {
+    async fn get_token_balance(&self, wallet_address: &str, mint: &str) -> crate::Result<u64> {
         // Use getTokenAccountsByOwner to find token accounts for this wallet+mint
         let params = serde_json::json!([
             wallet_address,
@@ -598,8 +609,7 @@ impl RpcClientMethods for RpcClient {
         let result = self
             .manager
             .execute_raw("getTokenAccountsByOwner", params)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
         // Parse the response - look for token accounts and sum their balances
         let value = result.get("value").and_then(|v| v.as_array());
@@ -615,9 +625,12 @@ impl RpcClientMethods for RpcClient {
                     .and_then(|t| t.get("amount"))
                     .and_then(|a| a.as_str())
                 {
-                    return amount_str
-                        .parse::<u64>()
-                        .map_err(|e| format!("Failed to parse token amount: {}", e));
+                    return amount_str.parse::<u64>().map_err(|e| {
+                        parse_err(
+                            "token amount",
+                            &format!("Failed to parse '{}': {}", amount_str, e),
+                        )
+                    });
                 }
             }
         }
@@ -626,7 +639,7 @@ impl RpcClientMethods for RpcClient {
         Ok(0)
     }
 
-    async fn get_latest_blockhash(&self) -> Result<Hash, String> {
+    async fn get_latest_blockhash(&self) -> crate::Result<Hash> {
         let (hash, _) = self
             .get_latest_blockhash_with_commitment(CommitmentLevel::Finalized)
             .await?;
@@ -636,7 +649,7 @@ impl RpcClientMethods for RpcClient {
     async fn get_latest_blockhash_with_commitment(
         &self,
         commitment: CommitmentLevel,
-    ) -> Result<(Hash, u64), String> {
+    ) -> crate::Result<(Hash, u64)> {
         let params = serde_json::json!([{
             "commitment": commitment_to_string(commitment)
         }]);
@@ -644,45 +657,47 @@ impl RpcClientMethods for RpcClient {
         let result = self
             .manager
             .execute_raw("getLatestBlockhash", params)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
-        let value = result.get("value").ok_or("Missing value")?;
+        let value = result
+            .get("value")
+            .ok_or_else(|| parse_err("response", "missing value field"))?;
         let blockhash = value
             .get("blockhash")
             .and_then(|v| v.as_str())
-            .ok_or("Missing blockhash")?;
+            .ok_or_else(|| parse_err("blockhash", "missing blockhash field"))?;
         let last_valid_block_height = value
             .get("lastValidBlockHeight")
             .and_then(|v| v.as_u64())
-            .ok_or("Missing lastValidBlockHeight")?;
+            .ok_or_else(|| parse_err("blockhash", "missing lastValidBlockHeight"))?;
 
-        let hash = Hash::from_str(blockhash).map_err(|e| format!("Invalid blockhash: {}", e))?;
+        let hash = Hash::from_str(blockhash).map_err(|e| {
+            parse_err(
+                "blockhash",
+                &format!("Invalid hash \'{}\': {}", blockhash, e),
+            )
+        })?;
 
         Ok((hash, last_valid_block_height))
     }
 
-    async fn get_block_height(&self) -> Result<u64, String> {
+    async fn get_block_height(&self) -> crate::Result<u64> {
         let params = serde_json::json!([]);
 
-        let result = self
-            .manager
-            .execute_raw("getBlockHeight", params)
-            .await
-            .map_err(|e| e.to_string())?;
+        let result = self.manager.execute_raw("getBlockHeight", params).await?;
 
         result
             .as_u64()
-            .ok_or_else(|| "Invalid block height response".to_string())
+            .ok_or_else(|| parse_err("block height", "invalid response format"))
     }
 
     async fn send_transaction(
         &self,
         transaction: &VersionedTransaction,
-    ) -> Result<Signature, String> {
+    ) -> crate::Result<Signature> {
         // Serialize transaction
         let tx_bytes = bincode::serialize(transaction)
-            .map_err(|e| format!("Failed to serialize transaction: {}", e))?;
+            .map_err(|e| parse_err("transaction", &format!("Failed to serialize: {}", e)))?;
         let tx_base64 = base64::engine::general_purpose::STANDARD.encode(&tx_bytes);
 
         let params = serde_json::json!([
@@ -695,21 +710,24 @@ impl RpcClientMethods for RpcClient {
             }
         ]);
 
-        let result = self
-            .manager
-            .execute_raw("sendTransaction", params)
-            .await
-            .map_err(|e| e.to_string())?;
+        let result = self.manager.execute_raw("sendTransaction", params).await?;
 
-        let sig_str = result.as_str().ok_or("Invalid signature response")?;
+        let sig_str = result
+            .as_str()
+            .ok_or_else(|| parse_err("signature", "invalid response format"))?;
 
-        Signature::from_str(sig_str).map_err(|e| format!("Invalid signature: {}", e))
+        Signature::from_str(sig_str).map_err(|e| {
+            parse_err(
+                "signature",
+                &format!("Invalid signature \'{}\': {}", sig_str, e),
+            )
+        })
     }
 
     async fn get_transaction(
         &self,
         signature: &Signature,
-    ) -> Result<Option<EncodedConfirmedTransactionWithStatusMeta>, String> {
+    ) -> crate::Result<Option<EncodedConfirmedTransactionWithStatusMeta>> {
         let params = serde_json::json!([
             signature.to_string(),
             {
@@ -728,39 +746,43 @@ impl RpcClientMethods for RpcClient {
                 }
                 let tx: EncodedConfirmedTransactionWithStatusMeta =
                     serde_json::from_value(value)
-                        .map_err(|e| format!("Failed to parse transaction: {}", e))?;
+                        .map_err(|e| parse_err("transaction", &e.to_string()))?;
                 Ok(Some(tx))
             }
             Err(RpcError::AccountNotFound { .. }) => Ok(None),
-            Err(e) => Err(e.to_string()),
+            Err(e) => Err(e.into()),
         }
     }
 
     async fn get_signature_statuses(
         &self,
         signatures: &[Signature],
-    ) -> Result<Vec<Option<TransactionStatus>>, String> {
+    ) -> crate::Result<Vec<Option<TransactionStatus>>> {
         let sig_strings: Vec<String> = signatures.iter().map(|s| s.to_string()).collect();
         let params = serde_json::json!([sig_strings, { "searchTransactionHistory": true }]);
 
         let result = self
             .manager
             .execute_raw("getSignatureStatuses", params)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
         let values = result
             .get("value")
             .and_then(|v| v.as_array())
-            .ok_or("Invalid response")?;
+            .ok_or_else(|| parse_err("response", "invalid format"))?;
 
         let mut statuses = Vec::with_capacity(values.len());
         for value in values {
             if value.is_null() {
                 statuses.push(None);
             } else {
-                let status: TransactionStatus = serde_json::from_value(value.clone())
-                    .map_err(|e| format!("Failed to parse status: {}", e))?;
+                let status: TransactionStatus =
+                    serde_json::from_value(value.clone()).map_err(|e| {
+                        crate::Error::Data(crate::errors::DataError::ParseError {
+                            data_type: "TransactionStatus".to_string(),
+                            error: e.to_string(),
+                        })
+                    })?;
                 statuses.push(Some(status));
             }
         }
@@ -771,7 +793,7 @@ impl RpcClientMethods for RpcClient {
     async fn get_token_accounts_by_owner(
         &self,
         owner: &Pubkey,
-    ) -> Result<Vec<(Pubkey, Account)>, String> {
+    ) -> crate::Result<Vec<(Pubkey, Account)>> {
         let params = serde_json::json!([
             owner.to_string(),
             { "programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" },
@@ -781,22 +803,25 @@ impl RpcClientMethods for RpcClient {
         let result = self
             .manager
             .execute_raw("getTokenAccountsByOwner", params)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
         let values = result
             .get("value")
             .and_then(|v| v.as_array())
-            .ok_or("Invalid response")?;
+            .ok_or_else(|| parse_err("response", "invalid format"))?;
 
         let mut accounts = Vec::with_capacity(values.len());
         for item in values {
             let pubkey_str = item
                 .get("pubkey")
                 .and_then(|v| v.as_str())
-                .ok_or("Missing pubkey")?;
-            let pubkey =
-                Pubkey::from_str(pubkey_str).map_err(|e| format!("Invalid pubkey: {}", e))?;
+                .ok_or_else(|| parse_err("pubkey", "missing pubkey field"))?;
+            let pubkey = Pubkey::from_str(pubkey_str).map_err(|e| {
+                parse_err(
+                    "pubkey",
+                    &format!("Invalid pubkey \'{}\': {}", pubkey_str, e),
+                )
+            })?;
 
             if let Some(account) =
                 parse_account_from_json(item.get("account").unwrap_or(&serde_json::Value::Null))?
@@ -808,41 +833,33 @@ impl RpcClientMethods for RpcClient {
         Ok(accounts)
     }
 
-    async fn get_slot(&self) -> Result<u64, String> {
+    async fn get_slot(&self) -> crate::Result<u64> {
         let params = serde_json::json!([]);
 
-        let result = self
-            .manager
-            .execute_raw("getSlot", params)
-            .await
-            .map_err(|e| e.to_string())?;
+        let result = self.manager.execute_raw("getSlot", params).await?;
 
         result
             .as_u64()
-            .ok_or_else(|| "Invalid slot response".to_string())
+            .ok_or_else(|| parse_err("slot", "invalid response format"))
     }
 
-    async fn get_minimum_balance_for_rent_exemption(&self, data_len: usize) -> Result<u64, String> {
+    async fn get_minimum_balance_for_rent_exemption(&self, data_len: usize) -> crate::Result<u64> {
         let params = serde_json::json!([data_len]);
 
         let result = self
             .manager
             .execute_raw("getMinimumBalanceForRentExemption", params)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
         result
             .as_u64()
-            .ok_or_else(|| "Invalid rent response".to_string())
+            .ok_or_else(|| parse_err("rent", "invalid response format"))
     }
 
-    async fn get_health(&self) -> Result<(), String> {
+    async fn get_health(&self) -> crate::Result<()> {
         let params = serde_json::json!([]);
 
-        self.manager
-            .execute_raw("getHealth", params)
-            .await
-            .map_err(|e| e.to_string())?;
+        self.manager.execute_raw("getHealth", params).await?;
 
         Ok(())
     }
@@ -859,15 +876,25 @@ impl RpcClientMethods for RpcClient {
         &self,
         transaction_base64: &str,
         keypair: &Keypair,
-    ) -> Result<Signature, String> {
+    ) -> crate::Result<Signature> {
         // Decode the base64 transaction
         let tx_bytes = base64::engine::general_purpose::STANDARD
             .decode(transaction_base64)
-            .map_err(|e| format!("Failed to decode transaction: {}", e))?;
+            .map_err(|e| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "base64 transaction".to_string(),
+                    error: e.to_string(),
+                })
+            })?;
 
         // Deserialize the VersionedTransaction
-        let mut transaction: VersionedTransaction = bincode::deserialize(&tx_bytes)
-            .map_err(|e| format!("Failed to deserialize transaction: {}", e))?;
+        let mut transaction: VersionedTransaction =
+            bincode::deserialize(&tx_bytes).map_err(|e| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "VersionedTransaction".to_string(),
+                    error: e.to_string(),
+                })
+            })?;
 
         // Sign the transaction (first signature index is the fee payer)
         let sig = keypair.sign_message(&transaction.message.serialize());
@@ -887,7 +914,7 @@ impl RpcClientMethods for RpcClient {
         keypair: &Keypair,
         commitment: CommitmentLevel,
         timeout: Duration,
-    ) -> Result<Signature, String> {
+    ) -> crate::Result<Signature> {
         // Sign and send the transaction
         let signature = self
             .sign_and_send_transaction(transaction_base64, keypair)
@@ -901,14 +928,14 @@ impl RpcClientMethods for RpcClient {
         if confirmed {
             Ok(signature)
         } else {
-            Err(format!(
-                "Transaction {} not confirmed within timeout",
-                signature
+            Err(parse_err(
+                "transaction",
+                &format!("Transaction {} not confirmed within timeout", signature),
             ))
         }
     }
 
-    async fn send_raw_transaction(&self, transaction_base64: &str) -> Result<Signature, String> {
+    async fn send_raw_transaction(&self, transaction_base64: &str) -> crate::Result<Signature> {
         let params = serde_json::json!([
             transaction_base64,
             {
@@ -919,14 +946,17 @@ impl RpcClientMethods for RpcClient {
             }
         ]);
 
-        let result = self
-            .manager
-            .execute_raw("sendTransaction", params)
-            .await
-            .map_err(|e| e.to_string())?;
+        let result = self.manager.execute_raw("sendTransaction", params).await?;
 
-        let sig_str = result.as_str().ok_or("Invalid signature response")?;
-        Signature::from_str(sig_str).map_err(|e| format!("Invalid signature: {}", e))
+        let sig_str = result
+            .as_str()
+            .ok_or_else(|| parse_err("signature", "invalid response format"))?;
+        Signature::from_str(sig_str).map_err(|e| {
+            parse_err(
+                "signature",
+                &format!("Invalid signature \'{}\': {}", sig_str, e),
+            )
+        })
     }
 
     async fn confirm_transaction(
@@ -934,7 +964,7 @@ impl RpcClientMethods for RpcClient {
         signature: &Signature,
         commitment: CommitmentLevel,
         timeout: Duration,
-    ) -> Result<bool, String> {
+    ) -> crate::Result<bool> {
         let start = std::time::Instant::now();
         let poll_interval = Duration::from_millis(500);
         let commitment_str = commitment_to_string(commitment);
@@ -963,9 +993,12 @@ impl RpcClientMethods for RpcClient {
                                 // Check for error
                                 if let Some(err) = status.get("err") {
                                     if !err.is_null() {
-                                        return Err(format!(
-                                            "Transaction failed: {}",
-                                            serde_json::to_string(err).unwrap_or_default()
+                                        return Err(parse_err(
+                                            "transaction",
+                                            &format!(
+                                                "Transaction failed: {}",
+                                                serde_json::to_string(err).unwrap_or_default()
+                                            ),
                                         ));
                                     }
                                 }
@@ -1009,10 +1042,7 @@ impl RpcClientMethods for RpcClient {
     // Token Account Utility Methods Implementation
     // =========================================================================
 
-    async fn get_all_token_accounts(
-        &self,
-        owner: &Pubkey,
-    ) -> Result<Vec<TokenAccountInfo>, String> {
+    async fn get_all_token_accounts(&self, owner: &Pubkey) -> crate::Result<Vec<TokenAccountInfo>> {
         let mut all_accounts = Vec::new();
 
         // Fetch SPL Token accounts
@@ -1060,28 +1090,27 @@ impl RpcClientMethods for RpcClient {
         Ok(all_accounts)
     }
 
-    async fn is_token_2022_mint(&self, mint: &Pubkey) -> Result<bool, String> {
+    async fn is_token_2022_mint(&self, mint: &Pubkey) -> crate::Result<bool> {
         let params = serde_json::json!([
             mint.to_string(),
             { "encoding": "jsonParsed" }
         ]);
 
-        let result = self
-            .manager
-            .execute_raw("getAccountInfo", params)
-            .await
-            .map_err(|e| e.to_string())?;
+        let result = self.manager.execute_raw("getAccountInfo", params).await?;
 
         let value = result.get("value");
         if value.is_none() || value == Some(&serde_json::Value::Null) {
-            return Err(format!("Mint account not found: {}", mint));
+            return Err(parse_err(
+                "mint account",
+                &format!("Account not found: {}", mint),
+            ));
         }
 
         let value = value.unwrap();
         if let Some(owner) = value.get("owner").and_then(|v| v.as_str()) {
             Ok(owner == TOKEN_2022_PROGRAM_ID)
         } else {
-            Err("Missing owner field in account info".to_string())
+            Err(parse_err("account", "Missing owner field"))
         }
     }
 
@@ -1114,37 +1143,40 @@ impl RpcClientMethods for RpcClient {
     async fn get_all_token_accounts_str(
         &self,
         owner: &str,
-    ) -> Result<Vec<TokenAccountInfo>, String> {
+    ) -> crate::Result<Vec<TokenAccountInfo>> {
         let owner_pubkey = Pubkey::from_str(owner)
-            .map_err(|e| format!("Invalid owner address '{}': {}", owner, e))?;
+            .map_err(|e| parse_err("pubkey", &format!("Invalid owner \'{}\': {}", owner, e)))?;
         self.get_all_token_accounts(&owner_pubkey).await
     }
 
-    async fn is_token_account_token_2022(&self, token_account: &str) -> Result<bool, String> {
-        let account_pubkey = Pubkey::from_str(token_account)
-            .map_err(|e| format!("Invalid token account address '{}': {}", token_account, e))?;
+    async fn is_token_account_token_2022(&self, token_account: &str) -> crate::Result<bool> {
+        let account_pubkey = Pubkey::from_str(token_account).map_err(|e| {
+            parse_err(
+                "pubkey",
+                &format!("Invalid token account \'{}\': {}", token_account, e),
+            )
+        })?;
 
         let params = serde_json::json!([
             account_pubkey.to_string(),
             { "encoding": "jsonParsed" }
         ]);
 
-        let result = self
-            .manager
-            .execute_raw("getAccountInfo", params)
-            .await
-            .map_err(|e| e.to_string())?;
+        let result = self.manager.execute_raw("getAccountInfo", params).await?;
 
         let value = result.get("value");
         if value.is_none() || value == Some(&serde_json::Value::Null) {
-            return Err(format!("Token account not found: {}", token_account));
+            return Err(parse_err(
+                "token account",
+                &format!("Account not found: {}", token_account),
+            ));
         }
 
         let value = value.unwrap();
         if let Some(owner) = value.get("owner").and_then(|v| v.as_str()) {
             Ok(owner == TOKEN_2022_PROGRAM_ID)
         } else {
-            Err("Missing owner field in account info".to_string())
+            Err(parse_err("account", "Missing owner field"))
         }
     }
 
@@ -1152,11 +1184,15 @@ impl RpcClientMethods for RpcClient {
         &self,
         wallet_address: &str,
         mint: &str,
-    ) -> Result<String, String> {
-        let wallet_pubkey = Pubkey::from_str(wallet_address)
-            .map_err(|e| format!("Invalid wallet address '{}': {}", wallet_address, e))?;
+    ) -> crate::Result<String> {
+        let wallet_pubkey = Pubkey::from_str(wallet_address).map_err(|e| {
+            parse_err(
+                "pubkey",
+                &format!("Invalid wallet \'{}\': {}", wallet_address, e),
+            )
+        })?;
         let mint_pubkey = Pubkey::from_str(mint)
-            .map_err(|e| format!("Invalid mint address '{}': {}", mint, e))?;
+            .map_err(|e| parse_err("pubkey", &format!("Invalid mint \'{}\': {}", mint, e)))?;
 
         // First try standard SPL Token ATA
         let spl_ata = Self::get_associated_token_address(&wallet_pubkey, &mint_pubkey);
@@ -1168,7 +1204,7 @@ impl RpcClientMethods for RpcClient {
 
         // Try Token-2022 ATA
         let token_2022_program_id = Pubkey::from_str(TOKEN_2022_PROGRAM_ID)
-            .map_err(|e| format!("Invalid Token-2022 program ID: {}", e))?;
+            .map_err(|e| parse_err("pubkey", &format!("Invalid Token-2022 program ID: {}", e)))?;
         let token_2022_ata = Self::get_associated_token_address_with_program(
             &wallet_pubkey,
             &mint_pubkey,
@@ -1186,12 +1222,12 @@ impl RpcClientMethods for RpcClient {
     async fn send_and_confirm_signed_transaction(
         &self,
         transaction: &solana_sdk::transaction::Transaction,
-    ) -> Result<Signature, String> {
+    ) -> crate::Result<Signature> {
         use bincode;
 
         // Serialize the transaction
         let serialized = bincode::serialize(transaction)
-            .map_err(|e| format!("Failed to serialize transaction: {}", e))?;
+            .map_err(|e| parse_err("transaction", &format!("Failed to serialize: {}", e)))?;
 
         // Encode to base64
         let transaction_base64 = base64::engine::general_purpose::STANDARD.encode(&serialized);
@@ -1207,18 +1243,18 @@ impl RpcClientMethods for RpcClient {
             }
         ]);
 
-        let result = self
-            .manager
-            .execute_raw("sendTransaction", params)
-            .await
-            .map_err(|e| e.to_string())?;
+        let result = self.manager.execute_raw("sendTransaction", params).await?;
 
         let signature_str = result
             .as_str()
-            .ok_or("Invalid sendTransaction response: expected signature string")?;
+            .ok_or_else(|| parse_err("signature", "expected signature string"))?;
 
-        let signature = Signature::from_str(signature_str)
-            .map_err(|e| format!("Invalid signature in response: {}", e))?;
+        let signature = Signature::from_str(signature_str).map_err(|e| {
+            crate::Error::Data(crate::errors::DataError::ParseError {
+                data_type: "Signature".to_string(),
+                error: e.to_string(),
+            })
+        })?;
 
         // Poll for confirmation with timeout
         let timeout = Duration::from_secs(60);
@@ -1229,9 +1265,9 @@ impl RpcClientMethods for RpcClient {
         if confirmed {
             Ok(signature)
         } else {
-            Err(format!(
-                "Transaction {} not confirmed within timeout",
-                signature
+            Err(parse_err(
+                "transaction",
+                &format!("Transaction {} not confirmed within timeout", signature),
             ))
         }
     }
@@ -1245,7 +1281,7 @@ impl RpcClientMethods for RpcClient {
         address: &Pubkey,
         limit: Option<usize>,
         before: Option<&Signature>,
-    ) -> Result<Vec<SignatureInfo>, String> {
+    ) -> crate::Result<Vec<SignatureInfo>> {
         let mut config = serde_json::Map::new();
 
         if let Some(limit_val) = limit {
@@ -1272,12 +1308,11 @@ impl RpcClientMethods for RpcClient {
         let result = self
             .manager
             .execute_raw("getSignaturesForAddress", params)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
         let signatures_array = result
             .as_array()
-            .ok_or("Invalid response: expected array")?;
+            .ok_or_else(|| parse_err("response", "expected array"))?;
 
         let mut signatures = Vec::with_capacity(signatures_array.len());
 
@@ -1285,15 +1320,19 @@ impl RpcClientMethods for RpcClient {
             let sig_str = item
                 .get("signature")
                 .and_then(|v| v.as_str())
-                .ok_or("Missing signature field")?;
+                .ok_or_else(|| parse_err("signature", "missing signature field"))?;
 
-            let signature =
-                Signature::from_str(sig_str).map_err(|e| format!("Invalid signature: {}", e))?;
+            let signature = Signature::from_str(sig_str).map_err(|e| {
+                parse_err(
+                    "signature",
+                    &format!("Invalid signature \'{}\': {}", sig_str, e),
+                )
+            })?;
 
             let slot = item
                 .get("slot")
                 .and_then(|v| v.as_u64())
-                .ok_or("Missing slot field")?;
+                .ok_or_else(|| parse_err("slot", "missing slot field"))?;
 
             let err = item.get("err").and_then(|v| {
                 if v.is_null() {
@@ -1328,7 +1367,7 @@ impl RpcClientMethods for RpcClient {
     async fn get_transactions(
         &self,
         signatures: &[Signature],
-    ) -> Result<Vec<Option<EncodedConfirmedTransactionWithStatusMeta>>, String> {
+    ) -> crate::Result<Vec<Option<EncodedConfirmedTransactionWithStatusMeta>>> {
         if signatures.is_empty() {
             return Ok(Vec::new());
         }
@@ -1366,7 +1405,7 @@ impl RpcClientMethods for RpcClient {
         &self,
         program_id: &Pubkey,
         filters: Option<Vec<RpcFilterType>>,
-    ) -> Result<Vec<(Pubkey, Account)>, String> {
+    ) -> crate::Result<Vec<(Pubkey, Account)>> {
         self.get_program_accounts_with_config(
             program_id,
             filters,
@@ -1384,7 +1423,7 @@ impl RpcClientMethods for RpcClient {
         encoding: Option<&str>,
         data_slice: Option<(usize, usize)>,
         commitment: Option<CommitmentLevel>,
-    ) -> Result<Vec<(Pubkey, Account)>, String> {
+    ) -> crate::Result<Vec<(Pubkey, Account)>> {
         let mut config = serde_json::Map::new();
 
         config.insert(
@@ -1434,12 +1473,11 @@ impl RpcClientMethods for RpcClient {
         let result = self
             .manager
             .execute_raw("getProgramAccounts", params)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
         let accounts_array = result
             .as_array()
-            .ok_or("Invalid response: expected array")?;
+            .ok_or_else(|| parse_err("response", "expected array"))?;
 
         let mut accounts = Vec::with_capacity(accounts_array.len());
 
@@ -1447,12 +1485,18 @@ impl RpcClientMethods for RpcClient {
             let pubkey_str = item
                 .get("pubkey")
                 .and_then(|v| v.as_str())
-                .ok_or("Missing pubkey field")?;
+                .ok_or_else(|| parse_err("pubkey", "missing pubkey field"))?;
 
-            let pubkey =
-                Pubkey::from_str(pubkey_str).map_err(|e| format!("Invalid pubkey: {}", e))?;
+            let pubkey = Pubkey::from_str(pubkey_str).map_err(|e| {
+                parse_err(
+                    "pubkey",
+                    &format!("Invalid pubkey \'{}\': {}", pubkey_str, e),
+                )
+            })?;
 
-            let account_data = item.get("account").ok_or("Missing account field")?;
+            let account_data = item
+                .get("account")
+                .ok_or_else(|| parse_err("account", "missing account field"))?;
 
             if let Some(account) = parse_account_from_json(account_data)? {
                 accounts.push((pubkey, account));
@@ -1466,30 +1510,29 @@ impl RpcClientMethods for RpcClient {
     // Token Supply Methods Implementation
     // =========================================================================
 
-    async fn get_token_supply(&self, mint: &Pubkey) -> Result<TokenSupply, String> {
+    async fn get_token_supply(&self, mint: &Pubkey) -> crate::Result<TokenSupply> {
         let params = serde_json::json!([
             mint.to_string(),
             { "commitment": "confirmed" }
         ]);
 
-        let result = self
-            .manager
-            .execute_raw("getTokenSupply", params)
-            .await
-            .map_err(|e| e.to_string())?;
+        let result = self.manager.execute_raw("getTokenSupply", params).await?;
 
-        let value = result.get("value").ok_or("Missing value field")?;
+        let value = result
+            .get("value")
+            .ok_or_else(|| parse_err("response", "missing value field"))?;
 
         let amount = value
             .get("amount")
             .and_then(|v| v.as_str())
-            .ok_or("Missing amount field")?
+            .ok_or_else(|| parse_err("amount", "missing amount field"))?
             .to_string();
 
         let decimals = value
             .get("decimals")
             .and_then(|v| v.as_u64())
-            .ok_or("Missing decimals field")? as u8;
+            .ok_or_else(|| parse_err("decimals", "missing decimals field"))?
+            as u8;
 
         let ui_amount = value.get("uiAmount").and_then(|v| v.as_f64());
 
@@ -1510,7 +1553,7 @@ impl RpcClientMethods for RpcClient {
     async fn get_token_largest_accounts(
         &self,
         mint: &Pubkey,
-    ) -> Result<Vec<RpcTokenAccountBalance>, String> {
+    ) -> crate::Result<Vec<RpcTokenAccountBalance>> {
         let params = serde_json::json!([
             mint.to_string(),
             { "commitment": "confirmed" }
@@ -1519,13 +1562,17 @@ impl RpcClientMethods for RpcClient {
         let result = self
             .manager
             .execute_raw("getTokenLargestAccounts", params)
-            .await
-            .map_err(|e| e.to_string())?;
+            .await?;
 
         let values = result
             .get("value")
             .and_then(|v| v.as_array())
-            .ok_or("Missing value array")?;
+            .ok_or_else(|| {
+                crate::Error::Data(crate::errors::DataError::InvalidFormat {
+                    expected: "value array".to_string(),
+                    received: "missing or not an array".to_string(),
+                })
+            })?;
 
         let mut accounts = Vec::with_capacity(values.len());
 
@@ -1533,21 +1580,31 @@ impl RpcClientMethods for RpcClient {
             let address_str = item
                 .get("address")
                 .and_then(|v| v.as_str())
-                .ok_or("Missing address field")?;
+                .ok_or_else(|| {
+                    crate::Error::Data(crate::errors::DataError::InvalidFormat {
+                        expected: "address field".to_string(),
+                        received: "missing or not a string".to_string(),
+                    })
+                })?;
 
-            let address =
-                Pubkey::from_str(address_str).map_err(|e| format!("Invalid address: {}", e))?;
+            let address = Pubkey::from_str(address_str).map_err(|e| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "Pubkey".to_string(),
+                    error: e.to_string(),
+                })
+            })?;
 
             let amount = item
                 .get("amount")
                 .and_then(|v| v.as_str())
-                .ok_or("Missing amount field")?
+                .ok_or_else(|| parse_err("amount", "missing amount field"))?
                 .to_string();
 
             let decimals = item
                 .get("decimals")
                 .and_then(|v| v.as_u64())
-                .ok_or("Missing decimals field")? as u8;
+                .ok_or_else(|| parse_err("decimals", "missing decimals field"))?
+                as u8;
 
             let ui_amount = item.get("uiAmount").and_then(|v| v.as_f64());
 
@@ -1589,10 +1646,13 @@ impl RpcClientMethods for RpcClient {
     async fn sign_and_send_with_main_wallet(
         &self,
         transaction_base64: &str,
-    ) -> Result<Signature, String> {
+    ) -> crate::Result<Signature> {
         // Load main wallet keypair from config
-        let keypair = crate::config::get_wallet_keypair()
-            .map_err(|e| format!("Failed to load wallet keypair: {}", e))?;
+        let keypair = crate::config::get_wallet_keypair().map_err(|e| {
+            crate::Error::Configuration(crate::errors::ConfigurationError::Generic {
+                message: format!("Failed to load wallet keypair: {}", e),
+            })
+        })?;
 
         // Delegate to sign_and_send_transaction
         self.sign_and_send_transaction(transaction_base64, &keypair)
@@ -1604,10 +1664,13 @@ impl RpcClientMethods for RpcClient {
         transaction_base64: &str,
         commitment: CommitmentLevel,
         timeout: Duration,
-    ) -> Result<Signature, String> {
+    ) -> crate::Result<Signature> {
         // Load main wallet keypair from config
-        let keypair = crate::config::get_wallet_keypair()
-            .map_err(|e| format!("Failed to load wallet keypair: {}", e))?;
+        let keypair = crate::config::get_wallet_keypair().map_err(|e| {
+            crate::Error::Configuration(crate::errors::ConfigurationError::Generic {
+                message: format!("Failed to load wallet keypair: {}", e),
+            })
+        })?;
 
         // Delegate to sign_send_and_confirm_transaction
         self.sign_send_and_confirm_transaction(transaction_base64, &keypair, commitment, timeout)
@@ -1623,12 +1686,14 @@ impl RpcClientMethods for RpcClient {
         wallet_pubkey: &Pubkey,
         limit: usize,
         before: Option<&str>,
-    ) -> Result<Vec<SignatureInfo>, String> {
+    ) -> crate::Result<Vec<SignatureInfo>> {
         let before_sig = match before {
-            Some(sig_str) => Some(
-                Signature::from_str(sig_str)
-                    .map_err(|e| format!("Invalid before signature: {}", e))?,
-            ),
+            Some(sig_str) => Some(Signature::from_str(sig_str).map_err(|e| {
+                crate::Error::Data(crate::errors::DataError::ParseError {
+                    data_type: "Signature".to_string(),
+                    error: e.to_string(),
+                })
+            })?),
             None => None,
         };
         self.get_signatures_for_address(wallet_pubkey, Some(limit), before_sig.as_ref())
@@ -1638,7 +1703,7 @@ impl RpcClientMethods for RpcClient {
     async fn get_transaction_details(
         &self,
         signature: &str,
-    ) -> Result<crate::rpc::types::TransactionDetails, String> {
+    ) -> crate::Result<crate::rpc::types::TransactionDetails> {
         // Use jsonParsed encoding for proper decoding (required for v0 transactions with LUTs)
         let params = serde_json::json!([
             signature,
@@ -1648,24 +1713,22 @@ impl RpcClientMethods for RpcClient {
             }
         ]);
 
-        let result = self
-            .manager
-            .execute_raw("getTransaction", params)
-            .await
-            .map_err(|e| e.to_string())?;
+        let result = self.manager.execute_raw("getTransaction", params).await?;
 
         if result.is_null() {
-            return Err(format!("Transaction not found: {}", signature));
+            return Err(parse_err(
+                "transaction",
+                &format!("Transaction not found: {}", signature),
+            ));
         }
 
-        serde_json::from_value(result)
-            .map_err(|e| format!("Failed to parse transaction details: {}", e))
+        serde_json::from_value(result).map_err(|e| parse_err("transaction", &e.to_string()))
     }
 
     async fn sign_send_and_confirm_transaction_simple(
         &self,
         transaction_base64: &str,
-    ) -> Result<Signature, String> {
+    ) -> crate::Result<Signature> {
         // Use default commitment and timeout
         self.sign_send_and_confirm_with_main_wallet(
             transaction_base64,
@@ -1679,7 +1742,7 @@ impl RpcClientMethods for RpcClient {
         &self,
         transaction_base64: &str,
         keypair: &Keypair,
-    ) -> Result<Signature, String> {
+    ) -> crate::Result<Signature> {
         // Use default commitment and timeout
         self.sign_send_and_confirm_transaction(
             transaction_base64,
@@ -1701,44 +1764,85 @@ fn commitment_to_string(commitment: CommitmentLevel) -> &'static str {
     }
 }
 
-fn parse_account_from_json(value: &serde_json::Value) -> Result<Option<Account>, String> {
+fn parse_account_from_json(value: &serde_json::Value) -> crate::Result<Option<Account>> {
+    use crate::errors::{DataError, Error};
+
     if value.is_null() {
         return Ok(None);
     }
 
-    let data = value.get("data").ok_or("Missing data field")?;
+    let data = value.get("data").ok_or_else(|| {
+        Error::Data(DataError::ParseError {
+            data_type: "account".to_string(),
+            error: "Missing data field".to_string(),
+        })
+    })?;
 
     let data_bytes = if let Some(arr) = data.as_array() {
         // [data_base64, encoding]
-        let encoded = arr.first().and_then(|v| v.as_str()).ok_or("Invalid data")?;
+        let encoded = arr.first().and_then(|v| v.as_str()).ok_or_else(|| {
+            Error::Data(DataError::ParseError {
+                data_type: "account".to_string(),
+                error: "Invalid data array format".to_string(),
+            })
+        })?;
         let encoding = arr.get(1).and_then(|v| v.as_str()).unwrap_or("base64");
 
         if encoding == "base64" {
             base64::engine::general_purpose::STANDARD
                 .decode(encoded)
-                .map_err(|e| format!("Failed to decode base64: {}", e))?
+                .map_err(|e| {
+                    Error::Data(DataError::ParseError {
+                        data_type: "account base64".to_string(),
+                        error: e.to_string(),
+                    })
+                })?
         } else {
-            return Err(format!("Unsupported encoding: {}", encoding));
+            return Err(Error::Data(DataError::InvalidFormat {
+                expected: "base64 encoding".to_string(),
+                received: encoding.to_string(),
+            }));
         }
     } else if let Some(s) = data.as_str() {
         // Direct base64 string
         base64::engine::general_purpose::STANDARD
             .decode(s)
-            .map_err(|e| format!("Failed to decode base64: {}", e))?
+            .map_err(|e| {
+                Error::Data(DataError::ParseError {
+                    data_type: "account base64".to_string(),
+                    error: e.to_string(),
+                })
+            })?
     } else {
-        return Err("Invalid data format".to_string());
+        return Err(Error::Data(DataError::InvalidFormat {
+            expected: "base64 string or array".to_string(),
+            received: format!("{:?}", data),
+        }));
     };
 
     let lamports = value
         .get("lamports")
         .and_then(|v| v.as_u64())
-        .ok_or("Missing lamports")?;
+        .ok_or_else(|| {
+            Error::Data(DataError::ParseError {
+                data_type: "account".to_string(),
+                error: "Missing or invalid lamports field".to_string(),
+            })
+        })?;
 
-    let owner_str = value
-        .get("owner")
-        .and_then(|v| v.as_str())
-        .ok_or("Missing owner")?;
-    let owner = Pubkey::from_str(owner_str).map_err(|e| format!("Invalid owner pubkey: {}", e))?;
+    let owner_str = value.get("owner").and_then(|v| v.as_str()).ok_or_else(|| {
+        Error::Data(DataError::ParseError {
+            data_type: "account".to_string(),
+            error: "Missing owner field".to_string(),
+        })
+    })?;
+
+    let owner = Pubkey::from_str(owner_str).map_err(|e| {
+        Error::Data(DataError::ParseError {
+            data_type: "pubkey".to_string(),
+            error: format!("Invalid owner pubkey '{}': {}", owner_str, e),
+        })
+    })?;
 
     let executable = value
         .get("executable")

@@ -22,7 +22,7 @@ static STRATEGY_ENGINE: LazyLock<Arc<RwLock<Option<StrategyEngine>>>> =
     LazyLock::new(|| Arc::new(RwLock::new(None)));
 
 /// Initialize the strategy system
-pub async fn init_strategy_system(config: EngineConfig) -> Result<(), String> {
+pub async fn init_strategy_system(config: EngineConfig) -> crate::Result<()> {
     // Initialize database
     db::init_strategies_db()?;
 
@@ -37,10 +37,10 @@ pub async fn init_strategy_system(config: EngineConfig) -> Result<(), String> {
 }
 
 /// Get the global strategy engine
-async fn get_engine() -> Result<Arc<RwLock<Option<StrategyEngine>>>, String> {
+async fn get_engine() -> crate::Result<Arc<RwLock<Option<StrategyEngine>>>> {
     let engine = STRATEGY_ENGINE.read().await;
     if engine.is_none() {
-        return Err("Strategy engine not initialized".to_string());
+        return Err(crate::Error::internal_error("Strategy engine not initialized"));
     }
     drop(engine);
     Ok(STRATEGY_ENGINE.clone())
@@ -66,12 +66,12 @@ pub async fn evaluate_entry_strategies(
     current_price: f64,
     market_data: Option<MarketData>,
     timeframe_bundle: Option<TimeframeBundle>,
-) -> Result<Option<String>, String> {
+) -> crate::Result<Option<String>> {
     let engine_lock = get_engine().await?;
     let engine_guard = engine_lock.read().await;
     let engine = engine_guard
         .as_ref()
-        .ok_or_else(|| "Strategy engine not available".to_string())?;
+        .ok_or_else(|| crate::Error::internal_error("Strategy engine not available"))?;
 
     // Get enabled entry strategies
     let strategies = get_enabled_strategies(StrategyType::Entry)?;
@@ -152,12 +152,12 @@ pub async fn evaluate_exit_strategies(
     position_data: PositionData,
     market_data: Option<MarketData>,
     timeframe_bundle: Option<TimeframeBundle>,
-) -> Result<Option<String>, String> {
+) -> crate::Result<Option<String>> {
     let engine_lock = get_engine().await?;
     let engine_guard = engine_lock.read().await;
     let engine = engine_guard
         .as_ref()
-        .ok_or_else(|| "Strategy engine not available".to_string())?;
+        .ok_or_else(|| crate::Error::internal_error("Strategy engine not available"))?;
 
     // Get enabled exit strategies
     let strategies = get_enabled_strategies(StrategyType::Exit)?;
@@ -214,35 +214,35 @@ pub async fn evaluate_exit_strategies(
 }
 
 /// Validate a strategy without evaluation
-pub async fn validate_strategy(strategy: &Strategy) -> Result<(), String> {
+pub async fn validate_strategy(strategy: &Strategy) -> crate::Result<()> {
     let engine_lock = get_engine().await?;
     let engine_guard = engine_lock.read().await;
     let engine = engine_guard
         .as_ref()
-        .ok_or_else(|| "Strategy engine not available".to_string())?;
+        .ok_or_else(|| crate::Error::internal_error("Strategy engine not available"))?;
 
     engine.validate_strategy(strategy)
 }
 
 /// Clear the evaluation cache
-pub async fn clear_evaluation_cache() -> Result<(), String> {
+pub async fn clear_evaluation_cache() -> crate::Result<()> {
     let engine_lock = get_engine().await?;
     let engine_guard = engine_lock.read().await;
     let engine = engine_guard
         .as_ref()
-        .ok_or_else(|| "Strategy engine not available".to_string())?;
+        .ok_or_else(|| crate::Error::internal_error("Strategy engine not available"))?;
 
     engine.clear_cache().await;
     Ok(())
 }
 
 /// Get all condition schemas for UI
-pub async fn get_condition_schemas() -> Result<serde_json::Value, String> {
+pub async fn get_condition_schemas() -> crate::Result<serde_json::Value> {
     let engine_lock = get_engine().await?;
     let engine_guard = engine_lock.read().await;
     let engine = engine_guard
         .as_ref()
-        .ok_or_else(|| "Strategy engine not available".to_string())?;
+        .ok_or_else(|| crate::Error::internal_error("Strategy engine not available"))?;
 
     let registry = engine.get_condition_registry();
     Ok(registry.get_all_schemas())

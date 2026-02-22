@@ -1,3 +1,6 @@
+//! Pool analyzer service — analyzes pool metrics and token scoring.
+
+use crate::errors::ServiceError;
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
@@ -6,12 +9,6 @@ use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
 pub struct PoolAnalyzerService;
-
-impl Default for PoolAnalyzerService {
-    fn default() -> Self {
-        Self
-    }
-}
 
 #[async_trait]
 impl Service for PoolAnalyzerService {
@@ -24,14 +21,14 @@ impl Service for PoolAnalyzerService {
     }
 
     fn dependencies(&self) -> Vec<&'static str> {
-        vec!["pool_helpers", "pool_fetcher", "filtering"]
+        vec!["pools", "pool_fetcher", "filtering"]
     }
 
     fn is_enabled(&self) -> bool {
         crate::global::is_initialization_complete()
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         logger::info(
             LogTag::PoolService,
             &"Initializing pool analyzer service...".to_string(),
@@ -43,15 +40,19 @@ impl Service for PoolAnalyzerService {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String> {
+    ) -> crate::Result<Vec<JoinHandle<()>>> {
         logger::info(
             LogTag::PoolService,
             &"Starting pool analyzer service...".to_string(),
         );
 
         // Get the PoolAnalyzer component from global state
-        let analyzer = crate::pools::get_pool_analyzer()
-            .ok_or("PoolAnalyzer component not initialized".to_string())?;
+        let analyzer = crate::pools::get_pool_analyzer().ok_or_else(|| {
+            crate::Error::Service(ServiceError::Start {
+                service: self.name().to_string(),
+                message: "PoolAnalyzer component not initialized".to_string(),
+            })
+        })?;
 
         // Spawn analyzer task
         let handle = tokio::spawn(monitor.instrument(async move {
@@ -66,7 +67,7 @@ impl Service for PoolAnalyzerService {
         Ok(vec![handle])
     }
 
-    async fn stop(&mut self) -> Result<(), String> {
+    async fn stop(&mut self) -> crate::Result<()> {
         logger::info(
             LogTag::PoolService,
             &"Pool analyzer service stopping (via shutdown signal)".to_string(),

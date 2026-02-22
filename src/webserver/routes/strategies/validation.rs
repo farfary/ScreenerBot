@@ -25,7 +25,7 @@ pub async fn validate_strategy_handler(Path(id): Path<String>) -> Response {
 
     match strategies::validate_strategy(&strategy).await {
         Ok(_) => success_response(serde_json::json!({"valid": true})),
-        Err(e) => success_response(serde_json::json!({"valid": false, "errors": [e]})),
+        Err(e) => success_response(serde_json::json!({"valid": false, "errors": [e.to_string()]})),
     }
 }
 
@@ -78,6 +78,6 @@ pub async fn validate_strategy_inline_handler(Json(request): Json<StrategyReques
 
     match strategies::validate_strategy(&strategy).await {
         Ok(_) => success_response(serde_json::json!({"valid": true})),
-        Err(e) => success_response(serde_json::json!({"valid": false, "errors": [e]})),
+        Err(e) => success_response(serde_json::json!({"valid": false, "errors": [e.to_string()]})),
     }
 }

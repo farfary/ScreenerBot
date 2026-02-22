@@ -1,3 +1,5 @@
+//! Events service — manages event ingestion and database lifecycle.
+
 use crate::config;
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
@@ -36,7 +38,7 @@ impl Service for EventsService {
         is_events_enabled_in_config()
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         // Check if events are enabled before initializing
         if !is_events_enabled_in_config() {
             crate::logger::info(
@@ -47,9 +49,12 @@ impl Service for EventsService {
         }
 
         // Initialize events database and system
-        crate::events::init()
-            .await
-            .map_err(|e| format!("Failed to initialize events system: {}", e))?;
+        crate::events::init().await.map_err(|e| {
+            crate::Error::Service(crate::errors::ServiceError::Initialize {
+                service: "events".to_string(),
+                message: format!("Failed to initialize events system: {}", e),
+            })
+        })?;
         Ok(())
     }
 
@@ -57,7 +62,7 @@ impl Service for EventsService {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String> {
+    ) -> crate::Result<Vec<JoinHandle<()>>> {
         // If events are disabled, just wait for shutdown
         if !is_events_enabled_in_config() {
             let handle = tokio::spawn(monitor.instrument(async move {

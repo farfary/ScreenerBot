@@ -75,21 +75,21 @@ pub struct RpcManager {
 
 impl RpcManager {
     /// Create new RpcManager from configuration
-    pub async fn new() -> Result<Self, String> {
+    pub async fn new() -> crate::Result<Self> {
         // Read RPC URLs from config
         let urls = crate::config::with_config(|cfg| cfg.rpc.urls.clone());
 
         if urls.is_empty() {
-            return Err("No RPC URLs configured".to_string());
+            return Err(crate::Error::configuration_error("No RPC URLs configured"));
         }
 
         Self::from_urls(&urls).await
     }
 
     /// Create from URL list
-    pub async fn from_urls(urls: &[String]) -> Result<Self, String> {
+    pub async fn from_urls(urls: &[String]) -> crate::Result<Self> {
         if urls.is_empty() {
-            return Err("No RPC URLs provided".to_string());
+            return Err(crate::Error::configuration_error("No RPC URLs provided"));
         }
 
         // Read config values
@@ -134,7 +134,7 @@ impl RpcManager {
             .tcp_keepalive(Duration::from_secs(60))
             .tcp_nodelay(true)
             .build()
-            .map_err(|e| format!("Failed to create HTTP client: {}", e))?;
+            .map_err(|e| crate::Error::network_error(format!("Failed to create HTTP client: {}", e)))?;
 
         // Create provider configs
         let mut providers = Vec::new();
@@ -665,7 +665,7 @@ impl std::fmt::Debug for RpcManager {
 static RPC_MANAGER: OnceCell<Arc<RpcManager>> = OnceCell::const_new();
 
 /// Initialize global RPC manager
-pub async fn init_rpc_manager() -> Result<Arc<RpcManager>, String> {
+pub async fn init_rpc_manager() -> crate::Result<Arc<RpcManager>> {
     RPC_MANAGER
         .get_or_try_init(|| async {
             let manager = RpcManager::new().await?;
@@ -682,6 +682,6 @@ pub fn get_rpc_manager() -> Option<Arc<RpcManager>> {
 }
 
 /// Get or initialize global RPC manager
-pub async fn get_or_init_rpc_manager() -> Result<Arc<RpcManager>, String> {
+pub async fn get_or_init_rpc_manager() -> crate::Result<Arc<RpcManager>> {
     init_rpc_manager().await
 }

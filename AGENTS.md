@@ -168,7 +168,7 @@ screenerbot::config::load_config().expect("Failed to load config");
 - **Config access**: Always use `with_config()` or `get_config_clone()` — never hardcode values.
 - **Config sections**: Must use `config_struct!` macro (see `src/config/macros.rs`).
 - **Database**: SQLite via rusqlite + r2d2. Use `with_init()` for PRAGMA settings.
-- **Error handling**: Use `crate::Error` + `crate::Result<T>` from `src/errors/` (compat alias `ScreenerBotError` exists but prefer `Error`).
+- **Error handling**: Use `crate::Error` + `crate::Result<T>` from `src/errors/`. All errors must use explicit domain variants (no implicit String/&str conversions).
 - **Logging**: Use `error!()`, `warning!()`, `info!()`, `debug!()`, `verbose!()` with `LogTag`.
 - **Services**: Implement `Service` trait, register in `src/services/implementations/`.
 - **Global state**: Check `src/global.rs` for startup flags before accessing services.
@@ -544,8 +544,8 @@ Operation progress tracking with real-time SSE broadcasting to dashboard. Tracks
 
 Structured error types with blockchain-aware parsing. Files:
 
-- `mod.rs` (re-exports + `ScreenerBotError = Error` alias)
-- `error.rs` (`Error` enum + `Result<T>` alias + migration helpers/builders)
+- `mod.rs` (re-exports for `Error` and `Result<T>`)
+- `error.rs` (`Error` enum + `Result<T>` alias + builder helpers)
 - `database.rs` (`DatabaseError` for rusqlite/r2d2/schema/migrations)
 - `network.rs` (`NetworkError`)
 - `rpc_provider.rs` (`RpcProviderError`)
@@ -557,6 +557,13 @@ Structured error types with blockchain-aware parsing. Files:
 - `rate_limit.rs` (`RateLimitError`)
 - `service.rs` (`ServiceError` for ServiceManager lifecycle/deps)
 - `blockchain.rs` (`BlockchainError`, `parse_solana_error()`, `parse_structured_solana_error()`, `CommitmentLevel`, retry/severity helpers)
+
+**Important:** No backwards-compatibility conversions exist. All errors must be constructed with explicit domain variants:
+- ❌ `Err("error message".into())` - NOT ALLOWED
+- ❌ `Err(format!("error").into())` - NOT ALLOWED
+- ✅ `Err(Error::Network(NetworkError::Generic { message }))` - CORRECT
+- ✅ `Err(Error::Data(DataError::ParseError { data_type, error }))` - CORRECT
+- ✅ `Err(Error::Configuration(ConfigurationError::Generic { message }))` - CORRECT
 
 ### Global (src/global.rs)
 
@@ -752,7 +759,7 @@ ALL databases must use `database::configure_connection()` — never set PRAGMAs 
 
 **New DEX:** Add to `ProgramKind` (`pools/types.rs`) → implement decoder `pools/decoders/<dex>.rs` (see `raydium_cpmm.rs`) → wire in `pools/calculator.rs::calculate_price()`.
 
-**New service:** Implement `Service` trait in `services/implementations/<name>_service.rs`, register in `run.rs::register_all_services()`. Set priority and dependencies.
+**New service:** Implement `Service` trait in `services/implementations/<name>_service.rs`, register in `run.rs::register_all_services()`. Set priority and dependencies. Rules: (1) Every service file MUST have a `//!` doc comment as the first line. (2) Unit structs (no fields) MUST NOT have `impl Default` — only structs with fields need it. (3) Service `name()` must match the conventional name used in dependency lists (e.g., "pools" not "pool_helpers").
 
 **New webserver route:** Create `routes/<name>.rs` with inline response types → implement `routes()` function → merge in `routes/mod.rs::api_routes()`.
 

@@ -1,12 +1,12 @@
 /// GMGN Router - Self-contained implementation with direct API integration
 use crate::config::with_config;
 use crate::constants::SOL_MINT;
-use crate::{Error, Result};
 use crate::logger::{self, LogTag};
 use crate::rpc::RpcClientMethods;
 use crate::swaps::router::{Quote, QuoteRequest, SwapResult, SwapRouter};
 use crate::swaps::types::deserialize_optional_string_or_number;
 use crate::tokens::Token;
+use crate::{Error, Result};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -262,9 +262,8 @@ impl GmgnRouter {
             }
         }
 
-        Err(last_error.unwrap_or_else(|| {
-            Error::api_error("All GMGN retry attempts failed".to_string())
-        }))
+        Err(last_error
+            .unwrap_or_else(|| Error::api_error("All GMGN retry attempts failed".to_string())))
     }
 
     async fn execute_gmgn_swap_internal(
@@ -383,9 +382,11 @@ impl SwapRouter for GmgnRouter {
             )
             .await?;
 
-        let output_amount = swap_data.quote.out_amount.parse::<u64>().map_err(|e| {
-            Error::parse_error(format!("Failed to parse output_amount: {}", e))
-        })?;
+        let output_amount = swap_data
+            .quote
+            .out_amount
+            .parse::<u64>()
+            .map_err(|e| Error::parse_error(format!("Failed to parse output_amount: {}", e)))?;
 
         let price_impact = swap_data
             .quote
@@ -393,9 +394,8 @@ impl SwapRouter for GmgnRouter {
             .parse::<f64>()
             .unwrap_or(0.0);
 
-        let execution_data = serde_json::to_vec(&swap_data).map_err(|e| {
-            Error::internal_error(format!("Swap data serialization failed: {}", e))
-        })?;
+        let execution_data = serde_json::to_vec(&swap_data)
+            .map_err(|e| Error::internal_error(format!("Swap data serialization failed: {}", e)))?;
 
         Ok(Quote {
             router_id: self.id().to_string(),
@@ -414,11 +414,7 @@ impl SwapRouter for GmgnRouter {
         })
     }
 
-    async fn execute_swap(
-        &self,
-        token: &Token,
-        quote: &Quote,
-    ) -> Result<SwapResult> {
+    async fn execute_swap(&self, token: &Token, quote: &Quote) -> Result<SwapResult> {
         let start = Instant::now();
 
         let swap_data: SwapData = serde_json::from_slice(&quote.execution_data).map_err(|e| {

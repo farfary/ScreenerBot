@@ -30,11 +30,7 @@ pub trait SwapRouter: Send + Sync {
     async fn get_quote(&self, request: &QuoteRequest) -> Result<Quote>;
 
     /// Execute swap using quote from this router
-    async fn execute_swap(
-        &self,
-        token: &Token,
-        quote: &Quote,
-    ) -> Result<SwapResult>;
+    async fn execute_swap(&self, token: &Token, quote: &Quote) -> Result<SwapResult>;
 }
 
 // ============================================================================

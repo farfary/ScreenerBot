@@ -346,9 +346,7 @@ impl FilterRejectionReason {
             FilterRejectionReason::OnChainSuspiciousSymbol => {
                 "Suspicious symbol (scam)".to_string()
             }
-            FilterRejectionReason::OnChainKnownScamAuthority => {
-                "Known scam authority".to_string()
-            }
+            FilterRejectionReason::OnChainKnownScamAuthority => "Known scam authority".to_string(),
             FilterRejectionReason::OnChainImmutableWithFreeze => {
                 "Immutable + freeze authority (scam)".to_string()
             }

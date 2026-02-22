@@ -1,3 +1,6 @@
+//! Pool calculator service — computes token prices from pool reserves.
+
+use crate::errors::ServiceError;
 use crate::logger::{self, LogTag};
 use crate::services::{Service, ServiceHealth, ServiceMetrics};
 use async_trait::async_trait;
@@ -6,12 +9,6 @@ use tokio::sync::Notify;
 use tokio::task::JoinHandle;
 
 pub struct PoolCalculatorService;
-
-impl Default for PoolCalculatorService {
-    fn default() -> Self {
-        Self
-    }
-}
 
 #[async_trait]
 impl Service for PoolCalculatorService {
@@ -24,14 +21,14 @@ impl Service for PoolCalculatorService {
     }
 
     fn dependencies(&self) -> Vec<&'static str> {
-        vec!["pool_helpers", "pool_fetcher", "filtering"]
+        vec!["pools", "pool_fetcher", "filtering"]
     }
 
     fn is_enabled(&self) -> bool {
         crate::global::is_initialization_complete()
     }
 
-    async fn initialize(&mut self) -> Result<(), String> {
+    async fn initialize(&mut self) -> crate::Result<()> {
         logger::info(
             LogTag::PoolService,
             &"Initializing pool calculator service...".to_string(),
@@ -43,15 +40,19 @@ impl Service for PoolCalculatorService {
         &mut self,
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
-    ) -> Result<Vec<JoinHandle<()>>, String> {
+    ) -> crate::Result<Vec<JoinHandle<()>>> {
         logger::info(
             LogTag::PoolService,
             &"Starting pool calculator service...".to_string(),
         );
 
         // Get the PriceCalculator component from global state
-        let calculator = crate::pools::get_price_calculator()
-            .ok_or("PriceCalculator component not initialized".to_string())?;
+        let calculator = crate::pools::get_price_calculator().ok_or_else(|| {
+            crate::Error::Service(ServiceError::Start {
+                service: self.name().to_string(),
+                message: "PriceCalculator component not initialized".to_string(),
+            })
+        })?;
 
         // Spawn calculator task
         let handle = tokio::spawn(monitor.instrument(async move {
@@ -66,7 +67,7 @@ impl Service for PoolCalculatorService {
         Ok(vec![handle])
     }
 
-    async fn stop(&mut self) -> Result<(), String> {
+    async fn stop(&mut self) -> crate::Result<()> {
         logger::info(
             LogTag::PoolService,
             &"Pool calculator service stopping (via shutdown signal)".to_string(),

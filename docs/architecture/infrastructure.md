@@ -220,6 +220,7 @@ ScreenerBot uses structured errors so that:
 pub enum Error {
   Blockchain(BlockchainError),
   Network(NetworkError),
+  Rpc(RpcError),
   RpcProvider(RpcProviderError),
   Database(DatabaseError),
   Service(ServiceError),
@@ -235,22 +236,24 @@ pub enum Error {
 For ergonomics, the crate also provides:
 
 - `pub type Result<T> = std::result::Result<T, Error>;` (re-exported as `crate::Result<T>`)
-- `pub type ScreenerBotError = Error;` (compat alias — prefer `crate::Error`)
 
 All variants implement `Display` and the enum implements `std::error::Error`.
 
-### 3.2 Error conversions (migration convenience)
+### 3.2 Error conversions (external types only)
 
 **File:** `src/errors/error.rs`
 
-To reduce boilerplate during migration from older string-based errors:
+The error system provides `From` implementations only for external library types:
 
-- `From<String>` and `From<&str>` map to `NetworkError::Generic`
 - `From<reqwest::Error>` maps to `NetworkError::Generic { message: ... }`
 - `From<serde_json::Error>` maps to `DataError::ParseError { data_type: "JSON", ... }`
 - `From<std::io::Error>` maps to `IoError::{NotFound|PermissionDenied|...}`
 - `From<rusqlite::Error>` and `From<r2d2::Error>` map to `DatabaseError`
 - `From<tokio::task::JoinError>` and `From<tokio::time::error::Elapsed>` map to `InternalError`
+- `From<RpcError>` (from `crate::rpc::errors::RpcError`) maps to `Error::Rpc(RpcError)` — used by RPC client methods
+
+**Note:** No implicit conversions exist for `String`, `&str`, or other internal types. 
+All errors must be explicitly constructed using the appropriate domain-specific variant.
 
 ### 3.3 Builder helpers (backward-compatible constructors)
 

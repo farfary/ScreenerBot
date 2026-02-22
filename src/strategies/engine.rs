@@ -249,12 +249,12 @@ impl StrategyEngine {
     }
 
     /// Validate a strategy without evaluating
-    pub fn validate_strategy(&self, strategy: &Strategy) -> Result<(), String> {
+    pub fn validate_strategy(&self, strategy: &Strategy) -> crate::Result<()> {
         self.validate_rule_tree(&strategy.rules)
     }
 
     /// Validate a rule tree recursively
-    fn validate_rule_tree(&self, rule_tree: &RuleTree) -> Result<(), String> {
+    fn validate_rule_tree(&self, rule_tree: &RuleTree) -> crate::Result<()> {
         // Leaf node - validate condition
         if rule_tree.is_leaf() {
             if let Some(condition) = &rule_tree.condition {
@@ -262,12 +262,13 @@ impl StrategyEngine {
                     .condition_registry
                     .get(&condition.condition_type)
                     .ok_or_else(|| {
-                        format!("Unknown condition type: {}", condition.condition_type)
+                        crate::Error::internal_error(format!("Unknown condition type: {}", condition.condition_type))
                     })?;
 
-                return evaluator.validate(condition);
+                return evaluator.validate(condition)
+                    .map_err(|e| crate::Error::internal_error(e));
             } else {
-                return Err("Leaf node missing condition".to_string());
+                return Err(crate::Error::internal_error("Leaf node missing condition"));
             }
         }
 
@@ -275,19 +276,19 @@ impl StrategyEngine {
         if rule_tree.is_branch() {
             let operator = rule_tree
                 .operator
-                .ok_or_else(|| "Branch node missing operator".to_string())?;
+                .ok_or_else(|| crate::Error::internal_error("Branch node missing operator"))?;
 
             let conditions = rule_tree
                 .conditions
                 .as_ref()
-                .ok_or_else(|| "Branch node missing conditions".to_string())?;
+                .ok_or_else(|| crate::Error::internal_error("Branch node missing conditions"))?;
 
             if conditions.is_empty() {
-                return Err("Branch node must have at least one child".to_string());
+                return Err(crate::Error::internal_error("Branch node must have at least one child"));
             }
 
             if operator == LogicalOperator::Not && conditions.len() != 1 {
-                return Err("NOT operator must have exactly one child".to_string());
+                return Err(crate::Error::internal_error("NOT operator must have exactly one child"));
             }
 
             // Validate all children recursively
@@ -298,7 +299,7 @@ impl StrategyEngine {
             return Ok(());
         }
 
-        Err("Invalid rule tree structure".to_string())
+        Err(crate::Error::internal_error("Invalid rule tree structure"))
     }
 }
 

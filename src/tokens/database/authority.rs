@@ -160,10 +160,10 @@ impl TokenDatabase {
         let rows = stmt
             .query_map(rusqlite::params![min_tokens], |row| {
                 Ok((
-                    row.get::<_, String>(0)?,   // authority
-                    row.get::<_, String>(1)?,   // authority_type
-                    row.get::<_, u32>(2)?,      // total_tokens
-                    row.get::<_, u32>(3)?,      // flagged_tokens
+                    row.get::<_, String>(0)?, // authority
+                    row.get::<_, String>(1)?, // authority_type
+                    row.get::<_, u32>(2)?,    // total_tokens
+                    row.get::<_, u32>(3)?,    // flagged_tokens
                 ))
             })
             .map_err(|e| TokenError::Database(format!("Query discovery error: {}", e)))?;
