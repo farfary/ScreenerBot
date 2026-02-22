@@ -1,6 +1,6 @@
 use super::{
-    BlockchainError, ConfigurationError, DataError, NetworkError, PositionError, RateLimitError,
-    RpcProviderError,
+    BlockchainError, ConfigurationError, DataError, DatabaseError, InternalError, IoError,
+    NetworkError, PositionError, RateLimitError, RpcProviderError, ServiceError,
 };
 
 /// Top-level error type for ScreenerBot.
@@ -16,6 +16,18 @@ pub enum Error {
 
     // RPC provider issues
     RpcProvider(RpcProviderError),
+
+    // Database errors (rusqlite/r2d2, schema, migrations)
+    Database(DatabaseError),
+
+    // Service lifecycle errors (startup/shutdown/deps)
+    Service(ServiceError),
+
+    // Filesystem / OS I/O errors
+    Io(IoError),
+
+    // Invariants, task join failures, cancellation/timeouts, etc.
+    Internal(InternalError),
 
     // Configuration errors
     Configuration(ConfigurationError),
@@ -39,6 +51,10 @@ impl std::fmt::Display for Error {
             Error::Blockchain(e) => write!(f, "Blockchain Error: {}", e),
             Error::Network(e) => write!(f, "Network Error: {}", e),
             Error::RpcProvider(e) => write!(f, "RPC Provider Error: {}", e),
+            Error::Database(e) => write!(f, "Database Error: {}", e),
+            Error::Service(e) => write!(f, "Service Error: {}", e),
+            Error::Io(e) => write!(f, "IO Error: {}", e),
+            Error::Internal(e) => write!(f, "Internal Error: {}", e),
             Error::Configuration(e) => write!(f, "Configuration Error: {}", e),
             Error::Data(e) => write!(f, "Data Error: {}", e),
             Error::Position(e) => write!(f, "Position Error: {}", e),
@@ -81,6 +97,36 @@ impl From<serde_json::Error> for Error {
             data_type: "JSON".to_string(),
             error: err.to_string(),
         })
+    }
+}
+
+impl From<std::io::Error> for Error {
+    fn from(err: std::io::Error) -> Self {
+        Error::Io(IoError::from(err))
+    }
+}
+
+impl From<rusqlite::Error> for Error {
+    fn from(err: rusqlite::Error) -> Self {
+        Error::Database(DatabaseError::from(err))
+    }
+}
+
+impl From<r2d2::Error> for Error {
+    fn from(err: r2d2::Error) -> Self {
+        Error::Database(DatabaseError::from(err))
+    }
+}
+
+impl From<tokio::task::JoinError> for Error {
+    fn from(err: tokio::task::JoinError) -> Self {
+        Error::Internal(InternalError::from(err))
+    }
+}
+
+impl From<tokio::time::error::Elapsed> for Error {
+    fn from(err: tokio::time::error::Elapsed) -> Self {
+        Error::Internal(InternalError::from(err))
     }
 }
 
@@ -173,11 +219,8 @@ impl Error {
 
     /// Create an internal error.
     pub fn internal_error(message: impl Into<String>) -> Self {
-        Error::Data(DataError::ValidationError {
-            field: "internal".to_string(),
-            value: "error".to_string(),
-            reason: message.into(),
+        Error::Internal(InternalError::InvariantViolation {
+            message: message.into(),
         })
     }
 }
-

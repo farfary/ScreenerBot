@@ -190,12 +190,16 @@ All heavy SQLite work is run via `spawn_blocking` to avoid stalling the async ru
 
 - `src/errors/mod.rs`
 - `src/errors/error.rs`
+- `src/errors/database.rs`
 - `src/errors/network.rs`
 - `src/errors/rpc_provider.rs`
 - `src/errors/configuration.rs`
 - `src/errors/data.rs`
+- `src/errors/io.rs`
+- `src/errors/internal.rs`
 - `src/errors/position.rs`
 - `src/errors/rate_limit.rs`
+- `src/errors/service.rs`
 - `src/errors/blockchain.rs`
 
 ScreenerBot uses structured errors so that:
@@ -217,6 +221,10 @@ pub enum Error {
   Blockchain(BlockchainError),
   Network(NetworkError),
   RpcProvider(RpcProviderError),
+  Database(DatabaseError),
+  Service(ServiceError),
+  Io(IoError),
+  Internal(InternalError),
   Configuration(ConfigurationError),
   Data(DataError),
   Position(PositionError),
@@ -240,6 +248,9 @@ To reduce boilerplate during migration from older string-based errors:
 - `From<String>` and `From<&str>` map to `NetworkError::Generic`
 - `From<reqwest::Error>` maps to `NetworkError::Generic { message: ... }`
 - `From<serde_json::Error>` maps to `DataError::ParseError { data_type: "JSON", ... }`
+- `From<std::io::Error>` maps to `IoError::{NotFound|PermissionDenied|...}`
+- `From<rusqlite::Error>` and `From<r2d2::Error>` map to `DatabaseError`
+- `From<tokio::task::JoinError>` and `From<tokio::time::error::Elapsed>` map to `InternalError`
 
 ### 3.3 Builder helpers (backward-compatible constructors)
 

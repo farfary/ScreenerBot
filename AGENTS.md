@@ -546,12 +546,16 @@ Structured error types with blockchain-aware parsing. Files:
 
 - `mod.rs` (re-exports + `ScreenerBotError = Error` alias)
 - `error.rs` (`Error` enum + `Result<T>` alias + migration helpers/builders)
+- `database.rs` (`DatabaseError` for rusqlite/r2d2/schema/migrations)
 - `network.rs` (`NetworkError`)
 - `rpc_provider.rs` (`RpcProviderError`)
 - `configuration.rs` (`ConfigurationError`)
 - `data.rs` (`DataError`)
+- `io.rs` (`IoError` for filesystem/OS errors)
+- `internal.rs` (`InternalError` for invariants, task join failures, timeouts)
 - `position.rs` (`PositionError`)
 - `rate_limit.rs` (`RateLimitError`)
+- `service.rs` (`ServiceError` for ServiceManager lifecycle/deps)
 - `blockchain.rs` (`BlockchainError`, `parse_solana_error()`, `parse_structured_solana_error()`, `CommitmentLevel`, retry/severity helpers)
 
 ### Global (src/global.rs)
