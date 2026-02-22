@@ -381,10 +381,13 @@ pub async fn run_automation_task(Path(id): Path<i64>) -> Response {
         } else {
             120
         };
-        if let Err(e) = crate::services::implementations::scheduled_ai_tasks_service::execute_scheduled_task_public(
-            &pool, &task, timeout
-        ).await {
-            logger::warning(LogTag::System, &format!("Manual task execution failed for '{}': {}", task.name, e));
+        if let Err(e) =
+            crate::ai::scheduled_worker::execute_task_public(&pool, &task, timeout).await
+        {
+            logger::warning(
+                LogTag::System,
+                &format!("Manual task execution failed for '{}': {}", task.name, e),
+            );
         }
     });
 

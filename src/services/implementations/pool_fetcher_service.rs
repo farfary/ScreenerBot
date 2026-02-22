@@ -21,12 +21,7 @@ impl Service for PoolFetcherService {
     }
 
     fn dependencies(&self) -> Vec<&'static str> {
-        vec![
-            "transactions",
-            "pools",
-            "pool_discovery",
-            "filtering",
-        ]
+        vec!["transactions", "pools", "pool_discovery", "filtering"]
     }
 
     fn is_enabled(&self) -> bool {

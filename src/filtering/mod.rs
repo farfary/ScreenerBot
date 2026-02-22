@@ -1,3 +1,4 @@
+pub mod background;
 mod engine;
 pub mod sources;
 mod store;

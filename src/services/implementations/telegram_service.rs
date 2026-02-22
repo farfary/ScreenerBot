@@ -1,6 +1,4 @@
-//! Telegram service integration with ServiceManager
-//!
-//! Provides the Service trait implementation for the Telegram module.
+//! Telegram service — manages Telegram bot lifecycle, notifications, and command polling.
 
 use crate::config::with_config;
 use crate::logger::{self, LogTag};
@@ -220,66 +218,4 @@ impl Service for TelegramService {
     async fn metrics(&self) -> ServiceMetrics {
         ServiceMetrics::default()
     }
-}
-
-// ============================================================================
-// GLOBAL SERVICE ACCESS
-// ============================================================================
-
-use std::sync::LazyLock;
-
-static TELEGRAM_SERVICE: LazyLock<RwLock<TelegramService>> =
-    LazyLock::new(|| RwLock::new(TelegramService::new()));
-
-/// Get the global Telegram service (read-only)
-pub async fn get_service() -> tokio::sync::RwLockReadGuard<'static, TelegramService> {
-    TELEGRAM_SERVICE.read().await
-}
-
-/// Get the global Telegram service (mutable)
-pub async fn get_service_mut() -> tokio::sync::RwLockWriteGuard<'static, TelegramService> {
-    TELEGRAM_SERVICE.write().await
-}
-
-/// Check if Telegram is enabled and ready
-pub async fn is_ready() -> bool {
-    let service = TELEGRAM_SERVICE.read().await;
-    service.initialized.load(Ordering::SeqCst)
-}
-
-/// Get current bot state
-pub async fn get_bot_state() -> BotState {
-    let service = TELEGRAM_SERVICE.read().await;
-    service.get_state().await
-}
-
-/// Start discovery mode
-pub async fn start_discovery_mode() -> crate::Result<()> {
-    // Update state
-    let service = TELEGRAM_SERVICE.write().await;
-    *service.state.write().await = BotState::Discovery;
-    drop(service);
-
-    // Start discovery
-    discovery::start_discovery().await.map_err(|e| {
-        crate::Error::Service(crate::errors::ServiceError::Start {
-            service: "telegram".to_string(),
-            message: e,
-        })
-    })
-}
-
-/// Stop discovery mode
-pub async fn stop_discovery_mode() {
-    discovery::stop_discovery().await;
-
-    // Update state based on config
-    let service = TELEGRAM_SERVICE.write().await;
-    let chat_id = with_config(|c| c.telegram.chat_id.clone());
-    let new_state = if chat_id.is_empty() {
-        BotState::Disconnected
-    } else {
-        BotState::Connected
-    };
-    *service.state.write().await = new_state;
 }

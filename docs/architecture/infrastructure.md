@@ -564,8 +564,9 @@ Write strategy:
 - `src/connectivity/types.rs`
 - `src/connectivity/state.rs`
 - `src/connectivity/monitor.rs`
-- `src/connectivity/service.rs`
+- `src/connectivity/checker.rs` (business logic)
 - `src/connectivity/monitors/*`
+- `src/services/implementations/connectivity_service.rs` (Service trait wrapper)
 
 Connectivity is the "external dependency health" system.
 
@@ -580,6 +581,8 @@ Connectivity is a `ServiceManager` service:
 - name: `connectivity`
 - priority: 5 (starts early)
 - enabled only after initialization completes (`global::is_initialization_complete()`)
+- defined in: `src/services/implementations/connectivity_service.rs`
+- business logic: `src/connectivity/checker.rs`
 
 ### 6.1 Core types
 
@@ -644,7 +647,7 @@ Each endpoint implements:
 
 ### 6.4 ConnectivityService loop and event recording
 
-**File:** `src/connectivity/service.rs`
+**Files:** `src/services/implementations/connectivity_service.rs` (Service trait wrapper), `src/connectivity/checker.rs` (business logic)
 
 Startup:
 

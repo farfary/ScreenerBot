@@ -83,7 +83,6 @@ pub mod keyboards;
 pub mod notifier;
 pub mod pagination;
 pub mod polling;
-pub mod service;
 pub mod session;
 pub mod types;
 
@@ -110,12 +109,6 @@ pub use notifier::{
 pub use discovery::{
     clear_discovered_chats, get_discovered_chats, is_discovery_running, select_discovered_chat,
     start_discovery, stop_discovery,
-};
-
-// Service
-pub use service::{
-    get_bot_state, get_service, is_ready, start_discovery_mode, stop_discovery_mode,
-    TelegramService,
 };
 
 // Formatters (commonly used)

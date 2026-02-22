@@ -40,7 +40,9 @@ pub async fn init_strategy_system(config: EngineConfig) -> crate::Result<()> {
 async fn get_engine() -> crate::Result<Arc<RwLock<Option<StrategyEngine>>>> {
     let engine = STRATEGY_ENGINE.read().await;
     if engine.is_none() {
-        return Err(crate::Error::internal_error("Strategy engine not initialized"));
+        return Err(crate::Error::internal_error(
+            "Strategy engine not initialized",
+        ));
     }
     drop(engine);
     Ok(STRATEGY_ENGINE.clone())

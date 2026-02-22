@@ -134,7 +134,9 @@ impl RpcManager {
             .tcp_keepalive(Duration::from_secs(60))
             .tcp_nodelay(true)
             .build()
-            .map_err(|e| crate::Error::network_error(format!("Failed to create HTTP client: {}", e)))?;
+            .map_err(|e| {
+                crate::Error::network_error(format!("Failed to create HTTP client: {}", e))
+            })?;
 
         // Create provider configs
         let mut providers = Vec::new();

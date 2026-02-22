@@ -262,10 +262,14 @@ impl StrategyEngine {
                     .condition_registry
                     .get(&condition.condition_type)
                     .ok_or_else(|| {
-                        crate::Error::internal_error(format!("Unknown condition type: {}", condition.condition_type))
+                        crate::Error::internal_error(format!(
+                            "Unknown condition type: {}",
+                            condition.condition_type
+                        ))
                     })?;
 
-                return evaluator.validate(condition)
+                return evaluator
+                    .validate(condition)
                     .map_err(|e| crate::Error::internal_error(e));
             } else {
                 return Err(crate::Error::internal_error("Leaf node missing condition"));
@@ -284,11 +288,15 @@ impl StrategyEngine {
                 .ok_or_else(|| crate::Error::internal_error("Branch node missing conditions"))?;
 
             if conditions.is_empty() {
-                return Err(crate::Error::internal_error("Branch node must have at least one child"));
+                return Err(crate::Error::internal_error(
+                    "Branch node must have at least one child",
+                ));
             }
 
             if operator == LogicalOperator::Not && conditions.len() != 1 {
-                return Err(crate::Error::internal_error("NOT operator must have exactly one child"));
+                return Err(crate::Error::internal_error(
+                    "NOT operator must have exactly one child",
+                ));
             }
 
             // Validate all children recursively

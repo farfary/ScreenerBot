@@ -4,6 +4,7 @@
 //! Uses LLM providers from src/apis/llm/ for intelligent decision making.
 //! ALL FEATURES DISABLED BY DEFAULT.
 
+pub mod background_worker;
 pub mod cache;
 pub mod chat_db;
 pub mod chat_engine;
@@ -13,6 +14,7 @@ pub mod engine;
 pub mod permissions;
 pub mod prompts;
 pub mod scheduled_db;
+pub mod scheduled_worker;
 pub mod schemas;
 pub mod tools;
 pub mod types;

@@ -49,32 +49,43 @@ src/services/
 ├── mod.rs            Service trait + ServiceManager + global access helpers
 ├── health.rs         ServiceHealth enum (healthy/degraded/unhealthy/starting/stopping)
 ├── metrics.rs        ServiceMetrics + MetricsCollector (TaskMonitor + sysinfo)
-└── implementations/  Many Service implementations (but not all)
+└── implementations/  ALL Service trait implementations (23 services)
     ├── mod.rs
+    ├── ai_service.rs
+    ├── ata_cleanup_service.rs
+    ├── connectivity_service.rs
     ├── events_service.rs
-    ├── transactions_service.rs
-    ├── sol_price_service.rs
-    ├── tokens_service.rs
     ├── filtering_service.rs
     ├── ohlcv_service.rs
+    ├── pool_analyzer_service.rs
+    ├── pool_calculator_service.rs
+    ├── pool_discovery_service.rs
+    ├── pool_fetcher_service.rs
+    ├── pools_service.rs
     ├── positions_service.rs
-    ├── wallet_service.rs
     ├── rpc_stats_service.rs
-    ├── ata_cleanup_service.rs
-    ├── webserver_service.rs
-    ├── ai_service.rs
+    ├── scheduled_ai_tasks_service.rs
+    ├── sol_price_service.rs
+    ├── telegram_service.rs
+    ├── tokens_service.rs
+    ├── trader_service.rs
+    ├── transactions_service.rs
     ├── update_check_service.rs
-    └── pool_*_service.rs (discovery/fetcher/calculator/analyzer)
+    ├── wallet_service.rs
+    └── webserver_service.rs
 ```
 
-### 2.2 Service implementations outside `src/services/`
+### 2.2 Service architecture pattern
 
-Not every `impl Service for ...` lives in `src/services/implementations/`.
-Examples (registered today):
+**All** `impl Service for ...` live in `src/services/implementations/`.
 
-* `src/connectivity/service.rs` => `ConnectivityService` (`name() = "connectivity"`)
-* `src/telegram/service.rs` => `TelegramService` (`name() = "telegram"`)
-* `src/trader/service.rs` => `TraderService` (`name() = "trader"`)
+Services are thin wrappers (<120 lines) that delegate to domain modules:
+* `connectivity_service.rs` delegates to `connectivity/checker.rs`
+* `trader_service.rs` delegates to `trader/*`
+* `telegram_service.rs` delegates to `telegram/*`
+* `filtering_service.rs` delegates to `filtering/background.rs`
+* `ai_service.rs` delegates to `ai/background_worker.rs`
+* `scheduled_ai_tasks_service.rs` delegates to `ai/scheduled_worker.rs`
 
 The single source of truth for **what is actually registered** is:
 * `src/run.rs` => `register_all_services(manager: &mut ServiceManager)`
@@ -359,7 +370,7 @@ Registered today (in registration order):
 
 | Service name | Type | Defined in | Notes |
 |-------------|------|------------|------|
-| `connectivity` | `ConnectivityService` | `src/connectivity/service.rs` | gated by init + `cfg.connectivity.enabled` |
+| `connectivity` | `ConnectivityService` | `src/services/implementations/connectivity_service.rs` | gated by init + `cfg.connectivity.enabled`, delegates to `connectivity/checker.rs` |
 | `events` | `EventsService` | `src/services/implementations/events_service.rs` | gated by init + `cfg.events.enabled` |
 | `transactions` | `TransactionsService` | `src/services/implementations/transactions_service.rs` | starts global tx manager |
 | `sol_price` | `SolPriceService` | `src/services/implementations/sol_price_service.rs` | wraps `apis/sol_price.rs` |
@@ -369,16 +380,17 @@ Registered today (in registration order):
 | `pool_analyzer` | `PoolAnalyzerService` | `src/services/implementations/pool_analyzer_service.rs` | depends on pools + pool_fetcher + filtering |
 | `pools` | `PoolsService` | `src/services/implementations/pools_service.rs` | initializes pool components + helper tasks |
 | `tokens` | `TokensService` | `src/services/implementations/tokens_service.rs` | delegates to `tokens::service::TokensServiceNew` |
-| `filtering` | `FilteringService` | `src/services/implementations/filtering_service.rs` | periodic refresh + cleanup tasks |
+| `filtering` | `FilteringService` | `src/services/implementations/filtering_service.rs` | delegates to `filtering/background.rs` |
 | `ohlcv` | `OhlcvService` | `src/services/implementations/ohlcv_service.rs` | starts OHLCV runtime + auto-populate from open positions |
 | `positions` | `PositionsService` | `src/services/implementations/positions_service.rs` | starts positions manager + verification worker |
 | `wallet` | `WalletService` | `src/services/implementations/wallet_service.rs` | wallet monitoring loops |
 | `rpc_stats` | `RpcStatsService` | `src/services/implementations/rpc_stats_service.rs` | auto-save stats DB |
 | `ata_cleanup` | `AtaCleanupService` | `src/services/implementations/ata_cleanup_service.rs` | starts ATA cleanup background tool |
-| `trader` | `TraderService` | `src/trader/service.rs` | automated trading monitors |
+| `trader` | `TraderService` | `src/services/implementations/trader_service.rs` | delegates to `trader/*` |
 | `webserver` | `WebserverService` | `src/services/implementations/webserver_service.rs` | **always enabled** (pre-init support) |
-| `ai` | `AiService` | `src/services/implementations/ai_service.rs` | enabled by config (background checks) |
-| `telegram` | `TelegramService` | `src/telegram/service.rs` | notifications + command polling |
+| `ai` | `AiService` | `src/services/implementations/ai_service.rs` | delegates to `ai/background_worker.rs` |
+| `scheduled_ai_tasks` | `ScheduledAiTasksService` | `src/services/implementations/scheduled_ai_tasks_service.rs` | delegates to `ai/scheduled_worker.rs` |
+| `telegram` | `TelegramService` | `src/services/implementations/telegram_service.rs` | delegates to `telegram/*` |
 | `update_check` | `UpdateCheckService` | `src/services/implementations/update_check_service.rs` | periodic update checks |
 
 ---

@@ -376,7 +376,7 @@ fn register_all_services(manager: &mut ServiceManager) {
     logger::info(LogTag::System, "Registering services...");
 
     // Core infrastructure services
-    manager.register(Box::new(crate::connectivity::ConnectivityService::new()));
+    manager.register(Box::new(ConnectivityService::new()));
     manager.register(Box::new(EventsService));
     manager.register(Box::new(TransactionsService));
     manager.register(Box::new(SolPriceService));
@@ -398,14 +398,14 @@ fn register_all_services(manager: &mut ServiceManager) {
     manager.register(Box::new(WalletService));
     manager.register(Box::new(RpcStatsService));
     manager.register(Box::new(AtaCleanupService));
-    manager.register(Box::new(crate::trader::TraderService::new()));
+    manager.register(Box::new(TraderService::new()));
     manager.register(Box::new(WebserverService));
 
     // AI service (background auto-blacklisting)
     manager.register(Box::new(AiService::default()));
 
     // Telegram service (notifications + commands + discovery)
-    manager.register(Box::new(crate::telegram::TelegramService::new()));
+    manager.register(Box::new(TelegramService::new()));
 
     // Background utility services
     manager.register(Box::new(UpdateCheckService));

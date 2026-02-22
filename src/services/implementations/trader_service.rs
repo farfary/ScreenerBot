@@ -1,4 +1,4 @@
-//! Trader service implementation
+//! Trader service — orchestrates automated trading strategies and position management.
 
 use crate::events::{record_trader_event, Severity};
 use crate::logger::{self, LogTag};
@@ -56,7 +56,7 @@ impl Service for TraderService {
     }
 
     async fn initialize(&mut self) -> crate::Result<()> {
-        super::init_trader_system().await.map_err(|e| {
+        crate::trader::init_trader_system().await.map_err(|e| {
             crate::Error::Service(crate::errors::ServiceError::Initialize {
                 service: "trader".to_string(),
                 message: e,

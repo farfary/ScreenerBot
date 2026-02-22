@@ -155,8 +155,8 @@ pub fn init_strategies_db() -> crate::Result<()> {
     conn.execute_batch(SCHEMA_VERSION_TABLE)?;
 
     // Check current schema version
-    let current_version: Option<u32> =
-        conn.query_row(
+    let current_version: Option<u32> = conn
+        .query_row(
             "SELECT version FROM schema_version ORDER BY version DESC LIMIT 1",
             [],
             |row| row.get(0),
@@ -436,10 +436,14 @@ pub fn get_all_strategies() -> crate::Result<Vec<Strategy>> {
             _ => continue,
         };
         let created_at = DateTime::parse_from_rfc3339(&created_at_str)
-            .map_err(|e| Error::parse_error(format!("Failed to parse created_at for {}: {}", id, e)))?
+            .map_err(|e| {
+                Error::parse_error(format!("Failed to parse created_at for {}: {}", id, e))
+            })?
             .with_timezone(&Utc);
         let updated_at = DateTime::parse_from_rfc3339(&updated_at_str)
-            .map_err(|e| Error::parse_error(format!("Failed to parse updated_at for {}: {}", id, e)))?
+            .map_err(|e| {
+                Error::parse_error(format!("Failed to parse updated_at for {}: {}", id, e))
+            })?
             .with_timezone(&Utc);
 
         result.push(Strategy {
@@ -535,10 +539,14 @@ pub fn get_enabled_strategies(strategy_type: StrategyType) -> crate::Result<Vec<
             _ => continue,
         };
         let created_at = DateTime::parse_from_rfc3339(&created_at_str)
-            .map_err(|e| Error::parse_error(format!("Failed to parse created_at for {}: {}", id, e)))?
+            .map_err(|e| {
+                Error::parse_error(format!("Failed to parse created_at for {}: {}", id, e))
+            })?
             .with_timezone(&Utc);
         let updated_at = DateTime::parse_from_rfc3339(&updated_at_str)
-            .map_err(|e| Error::parse_error(format!("Failed to parse updated_at for {}: {}", id, e)))?
+            .map_err(|e| {
+                Error::parse_error(format!("Failed to parse updated_at for {}: {}", id, e))
+            })?
             .with_timezone(&Utc);
 
         result.push(Strategy {
@@ -589,9 +597,7 @@ pub fn record_evaluation(result: &EvaluationResult, token_mint: &str) -> crate::
 }
 
 /// Get performance statistics for a strategy
-pub fn get_strategy_performance(
-    strategy_id: &str,
-) -> crate::Result<Option<StrategyPerformance>> {
+pub fn get_strategy_performance(strategy_id: &str) -> crate::Result<Option<StrategyPerformance>> {
     let conn = get_connection()?;
 
     let result = conn

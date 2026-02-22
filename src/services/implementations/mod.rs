@@ -1,5 +1,6 @@
 pub mod ai_service;
 pub mod ata_cleanup_service;
+pub mod connectivity_service;
 pub mod events_service;
 pub mod filtering_service;
 pub mod ohlcv_service;
@@ -22,8 +23,15 @@ pub mod pool_fetcher_service;
 // Centralized tokens service
 pub mod tokens_service;
 
+// Trader service
+pub mod trader_service;
+
+// Telegram service
+pub mod telegram_service;
+
 pub use ai_service::AiService;
 pub use ata_cleanup_service::AtaCleanupService;
+pub use connectivity_service::ConnectivityService;
 pub use events_service::EventsService;
 pub use filtering_service::FilteringService;
 pub use ohlcv_service::OhlcvService;
@@ -45,3 +53,9 @@ pub use pool_fetcher_service::PoolFetcherService;
 
 // Centralized tokens service
 pub use tokens_service::TokensService;
+
+// Trader service
+pub use trader_service::TraderService;
+
+// Telegram service
+pub use telegram_service::TelegramService;

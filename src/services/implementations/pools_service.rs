@@ -29,10 +29,7 @@ impl Service for PoolsService {
     }
 
     async fn initialize(&mut self) -> crate::Result<()> {
-        logger::info(
-            LogTag::PoolService,
-            "Initializing pool components...",
-        );
+        logger::info(LogTag::PoolService, "Initializing pool components...");
 
         // Initialize all pool components (database, cache, RPC, components)
         crate::pools::initialize_pool_components()
@@ -44,10 +41,7 @@ impl Service for PoolsService {
                 })
             })?;
 
-        logger::info(
-            LogTag::PoolService,
-            "Pool components initialized",
-        );
+        logger::info(LogTag::PoolService, "Pool components initialized");
         Ok(())
     }
 
@@ -56,10 +50,7 @@ impl Service for PoolsService {
         shutdown: Arc<Notify>,
         monitor: tokio_metrics::TaskMonitor,
     ) -> crate::Result<Vec<JoinHandle<()>>> {
-        logger::info(
-            LogTag::PoolService,
-            "Starting pool helper tasks...",
-        );
+        logger::info(LogTag::PoolService, "Starting pool helper tasks...");
 
         // Start helper background tasks (health monitor, database cleanup, gap cleanup)
         // Note: Main pool tasks (discovery, fetcher, calculator, analyzer) are started by separate services

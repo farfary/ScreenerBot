@@ -34,14 +34,12 @@ pub mod executors;
 pub mod manual;
 pub mod monitors;
 pub mod safety;
-mod service;
 mod types;
 
 // Re-exports for common usage
 pub use constants::*;
 pub use controller::{is_trader_running, start_trader, stop_trader_gracefully, TraderControlError};
 pub use executors::execute_trade;
-pub use service::TraderService;
 pub use types::{TradeAction, TradeDecision, TradePriority, TradeReason, TradeResult};
 
 use crate::logger::{self, LogTag};

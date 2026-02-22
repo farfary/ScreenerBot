@@ -1,3 +1,5 @@
+//! Connectivity health checking — monitors external endpoint availability.
+
 use crate::config::get_config_clone;
 use crate::connectivity::monitor::EndpointMonitor;
 use crate::connectivity::monitors::{
@@ -7,16 +9,13 @@ use crate::connectivity::monitors::{
 use crate::connectivity::state;
 use crate::events::{record_connectivity_event, Severity};
 use crate::logger::{self, LogTag};
-use crate::services::{Service, ServiceHealth};
-use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::Notify;
-use tokio::task::JoinHandle;
 use tokio::time::{interval, Duration};
 
-/// ConnectivityService - monitors health of all external endpoints
+/// ConnectivityChecker - business logic for monitoring health of all external endpoints
 ///
-/// This service runs continuous health checks on:
+/// This checker runs continuous health checks on:
 /// - Internet connectivity (DNS, HTTP)
 /// - RPC endpoints
 /// - API endpoints (DexScreener, GeckoTerminal, Rugcheck, Jupiter)
@@ -24,11 +23,11 @@ use tokio::time::{interval, Duration};
 /// Critical endpoints (Internet, RPC) will cause system pause when unavailable.
 /// Important endpoints (DexScreener, Jupiter) will trigger warnings and degraded mode.
 /// Optional endpoints (Rugcheck) will silently fallback when unavailable.
-pub struct ConnectivityService {
-    monitors: Vec<Box<dyn EndpointMonitor>>,
+pub struct ConnectivityChecker {
+    pub monitors: Vec<Box<dyn EndpointMonitor>>,
 }
 
-impl ConnectivityService {
+impl ConnectivityChecker {
     pub fn new() -> Self {
         // Initialize all monitors
         let monitors: Vec<Box<dyn EndpointMonitor>> = vec![
@@ -45,7 +44,7 @@ impl ConnectivityService {
     }
 
     /// Register all monitors with global state
-    async fn register_monitors(&self) {
+    pub async fn register_monitors(&self) {
         for monitor in &self.monitors {
             if monitor.is_enabled() {
                 state::register_endpoint(
@@ -73,7 +72,7 @@ impl ConnectivityService {
     }
 
     /// Run health check for a single monitor
-    async fn check_monitor(monitor: &Box<dyn EndpointMonitor>) {
+    pub async fn check_monitor(monitor: &Box<dyn EndpointMonitor>) {
         if !monitor.is_enabled() {
             return;
         }
@@ -257,7 +256,7 @@ impl ConnectivityService {
     }
 
     /// Background task that periodically checks all endpoints
-    async fn run_health_checks(monitors: Vec<Box<dyn EndpointMonitor>>, shutdown: Arc<Notify>) {
+    pub async fn run_health_checks(monitors: Vec<Box<dyn EndpointMonitor>>, shutdown: Arc<Notify>) {
         let cfg = get_config_clone();
         let check_interval_secs = cfg.connectivity.check_interval_secs;
 
@@ -319,150 +318,6 @@ impl ConnectivityService {
                     }
                 }
             }
-        }
-    }
-}
-
-#[async_trait]
-impl Service for ConnectivityService {
-    fn name(&self) -> &'static str {
-        "connectivity"
-    }
-
-    fn priority(&self) -> i32 {
-        5 // Very high priority - starts early, stops late
-    }
-
-    fn dependencies(&self) -> Vec<&'static str> {
-        vec![] // No dependencies - foundation service
-    }
-
-    fn is_enabled(&self) -> bool {
-        // During pre-initialization (no config loaded), connectivity service should not start
-        if !crate::global::is_initialization_complete() {
-            return false;
-        }
-
-        let cfg = get_config_clone();
-        cfg.connectivity.enabled
-    }
-
-    async fn initialize(&mut self) -> crate::Result<()> {
-        logger::info(LogTag::Connectivity, "Initializing connectivity service");
-
-        // Register all monitors with global state
-        self.register_monitors().await;
-
-        // Set readiness flag
-        crate::global::CONNECTIVITY_SYSTEM_READY.store(true, std::sync::atomic::Ordering::SeqCst);
-
-        logger::info(
-            LogTag::Connectivity,
-            &format!(
-                "Connectivity service initialized with {} monitors",
-                self.monitors.len()
-            ),
-        );
-
-        // Record initialization event
-        tokio::spawn({
-            let monitor_count = self.monitors.len();
-            async move {
-                record_connectivity_event(
-                    "system",
-                    "service_initialized",
-                    Severity::Info,
-                    serde_json::json!({
-                        "monitor_count": monitor_count,
-                        "message": format!("Connectivity service initialized with {} monitors", monitor_count),
-                    }),
-                )
-                .await;
-            }
-        });
-
-        Ok(())
-    }
-
-    async fn start(
-        &mut self,
-        shutdown: Arc<Notify>,
-        monitor: tokio_metrics::TaskMonitor,
-    ) -> crate::Result<Vec<JoinHandle<()>>> {
-        logger::info(LogTag::Connectivity, "Starting connectivity service");
-
-        let cfg = get_config_clone();
-        if !cfg.connectivity.enabled {
-            logger::info(
-                LogTag::Connectivity,
-                "Connectivity monitoring disabled in config",
-            );
-            return Ok(vec![]);
-        }
-
-        // Record service start event
-        tokio::spawn({
-            let check_interval = cfg.connectivity.check_interval_secs;
-            async move {
-                record_connectivity_event(
-                    "system",
-                    "service_started",
-                    Severity::Info,
-                    serde_json::json!({
-                        "check_interval_secs": check_interval,
-                        "message": format!("Connectivity monitoring started (interval={}s)", check_interval),
-                    }),
-                )
-                .await;
-            }
-        });
-
-        // Move monitors out for the background task
-        let monitors = std::mem::take(&mut self.monitors);
-
-        let handle = tokio::spawn(monitor.instrument(async move {
-            Self::run_health_checks(monitors, shutdown).await;
-        }));
-
-        Ok(vec![handle])
-    }
-
-    async fn stop(&mut self) -> crate::Result<()> {
-        logger::info(LogTag::Connectivity, "Connectivity service stopped");
-
-        // Record service stop event
-        tokio::spawn(async move {
-            record_connectivity_event(
-                "system",
-                "service_stopped",
-                Severity::Info,
-                serde_json::json!({
-                    "message": "Connectivity monitoring stopped",
-                }),
-            )
-            .await;
-        });
-
-        Ok(())
-    }
-
-    async fn health(&self) -> ServiceHealth {
-        // Service is healthy if not initialized yet or if enabled
-        if !crate::global::is_initialization_complete() {
-            return ServiceHealth::Healthy; // Not started yet, so healthy
-        }
-
-        let cfg = get_config_clone();
-
-        if !cfg.connectivity.enabled {
-            return ServiceHealth::Healthy;
-        }
-
-        if state::are_critical_endpoints_healthy().await {
-            ServiceHealth::Healthy
-        } else {
-            let unhealthy = state::get_unhealthy_critical_endpoints().await;
-            ServiceHealth::Unhealthy(format!("Critical endpoints unhealthy: {:?}", unhealthy))
         }
     }
 }

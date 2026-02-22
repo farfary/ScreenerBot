@@ -170,7 +170,7 @@ screenerbot::config::load_config().expect("Failed to load config");
 - **Database**: SQLite via rusqlite + r2d2. Use `with_init()` for PRAGMA settings.
 - **Error handling**: Use `crate::Error` + `crate::Result<T>` from `src/errors/`. All errors must use explicit domain variants (no implicit String/&str conversions).
 - **Logging**: Use `error!()`, `warning!()`, `info!()`, `debug!()`, `verbose!()` with `LogTag`.
-- **Services**: Implement `Service` trait, register in `src/services/implementations/`.
+- **Services**: ALL Service trait implementations MUST live in `src/services/implementations/`. Business logic belongs in domain modules (e.g., `connectivity/checker.rs`, `filtering/background.rs`, `ai/scheduled_worker.rs`).
 - **Global state**: Check `src/global.rs` for startup flags before accessing services.
 
 ### Dashboard (Embedded HTML/CSS/JS)
@@ -499,7 +499,7 @@ Modular RPC client with multi-provider support, rate limiting, circuit breaker, 
 
 ### Services (src/services/)
 
-ServiceManager with dependency resolution, priority-based startup (topological sort), reverse-order shutdown, health/metrics monitoring. Files: `mod.rs` (Service trait, ServiceManager, GLOBAL_SERVICE_MANAGER), `health.rs`, `metrics.rs` (MetricsCollector with tokio_metrics TaskMonitor sampling), `implementations/` (19 services).
+ServiceManager with dependency resolution, priority-based startup (topological sort), reverse-order shutdown, health/metrics monitoring. Files: `mod.rs` (Service trait, ServiceManager, GLOBAL_SERVICE_MANAGER), `health.rs`, `metrics.rs` (MetricsCollector with tokio_metrics TaskMonitor sampling), `implementations/` (23 services). ALL Service trait implementations live in `implementations/`. Service wrappers should be thin (<120 lines); extract business logic to domain modules.
 
 ### Webserver (src/webserver/)
 

@@ -42,7 +42,7 @@ src/telegram/
 ├── bot.rs                 Bot instance helpers (used by notifier/polling/discovery)
 ├── mod.rs                 Public API and re-exports (architecture comment block)
 ├── types.rs               NotificationType, BotState, SessionState, TelegramSession, DiscoveredChat
-├── service.rs              Service trait implementation + global TELEGRAM_SERVICE
+├── service.rs              Service trait implementation (thin wrapper, delegates to other modules)
 ├── notifier.rs             TelegramNotifier + global queue helpers + preference filtering
 ├── polling.rs              Main update polling loop (getUpdates + offset tracking)
 ├── discovery.rs            Chat discovery polling (captures incoming messages to discover chat IDs)
@@ -118,18 +118,9 @@ The Telegram subsystem uses several global singletons (intentionally) so any mod
 
 ### 4.1 TelegramService global instance
 
-**File:** `src/telegram/service.rs`
+**File:** `src/services/implementations/telegram_service.rs`
 
-```rust
-static TELEGRAM_SERVICE: LazyLock<RwLock<TelegramService>> =
-    LazyLock::new(|| RwLock::new(TelegramService::new()));
-```
-
-Public access helpers:
-* `get_service()` / `get_service_mut()`
-* `is_ready()`
-* `get_bot_state()`
-* `start_discovery_mode()` / `stop_discovery_mode()`
+The Telegram module integrates with ServiceManager via `TelegramService` (thin wrapper that delegates to `telegram/*`).
 
 ### 4.2 Session manager singleton
 
@@ -174,7 +165,7 @@ These allow:
 
 ## 5. Service Integration (TelegramService)
 
-**File:** `src/telegram/service.rs`
+**File:** `src/services/implementations/telegram_service.rs`
 
 The Telegram module integrates with ServiceManager via `TelegramService`:
 

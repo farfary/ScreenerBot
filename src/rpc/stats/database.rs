@@ -397,9 +397,8 @@ impl RpcStatsDatabase {
         let conn = self.conn()?;
         let cutoff = Utc::now() - ChronoDuration::minutes(minutes as i64);
 
-        let mut stmt = conn
-            .prepare(
-                r#"
+        let mut stmt = conn.prepare(
+            r#"
                 SELECT 
                     strftime('%Y-%m-%dT%H:%M:00Z', timestamp) as minute,
                     COUNT(*) as call_count,
@@ -414,7 +413,7 @@ impl RpcStatsDatabase {
                 GROUP BY minute
                 ORDER BY minute DESC
                 "#,
-            )?;
+        )?;
 
         let rows = stmt.query_map(params![session_id, cutoff.to_rfc3339()], |row| {
             let minute_str: String = row.get(0)?;
