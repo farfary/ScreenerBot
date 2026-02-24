@@ -63,19 +63,6 @@ pub fn mark_service_ready(name: &'static str) {
     }
 }
 
-pub fn set_service_message(name: &'static str, message: impl Into<String>) {
-    let mut tracker = tracker();
-    let entry = tracker.entry(name).or_insert_with(InternalStatus::default);
-    entry.message = Some(message.into());
-}
-
-pub fn clear_service_message(name: &'static str) {
-    let mut tracker = tracker();
-    if let Some(entry) = tracker.get_mut(name) {
-        entry.message = None;
-    }
-}
-
 pub fn get_status(name: &'static str) -> Option<StartupServiceStatus> {
     let tracker = tracker();
     tracker.get(name).map(|status| StartupServiceStatus {

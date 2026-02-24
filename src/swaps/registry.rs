@@ -89,10 +89,3 @@ static REGISTRY: OnceLock<RouterRegistry> = OnceLock::new();
 pub fn get_registry() -> &'static RouterRegistry {
     REGISTRY.get_or_init(|| RouterRegistry::new())
 }
-
-/// Reset registry (for testing only)
-#[cfg(test)]
-pub fn reset_registry() {
-    // Cannot reset OnceCell in production - only for tests
-    // This is intentional to prevent runtime registry changes
-}
