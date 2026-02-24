@@ -369,11 +369,15 @@ Trait-based router architecture supporting multiple DEX routers (GMGN, Jupiter, 
 
 ### Wallet (src/wallets/)
 
-Balance monitoring with historical snapshots in SQLite (`data/wallet.db`). Tracks SOL + token balances with delayed RPC calls. Background service checks every minute. Files: `balance_monitor/` (types.rs, cache.rs, dashboard.rs, database.rs, service.rs), `manager.rs` (wallet management). ATA operations in `src/ata_operations.rs` (close/cleanup ATAs, get balances). Connection pooling with r2d2. Export to CSV. Service integration.
+Balance monitoring with historical snapshots in SQLite (`data/wallet.db`). Tracks SOL + token balances with delayed RPC calls. Background service checks every minute. Files: `balance_monitor/` (types.rs, cache.rs, dashboard.rs, database.rs, service.rs), `manager.rs` (wallet management entry point — mod declarations and init only). ATA operations in `src/ata_operations.rs` (close/cleanup ATAs, get balances). Connection pooling with r2d2. Export to CSV. Service integration.
 
-Code organization: when `src/wallets/manager.rs` grows, prefer splitting it into small submodules under `src/wallets/manager/` (e.g. `cache.rs`) and keeping `manager.rs` as the single public entry point via `mod` + `use`/re-exports.
+Code organization: `src/wallets/manager.rs` is a thin orchestration file (~100 LOC) — only global state, initialization, mod declarations, and re-exports. All logic lives in submodules under `src/wallets/manager/`.
 
-Current wallet submodules: `src/wallets/manager/` (cache, main_wallet, migration, crud, access, balance_constants, token_balance_queries), `src/wallets/balance_monitor/database/` (schema, metrics, flow_cache, dashboard_metrics, snapshots), `src/wallets/balance_monitor/dashboard/` (token_metadata).
+Current wallet submodules:
+- `src/wallets/manager/` — crud, access, main_wallet, cache, bulk_ops, token_balances, token_balance_queries, tools, migration, balance_constants
+- `src/wallets/balance_monitor/database/` — schema, metrics, flow_cache, dashboard_metrics, snapshots
+- `src/wallets/balance_monitor/dashboard/` — token_metadata, flow_metrics
+- `src/wallets/database/` — schema, token_balances
 
 ### Transactions (src/transactions/)
 
