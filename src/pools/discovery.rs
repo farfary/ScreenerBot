@@ -216,7 +216,7 @@ impl PoolDiscovery {
 
         record_safe(Event::info(
             EventCategory::Pool,
-            Some("discovery_tick_started".to_string()),
+            Some("discovery_tick_started".to_owned()),
             None,
             None,
             serde_json::json!({
@@ -459,7 +459,7 @@ impl PoolDiscovery {
 
             record_safe(Event::info(
                 EventCategory::Pool,
-                Some("discovery_tick_completed".to_string()),
+                Some("discovery_tick_completed".to_owned()),
                 None,
                 None,
                 serde_json::json!({
@@ -479,7 +479,7 @@ impl PoolDiscovery {
                 LogTag::PoolDiscovery,
                 "Analyzer not initialized; cannot stream discovered pools",
             );
-            Err("Analyzer not initialized".to_string())
+            Err("Analyzer not initialized".to_owned())
         }
     }
 

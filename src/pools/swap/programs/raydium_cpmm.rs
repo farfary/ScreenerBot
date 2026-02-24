@@ -76,7 +76,7 @@ impl RaydiumCpmmSwap {
         // We need to call the internal decode method directly since we already have the pool account
         RaydiumCpmmDecoder::decode_raydium_cpmm_pool(&pool_data.data, &pool_data.pubkey.to_string())
             .ok_or_else(|| {
-                SwapError::DecoderError("Failed to decode Raydium CPMM pool".to_string())
+                SwapError::DecoderError("Failed to decode Raydium CPMM pool".to_owned())
             })
     }
 
@@ -394,7 +394,7 @@ impl RaydiumCpmmSwap {
         // Decode token account amount (at offset 64)
         if account.data.len() < 72 {
             return Err(SwapError::DecoderError(
-                "Invalid token account data".to_string(),
+                "Invalid token account data".to_owned(),
             ));
         }
 

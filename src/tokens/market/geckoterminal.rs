@@ -93,7 +93,7 @@ pub async fn fetch_geckoterminal_data_batch(
         .fetch_tokens_multi("solana", &addresses_str, None, None)
         .await
         .map_err(|e| TokenError::Api {
-            source: "GeckoTerminal".to_string(),
+            source: "GeckoTerminal".to_owned(),
             message: format!("{:?}", e),
         })?;
 

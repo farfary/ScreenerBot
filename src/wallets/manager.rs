@@ -173,7 +173,7 @@ pub async fn get_main_keypair() -> Result<Keypair, String> {
         return Keypair::from_bytes(&bytes).map_err(|e| format!("Failed to clone keypair: {e}"));
     }
 
-    Err("No main wallet configured".to_string())
+    Err("No main wallet configured".to_owned())
 }
 
 /// Get the main wallet's address (cached for performance)
@@ -193,7 +193,7 @@ pub async fn get_main_address() -> Result<String, String> {
     cache
         .as_ref()
         .map(|c| c.wallet.address.clone())
-        .ok_or_else(|| "No main wallet configured".to_string())
+        .ok_or_else(|| "No main wallet configured".to_owned())
 }
 
 /// Get the main wallet info
@@ -269,7 +269,7 @@ pub async fn create_wallet(request: CreateWalletRequest) -> Result<Wallet, Strin
         .as_ref()
         .ok_or("Database unavailable")?
         .get_wallet_by_address(&address)?
-        .ok_or_else(|| "Failed to retrieve created wallet".to_string())
+        .ok_or_else(|| "Failed to retrieve created wallet".to_owned())
 }
 
 /// Import an existing wallet
@@ -332,7 +332,7 @@ pub async fn import_wallet(request: ImportWalletRequest) -> Result<Wallet, Strin
         .as_ref()
         .ok_or("Database unavailable")?
         .get_wallet_by_address(&address)?
-        .ok_or_else(|| "Failed to retrieve imported wallet".to_string())
+        .ok_or_else(|| "Failed to retrieve imported wallet".to_owned())
 }
 
 /// Export a wallet's private key
@@ -429,7 +429,7 @@ pub async fn update_wallet(wallet_id: i64, request: UpdateWalletRequest) -> Resu
         .as_ref()
         .ok_or("Database unavailable")?
         .get_wallet(wallet_id)?
-        .ok_or_else(|| "Wallet not found after update".to_string())
+        .ok_or_else(|| "Wallet not found after update".to_owned())
 }
 
 /// Set a wallet as the main wallet
@@ -655,7 +655,7 @@ pub async fn bulk_import_wallets(
                     name: row.name.clone(),
                     address: Some(address),
                     success: false,
-                    error: Some("Skipped: wallet already exists".to_string()),
+                    error: Some("Skipped: wallet already exists".to_owned()),
                 });
                 continue;
             } else {
@@ -664,7 +664,7 @@ pub async fn bulk_import_wallets(
                     name: row.name.clone(),
                     address: Some(address),
                     success: false,
-                    error: Some("Wallet already exists".to_string()),
+                    error: Some("Wallet already exists".to_owned()),
                 });
                 result.failed_count += 1;
                 continue;
@@ -954,11 +954,11 @@ pub async fn create_wallets_batch(
     notes: Option<&str>,
 ) -> Result<Vec<Wallet>, String> {
     if count == 0 {
-        return Err("Count must be greater than 0".to_string());
+        return Err("Count must be greater than 0".to_owned());
     }
 
     if count > 100 {
-        return Err("Maximum batch size is 100 wallets".to_string());
+        return Err("Maximum batch size is 100 wallets".to_owned());
     }
 
     let mut created_wallets = Vec::with_capacity(count as usize);
@@ -990,7 +990,7 @@ pub async fn create_wallets_batch(
     }
 
     if created_wallets.is_empty() {
-        return Err("Failed to create any wallets".to_string());
+        return Err("Failed to create any wallets".to_owned());
     }
 
     logger::info(

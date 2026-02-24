@@ -37,7 +37,7 @@ pub fn validate_row(
         .unwrap_or_default();
 
     if name.is_empty() {
-        errors.push("Name is required".to_string());
+        errors.push("Name is required".to_owned());
     }
 
     // Get private key
@@ -48,7 +48,7 @@ pub fn validate_row(
         .unwrap_or_default();
 
     if private_key.is_empty() {
-        errors.push("Private key is required".to_string());
+        errors.push("Private key is required".to_owned());
         return RowValidationResult::Invalid { row_num, errors };
     }
 
@@ -222,14 +222,14 @@ mod tests {
 
     #[test]
     fn test_validate_row_missing_name() {
-        let row = vec!["".to_string(), "somekey".to_string(), "notes".to_string()];
+        let row = vec!["".to_owned(), "somekey".to_owned(), "notes".to_owned()];
         let result = validate_row(&row, 1, &test_mapping(), &HashSet::new());
         assert!(!result.is_valid());
     }
 
     #[test]
     fn test_validate_row_missing_key() {
-        let row = vec!["Wallet".to_string(), "".to_string(), "notes".to_string()];
+        let row = vec!["Wallet".to_owned(), "".to_owned(), "notes".to_owned()];
         let result = validate_row(&row, 1, &test_mapping(), &HashSet::new());
         assert!(!result.is_valid());
     }

@@ -535,7 +535,7 @@ impl AccountFetcher {
 
             record_safe(Event::info(
                 EventCategory::Pool,
-                Some("rpc_batch_started".to_string()),
+                Some("rpc_batch_started".to_owned()),
                 None,
                 None,
                 serde_json::json!({
@@ -560,7 +560,7 @@ impl AccountFetcher {
 
                     record_safe(Event::info(
                         EventCategory::Pool,
-                        Some("rpc_batch_completed".to_string()),
+                        Some("rpc_batch_completed".to_owned()),
                         None,
                         None,
                         serde_json::json!({
@@ -628,7 +628,7 @@ impl AccountFetcher {
 
                     record_safe(Event::error(
                         EventCategory::Pool,
-                        Some("rpc_batch_failed".to_string()),
+                        Some("rpc_batch_failed".to_owned()),
                         None,
                         None,
                         serde_json::json!({
@@ -712,7 +712,7 @@ impl AccountFetcher {
                         );
                         record_safe(Event::warn(
                             EventCategory::Pool,
-                            Some("account_blacklisted_after_threshold".to_string()),
+                            Some("account_blacklisted_after_threshold".to_owned()),
                             token_mint_str.clone(),
                             pool_id_str.clone(),
                             serde_json::json!({
@@ -776,7 +776,7 @@ impl AccountFetcher {
                             );
                             record_safe(Event::warn(
                                 EventCategory::Pool,
-                                Some("pool_blacklisted_missing_accounts".to_string()),
+                                Some("pool_blacklisted_missing_accounts".to_owned()),
                                 Some(token_mint.clone()),
                                 Some(pool_id.to_string()),
                                 serde_json::json!({
@@ -854,7 +854,7 @@ impl AccountFetcher {
 
                 record_safe(Event::info(
                     EventCategory::Rpc,
-                    Some("get_multiple_accounts_success".to_string()),
+                    Some("get_multiple_accounts_success".to_owned()),
                     None,
                     None,
                     serde_json::json!({
@@ -872,7 +872,7 @@ impl AccountFetcher {
 
                 record_safe(Event::error(
                     EventCategory::Rpc,
-                    Some("get_multiple_accounts_failed".to_string()),
+                    Some("get_multiple_accounts_failed".to_owned()),
                     None,
                     None,
                     serde_json::json!({
@@ -908,7 +908,7 @@ impl AccountFetcher {
         if !missing_accounts.is_empty() {
             record_safe(Event::warn(
                 EventCategory::Pool,
-                Some("accounts_not_found".to_string()),
+                Some("accounts_not_found".to_owned()),
                 None,
                 None,
                 serde_json::json!({

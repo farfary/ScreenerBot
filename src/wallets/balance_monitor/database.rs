@@ -427,7 +427,7 @@ impl WalletDatabase {
                     .map_err(|_| {
                         rusqlite::Error::InvalidColumnType(
                             6,
-                            "computed_at".to_string(),
+                            "computed_at".to_owned(),
                             rusqlite::types::Type::Text,
                         )
                     })?;
@@ -436,7 +436,7 @@ impl WalletDatabase {
                     .map_err(|_| {
                         rusqlite::Error::InvalidColumnType(
                             7,
-                            "valid_until".to_string(),
+                            "valid_until".to_owned(),
                             rusqlite::types::Type::Text,
                         )
                     })?;
@@ -767,7 +767,7 @@ impl WalletDatabase {
                     .map_err(|_| {
                         rusqlite::Error::InvalidColumnType(
                             2,
-                            "Invalid snapshot_time".to_string(),
+                            "Invalid snapshot_time".to_owned(),
                             rusqlite::types::Type::Text,
                         )
                     })?
@@ -818,7 +818,7 @@ impl WalletDatabase {
                     .map_err(|_| {
                         rusqlite::Error::InvalidColumnType(
                             2,
-                            "Invalid snapshot_time".to_string(),
+                            "Invalid snapshot_time".to_owned(),
                             rusqlite::types::Type::Text,
                         )
                     })?
@@ -879,7 +879,7 @@ impl WalletDatabase {
                     .with_timezone(&Utc);
                 (addr, Some(time), Some(balance), Some(count as u32))
             } else {
-                ("Unknown".to_string(), None, None, None)
+                ("Unknown".to_owned(), None, None, None)
             };
 
         // Get database file size
@@ -930,7 +930,7 @@ impl WalletDatabase {
                     .with_timezone(&Utc);
                 (addr, Some(time), Some(balance), Some(count as u32))
             } else {
-                ("Unknown".to_string(), None, None, None)
+                ("Unknown".to_owned(), None, None, None)
             };
 
         // Get database file size

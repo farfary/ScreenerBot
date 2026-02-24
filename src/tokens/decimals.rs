@@ -274,7 +274,7 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
     let account_opt = rpc_client.get_account(&mint_pubkey).await.map_err(|e| {
         let e_str = e.to_string();
         if e_str.contains("could not find account") || e_str.contains("Account not found") {
-            "Account not found".to_string()
+            "Account not found".to_owned()
         } else if e_str.contains("429") || e_str.to_lowercase().contains("rate limit") {
             format!("Rate limited: {e_str}")
         } else {
@@ -282,11 +282,11 @@ pub async fn get_token_decimals_from_chain(mint: &str) -> Result<u8, String> {
         }
     })?;
 
-    let account = account_opt.ok_or_else(|| "Account not found".to_string())?;
+    let account = account_opt.ok_or_else(|| "Account not found".to_owned())?;
 
     // Check account data
     if account.data.is_empty() {
-        return Err("Account data is empty".to_string());
+        return Err("Account data is empty".to_owned());
     }
 
     // Check if it's an SPL Token mint

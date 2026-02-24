@@ -336,7 +336,7 @@ impl TokenDatabase {
             "SELECT ut.mint, ut.last_rejection_reason, ut.last_rejection_source, ut.last_rejection_at 
              FROM update_tracking ut 
              LEFT JOIN tokens t ON ut.mint = t.mint 
-             WHERE ut.last_rejection_reason IS NOT NULL".to_string()
+             WHERE ut.last_rejection_reason IS NOT NULL".to_owned()
         } else {
             "SELECT mint, last_rejection_reason, last_rejection_source, last_rejection_at 
              FROM update_tracking 
@@ -459,7 +459,7 @@ impl TokenDatabase {
 
         // Query rejection_history table for time-range stats
         let mut query =
-            "SELECT reason, source, COUNT(*) as count FROM rejection_history WHERE 1=1".to_string();
+            "SELECT reason, source, COUNT(*) as count FROM rejection_history WHERE 1=1".to_owned();
 
         if start_time.is_some() {
             query.push_str(" AND rejected_at >= :start_time");

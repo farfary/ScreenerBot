@@ -33,7 +33,7 @@ pub async fn queue_price_for_storage(price: PriceResult) -> Result<(), String> {
     let db_ref = match GLOBAL_POOLS_DB.read() {
         Ok(guard) => match guard.as_ref() {
             Some(db) => db.clone_for_async(),
-            None => return Err("Database not initialized".to_string()),
+            None => return Err("Database not initialized".to_owned()),
         },
         Err(e) => return Err(format!("Failed to acquire read lock: {e}")),
     };
@@ -63,7 +63,7 @@ pub async fn get_extended_price_history(
     let db_ref = match GLOBAL_POOLS_DB.read() {
         Ok(guard) => match guard.as_ref() {
             Some(db) => db.clone_for_async(),
-            None => return Err("Database not initialized".to_string()),
+            None => return Err("Database not initialized".to_owned()),
         },
         Err(e) => return Err(format!("Failed to acquire read lock: {e}")),
     };
@@ -117,7 +117,7 @@ pub async fn add_account_to_blacklist(
     let db_ref = match GLOBAL_POOLS_DB.read() {
         Ok(guard) => match guard.as_ref() {
             Some(db) => db.clone_for_async(),
-            None => return Err("Database not initialized".to_string()),
+            None => return Err("Database not initialized".to_owned()),
         },
         Err(e) => return Err(format!("Failed to acquire read lock: {e}")),
     };
@@ -131,7 +131,7 @@ pub async fn is_account_blacklisted(account_pubkey: &str) -> Result<bool, String
     let db_ref = match GLOBAL_POOLS_DB.read() {
         Ok(guard) => match guard.as_ref() {
             Some(db) => db.clone_for_async(),
-            None => return Err("Database not initialized".to_string()),
+            None => return Err("Database not initialized".to_owned()),
         },
         Err(e) => return Err(format!("Failed to acquire read lock: {e}")),
     };
@@ -148,7 +148,7 @@ pub async fn add_pool_to_blacklist(
     let db_ref = match GLOBAL_POOLS_DB.read() {
         Ok(guard) => match guard.as_ref() {
             Some(db) => db.clone_for_async(),
-            None => return Err("Database not initialized".to_string()),
+            None => return Err("Database not initialized".to_owned()),
         },
         Err(e) => return Err(format!("Failed to acquire read lock: {e}")),
     };
@@ -162,7 +162,7 @@ pub async fn is_pool_blacklisted(pool_id: &str) -> Result<bool, String> {
     let db_ref = match GLOBAL_POOLS_DB.read() {
         Ok(guard) => match guard.as_ref() {
             Some(db) => db.clone_for_async(),
-            None => return Err("Database not initialized".to_string()),
+            None => return Err("Database not initialized".to_owned()),
         },
         Err(e) => return Err(format!("Failed to acquire read lock: {e}")),
     };

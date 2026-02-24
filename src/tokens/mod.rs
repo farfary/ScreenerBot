@@ -162,10 +162,10 @@ pub use favorites::{
 /// ```
 pub async fn request_immediate_update(mint: &str) -> TokenResult<UpdateResult> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Token database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
 
     let coordinator = service::get_rate_coordinator()
-        .ok_or_else(|| TokenError::Database("Rate limit coordinator not available".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Rate limit coordinator not available".to_owned()))?;
 
     updates::force_update_token(mint, db, coordinator).await
 }

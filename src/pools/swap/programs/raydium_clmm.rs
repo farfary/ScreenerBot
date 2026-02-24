@@ -82,7 +82,7 @@ impl RaydiumClmmSwap {
 
         // Use the centralized decoder to extract pool data
         RaydiumClmmDecoder::extract_pool_data(&accounts).ok_or_else(|| {
-            SwapError::DecoderError("Failed to decode Raydium CLMM pool".to_string())
+            SwapError::DecoderError("Failed to decode Raydium CLMM pool".to_owned())
         })
     }
 
@@ -132,7 +132,7 @@ impl RaydiumClmmSwap {
                 )
             } else {
                 return Err(SwapError::InvalidPool(
-                    "Pool does not contain SOL".to_string(),
+                    "Pool does not contain SOL".to_owned(),
                 ));
             };
 
@@ -229,7 +229,7 @@ impl RaydiumClmmSwap {
             (token_mint, token_program_id, true)
         } else {
             return Err(SwapError::InvalidPool(
-                "Pool does not contain SOL".to_string(),
+                "Pool does not contain SOL".to_owned(),
             ));
         };
 
@@ -473,10 +473,10 @@ impl RaydiumClmmSwap {
         if account.data.len() >= 72 {
             let amount_bytes: [u8; 8] = account.data[64..72]
                 .try_into()
-                .map_err(|_| SwapError::RpcError("Invalid token account data".to_string()))?;
+                .map_err(|_| SwapError::RpcError("Invalid token account data".to_owned()))?;
             Ok(u64::from_le_bytes(amount_bytes))
         } else {
-            Err(SwapError::RpcError("Account data too short".to_string()))
+            Err(SwapError::RpcError("Account data too short".to_owned()))
         }
     }
 

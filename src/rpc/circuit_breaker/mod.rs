@@ -245,7 +245,7 @@ mod tests {
         let healthy_list = manager.get_healthy_providers().await;
         let unhealthy_list = manager.get_unhealthy_providers().await;
 
-        assert!(healthy_list.contains(&"healthy".to_string()));
+        assert!(healthy_list.contains(&"healthy".to_owned()));
         assert!(unhealthy_list.iter().any(|(id, _)| id == "unhealthy"));
     }
 }

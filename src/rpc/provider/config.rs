@@ -66,7 +66,7 @@ impl ProviderConfig {
 impl Default for ProviderConfig {
     fn default() -> Self {
         Self {
-            id: "default".to_string(),
+            id: "default".to_owned(),
             url: String::new(),
             kind: ProviderKind::Unknown,
             priority: 100,

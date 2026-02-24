@@ -113,7 +113,7 @@ pub fn analyze_token_pair(pool_info: PoolMintVaultInfo) -> TokenPairInfo {
         // mint1 is SOL, mint2 is token: SOL/TOKEN configuration
         if is_sol_mint(mint2) {
             // Both are SOL variants - invalid
-            return TokenPairInfo::invalid("Both mints are SOL variants".to_string());
+            return TokenPairInfo::invalid("Both mints are SOL variants".to_owned());
         }
         (
             mint2.clone(),
@@ -230,7 +230,7 @@ pub fn read_pubkey_at_offset(data: &[u8], offset: &mut usize) -> Result<String, 
     let pubkey = Pubkey::new_from_array(
         pubkey_bytes
             .try_into()
-            .map_err(|_| "Invalid pubkey bytes".to_string())?,
+            .map_err(|_| "Invalid pubkey bytes".to_owned())?,
     );
 
     Ok(pubkey.to_string())
@@ -261,7 +261,7 @@ pub fn read_pubkey_struct_at_offset(
 /// Read a u8 value from data at given offset, advancing the offset
 pub fn read_u8_at_offset(data: &[u8], offset: &mut usize) -> Result<u8, String> {
     if *offset >= data.len() {
-        return Err("Insufficient data for u8".to_string());
+        return Err("Insufficient data for u8".to_owned());
     }
 
     let value = data[*offset];
@@ -272,7 +272,7 @@ pub fn read_u8_at_offset(data: &[u8], offset: &mut usize) -> Result<u8, String> 
 /// Read a u16 value from data at given offset, advancing the offset
 pub fn read_u16_at_offset(data: &[u8], offset: &mut usize) -> Result<u16, String> {
     if *offset + 2 > data.len() {
-        return Err("Insufficient data for u16".to_string());
+        return Err("Insufficient data for u16".to_owned());
     }
 
     let value_bytes = &data[*offset..*offset + 2];
@@ -280,7 +280,7 @@ pub fn read_u16_at_offset(data: &[u8], offset: &mut usize) -> Result<u16, String
     let value = u16::from_le_bytes(
         value_bytes
             .try_into()
-            .map_err(|_| "Failed to parse u16".to_string())?,
+            .map_err(|_| "Failed to parse u16".to_owned())?,
     );
     Ok(value)
 }
@@ -288,7 +288,7 @@ pub fn read_u16_at_offset(data: &[u8], offset: &mut usize) -> Result<u16, String
 /// Read a u32 value from data at given offset, advancing the offset
 pub fn read_u32_at_offset(data: &[u8], offset: &mut usize) -> Result<u32, String> {
     if *offset + 4 > data.len() {
-        return Err("Insufficient data for u32".to_string());
+        return Err("Insufficient data for u32".to_owned());
     }
 
     let value_bytes = &data[*offset..*offset + 4];
@@ -296,7 +296,7 @@ pub fn read_u32_at_offset(data: &[u8], offset: &mut usize) -> Result<u32, String
     let value = u32::from_le_bytes(
         value_bytes
             .try_into()
-            .map_err(|_| "Failed to parse u32".to_string())?,
+            .map_err(|_| "Failed to parse u32".to_owned())?,
     );
     Ok(value)
 }
@@ -304,7 +304,7 @@ pub fn read_u32_at_offset(data: &[u8], offset: &mut usize) -> Result<u32, String
 /// Read a u64 value from data at given offset, advancing the offset
 pub fn read_u64_at_offset(data: &[u8], offset: &mut usize) -> Result<u64, String> {
     if *offset + 8 > data.len() {
-        return Err("Insufficient data for u64".to_string());
+        return Err("Insufficient data for u64".to_owned());
     }
 
     let value_bytes = &data[*offset..*offset + 8];
@@ -312,7 +312,7 @@ pub fn read_u64_at_offset(data: &[u8], offset: &mut usize) -> Result<u64, String
     let value = u64::from_le_bytes(
         value_bytes
             .try_into()
-            .map_err(|_| "Failed to parse u64".to_string())?,
+            .map_err(|_| "Failed to parse u64".to_owned())?,
     );
     Ok(value)
 }
@@ -320,7 +320,7 @@ pub fn read_u64_at_offset(data: &[u8], offset: &mut usize) -> Result<u64, String
 /// Read a u128 value from data at given offset, advancing the offset
 pub fn read_u128_at_offset(data: &[u8], offset: &mut usize) -> Result<u128, String> {
     if *offset + 16 > data.len() {
-        return Err("Insufficient data for u128".to_string());
+        return Err("Insufficient data for u128".to_owned());
     }
 
     let value_bytes = &data[*offset..*offset + 16];
@@ -328,7 +328,7 @@ pub fn read_u128_at_offset(data: &[u8], offset: &mut usize) -> Result<u128, Stri
     let value = u128::from_le_bytes(
         value_bytes
             .try_into()
-            .map_err(|_| "Failed to parse u128".to_string())?,
+            .map_err(|_| "Failed to parse u128".to_owned())?,
     );
     Ok(value)
 }
@@ -336,7 +336,7 @@ pub fn read_u128_at_offset(data: &[u8], offset: &mut usize) -> Result<u128, Stri
 /// Read a bool value from data at given offset, advancing the offset
 pub fn read_bool_at_offset(data: &[u8], offset: &mut usize) -> Result<bool, String> {
     if *offset >= data.len() {
-        return Err("Insufficient data for bool".to_string());
+        return Err("Insufficient data for bool".to_owned());
     }
 
     let value = data[*offset] != 0;
@@ -377,7 +377,7 @@ pub fn validate_sol_pool(pool_info: PoolMintVaultInfo) -> Result<TokenPairInfo, 
     let pair_info = analyze_token_pair(pool_info);
 
     if !pair_info.is_sol_pair {
-        Err("Pool does not contain SOL as base or quote".to_string())
+        Err("Pool does not contain SOL as base or quote".to_owned())
     } else {
         Ok(pair_info)
     }

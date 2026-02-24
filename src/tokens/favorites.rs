@@ -115,7 +115,7 @@ pub fn add_favorite(
 
     // Fetch the newly created/updated favorite
     get_favorite_internal(&conn, &request.mint)?
-        .ok_or_else(|| TokenError::Database("Failed to retrieve favorite after insert".to_string()))
+        .ok_or_else(|| TokenError::Database("Failed to retrieve favorite after insert".to_owned()))
 }
 
 /// Remove a token from favorites
@@ -289,7 +289,7 @@ pub fn get_favorites_count(conn: &Mutex<Connection>) -> TokenResult<usize> {
 /// Add a favorite (async wrapper)
 pub async fn add_favorite_async(request: AddFavoriteRequest) -> TokenResult<FavoriteToken> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Token database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
 
     tokio::task::spawn_blocking(move || add_favorite(&db.connection(), &request))
         .await
@@ -299,7 +299,7 @@ pub async fn add_favorite_async(request: AddFavoriteRequest) -> TokenResult<Favo
 /// Remove a favorite (async wrapper)
 pub async fn remove_favorite_async(mint: String) -> TokenResult<bool> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Token database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
 
     tokio::task::spawn_blocking(move || remove_favorite(&db.connection(), &mint))
         .await
@@ -309,7 +309,7 @@ pub async fn remove_favorite_async(mint: String) -> TokenResult<bool> {
 /// Get all favorites (async wrapper)
 pub async fn get_favorites_async() -> TokenResult<Vec<FavoriteToken>> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Token database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
 
     tokio::task::spawn_blocking(move || get_favorites(&db.connection()))
         .await
@@ -319,7 +319,7 @@ pub async fn get_favorites_async() -> TokenResult<Vec<FavoriteToken>> {
 /// Get a single favorite (async wrapper)
 pub async fn get_favorite_async(mint: String) -> TokenResult<Option<FavoriteToken>> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Token database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
 
     tokio::task::spawn_blocking(move || get_favorite(&db.connection(), &mint))
         .await
@@ -332,7 +332,7 @@ pub async fn update_favorite_async(
     request: UpdateFavoriteRequest,
 ) -> TokenResult<Option<FavoriteToken>> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Token database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
 
     tokio::task::spawn_blocking(move || update_favorite(&db.connection(), &mint, &request))
         .await
@@ -353,7 +353,7 @@ pub async fn is_favorite_async(mint: String) -> bool {
 /// Get count of favorites (async wrapper)
 pub async fn get_favorites_count_async() -> TokenResult<usize> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Token database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Token database not initialized".to_owned()))?;
 
     tokio::task::spawn_blocking(move || get_favorites_count(&db.connection()))
         .await

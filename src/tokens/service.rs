@@ -60,7 +60,7 @@ impl Service for TokensServiceNew {
         let db_path = crate::paths::get_tokens_db_path();
         let db = TokenDatabase::new(&db_path.to_string_lossy()).map_err(|e| {
             crate::Error::Service(crate::errors::ServiceError::Initialize {
-                service: "tokens_new".to_string(),
+                service: "tokens_new".to_owned(),
                 message: format!("Failed to create database: {e}"),
             })
         })?;
@@ -70,7 +70,7 @@ impl Service for TokensServiceNew {
         // Initialize global database for decimals module and other components
         crate::tokens::database::init_global_database(db_arc.clone()).map_err(|e| {
             crate::Error::Service(crate::errors::ServiceError::Initialize {
-                service: "tokens_new".to_string(),
+                service: "tokens_new".to_owned(),
                 message: format!("Failed to init global database: {e}"),
             })
         })?;
@@ -85,13 +85,13 @@ impl Service for TokensServiceNew {
                 .await
                 .map_err(|e| {
                     crate::Error::Service(crate::errors::ServiceError::Initialize {
-                        service: "tokens_new".to_string(),
+                        service: "tokens_new".to_owned(),
                         message: format!("Failed to spawn decimals preload task: {e}"),
                     })
                 })?
                 .map_err(|e| {
                     crate::Error::Service(crate::errors::ServiceError::Initialize {
-                        service: "tokens_new".to_string(),
+                        service: "tokens_new".to_owned(),
                         message: format!("Failed to fetch decimals from database: {e}"),
                     })
                 })?;
@@ -160,8 +160,8 @@ impl Service for TokensServiceNew {
             .as_ref()
             .ok_or_else(|| {
                 crate::Error::Service(crate::errors::ServiceError::Start {
-                    service: "tokens_new".to_string(),
-                    message: "Database not initialized".to_string(),
+                    service: "tokens_new".to_owned(),
+                    message: "Database not initialized".to_owned(),
                 })
             })?
             .clone();
@@ -304,26 +304,26 @@ impl Service for TokensServiceNew {
 
         let mut metrics = ServiceMetrics::default();
         metrics.custom_metrics.insert(
-            "dexscreener_cache_hit_rate".to_string(),
+            "dexscreener_cache_hit_rate".to_owned(),
             dex_metrics.hit_rate(),
         );
         metrics
             .custom_metrics
-            .insert("dexscreener_cache_entries".to_string(), dex_size as f64);
+            .insert("dexscreener_cache_entries".to_owned(), dex_size as f64);
         metrics.custom_metrics.insert(
-            "geckoterminal_cache_hit_rate".to_string(),
+            "geckoterminal_cache_hit_rate".to_owned(),
             gecko_metrics.hit_rate(),
         );
         metrics
             .custom_metrics
-            .insert("geckoterminal_cache_entries".to_string(), gecko_size as f64);
+            .insert("geckoterminal_cache_entries".to_owned(), gecko_size as f64);
         metrics.custom_metrics.insert(
-            "rugcheck_cache_hit_rate".to_string(),
+            "rugcheck_cache_hit_rate".to_owned(),
             rug_metrics.hit_rate(),
         );
         metrics
             .custom_metrics
-            .insert("rugcheck_cache_entries".to_string(), rug_size as f64);
+            .insert("rugcheck_cache_entries".to_owned(), rug_size as f64);
         metrics
     }
 }

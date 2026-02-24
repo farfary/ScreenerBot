@@ -29,7 +29,7 @@ pub fn parse_csv(content: &str) -> Result<(Vec<String>, Vec<Vec<String>>), Strin
         .collect();
 
     if headers.is_empty() {
-        return Err("CSV file has no headers".to_string());
+        return Err("CSV file has no headers".to_owned());
     }
 
     // Parse rows
@@ -61,7 +61,7 @@ pub fn parse_excel(
     // Get sheet names
     let sheet_names = workbook.sheet_names().to_vec();
     if sheet_names.is_empty() {
-        return Err("Excel file has no sheets".to_string());
+        return Err("Excel file has no sheets".to_owned());
     }
 
     // Select sheet
@@ -85,7 +85,7 @@ pub fn parse_excel(
         .map_err(|e| format!("Failed to read sheet '{target_sheet}': {e}"))?;
 
     if range.is_empty() {
-        return Err("Sheet is empty".to_string());
+        return Err("Sheet is empty".to_owned());
     }
 
     // Convert to rows
@@ -95,14 +95,14 @@ pub fn parse_excel(
         .collect();
 
     if all_rows.is_empty() {
-        return Err("No data found in sheet".to_string());
+        return Err("No data found in sheet".to_owned());
     }
 
     // First row is headers
     let headers = all_rows.remove(0);
 
     if headers.is_empty() || headers.iter().all(|h| h.is_empty()) {
-        return Err("Excel file has no headers".to_string());
+        return Err("Excel file has no headers".to_owned());
     }
 
     Ok((headers, all_rows))
@@ -195,9 +195,9 @@ mod tests {
     #[test]
     fn test_detect_columns_basic() {
         let headers = vec![
-            "Name".to_string(),
-            "Private Key".to_string(),
-            "Notes".to_string(),
+            "Name".to_owned(),
+            "Private Key".to_owned(),
+            "Notes".to_owned(),
         ];
         let mapping = detect_columns(&headers);
         assert_eq!(mapping.name_col, Some(0));
@@ -209,10 +209,10 @@ mod tests {
     #[test]
     fn test_detect_columns_variations() {
         let headers = vec![
-            "wallet_name".to_string(),
-            "secret_key".to_string(),
-            "description".to_string(),
-            "address".to_string(),
+            "wallet_name".to_owned(),
+            "secret_key".to_owned(),
+            "description".to_owned(),
+            "address".to_owned(),
         ];
         let mapping = detect_columns(&headers);
         assert_eq!(mapping.name_col, Some(0));

@@ -323,7 +323,7 @@ async fn refresh_token_pools_and_cache(
     let mint_trimmed = mint.trim();
     if mint_trimmed.is_empty() {
         return Err(TokenError::InvalidMint(
-            "Mint address cannot be empty".to_string(),
+            "Mint address cannot be empty".to_owned(),
         ));
     }
 
@@ -344,7 +344,7 @@ async fn refresh_token_pools_and_cache(
     }
 
     let coordinator = get_rate_coordinator().ok_or_else(|| {
-        TokenError::Database("Rate limit coordinator not initialized".to_string())
+        TokenError::Database("Rate limit coordinator not initialized".to_owned())
     })?;
 
     let (pools_map, success_sources) = match api::fetch_from_sources(mint_trimmed, coordinator)
@@ -462,7 +462,7 @@ async fn refresh_token_pools_and_cache(
         .pools
         .first()
         .map(|pool| (pool.pool_address.clone(), calculate_pool_metric(pool)))
-        .unwrap_or_else(|| ("none".to_string(), 0.0));
+        .unwrap_or_else(|| ("none".to_owned(), 0.0));
     let top_pool_value = if top_pool == "none" {
         serde_json::Value::Null
     } else {
@@ -529,7 +529,7 @@ async fn get_snapshot_internal(
     let trimmed = mint.trim();
     if trimmed.is_empty() {
         return Err(TokenError::InvalidMint(
-            "Mint address cannot be empty".to_string(),
+            "Mint address cannot be empty".to_owned(),
         ));
     }
 
@@ -641,7 +641,7 @@ pub async fn fetch_immediate(mint: &str) -> TokenResult<Option<TokenPoolsSnapsho
     let trimmed = mint.trim();
     if trimmed.is_empty() {
         return Err(TokenError::InvalidMint(
-            "Mint address cannot be empty".to_string(),
+            "Mint address cannot be empty".to_owned(),
         ));
     }
 

@@ -288,7 +288,7 @@ impl PoolsDatabase {
                 .map_err(|e| format!("Failed to queue price for storage: {e}"))?;
             Ok(())
         } else {
-            Err("Write queue not initialized".to_string())
+            Err("Write queue not initialized".to_owned())
         }
     }
 
@@ -308,7 +308,7 @@ impl PoolsDatabase {
 
             let conn = connection_guard
                 .as_ref()
-                .ok_or_else(|| "Database not initialized".to_string())?;
+                .ok_or_else(|| "Database not initialized".to_owned())?;
 
             let mut stmt = conn
                 .prepare(
@@ -358,7 +358,7 @@ impl PoolsDatabase {
 
             let conn = connection_guard
                 .as_ref()
-                .ok_or_else(|| "Database not initialized".to_string())?;
+                .ok_or_else(|| "Database not initialized".to_owned())?;
 
             let mut results = Vec::new();
 
@@ -428,7 +428,7 @@ impl PoolsDatabase {
 
             let conn = connection_guard
                 .as_ref()
-                .ok_or_else(|| "Database not initialized".to_string())?;
+                .ok_or_else(|| "Database not initialized".to_owned())?;
 
             // Calculate cutoff date
             let cutoff_date =
@@ -468,7 +468,7 @@ impl PoolsDatabase {
 
             let conn = connection_guard
                 .as_ref()
-                .ok_or_else(|| "Database not initialized".to_string())?;
+                .ok_or_else(|| "Database not initialized".to_owned())?;
 
             let deleted = conn
                 .execute(
@@ -496,7 +496,7 @@ impl PoolsDatabase {
 
             let conn = connection_guard
                 .as_ref()
-                .ok_or_else(|| "Database not initialized".to_string())?;
+                .ok_or_else(|| "Database not initialized".to_owned())?;
 
             let mut stmt = conn
                 .prepare(
@@ -553,7 +553,7 @@ impl PoolsDatabase {
 
             let conn = connection_guard
                 .as_ref()
-                .ok_or_else(|| "Database not initialized".to_string())?;
+                .ok_or_else(|| "Database not initialized".to_owned())?;
 
             let mut stmt = conn
                 .prepare("SELECT DISTINCT mint FROM price_history")

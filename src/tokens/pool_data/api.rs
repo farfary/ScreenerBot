@@ -53,7 +53,7 @@ pub async fn fetch_from_sources(
                             .fetch_token_pools(&mint, None)
                             .await
                             .map_err(|e| TokenError::Api {
-                                source: "DexScreener".to_string(),
+                                source: "DexScreener".to_owned(),
                                 message: e,
                             });
                         // Only forget permit if API call succeeded
@@ -64,8 +64,8 @@ pub async fn fetch_from_sources(
                     }
                     Ok(Err(e)) => Err(e),
                     Err(_) => Err(TokenError::RateLimit {
-                        source: "DexScreener".to_string(),
-                        message: "Rate limit acquisition timed out".to_string(),
+                        source: "DexScreener".to_owned(),
+                        message: "Rate limit acquisition timed out".to_owned(),
                     }),
                 }
             } else {
@@ -91,7 +91,7 @@ pub async fn fetch_from_sources(
                         // Got permit, proceed with fetch
                         let result = api.geckoterminal.fetch_pools(&mint).await.map_err(|e| {
                             TokenError::Api {
-                                source: "GeckoTerminal".to_string(),
+                                source: "GeckoTerminal".to_owned(),
                                 message: e,
                             }
                         });
@@ -103,8 +103,8 @@ pub async fn fetch_from_sources(
                     }
                     Ok(Err(e)) => Err(e),
                     Err(_) => Err(TokenError::RateLimit {
-                        source: "GeckoTerminal".to_string(),
-                        message: "Rate limit acquisition timed out".to_string(),
+                        source: "GeckoTerminal".to_owned(),
+                        message: "Rate limit acquisition timed out".to_owned(),
                     }),
                 }
             } else {
@@ -190,7 +190,7 @@ pub async fn fetch_from_sources(
     let attempted_sources = (should_fetch_dex as usize) + (should_fetch_gecko as usize);
     if attempted_sources > 0 && success_sources == 0 {
         let combined = if failures.is_empty() {
-            "all pool sources failed without details".to_string()
+            "all pool sources failed without details".to_owned()
         } else {
             failures.join(" | ")
         };
@@ -205,7 +205,7 @@ pub async fn fetch_from_sources(
         )
         .await;
         return Err(TokenError::Api {
-            source: "TokenPools".to_string(),
+            source: "TokenPools".to_owned(),
             message: combined,
         });
     }

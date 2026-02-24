@@ -338,7 +338,7 @@ impl MoonitAmmDecoder {
             price_sol,
             sol_reserves,
             token_reserves,
-            "".to_string(), // Pool address not needed for calculation
+            "".to_owned(), // Pool address not needed for calculation
         ))
     }
 }

@@ -377,7 +377,7 @@ pub async fn get_recent_wallet_snapshots(limit: usize) -> Result<Vec<WalletSnaps
             // Use the synchronous version to avoid lifetime issues
             db.get_recent_snapshots_sync(limit)
         }
-        None => Err("Wallet database not initialized".to_string()),
+        None => Err("Wallet database not initialized".to_owned()),
     }
 }
 
@@ -386,7 +386,7 @@ pub async fn get_wallet_monitor_stats() -> Result<WalletMonitorStats, String> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_monitor_stats_sync(),
-        None => Err("Wallet database not initialized".to_string()),
+        None => Err("Wallet database not initialized".to_owned()),
     }
 }
 
@@ -395,7 +395,7 @@ pub async fn get_snapshot_token_balances(snapshot_id: i64) -> Result<Vec<TokenBa
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_token_balances_sync(snapshot_id),
-        None => Err("Wallet database not initialized".to_string()),
+        None => Err("Wallet database not initialized".to_owned()),
     }
 }
 
@@ -404,7 +404,7 @@ pub async fn get_snapshot_nft_balances(snapshot_id: i64) -> Result<Vec<NftBalanc
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_nft_balances_sync(snapshot_id),
-        None => Err("Wallet database not initialized".to_string()),
+        None => Err("Wallet database not initialized".to_owned()),
     }
 }
 
@@ -419,7 +419,7 @@ pub async fn get_balance_at_time(target_time: DateTime<Utc>) -> Result<Option<f6
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_balance_at_time_sync(target_time),
-        None => Err("Wallet database not initialized".to_string()),
+        None => Err("Wallet database not initialized".to_owned()),
     }
 }
 
@@ -428,14 +428,14 @@ pub async fn get_flow_cache_stats() -> Result<WalletFlowCacheStats, String> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => db.get_flow_cache_stats_sync(),
-        None => Err("Wallet database not initialized".to_string()),
+        None => Err("Wallet database not initialized".to_owned()),
     }
 }
 
 pub async fn refresh_dashboard_cache(window_hours: i64) -> Result<(), String> {
     let window_hours = clamp_window_hours(window_hours);
     let (window_key, canonical_hours) =
-        canonical_window(window_hours).ok_or_else(|| "Unsupported window".to_string())?;
+        canonical_window(window_hours).ok_or_else(|| "Unsupported window".to_owned())?;
 
     {
         let db_guard = GLOBAL_WALLET_DB.lock().await;

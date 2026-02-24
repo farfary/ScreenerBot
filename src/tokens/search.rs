@@ -141,7 +141,7 @@ fn is_mint_address(query: &str) -> bool {
 pub async fn search_tokens(query: &str, limit: Option<usize>) -> Result<SearchResults, String> {
     let query = query.trim();
     if query.is_empty() {
-        return Err("Search query cannot be empty".to_string());
+        return Err("Search query cannot be empty".to_owned());
     }
 
     let max_results = limit.unwrap_or(20).min(50);
@@ -180,7 +180,7 @@ pub async fn search_tokens(query: &str, limit: Option<usize>) -> Result<SearchRe
                             market_cap: pool.market_cap,
                             volume_24h: pool.volume_h24,
                             liquidity_usd: pool.liquidity_usd,
-                            source: "dexscreener".to_string(),
+                            source: "dexscreener".to_owned(),
                         };
                         results_map.insert(result.mint.clone(), result);
                     }
@@ -210,7 +210,7 @@ pub async fn search_tokens(query: &str, limit: Option<usize>) -> Result<SearchRe
                                 market_cap: pool.market_cap_usd,
                                 volume_24h: pool.volume_h24,
                                 liquidity_usd: pool.reserve_usd,
-                                source: "geckoterminal".to_string(),
+                                source: "geckoterminal".to_owned(),
                             };
                             results_map.insert(result.mint.clone(), result);
                         }
@@ -252,7 +252,7 @@ pub async fn search_tokens(query: &str, limit: Option<usize>) -> Result<SearchRe
                                 market_cap: pool.market_cap,
                                 volume_24h: pool.volume_h24,
                                 liquidity_usd: pool.liquidity_usd,
-                                source: "dexscreener".to_string(),
+                                source: "dexscreener".to_owned(),
                             };
                             results_map.insert(result.mint.clone(), result);
                         }

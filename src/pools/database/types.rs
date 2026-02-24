@@ -69,7 +69,7 @@ impl DbPriceResult {
             .map_err(|_| {
                 rusqlite::Error::InvalidColumnType(
                     0,
-                    "created_at".to_string(),
+                    "created_at".to_owned(),
                     rusqlite::types::Type::Text,
                 )
             })?

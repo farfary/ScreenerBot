@@ -41,11 +41,11 @@ pub fn extract_dex_label(pool: &TokenPoolInfo) -> String {
     }
 
     if pool.sources.dexscreener.is_some() {
-        "dexscreener".to_string()
+        "dexscreener".to_owned()
     } else if pool.sources.geckoterminal.is_some() {
-        "geckoterminal".to_string()
+        "geckoterminal".to_owned()
     } else {
-        "unknown".to_string()
+        "unknown".to_owned()
     }
 }
 

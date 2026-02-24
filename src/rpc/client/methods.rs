@@ -779,7 +779,7 @@ impl RpcClientMethods for RpcClient {
                 let status: TransactionStatus =
                     serde_json::from_value(value.clone()).map_err(|e| {
                         crate::Error::Data(crate::errors::DataError::ParseError {
-                            data_type: "TransactionStatus".to_string(),
+                            data_type: "TransactionStatus".to_owned(),
                             error: e.to_string(),
                         })
                     })?;
@@ -882,7 +882,7 @@ impl RpcClientMethods for RpcClient {
             .decode(transaction_base64)
             .map_err(|e| {
                 crate::Error::Data(crate::errors::DataError::ParseError {
-                    data_type: "base64 transaction".to_string(),
+                    data_type: "base64 transaction".to_owned(),
                     error: e.to_string(),
                 })
             })?;
@@ -891,7 +891,7 @@ impl RpcClientMethods for RpcClient {
         let mut transaction: VersionedTransaction =
             bincode::deserialize(&tx_bytes).map_err(|e| {
                 crate::Error::Data(crate::errors::DataError::ParseError {
-                    data_type: "VersionedTransaction".to_string(),
+                    data_type: "VersionedTransaction".to_owned(),
                     error: e.to_string(),
                 })
             })?;
@@ -1251,7 +1251,7 @@ impl RpcClientMethods for RpcClient {
 
         let signature = Signature::from_str(signature_str).map_err(|e| {
             crate::Error::Data(crate::errors::DataError::ParseError {
-                data_type: "Signature".to_string(),
+                data_type: "Signature".to_owned(),
                 error: e.to_string(),
             })
         })?;
@@ -1286,21 +1286,21 @@ impl RpcClientMethods for RpcClient {
 
         if let Some(limit_val) = limit {
             config.insert(
-                "limit".to_string(),
+                "limit".to_owned(),
                 serde_json::Value::Number(limit_val.into()),
             );
         }
 
         if let Some(before_sig) = before {
             config.insert(
-                "before".to_string(),
+                "before".to_owned(),
                 serde_json::Value::String(before_sig.to_string()),
             );
         }
 
         config.insert(
-            "commitment".to_string(),
-            serde_json::Value::String("confirmed".to_string()),
+            "commitment".to_owned(),
+            serde_json::Value::String("confirmed".to_owned()),
         );
 
         let params = serde_json::json!([address.to_string(), serde_json::Value::Object(config)]);
@@ -1427,20 +1427,20 @@ impl RpcClientMethods for RpcClient {
         let mut config = serde_json::Map::new();
 
         config.insert(
-            "encoding".to_string(),
+            "encoding".to_owned(),
             serde_json::Value::String(encoding.unwrap_or("base64").to_string()),
         );
 
         if let Some(commitment_level) = commitment {
             config.insert(
-                "commitment".to_string(),
+                "commitment".to_owned(),
                 serde_json::Value::String(commitment_to_string(commitment_level).to_string()),
             );
         }
 
         if let Some((offset, length)) = data_slice {
             config.insert(
-                "dataSlice".to_string(),
+                "dataSlice".to_owned(),
                 serde_json::json!({
                     "offset": offset,
                     "length": length
@@ -1463,7 +1463,7 @@ impl RpcClientMethods for RpcClient {
                 .collect();
 
             config.insert(
-                "filters".to_string(),
+                "filters".to_owned(),
                 serde_json::Value::Array(filters_json),
             );
         }
@@ -1569,8 +1569,8 @@ impl RpcClientMethods for RpcClient {
             .and_then(|v| v.as_array())
             .ok_or_else(|| {
                 crate::Error::Data(crate::errors::DataError::InvalidFormat {
-                    expected: "value array".to_string(),
-                    received: "missing or not an array".to_string(),
+                    expected: "value array".to_owned(),
+                    received: "missing or not an array".to_owned(),
                 })
             })?;
 
@@ -1582,14 +1582,14 @@ impl RpcClientMethods for RpcClient {
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| {
                     crate::Error::Data(crate::errors::DataError::InvalidFormat {
-                        expected: "address field".to_string(),
-                        received: "missing or not a string".to_string(),
+                        expected: "address field".to_owned(),
+                        received: "missing or not a string".to_owned(),
                     })
                 })?;
 
             let address = Pubkey::from_str(address_str).map_err(|e| {
                 crate::Error::Data(crate::errors::DataError::ParseError {
-                    data_type: "Pubkey".to_string(),
+                    data_type: "Pubkey".to_owned(),
                     error: e.to_string(),
                 })
             })?;
@@ -1690,7 +1690,7 @@ impl RpcClientMethods for RpcClient {
         let before_sig = match before {
             Some(sig_str) => Some(Signature::from_str(sig_str).map_err(|e| {
                 crate::Error::Data(crate::errors::DataError::ParseError {
-                    data_type: "Signature".to_string(),
+                    data_type: "Signature".to_owned(),
                     error: e.to_string(),
                 })
             })?),
@@ -1773,8 +1773,8 @@ fn parse_account_from_json(value: &serde_json::Value) -> crate::Result<Option<Ac
 
     let data = value.get("data").ok_or_else(|| {
         Error::Data(DataError::ParseError {
-            data_type: "account".to_string(),
-            error: "Missing data field".to_string(),
+            data_type: "account".to_owned(),
+            error: "Missing data field".to_owned(),
         })
     })?;
 
@@ -1782,8 +1782,8 @@ fn parse_account_from_json(value: &serde_json::Value) -> crate::Result<Option<Ac
         // [data_base64, encoding]
         let encoded = arr.first().and_then(|v| v.as_str()).ok_or_else(|| {
             Error::Data(DataError::ParseError {
-                data_type: "account".to_string(),
-                error: "Invalid data array format".to_string(),
+                data_type: "account".to_owned(),
+                error: "Invalid data array format".to_owned(),
             })
         })?;
         let encoding = arr.get(1).and_then(|v| v.as_str()).unwrap_or("base64");
@@ -1793,13 +1793,13 @@ fn parse_account_from_json(value: &serde_json::Value) -> crate::Result<Option<Ac
                 .decode(encoded)
                 .map_err(|e| {
                     Error::Data(DataError::ParseError {
-                        data_type: "account base64".to_string(),
+                        data_type: "account base64".to_owned(),
                         error: e.to_string(),
                     })
                 })?
         } else {
             return Err(Error::Data(DataError::InvalidFormat {
-                expected: "base64 encoding".to_string(),
+                expected: "base64 encoding".to_owned(),
                 received: encoding.to_string(),
             }));
         }
@@ -1809,13 +1809,13 @@ fn parse_account_from_json(value: &serde_json::Value) -> crate::Result<Option<Ac
             .decode(s)
             .map_err(|e| {
                 Error::Data(DataError::ParseError {
-                    data_type: "account base64".to_string(),
+                    data_type: "account base64".to_owned(),
                     error: e.to_string(),
                 })
             })?
     } else {
         return Err(Error::Data(DataError::InvalidFormat {
-            expected: "base64 string or array".to_string(),
+            expected: "base64 string or array".to_owned(),
             received: format!("{:?}", data),
         }));
     };
@@ -1825,21 +1825,21 @@ fn parse_account_from_json(value: &serde_json::Value) -> crate::Result<Option<Ac
         .and_then(|v| v.as_u64())
         .ok_or_else(|| {
             Error::Data(DataError::ParseError {
-                data_type: "account".to_string(),
-                error: "Missing or invalid lamports field".to_string(),
+                data_type: "account".to_owned(),
+                error: "Missing or invalid lamports field".to_owned(),
             })
         })?;
 
     let owner_str = value.get("owner").and_then(|v| v.as_str()).ok_or_else(|| {
         Error::Data(DataError::ParseError {
-            data_type: "account".to_string(),
-            error: "Missing owner field".to_string(),
+            data_type: "account".to_owned(),
+            error: "Missing owner field".to_owned(),
         })
     })?;
 
     let owner = Pubkey::from_str(owner_str).map_err(|e| {
         Error::Data(DataError::ParseError {
-            data_type: "pubkey".to_string(),
+            data_type: "pubkey".to_owned(),
             error: format!("Invalid owner pubkey '{owner_str}': {e}"),
         })
     })?;

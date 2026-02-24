@@ -97,7 +97,7 @@ async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, St
         // Fallback to full aggregation from transactions DB (from epoch)
         let tx_db = get_transaction_database()
             .await
-            .ok_or_else(|| "Transaction database not initialized".to_string())?;
+            .ok_or_else(|| "Transaction database not initialized".to_owned())?;
         let epoch = DateTime::<Utc>::from(std::time::UNIX_EPOCH);
         let (inflow, outflow, tx_count) = tx_db
             .aggregate_sol_flows_since(epoch, None)
@@ -162,7 +162,7 @@ async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, St
 
     let tx_db = get_transaction_database()
         .await
-        .ok_or_else(|| "Transaction database not initialized".to_string())?;
+        .ok_or_else(|| "Transaction database not initialized".to_owned())?;
     let (inflow, outflow, tx_count) = tx_db
         .aggregate_sol_flows_since(window_start, None)
         .await
@@ -195,7 +195,7 @@ async fn compute_daily_flows(window_hours: i64) -> Result<Vec<DailyFlowPoint>, S
 
     let tx_db = get_transaction_database()
         .await
-        .ok_or_else(|| "Transaction database not initialized".to_string())?;
+        .ok_or_else(|| "Transaction database not initialized".to_owned())?;
 
     let daily_data = tx_db
         .aggregate_daily_flows(window_start, None)
@@ -480,7 +480,7 @@ pub(super) async fn compute_dashboard_payload_realtime(
     let latest_snapshot = snapshots
         .last()
         .cloned()
-        .ok_or_else(|| "Latest snapshot unavailable".to_string())?;
+        .ok_or_else(|| "Latest snapshot unavailable".to_owned())?;
     // Determine window_start for trend; for all-time (0), include all loaded snapshots
     let window_start = if window_hours == 0 {
         snapshots

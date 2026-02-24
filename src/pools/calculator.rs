@@ -136,7 +136,7 @@ impl PriceCalculator {
 
                                 record_safe(Event::info(
                                     EventCategory::Pool,
-                                    Some("price_calculation_started".to_string()),
+                                    Some("price_calculation_started".to_owned()),
                                     Some(token_mint.clone()),
                                     Some(pool_id.to_string()),
                                     serde_json::json!({
@@ -192,7 +192,7 @@ impl PriceCalculator {
 
                                     record_safe(Event::info(
                                         EventCategory::Pool,
-                                        Some("price_calculation_success".to_string()),
+                                        Some("price_calculation_success".to_owned()),
                                         Some(token_mint.clone()),
                                         Some(pool_id.to_string()),
                                         serde_json::json!({
@@ -221,7 +221,7 @@ impl PriceCalculator {
 
                                     record_safe(Event::error(
                                         EventCategory::Pool,
-                                        Some("price_calculation_failed".to_string()),
+                                        Some("price_calculation_failed".to_owned()),
                                         Some(token_mint.clone()),
                                         Some(pool_id.to_string()),
                                         serde_json::json!({
@@ -300,7 +300,7 @@ impl PriceCalculator {
 
             record_safe(Event::warn(
                 EventCategory::Pool,
-                Some("incomplete_account_bundle".to_string()),
+                Some("incomplete_account_bundle".to_owned()),
                 Some(target_mint.clone()),
                 Some(pool_id.to_string()),
                 serde_json::json!({
@@ -317,7 +317,7 @@ impl PriceCalculator {
             return PoolCalculationResult {
                 pool_id,
                 price_result: None,
-                error: Some("Incomplete account bundle".to_string()),
+                error: Some("Incomplete account bundle".to_owned()),
             };
         }
 
@@ -366,7 +366,7 @@ impl PriceCalculator {
             None => {
                 record_safe(Event::error(
                     EventCategory::Pool,
-                    Some("decoder_failed".to_string()),
+                    Some("decoder_failed".to_owned()),
                     Some(target_mint.to_string()),
                     Some(pool_id.to_string()),
                     serde_json::json!({
@@ -383,7 +383,7 @@ impl PriceCalculator {
                 PoolCalculationResult {
                     pool_id,
                     price_result: None,
-                    error: Some("Decoder failed to parse pool data".to_string()),
+                    error: Some("Decoder failed to parse pool data".to_owned()),
                 }
             }
         }

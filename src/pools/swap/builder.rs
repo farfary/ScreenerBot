@@ -65,7 +65,7 @@ impl SwapBuilder {
     fn validate_request(request: &SwapRequest) -> Result<(), SwapError> {
         if request.amount <= 0.0 {
             return Err(SwapError::InvalidInput(
-                "Amount must be greater than 0".to_string(),
+                "Amount must be greater than 0".to_owned(),
             ));
         }
 
@@ -73,14 +73,14 @@ impl SwapBuilder {
             SwapDirection::Buy => {
                 if request.amount < 0.001 {
                     return Err(SwapError::InvalidInput(
-                        "SOL amount too small (minimum 0.001 SOL)".to_string(),
+                        "SOL amount too small (minimum 0.001 SOL)".to_owned(),
                     ));
                 }
             }
             SwapDirection::Sell => {
                 if request.amount < 1.0 {
                     return Err(SwapError::InvalidInput(
-                        "Token amount too small (minimum 1 token)".to_string(),
+                        "Token amount too small (minimum 1 token)".to_owned(),
                     ));
                 }
             }
@@ -88,7 +88,7 @@ impl SwapBuilder {
 
         if request.slippage_bps > 5000 {
             return Err(SwapError::InvalidInput(
-                "Slippage too high (maximum 50%)".to_string(),
+                "Slippage too high (maximum 50%)".to_owned(),
             ));
         }
 
@@ -210,16 +210,16 @@ impl SwapRequestBuilder {
         Ok(SwapRequest {
             pool_address: self
                 .pool_address
-                .ok_or_else(|| SwapError::InvalidInput("Pool address is required".to_string()))?,
+                .ok_or_else(|| SwapError::InvalidInput("Pool address is required".to_owned()))?,
             token_mint: self
                 .token_mint
-                .ok_or_else(|| SwapError::InvalidInput("Token mint is required".to_string()))?,
+                .ok_or_else(|| SwapError::InvalidInput("Token mint is required".to_owned()))?,
             amount: self
                 .amount
-                .ok_or_else(|| SwapError::InvalidInput("Amount is required".to_string()))?,
+                .ok_or_else(|| SwapError::InvalidInput("Amount is required".to_owned()))?,
             direction: self
                 .direction
-                .ok_or_else(|| SwapError::InvalidInput("Direction is required".to_string()))?,
+                .ok_or_else(|| SwapError::InvalidInput("Direction is required".to_owned()))?,
             slippage_bps: self.slippage_bps,
         })
     }

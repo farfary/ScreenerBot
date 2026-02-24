@@ -183,7 +183,7 @@ pub async fn fetch_rugcheck_data(
 
             // Other errors
             return Err(TokenError::Api {
-                source: "Rugcheck".to_string(),
+                source: "Rugcheck".to_owned(),
                 message: err_str,
             });
         }

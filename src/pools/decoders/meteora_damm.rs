@@ -379,7 +379,7 @@ impl PoolDecoder for MeteoraDammDecoder {
             sol_reserves: sol_reserves_display,
             token_reserves: token_reserves_display,
             confidence: 0.9,
-            source_pool: Some("METEORA_DAMM_Q64_CANON".to_string()),
+            source_pool: Some("METEORA_DAMM_Q64_CANON".to_owned()),
             pool_address: pool_account.pubkey.to_string(),
             slot: 0, // Will be updated by the system
             timestamp: Instant::now(),
@@ -541,13 +541,13 @@ impl MeteoraDammDecoder {
     /// Decode token account amount from token account data
     fn decode_token_account_amount(data: &[u8]) -> Result<u64, String> {
         if data.len() < 72 {
-            return Err("Token account data too short".to_string());
+            return Err("Token account data too short".to_owned());
         }
 
         // Token account amount is at offset 64 (8 bytes, little-endian)
         let amount_bytes: [u8; 8] = data[64..72]
             .try_into()
-            .map_err(|_| "Failed to read amount bytes".to_string())?;
+            .map_err(|_| "Failed to read amount bytes".to_owned())?;
 
         Ok(u64::from_le_bytes(amount_bytes))
     }
@@ -555,13 +555,13 @@ impl MeteoraDammDecoder {
     /// Decode token account mint from token account data
     fn decode_token_account_mint(data: &[u8]) -> Result<String, String> {
         if data.len() < 32 {
-            return Err("Token account data too short for mint".to_string());
+            return Err("Token account data too short for mint".to_owned());
         }
 
         // Mint is at offset 0 (32 bytes)
         let mint_bytes: [u8; 32] = data[0..32]
             .try_into()
-            .map_err(|_| "Failed to read mint bytes".to_string())?;
+            .map_err(|_| "Failed to read mint bytes".to_owned())?;
 
         let mint_pubkey = Pubkey::new_from_array(mint_bytes);
         Ok(mint_pubkey.to_string())

@@ -263,7 +263,7 @@ impl PumpFunLegacyDecoder {
             price_usd: 0.0, // USD price calculated later
             price_sol,
             confidence: 1.0,
-            source_pool: Some("PumpFun Bonding Curve".to_string()),
+            source_pool: Some("PumpFun Bonding Curve".to_owned()),
             pool_address: pool_account.to_string(),
             slot: 0,
             timestamp: Instant::now(),

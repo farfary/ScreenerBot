@@ -23,7 +23,7 @@
 //!
 //! // Create a new wallet
 //! let wallet = wallets::create_wallet(CreateWalletRequest {
-//!     name: "Trading Wallet".to_string(),
+//!     name: "Trading Wallet".to_owned(),
 //!     notes: None,
 //!     set_as_main: true,
 //! }).await?;

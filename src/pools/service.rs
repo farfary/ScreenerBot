@@ -88,7 +88,7 @@ pub async fn initialize_pool_components() -> Result<(), PoolError> {
     // Record service start attempt
     record_safe(Event::info(
         EventCategory::System,
-        Some("pool_service_start_attempt".to_string()),
+        Some("pool_service_start_attempt".to_owned()),
         None,
         None,
         serde_json::json!({
@@ -107,7 +107,7 @@ pub async fn initialize_pool_components() -> Result<(), PoolError> {
 
         record_safe(Event::warn(
             EventCategory::System,
-            Some("pool_service_already_running".to_string()),
+            Some("pool_service_already_running".to_owned()),
             None,
             None,
             serde_json::json!({
@@ -118,7 +118,7 @@ pub async fn initialize_pool_components() -> Result<(), PoolError> {
         .await;
 
         return Err(PoolError::InitializationFailed(
-            "Service already running".to_string(),
+            "Service already running".to_owned(),
         ));
     }
 
@@ -134,7 +134,7 @@ pub async fn initialize_pool_components() -> Result<(), PoolError> {
 
         record_safe(Event::error(
             EventCategory::System,
-            Some("pool_service_db_init_failed".to_string()),
+            Some("pool_service_db_init_failed".to_owned()),
             None,
             None,
             serde_json::json!({
@@ -178,7 +178,7 @@ pub async fn initialize_pool_components() -> Result<(), PoolError> {
 
             record_safe(Event::error(
                 EventCategory::System,
-                Some("pool_service_component_init_failed".to_string()),
+                Some("pool_service_component_init_failed".to_owned()),
                 None,
                 None,
                 serde_json::json!({
@@ -219,7 +219,7 @@ pub async fn initialize_pool_components() -> Result<(), PoolError> {
 
     record_safe(Event::info(
         EventCategory::System,
-        Some("pool_components_initialized".to_string()),
+        Some("pool_components_initialized".to_owned()),
         None,
         None,
         serde_json::json!({
@@ -240,7 +240,7 @@ pub async fn initialize_pool_components() -> Result<(), PoolError> {
 pub async fn stop_pool_service(timeout_seconds: u64) -> Result<(), PoolError> {
     record_safe(Event::info(
         EventCategory::System,
-        Some("pool_service_stop_attempt".to_string()),
+        Some("pool_service_stop_attempt".to_owned()),
         None,
         None,
         serde_json::json!({
@@ -255,7 +255,7 @@ pub async fn stop_pool_service(timeout_seconds: u64) -> Result<(), PoolError> {
 
         record_safe(Event::warn(
             EventCategory::System,
-            Some("pool_service_not_running".to_string()),
+            Some("pool_service_not_running".to_owned()),
             None,
             None,
             serde_json::json!({
@@ -311,7 +311,7 @@ pub async fn stop_pool_service(timeout_seconds: u64) -> Result<(), PoolError> {
 
             record_safe(Event::info(
                 EventCategory::System,
-                Some("pool_service_stopped".to_string()),
+                Some("pool_service_stopped".to_owned()),
                 None,
                 None,
                 serde_json::json!({
@@ -329,7 +329,7 @@ pub async fn stop_pool_service(timeout_seconds: u64) -> Result<(), PoolError> {
 
             record_safe(Event::error(
                 EventCategory::System,
-                Some("pool_service_stop_timeout".to_string()),
+                Some("pool_service_stop_timeout".to_owned()),
                 None,
                 None,
                 serde_json::json!({
@@ -341,7 +341,7 @@ pub async fn stop_pool_service(timeout_seconds: u64) -> Result<(), PoolError> {
             .await;
 
             Err(PoolError::InitializationFailed(
-                "Shutdown timeout".to_string(),
+                "Shutdown timeout".to_owned(),
             ))
         }
     }
@@ -421,7 +421,7 @@ async fn initialize_service_components() -> Result<(), String> {
 
     record_safe(Event::info(
         EventCategory::System,
-        Some("pool_components_init_start".to_string()),
+        Some("pool_components_init_start".to_owned()),
         None,
         None,
         serde_json::json!({
@@ -469,7 +469,7 @@ async fn initialize_service_components() -> Result<(), String> {
 
     record_safe(Event::info(
         EventCategory::System,
-        Some("pool_components_initialized".to_string()),
+        Some("pool_components_initialized".to_owned()),
         None,
         None,
         serde_json::json!({

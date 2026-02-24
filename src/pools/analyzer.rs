@@ -261,7 +261,7 @@ impl PoolAnalyzer {
 
                     record_safe(Event::error(
                         EventCategory::Pool,
-                        Some("pool_account_fetch_failed".to_string()),
+                        Some("pool_account_fetch_failed".to_owned()),
                         Some(target_mint.clone()),
                         Some(pool_id.to_string()),
                         serde_json::json!({
@@ -288,7 +288,7 @@ impl PoolAnalyzer {
 
                     record_safe(Event::error(
                         EventCategory::Pool,
-                        Some("pool_account_fetch_failed".to_string()),
+                        Some("pool_account_fetch_failed".to_owned()),
                         Some(target_mint.clone()),
                         Some(pool_id.to_string()),
                         serde_json::json!({
@@ -326,7 +326,7 @@ impl PoolAnalyzer {
 
             record_safe(Event::warn(
                 EventCategory::Pool,
-                Some("unsupported_program".to_string()),
+                Some("unsupported_program".to_owned()),
                 Some(target_mint.clone()),
                 Some(pool_id.to_string()),
                 serde_json::json!({

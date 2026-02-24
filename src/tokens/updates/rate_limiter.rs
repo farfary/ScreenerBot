@@ -85,7 +85,7 @@ impl RateLimitCoordinator {
             .acquire_owned()
             .await
             .map_err(|e| TokenError::RateLimit {
-                source: "DexScreener-Batch".to_string(),
+                source: "DexScreener-Batch".to_owned(),
                 message: format!("Failed to acquire permit: {e}"),
             })
     }
@@ -98,7 +98,7 @@ impl RateLimitCoordinator {
             .acquire_owned()
             .await
             .map_err(|e| TokenError::RateLimit {
-                source: "DexScreener-Profiles".to_string(),
+                source: "DexScreener-Profiles".to_owned(),
                 message: format!("Failed to acquire permit: {e}"),
             })
     }
@@ -111,7 +111,7 @@ impl RateLimitCoordinator {
             .acquire_owned()
             .await
             .map_err(|e| TokenError::RateLimit {
-                source: "DexScreener-Boosts".to_string(),
+                source: "DexScreener-Boosts".to_owned(),
                 message: format!("Failed to acquire permit: {e}"),
             })
     }
@@ -124,7 +124,7 @@ impl RateLimitCoordinator {
             .acquire_owned()
             .await
             .map_err(|e| TokenError::RateLimit {
-                source: "DexScreener-Pools".to_string(),
+                source: "DexScreener-Pools".to_owned(),
                 message: format!("Failed to acquire permit: {e}"),
             })
     }
@@ -136,7 +136,7 @@ impl RateLimitCoordinator {
             .acquire_owned()
             .await
             .map_err(|e| TokenError::RateLimit {
-                source: "GeckoTerminal".to_string(),
+                source: "GeckoTerminal".to_owned(),
                 message: format!("Failed to acquire permit: {e}"),
             })
     }
@@ -148,7 +148,7 @@ impl RateLimitCoordinator {
             .acquire_owned()
             .await
             .map_err(|e| TokenError::RateLimit {
-                source: "Rugcheck".to_string(),
+                source: "Rugcheck".to_owned(),
                 message: format!("Failed to acquire permit: {e}"),
             })
     }

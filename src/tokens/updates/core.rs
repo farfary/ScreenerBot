@@ -226,7 +226,7 @@ pub async fn update_token(
         Ok(permit) => match dexscreener::fetch_dexscreener_data(mint, db).await {
             Ok(Some(_)) => {
                 permit.forget();
-                successes.push("DexScreener".to_string());
+                successes.push("DexScreener".to_owned());
             }
             Ok(None) => failures.push(format!("DexScreener: Token not listed")),
             Err(e) => failures.push(format!("DexScreener: {e}")),
@@ -358,7 +358,7 @@ pub async fn update_tokens_batch(
             result
         }
         Err(e) => Err(TokenError::RateLimit {
-            source: "DexScreener-Batch".to_string(),
+            source: "DexScreener-Batch".to_owned(),
             message: e.to_string(),
         }),
     };
@@ -384,16 +384,16 @@ pub async fn update_tokens_batch(
 
         // DexScreener result from batch
         if let Some(Some(_)) = dex_results.get(mint) {
-            successes.push("DexScreener".to_string());
+            successes.push("DexScreener".to_owned());
         } else if dex_results.contains_key(mint) {
-            failures.push("DexScreener: Token not listed".to_string());
+            failures.push("DexScreener: Token not listed".to_owned());
         } else if let Some(err) = &dex_global_err {
             failures.push(err.clone());
         }
 
         // If no results at all, mark as failure
         if successes.is_empty() && failures.is_empty() {
-            failures.push("No market sources responded".to_string());
+            failures.push("No market sources responded".to_owned());
         }
 
         // Update tracking timestamp
@@ -584,22 +584,22 @@ pub async fn force_update_token(
 
     // Process DexScreener result
     match dex_result {
-        Ok(Some(_)) => successes.push("DexScreener".to_string()),
-        Ok(None) => failures.push("DexScreener: Token not listed".to_string()),
+        Ok(Some(_)) => successes.push("DexScreener".to_owned()),
+        Ok(None) => failures.push("DexScreener: Token not listed".to_owned()),
         Err(e) => failures.push(format!("DexScreener: {e}")),
     }
 
     // Process GeckoTerminal result
     match gecko_result {
-        Ok(Some(_)) => successes.push("GeckoTerminal".to_string()),
-        Ok(None) => failures.push("GeckoTerminal: Token not listed".to_string()),
+        Ok(Some(_)) => successes.push("GeckoTerminal".to_owned()),
+        Ok(None) => failures.push("GeckoTerminal: Token not listed".to_owned()),
         Err(e) => failures.push(format!("GeckoTerminal: {e}")),
     }
 
     // Process Rugcheck result
     match rug_result {
-        Ok(Some(_)) => successes.push("Rugcheck".to_string()),
-        Ok(None) => failures.push("Rugcheck: No security data available".to_string()),
+        Ok(Some(_)) => successes.push("Rugcheck".to_owned()),
+        Ok(None) => failures.push("Rugcheck: No security data available".to_owned()),
         Err(e) => failures.push(format!("Rugcheck: {e}")),
     }
 

@@ -16,7 +16,7 @@ pub fn get_websocket_url() -> Result<String> {
     if rpc_urls.is_empty() {
         return Err(Error::Configuration(
             crate::errors::ConfigurationError::Generic {
-                message: "No RPC URLs configured".to_string(),
+                message: "No RPC URLs configured".to_owned(),
             },
         ));
     }

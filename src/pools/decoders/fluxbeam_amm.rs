@@ -193,7 +193,7 @@ impl PoolDecoder for FluxbeamAmmDecoder {
             sol_reserves: sol_adjusted,
             token_reserves: token_adjusted,
             confidence: 0.9,
-            source_pool: Some("FLUXBEAM_AMM".to_string()),
+            source_pool: Some("FLUXBEAM_AMM".to_owned()),
             pool_address: pool_account.pubkey.to_string(),
             slot: 0, // Will be updated by the system
             timestamp: Instant::now(),
@@ -277,13 +277,13 @@ impl FluxbeamAmmDecoder {
     /// Decode token account amount from token account data
     fn decode_token_account_amount(data: &[u8]) -> Result<u64, String> {
         if data.len() < 72 {
-            return Err("Token account data too short".to_string());
+            return Err("Token account data too short".to_owned());
         }
 
         // Token account amount is at offset 64 (8 bytes, little-endian)
         let amount_bytes: [u8; 8] = data[64..72]
             .try_into()
-            .map_err(|_| "Failed to read amount bytes".to_string())?;
+            .map_err(|_| "Failed to read amount bytes".to_owned())?;
 
         Ok(u64::from_le_bytes(amount_bytes))
     }

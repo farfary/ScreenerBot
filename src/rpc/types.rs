@@ -537,7 +537,7 @@ pub fn mask_url(url: &str) -> String {
                         &url[key_end - 4..key_end]
                     )
                 } else {
-                    "***".to_string()
+                    "***".to_owned()
                 };
                 masked = format!("{}{}{}", &url[..key_start], mask, &url[key_end..]);
             }

@@ -12,7 +12,7 @@ use super::{get_global_database, TokenBlacklistRecord};
 
 pub async fn get_token_async(mint: &str) -> TokenResult<Option<TokenMetadata>> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
 
     let mint = mint.to_string();
     tokio::task::spawn_blocking(move || db.get_token(&mint))
@@ -26,7 +26,7 @@ pub async fn get_token_images_batch_async(
     mints: Vec<String>,
 ) -> TokenResult<HashMap<String, String>> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
 
     tokio::task::spawn_blocking(move || db.get_token_images_batch(&mints))
         .await
@@ -39,7 +39,7 @@ pub async fn get_token_info_batch_async(
     mints: Vec<String>,
 ) -> TokenResult<HashMap<String, (Option<String>, Option<String>, Option<String>)>> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
 
     tokio::task::spawn_blocking(move || db.get_token_info_batch(&mints))
         .await
@@ -49,7 +49,7 @@ pub async fn get_token_info_batch_async(
 /// Async wrapper for get_full_token (returns complete Token)
 pub async fn get_full_token_async(mint: &str) -> TokenResult<Option<Token>> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
 
     let mint = mint.to_string();
     let db_clone = db.clone();
@@ -64,7 +64,7 @@ pub async fn get_full_token_for_source_async(
     source: DataSource,
 ) -> TokenResult<Option<Token>> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
 
     let mint = mint.to_string();
     let db_clone = db.clone();
@@ -76,7 +76,7 @@ pub async fn get_full_token_for_source_async(
 /// Async wrapper for get_token_pools (returns aggregated pool snapshot)
 pub async fn get_token_pools_async(mint: &str) -> TokenResult<Option<TokenPoolsSnapshot>> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
 
     let mint = mint.to_string();
     let db_clone = db.clone();
@@ -88,7 +88,7 @@ pub async fn get_token_pools_async(mint: &str) -> TokenResult<Option<TokenPoolsS
 /// Async wrapper for replace_token_pools (persist aggregated pool snapshot)
 pub async fn replace_token_pools_async(snapshot: TokenPoolsSnapshot) -> TokenResult<()> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
 
     let mint = snapshot.mint.clone();
 
@@ -105,7 +105,7 @@ pub async fn replace_token_pools_async(snapshot: TokenPoolsSnapshot) -> TokenRes
 /// Async wrapper for list_tokens (returns Vec<TokenMetadata>)
 pub async fn list_tokens_async(limit: usize) -> TokenResult<Vec<TokenMetadata>> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
 
     tokio::task::spawn_blocking(move || db.list_tokens(limit))
         .await
@@ -115,7 +115,7 @@ pub async fn list_tokens_async(limit: usize) -> TokenResult<Vec<TokenMetadata>> 
 /// Async wrapper for listing all token blacklist entries
 pub async fn list_blacklisted_tokens_async() -> TokenResult<Vec<TokenBlacklistRecord>> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
 
     tokio::task::spawn_blocking(move || db.list_blacklisted_tokens())
         .await
@@ -125,7 +125,7 @@ pub async fn list_blacklisted_tokens_async() -> TokenResult<Vec<TokenBlacklistRe
 /// Async wrapper to count total tokens in database (fast, no data loading)
 pub async fn count_tokens_async() -> TokenResult<usize> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
 
     tokio::task::spawn_blocking(move || {
         let conn = db
@@ -151,7 +151,7 @@ pub async fn get_all_tokens_optional_market_async(
     sort_direction: Option<String>,
 ) -> TokenResult<Vec<Token>> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
 
     tokio::task::spawn_blocking(move || {
         db.get_all_tokens_optional_market(
@@ -172,7 +172,7 @@ pub async fn get_all_tokens_optional_market_async(
 /// Returns tokens with market data and security fields needed for filtering.
 pub async fn get_all_tokens_for_filtering_async() -> TokenResult<Vec<Token>> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
 
     tokio::task::spawn_blocking(move || {
         // PERF: require_market_data=true reduces initial load by ~60%
@@ -186,7 +186,7 @@ pub async fn get_all_tokens_for_filtering_async() -> TokenResult<Vec<Token>> {
 /// Async: count tokens with no market
 pub async fn count_tokens_no_market_async() -> TokenResult<usize> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
     tokio::task::spawn_blocking(move || db.count_tokens_no_market())
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {e}")))?
@@ -200,7 +200,7 @@ pub async fn get_tokens_no_market_async(
     sort_direction: Option<String>,
 ) -> TokenResult<Vec<Token>> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
     tokio::task::spawn_blocking(move || {
         db.get_tokens_no_market(limit, offset, sort_by.as_deref(), sort_direction.as_deref())
     })
@@ -211,7 +211,7 @@ pub async fn get_tokens_no_market_async(
 /// Async: update token priority
 pub async fn update_token_priority_async(mint: &str, priority: i32) -> TokenResult<()> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
     let mint_owned = mint.to_string();
     tokio::task::spawn_blocking(move || db.update_priority(&mint_owned, priority))
         .await
@@ -223,7 +223,7 @@ pub async fn update_token_priority_async(mint: &str, priority: i32) -> TokenResu
 #[allow(dead_code)]
 pub async fn is_market_data_stale_async(mint: &str, threshold_seconds: i64) -> TokenResult<bool> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
     let mint_owned = mint.to_string();
     tokio::task::spawn_blocking(move || db.is_market_data_stale(&mint_owned, threshold_seconds))
         .await
@@ -233,7 +233,7 @@ pub async fn is_market_data_stale_async(mint: &str, threshold_seconds: i64) -> T
 /// Async: count tokens with permanent market data failure
 pub async fn count_permanent_market_failures_async() -> TokenResult<u64> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
     tokio::task::spawn_blocking(move || db.count_permanent_market_failures())
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {e}")))?
@@ -247,7 +247,7 @@ pub async fn update_rejection_status_async(
     rejected_at: i64,
 ) -> TokenResult<()> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
     let mint_owned = mint.to_string();
     let reason_owned = reason.to_string();
     let source_owned = source.to_string();
@@ -261,7 +261,7 @@ pub async fn update_rejection_status_async(
 /// Async: clear token rejection status (when token passes)
 pub async fn clear_rejection_status_async(mint: &str) -> TokenResult<()> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
     let mint_owned = mint.to_string();
     tokio::task::spawn_blocking(move || db.clear_rejection_status(&mint_owned))
         .await
@@ -275,7 +275,7 @@ pub async fn batch_clear_rejection_status_async(mints: Vec<String>) -> TokenResu
         return Ok(0);
     }
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
     tokio::task::spawn_blocking(move || db.batch_clear_rejection_status(&mints))
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {e}")))?
@@ -288,7 +288,7 @@ pub async fn batch_update_priority_async(mints: Vec<String>, priority: i32) -> T
         return Ok(0);
     }
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
     tokio::task::spawn_blocking(move || db.batch_update_priority(&mints, priority))
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {e}")))?
@@ -304,7 +304,7 @@ pub async fn batch_update_rejection_status_async(
         return Ok(0);
     }
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
     tokio::task::spawn_blocking(move || db.batch_update_rejection_status(&updates))
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {e}")))?
@@ -320,7 +320,7 @@ pub async fn batch_upsert_rejection_stats_async(
         return Ok(0);
     }
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
     tokio::task::spawn_blocking(move || db.batch_upsert_rejection_stats(&stats))
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {e}")))?
@@ -329,7 +329,7 @@ pub async fn batch_upsert_rejection_stats_async(
 /// Async: get rejection statistics grouped by reason
 pub async fn get_rejection_stats_async() -> TokenResult<Vec<(String, String, i64)>> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
     tokio::task::spawn_blocking(move || db.get_rejection_stats())
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {e}")))?
@@ -342,7 +342,7 @@ pub async fn get_rejection_stats_with_time_filter_async(
     end_time: Option<i64>,
 ) -> TokenResult<Vec<(String, String, i64)>> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
     tokio::task::spawn_blocking(move || {
         db.get_rejection_stats_with_time_filter(start_time, end_time)
     })
@@ -355,7 +355,7 @@ pub async fn get_recent_rejections_async(
     limit: usize,
 ) -> TokenResult<Vec<(String, String, String, i64, Option<String>)>> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
 
     tokio::task::spawn_blocking(move || db.get_recent_rejections(limit))
         .await
@@ -370,7 +370,7 @@ pub async fn get_rejected_tokens_async(
     offset: usize,
 ) -> TokenResult<Vec<(String, String, String, i64)>> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
 
     tokio::task::spawn_blocking(move || {
         db.get_rejected_tokens(reason_filter, source_filter, search_filter, limit, offset)
@@ -387,7 +387,7 @@ pub async fn insert_rejection_history_async(
     rejected_at: i64,
 ) -> TokenResult<()> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
     let mint_owned = mint.to_string();
     let reason_owned = reason.to_string();
     let source_owned = source.to_string();
@@ -404,7 +404,7 @@ pub async fn get_rejection_stats_for_range_async(
     end_time: Option<i64>,
 ) -> TokenResult<Vec<(String, String, i64)>> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
     tokio::task::spawn_blocking(move || db.get_rejection_stats_for_range(start_time, end_time))
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {e}")))?
@@ -413,7 +413,7 @@ pub async fn get_rejection_stats_for_range_async(
 /// Async: cleanup old rejection history entries (keep last N hours)
 pub async fn cleanup_rejection_history_async(hours_to_keep: i64) -> TokenResult<usize> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
     tokio::task::spawn_blocking(move || db.cleanup_rejection_history(hours_to_keep))
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {e}")))?
@@ -426,7 +426,7 @@ pub async fn upsert_rejection_stat_async(
     timestamp: i64,
 ) -> TokenResult<()> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
     let reason = reason.to_string();
     let source = source.to_string();
     tokio::task::spawn_blocking(move || db.upsert_rejection_stat(&reason, &source, timestamp))
@@ -440,7 +440,7 @@ pub async fn get_rejection_stats_aggregated_async(
     end_time: Option<i64>,
 ) -> TokenResult<Vec<(String, String, i64)>> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
     tokio::task::spawn_blocking(move || db.get_rejection_stats_aggregated(start_time, end_time))
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {e}")))?
@@ -449,7 +449,7 @@ pub async fn get_rejection_stats_aggregated_async(
 /// Async: cleanup old aggregated rejection stats
 pub async fn cleanup_rejection_stats_async(hours_to_keep: i64) -> TokenResult<usize> {
     let db = get_global_database()
-        .ok_or_else(|| TokenError::Database("Global database not initialized".to_string()))?;
+        .ok_or_else(|| TokenError::Database("Global database not initialized".to_owned()))?;
     tokio::task::spawn_blocking(move || db.cleanup_rejection_stats(hours_to_keep))
         .await
         .map_err(|e| TokenError::Database(format!("Join error: {e}")))?

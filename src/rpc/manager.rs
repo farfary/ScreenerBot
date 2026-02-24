@@ -507,7 +507,7 @@ impl RpcManager {
         json.get("result")
             .cloned()
             .ok_or_else(|| RpcError::InvalidResponse {
-                message: "Missing result field".to_string(),
+                message: "Missing result field".to_owned(),
             })
     }
 

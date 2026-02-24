@@ -73,7 +73,7 @@ impl PoolsDatabase {
 
         Ok(())
       } else {
-        Err("Database connection not available".to_string())
+        Err("Database connection not available".to_owned())
       }
     })
     .await
@@ -148,7 +148,7 @@ impl PoolsDatabase {
 
         Ok(())
       } else {
-        Err("Database connection not available".to_string())
+        Err("Database connection not available".to_owned())
       }
     })
     .await
@@ -184,7 +184,7 @@ impl PoolsDatabase {
                 .map_err(|e| format!("Failed to remove from blacklist_accounts: {e}"))?;
                 Ok(())
             } else {
-                Err("Database connection not available".to_string())
+                Err("Database connection not available".to_owned())
             }
         })
         .await
@@ -213,7 +213,7 @@ impl PoolsDatabase {
                 .map_err(|e| format!("Failed to remove from blacklist_pools: {e}"))?;
                 Ok(())
             } else {
-                Err("Database connection not available".to_string())
+                Err("Database connection not available".to_owned())
             }
         })
         .await
@@ -239,7 +239,7 @@ impl PoolsDatabase {
 
       let conn = connection_guard
         .as_ref()
-        .ok_or_else(|| "Database not initialized".to_string())?;
+        .ok_or_else(|| "Database not initialized".to_owned())?;
 
       let mut records = Vec::new();
 
@@ -320,7 +320,7 @@ impl PoolsDatabase {
 
       let conn = connection_guard
         .as_ref()
-        .ok_or_else(|| "Database not initialized".to_string())?;
+        .ok_or_else(|| "Database not initialized".to_owned())?;
 
       let mut records = Vec::new();
 

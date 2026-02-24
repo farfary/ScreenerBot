@@ -405,7 +405,7 @@ impl RaydiumCpmmDecoder {
     /// Decode token account amount from account data
     fn decode_token_account_amount(data: &[u8]) -> Result<u64, String> {
         if data.len() < 72 {
-            return Err("Invalid token account data length".to_string());
+            return Err("Invalid token account data length".to_owned());
         }
 
         // Token account amount is at offset 64 (8 bytes)
@@ -413,7 +413,7 @@ impl RaydiumCpmmDecoder {
         let amount = u64::from_le_bytes(
             amount_bytes
                 .try_into()
-                .map_err(|_| "Failed to parse token account amount".to_string())?,
+                .map_err(|_| "Failed to parse token account amount".to_owned())?,
         );
 
         Ok(amount)

@@ -319,7 +319,7 @@ impl WalletsDatabase {
 
         if updated == 0 {
             let _ = conn.execute("ROLLBACK", []);
-            return Err("Wallet not found or inactive".to_string());
+            return Err("Wallet not found or inactive".to_owned());
         }
 
         conn.execute("COMMIT", [])
@@ -413,7 +413,7 @@ impl WalletsDatabase {
 
         if is_main {
             return Err(
-                "Cannot archive the main wallet. Set another wallet as main first.".to_string(),
+                "Cannot archive the main wallet. Set another wallet as main first.".to_owned(),
             );
         }
 
@@ -442,11 +442,11 @@ impl WalletsDatabase {
             .unwrap_or((false, false));
 
         if !exists {
-            return Err("Wallet not found".to_string());
+            return Err("Wallet not found".to_owned());
         }
 
         if !is_archived {
-            return Err("Wallet is not archived".to_string());
+            return Err("Wallet is not archived".to_owned());
         }
 
         conn.execute(
@@ -475,7 +475,7 @@ impl WalletsDatabase {
 
         if is_main {
             return Err(
-                "Cannot delete the main wallet. Set another wallet as main first.".to_string(),
+                "Cannot delete the main wallet. Set another wallet as main first.".to_owned(),
             );
         }
 

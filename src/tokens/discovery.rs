@@ -78,7 +78,7 @@ pub fn start_discovery_loop(
                             last_skip_reason = None;
 
                             let source_summary = if stats.by_source.is_empty() {
-                                "-".to_string()
+                                "-".to_owned()
                             } else {
                                 let mut parts: Vec<String> = stats
                                     .by_source
@@ -190,7 +190,7 @@ pub async fn run_discovery_once(
             let coord = coordinator.clone();
             tasks.push(Box::pin(async move {
                 (
-                    "dexscreener.latest_profiles".to_string(),
+                    "dexscreener.latest_profiles".to_owned(),
                     fetch_dexscreener_profiles(&api, coord.clone()).await,
                 )
             }));
@@ -201,7 +201,7 @@ pub async fn run_discovery_once(
             let coord = coordinator.clone();
             tasks.push(Box::pin(async move {
                 (
-                    "dexscreener.latest_boosts".to_string(),
+                    "dexscreener.latest_boosts".to_owned(),
                     fetch_dexscreener_latest_boosts(&api, coord.clone()).await,
                 )
             }));
@@ -212,7 +212,7 @@ pub async fn run_discovery_once(
             let coord = coordinator.clone();
             tasks.push(Box::pin(async move {
                 (
-                    "dexscreener.top_boosts".to_string(),
+                    "dexscreener.top_boosts".to_owned(),
                     fetch_dexscreener_top_boosts(&api, coord.clone()).await,
                 )
             }));
@@ -225,7 +225,7 @@ pub async fn run_discovery_once(
             let coord = coordinator.clone();
             tasks.push(Box::pin(async move {
                 (
-                    "geckoterminal.new_pools".to_string(),
+                    "geckoterminal.new_pools".to_owned(),
                     fetch_gecko_new_pools(&api, coord.clone()).await,
                 )
             }));
@@ -236,7 +236,7 @@ pub async fn run_discovery_once(
             let coord = coordinator.clone();
             tasks.push(Box::pin(async move {
                 (
-                    "geckoterminal.recently_updated".to_string(),
+                    "geckoterminal.recently_updated".to_owned(),
                     fetch_gecko_recent_updates(&api, coord.clone()).await,
                 )
             }));
@@ -247,7 +247,7 @@ pub async fn run_discovery_once(
             let coord = coordinator.clone();
             tasks.push(Box::pin(async move {
                 (
-                    "geckoterminal.trending".to_string(),
+                    "geckoterminal.trending".to_owned(),
                     fetch_gecko_trending(&api, coord.clone()).await,
                 )
             }));
@@ -260,7 +260,7 @@ pub async fn run_discovery_once(
             let coord = coordinator.clone();
             tasks.push(Box::pin(async move {
                 (
-                    "rugcheck.new_tokens".to_string(),
+                    "rugcheck.new_tokens".to_owned(),
                     fetch_rugcheck_new_tokens(&api, coord.clone()).await,
                 )
             }));
@@ -271,7 +271,7 @@ pub async fn run_discovery_once(
             let coord = coordinator.clone();
             tasks.push(Box::pin(async move {
                 (
-                    "rugcheck.recent".to_string(),
+                    "rugcheck.recent".to_owned(),
                     fetch_rugcheck_recent_tokens(&api, coord.clone()).await,
                 )
             }));
@@ -282,7 +282,7 @@ pub async fn run_discovery_once(
             let coord = coordinator.clone();
             tasks.push(Box::pin(async move {
                 (
-                    "rugcheck.trending".to_string(),
+                    "rugcheck.trending".to_owned(),
                     fetch_rugcheck_trending_tokens(&api, coord.clone()).await,
                 )
             }));
@@ -293,7 +293,7 @@ pub async fn run_discovery_once(
             let coord = coordinator.clone();
             tasks.push(Box::pin(async move {
                 (
-                    "rugcheck.verified".to_string(),
+                    "rugcheck.verified".to_owned(),
                     fetch_rugcheck_verified_tokens(&api, coord.clone()).await,
                 )
             }));
@@ -305,7 +305,7 @@ pub async fn run_discovery_once(
             let api = apis.clone();
             tasks.push(Box::pin(async move {
                 (
-                    "jupiter.recent".to_string(),
+                    "jupiter.recent".to_owned(),
                     fetch_jupiter_recent(&api).await,
                 )
             }));
@@ -315,7 +315,7 @@ pub async fn run_discovery_once(
             let api = apis.clone();
             tasks.push(Box::pin(async move {
                 (
-                    "jupiter.top_organic".to_string(),
+                    "jupiter.top_organic".to_owned(),
                     fetch_jupiter_top_organic(&api).await,
                 )
             }));
@@ -325,7 +325,7 @@ pub async fn run_discovery_once(
             let api = apis.clone();
             tasks.push(Box::pin(async move {
                 (
-                    "jupiter.top_traded".to_string(),
+                    "jupiter.top_traded".to_owned(),
                     fetch_jupiter_top_traded(&api).await,
                 )
             }));
@@ -335,7 +335,7 @@ pub async fn run_discovery_once(
             let api = apis.clone();
             tasks.push(Box::pin(async move {
                 (
-                    "jupiter.top_trending".to_string(),
+                    "jupiter.top_trending".to_owned(),
                     fetch_jupiter_top_trending(&api).await,
                 )
             }));
@@ -346,7 +346,7 @@ pub async fn run_discovery_once(
         let api = apis.clone();
         tasks.push(Box::pin(async move {
             (
-                "coingecko.markets".to_string(),
+                "coingecko.markets".to_owned(),
                 fetch_coingecko_markets(&api).await,
             )
         }));
@@ -356,7 +356,7 @@ pub async fn run_discovery_once(
         let api = apis.clone();
         tasks.push(Box::pin(async move {
             (
-                "defillama.protocols".to_string(),
+                "defillama.protocols".to_owned(),
                 fetch_defillama_protocols(&api).await,
             )
         }));

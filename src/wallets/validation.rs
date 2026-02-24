@@ -40,7 +40,7 @@ impl WalletValidator {
                 Self::get_stored_wallet(&transactions_db_path.to_string_lossy(), "db_metadata")?
             {
                 if stored_wallet != current_wallet {
-                    mismatches.push(("Transactions".to_string(), stored_wallet));
+                    mismatches.push(("Transactions".to_owned(), stored_wallet));
                 }
             }
         }
@@ -52,7 +52,7 @@ impl WalletValidator {
                 Self::get_stored_wallet(&positions_db_path.to_string_lossy(), "position_metadata")?
             {
                 if stored_wallet != current_wallet {
-                    mismatches.push(("Positions".to_string(), stored_wallet));
+                    mismatches.push(("Positions".to_owned(), stored_wallet));
                 }
             }
         }
@@ -64,7 +64,7 @@ impl WalletValidator {
                 Self::get_stored_wallet(&wallet_db_path.to_string_lossy(), "wallet_metadata")?
             {
                 if stored_wallet != current_wallet {
-                    mismatches.push(("Wallet History".to_string(), stored_wallet));
+                    mismatches.push(("Wallet History".to_owned(), stored_wallet));
                 }
             }
         }

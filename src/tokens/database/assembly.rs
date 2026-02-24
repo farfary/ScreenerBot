@@ -215,7 +215,7 @@ impl TokenDatabase {
         // Configure via maintenance.stale_token_days (0 = include all).
         let where_clause = if require_market_data {
             let stale_days = crate::config::with_config(|cfg| cfg.maintenance.stale_token_days);
-            let mut clause = " WHERE (d.mint IS NOT NULL OR g.mint IS NOT NULL)".to_string();
+            let mut clause = " WHERE (d.mint IS NOT NULL OR g.mint IS NOT NULL)".to_owned();
             if stale_days > 0 {
                 let cutoff_secs =
                     chrono::Utc::now().timestamp() - (stale_days as i64 * 24 * 60 * 60);
@@ -542,7 +542,7 @@ impl TokenDatabase {
                             .unwrap_or(metadata_last_fetched_dt),
                         g_price_usd.unwrap_or(0.0),
                         g_price_sol.unwrap_or(0.0),
-                        g_price_native.unwrap_or_else(|| "0".to_string()),
+                        g_price_native.unwrap_or_else(|| "0".to_owned()),
                         g_change_5m,
                         g_change_1h,
                         g_change_6h,
@@ -571,7 +571,7 @@ impl TokenDatabase {
                             .unwrap_or(metadata_last_fetched_dt),
                         d_price_usd.unwrap_or(0.0),
                         d_price_sol.unwrap_or(0.0),
-                        d_price_native.unwrap_or_else(|| "0".to_string()),
+                        d_price_native.unwrap_or_else(|| "0".to_owned()),
                         d_change_5m,
                         d_change_1h,
                         d_change_6h,
@@ -598,7 +598,7 @@ impl TokenDatabase {
                         metadata_last_fetched_dt,
                         0.0,
                         0.0,
-                        "0".to_string(),
+                        "0".to_owned(),
                         // price changes
                         None,
                         None,
@@ -633,7 +633,7 @@ impl TokenDatabase {
                             .unwrap_or(metadata_last_fetched_dt),
                         d_price_usd.unwrap_or(0.0),
                         d_price_sol.unwrap_or(0.0),
-                        d_price_native.unwrap_or_else(|| "0".to_string()),
+                        d_price_native.unwrap_or_else(|| "0".to_owned()),
                         d_change_5m,
                         d_change_1h,
                         d_change_6h,
@@ -662,7 +662,7 @@ impl TokenDatabase {
                             .unwrap_or(metadata_last_fetched_dt),
                         g_price_usd.unwrap_or(0.0),
                         g_price_sol.unwrap_or(0.0),
-                        g_price_native.unwrap_or_else(|| "0".to_string()),
+                        g_price_native.unwrap_or_else(|| "0".to_owned()),
                         g_change_5m,
                         g_change_1h,
                         g_change_6h,
@@ -689,7 +689,7 @@ impl TokenDatabase {
                         metadata_last_fetched_dt,
                         0.0,
                         0.0,
-                        "0".to_string(),
+                        "0".to_owned(),
                         None,
                         None,
                         None,
@@ -749,8 +749,8 @@ impl TokenDatabase {
             let token = Token {
                 // Core Identity & Metadata
                 mint: mint.clone(),
-                symbol: symbol.unwrap_or_else(|| "UNKNOWN".to_string()),
-                name: name.unwrap_or_else(|| "Unknown Token".to_string()),
+                symbol: symbol.unwrap_or_else(|| "UNKNOWN".to_owned()),
+                name: name.unwrap_or_else(|| "Unknown Token".to_owned()),
                 decimals: decimals.unwrap_or(9),
                 description: None,
                 image_url: resolved_image_url,
@@ -1061,8 +1061,8 @@ pub(super) fn assemble_token(
     Token {
         // Core identity
         mint: metadata.mint.clone(),
-        symbol: metadata.symbol.unwrap_or_else(|| "UNKNOWN".to_string()),
-        name: metadata.name.unwrap_or_else(|| "Unknown Token".to_string()),
+        symbol: metadata.symbol.unwrap_or_else(|| "UNKNOWN".to_owned()),
+        name: metadata.name.unwrap_or_else(|| "Unknown Token".to_owned()),
         decimals: resolved_decimals,
         description: None,
         image_url: resolved_image_url,
@@ -1240,8 +1240,8 @@ pub(super) fn assemble_token_without_market_data(
     Token {
         // Core Identity & Metadata
         mint: metadata.mint.clone(),
-        symbol: metadata.symbol.unwrap_or_else(|| "UNKNOWN".to_string()),
-        name: metadata.name.unwrap_or_else(|| "Unknown Token".to_string()),
+        symbol: metadata.symbol.unwrap_or_else(|| "UNKNOWN".to_owned()),
+        name: metadata.name.unwrap_or_else(|| "Unknown Token".to_owned()),
         decimals: resolved_decimals, // Default to 9 if unknown
         description: None,
         image_url: None,
@@ -1272,7 +1272,7 @@ pub(super) fn assemble_token_without_market_data(
         // Price Information (defaults for missing market data)
         price_usd: 0.0,
         price_sol: 0.0,
-        price_native: "0".to_string(),
+        price_native: "0".to_owned(),
         price_change_m5: None,
         price_change_h1: None,
         price_change_h6: None,

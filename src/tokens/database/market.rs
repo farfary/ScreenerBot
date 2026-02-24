@@ -346,7 +346,7 @@ impl TokenDatabase {
                 price_sol: row.get::<_, Option<f64>>(1)?.unwrap_or(0.0),
                 price_native: row
                     .get::<_, Option<String>>(2)?
-                    .unwrap_or_else(|| "0".to_string()),
+                    .unwrap_or_else(|| "0".to_owned()),
                 price_change_5m: row.get(3)?,
                 price_change_1h: row.get(4)?,
                 price_change_6h: row.get(5)?,
@@ -488,7 +488,7 @@ impl TokenDatabase {
                 price_sol: row.get::<_, Option<f64>>(1)?.unwrap_or(0.0),
                 price_native: row
                     .get::<_, Option<String>>(2)?
-                    .unwrap_or_else(|| "0".to_string()),
+                    .unwrap_or_else(|| "0".to_owned()),
                 price_change_5m: row.get(3)?,
                 price_change_1h: row.get(4)?,
                 price_change_6h: row.get(5)?,

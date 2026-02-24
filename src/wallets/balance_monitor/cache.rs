@@ -322,7 +322,7 @@ pub(super) async fn compute_and_cache_metrics(
         snapshot_limit,
         token_limit,
         payload: payload_blob,
-        payload_format: "json-gzip".to_string(),
+        payload_format: "json-gzip".to_owned(),
         computed_at,
         valid_until,
         computation_duration_ms: Some(duration_ms),
@@ -341,7 +341,7 @@ pub(super) async fn compute_and_cache_metrics(
         let db_guard = GLOBAL_WALLET_DB.lock().await;
         let db = db_guard
             .as_ref()
-            .ok_or_else(|| "Wallet database not initialized".to_string())?;
+            .ok_or_else(|| "Wallet database not initialized".to_owned())?;
         db.upsert_dashboard_metrics(&cached_entry)?;
     }
 
