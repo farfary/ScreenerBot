@@ -1,3 +1,10 @@
+//! Token discovery engine.
+//!
+//! Polls multiple data sources (DexScreener, GeckoTerminal, RugCheck, Jupiter)
+//! on a configurable interval to find new and trending tokens. Discovered tokens
+//! are deduplicated, validated, and stored in the token database for further
+//! analysis by the filtering and strategy pipelines.
+
 use crate::apis::get_api_manager;
 use crate::config;
 use crate::events::{record_token_event, Severity};
