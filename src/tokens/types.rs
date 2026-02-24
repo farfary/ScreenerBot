@@ -250,7 +250,6 @@ pub struct Token {
 
 impl Token {
     /// Calculate total transactions (buys + sells) for 5 minute range
-    #[allow(dead_code)]
     pub fn txns_5m_total(&self) -> Option<i64> {
         match (self.txns_m5_buys, self.txns_m5_sells) {
             (Some(b), Some(s)) => Some(b + s),
@@ -261,7 +260,6 @@ impl Token {
     }
 
     /// Calculate total transactions (buys + sells) for 1 hour range
-    #[allow(dead_code)]
     pub fn txns_1h_total(&self) -> Option<i64> {
         match (self.txns_h1_buys, self.txns_h1_sells) {
             (Some(b), Some(s)) => Some(b + s),
@@ -272,7 +270,6 @@ impl Token {
     }
 
     /// Calculate total transactions (buys + sells) for 6 hour range
-    #[allow(dead_code)]
     pub fn txns_6h_total(&self) -> Option<i64> {
         match (self.txns_h6_buys, self.txns_h6_sells) {
             (Some(b), Some(s)) => Some(b + s),
@@ -283,7 +280,6 @@ impl Token {
     }
 
     /// Calculate total transactions (buys + sells) for 24 hour range
-    #[allow(dead_code)]
     pub fn txns_24h_total(&self) -> Option<i64> {
         match (self.txns_h24_buys, self.txns_h24_sells) {
             (Some(b), Some(s)) => Some(b + s),
