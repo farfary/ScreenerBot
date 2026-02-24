@@ -46,47 +46,48 @@ pub use types::{
 
 // Re-export manager functions
 pub use manager::{
-    // CRUD
-    archive_wallet,
-    // Bulk operations
-    bulk_import_wallets,
-    // Token balance operations
-    clear_token_balances,
-    create_wallet,
-    create_wallets_batch,
-    delete_wallet,
-    export_wallet,
-    export_wallets,
-    get_all_token_balances,
-    get_all_wallet_balances,
-    get_existing_wallet_addresses,
+    // Initialization
+    initialize,
+    is_initialized,
     // Main wallet (fast path)
     get_main_address,
     get_main_keypair,
     get_main_wallet,
-    get_token_balances,
+    has_main_wallet,
+    // CRUD
+    archive_wallet,
+    create_wallet,
+    delete_wallet,
+    export_wallet,
+    import_wallet,
+    restore_wallet,
+    set_main_wallet,
+    update_wallet,
+    // Access
     get_wallet,
     get_wallet_by_address,
     get_wallet_keypair,
-    // Summary
-    get_wallets_summary,
-    // Tools integration
-    get_wallets_with_keys,
-    get_wallets_with_token,
-    has_main_wallet,
-    import_wallet,
-    // Initialization
-    initialize,
-    is_initialized,
     list_active_wallets,
     list_wallets,
-    restore_wallet,
-    set_main_wallet,
+    // Bulk operations
+    bulk_import_wallets,
+    create_wallets_batch,
+    export_wallets,
+    get_existing_wallet_addresses,
+    // Token balance operations
+    clear_token_balances,
+    get_all_token_balances,
+    get_token_balances,
     update_all_wallet_balances,
-    update_last_used,
-    update_wallet,
     update_wallet_balances,
     upsert_token_balance,
+    // Token balance queries (RPC)
+    get_all_wallet_balances,
+    get_wallets_with_token,
+    // Tools & summary
+    get_wallets_summary,
+    get_wallets_with_keys,
+    update_last_used,
 };
 
 // Re-export crypto utilities
