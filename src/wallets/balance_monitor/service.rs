@@ -246,7 +246,7 @@ pub async fn start_wallet_monitoring_service(
                             let db_guard = GLOBAL_WALLET_DB.lock().await;
                             match db_guard.as_ref() {
                                 Some(db) => {
-                                    match db.save_wallet_snapshot_sync(&snapshot) {
+                                    match db.save_wallet_snapshot(&snapshot) {
                                         Ok(snapshot_id) => {
                                             logger::debug(
                                                 LogTag::Wallet,
@@ -282,7 +282,7 @@ pub async fn start_wallet_monitoring_service(
                         let db_guard = GLOBAL_WALLET_DB.lock().await;
                         match db_guard.as_ref() {
                             Some(db) => {
-                                if let Err(e) = db.cleanup_old_snapshots_sync() {
+                                if let Err(e) = db.cleanup_old_snapshots() {
                                     logger::warning(LogTag::Wallet, &format!("Failed to cleanup old snapshots: {e}"));
                                 }
                                 if let Err(e) = db.cleanup_expired_metrics() {
@@ -305,7 +305,7 @@ pub async fn start_wallet_monitoring_service(
                     let start_ts = {
                         let db_guard = GLOBAL_WALLET_DB.lock().await;
                         if let Some(wallet_db) = db_guard.as_ref() {
-                            match wallet_db.get_flow_cache_max_ts_sync() {
+                            match wallet_db.get_flow_cache_max_ts() {
                                 Ok(Some(ts)) => ts - ChronoDuration::seconds(lookback_secs as i64),
                                 Ok(None) => Utc::now() - ChronoDuration::hours(24),
                                 Err(_) => Utc::now() - ChronoDuration::hours(24),
@@ -336,7 +336,7 @@ pub async fn start_wallet_monitoring_service(
                         .collect();
                     let db_guard = GLOBAL_WALLET_DB.lock().await;
                     if let Some(wallet_db) = db_guard.as_ref() {
-                        if let Err(e) = wallet_db.upsert_flow_rows_sync(&mapped) {
+                        if let Err(e) = wallet_db.upsert_flow_rows(&mapped) {
                             increment_errors();
                             logger::error(LogTag::Wallet, &format!("Failed to upsert flow cache rows: {e}"));
                         } else {
@@ -374,8 +374,7 @@ pub async fn get_recent_wallet_snapshots(limit: usize) -> Result<Vec<WalletSnaps
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
         Some(db) => {
-            // Use the synchronous version to avoid lifetime issues
-            db.get_recent_snapshots_sync(limit)
+            db.get_recent_snapshots(limit)
         }
         None => Err("Wallet database not initialized".to_owned()),
     }
@@ -385,7 +384,7 @@ pub async fn get_recent_wallet_snapshots(limit: usize) -> Result<Vec<WalletSnaps
 pub async fn get_wallet_monitor_stats() -> Result<WalletMonitorStats, String> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
-        Some(db) => db.get_monitor_stats_sync(),
+        Some(db) => db.get_monitor_stats(),
         None => Err("Wallet database not initialized".to_owned()),
     }
 }
@@ -394,7 +393,7 @@ pub async fn get_wallet_monitor_stats() -> Result<WalletMonitorStats, String> {
 pub async fn get_snapshot_token_balances(snapshot_id: i64) -> Result<Vec<SnapshotTokenBalance>, String> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
-        Some(db) => db.get_token_balances_sync(snapshot_id),
+        Some(db) => db.get_token_balances(snapshot_id),
         None => Err("Wallet database not initialized".to_owned()),
     }
 }
@@ -403,7 +402,7 @@ pub async fn get_snapshot_token_balances(snapshot_id: i64) -> Result<Vec<Snapsho
 pub async fn get_snapshot_nft_balances(snapshot_id: i64) -> Result<Vec<NftBalance>, String> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
-        Some(db) => db.get_nft_balances_sync(snapshot_id),
+        Some(db) => db.get_nft_balances(snapshot_id),
         None => Err("Wallet database not initialized".to_owned()),
     }
 }
@@ -418,7 +417,7 @@ pub async fn get_current_wallet_status() -> Result<Option<WalletSnapshot>, Strin
 pub async fn get_balance_at_time(target_time: DateTime<Utc>) -> Result<Option<f64>, String> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
-        Some(db) => db.get_balance_at_time_sync(target_time),
+        Some(db) => db.get_balance_at_time(target_time),
         None => Err("Wallet database not initialized".to_owned()),
     }
 }
@@ -427,7 +426,7 @@ pub async fn get_balance_at_time(target_time: DateTime<Utc>) -> Result<Option<f6
 pub async fn get_flow_cache_stats() -> Result<WalletFlowCacheStats, String> {
     let db_guard = GLOBAL_WALLET_DB.lock().await;
     match db_guard.as_ref() {
-        Some(db) => db.get_flow_cache_stats_sync(),
+        Some(db) => db.get_flow_cache_stats(),
         None => Err("Wallet database not initialized".to_owned()),
     }
 }

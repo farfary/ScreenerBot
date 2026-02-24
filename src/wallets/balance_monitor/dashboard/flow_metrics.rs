@@ -19,9 +19,9 @@ pub(super) async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlow
     // All-time mode when window_hours <= 0
     if window_hours <= 0 {
         if let Some(db) = GLOBAL_WALLET_DB.lock().await.as_ref() {
-            if let Ok(Some(min_ts)) = db.get_flow_cache_min_ts_sync() {
+            if let Ok(Some(min_ts)) = db.get_flow_cache_min_ts() {
                 if let Ok((inflow, outflow, tx_count)) =
-                    db.aggregate_cached_flows_sync(min_ts, None)
+                    db.aggregate_cached_flows(min_ts, None)
                 {
                     if tx_count > 0 {
                         logger::debug(
@@ -77,7 +77,7 @@ pub(super) async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlow
 
     // Try cached aggregation first
     if let Some(db) = GLOBAL_WALLET_DB.lock().await.as_ref() {
-        match db.aggregate_cached_flows_sync(window_start, None) {
+        match db.aggregate_cached_flows(window_start, None) {
             Ok((inflow, outflow, tx_count)) => {
                 logger::debug(
                     LogTag::Wallet,

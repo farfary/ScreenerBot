@@ -8,89 +8,8 @@ use super::super::types::WalletSnapshot;
 use super::WalletDatabase;
 
 impl WalletDatabase {
-    /// Save wallet snapshot with token balances (synchronous version)
-    pub fn save_wallet_snapshot_sync(&self, snapshot: &WalletSnapshot) -> Result<i64, String> {
-        let conn = self.get_connection()?;
-
-        // Insert wallet snapshot
-        let snapshot_id = conn
-            .query_row(
-                r#"
-            INSERT INTO wallet_snapshots (
-                wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_tokens_count, total_nfts_count
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6) RETURNING id
-            "#,
-                params![
-                    snapshot.wallet_address,
-                    snapshot.snapshot_time.to_rfc3339(),
-                    snapshot.sol_balance,
-                    snapshot.sol_balance_lamports as i64,
-                    snapshot.total_tokens_count as i64,
-                    snapshot.total_nfts_count as i64
-                ],
-                |row| row.get::<_, i64>(0),
-            )
-            .map_err(|e| format!("Failed to insert wallet snapshot: {e}"))?;
-
-        // Insert token balances
-        for token_balance in &snapshot.token_balances {
-            conn.execute(
-                r#"
-                INSERT INTO token_balances (
-                    snapshot_id, mint, balance, balance_ui, decimals, is_token_2022
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-                "#,
-                params![
-                    snapshot_id,
-                    token_balance.mint,
-                    token_balance.balance as i64,
-                    token_balance.balance_ui,
-                    token_balance.decimals,
-                    token_balance.is_token_2022
-                ],
-            )
-            .map_err(|e| format!("Failed to insert token balance: {e}"))?;
-        }
-
-        // Insert NFT balances
-        for nft_balance in &snapshot.nft_balances {
-            conn.execute(
-                r#"
-                INSERT INTO nft_balances (
-                    snapshot_id, mint, account_address, name, symbol, image_url, is_token_2022
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-                "#,
-                params![
-                    snapshot_id,
-                    nft_balance.mint,
-                    nft_balance.account_address,
-                    nft_balance.name,
-                    nft_balance.symbol,
-                    nft_balance.image_url,
-                    nft_balance.is_token_2022
-                ],
-            )
-            .map_err(|e| format!("Failed to insert NFT balance: {e}"))?;
-        }
-
-        logger::debug(
-            LogTag::Wallet,
-            &format!(
-                "Saved wallet snapshot ID {} with {} tokens, {} NFTs for {}",
-                snapshot_id,
-                snapshot.token_balances.len(),
-                snapshot.nft_balances.len(),
-                &snapshot.wallet_address[..8]
-            ),
-        );
-
-        update_wallet_snapshot_status(snapshot.snapshot_time);
-
-        Ok(snapshot_id)
-    }
-
-    /// Save wallet snapshot with token balances (async version)
-    pub async fn save_wallet_snapshot(&self, snapshot: &WalletSnapshot) -> Result<i64, String> {
+    /// Save wallet snapshot with token balances
+    pub fn save_wallet_snapshot(&self, snapshot: &WalletSnapshot) -> Result<i64, String> {
         let conn = self.get_connection()?;
 
         // Insert wallet snapshot
@@ -172,7 +91,7 @@ impl WalletDatabase {
 
     /// Get SOL balance at or before a specific time (optimized for single value)
     /// Uses idx_wallet_snapshots_time index for fast descending time lookup
-    pub fn get_balance_at_time_sync(
+    pub fn get_balance_at_time(
         &self,
         target_time: DateTime<Utc>,
     ) -> Result<Option<f64>, String> {

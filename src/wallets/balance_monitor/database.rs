@@ -164,7 +164,7 @@ impl WalletDatabase {
     }
 
     /// Get recent wallet snapshots
-    pub fn get_recent_snapshots_sync(&self, limit: usize) -> Result<Vec<WalletSnapshot>, String> {
+    pub fn get_recent_snapshots(&self, limit: usize) -> Result<Vec<WalletSnapshot>, String> {
         let conn = self.get_connection()?;
 
         let mut stmt = conn
@@ -215,7 +215,7 @@ impl WalletDatabase {
     }
 
     /// Get wallet monitoring statistics
-    pub fn get_monitor_stats_sync(&self) -> Result<WalletMonitorStats, String> {
+    pub fn get_monitor_stats(&self) -> Result<WalletMonitorStats, String> {
         let conn = self.get_connection()?;
 
         let total_snapshots: i64 = conn
@@ -266,7 +266,7 @@ impl WalletDatabase {
     }
 
     /// Get token balances for a specific snapshot
-    pub fn get_token_balances_sync(&self, snapshot_id: i64) -> Result<Vec<SnapshotTokenBalance>, String> {
+    pub fn get_token_balances(&self, snapshot_id: i64) -> Result<Vec<SnapshotTokenBalance>, String> {
         let conn = self.get_connection()?;
 
         let mut stmt = conn
@@ -305,7 +305,7 @@ impl WalletDatabase {
     }
 
     /// Get NFT balances for a specific snapshot
-    pub fn get_nft_balances_sync(&self, snapshot_id: i64) -> Result<Vec<NftBalance>, String> {
+    pub fn get_nft_balances(&self, snapshot_id: i64) -> Result<Vec<NftBalance>, String> {
         let conn = self.get_connection()?;
 
         let mut stmt = conn
@@ -345,7 +345,7 @@ impl WalletDatabase {
     }
 
     /// Cleanup old snapshots (keep last 1000)
-    pub fn cleanup_old_snapshots_sync(&self) -> Result<u64, String> {
+    pub fn cleanup_old_snapshots(&self) -> Result<u64, String> {
         let conn = self.get_connection()?;
 
         let deleted_count = conn

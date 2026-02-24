@@ -6,7 +6,7 @@ use super::WalletDatabase;
 
 impl WalletDatabase {
     /// Aggregate pre-cached SOL flows for a given time window
-    pub fn aggregate_cached_flows_sync(
+    pub fn aggregate_cached_flows(
         &self,
         from: DateTime<Utc>,
         to: Option<DateTime<Utc>>,
@@ -43,7 +43,7 @@ impl WalletDatabase {
     }
 
     /// Upsert a batch of flow rows into cache
-    pub fn upsert_flow_rows_sync(
+    pub fn upsert_flow_rows(
         &self,
         rows: &[(String, DateTime<Utc>, f64)],
     ) -> Result<usize, String> {
@@ -71,7 +71,7 @@ impl WalletDatabase {
     }
 
     /// Get the max timestamp present in the flow cache
-    pub fn get_flow_cache_max_ts_sync(&self) -> Result<Option<DateTime<Utc>>, String> {
+    pub fn get_flow_cache_max_ts(&self) -> Result<Option<DateTime<Utc>>, String> {
         let conn = self.get_connection()?;
         let mut stmt = conn
             .prepare("SELECT MAX(timestamp) FROM sol_flow_cache")
@@ -92,7 +92,7 @@ impl WalletDatabase {
     }
 
     /// Get the minimum timestamp present in the flow cache (earliest record)
-    pub fn get_flow_cache_min_ts_sync(&self) -> Result<Option<DateTime<Utc>>, String> {
+    pub fn get_flow_cache_min_ts(&self) -> Result<Option<DateTime<Utc>>, String> {
         let conn = self.get_connection()?;
         let mut stmt = conn
             .prepare("SELECT MIN(timestamp) FROM sol_flow_cache")
@@ -113,12 +113,12 @@ impl WalletDatabase {
     }
 
     /// Get flow cache stats (row count and latest timestamp)
-    pub fn get_flow_cache_stats_sync(&self) -> Result<WalletFlowCacheStats, String> {
+    pub fn get_flow_cache_stats(&self) -> Result<WalletFlowCacheStats, String> {
         let conn = self.get_connection()?;
         let rows: i64 = conn
             .query_row("SELECT COUNT(*) FROM sol_flow_cache", [], |row| row.get(0))
             .unwrap_or_default();
-        let max_ts = self.get_flow_cache_max_ts_sync()?.map(|dt| dt.to_rfc3339());
+        let max_ts = self.get_flow_cache_max_ts()?.map(|dt| dt.to_rfc3339());
         Ok(WalletFlowCacheStats {
             rows: rows.max(0) as u64,
             max_timestamp: max_ts,
