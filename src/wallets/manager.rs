@@ -80,49 +80,8 @@ pub async fn is_initialized() -> bool {
 mod crud;
 pub use crud::{create_wallet, export_wallet, import_wallet};
 
-/// Get a wallet by ID
-pub async fn get_wallet(wallet_id: i64) -> Result<Option<Wallet>, String> {
-    let db_guard = WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
-
-    db.get_wallet(wallet_id)
-}
-
-/// Get a wallet by address
-pub async fn get_wallet_by_address(address: &str) -> Result<Option<Wallet>, String> {
-    let db_guard = WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
-
-    db.get_wallet_by_address(address)
-}
-
-/// Get a wallet's keypair by ID
-pub async fn get_wallet_keypair(wallet_id: i64) -> Result<Keypair, String> {
-    let db_guard = WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
-
-    let (encrypted, nonce) = db
-        .get_wallet_encrypted_key(wallet_id)?
-        .ok_or("Wallet not found")?;
-
-    decrypt_to_keypair(&encrypted, &nonce)
-}
-
-/// List all wallets
-pub async fn list_wallets(include_inactive: bool) -> Result<Vec<Wallet>, String> {
-    let db_guard = WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
-
-    db.list_wallets(include_inactive)
-}
-
-/// List active wallets (usable for operations)
-pub async fn list_active_wallets() -> Result<Vec<Wallet>, String> {
-    let db_guard = WALLETS_DB.read().await;
-    let db = db_guard.as_ref().ok_or("Wallet database not initialized")?;
-
-    db.list_active_wallets()
-}
+mod access;
+pub use access::{get_wallet, get_wallet_by_address, get_wallet_keypair, list_active_wallets, list_wallets};
 
 /// Update wallet metadata
 pub async fn update_wallet(wallet_id: i64, request: UpdateWalletRequest) -> Result<Wallet, String> {
