@@ -180,7 +180,7 @@ impl std::fmt::Display for LogTag {
             LogTag::Tokens => format!("{:<8}", "TOKENS").bright_cyan().bold(),
             LogTag::Transactions => format!("{:<8}", "TX").bright_blue().bold(),
             LogTag::Websocket => format!("{:<8}", "WS").bright_cyan().bold(),
-            LogTag::Positions => format!("{:<8}", "Positions").bright_yellow().bold(),
+            LogTag::Positions => format!("{:<8}", "POSITION").bright_yellow().bold(),
             LogTag::AI => format!("{:<8}", "AI").bright_purple().bold(),
             LogTag::Unknown => format!("{:<8}", "UNKNOWN").white().dimmed(),
             LogTag::Security => format!("{:<8}", "SECURITY").bright_red().bold(),
