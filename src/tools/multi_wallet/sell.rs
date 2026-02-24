@@ -2,7 +2,7 @@
 //!
 //! Coordinate sell orders across multiple wallets with optional consolidation.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::Ordering;
 
 use tokio::time::{sleep, Duration};
@@ -94,7 +94,7 @@ pub async fn execute_multi_sell(config: MultiSellConfig) -> Result<SessionResult
     }
 
     // Execute sells - track successful sells for ATA closure
-    let wallet_map: std::collections::HashMap<String, &WalletWithKey> = wallets
+    let wallet_map: HashMap<String, &WalletWithKey> = wallets
         .iter()
         .map(|w| (w.wallet.address.clone(), w))
         .collect();

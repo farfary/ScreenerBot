@@ -3,6 +3,7 @@
 //! Contains references to core ScreenerBot systems and shared resources
 //! that need to be accessed by route handlers.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Shared application state passed to all route handlers
@@ -63,25 +64,25 @@ impl AppState {
     /// Get all services health
     pub async fn get_all_services_health(
         &self,
-    ) -> std::collections::HashMap<&'static str, crate::services::ServiceHealth> {
+    ) -> HashMap<&'static str, crate::services::ServiceHealth> {
         if let Some(manager_ref) = crate::services::get_service_manager().await {
             if let Some(manager) = manager_ref.read().await.as_ref() {
                 return manager.get_health().await;
             }
         }
-        std::collections::HashMap::new()
+        HashMap::new()
     }
 
     /// Get service metrics (optimized - uses read lock, not write lock)
     pub async fn get_service_metrics(
         &self,
-    ) -> std::collections::HashMap<&'static str, crate::services::ServiceMetrics> {
+    ) -> HashMap<&'static str, crate::services::ServiceMetrics> {
         if let Some(manager_ref) = crate::services::get_service_manager().await {
             if let Some(manager) = manager_ref.read().await.as_ref() {
                 return manager.get_metrics().await;
             }
         }
-        std::collections::HashMap::new()
+        HashMap::new()
     }
 }
 

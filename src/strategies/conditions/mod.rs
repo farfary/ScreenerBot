@@ -20,6 +20,7 @@ pub use volume_spike::VolumeSpikeCondition;
 use crate::ohlcvs::Candle;
 use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;
+use std::collections::HashMap;
 
 /// Helper to extract candles from TimeframeBundle using strategy's configured timeframe
 /// Returns detailed error messages for debugging
@@ -111,14 +112,14 @@ pub trait ConditionEvaluator: Send + Sync {
 
 /// Registry for all condition evaluators
 pub struct ConditionRegistry {
-    evaluators: std::collections::HashMap<String, Box<dyn ConditionEvaluator>>,
+    evaluators: HashMap<String, Box<dyn ConditionEvaluator>>,
 }
 
 impl ConditionRegistry {
     /// Create a new registry with all built-in conditions
     pub fn new() -> Self {
         let mut registry = Self {
-            evaluators: std::collections::HashMap::new(),
+            evaluators: HashMap::new(),
         };
 
         // Register all built-in conditions

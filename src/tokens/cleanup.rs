@@ -11,6 +11,7 @@ use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::tokens::database::TokenDatabase;
 use crate::tokens::types::{TokenError, TokenResult};
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Notify;
@@ -215,7 +216,7 @@ pub struct BlacklistSummary {
     pub authority_freeze_count: usize,
     pub manual_count: usize,
     pub non_authority_auto_count: usize,
-    pub non_authority_breakdown: std::collections::HashMap<String, usize>,
+    pub non_authority_breakdown: HashMap<String, usize>,
 }
 
 /// Get blacklist summary
@@ -233,8 +234,8 @@ pub fn get_blacklist_summary(db: &TokenDatabase) -> TokenResult<BlacklistSummary
     let mut authority_freeze_count = 0;
     let mut manual_count = 0;
     let mut non_authority_auto_count = 0;
-    let mut non_authority_breakdown: std::collections::HashMap<String, usize> =
-        std::collections::HashMap::new();
+    let mut non_authority_breakdown: HashMap<String, usize> =
+        HashMap::new();
 
     let mut stmt = conn
         .prepare("SELECT reason, source FROM blacklist")

@@ -56,7 +56,7 @@ pub use maintenance::{
     record_system_event, record_token_event, record_trader_event, record_transaction_event,
     record_wallet_event, search_events, start_maintenance_task,
 };
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::sync::{LazyLock, OnceLock};
 use tokio::sync::{broadcast, mpsc, Mutex, RwLock};
@@ -190,7 +190,7 @@ pub async fn recent_all(limit: usize) -> Result<Vec<Event>, String> {
 /// Get event counts by category for the last N hours
 pub async fn count_by_category(
     since_hours: u64,
-) -> Result<std::collections::HashMap<String, u64>, String> {
+) -> Result<HashMap<String, u64>, String> {
     let db = EVENTS_DB
         .get()
         .ok_or_else(|| "Events system not initialized".to_owned())?;

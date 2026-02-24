@@ -3,6 +3,7 @@
 // GUI configuration schema
 
 use crate::config_struct;
+use std::collections::HashMap;
 
 config_struct! {
     /// GUI/Desktop application configuration
@@ -246,7 +247,7 @@ pub fn ensure_all_tabs_present(mut tabs: Vec<TabConfig>) -> Vec<TabConfig> {
     }
 
     // Create a map of default tabs for quick lookup
-    let default_map: std::collections::HashMap<String, &TabConfig> =
+    let default_map: HashMap<String, &TabConfig> =
         defaults.iter().map(|t| (t.id.clone(), t)).collect();
 
     // Force icons and labels from defaults for existing tabs

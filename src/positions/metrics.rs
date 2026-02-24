@@ -2,6 +2,7 @@
 
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::LazyLock;
 
@@ -165,7 +166,7 @@ impl VerificationMetricsInternal {
         let abandoned_count = self.abandoned.load(Ordering::Relaxed);
         let permanent_count = self.permanent_failures.load(Ordering::Relaxed);
 
-        let mut custom = std::collections::HashMap::new();
+        let mut custom = HashMap::new();
         custom.insert("queue_size".to_owned(), queue_size as f64);
         custom.insert("entry_verified".to_owned(), entries as f64);
         custom.insert("exit_verified".to_owned(), exits as f64);

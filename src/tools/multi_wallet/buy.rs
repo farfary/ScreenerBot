@@ -2,6 +2,7 @@
 //!
 //! Distribute buy orders across multiple wallets for stealth accumulation.
 
+use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 
 use tokio::time::{sleep, Duration};
@@ -92,7 +93,7 @@ pub async fn execute_multi_buy(config: MultiBuyConfig) -> Result<SessionResult, 
     }
 
     // Execute buys
-    let wallet_map: std::collections::HashMap<String, &WalletWithKey> = wallets
+    let wallet_map: HashMap<String, &WalletWithKey> = wallets
         .iter()
         .map(|w| (w.wallet.address.clone(), w))
         .collect();
