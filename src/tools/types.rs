@@ -306,7 +306,7 @@ impl DistributionStrategy {
         match self {
             DistributionStrategy::RoundRobin => "round_robin".to_string(),
             DistributionStrategy::Random => "random".to_string(),
-            DistributionStrategy::Burst { burst_size } => format!("burst:{}", burst_size),
+            DistributionStrategy::Burst { burst_size } => format!("burst:{burst_size}"),
         }
     }
 

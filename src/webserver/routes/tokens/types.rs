@@ -680,7 +680,7 @@ pub(super) async fn fetch_and_add_token_from_external(mint: &str) -> Option<crat
 
     logger::debug(
         LogTag::Webserver,
-        &format!("Token not in DB, attempting external fetch: mint={}", mint),
+        &format!("Token not in DB, attempting external fetch: mint={mint}"),
     );
 
     let apis = get_api_manager();

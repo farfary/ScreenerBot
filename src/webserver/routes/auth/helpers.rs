@@ -23,7 +23,7 @@ pub fn get_cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
 /// Build session cookie string with proper attributes
 pub fn build_session_cookie(token: &str, timeout_secs: u64) -> String {
     let max_age = if timeout_secs > 0 {
-        format!("; Max-Age={}", timeout_secs)
+        format!("; Max-Age={timeout_secs}")
     } else {
         // Session cookie (expires when browser closes) - no Max-Age
         String::new()

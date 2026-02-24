@@ -110,7 +110,7 @@ pub async fn update_favorite(
 pub async fn delete_favorite(Path(id): Path<i64>) -> Response {
     match remove_tool_favorite(id) {
         Ok(true) => {
-            logger::info(LogTag::Tools, &format!("Removed tool favorite: {}", id));
+            logger::info(LogTag::Tools, &format!("Removed tool favorite: {id}"));
             success_response(serde_json::json!({ "success": true }))
         }
         Ok(false) => error_response(

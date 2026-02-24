@@ -900,7 +900,7 @@ impl AccountFetcher {
                 missing_accounts.push(missing_key);
                 logger::warning(
                     LogTag::PoolFetcher,
-                    &format!("Account not found: {}", missing_key),
+                    &format!("Account not found: {missing_key}"),
                 );
             }
         }
@@ -1097,7 +1097,7 @@ impl AccountFetcher {
             if !should_keep {
                 logger::debug(
                     LogTag::PoolFetcher,
-                    &format!("Removing stale bundle for pool: {}", pool_id),
+                    &format!("Removing stale bundle for pool: {pool_id}"),
                 );
             }
             should_keep

@@ -172,7 +172,7 @@ pub async fn generate_keypair() -> Response {
 
     logger::info(
         LogTag::Wallet,
-        &format!("Generated new keypair via API: {}", pubkey),
+        &format!("Generated new keypair via API: {pubkey}"),
     );
 
     success_response(KeypairResponse { pubkey, secret })

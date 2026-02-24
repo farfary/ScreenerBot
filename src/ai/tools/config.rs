@@ -78,7 +78,7 @@ impl Tool for GetConfigTool {
                 }
             }),
             Some(section) => {
-                return ToolResult::error(format!("Unknown section: {}", section));
+                return ToolResult::error(format!("Unknown section: {section}"));
             }
             None => {
                 // Return all important sections
@@ -158,7 +158,7 @@ impl Tool for UpdateConfigTool {
             "telegram" => update_telegram_config(&params.key, params.value),
             "ai" => update_ai_config(&params.key, params.value),
             section => {
-                return ToolResult::error(format!("Cannot update section: {}", section));
+                return ToolResult::error(format!("Cannot update section: {section}"));
             }
         };
 

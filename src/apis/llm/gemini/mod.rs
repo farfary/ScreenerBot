@@ -199,7 +199,7 @@ impl GeminiClient {
 
         logger::debug(
             LogTag::Api,
-            &format!("[GEMINI] Calling generateContent: model={}", model),
+            &format!("[GEMINI] Calling generateContent: model={model}"),
         );
 
         let start = Instant::now();

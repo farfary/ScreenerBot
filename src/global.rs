@@ -224,7 +224,7 @@ pub fn set_dashboard_active_token(mint: Option<String>) {
             if let Some(ref m) = mint {
                 crate::logger::debug(
                     crate::logger::LogTag::Webserver,
-                    &format!("Dashboard focus set: mint={}", m),
+                    &format!("Dashboard focus set: mint={m}"),
                 );
             } else if guard.is_some() {
                 crate::logger::debug(crate::logger::LogTag::Webserver, "Dashboard focus cleared");

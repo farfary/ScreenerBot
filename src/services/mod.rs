@@ -149,7 +149,7 @@ pub fn log_service_notice(service_name: &str, kind: &str, details: Option<&str>,
 }
 
 pub fn log_service_startup_phase(phase: &str, details: Option<&str>) {
-    let mut message = format!("service_startup phase={}", phase);
+    let mut message = format!("service_startup phase={phase}");
     append_details(&mut message, details);
     logger::info(LogTag::System, &message);
 }
@@ -315,7 +315,7 @@ impl ServiceManager {
                     );
                 }
 
-                let handle_detail = Some(format!("handles={}", handle_count));
+                let handle_detail = Some(format!("handles={handle_count}"));
                 log_service_event(
                     service_name,
                     ServiceLogEvent::StartSuccess,
@@ -340,7 +340,7 @@ impl ServiceManager {
         log_service_startup_phase("complete", Some(&completion));
         logger::info(
             LogTag::System,
-            &format!("service_startup status=ready {}", completion),
+            &format!("service_startup status=ready {completion}"),
         );
         Ok(())
     }
@@ -466,7 +466,7 @@ impl ServiceManager {
                         log_service_event(
                             service_name,
                             ServiceLogEvent::StartSuccess,
-                            Some(&format!("handles={}", handle_count)),
+                            Some(&format!("handles={handle_count}")),
                             true,
                         );
 

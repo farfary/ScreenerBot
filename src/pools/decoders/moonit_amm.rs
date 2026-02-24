@@ -216,7 +216,7 @@ impl MoonitAmmDecoder {
             None => {
                 logger::error(
                     LogTag::PoolDecoder,
-                    &format!("No decimals found for token: {}", base_mint),
+                    &format!("No decimals found for token: {base_mint}"),
                 );
                 return None;
             }

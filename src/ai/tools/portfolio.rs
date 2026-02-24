@@ -298,7 +298,7 @@ impl Tool for GetPnLTool {
             "week" => Some(chrono::Utc::now() - chrono::Duration::weeks(1)),
             "month" => Some(chrono::Utc::now() - chrono::Duration::days(30)),
             "all" => None,
-            _ => return ToolResult::error(format!("Invalid period: {}", period)),
+            _ => return ToolResult::error(format!("Invalid period: {period}")),
         };
 
         // Get trading stats from database

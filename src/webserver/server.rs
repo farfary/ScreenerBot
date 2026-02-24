@@ -152,7 +152,7 @@ pub async fn start_server(
 
         // Log effective values with source information
         let source_info = if port_source == host_source {
-            format!("source: {}", port_source)
+            format!("source: {port_source}")
         } else {
             format!("port source: {}, host source: {}", port_source, host_source)
         };
@@ -313,7 +313,7 @@ pub async fn test_port_binding(
 
     logger::debug(
         LogTag::Webserver,
-        &format!("[TEST-BIND] Checking GUI mode: is_gui={}", is_gui),
+        &format!("[TEST-BIND] Checking GUI mode: is_gui={is_gui}"),
     );
 
     if is_gui {
@@ -334,7 +334,7 @@ pub async fn test_port_binding(
     let init_complete = crate::global::is_initialization_complete();
     logger::debug(
         LogTag::Webserver,
-        &format!("[TEST-BIND] Initialization complete: {}", init_complete),
+        &format!("[TEST-BIND] Initialization complete: {init_complete}"),
     );
 
     let (config_port, config_host) = if init_complete {

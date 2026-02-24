@@ -250,14 +250,14 @@ pub async fn check_for_update() -> Result<Option<UpdateInfo>, String> {
 
     logger::debug(
         LogTag::System,
-        &format!("Checking for updates at: {}", server_url),
+        &format!("Checking for updates at: {server_url}"),
     );
     logger::debug(LogTag::System, &format!("Update check URL: {url}"));
 
     let client = reqwest::Client::new();
     let response = client
         .get(&url)
-        .header("User-Agent", format!("ScreenerBot/{}", VERSION))
+        .header("User-Agent", format!("ScreenerBot/{VERSION}"))
         .timeout(std::time::Duration::from_secs(10))
         .send()
         .await
@@ -353,7 +353,7 @@ pub async fn download_update(update: &UpdateInfo) -> Result<String, String> {
 
     logger::debug(
         LogTag::System,
-        &format!("Downloading from: {}", download_url),
+        &format!("Downloading from: {download_url}"),
     );
 
     // Download file with timeout

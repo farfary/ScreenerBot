@@ -69,7 +69,7 @@ impl ConditionEvaluator for PriceBreakoutCondition {
                 let breakout_level = period_low * (1.0 - confirmation / 100.0);
                 current_price <= breakout_level
             }
-            _ => return Err(format!("Invalid direction: {}", direction)),
+            _ => return Err(format!("Invalid direction: {direction}")),
         };
 
         Ok(result)
@@ -86,7 +86,7 @@ impl ConditionEvaluator for PriceBreakoutCondition {
 
         let direction = get_param_string(condition, "direction")?;
         if !["UPWARD", "DOWNWARD"].contains(&direction.as_str()) {
-            return Err(format!("Invalid direction: {}", direction));
+            return Err(format!("Invalid direction: {direction}"));
         }
 
         let confirmation = get_param_f64(condition, "confirmation")?;

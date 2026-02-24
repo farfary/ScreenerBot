@@ -147,7 +147,7 @@ pub async fn update_instruction(
         )
     }) {
         Ok(()) => {
-            logger::info(LogTag::Api, &format!("Updated AI instruction: {}", id));
+            logger::info(LogTag::Api, &format!("Updated AI instruction: {id}"));
 
             // Fetch the updated instruction
             match db::with_ai_db(|conn| db::get_instruction(conn, id)) {
@@ -191,7 +191,7 @@ pub async fn delete_instruction(
 ) -> Response {
     match db::with_ai_db(|conn| db::delete_instruction(conn, id)) {
         Ok(()) => {
-            logger::info(LogTag::Api, &format!("Deleted AI instruction: {}", id));
+            logger::info(LogTag::Api, &format!("Deleted AI instruction: {id}"));
             success_response(serde_json::json!({
                 "message": "Instruction deleted successfully"
             }))

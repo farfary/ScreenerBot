@@ -69,7 +69,7 @@ impl Service for WebserverService {
         let is_gui = crate::global::is_gui_mode();
         logger::debug(
             LogTag::System,
-            &format!("[PRE-FLIGHT] GUI mode state: {}", is_gui),
+            &format!("[PRE-FLIGHT] GUI mode state: {is_gui}"),
         );
 
         // Pre-flight check: test port binding BEFORE spawning background task

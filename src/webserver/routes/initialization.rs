@@ -320,7 +320,7 @@ async fn complete_initialization(Json(request): Json<CompleteInitializationReque
     let wallet_address = keypair.pubkey();
     logger::info(
         LogTag::Webserver,
-        &format!("Wallet validated: {}", wallet_address),
+        &format!("Wallet validated: {wallet_address}"),
     );
 
     // Step 2: Test RPC endpoints

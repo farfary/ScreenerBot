@@ -95,7 +95,7 @@ pub fn init_chat_db() -> Result<Pool<SqliteConnectionManager>, String> {
 
     logger::info(
         LogTag::System,
-        &format!("AI chat database initialized at {}", db_path_str),
+        &format!("AI chat database initialized at {db_path_str}"),
     );
 
     // Store in global

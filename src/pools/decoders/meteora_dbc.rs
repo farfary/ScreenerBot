@@ -151,7 +151,7 @@ impl PoolDecoder for MeteoraDbcDecoder {
         if !price_per_token.is_finite() || price_per_token <= 0.0 {
             logger::error(
                 LogTag::PoolDecoder,
-                &format!("Meteora DBC: Invalid price calculated: {}", price_per_token),
+                &format!("Meteora DBC: Invalid price calculated: {price_per_token}"),
             );
             return None;
         }

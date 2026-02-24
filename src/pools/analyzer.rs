@@ -138,7 +138,7 @@ impl PoolAnalyzer {
                                         if is_blacklisted {
                                             logger::debug(
                                                 LogTag::PoolAnalyzer,
-                                                &format!("Skipping blacklisted pool: {}", pool_id),
+                                                &format!("Skipping blacklisted pool: {pool_id}"),
                                             );
                                             continue;
                                         }
@@ -466,7 +466,7 @@ impl PoolAnalyzer {
             ProgramKind::MeteoraDbc => {
                 logger::debug(
                     LogTag::PoolAnalyzer,
-                    &format!("Extracting DBC accounts for pool {}", pool_id),
+                    &format!("Extracting DBC accounts for pool {pool_id}"),
                 );
 
                 let mut accounts = vec![*pool_id];
@@ -659,7 +659,7 @@ impl PoolAnalyzer {
 
         logger::debug(
             LogTag::PoolAnalyzer,
-            &format!("Extracting CLMM accounts for pool {}", pool_id),
+            &format!("Extracting CLMM accounts for pool {pool_id}"),
         );
 
         let mut accounts = vec![*pool_id];
@@ -702,7 +702,7 @@ impl PoolAnalyzer {
     ) -> Option<Vec<Pubkey>> {
         logger::debug(
             LogTag::PoolAnalyzer,
-            &format!("Extracting Orca Whirlpool accounts for pool {}", pool_id),
+            &format!("Extracting Orca Whirlpool accounts for pool {pool_id}"),
         );
 
         let mut accounts = vec![*pool_id];
@@ -753,7 +753,7 @@ impl PoolAnalyzer {
     ) -> Option<Vec<Pubkey>> {
         logger::debug(
             LogTag::PoolAnalyzer,
-            &format!("Extracting DAMM accounts for pool {}", pool_id),
+            &format!("Extracting DAMM accounts for pool {pool_id}"),
         );
 
         let mut accounts = vec![*pool_id];
@@ -841,7 +841,7 @@ impl PoolAnalyzer {
     ) -> Option<Vec<Pubkey>> {
         logger::debug(
             LogTag::PoolAnalyzer,
-            &format!("Extracting PumpFun AMM accounts for pool {}", pool_id),
+            &format!("Extracting PumpFun AMM accounts for pool {pool_id}"),
         );
 
         let mut accounts = vec![*pool_id];

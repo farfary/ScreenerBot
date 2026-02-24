@@ -18,7 +18,7 @@ use crate::{
 pub async fn get_token_detail(Path(mint): Path<String>) -> Json<TokenDetailResponse> {
     let request_start = std::time::Instant::now();
 
-    logger::debug(LogTag::Webserver, &format!("mint={}", mint));
+    logger::debug(LogTag::Webserver, &format!("mint={mint}"));
 
     // Fetch token from database (with market data)
     let lookup_start = std::time::Instant::now();
@@ -628,7 +628,7 @@ pub async fn get_token_analysis(
 
     logger::debug(
         LogTag::Webserver,
-        &format!("Token analysis requested: mint={}", mint),
+        &format!("Token analysis requested: mint={mint}"),
     );
 
     // Fetch token from database, or try external APIs if not found
@@ -638,7 +638,7 @@ pub async fn get_token_analysis(
             // Token not in database - try to fetch from external APIs
             logger::debug(
                 LogTag::Webserver,
-                &format!("Token not in DB, trying external APIs: mint={}", mint),
+                &format!("Token not in DB, trying external APIs: mint={mint}"),
             );
 
             match fetch_and_add_token_from_external(&mint).await {
@@ -655,7 +655,7 @@ pub async fn get_token_analysis(
                 None => {
                     logger::debug(
                         LogTag::Webserver,
-                        &format!("Token not found in DB or external APIs: mint={}", mint),
+                        &format!("Token not found in DB or external APIs: mint={mint}"),
                     );
                     return Err((
                         StatusCode::NOT_FOUND,
@@ -863,7 +863,7 @@ pub async fn refresh_token_data(
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
     logger::debug(
         LogTag::Webserver,
-        &format!("Force refresh requested for mint={}", mint),
+        &format!("Force refresh requested for mint={mint}"),
     );
 
     match crate::tokens::request_immediate_update(&mint).await {

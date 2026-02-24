@@ -532,7 +532,7 @@ where
                 )?;
             }
             _ => {
-                return Err(format!("Unknown config section: {}", section_name));
+                return Err(format!("Unknown config section: {section_name}"));
             }
         }
 

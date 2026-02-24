@@ -669,19 +669,19 @@ impl OhlcvDatabase {
         ];
 
         if let Some(pool) = pool_address {
-            query.push_str(&format!(" AND pool_address = ?{}", param_index));
+            query.push_str(&format!(" AND pool_address = ?{param_index}"));
             params_vec.push(Box::new(pool.to_string()));
             param_index += 1;
         }
 
         if let Some(from) = from_ts {
-            query.push_str(&format!(" AND timestamp >= ?{}", param_index));
+            query.push_str(&format!(" AND timestamp >= ?{param_index}"));
             params_vec.push(Box::new(from));
             param_index += 1;
         }
 
         if let Some(to) = to_ts {
-            query.push_str(&format!(" AND timestamp <= ?{}", param_index));
+            query.push_str(&format!(" AND timestamp <= ?{param_index}"));
             params_vec.push(Box::new(to));
             param_index += 1;
         }
@@ -689,7 +689,7 @@ impl OhlcvDatabase {
         query.push_str(" ORDER BY timestamp ASC");
 
         if let Some(lim) = limit {
-            query.push_str(&format!(" LIMIT ?{}", param_index));
+            query.push_str(&format!(" LIMIT ?{param_index}"));
             params_vec.push(Box::new(lim));
         }
 

@@ -222,7 +222,7 @@ pub async fn close_single_ata(wallet_address: &str, mint: &str) -> Result<String
             }
         }
         None => {
-            let error_msg = format!("No empty ATA found for mint {}", mint);
+            let error_msg = format!("No empty ATA found for mint {mint}");
             logger::warning(LogTag::Wallet, &error_msg);
             Err(Error::invalid_amount(
                 error_msg.clone(),
@@ -524,7 +524,7 @@ pub async fn close_token_account_with_context(
 
     logger::info(
         LogTag::Wallet,
-        &format!("Found token account to close: {}", token_account),
+        &format!("Found token account to close: {token_account}"),
     );
 
     // Determine if this is a Token-2022 account by checking the token ACCOUNT's program (not the mint)
@@ -673,7 +673,7 @@ async fn close_ata(
             );
             logger::info(
                 LogTag::Wallet,
-                &format!("ATA closed successfully. TX: {}", signature),
+                &format!("ATA closed successfully. TX: {signature}"),
             );
             Ok(signature)
         }
@@ -866,7 +866,7 @@ async fn build_and_send_close_instruction(
                 crate::errors::parse_solana_error(&e.to_string(), None, "create_ata_transaction");
             logger::debug(
                 LogTag::Wallet,
-                &format!("ATA_TRANSACTION_FAILED: {}", blockchain_error),
+                &format!("ATA_TRANSACTION_FAILED: {blockchain_error}"),
             );
         }
     }

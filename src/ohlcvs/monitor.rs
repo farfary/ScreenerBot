@@ -362,7 +362,7 @@ impl OhlcvMonitor {
             Err(join_err) => {
                 logger::warning(
                     LogTag::Ohlcv,
-                    &format!("Gap stats join error: {}", join_err),
+                    &format!("Gap stats join error: {join_err}"),
                 );
                 (0, 0, Vec::new())
             }

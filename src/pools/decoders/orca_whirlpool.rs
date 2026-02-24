@@ -248,7 +248,7 @@ impl PoolDecoder for OrcaWhirlpoolDecoder {
         if !price_sol.is_finite() || price_sol <= 0.0 {
             logger::error(
                 LogTag::PoolDecoder,
-                &format!("Orca Whirlpool: Invalid price calculated: {}", price_sol),
+                &format!("Orca Whirlpool: Invalid price calculated: {price_sol}"),
             );
             return None;
         }

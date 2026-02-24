@@ -84,14 +84,14 @@ async fn run_bot_internal(_process_lock: ProcessLock) -> Result<(), String> {
 
         logger::info(
             LogTag::System,
-            &format!("CLI override: Using port {}", port),
+            &format!("CLI override: Using port {port}"),
         );
     }
 
     if let Some(host) = crate::arguments::get_host_override() {
         logger::info(
             LogTag::System,
-            &format!("CLI override: Using host {}", host),
+            &format!("CLI override: Using host {host}"),
         );
 
         if host == "0.0.0.0" {

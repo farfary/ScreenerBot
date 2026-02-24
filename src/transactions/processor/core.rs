@@ -132,7 +132,7 @@ impl TransactionProcessor {
             } else if self.debug_enabled {
                 logger::info(
                     LogTag::Transactions,
-                    &format!("Cached processed transaction: {}", signature),
+                    &format!("Cached processed transaction: {signature}"),
                 );
             }
         }

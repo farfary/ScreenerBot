@@ -177,7 +177,7 @@ pub async fn create_chat_session(
         Ok(session_id) => {
             logger::info(
                 LogTag::Api,
-                &format!("Created chat session: {}", session_id),
+                &format!("Created chat session: {session_id}"),
             );
             success_response(CreateChatSessionResponse { session_id })
         }
@@ -259,7 +259,7 @@ pub async fn delete_chat_session(
 
     match chat_db::delete_session(&pool, id) {
         Ok(()) => {
-            logger::info(LogTag::Api, &format!("Deleted chat session: {}", id));
+            logger::info(LogTag::Api, &format!("Deleted chat session: {id}"));
             success_response(serde_json::json!({
                 "message": "Chat session deleted successfully"
             }))
@@ -339,7 +339,7 @@ pub async fn summarize_chat_session(
             return error_response(
                 StatusCode::BAD_REQUEST,
                 "INVALID_PROVIDER",
-                &format!("Invalid provider: {}", provider_name),
+                &format!("Invalid provider: {provider_name}"),
                 None,
             )
         }
@@ -378,7 +378,7 @@ pub async fn summarize_chat_session(
                 );
             }
 
-            logger::info(LogTag::Api, &format!("Summarized chat session: {}", id));
+            logger::info(LogTag::Api, &format!("Summarized chat session: {id}"));
             success_response(serde_json::json!({
                 "summary": summary
             }))
@@ -458,7 +458,7 @@ pub async fn generate_session_title(
 
     // Build the title generation prompt
     let assistant_part = if !first_assistant_msg.is_empty() {
-        format!("\nAssistant: {}", first_assistant_msg)
+        format!("\nAssistant: {first_assistant_msg}")
     } else {
         String::new()
     };
@@ -494,7 +494,7 @@ Rules:
             return error_response(
                 StatusCode::BAD_REQUEST,
                 "INVALID_PROVIDER",
-                &format!("Invalid provider: {}", provider_name),
+                &format!("Invalid provider: {provider_name}"),
                 None,
             )
         }

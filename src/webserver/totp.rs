@@ -103,7 +103,7 @@ pub fn generate_qr_data_url(secret: &str, account: &str) -> Result<String, Strin
         .build();
 
     let encoded = BASE64.encode(svg_string.as_bytes());
-    Ok(format!("data:image/svg+xml;base64,{}", encoded))
+    Ok(format!("data:image/svg+xml;base64,{encoded}"))
 }
 
 #[cfg(test)]

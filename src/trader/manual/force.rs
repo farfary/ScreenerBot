@@ -173,7 +173,7 @@ pub async fn force_sell(mint: &str, percentage: Option<f64>) -> Result<TradeResu
     let position = match position {
         Some(p) => p,
         None => {
-            let error = format!("No open position for token: {}", mint);
+            let error = format!("No open position for token: {mint}");
             action.fail_validation(&error).await;
             return Err(error);
         }

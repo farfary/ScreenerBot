@@ -30,14 +30,14 @@ pub async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
     // Check services ready
     if !are_core_services_ready() {
         let pending = get_pending_services().join(", ");
-        let error_msg = format!("Core services not ready: {}", pending);
+        let error_msg = format!("Core services not ready: {pending}");
         // Create failed action for visibility
         crate::trader::actions::create_failed_buy_action(&req.mint, &error_msg).await;
         return error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "CoreServicesNotReady",
             "Core services are not ready for trading operations",
-            Some(&format!("pending={}", pending)),
+            Some(&format!("pending={pending}")),
         );
     }
 
@@ -155,13 +155,13 @@ pub async fn manual_add_handler(Json(req): Json<ManualAddRequest>) -> Response {
     // Check services ready
     if !are_core_services_ready() {
         let pending = get_pending_services().join(", ");
-        let error_msg = format!("Core services not ready: {}", pending);
+        let error_msg = format!("Core services not ready: {pending}");
         crate::trader::actions::create_failed_add_action(&req.mint, &error_msg).await;
         return error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "CoreServicesNotReady",
             "Core services are not ready for trading operations",
-            Some(&format!("pending={}", pending)),
+            Some(&format!("pending={pending}")),
         );
     }
 
@@ -243,13 +243,13 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
     // Check services ready
     if !are_core_services_ready() {
         let pending = get_pending_services().join(", ");
-        let error_msg = format!("Core services not ready: {}", pending);
+        let error_msg = format!("Core services not ready: {pending}");
         crate::trader::actions::create_failed_sell_action(&req.mint, &error_msg).await;
         return error_response(
             StatusCode::SERVICE_UNAVAILABLE,
             "CoreServicesNotReady",
             "Core services are not ready for trading operations",
-            Some(&format!("pending={}", pending)),
+            Some(&format!("pending={pending}")),
         );
     }
 

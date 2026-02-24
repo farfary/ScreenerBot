@@ -106,7 +106,7 @@ pub async fn debug_transaction(
 ) -> Result<DebugAnalysisResult, String> {
     logger::info(
         LogTag::Transactions,
-        &format!("Starting debug analysis for transaction: {}", signature),
+        &format!("Starting debug analysis for transaction: {signature}"),
     );
 
     let start_time = Instant::now();

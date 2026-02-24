@@ -23,7 +23,7 @@ pub async fn search_pools_handler(Path(mint): Path<String>) -> Response {
 
     logger::debug(
         LogTag::Tools,
-        &format!("[TRADE_WATCHER] API: Searching pools for mint={}", mint),
+        &format!("[TRADE_WATCHER] API: Searching pools for mint={mint}"),
     );
 
     match search_pools(&mint).await {
@@ -123,14 +123,14 @@ pub async fn add_watched_token_handler(Json(req): Json<AddWatchedTokenRequest>) 
 pub async fn delete_watched_token_handler(Path(id): Path<i64>) -> Response {
     logger::info(
         LogTag::Tools,
-        &format!("[TRADE_WATCHER] Deleting watched token: id={}", id),
+        &format!("[TRADE_WATCHER] Deleting watched token: id={id}"),
     );
 
     match delete_watched_token(id) {
         Ok(()) => {
             logger::info(
                 LogTag::Tools,
-                &format!("[TRADE_WATCHER] Deleted watched token: id={}", id),
+                &format!("[TRADE_WATCHER] Deleted watched token: id={id}"),
             );
             success_response(serde_json::json!({ "success": true }))
         }

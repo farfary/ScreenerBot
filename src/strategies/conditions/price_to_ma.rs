@@ -50,7 +50,7 @@ impl ConditionEvaluator for PriceToMaCondition {
             "ABOVE" => distance_pct >= distance,
             "BELOW" => distance_pct <= -distance,
             "WITHIN" => distance_pct.abs() <= distance,
-            _ => return Err(format!("Invalid position: {}", position)),
+            _ => return Err(format!("Invalid position: {position}")),
         };
 
         Ok(result)
@@ -78,7 +78,7 @@ impl ConditionEvaluator for PriceToMaCondition {
 
         let position = get_param_string(condition, "position")?;
         if !["ABOVE", "BELOW", "WITHIN"].contains(&position.as_str()) {
-            return Err(format!("Invalid position: {}", position));
+            return Err(format!("Invalid position: {position}"));
         }
 
         Ok(())

@@ -42,7 +42,7 @@ impl ConditionEvaluator for ConsecutiveCandlesCondition {
             let is_match = match direction.as_str() {
                 "GREEN" => price_change_pct >= minimum_change,
                 "RED" => price_change_pct <= -minimum_change,
-                _ => return Err(format!("Invalid direction: {}", direction)),
+                _ => return Err(format!("Invalid direction: {direction}")),
             };
 
             if is_match {
@@ -67,7 +67,7 @@ impl ConditionEvaluator for ConsecutiveCandlesCondition {
 
         let direction = get_param_string(condition, "direction")?;
         if !["GREEN", "RED"].contains(&direction.as_str()) {
-            return Err(format!("Invalid direction: {}", direction));
+            return Err(format!("Invalid direction: {direction}"));
         }
 
         let minimum_change = get_param_f64(condition, "minimum_change")?;

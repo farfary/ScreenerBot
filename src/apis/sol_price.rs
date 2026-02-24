@@ -344,7 +344,7 @@ async fn fetch_sol_price_from_jupiter() -> Result<f64, String> {
     if sol_price > 0.0 && sol_price.is_finite() {
         Ok(sol_price)
     } else {
-        Err(format!("Invalid SOL price: {}", sol_price))
+        Err(format!("Invalid SOL price: {sol_price}"))
     }
 }
 

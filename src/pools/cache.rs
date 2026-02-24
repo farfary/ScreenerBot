@@ -86,7 +86,7 @@ pub fn update_price(price: PriceResult) {
 
         logger::debug(
             LogTag::PoolCache,
-            &format!("Updated price for token: {}", mint),
+            &format!("Updated price for token: {mint}"),
         );
 
         // Trigger database gap cleanup if gaps were detected in memory
@@ -115,7 +115,7 @@ pub fn update_price(price: PriceResult) {
 
     logger::debug(
         LogTag::PoolCache,
-        &format!("Created new price history for token: {}", mint),
+        &format!("Created new price history for token: {mint}"),
     );
 }
 

@@ -288,13 +288,13 @@ pub fn delete_strategy(strategy_id: &str) -> crate::Result<()> {
     if rows_affected == 0 {
         return Err(Error::Database(DatabaseError::Query {
             operation: "delete_strategy".to_string(),
-            message: format!("Strategy not found: {}", strategy_id),
+            message: format!("Strategy not found: {strategy_id}"),
         }));
     }
 
     logger::info(
         LogTag::System,
-        &format!("Deleted strategy: id={}", strategy_id),
+        &format!("Deleted strategy: id={strategy_id}"),
     );
 
     Ok(())
@@ -345,7 +345,7 @@ pub fn get_strategy(strategy_id: &str) -> crate::Result<Option<Strategy>> {
                 _ => {
                     return Err(Error::Database(DatabaseError::Query {
                         operation: "get_strategy".to_string(),
-                        message: format!("Invalid strategy type: {}", type_str),
+                        message: format!("Invalid strategy type: {type_str}"),
                     }))
                 }
             };

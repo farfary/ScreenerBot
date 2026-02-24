@@ -191,7 +191,7 @@ impl PoolDecoder for RaydiumClmmDecoder {
         if !price_sol.is_finite() || price_sol <= 0.0 {
             logger::error(
                 LogTag::PoolDecoder,
-                &format!("Raydium CLMM: Invalid price calculated: {}", price_sol),
+                &format!("Raydium CLMM: Invalid price calculated: {price_sol}"),
             );
             return None;
         }

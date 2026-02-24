@@ -459,7 +459,7 @@ pub fn parse_structured_solana_error(
         instruction_index: None,
         error_code: None,
         error_name: "UnknownError".to_string(),
-        description: format!("Unknown error structure: {}", error_value),
+        description: format!("Unknown error structure: {error_value}"),
         raw_error: error_value.clone(),
     }
 }
@@ -551,7 +551,7 @@ fn parse_transaction_level_error(error_string: &str, raw_error: &Value) -> Solan
         ),
         _ => (
             FailureType::Uncertain,
-            format!("Unknown transaction error: {}", error_string),
+            format!("Unknown transaction error: {error_string}"),
         ),
     };
 
@@ -674,8 +674,8 @@ fn classify_custom_error(code: u32) -> (FailureType, String, String) {
         // Generic program errors
         _ => (
             FailureType::Uncertain,
-            format!("CustomError{}", code),
-            format!("Custom program error code: {}", code),
+            format!("CustomError{code}"),
+            format!("Custom program error code: {code}"),
         ),
     }
 }
@@ -749,7 +749,7 @@ fn classify_builtin_error(error_name: &str) -> (FailureType, String) {
         ),
         _ => (
             FailureType::Uncertain,
-            format!("Unknown built-in error: {}", error_name),
+            format!("Unknown built-in error: {error_name}"),
         ),
     }
 }
@@ -764,7 +764,7 @@ fn create_unknown_instruction_error(
         instruction_index: Some(instruction_index),
         error_code: None,
         error_name: "UnknownInstructionError".to_string(),
-        description: format!("Unknown instruction error at index {}", instruction_index),
+        description: format!("Unknown instruction error at index {instruction_index}"),
         raw_error: raw_error.clone(),
     }
 }

@@ -201,7 +201,7 @@ impl PumpFunAmmDecoder {
 
         logger::debug(
             LogTag::PoolDecoder,
-            &format!("Using target mint: {}", target_mint),
+            &format!("Using target mint: {target_mint}"),
         );
 
         // Get token reserves from vault accounts

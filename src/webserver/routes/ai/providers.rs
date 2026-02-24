@@ -83,7 +83,7 @@ pub async fn test_provider(
             return error_response(
                 StatusCode::BAD_REQUEST,
                 "INVALID_PROVIDER",
-                &format!("Unknown provider: {}", provider_name),
+                &format!("Unknown provider: {provider_name}"),
                 None,
             );
         }
@@ -222,7 +222,7 @@ pub async fn update_provider(
             return error_response(
                 StatusCode::BAD_REQUEST,
                 "INVALID_PROVIDER",
-                &format!("Unknown provider: {}", provider_name),
+                &format!("Unknown provider: {provider_name}"),
                 None,
             );
         }

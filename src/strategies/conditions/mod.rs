@@ -170,7 +170,7 @@ pub fn get_param_f64(condition: &Condition, param_name: &str) -> Result<f64, Str
     let param = condition
         .parameters
         .get(param_name)
-        .ok_or_else(|| format!("Missing parameter: {}", param_name))?;
+        .ok_or_else(|| format!("Missing parameter: {param_name}"))?;
 
     param
         .value
@@ -183,7 +183,7 @@ pub fn get_param_string(condition: &Condition, param_name: &str) -> Result<Strin
     let param = condition
         .parameters
         .get(param_name)
-        .ok_or_else(|| format!("Missing parameter: {}", param_name))?;
+        .ok_or_else(|| format!("Missing parameter: {param_name}"))?;
 
     param
         .value
@@ -197,7 +197,7 @@ pub fn get_param_bool(condition: &Condition, param_name: &str) -> Result<bool, S
     let param = condition
         .parameters
         .get(param_name)
-        .ok_or_else(|| format!("Missing parameter: {}", param_name))?;
+        .ok_or_else(|| format!("Missing parameter: {param_name}"))?;
 
     param
         .value

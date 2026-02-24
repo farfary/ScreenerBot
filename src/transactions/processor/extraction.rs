@@ -51,7 +51,7 @@ impl TransactionProcessor {
             if self.debug_enabled {
                 logger::info(
                     LogTag::Transactions,
-                    &format!("Force fetching fresh transaction data: {}", signature),
+                    &format!("Force fetching fresh transaction data: {signature}"),
                 );
             }
         } else {
@@ -60,7 +60,7 @@ impl TransactionProcessor {
                 if self.debug_enabled {
                     logger::info(
                         LogTag::Transactions,
-                        &format!("Using cached raw transaction data for: {}", signature),
+                        &format!("Using cached raw transaction data for: {signature}"),
                     );
                 }
                 return Ok(cached_details);
@@ -69,7 +69,7 @@ impl TransactionProcessor {
             if self.debug_enabled {
                 logger::info(
                     LogTag::Transactions,
-                    &format!("Fetching fresh transaction data for: {}", signature),
+                    &format!("Fetching fresh transaction data for: {signature}"),
                 );
             }
         }
@@ -117,7 +117,7 @@ impl TransactionProcessor {
             } else if self.debug_enabled {
                 logger::info(
                     LogTag::Transactions,
-                    &format!("Cached raw transaction data for: {}", signature),
+                    &format!("Cached raw transaction data for: {signature}"),
                 );
             }
         }

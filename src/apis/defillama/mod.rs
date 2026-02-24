@@ -139,7 +139,7 @@ impl DefiLlamaClient {
         self.stats.record_request(true, elapsed).await;
 
         // Extract price from response
-        let price_key = format!("solana:{}", mint);
+        let price_key = format!("solana:{mint}");
         price_response
             .coins
             .get(&price_key)

@@ -332,7 +332,7 @@ impl DexScreenerClient {
 
         logger::debug(
             LogTag::Api,
-            &format!("[DEXSCREENER] Searching pairs: query={}", query),
+            &format!("[DEXSCREENER] Searching pairs: query={query}"),
         );
         let builder = self.client.get(&url).query(&[("q", query)]);
 
@@ -538,12 +538,12 @@ impl DexScreenerClient {
     /// # Arguments
     /// * `address` - Token address
     pub async fn get_token_info(&self, address: &str) -> Result<Option<TokenInfo>, String> {
-        let endpoint = format!("token-profiles/{}", address);
+        let endpoint = format!("token-profiles/{address}");
         let url = format!("{}/{}", DEXSCREENER_BASE_URL, endpoint);
 
         logger::debug(
             LogTag::Api,
-            &format!("[DEXSCREENER] Fetching token info: {}", address),
+            &format!("[DEXSCREENER] Fetching token info: {address}"),
         );
         let (mut response, elapsed) = self
             .execute_request(&endpoint, self.client.get(&url), &self.limiter_token_info)

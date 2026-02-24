@@ -35,7 +35,7 @@ impl ConditionEvaluator for PriceChangePercentCondition {
             "SECONDS" => time_value as i64,
             "MINUTES" => (time_value * 60.0) as i64,
             "HOURS" => (time_value * 3600.0) as i64,
-            _ => return Err(format!("Invalid time unit: {}", time_unit)),
+            _ => return Err(format!("Invalid time unit: {time_unit}")),
         };
 
         // Get candles for specified timeframe (or use strategy default)
@@ -75,7 +75,7 @@ impl ConditionEvaluator for PriceChangePercentCondition {
             "ABOVE" => price_change_pct >= percentage,
             "BELOW" => price_change_pct <= -percentage,
             "WITHIN" => price_change_pct.abs() <= percentage,
-            _ => return Err(format!("Invalid direction: {}", direction)),
+            _ => return Err(format!("Invalid direction: {direction}")),
         };
 
         Ok(result)
@@ -95,7 +95,7 @@ impl ConditionEvaluator for PriceChangePercentCondition {
 
         let direction = get_param_string(condition, "direction")?;
         if !["ABOVE", "BELOW", "WITHIN"].contains(&direction.as_str()) {
-            return Err(format!("Invalid direction: {}", direction));
+            return Err(format!("Invalid direction: {direction}"));
         }
 
         let time_value = get_param_f64(condition, "time_value")?;
@@ -105,7 +105,7 @@ impl ConditionEvaluator for PriceChangePercentCondition {
 
         let time_unit = get_param_string(condition, "time_unit")?;
         if !["SECONDS", "MINUTES", "HOURS"].contains(&time_unit.as_str()) {
-            return Err(format!("Invalid time unit: {}", time_unit));
+            return Err(format!("Invalid time unit: {time_unit}"));
         }
 
         // Validate time value ranges based on unit

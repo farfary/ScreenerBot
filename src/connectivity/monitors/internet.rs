@@ -111,7 +111,7 @@ impl EndpointMonitor for InternetMonitor {
                 match self.check_http(timeout_secs).await {
                     Ok(latency) => HealthCheckResult::degraded(
                         latency,
-                        format!("DNS check failed but HTTP works: {}", dns_error),
+                        format!("DNS check failed but HTTP works: {dns_error}"),
                     ),
                     Err(http_error) => HealthCheckResult::failure(format!(
                         "DNS and HTTP checks failed. DNS: {}. HTTP: {}",

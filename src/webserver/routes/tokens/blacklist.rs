@@ -94,7 +94,7 @@ pub async fn remove_from_blacklist(
 ) -> Result<Json<BlacklistResponse>, (StatusCode, Json<serde_json::Value>)> {
     logger::debug(
         LogTag::Webserver,
-        &format!("Removing from blacklist: mint={}", mint),
+        &format!("Removing from blacklist: mint={mint}"),
     );
 
     let db = match get_global_database() {
@@ -116,7 +116,7 @@ pub async fn remove_from_blacklist(
         Ok(Ok(())) => {
             logger::info(
                 LogTag::Webserver,
-                &format!("Token removed from blacklist: mint={}", mint),
+                &format!("Token removed from blacklist: mint={mint}"),
             );
             Ok(Json(BlacklistResponse {
                 success: true,
@@ -165,7 +165,7 @@ pub async fn get_blacklist_status(
 ) -> Result<Json<BlacklistResponse>, (StatusCode, Json<serde_json::Value>)> {
     logger::debug(
         LogTag::Webserver,
-        &format!("Checking blacklist status: mint={}", mint),
+        &format!("Checking blacklist status: mint={mint}"),
     );
 
     let db = match get_global_database() {

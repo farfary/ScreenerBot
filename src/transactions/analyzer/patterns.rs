@@ -314,7 +314,7 @@ async fn detect_wash_trading(
                     confidence: 0.4,
                     severity: PatternSeverity::Low,
                     evidence: vec![
-                        format!("Account: {}", account),
+                        format!("Account: {account}"),
                         format!("Token changes: {}", changes.len()),
                     ],
                 });

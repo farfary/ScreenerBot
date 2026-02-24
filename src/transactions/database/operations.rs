@@ -60,7 +60,7 @@ impl TransactionDatabase {
         if log_details {
             logger::info(
                 LogTag::Transactions,
-                &format!("Initializing TransactionDatabase at: {}", database_path_str),
+                &format!("Initializing TransactionDatabase at: {database_path_str}"),
             );
         }
 

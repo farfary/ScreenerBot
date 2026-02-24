@@ -217,7 +217,7 @@ fn apply_section_to_config(
             cfg.telegram = serde_json::from_value(value)
                 .map_err(|e| format!("Invalid TelegramConfig: {e}"))?;
         }
-        _ => return Err(format!("Unknown section: {}", section)),
+        _ => return Err(format!("Unknown section: {section}")),
     }
     Ok(())
 }

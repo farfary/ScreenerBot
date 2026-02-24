@@ -84,7 +84,7 @@ pub fn init_ai_database() -> Result<Connection, String> {
 
     logger::info(
         LogTag::System,
-        &format!("AI database initialized at {}", db_path_str),
+        &format!("AI database initialized at {db_path_str}"),
     );
 
     // Store in global

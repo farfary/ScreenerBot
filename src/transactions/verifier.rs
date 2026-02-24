@@ -293,7 +293,7 @@ async fn perform_comprehensive_verification(
     for pattern in suspicious_patterns {
         issues.push(VerificationIssue {
             issue_type: IssueType::SuspiciousPattern,
-            description: format!("Suspicious pattern detected: {}", pattern),
+            description: format!("Suspicious pattern detected: {pattern}"),
             severity: IssueSeverity::Warning,
         });
         confidence_score *= 0.8;

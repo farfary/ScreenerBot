@@ -73,7 +73,7 @@ impl ConditionEvaluator for CandleSizeCondition {
                     false
                 }
             }
-            _ => return Err(format!("Invalid pattern: {}", pattern)),
+            _ => return Err(format!("Invalid pattern: {pattern}")),
         };
 
         Ok(result)
@@ -92,7 +92,7 @@ impl ConditionEvaluator for CandleSizeCondition {
         ]
         .contains(&pattern.as_str())
         {
-            return Err(format!("Invalid pattern: {}", pattern));
+            return Err(format!("Invalid pattern: {pattern}"));
         }
 
         let threshold = get_param_f64(condition, "threshold")?;

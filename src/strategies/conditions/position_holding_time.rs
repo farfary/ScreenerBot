@@ -32,7 +32,7 @@ impl ConditionEvaluator for PositionHoldingTimeCondition {
             "LESS_THAN" => position_age_hours < hours,
             "GREATER_EQUAL" => position_age_hours >= hours,
             "LESS_EQUAL" => position_age_hours <= hours,
-            _ => return Err(format!("Invalid comparison: {}", comparison)),
+            _ => return Err(format!("Invalid comparison: {comparison}")),
         };
 
         Ok(result)
@@ -47,7 +47,7 @@ impl ConditionEvaluator for PositionHoldingTimeCondition {
         let comparison = get_param_string(condition, "comparison")?;
         let valid_comparisons = ["GREATER_THAN", "LESS_THAN", "GREATER_EQUAL", "LESS_EQUAL"];
         if !valid_comparisons.contains(&comparison.as_str()) {
-            return Err(format!("Invalid comparison: {}", comparison));
+            return Err(format!("Invalid comparison: {comparison}"));
         }
 
         Ok(())

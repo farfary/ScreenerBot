@@ -396,7 +396,7 @@ impl TransactionsManager {
             if self.debug_enabled {
                 logger::info(
                     LogTag::Transactions,
-                    &format!("Removed pending transaction: {}", signature),
+                    &format!("Removed pending transaction: {signature}"),
                 );
             }
         }
@@ -500,7 +500,7 @@ impl TransactionsManager {
                         if self.debug_enabled {
                             logger::info(
                                 LogTag::Transactions,
-                                &format!("Exhausted retries for signature: {}", signature),
+                                &format!("Exhausted retries for signature: {signature}"),
                             );
                         }
                     }
@@ -527,7 +527,7 @@ impl TransactionsManager {
             if self.debug_enabled {
                 logger::info(
                     LogTag::Transactions,
-                    &format!("Removed deferred retry for signature: {}", signature),
+                    &format!("Removed deferred retry for signature: {signature}"),
                 );
             }
         }

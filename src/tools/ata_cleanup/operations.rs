@@ -135,7 +135,7 @@ pub async fn close_ata(wallet_address: &str, ata: &AtaInfo) -> Result<String, St
             ) {
                 logger::error(
                     LogTag::Wallet,
-                    &format!("Failed to cache failed ATA: {}", cache_err),
+                    &format!("Failed to cache failed ATA: {cache_err}"),
                 );
             }
 

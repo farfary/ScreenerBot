@@ -46,7 +46,7 @@ pub async fn evaluate_entry_for_token(
     if let Some(unhealthy) =
         crate::connectivity::check_endpoints_healthy(&["rpc", "dexscreener", "rugcheck"]).await
     {
-        return Err(format!("Unhealthy endpoints: {}", unhealthy));
+        return Err(format!("Unhealthy endpoints: {unhealthy}"));
     }
 
     // 2. Position limits - check if we can open more positions
@@ -99,7 +99,7 @@ pub async fn evaluate_entry_for_token(
                         // AI analysis failed or is disabled, continue with strategy checks
                         crate::logger::debug(
                             crate::logger::LogTag::Trader,
-                            &format!("AI entry analysis unavailable for {}", token_mint),
+                            &format!("AI entry analysis unavailable for {token_mint}"),
                         );
                     }
                 }
@@ -107,7 +107,7 @@ pub async fn evaluate_entry_for_token(
             Ok(None) => {
                 crate::logger::debug(
                     crate::logger::LogTag::Trader,
-                    &format!("Token data not found for AI analysis: {}", token_mint),
+                    &format!("Token data not found for AI analysis: {token_mint}"),
                 );
             }
             Err(e) => {

@@ -388,7 +388,7 @@ impl RaydiumCpmmSwap {
             .await
             .map_err(|e| SwapError::RpcError(format!("Failed to get token account: {e}")))?
             .ok_or_else(|| {
-                SwapError::RpcError(format!("Token account not found: {}", account_address))
+                SwapError::RpcError(format!("Token account not found: {account_address}"))
             })?;
 
         // Decode token account amount (at offset 64)

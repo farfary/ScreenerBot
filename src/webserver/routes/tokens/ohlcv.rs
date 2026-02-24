@@ -110,7 +110,7 @@ pub async fn refresh_token_ohlcv(
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
     logger::debug(
         LogTag::Webserver,
-        &format!("OHLCV refresh requested for mint={}", mint),
+        &format!("OHLCV refresh requested for mint={mint}"),
     );
 
     // First, ensure token is being monitored (add if not already)
@@ -164,7 +164,7 @@ pub async fn deprioritize_token_ohlcv(
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
     logger::debug(
         LogTag::Webserver,
-        &format!("OHLCV deprioritize requested for mint={}", mint),
+        &format!("OHLCV deprioritize requested for mint={mint}"),
     );
 
     // Don't deprioritize if this is an open position
@@ -215,7 +215,7 @@ pub async fn focus_token(
 ) -> Result<Json<FocusResponse>, (StatusCode, Json<serde_json::Value>)> {
     logger::info(
         LogTag::Webserver,
-        &format!("Token focus requested: mint={}", mint),
+        &format!("Token focus requested: mint={mint}"),
     );
 
     // Set as dashboard active token
@@ -270,7 +270,7 @@ pub async fn unfocus_token(
 ) -> Result<Json<FocusResponse>, (StatusCode, Json<serde_json::Value>)> {
     logger::info(
         LogTag::Webserver,
-        &format!("Token unfocus requested: mint={}", mint),
+        &format!("Token unfocus requested: mint={mint}"),
     );
 
     // Clear dashboard active token
@@ -326,7 +326,7 @@ pub async fn unfocus_token(
 pub async fn get_token_dexscreener(
     Path(mint): Path<String>,
 ) -> Result<Json<crate::tokens::DexScreenerData>, StatusCode> {
-    logger::debug(LogTag::Webserver, &format!("mint={}", mint));
+    logger::debug(LogTag::Webserver, &format!("mint={mint}"));
 
     // Get DexScreener data from token database
     let mint_clone = mint.clone();
@@ -374,7 +374,7 @@ pub async fn get_token_transactions(
 ) -> Result<Json<Vec<crate::transactions::database::TransactionListRow>>, StatusCode> {
     logger::debug(
         LogTag::Webserver,
-        &format!("Fetching transactions for token: {}", mint),
+        &format!("Fetching transactions for token: {mint}"),
     );
 
     // Get connection to transaction database

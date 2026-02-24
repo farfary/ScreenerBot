@@ -135,7 +135,7 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
 
 /// GET /api/strategies/:id - Get strategy details
 pub async fn get_strategy_detail(Path(id): Path<String>) -> Response {
-    logger::info(LogTag::Webserver, &format!("GET /api/strategies/{}", id));
+    logger::info(LogTag::Webserver, &format!("GET /api/strategies/{id}"));
 
     let strategy = match get_strategy(&id) {
         Ok(Some(s)) => s,
@@ -275,7 +275,7 @@ pub async fn update_strategy_handler(
     Path(id): Path<String>,
     Json(request): Json<StrategyRequest>,
 ) -> Response {
-    logger::info(LogTag::Webserver, &format!("PUT /api/strategies/{}", id));
+    logger::info(LogTag::Webserver, &format!("PUT /api/strategies/{id}"));
 
     // Check if strategy exists
     let existing = match get_strategy(&id) {
@@ -369,7 +369,7 @@ pub async fn update_strategy_handler(
 
 /// DELETE /api/strategies/:id - Delete strategy
 pub async fn delete_strategy_handler(Path(id): Path<String>) -> Response {
-    logger::info(LogTag::Webserver, &format!("DELETE /api/strategies/{}", id));
+    logger::info(LogTag::Webserver, &format!("DELETE /api/strategies/{id}"));
 
     // Check if strategy exists
     match get_strategy(&id) {
@@ -399,7 +399,7 @@ pub async fn delete_strategy_handler(Path(id): Path<String>) -> Response {
         );
     }
 
-    logger::info(LogTag::Webserver, &format!("Strategy deleted: id={}", id));
+    logger::info(LogTag::Webserver, &format!("Strategy deleted: id={id}"));
 
     success_response(serde_json::json!({
         "id": id,

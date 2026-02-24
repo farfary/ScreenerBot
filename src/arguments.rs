@@ -327,9 +327,9 @@ pub fn get_enabled_debug_modes() -> Vec<String> {
     // Check for debug flags
     for arg in &args {
         if let Some(module) = arg.strip_prefix("--debug-") {
-            modes.push(format!("debug-{}", module));
+            modes.push(format!("debug-{module}"));
         } else if let Some(module) = arg.strip_prefix("--verbose-") {
-            modes.push(format!("verbose-{}", module));
+            modes.push(format!("verbose-{module}"));
         }
     }
 

@@ -247,7 +247,7 @@ impl OhlcvServiceImpl {
         } else {
             logger::debug(
                 LogTag::Ohlcv,
-                &format!("CACHE_MISS: No bundle for {}", mint),
+                &format!("CACHE_MISS: No bundle for {mint}"),
             );
         }
 

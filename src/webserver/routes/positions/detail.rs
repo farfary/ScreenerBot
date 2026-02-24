@@ -163,7 +163,7 @@ async fn resolve_position_by_key(key: &str) -> Result<Option<positions::Position
     if let Some(id_part) = key.strip_prefix("id:") {
         let id: i64 = id_part
             .parse()
-            .map_err(|_| format!("Invalid position id: {}", id_part))?;
+            .map_err(|_| format!("Invalid position id: {id_part}"))?;
         return Ok(positions::get_position_by_id(id).await);
     }
 

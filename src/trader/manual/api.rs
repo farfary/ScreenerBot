@@ -171,7 +171,7 @@ pub async fn manual_sell(mint: &str, percentage: Option<f64>) -> Result<TradeRes
     let position = match position {
         Some(p) => p,
         None => {
-            let error = format!("No open position for token: {}", mint);
+            let error = format!("No open position for token: {mint}");
             action.fail_validation(&error).await;
             return Err(error);
         }
@@ -296,7 +296,7 @@ pub async fn manual_add(mint: &str, size_sol: f64) -> Result<TradeResult, String
     let position = match position {
         Some(p) => p,
         None => {
-            let error = format!("No open position for token: {}", mint);
+            let error = format!("No open position for token: {mint}");
             action.fail_validation(&error).await;
             return Err(error);
         }

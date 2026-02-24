@@ -103,8 +103,8 @@ pub fn execute_reset(config: ResetConfig) -> Result<(), String> {
         "═══════════════════════════════════════════════════════════════",
     );
     logger::info(LogTag::System, &format!("Reset operation complete!"));
-    logger::info(LogTag::System, &format!("Files removed: {}", removed_count));
-    logger::info(LogTag::System, &format!("Errors: {}", error_count));
+    logger::info(LogTag::System, &format!("Files removed: {removed_count}"));
+    logger::info(LogTag::System, &format!("Errors: {error_count}"));
     logger::info(
         LogTag::System,
         &format!("Space freed: {:.2} MB", total_size as f64 / 1_048_576.0),

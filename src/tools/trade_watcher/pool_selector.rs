@@ -21,7 +21,7 @@ pub async fn search_pools(token_mint: &str) -> Result<Vec<PoolInfo>, String> {
 
     logger::debug(
         LogTag::Tools,
-        &format!("[TRADE_WATCHER] Searching pools for token: {}", token_mint),
+        &format!("[TRADE_WATCHER] Searching pools for token: {token_mint}"),
     );
 
     // Search GeckoTerminal

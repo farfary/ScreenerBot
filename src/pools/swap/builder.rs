@@ -107,7 +107,7 @@ impl SwapBuilder {
             .await
             .map_err(|e| SwapError::RpcError(format!("Failed to fetch pool: {e}")))?
             .ok_or_else(|| {
-                SwapError::RpcError(format!("Pool account not found: {}", pool_address))
+                SwapError::RpcError(format!("Pool account not found: {pool_address}"))
             })?;
 
         // Create AccountData

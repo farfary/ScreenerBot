@@ -129,9 +129,9 @@ pub async fn compute_snapshot(
                 }
 
                 let detail = if !pool_id.is_empty() {
-                    Some(format!("pool={}", pool_id))
+                    Some(format!("pool={pool_id}"))
                 } else {
-                    program_id.map(|id| format!("program={}", id))
+                    program_id.map(|id| format!("program={id}"))
                 };
 
                 let info = BlacklistReasonInfo {

@@ -248,7 +248,7 @@ impl SolanaWebSocketClient {
                                 {
                                     logger::info(
                                         LogTag::Websocket,
-                                        &format!("New transaction detected: {}", signature),
+                                        &format!("New transaction detected: {signature}"),
                                     );
 
                                     // Send signature to transaction processor
@@ -273,7 +273,7 @@ impl SolanaWebSocketClient {
                 if result.is_number() {
                     logger::info(
                         LogTag::Websocket,
-                        &format!("WebSocket subscription confirmed: {}", result),
+                        &format!("WebSocket subscription confirmed: {result}"),
                     );
                     return Ok(());
                 }
@@ -292,7 +292,7 @@ impl SolanaWebSocketClient {
 
     /// Get Helius WebSocket URL with API key
     pub fn get_helius_ws_url(api_key: &str) -> String {
-        format!("wss://mainnet.helius-rpc.com/?api-key={}", api_key)
+        format!("wss://mainnet.helius-rpc.com/?api-key={api_key}")
     }
 }
 

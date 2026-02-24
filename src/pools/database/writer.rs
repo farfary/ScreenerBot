@@ -145,7 +145,7 @@ async fn flush_write_buffer(
             buffer.extend(entries.into_iter());
             logger::error(
                 LogTag::PoolCache,
-                &format!("Price history writer task panicked: {}", join_err),
+                &format!("Price history writer task panicked: {join_err}"),
             );
         }
     }

@@ -210,7 +210,7 @@ pub async fn toggle_entry_monitor_handler(
     } else {
         "disabled"
     };
-    logger::info(LogTag::Trader, &format!("Entry monitor {}", status));
+    logger::info(LogTag::Trader, &format!("Entry monitor {status}"));
     success_response(serde_json::json!({ "entry_monitor_enabled": payload.enabled }))
 }
 
@@ -238,7 +238,7 @@ pub async fn toggle_exit_monitor_handler(
     } else {
         "disabled"
     };
-    logger::info(LogTag::Trader, &format!("Exit monitor {}", status));
+    logger::info(LogTag::Trader, &format!("Exit monitor {status}"));
     success_response(serde_json::json!({ "exit_monitor_enabled": payload.enabled }))
 }
 

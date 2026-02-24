@@ -686,7 +686,7 @@ pub fn create_conservative_config() -> FetcherConfig {
 /// Validate signature format before fetching
 pub fn validate_signature_format(signature: &str) -> Result<(), String> {
     if !is_valid_signature(signature) {
-        return Err(format!("Invalid signature format: {}", signature));
+        return Err(format!("Invalid signature format: {signature}"));
     }
     Ok(())
 }

@@ -455,7 +455,7 @@ fn find_largest_token_change(
         }
     }
 
-    largest_change.ok_or_else(|| format!("No token changes found for mint: {}", target_mint))
+    largest_change.ok_or_else(|| format!("No token changes found for mint: {target_mint}"))
 }
 
 /// Find the SOL change that corresponds to a token swap

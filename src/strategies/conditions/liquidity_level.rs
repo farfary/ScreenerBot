@@ -34,7 +34,7 @@ impl ConditionEvaluator for LiquidityLevelCondition {
             "LESS_THAN" => liquidity < threshold,
             "GREATER_EQUAL" => liquidity >= threshold,
             "LESS_EQUAL" => liquidity <= threshold,
-            _ => return Err(format!("Invalid comparison: {}", comparison)),
+            _ => return Err(format!("Invalid comparison: {comparison}")),
         };
 
         Ok(result)
@@ -49,7 +49,7 @@ impl ConditionEvaluator for LiquidityLevelCondition {
         let comparison = get_param_string(condition, "comparison")?;
         let valid_comparisons = ["GREATER_THAN", "LESS_THAN", "GREATER_EQUAL", "LESS_EQUAL"];
         if !valid_comparisons.contains(&comparison.as_str()) {
-            return Err(format!("Invalid comparison: {}", comparison));
+            return Err(format!("Invalid comparison: {comparison}"));
         }
 
         Ok(())

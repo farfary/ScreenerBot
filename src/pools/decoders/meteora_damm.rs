@@ -328,7 +328,7 @@ impl PoolDecoder for MeteoraDammDecoder {
         if price_sol <= 0.0 || !price_sol.is_finite() {
             logger::error(
                 LogTag::PoolDecoder,
-                &format!("DAMM: Invalid price calculation result: {}", price_sol),
+                &format!("DAMM: Invalid price calculation result: {price_sol}"),
             );
             return None;
         }

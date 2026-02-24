@@ -194,7 +194,7 @@ impl PoolDecoder for MeteoraDlmmDecoder {
         if !price_sol.is_finite() || price_sol <= 0.0 {
             logger::error(
                 LogTag::PoolDecoder,
-                &format!("Meteora DLMM: Invalid price calculated: {}", price_sol),
+                &format!("Meteora DLMM: Invalid price calculated: {price_sol}"),
             );
             return None;
         }
@@ -394,7 +394,7 @@ impl MeteoraDlmmDecoder {
                 if value == -485 {
                     logger::debug(
                         LogTag::PoolDecoder,
-                        &format!("Found active_id=-485 at offset {}", offset),
+                        &format!("Found active_id=-485 at offset {offset}"),
                     );
                 }
             }
@@ -406,7 +406,7 @@ impl MeteoraDlmmDecoder {
                 if value == 30 {
                     logger::debug(
                         LogTag::PoolDecoder,
-                        &format!("Found bin_step=30 at offset {}", offset),
+                        &format!("Found bin_step=30 at offset {offset}"),
                     );
                 }
             }

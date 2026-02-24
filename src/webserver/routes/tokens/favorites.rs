@@ -87,7 +87,7 @@ pub async fn remove_favorite(
 ) -> Result<Json<FavoriteResponse>, (StatusCode, Json<serde_json::Value>)> {
     logger::debug(
         LogTag::Webserver,
-        &format!("Removing favorite: mint={}", mint),
+        &format!("Removing favorite: mint={mint}"),
     );
 
     match crate::tokens::remove_favorite_async(mint.clone()).await {
@@ -95,7 +95,7 @@ pub async fn remove_favorite(
             if removed {
                 logger::info(
                     LogTag::Webserver,
-                    &format!("Removed favorite: mint={}", mint),
+                    &format!("Removed favorite: mint={mint}"),
                 );
                 Ok(Json(FavoriteResponse {
                     success: true,
@@ -105,7 +105,7 @@ pub async fn remove_favorite(
             } else {
                 logger::debug(
                     LogTag::Webserver,
-                    &format!("Favorite not found: mint={}", mint),
+                    &format!("Favorite not found: mint={mint}"),
                 );
                 Err((
                     StatusCode::NOT_FOUND,
@@ -141,14 +141,14 @@ pub async fn update_favorite(
 ) -> Result<Json<FavoriteResponse>, (StatusCode, Json<serde_json::Value>)> {
     logger::debug(
         LogTag::Webserver,
-        &format!("Updating favorite: mint={}", mint),
+        &format!("Updating favorite: mint={mint}"),
     );
 
     match crate::tokens::update_favorite_async(mint.clone(), request).await {
         Ok(Some(favorite)) => {
             logger::info(
                 LogTag::Webserver,
-                &format!("Updated favorite: mint={}", mint),
+                &format!("Updated favorite: mint={mint}"),
             );
             Ok(Json(FavoriteResponse {
                 success: true,
@@ -159,7 +159,7 @@ pub async fn update_favorite(
         Ok(None) => {
             logger::debug(
                 LogTag::Webserver,
-                &format!("Favorite not found for update: mint={}", mint),
+                &format!("Favorite not found for update: mint={mint}"),
             );
             Err((
                 StatusCode::NOT_FOUND,

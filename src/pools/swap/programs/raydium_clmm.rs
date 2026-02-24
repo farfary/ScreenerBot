@@ -445,7 +445,7 @@ impl RaydiumClmmSwap {
             .await
             .map_err(|e| SwapError::RpcError(format!("Failed to fetch mint account: {e}")))?
             .ok_or_else(|| {
-                SwapError::RpcError(format!("Mint account not found: {}", mint_address))
+                SwapError::RpcError(format!("Mint account not found: {mint_address}"))
             })?;
 
         // Check the owner to determine if it's Token-2022 or legacy SPL Token
@@ -466,7 +466,7 @@ impl RaydiumClmmSwap {
             .await
             .map_err(|e| SwapError::RpcError(format!("Failed to fetch account: {e}")))?
             .ok_or_else(|| {
-                SwapError::RpcError(format!("Token account not found: {}", account_address))
+                SwapError::RpcError(format!("Token account not found: {account_address}"))
             })?;
 
         // Parse token account data to get amount

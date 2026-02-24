@@ -345,7 +345,7 @@ async fn revoke_session(State(_state): State<Arc<AppState>>, Path(user_id): Path
 
     logger::info(
         LogTag::Telegram,
-        &format!("Revoked Telegram session for user_id: {}", user_id),
+        &format!("Revoked Telegram session for user_id: {user_id}"),
     );
 
     success_response(serde_json::json!({
@@ -522,7 +522,7 @@ async fn select_discovered_chat(
 
             logger::info(
                 LogTag::Telegram,
-                &format!("Selected Telegram chat ID: {}", chat_id),
+                &format!("Selected Telegram chat ID: {chat_id}"),
             );
 
             success_response(serde_json::json!({

@@ -37,7 +37,7 @@ impl ScheduleType {
             "interval" => Ok(ScheduleType::Interval),
             "daily" => Ok(ScheduleType::Daily),
             "weekly" => Ok(ScheduleType::Weekly),
-            _ => Err(format!("Unknown schedule type: {}", s)),
+            _ => Err(format!("Unknown schedule type: {s}")),
         }
     }
 }
@@ -62,7 +62,7 @@ impl TaskToolPermissions {
         match s {
             "read_only" => Ok(TaskToolPermissions::ReadOnly),
             "full" => Ok(TaskToolPermissions::Full),
-            _ => Err(format!("Unknown tool permission: {}", s)),
+            _ => Err(format!("Unknown tool permission: {s}")),
         }
     }
 }
@@ -661,7 +661,7 @@ pub fn calculate_next_run(
             // Users should specify times in UTC format.
             let parts: Vec<&str> = schedule_value.split(':').collect();
             if parts.len() != 2 {
-                return Err(format!("Invalid daily schedule format: {}", schedule_value));
+                return Err(format!("Invalid daily schedule format: {schedule_value}"));
             }
             let hour: u32 = parts[0].parse().map_err(|_| "Invalid hour")?;
             let minute: u32 = parts[1].parse().map_err(|_| "Invalid minute")?;
@@ -734,7 +734,7 @@ pub fn calculate_next_run(
             // Should not be reachable if target_weekdays is non-empty
             Err("Could not calculate next weekly run time".to_string())
         }
-        _ => Err(format!("Unknown schedule type: {}", schedule_type)),
+        _ => Err(format!("Unknown schedule type: {schedule_type}")),
     }
 }
 

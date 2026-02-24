@@ -150,11 +150,11 @@ pub struct ExternalLinks {
 impl ExternalLinks {
     pub fn for_mint(mint: &str) -> Self {
         Self {
-            solscan: format!("https://solscan.io/token/{}", mint),
-            dexscreener: format!("https://dexscreener.com/solana/{}", mint),
+            solscan: format!("https://solscan.io/token/{mint}"),
+            dexscreener: format!("https://dexscreener.com/solana/{mint}"),
             birdeye: format!("https://birdeye.so/token/{}?chain=solana", mint),
-            rugcheck: format!("https://rugcheck.xyz/tokens/{}", mint),
-            photon: format!("https://photon-sol.tinyastro.io/en/lp/{}", mint),
+            rugcheck: format!("https://rugcheck.xyz/tokens/{mint}"),
+            photon: format!("https://photon-sol.tinyastro.io/en/lp/{mint}"),
         }
     }
 }

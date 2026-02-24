@@ -322,7 +322,7 @@ impl PoolDiscovery {
                     Ok(None) => {
                         logger::debug(
                             LogTag::PoolDiscovery,
-                            &format!("No pool snapshot for mint={}", mint),
+                            &format!("No pool snapshot for mint={mint}"),
                         );
                         continue;
                     }
@@ -341,7 +341,7 @@ impl PoolDiscovery {
                     None => {
                         logger::debug(
                             LogTag::PoolDiscovery,
-                            &format!("No canonical pool for mint={}", mint),
+                            &format!("No canonical pool for mint={mint}"),
                         );
                         continue;
                     }
@@ -403,7 +403,7 @@ impl PoolDiscovery {
                         if is_blacklisted {
                             logger::debug(
                                 LogTag::PoolDiscovery,
-                                &format!("Skipping pool for blacklisted token: {}", token_mint),
+                                &format!("Skipping pool for blacklisted token: {token_mint}"),
                             );
                             blacklist_filtered += 1;
                             continue;
@@ -487,7 +487,7 @@ impl PoolDiscovery {
     pub async fn discover_pools_for_token(&self, mint: &str) -> Vec<PoolDescriptor> {
         logger::debug(
             LogTag::PoolDiscovery,
-            &format!("Starting pool discovery for token {}", mint),
+            &format!("Starting pool discovery for token {mint}"),
         );
 
         if is_stablecoin_mint(mint) {
@@ -507,7 +507,7 @@ impl PoolDiscovery {
             Ok(None) => {
                 logger::debug(
                     LogTag::PoolDiscovery,
-                    &format!("No pool snapshot available for mint={}", mint),
+                    &format!("No pool snapshot available for mint={mint}"),
                 );
                 return Vec::new();
             }

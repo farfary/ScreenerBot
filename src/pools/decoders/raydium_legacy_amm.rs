@@ -304,14 +304,14 @@ fn adjust_vaults(
                     coin_vault = k.clone();
                     logger::debug(
                         LogTag::PoolDecoder,
-                        &format!("Found coin_vault: {}", coin_vault),
+                        &format!("Found coin_vault: {coin_vault}"),
                     );
                 }
                 if mint == info.pc_mint && (need_pc || pc_vault_wrong_mint) {
                     pc_vault = k.clone();
                     logger::debug(
                         LogTag::PoolDecoder,
-                        &format!("Found pc_vault: {}", pc_vault),
+                        &format!("Found pc_vault: {pc_vault}"),
                     );
                 }
             }
