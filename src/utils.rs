@@ -16,13 +16,8 @@ use tokio::sync::Notify;
 pub fn safe_format_signature(s: &str) -> String {
     let char_count = s.chars().count();
     if char_count > 12 {
-        let first_8 = s;
-        // Get last 4 characters safely
-        let last_4 = if char_count >= 4 {
-            s.chars().skip(char_count - 4).collect::<String>()
-        } else {
-            s.to_string()
-        };
+        let first_8: String = s.chars().take(8).collect();
+        let last_4: String = s.chars().skip(char_count - 4).collect();
         format!("{first_8}...{last_4}")
     } else {
         s.to_string()
