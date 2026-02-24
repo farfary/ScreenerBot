@@ -10,6 +10,8 @@
 //! - Secondary wallets for tools
 //! - Import/export functionality
 //! - Bulk import from CSV/Excel files
+//! - Token balance tracking (cached + real-time RPC)
+//! - Balance monitoring with historical snapshots
 //!
 //! ## Usage
 //! ```rust,ignore
