@@ -641,7 +641,7 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                              } else if let Some(position_id) = item.position_id {
                                logger::warning(LogTag::Positions, &format!("Removing orphan entry position {position_id} after verification abandonment (will release semaphore permit)"));
                                let transition = super::transitions::PositionTransition::RemoveOrphanEntry { position_id };
-                               if let Ok(_) = super::apply::apply_transition(transition).await {
+                               if super::apply::apply_transition(transition).await.is_ok() {
                                  // Permit is released in RemoveOrphanEntry transition handler
                                  logger::info(LogTag::Positions, &format!("Successfully removed orphan entry {position_id} and released permit"));
                                } else {
