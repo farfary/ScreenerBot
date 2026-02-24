@@ -375,7 +375,7 @@ pub async fn fetch_nft_metadata_batch(
             Ok(accounts) => {
                 for (i, account_opt) in accounts.iter().enumerate() {
                     let pda = &chunk[i];
-                    let mint = pda_to_mint.get(pda).unwrap().clone();
+                    let mint = pda_to_mint.get(pda).expect("pda should exist in map").clone();
 
                     match account_opt {
                         Some(account) => {
@@ -395,7 +395,7 @@ pub async fn fetch_nft_metadata_batch(
                                     results.insert(
                                         mint,
                                         Ok(NftMetadata {
-                                            mint: pda_to_mint.get(pda).unwrap().clone(),
+                                            mint: pda_to_mint.get(pda).expect("pda should exist in map").clone(),
                                             name: if on_chain.name.is_empty() {
                                                 None
                                             } else {
@@ -434,7 +434,7 @@ pub async fn fetch_nft_metadata_batch(
             Err(e) => {
                 // Mark all mints in this chunk as failed
                 for pda in chunk {
-                    let mint = pda_to_mint.get(pda).unwrap().clone();
+                    let mint = pda_to_mint.get(pda).expect("pda should exist in map").clone();
                     results.insert(mint, Err(NftMetadataError::RpcError(e.to_string())));
                 }
             }
