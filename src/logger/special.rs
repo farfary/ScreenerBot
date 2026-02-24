@@ -67,7 +67,7 @@ pub fn log_price_change(
     let price_part = format!(
         "{} {} {:.10} SOL ( {}SOL, {} % )",
         emoji,
-        format!("{}", symbol).bold(),
+        symbol.to_string().bold(),
         match price_color {
             "green" => format!("{:.10}", new_price).green().bold(),
             "red" => format!("{:.10}", new_price).red().bold(),
