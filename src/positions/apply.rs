@@ -222,7 +222,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                     position.entry_transaction_signature.as_deref(),
                                     position.exit_transaction_signature.as_deref(),
                                     position.total_size_sol,
-                                    position.token_amount.unwrap_or(0),
+                                    position.token_amount.unwrap_or_default(),
                                     pnl_sol,
                                     pnl_pct,
                                 )
@@ -272,7 +272,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                                         .map(|exit| {
                                             (exit - position.entry_time).num_seconds().max(0) as u64
                                         })
-                                        .unwrap_or(0);
+                                        .unwrap_or_default();
                                     queue_notification(Notification::position_closed(
                                         position.symbol.clone(),
                                         position.mint.clone(),
@@ -359,7 +359,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                         position.entry_transaction_signature.as_deref(),
                         position.exit_transaction_signature.as_deref(),
                         position.total_size_sol,
-                        position.remaining_token_amount.unwrap_or(0),
+                        position.remaining_token_amount.unwrap_or_default(),
                         None,
                         None,
                     )
@@ -615,7 +615,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
  "Partial exit verified for position {}: {} tokens sold, {} remaining",
                   position_id,
                   exit_amount,
-                  position.remaining_token_amount.unwrap_or(0)
+                  position.remaining_token_amount.unwrap_or_default()
                 ),
                             );
                             // Clear pending mark
@@ -672,7 +672,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     position.entry_transaction_signature.as_deref(),
                     position.exit_transaction_signature.as_deref(),
                     position.total_size_sol,
-                    position.remaining_token_amount.unwrap_or(0),
+                    position.remaining_token_amount.unwrap_or_default(),
                     None,
                     None,
                 )
@@ -766,7 +766,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
 
           // Recalculate average entry price (weighted average) with actual decimals
           // CRITICAL: Validate all inputs to prevent division by zero or invalid calculations
-          let remaining_tokens = pos.remaining_token_amount.unwrap_or(0);
+          let remaining_tokens = pos.remaining_token_amount.unwrap_or_default();
           if remaining_tokens > 0 && pos.total_size_sol > 0.0 && pos.total_size_sol.is_finite() {
             let total_tokens_normalized = remaining_tokens as f64
               / 10_f64.powi(decimals as i32);
@@ -894,7 +894,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
                     position.entry_transaction_signature.as_deref(),
                     Some(&dca_signature),
                     position.total_size_sol,
-                    position.remaining_token_amount.unwrap_or(0),
+                    position.remaining_token_amount.unwrap_or_default(),
                     None,
                     None,
                 )

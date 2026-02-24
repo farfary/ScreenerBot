@@ -188,7 +188,7 @@ async fn transfer_token_to_main(
         rpc_client
             .is_token_2022_mint(&mint_pubkey)
             .await
-            .unwrap_or(false)
+            .unwrap_or_default()
     } else {
         false
     };

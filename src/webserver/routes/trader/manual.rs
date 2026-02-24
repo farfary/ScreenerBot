@@ -63,7 +63,7 @@ pub async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
         .await
         .unwrap_or(Ok(false))
         {
-            if !req.force.unwrap_or(false) {
+            if !req.force.unwrap_or_default() {
                 let error_msg = "Token is blacklisted";
                 crate::trader::actions::create_failed_buy_action(&req.mint, error_msg).await;
                 return error_response(
@@ -87,7 +87,7 @@ pub async fn manual_buy_handler(Json(req): Json<ManualBuyRequest>) -> Response {
             "mint={} size_sol={} force={}",
             req.mint,
             size,
-            req.force.unwrap_or(false)
+            req.force.unwrap_or_default()
         ),
     );
 
@@ -273,7 +273,7 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
     }
 
     // Determine percentage
-    let close_all = req.close_all.unwrap_or(false);
+    let close_all = req.close_all.unwrap_or_default();
     let pct = if close_all {
         None // Full exit (100%)
     } else {
@@ -303,12 +303,12 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
             "mint={} percentage={:?} force={}",
             req.mint,
             pct,
-            req.force.unwrap_or(false)
+            req.force.unwrap_or_default()
         ),
     );
 
     // Route to trader module - action tracking is handled inside
-    let result = if req.force.unwrap_or(false) {
+    let result = if req.force.unwrap_or_default() {
         crate::trader::manual::force_sell(&req.mint, pct).await
     } else {
         crate::trader::manual::manual_sell(&req.mint, pct).await

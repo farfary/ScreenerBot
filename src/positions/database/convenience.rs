@@ -78,7 +78,7 @@ pub async fn update_position(position: &Position) -> Result<(), String> {
             "Updating position ID {:?} for mint {} with current price {:.11} SOL",
             position.id,
             position.mint,
-            position.current_price.unwrap_or(0.0)
+            position.current_price.unwrap_or_default()
         ),
     );
 

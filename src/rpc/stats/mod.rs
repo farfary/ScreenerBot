@@ -221,7 +221,7 @@ impl StatsManager {
         let session = self.get_session_stats();
         let calls_per_minute = self.get_calls_per_minute();
 
-        let calls_last_minute = calls_per_minute.first().map(|b| b.call_count).unwrap_or(0);
+        let calls_last_minute = calls_per_minute.first().map(|b| b.call_count).unwrap_or_default();
 
         match session {
             Some(stats) => RpcStatsResponse {
@@ -256,7 +256,7 @@ impl StatsManager {
 
     /// Cleanup old data
     pub fn cleanup(&self, retention_hours: u64) -> u64 {
-        self.db.cleanup(retention_hours).unwrap_or(0)
+        self.db.cleanup(retention_hours).unwrap_or_default()
     }
 
     /// Get session ID

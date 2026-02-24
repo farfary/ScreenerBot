@@ -195,7 +195,7 @@ fn is_pumpfun_token(token: &Token) -> bool {
         .token_type
         .as_ref()
         .map(|value| value.to_ascii_lowercase().contains("pump"))
-        .unwrap_or(false)
+        .unwrap_or_default()
 }
 
 fn extract_lp_lock_percentage(token: &Token) -> Option<f64> {

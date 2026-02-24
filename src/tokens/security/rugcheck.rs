@@ -29,7 +29,7 @@ fn convert_rugcheck_to_data(info: &RugcheckInfo) -> RugcheckData {
             .owner
             .as_ref()
             .map(|owner| owner.eq_ignore_ascii_case("creator"))
-            .unwrap_or(false)
+            .unwrap_or_default()
         {
             return Some(holder.pct);
         }

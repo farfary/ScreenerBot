@@ -232,7 +232,7 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
             .filter(|p| {
                 p.sol_received
                     .map(|r| r > p.entry_size_sol)
-                    .unwrap_or(false)
+                    .unwrap_or_default()
             })
             .count();
         let win_rate = if count > 0 {
@@ -269,7 +269,7 @@ pub async fn get_position_debug_info(Path(mint): Path<String>) -> Json<PositionD
         is_verified: token
             .security_score_normalised
             .map(|s| s <= 30)
-            .unwrap_or(false),
+            .unwrap_or_default(),
     });
 
     // 3. Get current price from pool service

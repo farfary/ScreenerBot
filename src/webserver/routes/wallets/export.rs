@@ -183,7 +183,7 @@ pub async fn export_wallets_full(Json(request): Json<FullExportRequest>) -> impl
             address_to_id
                 .get(export.address.as_str())
                 .map(|id| requested_ids.contains(id))
-                .unwrap_or(false)
+                .unwrap_or_default()
         })
         .collect();
 

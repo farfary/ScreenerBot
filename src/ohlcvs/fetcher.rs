@@ -473,7 +473,7 @@ impl OhlcvFetcher {
         self.request_queue
             .lock()
             .map(|queue| queue.len())
-            .unwrap_or(0)
+            .unwrap_or_default()
     }
 
     // ==================== Private Methods ====================

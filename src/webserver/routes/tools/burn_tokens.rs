@@ -116,7 +116,7 @@ pub async fn scan_burnable_tokens() -> Response {
         let has_liquidity = price_result
             .as_ref()
             .map(|p| p.sol_reserves > 0.0)
-            .unwrap_or(false);
+            .unwrap_or_default();
 
         // Calculate UI amount and value
         let ui_amount = account.balance as f64 / 10f64.powi(account.decimals as i32);

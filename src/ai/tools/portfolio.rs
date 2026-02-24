@@ -52,19 +52,19 @@ impl Tool for GetPositionsTool {
             let pnl = positions::calculate_position_pnl_safe(&pos, pos.current_price).await;
 
             summaries.push(PositionSummary {
-                position_id: pos.id.unwrap_or(0),
+                position_id: pos.id.unwrap_or_default(),
                 mint: pos.mint.clone(),
                 symbol: Some(pos.symbol.clone()),
                 entry_price_usd: pos.average_entry_price,
                 current_price_usd: pos.current_price,
                 amount: pos
                     .remaining_token_amount
-                    .unwrap_or(pos.token_amount.unwrap_or(0)) as f64,
+                    .unwrap_or(pos.token_amount.unwrap_or_default()) as f64,
                 cost_sol: pos.total_size_sol,
                 current_value_sol: pos.current_price.map(|cp| {
                     let remaining = pos
                         .remaining_token_amount
-                        .unwrap_or(pos.token_amount.unwrap_or(0))
+                        .unwrap_or(pos.token_amount.unwrap_or_default())
                         as f64;
                     remaining * cp
                 }),
@@ -147,24 +147,24 @@ impl Tool for GetPositionTool {
         };
 
         let pnl = positions::calculate_position_pnl_safe(&position, position.current_price).await;
-        let total_fees = (position.entry_fee_lamports.unwrap_or(0)
-            + position.exit_fee_lamports.unwrap_or(0)) as f64
+        let total_fees = (position.entry_fee_lamports.unwrap_or_default()
+            + position.exit_fee_lamports.unwrap_or_default()) as f64
             / 1_000_000_000.0;
 
         let details = PositionDetails {
-            position_id: position.id.unwrap_or(0),
+            position_id: position.id.unwrap_or_default(),
             mint: position.mint.clone(),
             symbol: Some(position.symbol.clone()),
             entry_price_usd: position.average_entry_price,
             current_price_usd: position.current_price,
             amount: position
                 .remaining_token_amount
-                .unwrap_or(position.token_amount.unwrap_or(0)) as f64,
+                .unwrap_or(position.token_amount.unwrap_or_default()) as f64,
             cost_sol: position.total_size_sol,
             current_value_sol: position.current_price.map(|cp| {
                 let remaining = position
                     .remaining_token_amount
-                    .unwrap_or(position.token_amount.unwrap_or(0))
+                    .unwrap_or(position.token_amount.unwrap_or_default())
                     as f64;
                 remaining * cp
             }),

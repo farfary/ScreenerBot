@@ -125,13 +125,13 @@ pub async fn get_home_dashboard(State(state): State<Arc<AppState>>) -> Json<Home
                 current_wallet
                     .as_ref()
                     .map(|w| w.sol_balance)
-                    .unwrap_or(0.0)
+                    .unwrap_or_default()
             });
 
     let current_balance_sol = current_wallet
         .as_ref()
         .map(|w| w.sol_balance)
-        .unwrap_or(0.0);
+        .unwrap_or_default();
     let change_sol = current_balance_sol - start_of_day_balance_sol;
     let change_percent = if start_of_day_balance_sol > 0.0 {
         (change_sol / start_of_day_balance_sol) * 100.0

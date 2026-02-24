@@ -362,7 +362,7 @@ impl PositionsDatabase {
                 "Updating position ID {} for mint {} with current price {:.11} SOL",
                 position_id,
                 position.mint,
-                position.current_price.unwrap_or(0.0)
+                position.current_price.unwrap_or_default()
             ),
         );
 
@@ -1409,7 +1409,7 @@ impl PositionsDatabase {
                 "Saving token snapshot for position ID {} (type: {}) with price {:.6} SOL",
                 snapshot.position_id,
                 snapshot.snapshot_type,
-                snapshot.price_sol.unwrap_or(0.0)
+                snapshot.price_sol.unwrap_or_default()
             ),
         );
 

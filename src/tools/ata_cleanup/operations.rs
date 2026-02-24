@@ -229,7 +229,7 @@ pub fn get_failed_ata_count() -> usize {
 
 /// Check if an ATA is in the failed cache
 pub fn is_ata_in_failed_cache(ata_address: &str) -> bool {
-    is_ata_failed(ata_address).unwrap_or(false)
+    is_ata_failed(ata_address).unwrap_or_default()
 }
 
 /// Clear all failed ATAs from cache (force retry)

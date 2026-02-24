@@ -981,7 +981,7 @@ impl TransactionProcessor {
                 ix.get("programId")
                     .and_then(|v| v.as_str())
                     .map(|pid| pumpfun_programs.contains(&pid))
-                    .unwrap_or(false)
+                    .unwrap_or_default()
             })
         } else {
             false

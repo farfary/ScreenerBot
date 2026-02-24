@@ -254,8 +254,8 @@ async fn send_position_details(bot: &Bot, chat_id: ChatId, mint_short: &str) -> 
                 &pos.mint,
                 pos.average_entry_price,
                 current_price,
-                pos.unrealized_pnl.unwrap_or(0.0),
-                pos.unrealized_pnl_percent.unwrap_or(0.0),
+                pos.unrealized_pnl.unwrap_or_default(),
+                pos.unrealized_pnl_percent.unwrap_or_default(),
                 pos.total_size_sol,
                 current_value,
                 tokens,
@@ -297,7 +297,7 @@ async fn send_history(bot: &Bot, chat_id: ChatId) -> Result<(), String> {
 
     let mut msg = String::from("📋 <b>Recent Trades</b>\n\n");
     for pos in positions.iter().take(10) {
-        let pnl = pos.pnl.unwrap_or(0.0);
+        let pnl = pos.pnl.unwrap_or_default();
         let pnl_emoji = if pnl >= 0.0 { "🟢" } else { "🔴" };
         let pnl_sign = if pnl >= 0.0 { "+" } else { "" };
         msg.push_str(&format!(
@@ -410,8 +410,8 @@ async fn send_confirm_close(bot: &Bot, chat_id: ChatId, mint_short: &str) -> Res
             let est_receive = tokens * pos.current_price.unwrap_or(pos.average_entry_price);
             let msg = formatters::msg_confirm_close(
                 &pos.symbol,
-                pos.unrealized_pnl.unwrap_or(0.0),
-                pos.unrealized_pnl_percent.unwrap_or(0.0),
+                pos.unrealized_pnl.unwrap_or_default(),
+                pos.unrealized_pnl_percent.unwrap_or_default(),
                 tokens,
                 est_receive,
             );
@@ -518,7 +518,7 @@ async fn execute_sell(
                          Received — {:.4} SOL",
                         pos.symbol,
                         percent,
-                        result.executed_size_sol.unwrap_or(0.0)
+                        result.executed_size_sol.unwrap_or_default()
                     );
                     send_with_keyboard(bot, chat_id, &msg, keyboards::main_menu_compact()).await
                 }
