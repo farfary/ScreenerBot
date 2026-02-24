@@ -155,7 +155,7 @@ pub(super) fn find_largest_system_transfer_from_wallet(
                         .or_else(|| info.get("amount").and_then(|v| v.as_u64()));
                     if let Some(lamports) = lamports {
                         if ix_type == "transfer" || ix_type == "createAccount" {
-                            if best.map_or(true, |b| lamports > b) {
+                            if best.is_none_or(|b| lamports > b) {
                                 best = Some(lamports);
                             }
                         }

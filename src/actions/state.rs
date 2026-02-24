@@ -528,7 +528,7 @@ pub fn spawn_cleanup_task() {
                     | ActionState::Failed { .. }
                     | ActionState::Cancelled => {
                         // Use completed_at if available, otherwise keep
-                        action.completed_at.map_or(true, |t| t > cutoff)
+                        action.completed_at.is_none_or(|t| t > cutoff)
                     }
                     _ => true, // Keep pending/running actions
                 }
