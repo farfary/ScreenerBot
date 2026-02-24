@@ -72,7 +72,7 @@ impl TransactionDatabase {
             .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
             .max_lifetime(None) // SQLite: no connection recycling
             .build(manager)
-            .map_err(|e| format!("Failed to create connection pool: {}", e))?;
+            .map_err(|e| format!("Failed to create connection pool: {e}"))?;
 
         let mut db = Self {
             pool,
@@ -98,7 +98,7 @@ impl TransactionDatabase {
 
         if let Some(parent) = database_path.parent() {
             std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create data directory: {}", e))?;
+                .map_err(|e| format!("Failed to create data directory: {e}"))?;
         }
 
         Self::create_database(database_path, true).await
@@ -108,7 +108,7 @@ impl TransactionDatabase {
     async fn initialize_schema(&mut self) -> Result<(), String> {
         let mut conn = self
             .get_connection()
-            .map_err(|e| format!("Failed to get database connection: {}", e))?;
+            .map_err(|e| format!("Failed to get database connection: {e}"))?;
 
         // Create all tables
         let tables = [
@@ -123,13 +123,13 @@ impl TransactionDatabase {
 
         for table_sql in &tables {
             conn.execute(table_sql, [])
-                .map_err(|e| format!("Failed to create table: {}", e))?;
+                .map_err(|e| format!("Failed to create table: {e}"))?;
         }
 
         // Create all indexes
         for index_sql in INDEXES {
             conn.execute(index_sql, [])
-                .map_err(|e| format!("Failed to create index: {}", e))?;
+                .map_err(|e| format!("Failed to create index: {e}"))?;
         }
 
         // Apply lightweight migrations for existing databases
@@ -140,16 +140,16 @@ impl TransactionDatabase {
             "INSERT OR REPLACE INTO db_metadata (key, value) VALUES (?1, ?2)",
             params!["schema_version", self.schema_version.to_string()],
         )
-        .map_err(|e| format!("Failed to set schema version: {}", e))?;
+        .map_err(|e| format!("Failed to set schema version: {e}"))?;
 
         // Store current wallet address in metadata
         let wallet_address = crate::utils::get_wallet_address()
-            .map_err(|e| format!("Failed to get wallet address: {}", e))?;
+            .map_err(|e| format!("Failed to get wallet address: {e}"))?;
         conn.execute(
             "INSERT OR REPLACE INTO db_metadata (key, value) VALUES (?1, ?2)",
             params!["current_wallet", wallet_address],
         )
-        .map_err(|e| format!("Failed to set current_wallet in metadata: {}", e))?;
+        .map_err(|e| format!("Failed to set current_wallet in metadata: {e}"))?;
 
         Ok(())
     }
@@ -161,15 +161,15 @@ impl TransactionDatabase {
         let mut has_sol_delta = false;
         let mut stmt = conn
             .prepare("PRAGMA table_info(processed_transactions)")
-            .map_err(|e| format!("Failed to inspect processed_transactions schema: {}", e))?;
+            .map_err(|e| format!("Failed to inspect processed_transactions schema: {e}"))?;
         let rows = stmt
             .query_map([], |row| {
                 let name: String = row.get(1)?;
                 Ok(name)
             })
-            .map_err(|e| format!("Failed to read processed_transactions schema: {}", e))?;
+            .map_err(|e| format!("Failed to read processed_transactions schema: {e}"))?;
         for r in rows {
-            let name = r.map_err(|e| format!("Failed to parse schema row: {}", e))?;
+            let name = r.map_err(|e| format!("Failed to parse schema row: {e}"))?;
             if name.eq_ignore_ascii_case("fee_sol") {
                 has_fee_sol = true;
             } else if name.eq_ignore_ascii_case("sol_delta") {
@@ -182,7 +182,7 @@ impl TransactionDatabase {
                 "ALTER TABLE processed_transactions ADD COLUMN fee_sol REAL NOT NULL DEFAULT 0",
                 [],
             )
-            .map_err(|e| format!("Failed to add fee_sol column: {}", e))?;
+            .map_err(|e| format!("Failed to add fee_sol column: {e}"))?;
         }
 
         if !has_sol_delta {
@@ -190,21 +190,21 @@ impl TransactionDatabase {
                 "ALTER TABLE processed_transactions ADD COLUMN sol_delta REAL",
                 [],
             )
-            .map_err(|e| format!("Failed to add sol_delta column: {}", e))?;
+            .map_err(|e| format!("Failed to add sol_delta column: {e}"))?;
 
             self.backfill_processed_sol_delta(conn)?;
         }
 
         // Ensure bootstrap_state table exists (idempotent)
         conn.execute(SCHEMA_BOOTSTRAP_STATE, [])
-            .map_err(|e| format!("Failed to ensure bootstrap_state table: {}", e))?;
+            .map_err(|e| format!("Failed to ensure bootstrap_state table: {e}"))?;
 
         // Ensure the single row exists
         conn.execute(
             "INSERT OR IGNORE INTO bootstrap_state (id, full_history_completed) VALUES (1, 0)",
             [],
         )
-        .map_err(|e| format!("Failed to initialize bootstrap_state row: {}", e))?;
+        .map_err(|e| format!("Failed to initialize bootstrap_state row: {e}"))?;
         Ok(())
     }
 
@@ -214,14 +214,14 @@ impl TransactionDatabase {
 
         // Get wallet address for filtering (this is a migration function, so it operates on current wallet data only)
         let wallet_address = crate::utils::get_wallet_address()
-            .map_err(|e| format!("Failed to get wallet address for sol_delta backfill: {}", e))?;
+            .map_err(|e| format!("Failed to get wallet address for sol_delta backfill: {e}"))?;
 
         loop {
             let mut stmt = conn
                 .prepare(
                     "SELECT signature, sol_balance_change FROM processed_transactions WHERE wallet_address = ?1 AND sol_delta IS NULL LIMIT ?2",
                 )
-                .map_err(|e| format!("Failed to prepare sol_delta backfill query: {}", e))?;
+                .map_err(|e| format!("Failed to prepare sol_delta backfill query: {e}"))?;
 
             let rows = stmt
                 .query_map(params![wallet_address, BATCH_SIZE], |row| {
@@ -229,12 +229,12 @@ impl TransactionDatabase {
                     let change_json: Option<String> = row.get(1)?;
                     Ok((signature, change_json))
                 })
-                .map_err(|e| format!("Failed to iterate sol_delta backfill rows: {}", e))?;
+                .map_err(|e| format!("Failed to iterate sol_delta backfill rows: {e}"))?;
 
             let mut batch: Vec<(String, Option<String>)> = Vec::new();
             for row in rows {
                 let (signature, change_json) =
-                    row.map_err(|e| format!("Failed to read sol_delta row: {}", e))?;
+                    row.map_err(|e| format!("Failed to read sol_delta row: {e}"))?;
                 batch.push((signature, change_json));
             }
 
@@ -246,7 +246,7 @@ impl TransactionDatabase {
 
             let tx = conn
                 .transaction()
-                .map_err(|e| format!("Failed to start sol_delta backfill transaction: {}", e))?;
+                .map_err(|e| format!("Failed to start sol_delta backfill transaction: {e}"))?;
 
             for (signature, change_json) in batch.into_iter() {
                 let delta = Self::compute_sol_delta_from_json(change_json.as_deref());
@@ -254,12 +254,12 @@ impl TransactionDatabase {
                     "UPDATE processed_transactions SET sol_delta = ?1 WHERE signature = ?2 AND wallet_address = ?3",
                     params![delta, signature, wallet_address],
                 )
-                .map_err(|e| format!("Failed to update sol_delta: {}", e))?;
+                .map_err(|e| format!("Failed to update sol_delta: {e}"))?;
                 total_updated += 1;
             }
 
             tx.commit()
-                .map_err(|e| format!("Failed to commit sol_delta backfill: {}", e))?;
+                .map_err(|e| format!("Failed to commit sol_delta backfill: {e}"))?;
         }
 
         if total_updated > 0 {
@@ -302,7 +302,7 @@ impl TransactionDatabase {
     ) -> Result<PooledConnection<SqliteConnectionManager>, String> {
         self.pool
             .get()
-            .map_err(|e| format!("Failed to get database connection from pool: {}", e))
+            .map_err(|e| format!("Failed to get database connection from pool: {e}"))
     }
 
     /// Health check - verify database connectivity and basic operations
@@ -316,7 +316,7 @@ impl TransactionDatabase {
                 [],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Database health check failed: {}", e))?;
+            .map_err(|e| format!("Database health check failed: {e}"))?;
 
         if count < 5 {
             return Err("Database schema incomplete".to_string());
@@ -342,7 +342,7 @@ impl TransactionDatabase {
                 params![signature, wallet_address],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to check known signature: {}", e))?;
+            .map_err(|e| format!("Failed to check known signature: {e}"))?;
 
         Ok(exists)
     }
@@ -356,7 +356,7 @@ impl TransactionDatabase {
             "INSERT OR IGNORE INTO known_signatures (signature, wallet_address) VALUES (?1, ?2)",
             params![signature, wallet_address],
         )
-        .map_err(|e| format!("Failed to add known signature: {}", e))?;
+        .map_err(|e| format!("Failed to add known signature: {e}"))?;
 
         Ok(())
     }
@@ -372,7 +372,7 @@ impl TransactionDatabase {
                 params![wallet_address],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to get known signatures count: {}", e))?;
+            .map_err(|e| format!("Failed to get known signatures count: {e}"))?;
 
         Ok(count as u64)
     }
@@ -389,7 +389,7 @@ impl TransactionDatabase {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(|e| format!("Failed to get newest known signature: {}", e))?;
+            .map_err(|e| format!("Failed to get newest known signature: {e}"))?;
 
         Ok(result)
     }
@@ -410,7 +410,7 @@ impl TransactionDatabase {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(|e| format!("Failed to get oldest known signature: {}", e))?;
+            .map_err(|e| format!("Failed to get oldest known signature: {e}"))?;
 
         Ok(result)
     }
@@ -424,7 +424,7 @@ impl TransactionDatabase {
                 "DELETE FROM known_signatures WHERE added_at < datetime('now', '-' || ?1 || ' days')",
                 params![days]
             )
-            .map_err(|e| format!("Failed to cleanup old known signatures: {}", e))?;
+            .map_err(|e| format!("Failed to cleanup old known signatures: {e}"))?;
 
         Ok(affected)
     }
@@ -445,18 +445,18 @@ impl TransactionDatabase {
 
         let tx = conn
             .unchecked_transaction()
-            .map_err(|e| format!("Failed to start transaction: {}", e))?;
+            .map_err(|e| format!("Failed to start transaction: {e}"))?;
 
         for (signature, timestamp) in pending {
             tx.execute(
                 "INSERT OR REPLACE INTO pending_transactions (signature, wallet_address, added_at) VALUES (?1, ?2, ?3)",
                 params![signature, wallet_address, timestamp.to_rfc3339()],
             )
-            .map_err(|e| format!("Failed to save pending transaction: {}", e))?;
+            .map_err(|e| format!("Failed to save pending transaction: {e}"))?;
         }
 
         tx.commit()
-            .map_err(|e| format!("Failed to commit pending transactions: {}", e))?;
+            .map_err(|e| format!("Failed to commit pending transactions: {e}"))?;
 
         Ok(())
     }
@@ -470,7 +470,7 @@ impl TransactionDatabase {
             .prepare(
                 "SELECT signature, added_at FROM pending_transactions WHERE wallet_address = ?1",
             )
-            .map_err(|e| format!("Failed to prepare pending transactions query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare pending transactions query: {e}"))?;
 
         let rows = stmt
             .query_map(params![wallet_address], |row| {
@@ -487,12 +487,12 @@ impl TransactionDatabase {
                     .with_timezone(&Utc);
                 Ok((signature, timestamp))
             })
-            .map_err(|e| format!("Failed to query pending transactions: {}", e))?;
+            .map_err(|e| format!("Failed to query pending transactions: {e}"))?;
 
         let mut result = HashMap::new();
         for row in rows {
             let (signature, timestamp) =
-                row.map_err(|e| format!("Failed to parse pending transaction row: {}", e))?;
+                row.map_err(|e| format!("Failed to parse pending transaction row: {e}"))?;
             result.insert(signature, timestamp);
         }
 
@@ -509,7 +509,7 @@ impl TransactionDatabase {
                 "DELETE FROM pending_transactions WHERE signature = ?1 AND wallet_address = ?2",
                 params![signature, wallet_address],
             )
-            .map_err(|e| format!("Failed to remove pending transaction: {}", e))?;
+            .map_err(|e| format!("Failed to remove pending transaction: {e}"))?;
 
         Ok(affected > 0)
     }
@@ -525,7 +525,7 @@ impl TransactionDatabase {
                 params![wallet_address],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to get pending transactions count: {}", e))?;
+            .map_err(|e| format!("Failed to get pending transactions count: {e}"))?;
 
         Ok(count as u64)
     }
@@ -566,7 +566,7 @@ impl TransactionDatabase {
                 }
             }
             Ok(None) => Ok(None),
-            Err(e) => Err(format!("Failed to read cached raw transaction: {}", e)),
+            Err(e) => Err(format!("Failed to read cached raw transaction: {e}")),
         }
     }
 
@@ -609,7 +609,7 @@ impl TransactionDatabase {
                     raw_transaction_json
                 ]
             )
-            .map_err(|e| format!("Failed to store raw transaction: {}", e))?;
+            .map_err(|e| format!("Failed to store raw transaction: {e}"))?;
 
         Ok(())
     }
@@ -680,7 +680,7 @@ impl TransactionDatabase {
                     sol_delta
                 ]
             )
-            .map_err(|e| format!("Failed to store processed transaction: {}", e))?;
+            .map_err(|e| format!("Failed to store processed transaction: {e}"))?;
 
         Ok(())
     }
@@ -708,7 +708,7 @@ impl TransactionDatabase {
                 "UPDATE raw_transactions SET status = ?1, success = ?2, error_message = ?3, updated_at = datetime('now') WHERE signature = ?4 AND wallet_address = ?5",
                 params![status, success, error_message, signature, wallet_address]
             )
-            .map_err(|e| format!("Failed to update transaction status: {}", e))?;
+            .map_err(|e| format!("Failed to update transaction status: {e}"))?;
 
         Ok(())
     }
@@ -882,7 +882,7 @@ impl TransactionDatabase {
         match result {
             Ok(transaction) => Ok(Some(transaction)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(format!("Failed to get transaction: {}", e)),
+            Err(e) => Err(format!("Failed to get transaction: {e}")),
         }
     }
 
@@ -897,7 +897,7 @@ impl TransactionDatabase {
                 params![wallet_address],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to get successful transactions count: {}", e))?;
+            .map_err(|e| format!("Failed to get successful transactions count: {e}"))?;
 
         Ok(count as u64)
     }
@@ -913,7 +913,7 @@ impl TransactionDatabase {
                 params![wallet_address],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to get failed transactions count: {}", e))?;
+            .map_err(|e| format!("Failed to get failed transactions count: {e}"))?;
 
         Ok(count as u64)
     }

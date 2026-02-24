@@ -90,11 +90,11 @@ impl TransactionDatabase {
 
         // Vacuum to reclaim space
         conn.execute("VACUUM", [])
-            .map_err(|e| format!("Failed to vacuum database: {}", e))?;
+            .map_err(|e| format!("Failed to vacuum database: {e}"))?;
 
         // Analyze for query optimization
         conn.execute("ANALYZE", [])
-            .map_err(|e| format!("Failed to analyze database: {}", e))?;
+            .map_err(|e| format!("Failed to analyze database: {e}"))?;
 
         // Cleanup old pending transactions (older than 1 day)
         let cleaned_pending = conn
@@ -102,7 +102,7 @@ impl TransactionDatabase {
                 "DELETE FROM pending_transactions WHERE added_at < datetime('now', '-1 day')",
                 [],
             )
-            .map_err(|e| format!("Failed to cleanup old pending transactions: {}", e))?;
+            .map_err(|e| format!("Failed to cleanup old pending transactions: {e}"))?;
 
         // Cleanup old deferred retries (older than 1 day with 0 attempts)
         let cleaned_retries = conn
@@ -110,7 +110,7 @@ impl TransactionDatabase {
                 "DELETE FROM deferred_retries WHERE remaining_attempts = 0 AND created_at < datetime('now', '-1 day')",
                 []
             )
-            .map_err(|e| format!("Failed to cleanup old deferred retries: {}", e))?;
+            .map_err(|e| format!("Failed to cleanup old deferred retries: {e}"))?;
 
         logger::info(
             LogTag::Transactions,
@@ -215,7 +215,7 @@ impl TransactionDatabase {
                 }
             )
             .optional()
-            .map_err(|e| format!("Failed to load bootstrap_state: {}", e))?;
+            .map_err(|e| format!("Failed to load bootstrap_state: {e}"))?;
 
         if let Some((cursor, completed_i)) = result {
             state.backfill_before_cursor = cursor;
@@ -232,14 +232,14 @@ impl TransactionDatabase {
             "INSERT OR IGNORE INTO bootstrap_state (id, full_history_completed) VALUES (1, 0)",
             [],
         )
-        .map_err(|e| format!("Failed to ensure bootstrap_state row: {}", e))?;
+        .map_err(|e| format!("Failed to ensure bootstrap_state row: {e}"))?;
 
         conn
             .execute(
                 "UPDATE bootstrap_state SET backfill_before_cursor = ?1, updated_at = datetime('now') WHERE id = 1",
                 params![cursor]
             )
-            .map_err(|e| format!("Failed to update backfill cursor: {}", e))?;
+            .map_err(|e| format!("Failed to update backfill cursor: {e}"))?;
         Ok(())
     }
 
@@ -256,7 +256,7 @@ impl TransactionDatabase {
                 "UPDATE bootstrap_state SET full_history_completed = 1, updated_at = datetime('now') WHERE id = 1",
                 []
             )
-            .map_err(|e| format!("Failed to mark full history completed: {}", e))?;
+            .map_err(|e| format!("Failed to mark full history completed: {e}"))?;
         Ok(())
     }
 
@@ -269,7 +269,7 @@ impl TransactionDatabase {
                 "INSERT OR IGNORE INTO known_signatures(signature) SELECT signature FROM processed_transactions",
                 []
             )
-            .map_err(|e| format!("Failed to reconcile known signatures: {}", e))?;
+            .map_err(|e| format!("Failed to reconcile known signatures: {e}"))?;
         Ok(affected as usize)
     }
 
@@ -384,7 +384,7 @@ impl TransactionDatabase {
             params_vec.iter().map(|p| p.as_ref()).collect();
         let mut stmt = conn
             .prepare(&query)
-            .map_err(|e| format!("Failed to prepare list query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare list query: {e}"))?;
 
         let rows = stmt
             .query_map(params_refs.as_slice(), |row| {
@@ -505,13 +505,13 @@ impl TransactionDatabase {
                     instructions_count,
                 })
             })
-            .map_err(|e| format!("Failed to execute list query: {}", e))?;
+            .map_err(|e| format!("Failed to execute list query: {e}"))?;
 
         // Collect and apply Rust-side filters
         let mut results: Vec<TransactionListRow> = Vec::new();
 
         for row_result in rows {
-            let row = row_result.map_err(|e| format!("Failed to parse row: {}", e))?;
+            let row = row_result.map_err(|e| format!("Failed to parse row: {e}"))?;
 
             if !Self::row_matches_filters(&row, filters) {
                 continue;
@@ -680,11 +680,11 @@ impl TransactionDatabase {
 
         let mut stmt = conn
             .prepare(&row_query)
-            .map_err(|e| format!("Failed to prepare flow aggregation query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare flow aggregation query: {e}"))?;
 
         let mut rows = stmt
             .query(params_refs.as_slice())
-            .map_err(|e| format!("Failed to execute flow aggregation query: {}", e))?;
+            .map_err(|e| format!("Failed to execute flow aggregation query: {e}"))?;
 
         let mut inflow = 0.0;
         let mut outflow = 0.0;
@@ -696,7 +696,7 @@ impl TransactionDatabase {
 
         while let Some(row) = rows
             .next()
-            .map_err(|e| format!("Failed to read flow row: {}", e))?
+            .map_err(|e| format!("Failed to read flow row: {e}"))?
         {
             count += 1;
             let signature: String = row.get(0).unwrap_or_default();
@@ -829,11 +829,11 @@ impl TransactionDatabase {
 
         let mut stmt = conn
             .prepare(&query)
-            .map_err(|e| format!("Failed to prepare daily flows query: {}", e))?;
+            .map_err(|e| format!("Failed to prepare daily flows query: {e}"))?;
 
         let mut rows = stmt
             .query(params_refs.as_slice())
-            .map_err(|e| format!("Failed to execute daily flows query: {}", e))?;
+            .map_err(|e| format!("Failed to execute daily flows query: {e}"))?;
 
         // Group by day manually
         use std::collections::HashMap;
@@ -841,7 +841,7 @@ impl TransactionDatabase {
 
         while let Some(row) = rows
             .next()
-            .map_err(|e| format!("Failed to read daily flow row: {}", e))?
+            .map_err(|e| format!("Failed to read daily flow row: {e}"))?
         {
             let day: String = row.get(0).unwrap_or_default();
             let sol_balance_change_json: Option<String> = row.get(2).ok();
@@ -899,7 +899,7 @@ impl TransactionDatabase {
                  ORDER BY r.timestamp ASC, r.signature ASC \
                  LIMIT ?3",
             )
-            .map_err(|e| format!("Failed to prepare wallet flow export: {}", e))?;
+            .map_err(|e| format!("Failed to prepare wallet flow export: {e}"))?;
 
         let mut rows = stmt
             .query(params![
@@ -907,22 +907,22 @@ impl TransactionDatabase {
                 from.to_rfc3339(),
                 (limit as i64).max(1)
             ])
-            .map_err(|e| format!("Failed to query wallet flow export: {}", e))?;
+            .map_err(|e| format!("Failed to query wallet flow export: {e}"))?;
 
         let mut results = Vec::new();
         while let Some(row) = rows
             .next()
-            .map_err(|e| format!("Failed to iterate wallet flow export: {}", e))?
+            .map_err(|e| format!("Failed to iterate wallet flow export: {e}"))?
         {
             let signature: String = row
                 .get(0)
-                .map_err(|e| format!("Failed to read signature: {}", e))?;
+                .map_err(|e| format!("Failed to read signature: {e}"))?;
             let ts_str: String = row
                 .get(1)
-                .map_err(|e| format!("Failed to read timestamp: {}", e))?;
+                .map_err(|e| format!("Failed to read timestamp: {e}"))?;
             let timestamp = DateTime::parse_from_rfc3339(&ts_str)
                 .map(|dt| dt.with_timezone(&Utc))
-                .map_err(|e| format!("Failed to parse timestamp: {}", e))?;
+                .map_err(|e| format!("Failed to parse timestamp: {e}"))?;
             let sol_delta: f64 = row
                 .get::<_, Option<f64>>(2)
                 .unwrap_or(Some(0.0))
@@ -985,7 +985,7 @@ impl TransactionDatabase {
 
         let count: i64 = conn
             .query_row(&query, params_refs.as_slice(), |row| row.get(0))
-            .map_err(|e| format!("Failed to count transactions: {}", e))?;
+            .map_err(|e| format!("Failed to count transactions: {e}"))?;
 
         Ok(count as u64)
     }

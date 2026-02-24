@@ -96,14 +96,14 @@ pub fn ensure_auto_vacuum_mode(path: &Path) -> Result<bool, String> {
 
     // Configure connection for safe operation
     conn.pragma_update(None, "busy_timeout", 5000)
-        .map_err(|e| format!("Failed to set busy_timeout: {}", e))?;
+        .map_err(|e| format!("Failed to set busy_timeout: {e}"))?;
     conn.pragma_update(None, "journal_mode", "WAL")
-        .map_err(|e| format!("Failed to set journal_mode: {}", e))?;
+        .map_err(|e| format!("Failed to set journal_mode: {e}"))?;
 
     // Check current auto_vacuum mode
     let auto_vacuum_mode: i64 = conn
         .pragma_query_value(None, "auto_vacuum", |row| row.get(0))
-        .map_err(|e| format!("Failed to query auto_vacuum: {}", e))?;
+        .map_err(|e| format!("Failed to query auto_vacuum: {e}"))?;
 
     // Mode 2 = INCREMENTAL, we're done
     if auto_vacuum_mode == 2 {
@@ -121,12 +121,12 @@ pub fn ensure_auto_vacuum_mode(path: &Path) -> Result<bool, String> {
 
     // Set INCREMENTAL mode
     conn.pragma_update(None, "auto_vacuum", 2)
-        .map_err(|e| format!("Failed to set auto_vacuum: {}", e))?;
+        .map_err(|e| format!("Failed to set auto_vacuum: {e}"))?;
 
     // Run full VACUUM to convert (this rewrites the entire database)
     let start = std::time::Instant::now();
     conn.execute_batch("VACUUM;")
-        .map_err(|e| format!("Failed to execute VACUUM: {}", e))?;
+        .map_err(|e| format!("Failed to execute VACUUM: {e}"))?;
     let elapsed = start.elapsed();
 
     logger::info(
@@ -172,12 +172,12 @@ pub fn run_incremental_vacuum(path: &Path, pages: u32) -> Result<u64, String> {
 
     // Configure connection
     conn.pragma_update(None, "busy_timeout", 5000)
-        .map_err(|e| format!("Failed to set busy_timeout: {}", e))?;
+        .map_err(|e| format!("Failed to set busy_timeout: {e}"))?;
 
     // Get freelist count before vacuum
     let freelist_before: u64 = conn
         .pragma_query_value(None, "freelist_count", |row| row.get(0))
-        .map_err(|e| format!("Failed to query freelist_count: {}", e))?;
+        .map_err(|e| format!("Failed to query freelist_count: {e}"))?;
 
     if freelist_before == 0 {
         return Ok(0); // Nothing to free
@@ -187,13 +187,13 @@ pub fn run_incremental_vacuum(path: &Path, pages: u32) -> Result<u64, String> {
     let start = std::time::Instant::now();
     let sql = format!("PRAGMA incremental_vacuum({});", pages);
     conn.execute_batch(&sql)
-        .map_err(|e| format!("Failed to execute incremental_vacuum: {}", e))?;
+        .map_err(|e| format!("Failed to execute incremental_vacuum: {e}"))?;
     let elapsed = start.elapsed();
 
     // Get freelist count after vacuum
     let freelist_after: u64 = conn
         .pragma_query_value(None, "freelist_count", |row| row.get(0))
-        .map_err(|e| format!("Failed to query freelist_count: {}", e))?;
+        .map_err(|e| format!("Failed to query freelist_count: {e}"))?;
 
     let freed = freelist_before.saturating_sub(freelist_after);
 
@@ -241,12 +241,12 @@ pub fn run_wal_checkpoint(path: &Path) -> Result<(), String> {
         .map_err(|e| format!("Failed to open database {}: {}", path.display(), e))?;
 
     conn.pragma_update(None, "busy_timeout", 5000)
-        .map_err(|e| format!("Failed to set busy_timeout: {}", e))?;
+        .map_err(|e| format!("Failed to set busy_timeout: {e}"))?;
 
     // Check journal mode — only checkpoint WAL databases
     let journal_mode: String = conn
         .pragma_query_value(None, "journal_mode", |row| row.get(0))
-        .map_err(|e| format!("Failed to query journal_mode: {}", e))?;
+        .map_err(|e| format!("Failed to query journal_mode: {e}"))?;
 
     if journal_mode.to_lowercase() != "wal" {
         return Ok(()); // Not in WAL mode, nothing to do
@@ -255,7 +255,7 @@ pub fn run_wal_checkpoint(path: &Path) -> Result<(), String> {
     // TRUNCATE mode: checkpoint all frames and reset WAL file to zero bytes
     let start = std::time::Instant::now();
     conn.pragma_update(None, "wal_checkpoint", "TRUNCATE")
-        .map_err(|e| format!("WAL checkpoint failed: {}", e))?;
+        .map_err(|e| format!("WAL checkpoint failed: {e}"))?;
     let elapsed = start.elapsed();
 
     if elapsed.as_millis() > 100 {
