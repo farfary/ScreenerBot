@@ -1,20 +1,21 @@
-/// GeckoTerminal API client
-///
-/// API Documentation: https://www.geckoterminal.com/dex-api
-///
-/// Endpoints implemented:
-/// 1. /networks/{network}/tokens/{token}/pools - Get all pools for a token (primary)
-/// 2. /networks/{network}/trending_pools - Trending pools per network
-/// 3. /networks/{network}/pools - Top pools per network
-/// 4. /networks/{network}/pools/{address} - Pool details by address
-/// 5. /networks/{network}/pools/multi/{addresses} - Multiple pools at once
-/// 6. /networks/{network}/pools/{pool}/ohlcv/{timeframe} - OHLCV data
-/// 7. /networks/{network}/dexes - Supported DEX list
-/// 8. /networks/{network}/new_pools - Newly listed pools
-/// 9. /networks/{network}/tokens/multi/{addresses} - Multiple token metadata
-/// 10. /networks/{network}/tokens/{address}/info - Token metadata
-/// 11. /tokens/info_recently_updated - Recent token updates (global)
-/// 12. /networks/{network}/pools/{pool_address}/trades - Recent pool trades
+//! GeckoTerminal API client
+//!
+//! API Documentation: https://www.geckoterminal.com/dex-api
+//!
+//! Endpoints implemented:
+//! 1. /networks/{network}/tokens/{token}/pools - Get all pools for a token (primary)
+//! 2. /networks/{network}/trending_pools - Trending pools per network
+//! 3. /networks/{network}/pools - Top pools per network
+//! 4. /networks/{network}/pools/{address} - Pool details by address
+//! 5. /networks/{network}/pools/multi/{addresses} - Multiple pools at once
+//! 6. /networks/{network}/pools/{pool}/ohlcv/{timeframe} - OHLCV data
+//! 7. /networks/{network}/dexes - Supported DEX list
+//! 8. /networks/{network}/new_pools - Newly listed pools
+//! 9. /networks/{network}/tokens/multi/{addresses} - Multiple token metadata
+//! 10. /networks/{network}/tokens/{address}/info - Token metadata
+//! 11. /tokens/info_recently_updated - Recent token updates (global)
+//! 12. /networks/{network}/pools/{pool_address}/trades - Recent pool trades
+
 pub mod types;
 
 // Re-export types for external use

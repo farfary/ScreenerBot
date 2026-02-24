@@ -1,19 +1,20 @@
-/// Updates orchestrator - State-based priority updates
-///
-/// Coordinates fetching from all sources (DexScreener, GeckoTerminal, Rugcheck)
-/// with rate limiting and state-based priority scheduling.
-///
-/// Priority levels (named by token state):
-/// - OpenPosition (100): Tokens with active trading positions → Update every 5s
-/// - PoolTracked (75): Tokens tracked by Pool Service → Update every 7s
-/// - FilterPassed (60): Tokens that passed filtering criteria → Update every 8s
-/// - Uninitialized (55): New tokens without market data yet → Update every 10s (immediate seeding)
-/// - Stale (40): Tokens with outdated market data → Update every 15s
-/// - Standard (25): Regular tokens with fresh data → Update every 20s
-/// - Background (10): Oldest tokens being refreshed in background → Update every 30s
-///
-/// Security data (Rugcheck) is fetched in a separate loop, one token per interval (configurable, default 60s),
-/// and only for tokens that don't have security data yet.
+//! Updates orchestrator - State-based priority updates
+//!
+//! Coordinates fetching from all sources (DexScreener, GeckoTerminal, Rugcheck)
+//! with rate limiting and state-based priority scheduling.
+//!
+//! Priority levels (named by token state):
+//! - OpenPosition (100): Tokens with active trading positions → Update every 5s
+//! - PoolTracked (75): Tokens tracked by Pool Service → Update every 7s
+//! - FilterPassed (60): Tokens that passed filtering criteria → Update every 8s
+//! - Uninitialized (55): New tokens without market data yet → Update every 10s (immediate seeding)
+//! - Stale (40): Tokens with outdated market data → Update every 15s
+//! - Standard (25): Regular tokens with fresh data → Update every 20s
+//! - Background (10): Oldest tokens being refreshed in background → Update every 30s
+//!
+//! Security data (Rugcheck) is fetched in a separate loop, one token per interval (configurable, default 60s),
+//! and only for tokens that don't have security data yet.
+
 use super::core::{
     update_security_data, update_token, update_tokens_batch, PoolPriorityManager, UpdateResult,
 };

@@ -1,8 +1,9 @@
-/// Raydium CLMM (Concentrated Liquidity Market Maker) swap implementation
-///
-/// This module implements direct swaps for Raydium Concentrated Liquidity pools.
-/// It integrates with the centralized Raydium CLMM decoder and provides proper
-/// account derivation and swap calculations based on the Uniswap V3 model.
+//! Raydium CLMM (Concentrated Liquidity Market Maker) swap implementation
+//!
+//! This module implements direct swaps for Raydium Concentrated Liquidity pools.
+//! It integrates with the centralized Raydium CLMM decoder and provides proper
+//! account derivation and swap calculations based on the Uniswap V3 model.
+
 use super::ProgramSwap;
 use crate::constants::{
     MEMO_PROGRAM_ID, RAYDIUM_CLMM_PROGRAM_ID, SOL_MINT, SPL_TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID,

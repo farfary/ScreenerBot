@@ -1,4 +1,5 @@
-/// GeckoTerminal API response types
+//! GeckoTerminal API response types
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 

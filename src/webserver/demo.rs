@@ -1,16 +1,17 @@
-/// Demo mode for dashboard screenshots and marketing materials
-///
-/// This module provides hardcoded realistic data for showcasing the bot
-/// in screenshots, videos, and social media posts.
-///
-/// Enable with: cargo run --bin screenerbot -- --gui --dashboard-demo
-///
-/// Affected endpoints:
-/// - /api/dashboard/home (wallet balance, P&L, positions)
-/// - /api/dashboard/overview
-/// - /api/positions (open/closed positions)
-/// - /api/wallet/current (SOL balance, tokens)
-/// - /api/trader/status & /api/trader/stats
+//! Demo mode for dashboard screenshots and marketing materials
+//!
+//! This module provides hardcoded realistic data for showcasing the bot
+//! in screenshots, videos, and social media posts.
+//!
+//! Enable with: cargo run --bin screenerbot -- --gui --dashboard-demo
+//!
+//! Affected endpoints:
+//! - /api/dashboard/home (wallet balance, P&L, positions)
+//! - /api/dashboard/overview
+//! - /api/positions (open/closed positions)
+//! - /api/wallet/current (SOL balance, tokens)
+//! - /api/trader/status & /api/trader/stats
+
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 

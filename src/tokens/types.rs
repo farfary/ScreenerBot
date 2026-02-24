@@ -1,4 +1,5 @@
-/// Core types for the unified token data system
+//! Core types for the unified token data system
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

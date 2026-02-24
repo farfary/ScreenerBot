@@ -1,8 +1,9 @@
-/// Raydium CLMM (Concentrated Liquidity Market Maker) decoder
-///
-/// This decoder handles Raydium Concentrated Liquidity pools.
-/// CLMM uses a sqrt_price_x64 format (Q64.64) and token vaults for pricing.
-/// Based on Uniswap v3 math principles but with Raydium-specific implementation.
+//! Raydium CLMM (Concentrated Liquidity Market Maker) decoder
+//!
+//! This decoder handles Raydium Concentrated Liquidity pools.
+//! CLMM uses a sqrt_price_x64 format (Q64.64) and token vaults for pricing.
+//! Based on Uniswap v3 math principles but with Raydium-specific implementation.
+
 use super::{AccountData, PoolDecoder};
 use crate::constants::{RAYDIUM_CLMM_PROGRAM_ID, SOL_DECIMALS, SOL_MINT};
 use crate::logger::{self, LogTag};

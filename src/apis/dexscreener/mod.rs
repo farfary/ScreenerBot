@@ -1,16 +1,17 @@
-/// Complete DexScreener API client with ALL available endpoints
-///
-/// API Documentation: https://docs.dexscreener.com/api/reference
-///
-/// Endpoints implemented (verified working):
-/// 1. /token-pairs/v1/{chainId}/{tokenAddress} - PRIMARY: Get all pools for a token
-/// 2. /tokens/v1/{chainId}/{tokenAddresses} - Get pools for up to 30 tokens (batch)
-/// 3. /latest/dex/pairs/{chainId}/{pairId} - Get single pair by chain/address
-/// 4. /latest/dex/search?q={query} - Search pairs
-/// 5. /token-profiles/latest/v1 - Get latest token profiles
-/// 6. /token-boosts/latest/v1 - Get latest boosted tokens
-/// 7. /token-boosts/top/v1 - Get top boosted tokens  
-/// 8. /orders/v1/{chainId}/{tokenAddress} - Get orders for a token
+//! Complete DexScreener API client with ALL available endpoints
+//!
+//! API Documentation: https://docs.dexscreener.com/api/reference
+//!
+//! Endpoints implemented (verified working):
+//! 1. /token-pairs/v1/{chainId}/{tokenAddress} - PRIMARY: Get all pools for a token
+//! 2. /tokens/v1/{chainId}/{tokenAddresses} - Get pools for up to 30 tokens (batch)
+//! 3. /latest/dex/pairs/{chainId}/{pairId} - Get single pair by chain/address
+//! 4. /latest/dex/search?q={query} - Search pairs
+//! 5. /token-profiles/latest/v1 - Get latest token profiles
+//! 6. /token-boosts/latest/v1 - Get latest boosted tokens
+//! 7. /token-boosts/top/v1 - Get top boosted tokens  
+//! 8. /orders/v1/{chainId}/{tokenAddress} - Get orders for a token
+
 pub mod types;
 
 // Re-export types for external use

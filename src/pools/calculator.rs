@@ -1,10 +1,11 @@
-/// Price calculator module
-///
-/// This module handles the core price calculation logic:
-/// - Decodes pool account data using program-specific decoders
-/// - Calculates token prices from pool reserves (SOL-based pricing only)
-/// - Handles price triangulation for indirect pairs
-/// - Updates price cache and history
+//! Price calculator module
+//!
+//! This module handles the core price calculation logic:
+//! - Decodes pool account data using program-specific decoders
+//! - Calculates token prices from pool reserves (SOL-based pricing only)
+//! - Handles price triangulation for indirect pairs
+//! - Updates price cache and history
+
 use super::cache;
 use super::decoders;
 use super::fetcher::{AccountData, PoolAccountBundle};

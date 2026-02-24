@@ -1,12 +1,13 @@
-/// Pool discovery module
-///
-/// This module orchestrates pool discovery for watched tokens by:
-/// 1. Building token list (filtered + position tokens)
-/// 2. Fetching pool snapshots from tokens module (which handles all caching, deduplication, selection)
-/// 3. Converting canonical pools to PoolDescriptor format
-/// 4. Sending to analyzer for classification
-///
-/// All pool data fetching, caching, deduplication, and canonical selection is handled by tokens/pools module.
+//! Pool discovery module
+//!
+//! This module orchestrates pool discovery for watched tokens by:
+//! 1. Building token list (filtered + position tokens)
+//! 2. Fetching pool snapshots from tokens module (which handles all caching, deduplication, selection)
+//! 3. Converting canonical pools to PoolDescriptor format
+//! 4. Sending to analyzer for classification
+//!
+//! All pool data fetching, caching, deduplication, and canonical selection is handled by tokens/pools module.
+
 use super::types::{max_watched_tokens, PoolDescriptor, ProgramKind};
 use super::utils::is_stablecoin_mint;
 

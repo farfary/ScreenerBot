@@ -1,4 +1,5 @@
-/// Caching layer for pool snapshots with TTL and stale fallback
+//! Caching layer for pool snapshots with TTL and stale fallback
+
 use crate::events::{record_token_event, Severity};
 use crate::logger::{self, LogTag};
 use crate::tokens::database;

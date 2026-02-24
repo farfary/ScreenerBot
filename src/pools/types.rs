@@ -1,7 +1,8 @@
-/// Core types for the pools module
-///
-/// This file contains all the essential data structures used throughout the pools system.
-/// These types are designed to be minimal, efficient, and focused on the core functionality.
+//! Core types for the pools module
+//!
+//! This file contains all the essential data structures used throughout the pools system.
+//! These types are designed to be minimal, efficient, and focused on the core functionality.
+
 use crate::config::with_config;
 use crate::constants::{
     FLUXBEAM_AMM_PROGRAM_ID, METEORA_DAMM_PROGRAM_ID, METEORA_DBC_PROGRAM_ID,
