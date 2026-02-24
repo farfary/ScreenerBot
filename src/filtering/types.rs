@@ -204,7 +204,7 @@ impl FilteringQuery {
 
     pub fn clamp_page_size(&mut self, max_page_size: usize) {
         let max_size = max_page_size.max(1);
-        self.page_size = self.page_size.max(1).min(max_size);
+        self.page_size = self.page_size.clamp(1, max_size);
     }
 }
 

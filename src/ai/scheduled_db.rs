@@ -811,7 +811,7 @@ pub fn list_runs_for_task(
         .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     // Clamp limit to reasonable bounds
-    let limit = limit.min(100).max(1);
+    let limit = limit.clamp(1, 100);
 
     let mut stmt = conn
         .prepare(
@@ -859,7 +859,7 @@ pub fn list_recent_runs(
         .map_err(|e| format!("Failed to get connection: {e}"))?;
 
     // Clamp limit to reasonable bounds
-    let limit = limit.min(100).max(1);
+    let limit = limit.clamp(1, 100);
 
     let mut stmt = conn
         .prepare(

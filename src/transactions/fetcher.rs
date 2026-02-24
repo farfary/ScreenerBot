@@ -695,7 +695,7 @@ pub fn validate_signature_format(signature: &str) -> Result<(), String> {
 pub fn calculate_optimal_batch_size(available_memory_mb: usize, network_latency_ms: u64) -> usize {
     // Basic heuristic for batch size calculation
     let base_size = 50;
-    let memory_factor = (available_memory_mb / 100).max(1).min(10);
+    let memory_factor = (available_memory_mb / 100).clamp(1, 10);
     let latency_factor = if network_latency_ms < 100 { 2 } else { 1 };
 
     base_size * memory_factor * latency_factor

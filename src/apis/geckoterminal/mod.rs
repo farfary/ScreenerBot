@@ -320,7 +320,7 @@ impl GeckoTerminalClient {
 
         let mut query_params: Vec<(String, String)> = Vec::new();
         if let Some(p) = page {
-            let page_num = p.min(10).max(1);
+            let page_num = p.clamp(1, 10);
             query_params.push(("page".to_owned(), page_num.to_string()));
         }
         if let Some(s) = sort {
