@@ -145,7 +145,7 @@ pub fn log_price_change(
             };
             line2_parts.push(diff_text);
         } else {
-            line2_parts.push(format!("{} Pool", formatted_pool_type).dimmed().to_string());
+            line2_parts.push(format!("{formatted_pool_type} Pool").dimmed().to_string());
         }
     } else {
         line2_parts.push("API Price".dimmed().to_string());
@@ -154,7 +154,7 @@ pub fn log_price_change(
     // Pool details
     if pool_address.is_some() {
         line2_parts.push(
-            format!("[ {} ]", formatted_pool_type)
+            format!("[ {formatted_pool_type} ]")
                 .bright_yellow()
                 .to_string(),
         );

@@ -108,7 +108,7 @@ impl Tool for AnalyzeTokenTool {
             liquidity_usd: token.liquidity_usd,
             security_score: token
                 .security_score_normalised
-                .map(|s| format!("{}/100", s)),
+                .map(|s| format!("{s}/100")),
             security_risks: if token.security_risks.is_empty() {
                 None
             } else {

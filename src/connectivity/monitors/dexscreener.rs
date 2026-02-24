@@ -68,7 +68,7 @@ impl EndpointMonitor for DexScreenerMonitor {
             }
             Err(e) => {
                 if e.is_timeout() {
-                    HealthCheckResult::failure(format!("Timeout after {}s", timeout_secs))
+                    HealthCheckResult::failure(format!("Timeout after {timeout_secs}s"))
                 } else {
                     HealthCheckResult::failure(format!("Request failed: {e}"))
                 }

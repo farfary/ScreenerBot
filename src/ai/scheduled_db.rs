@@ -610,7 +610,7 @@ pub fn update_task_after_run(
     let now = chrono::Utc::now().to_rfc3339();
 
     // Get the task to calculate next run
-    let task = get_task(pool, id)?.ok_or_else(|| format!("Task {} not found", id))?;
+    let task = get_task(pool, id)?.ok_or_else(|| format!("Task {id} not found"))?;
 
     let next_run = calculate_next_run(&task.schedule_type, &task.schedule_value, None)?;
 
@@ -1039,7 +1039,7 @@ pub fn cleanup_old_runs(
     let deleted = conn
         .execute(
             "DELETE FROM ai_task_runs WHERE started_at < datetime('now', ?1)",
-            params![format!("-{} days", keep_days)],
+            params![format!("-{keep_days} days")],
         )
         .map_err(|e| format!("Failed to cleanup old runs: {e}"))?;
 

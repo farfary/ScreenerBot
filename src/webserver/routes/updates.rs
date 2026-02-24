@@ -171,7 +171,7 @@ async fn download_update(_body: Json<DownloadRequest>) -> Response {
 
     success_response(DownloadResponse {
         started: true,
-        message: format!("Downloading update v{}...", version_str),
+        message: format!("Downloading update v{version_str}..."),
     })
 }
 

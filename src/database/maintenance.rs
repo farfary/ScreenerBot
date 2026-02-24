@@ -185,7 +185,7 @@ pub fn run_incremental_vacuum(path: &Path, pages: u32) -> Result<u64, String> {
 
     // Run incremental vacuum
     let start = std::time::Instant::now();
-    let sql = format!("PRAGMA incremental_vacuum({});", pages);
+    let sql = format!("PRAGMA incremental_vacuum({pages});");
     conn.execute_batch(&sql)
         .map_err(|e| format!("Failed to execute incremental_vacuum: {e}"))?;
     let elapsed = start.elapsed();
@@ -337,12 +337,12 @@ pub async fn start_maintenance_task() {
                 if converted {
                     logger::info(
                         LogTag::System,
-                        &format!("✓ Migrated {} to INCREMENTAL mode", name),
+                        &format!("✓ Migrated {name} to INCREMENTAL mode"),
                     );
                 } else {
                     logger::info(
                         LogTag::System,
-                        &format!("✓ {} already in INCREMENTAL mode", name),
+                        &format!("✓ {name} already in INCREMENTAL mode"),
                     );
                 }
             }

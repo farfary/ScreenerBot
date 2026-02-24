@@ -132,14 +132,14 @@ pub fn format_pnl_bold(pnl_sol: f64, pnl_pct: f64) -> String {
 /// Format duration in human-readable form
 pub fn format_duration(seconds: u64) -> String {
     if seconds < 60 {
-        format!("{}s", seconds)
+        format!("{seconds}s")
     } else if seconds < 3600 {
         let mins = seconds / 60;
         let secs = seconds % 60;
         if secs > 0 {
             format!("{mins}m {secs}s")
         } else {
-            format!("{}m", mins)
+            format!("{mins}m")
         }
     } else if seconds < 86400 {
         let hours = seconds / 3600;
@@ -147,7 +147,7 @@ pub fn format_duration(seconds: u64) -> String {
         if mins > 0 {
             format!("{hours}h {mins}m")
         } else {
-            format!("{}h", hours)
+            format!("{hours}h")
         }
     } else {
         let days = seconds / 86400;
@@ -155,7 +155,7 @@ pub fn format_duration(seconds: u64) -> String {
         if hours > 0 {
             format!("{days}d {hours}h")
         } else {
-            format!("{}d", days)
+            format!("{days}d")
         }
     }
 }
@@ -176,7 +176,7 @@ pub fn format_ai_reasoning(reasoning: &Option<String>) -> String {
             } else {
                 escaped
             };
-            format!("\n\n🤖 <b>AI Analysis</b>\n<i>{}</i>", truncated)
+            format!("\n\n🤖 <b>AI Analysis</b>\n<i>{truncated}</i>")
         }
         _ => String::new(),
     }
@@ -715,7 +715,7 @@ pub fn format_tokens_page(
 ) -> String {
     let mut text = String::new();
 
-    text.push_str(&format!("<b>🔍 Filter Results</b> ({})\n\n", total_items));
+    text.push_str(&format!("<b>🔍 Filter Results</b> ({total_items})\n\n"));
 
     if tokens.is_empty() {
         text.push_str("<i>No tokens found.</i>");

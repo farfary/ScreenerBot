@@ -270,7 +270,7 @@ pub async fn stop_pool_service(timeout_seconds: u64) -> Result<(), PoolError> {
 
     logger::info(
         LogTag::PoolService,
-        &format!("Stopping pool service (timeout: {}s)...", timeout_seconds),
+        &format!("Stopping pool service (timeout: {timeout_seconds}s)..."),
     );
 
     // Get shutdown handle and notify
@@ -562,7 +562,7 @@ async fn run_gap_cleanup_task(shutdown: Arc<Notify>) {
                 if deleted > 0 {
                   logger::info(
                     LogTag::PoolService,
-                    &format!("Gap cleanup completed: removed {} gapped entries", deleted),
+                    &format!("Gap cleanup completed: removed {deleted} gapped entries"),
                   );
                 } else {
                   logger::info(LogTag::PoolService, "Gap cleanup completed: no gapped data found");

@@ -68,7 +68,7 @@ pub async fn get_instruction(State(_state): State<Arc<AppState>>, Path(id): Path
         Ok(None) => error_response(
             StatusCode::NOT_FOUND,
             "NOT_FOUND",
-            &format!("Instruction {} not found", id),
+            &format!("Instruction {id} not found"),
             None,
         ),
         Err(e) => error_response(
@@ -164,7 +164,7 @@ pub async fn update_instruction(
                 Ok(None) => error_response(
                     StatusCode::NOT_FOUND,
                     "NOT_FOUND",
-                    &format!("Instruction {} not found", id),
+                    &format!("Instruction {id} not found"),
                     None,
                 ),
                 Err(e) => error_response(
@@ -344,7 +344,7 @@ pub async fn get_history_detail(
         Ok(None) => error_response(
             StatusCode::NOT_FOUND,
             "NOT_FOUND",
-            &format!("Decision {} not found", id),
+            &format!("Decision {id} not found"),
             None,
         ),
         Err(e) => error_response(

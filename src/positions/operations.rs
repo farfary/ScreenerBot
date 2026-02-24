@@ -222,7 +222,7 @@ async fn force_fetch_fresh_price(token_mint: &str) -> Option<crate::tokens::Toke
                     Ok(None) => {
                         logger::warning(
                             LogTag::Positions,
-                            &format!("Token {} not found after force fetch", token_mint),
+                            &format!("Token {token_mint} not found after force fetch"),
                         );
                     }
                     Err(e) => {

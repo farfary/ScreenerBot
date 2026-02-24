@@ -529,7 +529,7 @@ impl EventsDatabase {
         if deleted_count > 0 {
             logger::info(
                 LogTag::System,
-                &format!("Cleaned up {} old events", deleted_count),
+                &format!("Cleaned up {deleted_count} old events"),
             );
         }
 

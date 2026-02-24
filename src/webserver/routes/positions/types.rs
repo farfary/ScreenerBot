@@ -152,7 +152,7 @@ impl ExternalLinks {
         Self {
             solscan: format!("https://solscan.io/token/{mint}"),
             dexscreener: format!("https://dexscreener.com/solana/{mint}"),
-            birdeye: format!("https://birdeye.so/token/{}?chain=solana", mint),
+            birdeye: format!("https://birdeye.so/token/{mint}?chain=solana"),
             rugcheck: format!("https://rugcheck.xyz/tokens/{mint}"),
             photon: format!("https://photon-sol.tinyastro.io/en/lp/{mint}"),
         }
@@ -356,20 +356,20 @@ fn describe_transaction_type(transaction_type: &TransactionType) -> String {
         TransactionType::Failed => "Failed".to_owned(),
         TransactionType::Unknown => "Unknown".to_owned(),
         TransactionType::SwapSolToToken { router, .. } => {
-            format!("Swap SOL→Token ({})", router)
+            format!("Swap SOL→Token ({router})")
         }
         TransactionType::SwapTokenToSol { router, .. } => {
-            format!("Swap Token→SOL ({})", router)
+            format!("Swap Token→SOL ({router})")
         }
         TransactionType::SwapTokenToToken { router, .. } => {
-            format!("Swap Token→Token ({})", router)
+            format!("Swap Token→Token ({router})")
         }
         TransactionType::SolTransfer { .. } => "SOL Transfer".to_owned(),
         TransactionType::TokenTransfer { mint, amount, .. } => {
             format!("Token Transfer {} ({:.4})", mint, amount)
         }
         TransactionType::AtaClose { token_mint, .. } => {
-            format!("ATA Close ({})", token_mint)
+            format!("ATA Close ({token_mint})")
         }
         TransactionType::Other { description, .. } => description.clone(),
     }

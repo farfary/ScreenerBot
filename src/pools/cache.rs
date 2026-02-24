@@ -215,7 +215,7 @@ fn cleanup_stale_entries() {
     if removed_count > 0 {
         logger::debug(
             LogTag::PoolCache,
-            &format!("Cleaned {} stale price entries", removed_count),
+            &format!("Cleaned {removed_count} stale price entries"),
         );
     }
 

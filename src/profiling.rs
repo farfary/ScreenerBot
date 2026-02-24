@@ -79,7 +79,7 @@ pub fn init_profiling() {
             LogTag::System,
             &"CPU profiling enabled with pprof".to_owned(),
         );
-        logger::info(LogTag::System, &format!("Duration: {} seconds", duration));
+        logger::info(LogTag::System, &format!("Duration: {duration} seconds"));
         logger::info(
             LogTag::System,
             &"Flamegraph will be generated on exit".to_owned(),

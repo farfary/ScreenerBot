@@ -406,7 +406,7 @@ impl TransactionFetcher {
 
         logger::info(
             LogTag::Transactions,
-            &format!("Fetching details for {} transactions", total_count),
+            &format!("Fetching details for {total_count} transactions"),
         );
 
         let mut results = HashMap::new();

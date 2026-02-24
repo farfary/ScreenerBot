@@ -39,7 +39,7 @@ impl FileLogger {
         // Create unique log file for each application start
         let now = Local::now();
         let timestamp = now.format("%Y-%m-%d_%H-%M-%S").to_string();
-        let log_file_name = format!("screenerbot_{}.log", timestamp);
+        let log_file_name = format!("screenerbot_{timestamp}.log");
         let log_file_path = log_dir.join(&log_file_name);
 
         let file = OpenOptions::new()

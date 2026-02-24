@@ -264,7 +264,7 @@ impl OhlcvServiceImpl {
             if in_progress.contains(mint) {
                 logger::debug(
                     LogTag::Ohlcv,
-                    &format!("BUNDLE_BUILD_WAIT: Another task already building bundle for {}, waiting...", mint),
+                    &format!("BUNDLE_BUILD_WAIT: Another task already building bundle for {mint}, waiting..."),
                 );
                 drop(in_progress);
 
@@ -464,7 +464,7 @@ impl OhlcvServiceImpl {
                 cache.remove(&oldest_mint);
                 logger::debug(
                     LogTag::Ohlcv,
-                    &format!("BUNDLE_EVICT: Removed {} from cache (LRU)", oldest_mint),
+                    &format!("BUNDLE_EVICT: Removed {oldest_mint} from cache (LRU)"),
                 );
             }
         }

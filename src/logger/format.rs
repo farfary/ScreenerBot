@@ -35,9 +35,9 @@ pub fn format_and_log(tag: LogTag, log_type: &str, message: &str) {
     if LOG_SHOW_DATE && LOG_SHOW_TIME {
         prefix = format!("{date} {time} ");
     } else if LOG_SHOW_DATE {
-        prefix = format!("{} ", date);
+        prefix = format!("{date} ");
     } else if LOG_SHOW_TIME {
-        prefix = format!("{} ", time);
+        prefix = format!("{time} ");
     }
 
     let prefix = if !prefix.is_empty() {

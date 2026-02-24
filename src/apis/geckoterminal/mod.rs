@@ -267,7 +267,7 @@ impl GeckoTerminalClient {
         include: Option<Vec<&str>>,
     ) -> Result<Vec<GeckoTerminalPool>, String> {
         let network_id = network.unwrap_or(DEFAULT_NETWORK);
-        let endpoint = format!("networks/{}/trending_pools", network_id);
+        let endpoint = format!("networks/{network_id}/trending_pools");
         let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
 
         let mut query_params: Vec<(String, String)> = Vec::new();
@@ -315,7 +315,7 @@ impl GeckoTerminalClient {
         sort: Option<&str>,
     ) -> Result<Vec<GeckoTerminalPool>, String> {
         let network_id = network.unwrap_or(DEFAULT_NETWORK);
-        let endpoint = format!("networks/{}/pools", network_id);
+        let endpoint = format!("networks/{network_id}/pools");
         let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
 
         let mut query_params: Vec<(String, String)> = Vec::new();
@@ -527,7 +527,7 @@ impl GeckoTerminalClient {
         network: &str,
         page: Option<u32>,
     ) -> Result<Vec<(String, String)>, String> {
-        let endpoint = format!("networks/{}/dexes", network);
+        let endpoint = format!("networks/{network}/dexes");
         let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
 
         let builder = if let Some(p) = page {
@@ -562,7 +562,7 @@ impl GeckoTerminalClient {
         include: Option<&str>,
         page: Option<u32>,
     ) -> Result<Vec<GeckoTerminalPool>, String> {
-        let endpoint = format!("networks/{}/new_pools", network);
+        let endpoint = format!("networks/{network}/new_pools");
         let url = format!("{GECKOTERMINAL_BASE_URL}/{endpoint}");
 
         let mut query_params: Vec<(String, String)> = Vec::new();

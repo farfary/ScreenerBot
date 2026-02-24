@@ -459,7 +459,7 @@ impl OhlcvMonitor {
                     Err(OhlcvError::NotFound(_)) => {
                         logger::debug(
                             LogTag::Ohlcv,
-                            &format!("Token {} disappeared during processing; skipping", mint),
+                            &format!("Token {mint} disappeared during processing; skipping"),
                         );
                         record_ohlcv_event(
                             "token_missing",
@@ -467,7 +467,7 @@ impl OhlcvMonitor {
                             Some(mint.as_str()),
                             None,
                             json!({
-                              "message": format!("Token {} was missing during processing", mint),
+                              "message": format!("Token {mint} was missing during processing"),
                               "action": "skip_cycle",
                             }),
                         )
@@ -476,7 +476,7 @@ impl OhlcvMonitor {
                     Err(OhlcvError::PoolNotFound(_)) => {
                         logger::warning(
                             LogTag::Ohlcv,
-                            &format!("No healthy pools available for {}; deferring", mint),
+                            &format!("No healthy pools available for {mint}; deferring"),
                         );
                         record_ohlcv_event(
                             "pool_unavailable",

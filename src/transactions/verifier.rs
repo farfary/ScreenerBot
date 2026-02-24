@@ -281,7 +281,7 @@ async fn perform_comprehensive_verification(
             // More than 1 week old
             issues.push(VerificationIssue {
                 issue_type: IssueType::TimestampMismatch,
-                description: format!("Transaction is {} hours old", age_hours),
+                description: format!("Transaction is {age_hours} hours old"),
                 severity: IssueSeverity::Info,
             });
             confidence_score *= 0.9;

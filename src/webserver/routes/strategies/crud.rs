@@ -219,7 +219,7 @@ pub async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
     if let Ok(Some(_)) = get_strategy(&id) {
         return err(
             StatusCode::CONFLICT,
-            &format!("Strategy with ID '{}' already exists", id),
+            &format!("Strategy with ID '{id}' already exists"),
         );
     }
 

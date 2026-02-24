@@ -1088,7 +1088,7 @@ impl WalletDatabase {
         if deleted_count > 0 {
             logger::info(
                 LogTag::Wallet,
-                &format!("Cleaned up {} old wallet snapshots", deleted_count),
+                &format!("Cleaned up {deleted_count} old wallet snapshots"),
             );
         }
 
@@ -1116,7 +1116,7 @@ impl WalletDatabase {
         if deleted_count > 0 {
             logger::info(
                 LogTag::Wallet,
-                &format!("Cleaned up {} old wallet snapshots", deleted_count),
+                &format!("Cleaned up {deleted_count} old wallet snapshots"),
             );
         }
 

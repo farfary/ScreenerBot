@@ -40,7 +40,7 @@ pub fn get_candles_from_context(context: &EvaluationContext) -> Result<Vec<Candl
 
     // Check if timeframe has data
     if candles.is_empty() {
-        return Err(format!("Timeframe {} has no candle data - OHLCV system may not have fetched historical data yet", timeframe));
+        return Err(format!("Timeframe {timeframe} has no candle data - OHLCV system may not have fetched historical data yet"));
     }
 
     Ok(candles.clone())
@@ -82,7 +82,7 @@ pub fn get_candles_for_timeframe(
 
     // Check if timeframe has data
     if candles.is_empty() {
-        return Err(format!("Timeframe {} has no candle data - OHLCV system may not have fetched historical data yet", timeframe));
+        return Err(format!("Timeframe {timeframe} has no candle data - OHLCV system may not have fetched historical data yet"));
     }
 
     Ok(candles.clone())
@@ -175,7 +175,7 @@ pub fn get_param_f64(condition: &Condition, param_name: &str) -> Result<f64, Str
     param
         .value
         .as_f64()
-        .ok_or_else(|| format!("Parameter {} must be a number", param_name))
+        .ok_or_else(|| format!("Parameter {param_name} must be a number"))
 }
 
 /// Helper function to get parameter value as string
@@ -189,7 +189,7 @@ pub fn get_param_string(condition: &Condition, param_name: &str) -> Result<Strin
         .value
         .as_str()
         .map(str::to_string)
-        .ok_or_else(|| format!("Parameter {} must be a string", param_name))
+        .ok_or_else(|| format!("Parameter {param_name} must be a string"))
 }
 
 /// Helper function to get parameter value as bool
@@ -202,7 +202,7 @@ pub fn get_param_bool(condition: &Condition, param_name: &str) -> Result<bool, S
     param
         .value
         .as_bool()
-        .ok_or_else(|| format!("Parameter {} must be a boolean", param_name))
+        .ok_or_else(|| format!("Parameter {param_name} must be a boolean"))
 }
 
 /// Helper function to get optional parameter value as string

@@ -26,7 +26,7 @@ impl InternetMonitor {
         let timeout_duration = Duration::from_secs(timeout_secs);
 
         for dns_server in dns_servers {
-            let addr = format!("{}:53", dns_server);
+            let addr = format!("{dns_server}:53");
             let start = Instant::now();
 
             match timeout(timeout_duration, TcpStream::connect(&addr)).await {

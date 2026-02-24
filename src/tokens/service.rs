@@ -124,7 +124,7 @@ impl Service for TokensServiceNew {
                     if count > 0 {
                         logger::info(
                             LogTag::Tokens,
-                            &format!("Loaded {} blocked authorities from DB", count),
+                            &format!("Loaded {count} blocked authorities from DB"),
                         );
                     }
                 }

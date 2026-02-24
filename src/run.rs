@@ -415,7 +415,7 @@ fn register_all_services(manager: &mut ServiceManager) {
                             // positions, wallet, rpc_stats, ata_cleanup, trader, webserver, ai, telegram, update_check
     logger::info(
         LogTag::System,
-        &format!("All services registered ({} total)", service_count),
+        &format!("All services registered ({service_count} total)"),
     );
 }
 

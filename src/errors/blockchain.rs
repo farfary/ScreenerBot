@@ -377,7 +377,7 @@ impl BlockchainError {
                     age / 60
                 ),
                 Some(age) => format!("Transaction {signature} still processing ({age}s)"),
-                None => format!("Transaction {} not yet indexed", signature),
+                None => format!("Transaction {signature} not yet indexed"),
             },
             BlockchainError::BlockhashExpired {
                 signature,
@@ -922,7 +922,7 @@ fn map_instruction_error_code(code: u32) -> String {
         5 => "TokenInvalidAmount".to_owned(),
         17 => "TokenAccountFrozen".to_owned(),
 
-        _ => format!("UnknownError({})", code),
+        _ => format!("UnknownError({code})"),
     }
 }
 

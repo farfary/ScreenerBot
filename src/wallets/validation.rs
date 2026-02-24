@@ -138,7 +138,7 @@ impl WalletValidator {
         if deleted_count > 0 {
             logger::info(
                 LogTag::System,
-                &format!("Cleaned {} database files", deleted_count),
+                &format!("Cleaned {deleted_count} database files"),
             );
         }
 

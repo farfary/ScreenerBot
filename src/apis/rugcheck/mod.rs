@@ -272,25 +272,25 @@ impl RugcheckClient {
 
     /// Fetch new tokens from /v1/stats/new_tokens
     pub async fn fetch_new_tokens(&self) -> Result<Vec<RugcheckNewToken>, ApiError> {
-        let url = format!("{}/new_tokens", RUGCHECK_STATS_BASE_URL);
+        let url = format!("{RUGCHECK_STATS_BASE_URL}/new_tokens");
         self.parse_json(&url, "rugcheck.stats.new_tokens").await
     }
 
     /// Fetch most viewed tokens from /v1/stats/recent
     pub async fn fetch_recent_tokens(&self) -> Result<Vec<RugcheckRecentToken>, ApiError> {
-        let url = format!("{}/recent", RUGCHECK_STATS_BASE_URL);
+        let url = format!("{RUGCHECK_STATS_BASE_URL}/recent");
         self.parse_json(&url, "rugcheck.stats.recent").await
     }
 
     /// Fetch trending tokens from /v1/stats/trending
     pub async fn fetch_trending_tokens(&self) -> Result<Vec<RugcheckTrendingToken>, ApiError> {
-        let url = format!("{}/trending", RUGCHECK_STATS_BASE_URL);
+        let url = format!("{RUGCHECK_STATS_BASE_URL}/trending");
         self.parse_json(&url, "rugcheck.stats.trending").await
     }
 
     /// Fetch verified tokens from /v1/stats/verified
     pub async fn fetch_verified_tokens(&self) -> Result<Vec<RugcheckVerifiedToken>, ApiError> {
-        let url = format!("{}/verified", RUGCHECK_STATS_BASE_URL);
+        let url = format!("{RUGCHECK_STATS_BASE_URL}/verified");
         self.parse_json(&url, "rugcheck.stats.verified").await
     }
 }

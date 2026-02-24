@@ -76,7 +76,7 @@ impl Service for ConnectivityService {
                         Severity::Info,
                         serde_json::json!({
                             "monitor_count": monitor_count,
-                            "message": format!("Connectivity service initialized with {} monitors", monitor_count),
+                            "message": format!("Connectivity service initialized with {monitor_count} monitors"),
                         }),
                     )
                     .await;
@@ -113,7 +113,7 @@ impl Service for ConnectivityService {
                     Severity::Info,
                     serde_json::json!({
                         "check_interval_secs": check_interval,
-                        "message": format!("Connectivity monitoring started (interval={}s)", check_interval),
+                        "message": format!("Connectivity monitoring started (interval={check_interval}s)"),
                     }),
                 )
                 .await;

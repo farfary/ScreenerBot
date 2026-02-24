@@ -118,7 +118,7 @@ pub async fn perform_health_check(metrics: &mut ServiceMetrics) -> Result<(), St
             // 5 minutes
             logger::info(
                 LogTag::Transactions,
-                &format!("No periodic check in {} seconds", time_since_check),
+                &format!("No periodic check in {time_since_check} seconds"),
             );
         }
     }
@@ -205,7 +205,7 @@ pub async fn should_perform_fallback_check(metrics: &ServiceMetrics) -> bool {
             } else {
                 logger::debug(
                     LogTag::Transactions,
-                    &format!("Waiting for WebSocket to connect (uptime: {}s)", uptime),
+                    &format!("Waiting for WebSocket to connect (uptime: {uptime}s)"),
                 );
                 false
             }

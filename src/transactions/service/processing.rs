@@ -140,7 +140,7 @@ pub async fn run_transaction_service(config: ServiceConfig) -> Result<(), String
                      Err(e) => {
                        logger::info(
                          LogTag::Transactions,
-                         &format!("WebSocket connection failed: {} - will retry in 15s", e)
+                         &format!("WebSocket connection failed: {e} - will retry in 15s")
                        );
                      }
                    }
@@ -439,7 +439,7 @@ async fn perform_fallback_transaction_check(
                 new_count, db_persistence_failures
             )
         } else {
-            format!("Fallback check found {} new transactions", new_count)
+            format!("Fallback check found {new_count} new transactions")
         };
 
         logger::info(LogTag::Transactions, &summary);

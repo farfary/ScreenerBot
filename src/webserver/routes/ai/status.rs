@@ -307,7 +307,7 @@ pub async fn test_evaluate(
             return error_response(
                 StatusCode::BAD_REQUEST,
                 "INVALID_PRIORITY",
-                &format!("Invalid priority: '{}'. Use 'high', 'medium', or 'low'.", p),
+                &format!("Invalid priority: '{p}'. Use 'high', 'medium', or 'low'."),
                 None,
             );
         }

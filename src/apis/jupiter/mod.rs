@@ -65,7 +65,7 @@ impl JupiterClient {
         }
 
         let start = Instant::now();
-        let url = format!("{}/recent", JUPITER_BASE_URL);
+        let url = format!("{JUPITER_BASE_URL}/recent");
 
         let response = self
             .http_client

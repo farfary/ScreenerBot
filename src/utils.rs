@@ -99,7 +99,7 @@ pub fn sol_to_lamports(sol: f64) -> u64 {
 /// Format mint address consistently for logs (8 chars + "...")
 /// Consolidates multiple patterns for mint addresses
 pub fn format_mint_for_log(mint: &str) -> String {
-    format!("{}...", mint)
+    format!("{mint}...")
 }
 
 /// Format price with adaptive precision for Solana tokens
@@ -180,19 +180,19 @@ pub fn format_age_string(created_at: Option<DateTime<Utc>>) -> String {
         seconds %= 60;
         let mut parts = Vec::new();
         if years > 0 {
-            parts.push(format!("{}y", years));
+            parts.push(format!("{years}y"));
         }
         if days > 0 {
-            parts.push(format!("{}d", days));
+            parts.push(format!("{days}d"));
         }
         if hours > 0 {
-            parts.push(format!("{}h", hours));
+            parts.push(format!("{hours}h"));
         }
         if minutes > 0 {
-            parts.push(format!("{}m", minutes));
+            parts.push(format!("{minutes}m"));
         }
         if seconds > 0 || parts.is_empty() {
-            parts.push(format!("{}s", seconds));
+            parts.push(format!("{seconds}s"));
         }
         parts.join("")
     } else {
@@ -222,7 +222,7 @@ pub fn format_duration_compact(start: DateTime<Utc>, end: DateTime<Utc>) -> Stri
     let total_seconds = duration.num_seconds();
 
     if total_seconds < 60 {
-        format!("{}s", total_seconds)
+        format!("{total_seconds}s")
     } else if total_seconds < 3600 {
         format!("{}m", total_seconds / 60)
     } else if total_seconds < 86400 {
@@ -231,7 +231,7 @@ pub fn format_duration_compact(start: DateTime<Utc>, end: DateTime<Utc>) -> Stri
         if minutes > 0 {
             format!("{hours}h{minutes}m")
         } else {
-            format!("{}h", hours)
+            format!("{hours}h")
         }
     } else {
         let days = total_seconds / 86400;
@@ -239,7 +239,7 @@ pub fn format_duration_compact(start: DateTime<Utc>, end: DateTime<Utc>) -> Stri
         if hours > 0 {
             format!("{days}d{hours}h")
         } else {
-            format!("{}d", days)
+            format!("{days}d")
         }
     }
 }

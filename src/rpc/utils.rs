@@ -97,7 +97,7 @@ pub async fn get_ata_rent_lamports() -> crate::Result<u64> {
         Err(e) => {
             logger::warning(
                 LogTag::Rpc,
-                &format!("Failed to get ATA rent from chain: {} - using default", e),
+                &format!("Failed to get ATA rent from chain: {e} - using default"),
             );
             Ok(DEFAULT_ATA_RENT_LAMPORTS)
         }

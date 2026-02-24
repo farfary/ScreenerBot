@@ -240,7 +240,7 @@ pub async fn start_server(
     );
     logger::debug(
         LogTag::Webserver,
-        &format!("API endpoints available at http://{}/api", addr),
+        &format!("API endpoints available at http://{addr}/api"),
     );
 
     // Run the server with graceful shutdown
@@ -390,7 +390,7 @@ pub async fn test_port_binding(
     // Try to bind and immediately drop the listener
     logger::debug(
         LogTag::Webserver,
-        &format!("[TEST-BIND] Attempting TcpListener::bind({})...", addr),
+        &format!("[TEST-BIND] Attempting TcpListener::bind({addr})..."),
     );
 
     match TcpListener::bind(&addr).await {

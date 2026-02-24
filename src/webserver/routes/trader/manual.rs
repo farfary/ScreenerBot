@@ -286,7 +286,7 @@ pub async fn manual_sell_handler(Json(req): Json<ManualSellRequest>) -> Response
     // Validate percentage if provided
     if let Some(percentage) = pct {
         if !percentage.is_finite() || percentage <= 0.0 || percentage > 100.0 {
-            let error_msg = format!("Invalid percentage: {}. Must be in (0, 100]", percentage);
+            let error_msg = format!("Invalid percentage: {percentage}. Must be in (0, 100]");
             crate::trader::actions::create_failed_sell_action(&req.mint, &error_msg).await;
             return error_response(
                 StatusCode::BAD_REQUEST,

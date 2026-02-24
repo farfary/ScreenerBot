@@ -118,7 +118,7 @@ fn send_telegram_crash_notification(bot_token: &str, chat_id: &str, message: &st
         }
     };
 
-    let url = format!("https://api.telegram.org/bot{}/sendMessage", bot_token);
+    let url = format!("https://api.telegram.org/bot{bot_token}/sendMessage");
 
     let mut params = HashMap::new();
     params.insert("chat_id", chat_id);

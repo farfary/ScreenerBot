@@ -275,7 +275,7 @@ impl PoolAnalyzer {
 
                     logger::warning(
                         LogTag::PoolAnalyzer,
-                        &format!("Pool account {} not found for token analysis", pool_id),
+                        &format!("Pool account {pool_id} not found for token analysis"),
                     );
                     return None;
                 }
@@ -560,7 +560,7 @@ impl PoolAnalyzer {
             Ok(None) => {
                 logger::error(
                     LogTag::PoolAnalyzer,
-                    &format!("Pool account {} not found", pool_id),
+                    &format!("Pool account {pool_id} not found"),
                 );
                 return None;
             }
@@ -800,7 +800,7 @@ impl PoolAnalyzer {
             Ok(None) => {
                 logger::error(
                     LogTag::PoolAnalyzer,
-                    &format!("DLMM pool account {} not found", pool_id),
+                    &format!("DLMM pool account {pool_id} not found"),
                 );
                 return None;
             }
@@ -912,7 +912,7 @@ impl PoolAnalyzer {
             Ok(None) => {
                 logger::error(
                     LogTag::PoolAnalyzer,
-                    &format!("FluxBeam pool account {} not found", pool_id),
+                    &format!("FluxBeam pool account {pool_id} not found"),
                 );
                 return None;
             }

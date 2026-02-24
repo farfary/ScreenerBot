@@ -55,6 +55,6 @@ pub fn format_duration(seconds: u64) -> String {
     } else if minutes > 0 {
         format!("{minutes}m {secs}s")
     } else {
-        format!("{}s", secs)
+        format!("{secs}s")
     }
 }

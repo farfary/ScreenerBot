@@ -437,7 +437,7 @@ impl PositionsDatabase {
             .map_err(|e| format!("Failed to update position: {e}"))?;
 
         if rows_affected == 0 {
-            return Err(format!("Position with ID {} not found", position_id));
+            return Err(format!("Position with ID {position_id} not found"));
         }
 
         logger::debug(

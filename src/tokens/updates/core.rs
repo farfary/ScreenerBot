@@ -116,12 +116,12 @@ impl PoolPriorityManager {
                     .map(|(mint, prev)| format!("{mint} (from={prev})"))
                     .collect();
                 let extra = count.saturating_sub(sample_entries.len());
-                let mut message = format!("Promoted {} tokens to pool priority", count);
+                let mut message = format!("Promoted {count} tokens to pool priority");
                 if !sample_entries.is_empty() {
                     message.push_str(&format!("; details: {}", sample_entries.join(", ")));
                 }
                 if extra > 0 {
-                    message.push_str(&format!(" (+{} more)", extra));
+                    message.push_str(&format!(" (+{extra} more)"));
                 }
                 logger::info(LogTag::Tokens, &message);
             }
@@ -188,12 +188,12 @@ impl PoolPriorityManager {
                 .map(|(mint, target)| format!("{mint} (to={target})"))
                 .collect();
             let extra = count.saturating_sub(sample_entries.len());
-            let mut message = format!("Demoted {} tokens from pool priority after timeout", count);
+            let mut message = format!("Demoted {count} tokens from pool priority after timeout");
             if !sample_entries.is_empty() {
                 message.push_str(&format!("; details: {}", sample_entries.join(", ")));
             }
             if extra > 0 {
-                message.push_str(&format!(" (+{} more)", extra));
+                message.push_str(&format!(" (+{extra} more)"));
             }
             logger::info(LogTag::Tokens, &message);
         }

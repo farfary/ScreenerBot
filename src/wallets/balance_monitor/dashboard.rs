@@ -65,7 +65,7 @@ fn short_mint_label(mint: &str) -> String {
 async fn compute_flow_metrics(window_hours: i64) -> Result<WalletFlowMetrics, String> {
     logger::debug(
         LogTag::Wallet,
-        &format!("Computing flow metrics for window: {} hours", window_hours),
+        &format!("Computing flow metrics for window: {window_hours} hours"),
     );
 
     // All-time mode when window_hours <= 0

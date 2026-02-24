@@ -153,7 +153,7 @@ impl ConnectivityChecker {
                                 serde_json::json!({
                                     "latency_ms": latency,
                                     "previous_state": from_state,
-                                    "message": format!("Endpoint recovered from {} to healthy", from_state),
+                                    "message": format!("Endpoint recovered from {from_state} to healthy"),
                                 }),
                             )
                             .await;
@@ -309,7 +309,7 @@ impl ConnectivityChecker {
                                     serde_json::json!({
                                         "unhealthy_count": count,
                                         "unhealthy_endpoints": unhealthy_list,
-                                        "message": format!("{} critical endpoint(s) unhealthy - System should pause operations", count),
+                                        "message": format!("{count} critical endpoint(s) unhealthy - System should pause operations"),
                                     }),
                                 )
                                 .await;

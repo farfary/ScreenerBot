@@ -55,9 +55,9 @@ impl ConditionEvaluator for PriceChangePercentCondition {
         if past_candle.timestamp > lookback_timestamp {
             let available_seconds = current_timestamp - candles[0].timestamp;
             let requested_unit = match time_unit.as_str() {
-                "SECONDS" => format!("{} seconds", time_value),
-                "MINUTES" => format!("{} minutes", time_value),
-                "HOURS" => format!("{} hours", time_value),
+                "SECONDS" => format!("{time_value} seconds"),
+                "MINUTES" => format!("{time_value} minutes"),
+                "HOURS" => format!("{time_value} hours"),
                 _ => "unknown".to_owned(),
             };
             return Err(format!(

@@ -214,7 +214,7 @@ pub async fn get_chat_session(
             return error_response(
                 StatusCode::NOT_FOUND,
                 "NOT_FOUND",
-                &format!("Chat session {} not found", id),
+                &format!("Chat session {id} not found"),
                 None,
             )
         }

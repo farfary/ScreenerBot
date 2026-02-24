@@ -35,7 +35,7 @@ pub async fn scheduler_worker(
             Ok(count) if count > 0 => {
                 logger::info(
                     LogTag::System,
-                    &format!("Cleaned up {} old hidden AI sessions", count),
+                    &format!("Cleaned up {count} old hidden AI sessions"),
                 );
             }
             Err(e) => {
@@ -277,7 +277,7 @@ async fn execute_scheduled_task(
         }
         Err(_) => {
             // Timeout
-            let error_msg = format!("Task timed out after {}s", timeout_secs);
+            let error_msg = format!("Task timed out after {timeout_secs}s");
 
             if let Err(e) = scheduled_db::record_run_complete(
                 pool,

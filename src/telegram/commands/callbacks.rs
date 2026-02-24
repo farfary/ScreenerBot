@@ -830,7 +830,7 @@ async fn send_tokens_page(
     };
 
     if result.items.is_empty() {
-        let msg = format!("📭 No tokens found in <b>{}</b> view.", view);
+        let msg = format!("📭 No tokens found in <b>{view}</b> view.");
         return send_with_keyboard(bot, chat_id, &msg, keyboards::tokens_menu()).await;
     }
 

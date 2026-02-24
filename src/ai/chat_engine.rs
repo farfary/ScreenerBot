@@ -292,7 +292,7 @@ impl ChatEngine {
             if iteration >= MAX_TOOL_ITERATIONS {
                 logger::warning(
                     LogTag::Api,
-                    &format!("Max tool iterations ({}) reached", MAX_TOOL_ITERATIONS),
+                    &format!("Max tool iterations ({MAX_TOOL_ITERATIONS}) reached"),
                 );
                 break "I've reached the maximum number of tool calls. Please try breaking this down into smaller requests.".to_owned();
             }
@@ -587,10 +587,10 @@ impl ChatEngine {
         // Add context if available
         if let Some(ctx) = context {
             if let Some(token) = &ctx.current_token {
-                prompt.push_str(&format!("Current token context: {}\n", token));
+                prompt.push_str(&format!("Current token context: {token}\n"));
             }
             if let Some(position_id) = ctx.current_position {
-                prompt.push_str(&format!("Current position context: {}\n", position_id));
+                prompt.push_str(&format!("Current position context: {position_id}\n"));
             }
             prompt.push('\n');
         }

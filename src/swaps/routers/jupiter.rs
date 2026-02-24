@@ -254,7 +254,7 @@ impl SwapRouter for JupiterRouter {
         );
 
         // Send quote request with API key
-        let url = format!("{}/swap/v1/quote", JUPITER_API_BASE);
+        let url = format!("{JUPITER_API_BASE}/swap/v1/quote");
         let response = self
             .client
             .get(&url)
@@ -389,7 +389,7 @@ impl SwapRouter for JupiterRouter {
         );
 
         // Get swap transaction
-        let url = format!("{}/swap/v1/swap", JUPITER_API_BASE);
+        let url = format!("{JUPITER_API_BASE}/swap/v1/swap");
         let response = self
             .client
             .post(&url)

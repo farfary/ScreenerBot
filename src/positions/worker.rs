@@ -639,20 +639,20 @@ async fn verification_worker(shutdown: Arc<Notify>) {
                                  let _ = super::apply::apply_transition(transition).await;
                                }
                              } else if let Some(position_id) = item.position_id {
-                               logger::warning(LogTag::Positions, &format!("Removing orphan entry position {} after verification abandonment (will release semaphore permit)", position_id));
+                               logger::warning(LogTag::Positions, &format!("Removing orphan entry position {position_id} after verification abandonment (will release semaphore permit)"));
                                let transition = super::transitions::PositionTransition::RemoveOrphanEntry { position_id };
                                if let Ok(_) = super::apply::apply_transition(transition).await {
                                  // Permit is released in RemoveOrphanEntry transition handler
-                                 logger::info(LogTag::Positions, &format!("Successfully removed orphan entry {} and released permit", position_id));
+                                 logger::info(LogTag::Positions, &format!("Successfully removed orphan entry {position_id} and released permit"));
                                } else {
-                                 logger::error(LogTag::Positions, &format!("Failed to remove orphan entry {}, manual reconciliation may be needed", position_id));
+                                 logger::error(LogTag::Positions, &format!("Failed to remove orphan entry {position_id}, manual reconciliation may be needed"));
                                }
                              }
                            }
                            VerificationKind::Exit => {
                              // Force synthetic exit after timeout
                              if let Some(position_id) = item.position_id {
-                               logger::warning(LogTag::Positions, &format!("Forcing synthetic exit for position {} after verification abandonment - manual wallet check recommended", position_id));
+                               logger::warning(LogTag::Positions, &format!("Forcing synthetic exit for position {position_id} after verification abandonment - manual wallet check recommended"));
 
                                let transition = super::transitions::PositionTransition::ExitPermanentFailureSynthetic {
                                  position_id,

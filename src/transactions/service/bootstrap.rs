@@ -69,7 +69,7 @@ pub async fn perform_initial_transaction_bootstrap(
             if added > 0 {
                 logger::info(
                     LogTag::Transactions,
-                    &format!("Reconciled {} processed->known signatures", added),
+                    &format!("Reconciled {added} processed->known signatures"),
                 );
             }
         }
@@ -136,7 +136,7 @@ pub async fn perform_initial_transaction_bootstrap(
     };
     logger::info(
         LogTag::Transactions,
-        &format!("Phase 1: Collecting {} signatures...", phase1_label),
+        &format!("Phase 1: Collecting {phase1_label} signatures..."),
     );
 
     let mut all_signatures: Vec<String> = Vec::new();

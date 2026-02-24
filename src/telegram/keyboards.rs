@@ -130,16 +130,16 @@ pub fn position_actions(mint: &str, _symbol: &str) -> InlineKeyboardMarkup {
     InlineKeyboardMarkup::new(vec![
         // Row 1: Sell percentages
         vec![
-            btn("Sell 25%", &format!("sell:{}:25", m)),
-            btn("Sell 50%", &format!("sell:{}:50", m)),
-            btn("Sell 75%", &format!("sell:{}:75", m)),
-            btn("Sell 100%", &format!("sell:{}:100", m)),
+            btn("Sell 25%", &format!("sell:{m}:25")),
+            btn("Sell 50%", &format!("sell:{m}:50")),
+            btn("Sell 75%", &format!("sell:{m}:75")),
+            btn("Sell 100%", &format!("sell:{m}:100")),
         ],
         // Row 2: DCA options
         vec![
-            btn("➕ DCA 0.1", &format!("dca:{}:0.1", m)),
-            btn("➕ DCA 0.25", &format!("dca:{}:0.25", m)),
-            btn("➕ DCA 0.5", &format!("dca:{}:0.5", m)),
+            btn("➕ DCA 0.1", &format!("dca:{m}:0.1")),
+            btn("➕ DCA 0.25", &format!("dca:{m}:0.25")),
+            btn("➕ DCA 0.5", &format!("dca:{m}:0.5")),
         ],
         // Row 3: Actions
         vec![
@@ -187,7 +187,7 @@ pub fn confirm_sell(mint: &str, percent: u32) -> InlineKeyboardMarkup {
 
     InlineKeyboardMarkup::new(vec![vec![
         btn(
-            &format!("✅ Confirm Sell {}%", percent),
+            &format!("✅ Confirm Sell {percent}%"),
             &format!("exec:sell:{m}:{percent}"),
         ),
         btn("❌ Cancel", &format!("pos:{m}")),
@@ -200,7 +200,7 @@ pub fn confirm_dca(mint: &str, amount: f64) -> InlineKeyboardMarkup {
 
     InlineKeyboardMarkup::new(vec![vec![
         btn(
-            &format!("✅ DCA {} SOL", amount),
+            &format!("✅ DCA {amount} SOL"),
             &format!("exec:dca:{m}:{amount}"),
         ),
         btn("❌ Cancel", &format!("pos:{m}")),
@@ -247,7 +247,7 @@ pub fn confirm_token_buy(mint: &str, symbol: &str, amount: f64) -> InlineKeyboar
 
     InlineKeyboardMarkup::new(vec![vec![
         btn(
-            &format!("✅ Buy {} SOL", amount),
+            &format!("✅ Buy {amount} SOL"),
             &format!("exec:tokenbuy:{m}:{amount}"),
         ),
         btn("❌ Cancel", &format!("token:view:{m}")),
@@ -429,7 +429,7 @@ mod tests {
     fn test_callback_data_length() {
         // Ensure callback data doesn't exceed 64 bytes
         let m = mint_short("DezN1234567890abcdef");
-        let callback = format!("exec:sell:{}:100", m);
+        let callback = format!("exec:sell:{m}:100");
         assert!(callback.len() <= 64);
     }
 }
@@ -570,9 +570,9 @@ pub fn token_detail_keyboard(mint: &str, has_position: bool) -> InlineKeyboardMa
         InlineKeyboardMarkup::new(vec![
             // Row 1: Buy options
             vec![
-                btn("💰 0.1 SOL", &format!("token:buy:{}:0.1", m)),
-                btn("💰 0.25 SOL", &format!("token:buy:{}:0.25", m)),
-                btn("💰 0.5 SOL", &format!("token:buy:{}:0.5", m)),
+                btn("💰 0.1 SOL", &format!("token:buy:{m}:0.1")),
+                btn("💰 0.25 SOL", &format!("token:buy:{m}:0.25")),
+                btn("💰 0.5 SOL", &format!("token:buy:{m}:0.5")),
             ],
             // Row 2: Actions
             vec![

@@ -295,7 +295,7 @@ pub async fn handle_auth_attempt(bot: &Bot, chat_id: ChatId, user_id: i64, text:
                     let _ = bot
                         .send_message(
                             chat_id,
-                            format!("❌ <b>Wrong Code</b>\n\n{} attempts remaining.", remaining),
+                            format!("❌ <b>Wrong Code</b>\n\n{remaining} attempts remaining."),
                         )
                         .parse_mode(ParseMode::Html)
                         .await;

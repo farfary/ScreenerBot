@@ -132,7 +132,7 @@ pub async fn refresh_token_ohlcv(
         Ok(_) => {
             logger::info(
                 LogTag::Webserver,
-                &format!("mint={} ohlcv_refresh_success", mint),
+                &format!("mint={mint} ohlcv_refresh_success"),
             );
             Ok(Json(serde_json::json!({
               "success": true,
@@ -182,7 +182,7 @@ pub async fn deprioritize_token_ohlcv(
         Ok(_) => {
             logger::debug(
                 LogTag::Webserver,
-                &format!("mint={} ohlcv_deprioritized", mint),
+                &format!("mint={mint} ohlcv_deprioritized"),
             );
             Ok(Json(serde_json::json!({
               "success": true,
@@ -231,7 +231,7 @@ pub async fn focus_token(
         Ok(_) => {
             logger::debug(
                 LogTag::Webserver,
-                &format!("mint={} ohlcv_priority=Critical", mint),
+                &format!("mint={mint} ohlcv_priority=Critical"),
             );
             true
         }
@@ -281,7 +281,7 @@ pub async fn unfocus_token(
     let ohlcv_updated = if is_open_position {
         logger::debug(
             LogTag::Webserver,
-            &format!("mint={} is open position, keeping Critical priority", mint),
+            &format!("mint={mint} is open position, keeping Critical priority"),
         );
         false
     } else {
@@ -289,7 +289,7 @@ pub async fn unfocus_token(
             Ok(_) => {
                 logger::debug(
                     LogTag::Webserver,
-                    &format!("mint={} ohlcv_priority=Medium", mint),
+                    &format!("mint={mint} ohlcv_priority=Medium"),
                 );
                 true
             }
@@ -359,7 +359,7 @@ pub async fn get_token_dexscreener(
             Ok(Json(dexscreener_data))
         }
         None => {
-            logger::info(LogTag::Webserver, &format!("mint={} not found", mint));
+            logger::info(LogTag::Webserver, &format!("mint={mint} not found"));
             Err(StatusCode::NOT_FOUND)
         }
     }

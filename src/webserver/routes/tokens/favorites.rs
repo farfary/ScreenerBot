@@ -18,7 +18,7 @@ pub async fn get_favorites(
     match crate::tokens::get_favorites_async().await {
         Ok(favorites) => {
             let total = favorites.len();
-            logger::info(LogTag::Webserver, &format!("Fetched {} favorites", total));
+            logger::info(LogTag::Webserver, &format!("Fetched {total} favorites"));
             Ok(Json(FavoritesListResponse { favorites, total }))
         }
         Err(e) => {

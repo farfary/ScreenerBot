@@ -313,7 +313,7 @@ fn create_debug_info(transaction: &Transaction) -> TransactionDebugInfo {
     let age = if let Some(block_time) = transaction.block_time {
         let age_seconds = Utc::now().timestamp() - block_time;
         if age_seconds < 60 {
-            format!("{}s", age_seconds)
+            format!("{age_seconds}s")
         } else if age_seconds < 3600 {
             format!("{}m", age_seconds / 60)
         } else if age_seconds < 86400 {
@@ -332,7 +332,7 @@ fn create_debug_info(transaction: &Transaction) -> TransactionDebugInfo {
 
     let analysis_duration = transaction
         .analysis_duration_ms
-        .map(|d| format!("{}ms", d))
+        .map(|d| format!("{d}ms"))
         .unwrap_or_else(|| "N/A".to_owned());
 
     TransactionDebugInfo {

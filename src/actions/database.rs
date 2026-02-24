@@ -617,7 +617,7 @@ impl ActionsDatabase {
         if let Some(ref states) = filters.state {
             if !states.is_empty() {
                 let placeholders = states.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-                query.push_str(&format!(" AND state IN ({})", placeholders));
+                query.push_str(&format!(" AND state IN ({placeholders})"));
                 for state in states {
                     params.push(state.clone());
                 }
@@ -839,7 +839,7 @@ impl ActionsDatabase {
             if let Some(ref states) = filters.state {
                 if !states.is_empty() {
                     let placeholders = states.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-                    count_query.push_str(&format!(" AND state IN ({})", placeholders));
+                    count_query.push_str(&format!(" AND state IN ({placeholders})"));
                     for state in states {
                         params.push(state.clone());
                     }

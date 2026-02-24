@@ -131,7 +131,7 @@ async fn get_endpoint_status(Path(endpoint): Path<String>) -> Response {
         None => error_response(
             StatusCode::NOT_FOUND,
             "NOT_FOUND",
-            &format!("Endpoint '{}' not found or not monitored", endpoint),
+            &format!("Endpoint '{endpoint}' not found or not monitored"),
             None,
         ),
     }

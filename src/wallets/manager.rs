@@ -80,7 +80,7 @@ async fn migrate_from_config() -> Result<(), String> {
     if total > 0 {
         logger::debug(
             LogTag::Wallet,
-            &format!("Skipping migration - {} wallets already exist", total),
+            &format!("Skipping migration - {total} wallets already exist"),
         );
         return Ok(());
     }
@@ -283,7 +283,7 @@ pub async fn import_wallet(request: ImportWalletRequest) -> Result<Wallet, Strin
 
     // Check if wallet already exists
     if db.wallet_exists(&address)? {
-        return Err(format!("Wallet {} already exists", address));
+        return Err(format!("Wallet {address} already exists"));
     }
 
     // Determine role

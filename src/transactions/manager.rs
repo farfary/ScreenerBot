@@ -129,7 +129,7 @@ impl TransactionsManager {
                     if self.debug_enabled {
                         logger::info(
                             LogTag::Transactions,
-                            &format!("Loaded {} known signatures from database", count),
+                            &format!("Loaded {count} known signatures from database"),
                         );
                     }
                 }
@@ -434,7 +434,7 @@ impl TransactionsManager {
         if expired_count > 0 {
             logger::info(
                 LogTag::Transactions,
-                &format!("Cleaned up {} expired pending transactions", expired_count),
+                &format!("Cleaned up {expired_count} expired pending transactions"),
             );
 
             // Also cleanup global pending cache

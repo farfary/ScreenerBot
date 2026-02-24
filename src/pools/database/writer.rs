@@ -130,7 +130,7 @@ async fn flush_write_buffer(
             if inserted > 0 {
                 logger::debug(
                     LogTag::PoolCache,
-                    &format!("Stored {} price history entries to database", inserted),
+                    &format!("Stored {inserted} price history entries to database"),
                 );
             }
         }

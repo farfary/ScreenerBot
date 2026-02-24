@@ -42,7 +42,7 @@ pub async fn force_buy(mint: &str, size_sol: f64) -> Result<TradeResult, String>
         return Err(error.to_string());
     }
     if size_sol <= 0.0 {
-        let error = format!("Invalid SOL amount: {}. Must be positive", size_sol);
+        let error = format!("Invalid SOL amount: {size_sol}. Must be positive");
         action.fail_validation(&error).await;
         return Err(error);
     }

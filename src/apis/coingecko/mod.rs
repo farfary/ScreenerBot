@@ -65,7 +65,7 @@ impl CoinGeckoClient {
         }
 
         let start = Instant::now();
-        let url = format!("{}/coins/list?include_platform=true", COINGECKO_BASE_URL);
+        let url = format!("{COINGECKO_BASE_URL}/coins/list?include_platform=true");
 
         let response = self
             .http_client

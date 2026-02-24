@@ -152,7 +152,7 @@ pub async fn cleanup_expired_pending_transactions() -> usize {
     if expired_count > 0 {
         logger::info(
             LogTag::Transactions,
-            &format!("Cleaned up {} expired pending transactions", expired_count),
+            &format!("Cleaned up {expired_count} expired pending transactions"),
         );
     }
 

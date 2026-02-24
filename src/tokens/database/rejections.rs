@@ -387,7 +387,7 @@ impl TokenDatabase {
 
         let search_pattern;
         if let Some(ref search) = search_filter {
-            search_pattern = format!("%{}%", search);
+            search_pattern = format!("%{search}%");
             params.push((":search", &search_pattern));
         }
 

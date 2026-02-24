@@ -323,7 +323,7 @@ pub async fn import_config_preview(Json(request): Json<ImportConfigPreviewReques
     // Check for unknown sections
     for key in imported_obj.keys() {
         if key != "timestamp" && !CONFIG_SECTIONS.contains(&key.as_str()) {
-            warnings.push(format!("Unknown section '{}' will be ignored", key));
+            warnings.push(format!("Unknown section '{key}' will be ignored"));
         }
     }
 

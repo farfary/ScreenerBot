@@ -51,7 +51,7 @@ pub async fn initialize_websocket_monitoring(
         .unwrap_or_else(|| websocket::SolanaWebSocketClient::get_default_ws_url());
     logger::info(
         LogTag::Transactions,
-        &format!("Initializing WebSocket monitoring (url: {})", ws_url_log),
+        &format!("Initializing WebSocket monitoring (url: {ws_url_log})"),
     );
 
     let receiver = websocket::start_websocket_monitoring(

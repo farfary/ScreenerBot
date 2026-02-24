@@ -99,7 +99,7 @@ async fn stream_actions(
                     let lag_msg = serde_json::json!({
                         "type": "lag",
                         "skipped": skipped,
-                        "message": format!("Client lagged behind, {} updates skipped", skipped)
+                        "message": format!("Client lagged behind, {skipped} updates skipped")
                     });
                     if let Ok(json) = serde_json::to_string(&lag_msg) {
                         yield Ok(Event::default().event("lag").data(json));
@@ -227,7 +227,7 @@ async fn get_action_by_id(
         })),
         None => Json(serde_json::json!({
             "success": false,
-            "error": format!("Action {} not found", action_id)
+            "error": format!("Action {action_id} not found")
         })),
     }
 }

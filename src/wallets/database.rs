@@ -154,7 +154,7 @@ impl WalletsDatabase {
         )
         .map_err(|e| {
             if e.to_string().contains("UNIQUE constraint failed") {
-                format!("Wallet with address {} already exists", address)
+                format!("Wallet with address {address} already exists")
             } else {
                 format!("Failed to insert wallet: {e}")
             }

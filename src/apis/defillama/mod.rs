@@ -61,7 +61,7 @@ impl DefiLlamaClient {
         }
 
         let start = Instant::now();
-        let url = format!("{}/protocols", DEFILLAMA_BASE_URL);
+        let url = format!("{DEFILLAMA_BASE_URL}/protocols");
 
         let response = self
             .http_client

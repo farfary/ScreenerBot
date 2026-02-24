@@ -930,7 +930,7 @@ impl RpcClientMethods for RpcClient {
         } else {
             Err(parse_err(
                 "transaction",
-                &format!("Transaction {} not confirmed within timeout", signature),
+                &format!("Transaction {signature} not confirmed within timeout"),
             ))
         }
     }
@@ -1267,7 +1267,7 @@ impl RpcClientMethods for RpcClient {
         } else {
             Err(parse_err(
                 "transaction",
-                &format!("Transaction {} not confirmed within timeout", signature),
+                &format!("Transaction {signature} not confirmed within timeout"),
             ))
         }
     }

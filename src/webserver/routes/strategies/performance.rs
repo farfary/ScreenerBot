@@ -13,7 +13,7 @@ use super::utils::err;
 pub async fn get_strategy_performance_stats(Path(id): Path<String>) -> Response {
     logger::info(
         LogTag::Webserver,
-        &format!("GET /api/strategies/{}/performance", id),
+        &format!("GET /api/strategies/{id}/performance"),
     );
 
     // Check if strategy exists

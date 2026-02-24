@@ -62,7 +62,7 @@ pub fn load_config_from_path(path: &str) -> Result<(), String> {
         // Use defaults if file doesn't exist
         crate::logger::warning(
             crate::logger::LogTag::System,
-            &format!("Config file '{}' not found, using default values", path),
+            &format!("Config file '{path}' not found, using default values"),
         );
         Config::default()
     };
@@ -472,7 +472,7 @@ pub fn save_config_to_file(config: &Config, path: &str, set_global: bool) -> Res
 
     logger::info(
         LogTag::System,
-        &format!("Config saved to '{}'with secure permissions", path),
+        &format!("Config saved to '{path}'with secure permissions"),
     );
 
     // Optionally set as global config

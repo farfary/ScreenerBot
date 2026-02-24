@@ -115,7 +115,7 @@ pub fn execute_reset(config: ResetConfig) -> Result<(), String> {
     );
 
     if error_count > 0 {
-        return Err(format!("Reset completed with {} errors", error_count));
+        return Err(format!("Reset completed with {error_count} errors"));
     }
 
     Ok(())
@@ -202,7 +202,7 @@ pub fn clear_pending_verifications() -> Result<(), String> {
             if count > 0 {
                 logger::info(
                     LogTag::System,
-                    &format!("Cleared pending DCA swaps metadata ({} rows)", count),
+                    &format!("Cleared pending DCA swaps metadata ({count} rows)"),
                 );
             }
         }
@@ -223,7 +223,7 @@ pub fn clear_pending_verifications() -> Result<(), String> {
             if count > 0 {
                 logger::info(
                     LogTag::System,
-                    &format!("Cleared pending partial exits metadata ({} rows)", count),
+                    &format!("Cleared pending partial exits metadata ({count} rows)"),
                 );
             }
         }

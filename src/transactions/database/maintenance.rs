@@ -348,7 +348,7 @@ impl TransactionDatabase {
             let trimmed = signature.trim();
             if !trimmed.is_empty() {
                 query.push_str(&format!(" AND r.signature LIKE ?{}", params_vec.len() + 1));
-                params_vec.push(Box::new(format!("%{}%", trimmed)));
+                params_vec.push(Box::new(format!("%{trimmed}%")));
             }
         }
 
@@ -368,7 +368,7 @@ impl TransactionDatabase {
                     " AND (p.token_swap_info LIKE ?{} OR p.token_transfers LIKE ?{})",
                     param_idx, param_idx
                 ));
-                params_vec.push(Box::new(format!("%{}%", trimmed)));
+                params_vec.push(Box::new(format!("%{trimmed}%")));
             }
         }
 
@@ -976,7 +976,7 @@ impl TransactionDatabase {
             let trimmed = signature.trim();
             if !trimmed.is_empty() {
                 query.push_str(&format!(" AND r.signature LIKE ?{}", params_vec.len() + 1));
-                params_vec.push(Box::new(format!("%{}%", trimmed)));
+                params_vec.push(Box::new(format!("%{trimmed}%")));
             }
         }
 

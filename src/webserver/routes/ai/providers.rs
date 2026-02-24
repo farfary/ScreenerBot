@@ -109,7 +109,7 @@ pub async fn test_provider(
             return error_response(
                 StatusCode::BAD_REQUEST,
                 "PROVIDER_DISABLED",
-                &format!("Provider '{}' is not configured or disabled", provider_name),
+                &format!("Provider '{provider_name}' is not configured or disabled"),
                 None,
             );
         }
@@ -391,7 +391,7 @@ pub async fn update_provider(
         Ok(_) => {
             logger::info(
                 LogTag::Api,
-                &format!("Updated AI provider '{}' configuration", provider_name),
+                &format!("Updated AI provider '{provider_name}' configuration"),
             );
             success_response(serde_json::json!({
                 "provider": provider_name,
