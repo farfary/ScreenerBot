@@ -19,7 +19,7 @@ const LOG_RETENTION_HOURS: u64 = 24; // Keep logs for 24 hours
 const MAX_LOG_FILES: usize = 7; // Keep maximum 7 days of logs as backup
 
 /// Buffer configuration for high-performance logging
-const FLUSH_INTERVAL_WRITES: u64 = 1; // Flush every write for debugging
+const FLUSH_INTERVAL_WRITES: u64 = 10; // Flush every 10 writes for performance
 const CLEANUP_INTERVAL_WRITES: u64 = 1000; // Cleanup every 1000 writes
 const FILE_BUFFER_SIZE: usize = 4 * 1024; // 4KB buffer
 

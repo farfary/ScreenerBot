@@ -149,7 +149,7 @@ pub async fn update_ai_config(
                 cfg.ai.filtering_enabled = filtering_enabled;
             }
             if let Some(min_conf) = req.filtering_min_confidence {
-                if min_conf >= 0 && min_conf <= 100 {
+                if min_conf <= 100 {
                     cfg.ai.filtering_min_confidence = min_conf;
                 }
             }
@@ -179,7 +179,7 @@ pub async fn update_ai_config(
                 cfg.ai.auto_blacklist_enabled = auto_blacklist;
             }
             if let Some(min_conf) = req.auto_blacklist_min_confidence {
-                if min_conf >= 0 && min_conf <= 100 {
+                if min_conf <= 100 {
                     cfg.ai.auto_blacklist_min_confidence = min_conf;
                 }
             }
