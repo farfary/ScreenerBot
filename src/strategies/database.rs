@@ -643,34 +643,3 @@ pub fn get_strategy_performance(strategy_id: &str) -> crate::Result<Option<Strat
         None => Ok(None),
     }
 }
-
-// =============================================================================
-// STRATEGY ASSIGNMENTS (Position to Strategy mapping)
-// =============================================================================
-
-/// Assign a strategy to a position
-pub fn assign_strategy_to_position(position_id: &str, strategy_id: &str) -> crate::Result<()> {
-    let conn = get_connection()?;
-
-    conn.execute(
-        "INSERT OR REPLACE INTO strategy_assignments (position_id, strategy_id, assigned_at)
-         VALUES (?1, ?2, ?3)",
-        params![position_id, strategy_id, Utc::now().to_rfc3339()],
-    )?;
-
-    Ok(())
-}
-
-/// Get strategies assigned to a position
-pub fn get_position_strategies(position_id: &str) -> crate::Result<Vec<String>> {
-    let conn = get_connection()?;
-
-    let mut stmt =
-        conn.prepare("SELECT strategy_id FROM strategy_assignments WHERE position_id = ?1")?;
-
-    let strategies = stmt
-        .query_map(params![position_id], |row| row.get(0))?
-        .collect::<Result<Vec<String>, _>>()?;
-
-    Ok(strategies)
-}
