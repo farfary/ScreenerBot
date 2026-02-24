@@ -34,68 +34,6 @@ impl TokenDatabase {
         Ok(addresses)
     }
 
-    /// Upsert authority reputation record. Uses ON CONFLICT to update existing entries.
-    pub fn upsert_authority_reputation(
-        &self,
-        address: &str,
-        authority_type: &str,
-        total_token_count: u32,
-        flagged_token_count: u32,
-        confidence: f64,
-        is_blocked: bool,
-        source: &str,
-    ) -> TokenResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock error: {e}")))?;
-
-        let now = chrono::Utc::now().timestamp();
-        conn.execute(
-            "INSERT INTO authority_reputation (address, authority_type, total_token_count, flagged_token_count, confidence, is_blocked, source, first_seen_at, last_updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)
-             ON CONFLICT(address) DO UPDATE SET
-                 authority_type = ?2,
-                 total_token_count = ?3,
-                 flagged_token_count = ?4,
-                 confidence = ?5,
-                 is_blocked = ?6,
-                 source = ?7,
-                 last_updated_at = ?8",
-            rusqlite::params![
-                address,
-                authority_type,
-                total_token_count,
-                flagged_token_count,
-                confidence,
-                is_blocked as i32,
-                source,
-                now,
-            ],
-        )
-        .map_err(|e| TokenError::Database(format!("Upsert error: {e}")))?;
-
-        Ok(())
-    }
-
-    /// Get count of blocked authorities (for stats/logging)
-    pub fn count_blocked_authorities(&self) -> TokenResult<u32> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock error: {e}")))?;
-
-        let count: u32 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM authority_reputation WHERE is_blocked = 1",
-                [],
-                |row| row.get(0),
-            )
-            .map_err(|e| TokenError::Database(format!("Query error: {e}")))?;
-
-        Ok(count)
-    }
-
     /// Run auto-discovery: analyze rejection data to find scam authorities.
     /// Groups tokens by their freeze/mint/update authority addresses,
     /// cross-references with rejection history to compute confidence scores.

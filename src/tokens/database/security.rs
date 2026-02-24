@@ -311,31 +311,6 @@ impl TokenDatabase {
     /// - "permanent": Token not listed on any exchange - stop retrying after threshold
     ///
 
-    pub fn mark_security_data_updated(&self, mint: &str) -> TokenResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
-
-        let now = Utc::now().timestamp();
-
-        conn.execute(
-            "UPDATE update_tracking SET 
-                security_data_last_updated_at = ?1,
-                security_data_update_count = security_data_update_count + 1,
-                last_security_error = NULL,
-                last_security_error_at = NULL,
-                security_error_type = NULL
-             WHERE mint = ?2",
-            params![now, mint],
-        )
-        .map_err(|e| {
-            TokenError::Database(format!("Failed to mark security data updated: {e}"))
-        })?;
-
-        Ok(())
-    }
-
     pub fn record_security_error(
         &self,
         mint: &str,

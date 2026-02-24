@@ -957,32 +957,6 @@ impl PoolAnalyzer {
         Some(accounts)
     }
 
-    /// Public interface: Request analysis of a discovered pool
-    pub fn request_analysis(
-        &self,
-        pool_id: Pubkey,
-        program_id: Pubkey,
-        base_mint: Pubkey,
-        quote_mint: Pubkey,
-        liquidity_usd: f64,
-        volume_h24_usd: f64,
-    ) -> Result<(), String> {
-        let message = AnalyzerMessage::AnalyzePool {
-            pool_id,
-            program_id,
-            base_mint,
-            quote_mint,
-            liquidity_usd,
-            volume_h24_usd,
-        };
-
-        self.analyzer_tx
-            .send(message)
-            .map_err(|e| format!("Failed to send analysis request: {e}"))?;
-
-        Ok(())
-    }
-
     /// Get analyzed pool by ID
     pub fn get_pool(&self, pool_id: &Pubkey) -> Option<PoolDescriptor> {
         let directory = self.pool_directory.read().unwrap();
@@ -994,12 +968,6 @@ impl PoolAnalyzer {
         let calculator = super::service::get_price_calculator();
         let calculator = calculator?;
         calculator.get_canonical_pool(mint)
-    }
-
-    /// Get all analyzed pools
-    pub fn get_all_pools(&self) -> Vec<PoolDescriptor> {
-        let directory = self.pool_directory.read().unwrap();
-        directory.values().cloned().collect()
     }
 
     /// Get pools for a specific token mint

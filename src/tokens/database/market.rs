@@ -634,27 +634,6 @@ impl TokenDatabase {
         Ok(error_count)
     }
 
-    /// Clear market error tracking (called after successful market data fetch)
-    pub fn clear_market_error(&self, mint: &str) -> TokenResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
-
-        conn.execute(
-            "UPDATE update_tracking SET 
-                market_error_count = 0,
-                last_error = NULL,
-                last_error_at = NULL,
-                market_error_type = NULL
-             WHERE mint = ?1",
-            params![mint],
-        )
-        .map_err(|e| TokenError::Database(format!("Failed to clear market error: {e}")))?;
-
-        Ok(())
-    }
-
     /// Mark a token as permanently failed for market data updates
     /// This only updates the error_type without incrementing the error count
     /// Used when a token has hit the failure threshold and should be excluded from updates

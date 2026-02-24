@@ -67,19 +67,6 @@ pub const CREATE_FAVORITES_INDEXES: &[&str] = &[
     "CREATE INDEX IF NOT EXISTS idx_favorites_created ON token_favorites(created_at DESC)",
 ];
 
-/// Initialize favorites schema (called from database initialization)
-pub fn initialize_favorites_schema(conn: &Connection) -> Result<(), String> {
-    conn.execute(CREATE_FAVORITES_TABLE, [])
-        .map_err(|e| format!("Failed to create token_favorites table: {e}"))?;
-
-    for statement in CREATE_FAVORITES_INDEXES {
-        conn.execute(statement, [])
-            .map_err(|e| format!("Failed to create favorites index: {e}"))?;
-    }
-
-    Ok(())
-}
-
 // =============================================================================
 // DATABASE OPERATIONS
 // =============================================================================

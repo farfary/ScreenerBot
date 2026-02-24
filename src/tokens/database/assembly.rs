@@ -856,18 +856,6 @@ impl TokenDatabase {
         Ok(tokens)
     }
 
-    /// Get tokens that have NO market data in either DexScreener or GeckoTerminal
-    /// Returns minimal Token objects (Unknown data_source; market fields empty/defaults)
-    pub fn get_tokens_without_market_data_paginated(
-        &self,
-        limit: usize,
-        offset: usize,
-        sort_by: Option<&str>,
-        sort_direction: Option<&str>,
-    ) -> TokenResult<Vec<Token>> {
-        self.get_tokens_no_market(limit, offset, sort_by, sort_direction)
-    }
-
     fn get_optional_market_data(
         &self,
         mint: &str,

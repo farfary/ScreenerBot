@@ -48,11 +48,6 @@ pub fn get_cached(mint: &str) -> Option<MintAuthorities> {
     AUTHORITIES_CACHE.get(mint)
 }
 
-/// Get count of blocked authorities (for logging/stats)
-pub fn blocked_count() -> usize {
-    BLOCKED_AUTHORITIES.load().len()
-}
-
 // ============================================================================
 // CACHE POPULATION — called by decimals.rs during chain fetch
 // ============================================================================

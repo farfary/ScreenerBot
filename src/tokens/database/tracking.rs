@@ -8,42 +8,6 @@ use crate::tokens::types::{TokenError, TokenResult, UpdateTrackingInfo};
 use super::TokenDatabase;
 
 impl TokenDatabase {
-    pub fn mark_metadata_updated(&self, mint: &str) -> TokenResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
-
-        let now = Utc::now().timestamp();
-
-        conn.execute(
-            "UPDATE update_tracking SET metadata_last_updated_at = ?1 WHERE mint = ?2",
-            params![now, mint],
-        )
-        .map_err(|e| TokenError::Database(format!("Failed to mark metadata updated: {e}")))?;
-
-        Ok(())
-    }
-
-    /// Mark decimals as updated (called after decimals fetch from chain)
-
-    pub fn mark_decimals_updated(&self, mint: &str) -> TokenResult<()> {
-        let conn = self
-            .conn
-            .lock()
-            .map_err(|e| TokenError::Database(format!("Lock failed: {e}")))?;
-
-        let now = Utc::now().timestamp();
-
-        conn.execute(
-            "UPDATE update_tracking SET decimals_last_updated_at = ?1 WHERE mint = ?2",
-            params![now, mint],
-        )
-        .map_err(|e| TokenError::Database(format!("Failed to mark decimals updated: {e}")))?;
-
-        Ok(())
-    }
-
     /// Mark pool price as calculated (called after Pool Service calculation)
 
     pub fn mark_pool_price_calculated(&self, mint: &str, pool_address: &str) -> TokenResult<()> {
