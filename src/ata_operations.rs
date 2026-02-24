@@ -56,7 +56,7 @@ pub async fn get_token_balance(wallet_address: &str, mint: &str) -> Result<u64> 
 
     logger::debug(
         LogTag::Wallet,
-        &format!("TOKEN_BALANCE_RPC: querying RPC for balance"),
+        "TOKEN_BALANCE_RPC: querying RPC for balance",
     );
 
     match rpc_client.get_token_balance(wallet_address, mint).await {
@@ -732,7 +732,7 @@ async fn build_and_send_close_instruction(
     // Load keypair from config
     logger::debug(
         LogTag::Wallet,
-        &format!("ATA_KEYPAIR: creating keypair from config"),
+        "ATA_KEYPAIR: creating keypair from config",
     );
 
     let keypair = crate::config::get_wallet_keypair().map_err(|e| {
@@ -802,7 +802,7 @@ async fn build_and_send_close_instruction(
     // Get recent blockhash via RPC
     logger::debug(
         LogTag::Wallet,
-        &format!("ATA_BLOCKHASH: fetching recent blockhash via RPC"),
+        "ATA_BLOCKHASH: fetching recent blockhash via RPC",
     );
 
     let rpc_client = get_rpc_client();
@@ -822,7 +822,7 @@ async fn build_and_send_close_instruction(
     // Build transaction
     logger::debug(
         LogTag::Wallet,
-        &format!("ATA_TRANSACTION_BUILD: creating signed transaction"),
+        "ATA_TRANSACTION_BUILD: creating signed transaction",
     );
 
     let transaction = Transaction::new_signed_with_payer(
@@ -834,7 +834,7 @@ async fn build_and_send_close_instruction(
 
     logger::debug(
         LogTag::Wallet,
-        &format!("ATA_TRANSACTION_READY: transaction built and signed"),
+        "ATA_TRANSACTION_READY: transaction built and signed",
     );
 
     logger::info(LogTag::Wallet, "Built and signed close transaction");
@@ -842,7 +842,7 @@ async fn build_and_send_close_instruction(
     // Send transaction via RPC with confirmation
     logger::debug(
         LogTag::Wallet,
-        &format!("ATA_TRANSACTION_SEND: submitting transaction to network with confirmation"),
+        "ATA_TRANSACTION_SEND: submitting transaction to network with confirmation",
     );
 
     let result = rpc_client

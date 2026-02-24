@@ -102,7 +102,7 @@ pub fn execute_reset(config: ResetConfig) -> Result<(), String> {
         LogTag::System,
         "═══════════════════════════════════════════════════════════════",
     );
-    logger::info(LogTag::System, &format!("Reset operation complete!"));
+    logger::info(LogTag::System, "Reset operation complete!");
     logger::info(LogTag::System, &format!("Files removed: {removed_count}"));
     logger::info(LogTag::System, &format!("Errors: {error_count}"));
     logger::info(

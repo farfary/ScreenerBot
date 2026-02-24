@@ -228,7 +228,7 @@ pub async fn update_token(
                 permit.forget();
                 successes.push("DexScreener".to_owned());
             }
-            Ok(None) => failures.push(format!("DexScreener: Token not listed")),
+            Ok(None) => failures.push("DexScreener: Token not listed".to_owned()),
             Err(e) => failures.push(format!("DexScreener: {e}")),
         },
         Err(e) => failures.push(format!("DexScreener rate limit: {e}")),
