@@ -73,7 +73,7 @@ impl WalletsDatabase {
         // Ensure data directory exists
         if let Some(parent) = db_path.parent() {
             std::fs::create_dir_all(parent)
-                .map_err(|e| format!("Failed to create data directory: {}", e))?;
+                .map_err(|e| format!("Failed to create data directory: {e}"))?;
         }
 
         let manager = SqliteConnectionManager::file(&db_path)
@@ -83,7 +83,7 @@ impl WalletsDatabase {
             .idle_timeout(None) // SQLite: keep connections alive (WAL stability)
             .max_lifetime(None) // SQLite: no connection recycling
             .build(manager)
-            .map_err(|e| format!("Failed to create wallets connection pool: {}", e))?;
+            .map_err(|e| format!("Failed to create wallets connection pool: {e}"))?;
 
         let db = Self { pool };
         db.initialize()?;
@@ -95,7 +95,7 @@ impl WalletsDatabase {
     fn conn(&self) -> Result<PooledConnection<SqliteConnectionManager>, String> {
         self.pool
             .get()
-            .map_err(|e| format!("Failed to get connection: {}", e))
+            .map_err(|e| format!("Failed to get connection: {e}"))
     }
 
     /// Initialize database schema
@@ -104,15 +104,15 @@ impl WalletsDatabase {
 
         // Create tables
         conn.execute(WALLETS_SCHEMA, [])
-            .map_err(|e| format!("Failed to create wallets table: {}", e))?;
+            .map_err(|e| format!("Failed to create wallets table: {e}"))?;
 
         conn.execute(TOKEN_BALANCES_SCHEMA, [])
-            .map_err(|e| format!("Failed to create token_balances table: {}", e))?;
+            .map_err(|e| format!("Failed to create token_balances table: {e}"))?;
 
         // Create indexes
         for index_sql in WALLETS_INDEXES {
             conn.execute(index_sql, [])
-                .map_err(|e| format!("Failed to create index: {}", e))?;
+                .map_err(|e| format!("Failed to create index: {e}"))?;
         }
 
         Ok(())
@@ -156,7 +156,7 @@ impl WalletsDatabase {
             if e.to_string().contains("UNIQUE constraint failed") {
                 format!("Wallet with address {} already exists", address)
             } else {
-                format!("Failed to insert wallet: {}", e)
+                format!("Failed to insert wallet: {e}")
             }
         })?;
 
@@ -176,7 +176,7 @@ impl WalletsDatabase {
             |row| Self::row_to_wallet(row),
         )
         .optional()
-        .map_err(|e| format!("Failed to get wallet: {}", e))
+        .map_err(|e| format!("Failed to get wallet: {e}"))
     }
 
     /// Get a wallet by address
@@ -192,7 +192,7 @@ impl WalletsDatabase {
             |row| Self::row_to_wallet(row),
         )
         .optional()
-        .map_err(|e| format!("Failed to get wallet by address: {}", e))
+        .map_err(|e| format!("Failed to get wallet by address: {e}"))
     }
 
     /// Get the main wallet
@@ -208,7 +208,7 @@ impl WalletsDatabase {
             |row| Self::row_to_wallet(row),
         )
         .optional()
-        .map_err(|e| format!("Failed to get main wallet: {}", e))
+        .map_err(|e| format!("Failed to get main wallet: {e}"))
     }
 
     /// Get encrypted key data for a wallet
@@ -221,7 +221,7 @@ impl WalletsDatabase {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()
-        .map_err(|e| format!("Failed to get encrypted key: {}", e))
+        .map_err(|e| format!("Failed to get encrypted key: {e}"))
     }
 
     /// Get encrypted key data for main wallet
@@ -234,7 +234,7 @@ impl WalletsDatabase {
             |row| Ok((row.get(0)?, row.get(1)?)),
         )
         .optional()
-        .map_err(|e| format!("Failed to get main wallet encrypted key: {}", e))
+        .map_err(|e| format!("Failed to get main wallet encrypted key: {e}"))
     }
 
     /// List all wallets
@@ -255,13 +255,13 @@ impl WalletsDatabase {
 
         let mut stmt = conn
             .prepare(sql)
-            .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+            .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
         let wallets = stmt
             .query_map([], |row| Self::row_to_wallet(row))
-            .map_err(|e| format!("Failed to query wallets: {}", e))?
+            .map_err(|e| format!("Failed to query wallets: {e}"))?
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Failed to collect wallets: {}", e))?;
+            .map_err(|e| format!("Failed to collect wallets: {e}"))?;
 
         Ok(wallets)
     }
@@ -278,13 +278,13 @@ impl WalletsDatabase {
             ORDER BY role = 'main' DESC, created_at DESC
             "#,
             )
-            .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+            .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
         let wallets = stmt
             .query_map([], |row| Self::row_to_wallet(row))
-            .map_err(|e| format!("Failed to query wallets: {}", e))?
+            .map_err(|e| format!("Failed to query wallets: {e}"))?
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Failed to collect wallets: {}", e))?;
+            .map_err(|e| format!("Failed to collect wallets: {e}"))?;
 
         Ok(wallets)
     }
@@ -295,7 +295,7 @@ impl WalletsDatabase {
 
         // Start transaction
         conn.execute("BEGIN IMMEDIATE", [])
-            .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+            .map_err(|e| format!("Failed to begin transaction: {e}"))?;
 
         // Unset current main wallet
         if let Err(e) = conn.execute(
@@ -303,7 +303,7 @@ impl WalletsDatabase {
             [],
         ) {
             let _ = conn.execute("ROLLBACK", []);
-            return Err(format!("Failed to unset main wallet: {}", e));
+            return Err(format!("Failed to unset main wallet: {e}"));
         }
 
         // Set new main wallet
@@ -314,7 +314,7 @@ impl WalletsDatabase {
             )
             .map_err(|e| {
                 let _ = conn.execute("ROLLBACK", []);
-                format!("Failed to set main wallet: {}", e)
+                format!("Failed to set main wallet: {e}")
             })?;
 
         if updated == 0 {
@@ -323,7 +323,7 @@ impl WalletsDatabase {
         }
 
         conn.execute("COMMIT", [])
-            .map_err(|e| format!("Failed to commit transaction: {}", e))?;
+            .map_err(|e| format!("Failed to commit transaction: {e}"))?;
 
         Ok(())
     }
@@ -367,7 +367,7 @@ impl WalletsDatabase {
         // If changing role to main, wrap in transaction like set_main_wallet does
         if changing_to_main {
             conn.execute("BEGIN IMMEDIATE", [])
-                .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+                .map_err(|e| format!("Failed to begin transaction: {e}"))?;
 
             // Unset current main wallet
             if let Err(e) = conn.execute(
@@ -375,22 +375,22 @@ impl WalletsDatabase {
                 [],
             ) {
                 let _ = conn.execute("ROLLBACK", []);
-                return Err(format!("Failed to unset main: {}", e));
+                return Err(format!("Failed to unset main: {e}"));
             }
 
             // Apply the update
             let params: Vec<&dyn rusqlite::ToSql> = values.iter().map(|v| v.as_ref()).collect();
             if let Err(e) = conn.execute(&sql, params.as_slice()) {
                 let _ = conn.execute("ROLLBACK", []);
-                return Err(format!("Failed to update wallet: {}", e));
+                return Err(format!("Failed to update wallet: {e}"));
             }
 
             conn.execute("COMMIT", [])
-                .map_err(|e| format!("Failed to commit transaction: {}", e))?;
+                .map_err(|e| format!("Failed to commit transaction: {e}"))?;
         } else {
             let params: Vec<&dyn rusqlite::ToSql> = values.iter().map(|v| v.as_ref()).collect();
             conn.execute(&sql, params.as_slice())
-                .map_err(|e| format!("Failed to update wallet: {}", e))?;
+                .map_err(|e| format!("Failed to update wallet: {e}"))?;
         }
 
         Ok(())
@@ -408,7 +408,7 @@ impl WalletsDatabase {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(|e| format!("Failed to check wallet: {}", e))?
+            .map_err(|e| format!("Failed to check wallet: {e}"))?
             .unwrap_or(false);
 
         if is_main {
@@ -421,7 +421,7 @@ impl WalletsDatabase {
             "UPDATE wallets SET is_active = 0, role = 'archive' WHERE id = ?1",
             params![id],
         )
-        .map_err(|e| format!("Failed to archive wallet: {}", e))?;
+        .map_err(|e| format!("Failed to archive wallet: {e}"))?;
 
         Ok(())
     }
@@ -438,7 +438,7 @@ impl WalletsDatabase {
                 |row| Ok((row.get::<_, i32>(0)? == 1, row.get::<_, bool>(1)?)),
             )
             .optional()
-            .map_err(|e| format!("Failed to check wallet: {}", e))?
+            .map_err(|e| format!("Failed to check wallet: {e}"))?
             .unwrap_or((false, false));
 
         if !exists {
@@ -453,7 +453,7 @@ impl WalletsDatabase {
             "UPDATE wallets SET is_active = 1, role = 'secondary' WHERE id = ?1",
             params![id],
         )
-        .map_err(|e| format!("Failed to restore wallet: {}", e))?;
+        .map_err(|e| format!("Failed to restore wallet: {e}"))?;
 
         Ok(())
     }
@@ -470,7 +470,7 @@ impl WalletsDatabase {
                 |row| row.get(0),
             )
             .optional()
-            .map_err(|e| format!("Failed to check wallet: {}", e))?
+            .map_err(|e| format!("Failed to check wallet: {e}"))?
             .unwrap_or(false);
 
         if is_main {
@@ -480,7 +480,7 @@ impl WalletsDatabase {
         }
 
         conn.execute("DELETE FROM wallets WHERE id = ?1", params![id])
-            .map_err(|e| format!("Failed to delete wallet: {}", e))?;
+            .map_err(|e| format!("Failed to delete wallet: {e}"))?;
 
         Ok(())
     }
@@ -494,7 +494,7 @@ impl WalletsDatabase {
             "UPDATE wallets SET last_used_at = ?1 WHERE id = ?2",
             params![now, id],
         )
-        .map_err(|e| format!("Failed to update last used: {}", e))?;
+        .map_err(|e| format!("Failed to update last used: {e}"))?;
 
         Ok(())
     }
@@ -505,7 +505,7 @@ impl WalletsDatabase {
 
         let total: u32 = conn
             .query_row("SELECT COUNT(*) FROM wallets", [], |row| row.get(0))
-            .map_err(|e| format!("Failed to count wallets: {}", e))?;
+            .map_err(|e| format!("Failed to count wallets: {e}"))?;
 
         let active: u32 = conn
             .query_row(
@@ -513,7 +513,7 @@ impl WalletsDatabase {
                 [],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to count active wallets: {}", e))?;
+            .map_err(|e| format!("Failed to count active wallets: {e}"))?;
 
         Ok((total, active))
     }
@@ -528,7 +528,7 @@ impl WalletsDatabase {
                 params![address],
                 |row| row.get(0),
             )
-            .map_err(|e| format!("Failed to check wallet existence: {}", e))?;
+            .map_err(|e| format!("Failed to check wallet existence: {e}"))?;
 
         Ok(count > 0)
     }
@@ -608,7 +608,7 @@ impl WalletsDatabase {
                 now,
             ],
         )
-        .map_err(|e| format!("Failed to upsert token balance: {}", e))?;
+        .map_err(|e| format!("Failed to upsert token balance: {e}"))?;
 
         Ok(())
     }
@@ -626,13 +626,13 @@ impl WalletsDatabase {
                 ORDER BY ui_amount DESC
                 "#,
             )
-            .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+            .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
         let balances = stmt
             .query_map(params![wallet_id], |row| Self::row_to_token_balance(row))
-            .map_err(|e| format!("Failed to query token balances: {}", e))?
+            .map_err(|e| format!("Failed to query token balances: {e}"))?
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| format!("Failed to collect token balances: {}", e))?;
+            .map_err(|e| format!("Failed to collect token balances: {e}"))?;
 
         Ok(balances)
     }
@@ -649,16 +649,16 @@ impl WalletsDatabase {
                 ORDER BY wallet_id, ui_amount DESC
                 "#,
             )
-            .map_err(|e| format!("Failed to prepare statement: {}", e))?;
+            .map_err(|e| format!("Failed to prepare statement: {e}"))?;
 
         let mut balances_map: HashMap<i64, Vec<TokenBalance>> = HashMap::new();
 
         let rows = stmt
             .query_map([], |row| Self::row_to_token_balance(row))
-            .map_err(|e| format!("Failed to query all token balances: {}", e))?;
+            .map_err(|e| format!("Failed to query all token balances: {e}"))?;
 
         for row in rows {
-            let balance = row.map_err(|e| format!("Failed to parse token balance: {}", e))?;
+            let balance = row.map_err(|e| format!("Failed to parse token balance: {e}"))?;
             balances_map
                 .entry(balance.wallet_id)
                 .or_default()
@@ -677,7 +677,7 @@ impl WalletsDatabase {
                 "DELETE FROM wallet_token_balances WHERE wallet_id = ?1",
                 params![wallet_id],
             )
-            .map_err(|e| format!("Failed to clear token balances: {}", e))?;
+            .map_err(|e| format!("Failed to clear token balances: {e}"))?;
 
         Ok(deleted as u64)
     }
@@ -693,7 +693,7 @@ impl WalletsDatabase {
 
         // Use a transaction for atomicity
         conn.execute("BEGIN IMMEDIATE", [])
-            .map_err(|e| format!("Failed to begin transaction: {}", e))?;
+            .map_err(|e| format!("Failed to begin transaction: {e}"))?;
 
         // Clear existing balances for this wallet
         if let Err(e) = conn.execute(
@@ -701,7 +701,7 @@ impl WalletsDatabase {
             params![wallet_id],
         ) {
             let _ = conn.execute("ROLLBACK", []);
-            return Err(format!("Failed to clear existing balances: {}", e));
+            return Err(format!("Failed to clear existing balances: {e}"));
         }
 
         // Insert new balances
@@ -725,12 +725,12 @@ impl WalletsDatabase {
                 ],
             ) {
                 let _ = conn.execute("ROLLBACK", []);
-                return Err(format!("Failed to insert token balance: {}", e));
+                return Err(format!("Failed to insert token balance: {e}"));
             }
         }
 
         conn.execute("COMMIT", [])
-            .map_err(|e| format!("Failed to commit transaction: {}", e))?;
+            .map_err(|e| format!("Failed to commit transaction: {e}"))?;
 
         Ok(())
     }

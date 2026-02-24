@@ -24,7 +24,7 @@ pub async fn initialize_database() -> Result<(), String> {
             *guard = Some(db);
             Ok(())
         }
-        Err(e) => Err(format!("Failed to acquire write lock: {}", e)),
+        Err(e) => Err(format!("Failed to acquire write lock: {e}")),
     }
 }
 
@@ -35,7 +35,7 @@ pub async fn queue_price_for_storage(price: PriceResult) -> Result<(), String> {
             Some(db) => db.clone_for_async(),
             None => return Err("Database not initialized".to_string()),
         },
-        Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
+        Err(e) => return Err(format!("Failed to acquire read lock: {e}")),
     };
     db_ref.queue_price_for_storage(price).await
 }
@@ -65,7 +65,7 @@ pub async fn get_extended_price_history(
             Some(db) => db.clone_for_async(),
             None => return Err("Database not initialized".to_string()),
         },
-        Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
+        Err(e) => return Err(format!("Failed to acquire read lock: {e}")),
     };
     db_ref.get_price_history(mint, limit, since_timestamp).await
 }
@@ -119,7 +119,7 @@ pub async fn add_account_to_blacklist(
             Some(db) => db.clone_for_async(),
             None => return Err("Database not initialized".to_string()),
         },
-        Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
+        Err(e) => return Err(format!("Failed to acquire read lock: {e}")),
     };
     db_ref
         .add_account_to_blacklist(account_pubkey, reason, source, pool_id, token_mint)
@@ -133,7 +133,7 @@ pub async fn is_account_blacklisted(account_pubkey: &str) -> Result<bool, String
             Some(db) => db.clone_for_async(),
             None => return Err("Database not initialized".to_string()),
         },
-        Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
+        Err(e) => return Err(format!("Failed to acquire read lock: {e}")),
     };
     db_ref.is_account_blacklisted(account_pubkey).await
 }
@@ -150,7 +150,7 @@ pub async fn add_pool_to_blacklist(
             Some(db) => db.clone_for_async(),
             None => return Err("Database not initialized".to_string()),
         },
-        Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
+        Err(e) => return Err(format!("Failed to acquire read lock: {e}")),
     };
     db_ref
         .add_pool_to_blacklist(pool_id, reason, token_mint, program_id)
@@ -164,7 +164,7 @@ pub async fn is_pool_blacklisted(pool_id: &str) -> Result<bool, String> {
             Some(db) => db.clone_for_async(),
             None => return Err("Database not initialized".to_string()),
         },
-        Err(e) => return Err(format!("Failed to acquire read lock: {}", e)),
+        Err(e) => return Err(format!("Failed to acquire read lock: {e}")),
     };
     db_ref.is_pool_blacklisted(pool_id).await
 }

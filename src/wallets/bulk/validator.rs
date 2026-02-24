@@ -57,7 +57,7 @@ pub fn validate_row(
         Ok(keypair) => keypair_to_address(&keypair),
         Err(e) => {
             // Don't include the actual key in error message
-            errors.push(format!("Invalid private key: {}", e));
+            errors.push(format!("Invalid private key: {e}"));
             return RowValidationResult::Invalid { row_num, errors };
         }
     };
@@ -69,7 +69,7 @@ pub fn validate_row(
             if !expected_addr.is_empty() {
                 // Validate expected address format
                 if let Err(e) = validate_address(expected_addr) {
-                    errors.push(format!("Invalid address in file: {}", e));
+                    errors.push(format!("Invalid address in file: {e}"));
                 } else if expected_addr != address {
                     errors.push(format!(
                         "Address mismatch: file has {}, but key derives to {}",

@@ -34,7 +34,7 @@ impl PoolsDatabase {
         tokio::task::spawn_blocking(move || {
       let conn_guard = conn_arc
         .lock()
-        .map_err(|e| format!("Failed to lock connection: {}", e))?;
+        .map_err(|e| format!("Failed to lock connection: {e}"))?;
 
       if let Some(ref conn) = *conn_guard {
         let now = SystemTime::now()
@@ -59,7 +59,7 @@ impl PoolsDatabase {
              WHERE account_pubkey = ?2",
             params![now, &account_key],
           )
-          .map_err(|e| format!("Failed to update blacklist_accounts: {}", e))?;
+          .map_err(|e| format!("Failed to update blacklist_accounts: {e}"))?;
         } else {
           // Insert new entry
           conn.execute(
@@ -68,7 +68,7 @@ impl PoolsDatabase {
              VALUES (?1, ?2, ?3, ?4, ?5, 1, ?6, ?6, ?6)",
             params![&account_key, &reason_str, source_str.as_deref(), pool_id_str.as_deref(), token_mint_str.as_deref(), now],
           )
-          .map_err(|e| format!("Failed to insert into blacklist_accounts: {}", e))?;
+          .map_err(|e| format!("Failed to insert into blacklist_accounts: {e}"))?;
         }
 
         Ok(())
@@ -77,7 +77,7 @@ impl PoolsDatabase {
       }
     })
     .await
-    .map_err(|e| format!("Blocking task failed: {}", e))?
+    .map_err(|e| format!("Blocking task failed: {e}"))?
     }
 
     /// Check if account is blacklisted
@@ -109,7 +109,7 @@ impl PoolsDatabase {
         tokio::task::spawn_blocking(move || {
       let conn_guard = conn_arc
         .lock()
-        .map_err(|e| format!("Failed to lock connection: {}", e))?;
+        .map_err(|e| format!("Failed to lock connection: {e}"))?;
 
       if let Some(ref conn) = *conn_guard {
         let now = SystemTime::now()
@@ -134,7 +134,7 @@ impl PoolsDatabase {
              WHERE pool_id = ?2",
             params![now, &pool_id_str],
           )
-          .map_err(|e| format!("Failed to update blacklist_pools: {}", e))?;
+          .map_err(|e| format!("Failed to update blacklist_pools: {e}"))?;
         } else {
           // Insert new entry
           conn.execute(
@@ -143,7 +143,7 @@ impl PoolsDatabase {
              VALUES (?1, ?2, ?3, ?4, 1, ?5, ?5, ?5)",
             params![&pool_id_str, &reason_str, token_mint_str.as_deref(), program_id_str.as_deref(), now],
           )
-          .map_err(|e| format!("Failed to insert into blacklist_pools: {}", e))?;
+          .map_err(|e| format!("Failed to insert into blacklist_pools: {e}"))?;
         }
 
         Ok(())
@@ -152,7 +152,7 @@ impl PoolsDatabase {
       }
     })
     .await
-    .map_err(|e| format!("Blocking task failed: {}", e))?
+    .map_err(|e| format!("Blocking task failed: {e}"))?
     }
 
     /// Check if pool is blacklisted
@@ -175,20 +175,20 @@ impl PoolsDatabase {
         tokio::task::spawn_blocking(move || {
             let conn_guard = conn_arc
                 .lock()
-                .map_err(|e| format!("Failed to lock connection: {}", e))?;
+                .map_err(|e| format!("Failed to lock connection: {e}"))?;
             if let Some(ref conn) = *conn_guard {
                 conn.execute(
                     "DELETE FROM blacklist_accounts WHERE account_pubkey = ?1",
                     params![&account_key],
                 )
-                .map_err(|e| format!("Failed to remove from blacklist_accounts: {}", e))?;
+                .map_err(|e| format!("Failed to remove from blacklist_accounts: {e}"))?;
                 Ok(())
             } else {
                 Err("Database connection not available".to_string())
             }
         })
         .await
-        .map_err(|e| format!("Blocking task failed: {}", e))?
+        .map_err(|e| format!("Blocking task failed: {e}"))?
     }
 
     /// Remove pool from blacklist
@@ -204,20 +204,20 @@ impl PoolsDatabase {
         tokio::task::spawn_blocking(move || {
             let conn_guard = conn_arc
                 .lock()
-                .map_err(|e| format!("Failed to lock connection: {}", e))?;
+                .map_err(|e| format!("Failed to lock connection: {e}"))?;
             if let Some(ref conn) = *conn_guard {
                 conn.execute(
                     "DELETE FROM blacklist_pools WHERE pool_id = ?1",
                     params![&pool_key],
                 )
-                .map_err(|e| format!("Failed to remove from blacklist_pools: {}", e))?;
+                .map_err(|e| format!("Failed to remove from blacklist_pools: {e}"))?;
                 Ok(())
             } else {
                 Err("Database connection not available".to_string())
             }
         })
         .await
-        .map_err(|e| format!("Blocking task failed: {}", e))?
+        .map_err(|e| format!("Blocking task failed: {e}"))?
     }
 
     /// Get blacklist statistics
@@ -235,7 +235,7 @@ impl PoolsDatabase {
         tokio::task::spawn_blocking(move || {
       let connection_guard = conn_arc
         .lock()
-        .map_err(|e| format!("Failed to lock connection: {}", e))?;
+        .map_err(|e| format!("Failed to lock connection: {e}"))?;
 
       let conn = connection_guard
         .as_ref()
@@ -251,7 +251,7 @@ impl PoolsDatabase {
              ORDER BY last_failed_at DESC \
              LIMIT ?",
           )
-          .map_err(|e| format!("Failed to prepare blacklist_accounts query: {}", e))?;
+          .map_err(|e| format!("Failed to prepare blacklist_accounts query: {e}"))?;
 
         let rows = stmt
           .query_map(params![limit_value], |row| {
@@ -267,7 +267,7 @@ impl PoolsDatabase {
               added_at: row.get(8)?,
             })
           })
-          .map_err(|e| format!("Failed to query blacklist_accounts: {}", e))?;
+          .map_err(|e| format!("Failed to query blacklist_accounts: {e}"))?;
 
         for row in rows {
           records.push(row.map_err(|e| format!("Failed to read blacklist_accounts row: {e}"))?);
@@ -279,7 +279,7 @@ impl PoolsDatabase {
              FROM blacklist_accounts \
              ORDER BY last_failed_at DESC",
           )
-          .map_err(|e| format!("Failed to prepare blacklist_accounts query: {}", e))?;
+          .map_err(|e| format!("Failed to prepare blacklist_accounts query: {e}"))?;
 
         let rows = stmt
           .query_map([], |row| {
@@ -295,7 +295,7 @@ impl PoolsDatabase {
               added_at: row.get(8)?,
             })
           })
-          .map_err(|e| format!("Failed to query blacklist_accounts: {}", e))?;
+          .map_err(|e| format!("Failed to query blacklist_accounts: {e}"))?;
 
         for row in rows {
           records.push(row.map_err(|e| format!("Failed to read blacklist_accounts row: {e}"))?);
@@ -305,7 +305,7 @@ impl PoolsDatabase {
       Ok::<_, String>(records)
     })
     .await
-    .map_err(|e| format!("Blocking task failed: {}", e))?
+    .map_err(|e| format!("Blocking task failed: {e}"))?
     }
 
     pub async fn list_blacklisted_pools(
@@ -316,7 +316,7 @@ impl PoolsDatabase {
         tokio::task::spawn_blocking(move || {
       let connection_guard = conn_arc
         .lock()
-        .map_err(|e| format!("Failed to lock connection: {}", e))?;
+        .map_err(|e| format!("Failed to lock connection: {e}"))?;
 
       let conn = connection_guard
         .as_ref()
@@ -332,7 +332,7 @@ impl PoolsDatabase {
              ORDER BY last_failed_at DESC \
              LIMIT ?",
           )
-          .map_err(|e| format!("Failed to prepare blacklist_pools query: {}", e))?;
+          .map_err(|e| format!("Failed to prepare blacklist_pools query: {e}"))?;
 
         let rows = stmt
           .query_map(params![limit_value], |row| {
@@ -347,7 +347,7 @@ impl PoolsDatabase {
               added_at: row.get(7)?,
             })
           })
-          .map_err(|e| format!("Failed to query blacklist_pools: {}", e))?;
+          .map_err(|e| format!("Failed to query blacklist_pools: {e}"))?;
 
         for row in rows {
           records.push(row.map_err(|e| format!("Failed to read blacklist_pools row: {e}"))?);
@@ -359,7 +359,7 @@ impl PoolsDatabase {
              FROM blacklist_pools \
              ORDER BY last_failed_at DESC",
           )
-          .map_err(|e| format!("Failed to prepare blacklist_pools query: {}", e))?;
+          .map_err(|e| format!("Failed to prepare blacklist_pools query: {e}"))?;
 
         let rows = stmt
           .query_map([], |row| {
@@ -374,7 +374,7 @@ impl PoolsDatabase {
               added_at: row.get(7)?,
             })
           })
-          .map_err(|e| format!("Failed to query blacklist_pools: {}", e))?;
+          .map_err(|e| format!("Failed to query blacklist_pools: {e}"))?;
 
         for row in rows {
           records.push(row.map_err(|e| format!("Failed to read blacklist_pools row: {e}"))?);
@@ -384,6 +384,6 @@ impl PoolsDatabase {
       Ok::<_, String>(records)
     })
     .await
-    .map_err(|e| format!("Blocking task failed: {}", e))?
+    .map_err(|e| format!("Blocking task failed: {e}"))?
     }
 }

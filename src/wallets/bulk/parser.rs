@@ -23,7 +23,7 @@ pub fn parse_csv(content: &str) -> Result<(Vec<String>, Vec<Vec<String>>), Strin
     // Parse headers
     let headers: Vec<String> = reader
         .headers()
-        .map_err(|e| format!("Failed to parse CSV headers: {}", e))?
+        .map_err(|e| format!("Failed to parse CSV headers: {e}"))?
         .iter()
         .map(|s| s.to_string())
         .collect();
@@ -56,7 +56,7 @@ pub fn parse_excel(
 ) -> Result<(Vec<String>, Vec<Vec<String>>), String> {
     let cursor = Cursor::new(bytes);
     let mut workbook = open_workbook_auto_from_rs(cursor)
-        .map_err(|e| format!("Failed to open Excel file: {}", e))?;
+        .map_err(|e| format!("Failed to open Excel file: {e}"))?;
 
     // Get sheet names
     let sheet_names = workbook.sheet_names().to_vec();

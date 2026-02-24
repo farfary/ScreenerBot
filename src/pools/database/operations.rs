@@ -75,11 +75,11 @@ impl PoolsDatabase {
     pub async fn initialize(&mut self) -> Result<(), String> {
         // Create database connection
         let conn = Connection::open(&self.db_path)
-            .map_err(|e| format!("Failed to open pools database: {}", e))?;
+            .map_err(|e| format!("Failed to open pools database: {e}"))?;
 
         // Apply shared SQLite configuration
         database::configure_connection(&conn, database::POOLS_DB)
-            .map_err(|e| format!("Failed to configure pools database: {}", e))?;
+            .map_err(|e| format!("Failed to configure pools database: {e}"))?;
 
         // Create price history table
         conn.execute(
@@ -100,7 +100,7 @@ impl PoolsDatabase {
       )",
             [],
         )
-        .map_err(|e| format!("Failed to create price_history table: {}", e))?;
+        .map_err(|e| format!("Failed to create price_history table: {e}"))?;
 
         // Create indices for faster queries
         conn.execute(
@@ -108,21 +108,21 @@ impl PoolsDatabase {
        ON price_history(mint, timestamp_unix DESC)",
             [],
         )
-        .map_err(|e| format!("Failed to create mint timestamp index: {}", e))?;
+        .map_err(|e| format!("Failed to create mint timestamp index: {e}"))?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_price_history_pool_timestamp 
        ON price_history(pool_address, timestamp_unix DESC)",
             [],
         )
-        .map_err(|e| format!("Failed to create pool timestamp index: {}", e))?;
+        .map_err(|e| format!("Failed to create pool timestamp index: {e}"))?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_price_history_created_at 
        ON price_history(created_at)",
             [],
         )
-        .map_err(|e| format!("Failed to create created_at index: {}", e))?;
+        .map_err(|e| format!("Failed to create created_at index: {e}"))?;
 
         // Create blacklist_accounts table
         conn.execute(
@@ -139,7 +139,7 @@ impl PoolsDatabase {
       )",
             [],
         )
-        .map_err(|e| format!("Failed to create blacklist_accounts table: {}", e))?;
+        .map_err(|e| format!("Failed to create blacklist_accounts table: {e}"))?;
 
         // Create blacklist_pools table
         conn.execute(
@@ -155,7 +155,7 @@ impl PoolsDatabase {
       )",
             [],
         )
-        .map_err(|e| format!("Failed to create blacklist_pools table: {}", e))?;
+        .map_err(|e| format!("Failed to create blacklist_pools table: {e}"))?;
 
         // Create indices for blacklist tables
         conn.execute(
@@ -163,21 +163,21 @@ impl PoolsDatabase {
        ON blacklist_accounts(pool_id)",
             [],
         )
-        .map_err(|e| format!("Failed to create blacklist_accounts pool index: {}", e))?;
+        .map_err(|e| format!("Failed to create blacklist_accounts pool index: {e}"))?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_blacklist_accounts_token 
        ON blacklist_accounts(token_mint)",
             [],
         )
-        .map_err(|e| format!("Failed to create blacklist_accounts token index: {}", e))?;
+        .map_err(|e| format!("Failed to create blacklist_accounts token index: {e}"))?;
 
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_blacklist_pools_token 
        ON blacklist_pools(token_mint)",
             [],
         )
-        .map_err(|e| format!("Failed to create blacklist_pools token index: {}", e))?;
+        .map_err(|e| format!("Failed to create blacklist_pools token index: {e}"))?;
 
         // Store connection
         {
@@ -227,7 +227,7 @@ impl PoolsDatabase {
                         Err(e) => {
                             logger::warning(
                                 LogTag::PoolService,
-                                &format!("Failed to prepare load for blacklist_accounts: {}", e),
+                                &format!("Failed to prepare load for blacklist_accounts: {e}"),
                             );
                             Vec::new()
                         }
@@ -242,7 +242,7 @@ impl PoolsDatabase {
                             Err(e) => {
                                 logger::warning(
                                     LogTag::PoolService,
-                                    &format!("Failed to load blacklist_pools into memory: {}", e),
+                                    &format!("Failed to load blacklist_pools into memory: {e}"),
                                 );
                                 Vec::new()
                             }
@@ -251,7 +251,7 @@ impl PoolsDatabase {
                     Err(e) => {
                         logger::warning(
                             LogTag::PoolService,
-                            &format!("Failed to prepare load for blacklist_pools: {}", e),
+                            &format!("Failed to prepare load for blacklist_pools: {e}"),
                         );
                         Vec::new()
                     }
@@ -285,7 +285,7 @@ impl PoolsDatabase {
     pub async fn queue_price_for_storage(&self, price: PriceResult) -> Result<(), String> {
         if let Some(ref tx) = self.write_queue {
             tx.send(price)
-                .map_err(|e| format!("Failed to queue price for storage: {}", e))?;
+                .map_err(|e| format!("Failed to queue price for storage: {e}"))?;
             Ok(())
         } else {
             Err("Write queue not initialized".to_string())
@@ -304,7 +304,7 @@ impl PoolsDatabase {
         tokio::task::spawn_blocking(move || {
             let connection_guard = conn_arc
                 .lock()
-                .map_err(|e| format!("Failed to lock connection: {}", e))?;
+                .map_err(|e| format!("Failed to lock connection: {e}"))?;
 
             let conn = connection_guard
                 .as_ref()
@@ -319,15 +319,15 @@ impl PoolsDatabase {
          ORDER BY timestamp_unix DESC
          LIMIT ?",
                 )
-                .map_err(|e| format!("Failed to prepare query: {}", e))?;
+                .map_err(|e| format!("Failed to prepare query: {e}"))?;
 
             let rows = stmt
                 .query_map(params![mint_str, limit], |row| DbPriceResult::from_row(row))
-                .map_err(|e| format!("Failed to query price history: {}", e))?;
+                .map_err(|e| format!("Failed to query price history: {e}"))?;
 
             let mut results = Vec::new();
             for row in rows {
-                let db_price = row.map_err(|e| format!("Failed to read row: {}", e))?;
+                let db_price = row.map_err(|e| format!("Failed to read row: {e}"))?;
                 results.push(db_price.to_price_result());
             }
 
@@ -337,7 +337,7 @@ impl PoolsDatabase {
             Ok::<_, String>(results)
         })
         .await
-        .map_err(|e| format!("Blocking task failed: {}", e))?
+        .map_err(|e| format!("Blocking task failed: {e}"))?
     }
 
     /// Get price history with optional filtering
@@ -354,7 +354,7 @@ impl PoolsDatabase {
         tokio::task::spawn_blocking(move || {
             let connection_guard = conn_arc
                 .lock()
-                .map_err(|e| format!("Failed to lock connection: {}", e))?;
+                .map_err(|e| format!("Failed to lock connection: {e}"))?;
 
             let conn = connection_guard
                 .as_ref()
@@ -374,14 +374,14 @@ impl PoolsDatabase {
 
                 let mut stmt = conn
                     .prepare(&query)
-                    .map_err(|e| format!("Failed to prepare query: {}", e))?;
+                    .map_err(|e| format!("Failed to prepare query: {e}"))?;
 
                 let rows = stmt
                     .query_map(params![mint_str, ts], |row| DbPriceResult::from_row(row))
-                    .map_err(|e| format!("Failed to query price history: {}", e))?;
+                    .map_err(|e| format!("Failed to query price history: {e}"))?;
 
                 for row in rows {
-                    let db_price = row.map_err(|e| format!("Failed to read row: {}", e))?;
+                    let db_price = row.map_err(|e| format!("Failed to read row: {e}"))?;
                     results.push(db_price.to_price_result());
                 }
             } else {
@@ -396,14 +396,14 @@ impl PoolsDatabase {
 
                 let mut stmt = conn
                     .prepare(&query)
-                    .map_err(|e| format!("Failed to prepare query: {}", e))?;
+                    .map_err(|e| format!("Failed to prepare query: {e}"))?;
 
                 let rows = stmt
                     .query_map(params![mint_str], |row| DbPriceResult::from_row(row))
-                    .map_err(|e| format!("Failed to query price history: {}", e))?;
+                    .map_err(|e| format!("Failed to query price history: {e}"))?;
 
                 for row in rows {
-                    let db_price = row.map_err(|e| format!("Failed to read row: {}", e))?;
+                    let db_price = row.map_err(|e| format!("Failed to read row: {e}"))?;
                     results.push(db_price.to_price_result());
                 }
             }
@@ -414,7 +414,7 @@ impl PoolsDatabase {
             Ok::<_, String>(results)
         })
         .await
-        .map_err(|e| format!("Blocking task failed: {}", e))?
+        .map_err(|e| format!("Blocking task failed: {e}"))?
     }
 
     /// Cleanup old database entries beyond retention period
@@ -424,7 +424,7 @@ impl PoolsDatabase {
         tokio::task::spawn_blocking(move || {
             let connection_guard = conn_arc
                 .lock()
-                .map_err(|e| format!("Failed to lock connection: {}", e))?;
+                .map_err(|e| format!("Failed to lock connection: {e}"))?;
 
             let conn = connection_guard
                 .as_ref()
@@ -440,12 +440,12 @@ impl PoolsDatabase {
                     "DELETE FROM price_history WHERE created_at < ?",
                     params![cutoff_str],
                 )
-                .map_err(|e| format!("Failed to cleanup old entries: {}", e))?;
+                .map_err(|e| format!("Failed to cleanup old entries: {e}"))?;
 
             Ok::<_, String>(deleted)
         })
         .await
-        .map_err(|e| format!("Blocking task failed: {}", e))?
+        .map_err(|e| format!("Blocking task failed: {e}"))?
     }
 
     /// Cleanup gapped data for a specific token
@@ -464,7 +464,7 @@ impl PoolsDatabase {
         tokio::task::spawn_blocking(move || {
             let connection_guard = conn_arc
                 .lock()
-                .map_err(|e| format!("Failed to lock connection: {}", e))?;
+                .map_err(|e| format!("Failed to lock connection: {e}"))?;
 
             let conn = connection_guard
                 .as_ref()
@@ -475,12 +475,12 @@ impl PoolsDatabase {
                     "DELETE FROM price_history WHERE mint = ? AND timestamp_unix <= ?",
                     params![mint_str, cutoff_timestamp],
                 )
-                .map_err(|e| format!("Failed to delete gapped data: {}", e))?;
+                .map_err(|e| format!("Failed to delete gapped data: {e}"))?;
 
             Ok::<_, String>(deleted)
         })
         .await
-        .map_err(|e| format!("Blocking task failed: {}", e))?
+        .map_err(|e| format!("Blocking task failed: {e}"))?
     }
 
     /// Find the first significant gap in price data for a token
@@ -492,7 +492,7 @@ impl PoolsDatabase {
         let timestamps = tokio::task::spawn_blocking(move || {
             let connection_guard = conn_arc
                 .lock()
-                .map_err(|e| format!("Failed to lock connection: {}", e))?;
+                .map_err(|e| format!("Failed to lock connection: {e}"))?;
 
             let conn = connection_guard
                 .as_ref()
@@ -505,21 +505,21 @@ impl PoolsDatabase {
            WHERE mint = ? 
            ORDER BY timestamp_unix DESC",
                 )
-                .map_err(|e| format!("Failed to prepare gap query: {}", e))?;
+                .map_err(|e| format!("Failed to prepare gap query: {e}"))?;
 
             let rows = stmt
                 .query_map(params![mint_str], |row| row.get::<_, i64>(0))
-                .map_err(|e| format!("Failed to query timestamps: {}", e))?;
+                .map_err(|e| format!("Failed to query timestamps: {e}"))?;
 
             let mut timestamps = Vec::new();
             for row in rows {
-                timestamps.push(row.map_err(|e| format!("Failed to read timestamp: {}", e))?);
+                timestamps.push(row.map_err(|e| format!("Failed to read timestamp: {e}"))?);
             }
 
             Ok::<_, String>(timestamps)
         })
         .await
-        .map_err(|e| format!("Blocking task failed: {}", e))??;
+        .map_err(|e| format!("Blocking task failed: {e}"))??;
 
         if timestamps.len() < 2 {
             return Ok(None); // Not enough data to find a gap
@@ -549,7 +549,7 @@ impl PoolsDatabase {
         let tokens = tokio::task::spawn_blocking(move || {
             let connection_guard = conn_arc
                 .lock()
-                .map_err(|e| format!("Failed to lock connection: {}", e))?;
+                .map_err(|e| format!("Failed to lock connection: {e}"))?;
 
             let conn = connection_guard
                 .as_ref()
@@ -557,21 +557,21 @@ impl PoolsDatabase {
 
             let mut stmt = conn
                 .prepare("SELECT DISTINCT mint FROM price_history")
-                .map_err(|e| format!("Failed to prepare token list query: {}", e))?;
+                .map_err(|e| format!("Failed to prepare token list query: {e}"))?;
 
             let rows = stmt
                 .query_map([], |row| Ok(row.get::<_, String>("mint")?))
-                .map_err(|e| format!("Failed to execute token list query: {}", e))?;
+                .map_err(|e| format!("Failed to execute token list query: {e}"))?;
 
             let mut tokens = Vec::new();
             for row in rows {
-                tokens.push(row.map_err(|e| format!("Failed to parse token mint: {}", e))?);
+                tokens.push(row.map_err(|e| format!("Failed to parse token mint: {e}"))?);
             }
 
             Ok::<_, String>(tokens)
         })
         .await
-        .map_err(|e| format!("Blocking task failed: {}", e))??;
+        .map_err(|e| format!("Blocking task failed: {e}"))??;
 
         // Clean up gapped data for each token
         let mut total_deleted = 0;
