@@ -1,3 +1,5 @@
+//! Configuration helper utilities — validation, default values, and config access functions.
+
 use super::schemas::Config;
 use crate::logger::{self, LogTag};
 use solana_sdk::pubkey::Pubkey;

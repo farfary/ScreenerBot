@@ -1,3 +1,5 @@
+//! PumpFun AMM pool decoder — parses on-chain PumpFun pool accounts.
+
 use super::{AccountData, PoolDecoder};
 use crate::constants::{SOL_DECIMALS, SOL_MINT};
 use crate::logger::{self, LogTag};

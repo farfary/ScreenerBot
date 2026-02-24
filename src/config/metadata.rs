@@ -1,3 +1,5 @@
+//! Configuration field metadata — types and structures for config introspection and UI generation.
+
 use serde::Serialize;
 use std::collections::BTreeMap;
 

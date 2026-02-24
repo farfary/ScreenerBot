@@ -1,3 +1,5 @@
+//! Global pool database singleton — provides shared access to the pool data store.
+
 use super::super::types::{PriceResult, PRICE_HISTORY_MAX_ENTRIES};
 /// Global database instance and convenience functions
 use super::operations::PoolsDatabase;
