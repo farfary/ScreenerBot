@@ -371,6 +371,8 @@ Trait-based router architecture supporting multiple DEX routers (GMGN, Jupiter, 
 
 Balance monitoring with historical snapshots in SQLite (`data/wallet.db`). Tracks SOL + token balances with delayed RPC calls. Background service checks every minute. Files: `balance_monitor/` (types.rs, cache.rs, dashboard.rs, database.rs, service.rs), `manager.rs` (wallet management). ATA operations in `src/ata_operations.rs` (close/cleanup ATAs, get balances). Connection pooling with r2d2. Export to CSV. Service integration.
 
+Code organization: when `src/wallets/manager.rs` grows, prefer splitting it into small submodules under `src/wallets/manager/` (e.g. `cache.rs`) and keeping `manager.rs` as the single public entry point via `mod` + `use`/re-exports.
+
 ### Transactions (src/transactions/)
 
 Real-time monitoring via WebSocket + bootstrap. Comprehensive DEX transaction analysis. Files: `manager.rs` (TransactionsManager lifecycle), `service/` (config.rs, lifecycle.rs, bootstrap.rs, processing.rs, websocket.rs, health.rs), `analyzer/` (classification, swap detection, P&L calculation, patterns.rs for pattern detection and risk assessment — 6-step pipeline), `processor/` (core.rs, extraction.rs, analysis.rs, helpers.rs), `fetcher.rs` (RPC batching with 50-account limit), `verifier.rs` (position integration), `websocket.rs` (real-time streaming), `database/` (types.rs, schema.rs, operations.rs, maintenance.rs, global.rs), `debug.rs` (diagnostics), `types.rs` (Transaction, TransactionType, SwapPnLInfo, AtaOperation), `utils.rs` (helpers), `program_ids.rs` (DEX program ID constants).
