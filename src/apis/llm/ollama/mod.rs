@@ -233,7 +233,7 @@ impl LlmClient for OllamaClient {
             Err(e) => {
                 self.stats.record_request(false, 0.0).await;
                 self.stats
-                    .record_error_with_event("Ollama", "chat_completion", format!("{}", e))
+                    .record_error_with_event("Ollama", "chat_completion", e.to_string())
                     .await;
                 return Err(e);
             }

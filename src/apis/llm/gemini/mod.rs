@@ -305,7 +305,7 @@ impl LlmClient for GeminiClient {
             Err(e) => {
                 self.stats.record_request(false, 0.0).await;
                 self.stats
-                    .record_error_with_event("Gemini", "generate_content", format!("{}", e))
+                    .record_error_with_event("Gemini", "generate_content", e.to_string())
                     .await;
                 return Err(e);
             }
