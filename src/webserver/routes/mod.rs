@@ -3,6 +3,7 @@ use crate::webserver::{state::AppState, templates};
 use axum::{
     http::{header as http_header, StatusCode},
     response::{Html, IntoResponse, Response},
+    routing::get,
     Router,
 };
 use std::sync::Arc;
@@ -43,32 +44,32 @@ use asset_serving::*;
 
 pub fn create_router(state: Arc<AppState>) -> Router {
     Router::new()
-        .route("/", axum::routing::get(home_page))
-        .route("/home", axum::routing::get(home_page))
-        .route("/login", axum::routing::get(login_page))
-        .route("/services", axum::routing::get(services_page))
-        .route("/tokens", axum::routing::get(tokens_page))
-        .route("/positions", axum::routing::get(positions_page))
-        .route("/events", axum::routing::get(events_page))
-        .route("/transactions", axum::routing::get(transactions_page))
-        .route("/filtering", axum::routing::get(filtering_page))
-        .route("/wallets", axum::routing::get(wallets_page))
-        .route("/tools", axum::routing::get(tools_page))
-        .route("/ai", axum::routing::get(ai_page))
-        .route("/config", axum::routing::get(config_page))
-        .route("/strategies", axum::routing::get(strategies_page))
-        .route("/trader", axum::routing::get(trader_page))
-        .route("/initialization", axum::routing::get(initialization_page))
-        .route("/updates", axum::routing::get(updates_page))
-        .route("/about", axum::routing::get(about_page))
-        .route("/scripts/core/:file", axum::routing::get(get_core_script))
-        .route("/scripts/pages/*file", axum::routing::get(get_page_script))
-        .route("/scripts/ui/*file", axum::routing::get(get_ui_script))
-        .route("/assets/:file", axum::routing::get(get_asset))
-        .route("/assets/fonts/:file", axum::routing::get(get_font))
+        .route("/", get(home_page))
+        .route("/home", get(home_page))
+        .route("/login", get(login_page))
+        .route("/services", get(services_page))
+        .route("/tokens", get(tokens_page))
+        .route("/positions", get(positions_page))
+        .route("/events", get(events_page))
+        .route("/transactions", get(transactions_page))
+        .route("/filtering", get(filtering_page))
+        .route("/wallets", get(wallets_page))
+        .route("/tools", get(tools_page))
+        .route("/ai", get(ai_page))
+        .route("/config", get(config_page))
+        .route("/strategies", get(strategies_page))
+        .route("/trader", get(trader_page))
+        .route("/initialization", get(initialization_page))
+        .route("/updates", get(updates_page))
+        .route("/about", get(about_page))
+        .route("/scripts/core/:file", get(get_core_script))
+        .route("/scripts/pages/*file", get(get_page_script))
+        .route("/scripts/ui/*file", get(get_ui_script))
+        .route("/assets/:file", get(get_asset))
+        .route("/assets/fonts/:file", get(get_font))
         .route(
             "/assets/providers/:file",
-            axum::routing::get(get_provider_logo),
+            get(get_provider_logo),
         )
         .nest("/api", api_routes())
         .with_state(state)
@@ -220,7 +221,7 @@ fn api_routes() -> Router<Arc<AppState>> {
         .nest("/telegram", telegram::routes())
         .nest("/ai", ai::routes())
         .merge(updates::routes())
-        .route("/pages/:page", axum::routing::get(get_page_content))
+        .route("/pages/:page", get(get_page_content))
 }
 
 /// SPA page content handler - returns just the content HTML (not full template)
