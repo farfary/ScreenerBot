@@ -564,6 +564,37 @@
   position: relative;
 }
 
+/* ===================== Compact (no-title) layout ===================== */
+
+/* Single-row toolbar: [search + filters] [summary chips] [actions]     */
+.table-toolbar--compact {
+  padding: 0.375rem 1rem;
+}
+
+.table-toolbar--compact .table-toolbar__row--main {
+  gap: 0.75rem;
+}
+
+.table-toolbar--compact .table-toolbar-controls {
+  flex: 0 1 auto;
+  gap: 0.5rem;
+}
+
+.table-toolbar--compact .table-toolbar-controls > .table-toolbar-search {
+  flex: 0 1 280px;
+  min-width: 160px;
+  max-width: 320px;
+}
+
+.table-toolbar--compact .table-toolbar-summary {
+  gap: 0.75rem;
+  margin-left: auto;
+}
+
+.table-toolbar--compact .table-toolbar-actions {
+  flex-shrink: 0;
+}
+
 @media (width <= 960px) {
   .table-toolbar__row {
     gap: 10px;
@@ -596,6 +627,23 @@
 
   .table-toolbar-field--switch .table-toolbar-switch {
     margin-left: auto;
+  }
+
+  /* Compact: wrap into two rows on narrow screens */
+  .table-toolbar--compact .table-toolbar__row--main {
+    flex-wrap: wrap;
+  }
+
+  .table-toolbar--compact .table-toolbar-controls {
+    flex: 1 1 100%;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .table-toolbar--compact .table-toolbar-controls > .table-toolbar-search {
+    flex: 1 1 auto;
+    min-width: 160px;
+    max-width: none;
   }
 }
 

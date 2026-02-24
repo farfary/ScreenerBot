@@ -375,6 +375,24 @@ export class TableToolbarView {
       `;
 
     const controlsPresent = searchSection || filtersSection || customControlsSection;
+    const hasTitle = titleConfig.text || titleConfig.icon;
+
+    // Compact single-row layout when no title is configured
+    if (!hasTitle) {
+      return `
+        <div class="data-table-toolbar table-toolbar table-toolbar--compact">
+          <div class="table-toolbar__row table-toolbar__row--main">
+            ${controlsPresent ? `<div class="table-toolbar-controls">${searchSection}${customControlsSection}${filtersSection}</div>` : ""}
+            ${summarySection}
+            <div class="table-toolbar-actions">
+              ${metaSection}
+              ${buttonsSection}
+              ${settingsButton}
+            </div>
+          </div>
+        </div>
+      `;
+    }
 
     return `
       <div class="data-table-toolbar table-toolbar">

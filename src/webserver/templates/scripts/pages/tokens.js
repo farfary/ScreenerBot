@@ -50,7 +50,6 @@ function createLifecycle() {
   let tradeDialog = null;
   let tokenDetailsDialog = null;
   let walletBalance = 0;
-  let lastUpdatePoller = null; // Poller for updating "Last Update" display
 
   // Event cleanup tracking
   const eventCleanups = [];
@@ -92,7 +91,6 @@ function createLifecycle() {
     ohlcvTable: null,
     favoritesTable: null,
     poller: null,
-    lastUpdatePoller: null,
     ohlcvPoller: null,
     requestManager,
     DataTable,
@@ -365,44 +363,6 @@ function createLifecycle() {
         variant: summaryBlacklisted > 0 ? "warning" : "success",
       },
     ]);
-
-    const metaEntries = [];
-
-    let lastUpdateLines = ["Last Update", "—"];
-    if (state.lastUpdate) {
-      const parsed = new Date(state.lastUpdate);
-      if (!Number.isNaN(parsed.getTime())) {
-        const dateLine = parsed.toLocaleDateString(undefined, {
-          year: "numeric",
-          month: "short",
-          day: "numeric",
-        });
-        const timeLine = parsed.toLocaleTimeString(undefined, {
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-        });
-        lastUpdateLines = ["Last Update", `${dateLine} · ${timeLine}`];
-      }
-    }
-
-    metaEntries.push({
-      id: "tokens-last-update",
-      lines: lastUpdateLines,
-    });
-
-    const loadedLabel = Utils.formatNumber(loaded, { decimals: 0 });
-    const hasTotalCount = typeof state.totalCount === "number" && Number.isFinite(state.totalCount);
-    const loadedValue = hasTotalCount
-      ? `${loadedLabel} / ${Utils.formatNumber(state.totalCount, { decimals: 0 })}`
-      : `${loadedLabel}`;
-
-    metaEntries.push({
-      id: "tokens-loaded",
-      lines: ["Loaded", `${loadedValue} tokens`],
-    });
-
-    table.updateToolbarMeta(metaEntries);
   };
 
   const buildQuery = ({ cursor = null, page = null, pageSize = null } = {}) => {
@@ -1710,16 +1670,6 @@ function createLifecycle() {
           },
         },
         toolbar: {
-          title: {
-            icon: "icon-coins",
-            text: "Tokens",
-            meta: [
-              {
-                id: "tokens-last-update",
-                lines: ["Last Update", "—"],
-              },
-            ],
-          },
           summary: [
             { id: "tokens-total", label: "Total", value: "0" },
             { id: "tokens-priced", label: "With Price", value: "0", variant: "info" },
@@ -2019,26 +1969,6 @@ function createLifecycle() {
           .then(() => favorites.updateFavoritesTable())
           .catch(() => {});
         return;
-      }
-
-      // Start poller to update "Last Update" display every second
-      if (!lastUpdatePoller) {
-        lastUpdatePoller = deps.lastUpdatePoller = ctx.managePoller(
-          new Poller(
-            () => {
-              // Only update if we have a lastUpdate timestamp
-              if (state.lastUpdate && table) {
-                updateToolbar();
-              }
-            },
-            {
-              label: "TokensLastUpdate",
-              getInterval: () => 1000, // 1 second fixed interval
-              pauseWhenHidden: true,
-            },
-          ),
-        );
-        lastUpdatePoller.start();
       }
 
       if (!poller) {
