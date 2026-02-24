@@ -163,7 +163,7 @@ impl WalletDatabase {
             .map_err(|e| format!("Failed to get wallet database connection: {e}"))
     }
 
-    /// Get recent wallet snapshots (synchronous version)
+    /// Get recent wallet snapshots
     pub fn get_recent_snapshots_sync(&self, limit: usize) -> Result<Vec<WalletSnapshot>, String> {
         let conn = self.get_connection()?;
 
@@ -214,58 +214,7 @@ impl WalletDatabase {
         Ok(snapshots)
     }
 
-    /// Get recent wallet snapshots (async version)
-    pub async fn get_recent_snapshots(&self, limit: usize) -> Result<Vec<WalletSnapshot>, String> {
-        let conn = self.get_connection()?;
-
-        let mut stmt = conn
-            .prepare(
-                r#"
-            SELECT id, wallet_address, snapshot_time, sol_balance, sol_balance_lamports, total_tokens_count, COALESCE(total_nfts_count, 0)
-            FROM wallet_snapshots 
-            ORDER BY snapshot_time DESC 
-            LIMIT ?1
-            "#
-            )
-            .map_err(|e| format!("Failed to prepare snapshots query: {e}"))?;
-
-        let snapshot_iter = stmt
-            .query_map(params![limit], |row| {
-                let snapshot_time_str: String = row.get(2)?;
-                let snapshot_time = DateTime::parse_from_rfc3339(&snapshot_time_str)
-                    .map_err(|_| {
-                        rusqlite::Error::InvalidColumnType(
-                            2,
-                            "Invalid snapshot_time".to_owned(),
-                            rusqlite::types::Type::Text,
-                        )
-                    })?
-                    .with_timezone(&Utc);
-
-                Ok(WalletSnapshot {
-                    id: Some(row.get(0)?),
-                    wallet_address: row.get(1)?,
-                    snapshot_time,
-                    sol_balance: row.get(3)?,
-                    sol_balance_lamports: row.get::<_, i64>(4)? as u64,
-                    total_tokens_count: row.get::<_, i64>(5)? as u32,
-                    total_nfts_count: row.get::<_, i64>(6)? as u32,
-                    token_balances: Vec::new(), // Loaded separately if needed
-                    nft_balances: Vec::new(),   // Loaded separately if needed
-                })
-            })
-            .map_err(|e| format!("Failed to execute snapshots query: {e}"))?;
-
-        let mut snapshots = Vec::new();
-        for snapshot_result in snapshot_iter {
-            snapshots
-                .push(snapshot_result.map_err(|e| format!("Failed to parse snapshot row: {e}"))?);
-        }
-
-        Ok(snapshots)
-    }
-
-    /// Get wallet monitoring statistics (synchronous version)
+    /// Get wallet monitoring statistics
     pub fn get_monitor_stats_sync(&self) -> Result<WalletMonitorStats, String> {
         let conn = self.get_connection()?;
 
@@ -316,58 +265,7 @@ impl WalletDatabase {
         })
     }
 
-    /// Get wallet monitoring statistics (async version)
-    pub async fn get_monitor_stats(&self) -> Result<WalletMonitorStats, String> {
-        let conn = self.get_connection()?;
-
-        let total_snapshots: i64 = conn
-            .query_row("SELECT COUNT(*) FROM wallet_snapshots", [], |row| {
-                row.get(0)
-            })
-            .map_err(|e| format!("Failed to count snapshots: {e}"))?;
-
-        // Get latest snapshot info
-        let latest_info: Option<(String, String, f64, i64)> = conn
-            .query_row(
-                r#"
-            SELECT wallet_address, snapshot_time, sol_balance, total_tokens_count
-            FROM wallet_snapshots 
-            ORDER BY snapshot_time DESC 
-            LIMIT 1
-            "#,
-                [],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
-            )
-            .optional()
-            .map_err(|e| format!("Failed to get latest snapshot: {e}"))?;
-
-        let (wallet_address, latest_snapshot_time, current_sol_balance, current_tokens_count) =
-            if let Some((addr, time_str, balance, count)) = latest_info {
-                let time = DateTime::parse_from_rfc3339(&time_str)
-                    .map_err(|e| format!("Failed to parse latest snapshot time: {e}"))?
-                    .with_timezone(&Utc);
-                (addr, Some(time), Some(balance), Some(count as u32))
-            } else {
-                ("Unknown".to_owned(), None, None, None)
-            };
-
-        // Get database file size
-        let database_size = std::fs::metadata(&self.database_path)
-            .map(|m| m.len())
-            .unwrap_or_default();
-
-        Ok(WalletMonitorStats {
-            total_snapshots: total_snapshots as u64,
-            latest_snapshot_time,
-            wallet_address,
-            current_sol_balance,
-            current_tokens_count,
-            database_size_bytes: database_size,
-            schema_version: self.schema_version,
-        })
-    }
-
-    /// Get token balances for a specific snapshot (synchronous version)
+    /// Get token balances for a specific snapshot
     pub fn get_token_balances_sync(&self, snapshot_id: i64) -> Result<Vec<SnapshotTokenBalance>, String> {
         let conn = self.get_connection()?;
 
@@ -406,7 +304,7 @@ impl WalletDatabase {
         Ok(balances)
     }
 
-    /// Get NFT balances for a specific snapshot (synchronous version)
+    /// Get NFT balances for a specific snapshot
     pub fn get_nft_balances_sync(&self, snapshot_id: i64) -> Result<Vec<NftBalance>, String> {
         let conn = self.get_connection()?;
 
@@ -446,46 +344,7 @@ impl WalletDatabase {
         Ok(balances)
     }
 
-    /// Get token balances for a specific snapshot (async version)
-    pub async fn get_token_balances(&self, snapshot_id: i64) -> Result<Vec<SnapshotTokenBalance>, String> {
-        let conn = self.get_connection()?;
-
-        let mut stmt = conn
-            .prepare(
-                r#"
-            SELECT id, snapshot_id, mint, balance, balance_ui, COALESCE(decimals, 0), is_token_2022
-            FROM token_balances 
-            WHERE snapshot_id = ?1
-            ORDER BY balance_ui DESC
-            "#,
-            )
-            .map_err(|e| format!("Failed to prepare token balances query: {e}"))?;
-
-        let balances_iter = stmt
-            .query_map(params![snapshot_id], |row| {
-                Ok(SnapshotTokenBalance {
-                    id: Some(row.get(0)?),
-                    snapshot_id: Some(row.get(1)?),
-                    mint: row.get(2)?,
-                    balance: row.get::<_, i64>(3)? as u64,
-                    balance_ui: row.get(4)?,
-                    decimals: row.get::<_, i64>(5)? as u8,
-                    is_token_2022: row.get(6)?,
-                })
-            })
-            .map_err(|e| format!("Failed to execute token balances query: {e}"))?;
-
-        let mut balances = Vec::new();
-        for balance_result in balances_iter {
-            balances.push(
-                balance_result.map_err(|e| format!("Failed to parse token balance row: {e}"))?,
-            );
-        }
-
-        Ok(balances)
-    }
-
-    /// Cleanup old snapshots (keep last 1000) - synchronous version
+    /// Cleanup old snapshots (keep last 1000)
     pub fn cleanup_old_snapshots_sync(&self) -> Result<u64, String> {
         let conn = self.get_connection()?;
 
@@ -513,31 +372,4 @@ impl WalletDatabase {
         Ok(deleted_count as u64)
     }
 
-    /// Cleanup old snapshots (keep last 1000) - async version
-    pub async fn cleanup_old_snapshots(&self) -> Result<u64, String> {
-        let conn = self.get_connection()?;
-
-        let deleted_count = conn
-            .execute(
-                r#"
-            DELETE FROM wallet_snapshots 
-            WHERE id NOT IN (
-                SELECT id FROM wallet_snapshots 
-                ORDER BY snapshot_time DESC 
-                LIMIT 1000
-            )
-            "#,
-                [],
-            )
-            .map_err(|e| format!("Failed to cleanup old snapshots: {e}"))?;
-
-        if deleted_count > 0 {
-            logger::info(
-                LogTag::Wallet,
-                &format!("Cleaned up {deleted_count} old wallet snapshots"),
-            );
-        }
-
-        Ok(deleted_count as u64)
-    }
 }
