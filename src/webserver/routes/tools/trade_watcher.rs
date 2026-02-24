@@ -107,7 +107,7 @@ pub async fn add_watched_token_handler(Json(req): Json<AddWatchedTokenRequest>) 
         Err(e) => {
             logger::error(
                 LogTag::Tools,
-                &format!("[TRADE_WATCHER] Failed to add watched token: {}", e),
+                &format!("[TRADE_WATCHER] Failed to add watched token: {e}"),
             );
             error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,

@@ -26,7 +26,7 @@ pub async fn reload_config_from_disk() -> Response {
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "RELOAD_FAILED",
-            &format!("Failed to reload config: {}", e),
+            &format!("Failed to reload config: {e}"),
             None,
         ),
     }
@@ -65,7 +65,7 @@ pub async fn reset_config_to_defaults() -> Response {
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "RESET_FAILED",
-            &format!("Failed to reset config: {}", e),
+            &format!("Failed to reset config: {e}"),
             None,
         ),
     }
@@ -129,7 +129,7 @@ pub async fn get_config_diff() -> Response {
                 Err(e) => error_response(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "PARSE_ERROR",
-                    &format!("Failed to parse disk config: {}", e),
+                    &format!("Failed to parse disk config: {e}"),
                     None,
                 ),
             }
@@ -137,7 +137,7 @@ pub async fn get_config_diff() -> Response {
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "READ_ERROR",
-            &format!("Failed to read disk config: {}", e),
+            &format!("Failed to read disk config: {e}"),
             None,
         ),
     }

@@ -26,7 +26,7 @@ pub async fn list_automation_tasks() -> Response {
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to list tasks: {}", e),
+            &format!("Failed to list tasks: {e}"),
             None,
         ),
     }
@@ -83,7 +83,7 @@ pub async fn create_automation_task(Json(req): Json<CreateAutomationTaskRequest>
         return error_response(
             StatusCode::BAD_REQUEST,
             "INVALID_SCHEDULE",
-            &format!("Invalid schedule_value: {}", e),
+            &format!("Invalid schedule_value: {e}"),
             None,
         );
     }
@@ -129,7 +129,7 @@ pub async fn create_automation_task(Json(req): Json<CreateAutomationTaskRequest>
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to create task: {}", e),
+            &format!("Failed to create task: {e}"),
             None,
         ),
     }
@@ -155,7 +155,7 @@ pub async fn get_automation_task(Path(id): Path<i64>) -> Response {
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to get task: {}", e),
+            &format!("Failed to get task: {e}"),
             None,
         ),
     }
@@ -184,7 +184,7 @@ pub async fn update_automation_task(
             return error_response(
                 StatusCode::BAD_REQUEST,
                 "INVALID_SCHEDULE",
-                &format!("Invalid schedule: {}", e),
+                &format!("Invalid schedule: {e}"),
                 None,
             );
         }
@@ -237,7 +237,7 @@ pub async fn update_automation_task(
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to update task: {}", e),
+            &format!("Failed to update task: {e}"),
             None,
         ),
     }
@@ -275,7 +275,7 @@ pub async fn delete_automation_task(Path(id): Path<i64>) -> Response {
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to delete task: {}", e),
+            &format!("Failed to delete task: {e}"),
             None,
         ),
     }
@@ -306,7 +306,7 @@ pub async fn toggle_automation_task(
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to toggle task: {}", e),
+            &format!("Failed to toggle task: {e}"),
             None,
         ),
     }
@@ -335,7 +335,7 @@ pub async fn run_automation_task(Path(id): Path<i64>) -> Response {
             return error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "DB_ERROR",
-                &format!("Failed to get task: {}", e),
+                &format!("Failed to get task: {e}"),
                 None,
             )
         }
@@ -413,7 +413,7 @@ pub async fn get_automation_task_runs(Path(id): Path<i64>) -> Response {
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to list runs: {}", e),
+            &format!("Failed to list runs: {e}"),
             None,
         ),
     }
@@ -438,7 +438,7 @@ pub async fn get_automation_recent_runs() -> Response {
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to list recent runs: {}", e),
+            &format!("Failed to list recent runs: {e}"),
             None,
         ),
     }
@@ -464,7 +464,7 @@ pub async fn get_automation_run_detail(Path(run_id): Path<i64>) -> Response {
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to get run: {}", e),
+            &format!("Failed to get run: {e}"),
             None,
         ),
     }
@@ -489,7 +489,7 @@ pub async fn get_automation_stats_handler() -> Response {
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to get stats: {}", e),
+            &format!("Failed to get stats: {e}"),
             None,
         ),
     }

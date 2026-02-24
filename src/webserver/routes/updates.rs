@@ -118,7 +118,7 @@ async fn check_updates() -> Response {
             success_response(response)
         }
         Err(e) => {
-            logger::warning(LogTag::Webserver, &format!("Update check failed: {}", e));
+            logger::warning(LogTag::Webserver, &format!("Update check failed: {e}"));
             error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "UPDATE_CHECK_FAILED",
@@ -165,7 +165,7 @@ async fn download_update(_body: Json<DownloadRequest>) -> Response {
     // Start download in background
     tokio::spawn(async move {
         if let Err(e) = version::download_update(&update).await {
-            logger::warning(LogTag::System, &format!("Download failed: {}", e));
+            logger::warning(LogTag::System, &format!("Download failed: {e}"));
         }
     });
 
@@ -210,7 +210,7 @@ async fn install_update() -> Response {
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "INSTALL_FAILED",
-            &format!("Failed to open update: {}", e),
+            &format!("Failed to open update: {e}"),
             None,
         ),
     }

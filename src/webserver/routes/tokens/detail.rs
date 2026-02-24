@@ -676,7 +676,7 @@ pub async fn get_token_analysis(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
                   "success": false,
-                  "error": format!("Failed to fetch token: {}", e)
+                  "error": format!("Failed to fetch token: {e}")
                 })),
             ));
         }
@@ -911,7 +911,7 @@ pub async fn refresh_token_data(
                 Json(serde_json::json!({
                   "success": false,
                   "mint": mint,
-                  "error": format!("Failed to refresh token: {}", e),
+                  "error": format!("Failed to refresh token: {e}"),
                 })),
             ))
         }

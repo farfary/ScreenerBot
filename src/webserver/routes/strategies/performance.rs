@@ -23,7 +23,7 @@ pub async fn get_strategy_performance_stats(Path(id): Path<String>) -> Response 
         Err(e) => {
             return err(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get strategy: {}", e),
+                &format!("Failed to get strategy: {e}"),
             );
         }
     }
@@ -40,7 +40,7 @@ pub async fn get_strategy_performance_stats(Path(id): Path<String>) -> Response 
         Err(e) => {
             return err(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get performance stats: {}", e),
+                &format!("Failed to get performance stats: {e}"),
             );
         }
     };

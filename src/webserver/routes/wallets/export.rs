@@ -142,7 +142,7 @@ pub async fn export_wallets_full(Json(request): Json<FullExportRequest>) -> impl
     let all_exports = match wallets::export_wallets(true).await {
         Ok(exports) => exports,
         Err(e) => {
-            logger::error(LogTag::Wallet, &format!("Failed to export wallets: {}", e));
+            logger::error(LogTag::Wallet, &format!("Failed to export wallets: {e}"));
             return error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 "EXPORT_ERROR",

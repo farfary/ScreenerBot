@@ -34,7 +34,7 @@ pub async fn test_strategy(
         Err(e) => {
             return err(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get strategy: {}", e),
+                &format!("Failed to get strategy: {e}"),
             );
         }
     };
@@ -80,7 +80,7 @@ pub async fn test_strategy(
         Err(e) => {
             return err(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Strategy evaluation failed: {}", e),
+                &format!("Strategy evaluation failed: {e}"),
             );
         }
     };

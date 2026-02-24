@@ -28,7 +28,7 @@ pub async fn list_wallets(Query(query): Query<ListWalletsQuery>) -> Response {
             success_response(WalletListResponse { wallets, total })
         }
         Err(e) => {
-            logger::error(LogTag::Wallet, &format!("Failed to list wallets: {}", e));
+            logger::error(LogTag::Wallet, &format!("Failed to list wallets: {e}"));
             error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 "LIST_ERROR",
@@ -57,7 +57,7 @@ pub async fn create_wallet(Json(request): Json<CreateWalletRequest>) -> Response
             wallet,
         }),
         Err(e) => {
-            logger::error(LogTag::Wallet, &format!("Failed to create wallet: {}", e));
+            logger::error(LogTag::Wallet, &format!("Failed to create wallet: {e}"));
             error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 "CREATE_ERROR",
@@ -96,7 +96,7 @@ pub async fn import_wallet(Json(request): Json<ImportWalletRequest>) -> Response
             wallet,
         }),
         Err(e) => {
-            logger::error(LogTag::Wallet, &format!("Failed to import wallet: {}", e));
+            logger::error(LogTag::Wallet, &format!("Failed to import wallet: {e}"));
 
             // Check for specific error types
             let (status, code, msg) = if e.contains("already exists") {
@@ -129,7 +129,7 @@ pub async fn get_summary() -> Response {
     match wallets::get_wallets_summary().await {
         Ok(summary) => success_response(summary),
         Err(e) => {
-            logger::error(LogTag::Wallet, &format!("Failed to get summary: {}", e));
+            logger::error(LogTag::Wallet, &format!("Failed to get summary: {e}"));
             error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 "SUMMARY_ERROR",
@@ -151,7 +151,7 @@ pub async fn get_main_wallet() -> Response {
             None,
         ),
         Err(e) => {
-            logger::error(LogTag::Wallet, &format!("Failed to get main wallet: {}", e));
+            logger::error(LogTag::Wallet, &format!("Failed to get main wallet: {e}"));
             error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 "MAIN_WALLET_ERROR",

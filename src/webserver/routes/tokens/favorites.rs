@@ -24,13 +24,13 @@ pub async fn get_favorites(
         Err(e) => {
             logger::warning(
                 LogTag::Webserver,
-                &format!("Failed to fetch favorites: {}", e),
+                &format!("Failed to fetch favorites: {e}"),
             );
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
                   "success": false,
-                  "error": format!("Failed to fetch favorites: {}", e)
+                  "error": format!("Failed to fetch favorites: {e}")
                 })),
             ))
         }
@@ -72,7 +72,7 @@ pub async fn add_favorite(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
                   "success": false,
-                  "error": format!("Failed to add favorite: {}", e)
+                  "error": format!("Failed to add favorite: {e}")
                 })),
             ))
         }
@@ -125,7 +125,7 @@ pub async fn remove_favorite(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
                   "success": false,
-                  "error": format!("Failed to remove favorite: {}", e)
+                  "error": format!("Failed to remove favorite: {e}")
                 })),
             ))
         }
@@ -178,7 +178,7 @@ pub async fn update_favorite(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
                   "success": false,
-                  "error": format!("Failed to update favorite: {}", e)
+                  "error": format!("Failed to update favorite: {e}")
                 })),
             ))
         }

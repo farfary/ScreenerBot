@@ -20,7 +20,7 @@ pub async fn deploy_strategy_handler(Path(id): Path<String>) -> Response {
         Err(e) => {
             return err(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get strategy: {}", e),
+                &format!("Failed to get strategy: {e}"),
             )
         }
     };
@@ -33,7 +33,7 @@ pub async fn deploy_strategy_handler(Path(id): Path<String>) -> Response {
     if let Err(e) = update_strategy(&strategy) {
         return err(
             StatusCode::INTERNAL_SERVER_ERROR,
-            &format!("Failed to deploy strategy: {}", e),
+            &format!("Failed to deploy strategy: {e}"),
         );
     }
 
@@ -41,7 +41,7 @@ pub async fn deploy_strategy_handler(Path(id): Path<String>) -> Response {
     if let Err(e) = strategies::clear_evaluation_cache().await {
         logger::info(
             LogTag::Webserver,
-            &format!("Failed to clear evaluation cache: {}", e),
+            &format!("Failed to clear evaluation cache: {e}"),
         );
     }
 

@@ -89,13 +89,13 @@ fn save_store(store: &UiStateStore) -> Result<(), String> {
     // Ensure parent directory exists
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
-            .map_err(|e| format!("Failed to create directory: {}", e))?;
+            .map_err(|e| format!("Failed to create directory: {e}"))?;
     }
 
     let content =
-        serde_json::to_string_pretty(store).map_err(|e| format!("Failed to serialize: {}", e))?;
+        serde_json::to_string_pretty(store).map_err(|e| format!("Failed to serialize: {e}"))?;
 
-    std::fs::write(&path, content).map_err(|e| format!("Failed to write file: {}", e))?;
+    std::fs::write(&path, content).map_err(|e| format!("Failed to write file: {e}"))?;
 
     Ok(())
 }
@@ -119,7 +119,7 @@ async fn save_state(Json(req): Json<SaveStateRequest>) -> Response {
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "save_failed",
-            &format!("Failed to save state: {}", e),
+            &format!("Failed to save state: {e}"),
             None,
         );
     }
@@ -143,7 +143,7 @@ async fn batch_save_state(Json(req): Json<BatchSaveRequest>) -> Response {
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "save_failed",
-            &format!("Failed to save state: {}", e),
+            &format!("Failed to save state: {e}"),
             None,
         );
     }
@@ -172,7 +172,7 @@ async fn remove_state(Json(req): Json<RemoveStateRequest>) -> Response {
             return error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "save_failed",
-                &format!("Failed to save state: {}", e),
+                &format!("Failed to save state: {e}"),
                 None,
             );
         }
@@ -192,7 +192,7 @@ async fn clear_state() -> Response {
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "clear_failed",
-            &format!("Failed to clear state: {}", e),
+            &format!("Failed to clear state: {e}"),
             None,
         );
     }

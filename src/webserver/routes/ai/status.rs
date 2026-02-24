@@ -224,7 +224,7 @@ pub async fn update_ai_config(
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "CONFIG_ERROR",
-            &format!("Failed to update AI config: {}", e),
+            &format!("Failed to update AI config: {e}"),
             None,
         ),
     }
@@ -369,7 +369,7 @@ pub async fn test_evaluate(
             error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "EVALUATION_FAILED",
-                &format!("AI evaluation failed: {}", e),
+                &format!("AI evaluation failed: {e}"),
                 None,
             )
         }

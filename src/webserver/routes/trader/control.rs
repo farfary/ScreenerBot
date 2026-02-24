@@ -55,7 +55,7 @@ pub async fn start_trader_handler() -> Response {
             let (status, message) = match err {
                 TraderControlError::ConfigUpdate(e) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to update trader config: {}", e),
+                    format!("Failed to update trader config: {e}"),
                 ),
                 other => (StatusCode::BAD_REQUEST, other.to_string()),
             };
@@ -95,7 +95,7 @@ pub async fn stop_trader_handler() -> Response {
             let (status, message) = match err {
                 TraderControlError::ConfigUpdate(e) => (
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    format!("Failed to update trader config: {}", e),
+                    format!("Failed to update trader config: {e}"),
                 ),
                 TraderControlError::AlreadyStopped => (
                     StatusCode::BAD_REQUEST,
@@ -135,7 +135,7 @@ pub async fn force_stop_handler(
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "ConfigUpdateFailed",
-            &format!("Force stop activated but config update failed: {}", e),
+            &format!("Force stop activated but config update failed: {e}"),
             None,
         );
     }
@@ -200,7 +200,7 @@ pub async fn toggle_entry_monitor_handler(
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "ConfigUpdateFailed",
-            &format!("Failed to toggle entry monitor: {}", e),
+            &format!("Failed to toggle entry monitor: {e}"),
             None,
         );
     }
@@ -228,7 +228,7 @@ pub async fn toggle_exit_monitor_handler(
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "ConfigUpdateFailed",
-            &format!("Failed to toggle exit monitor: {}", e),
+            &format!("Failed to toggle exit monitor: {e}"),
             None,
         );
     }

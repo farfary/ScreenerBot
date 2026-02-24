@@ -305,7 +305,7 @@ async fn update_settings(
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "CONFIG_ERROR",
-            &format!("Failed to update settings: {}", e),
+            &format!("Failed to update settings: {e}"),
             None,
         ),
     }
@@ -402,7 +402,7 @@ async fn send_test_message(
                 Err(e) => error_response(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "SEND_FAILED",
-                    &format!("Failed to send message: {}", e),
+                    &format!("Failed to send message: {e}"),
                     None,
                 ),
             }
@@ -410,7 +410,7 @@ async fn send_test_message(
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "NOTIFIER_ERROR",
-            &format!("Failed to create notifier: {}", e),
+            &format!("Failed to create notifier: {e}"),
             None,
         ),
     }
@@ -459,7 +459,7 @@ async fn start_discovery(State(_state): State<Arc<AppState>>) -> Response {
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DISCOVERY_FAILED",
-            &format!("Failed to start discovery: {}", e),
+            &format!("Failed to start discovery: {e}"),
             None,
         );
     }
@@ -533,7 +533,7 @@ async fn select_discovered_chat(
         Err(e) => error_response(
             StatusCode::NOT_FOUND,
             "SELECTION_FAILED",
-            &format!("Failed to select chat: {}", e),
+            &format!("Failed to select chat: {e}"),
             None,
         ),
     }

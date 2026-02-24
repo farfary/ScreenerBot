@@ -452,7 +452,7 @@ pub(super) async fn collect_events_snapshot() -> Option<EventsStatusSnapshot> {
         Err(e) => {
             logger::warning(
                 LogTag::Webserver,
-                &format!("Failed to load events database stats: {}", e),
+                &format!("Failed to load events database stats: {e}"),
             );
             HashMap::new()
         }
@@ -468,7 +468,7 @@ pub(super) async fn collect_events_snapshot() -> Option<EventsStatusSnapshot> {
         Err(e) => {
             logger::warning(
                 LogTag::Webserver,
-                &format!("Failed to load events category counts: {}", e),
+                &format!("Failed to load events category counts: {e}"),
             );
             HashMap::new()
         }
@@ -480,7 +480,7 @@ pub(super) async fn collect_events_snapshot() -> Option<EventsStatusSnapshot> {
         Err(e) => {
             logger::warning(
                 LogTag::Webserver,
-                &format!("Failed to load recent events: {}", e),
+                &format!("Failed to load recent events: {e}"),
             );
             Vec::new()
         }

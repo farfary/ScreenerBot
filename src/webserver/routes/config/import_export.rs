@@ -167,55 +167,55 @@ fn apply_section_to_config(
     match section {
         "rpc" => {
             cfg.rpc =
-                serde_json::from_value(value).map_err(|e| format!("Invalid RpcConfig: {}", e))?;
+                serde_json::from_value(value).map_err(|e| format!("Invalid RpcConfig: {e}"))?;
         }
         "trader" => {
             cfg.trader = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid TraderConfig: {}", e))?;
+                .map_err(|e| format!("Invalid TraderConfig: {e}"))?;
         }
         "positions" => {
             cfg.positions = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid PositionsConfig: {}", e))?;
+                .map_err(|e| format!("Invalid PositionsConfig: {e}"))?;
         }
         "filtering" => {
             cfg.filtering = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid FilteringConfig: {}", e))?;
+                .map_err(|e| format!("Invalid FilteringConfig: {e}"))?;
         }
         "swaps" => {
             cfg.swaps =
-                serde_json::from_value(value).map_err(|e| format!("Invalid SwapsConfig: {}", e))?;
+                serde_json::from_value(value).map_err(|e| format!("Invalid SwapsConfig: {e}"))?;
         }
         "tokens" => {
             cfg.tokens = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid TokensConfig: {}", e))?;
+                .map_err(|e| format!("Invalid TokensConfig: {e}"))?;
         }
         "sol_price" => {
             cfg.sol_price = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid SolPriceConfig: {}", e))?;
+                .map_err(|e| format!("Invalid SolPriceConfig: {e}"))?;
         }
         "events" => {
             cfg.events = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid EventsConfig: {}", e))?;
+                .map_err(|e| format!("Invalid EventsConfig: {e}"))?;
         }
         "services" => {
             cfg.services = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid ServicesConfig: {}", e))?;
+                .map_err(|e| format!("Invalid ServicesConfig: {e}"))?;
         }
         "monitoring" => {
             cfg.monitoring = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid MonitoringConfig: {}", e))?;
+                .map_err(|e| format!("Invalid MonitoringConfig: {e}"))?;
         }
         "ohlcv" => {
             cfg.ohlcv =
-                serde_json::from_value(value).map_err(|e| format!("Invalid OhlcvConfig: {}", e))?;
+                serde_json::from_value(value).map_err(|e| format!("Invalid OhlcvConfig: {e}"))?;
         }
         "gui" => {
             cfg.gui =
-                serde_json::from_value(value).map_err(|e| format!("Invalid GuiConfig: {}", e))?;
+                serde_json::from_value(value).map_err(|e| format!("Invalid GuiConfig: {e}"))?;
         }
         "telegram" => {
             cfg.telegram = serde_json::from_value(value)
-                .map_err(|e| format!("Invalid TelegramConfig: {}", e))?;
+                .map_err(|e| format!("Invalid TelegramConfig: {e}"))?;
         }
         _ => return Err(format!("Unknown section: {}", section)),
     }
@@ -610,7 +610,7 @@ pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response
             return error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "COMMIT_FAILED",
-                &format!("Failed to commit config changes: {}", e),
+                &format!("Failed to commit config changes: {e}"),
                 None,
             );
         }
@@ -622,7 +622,7 @@ pub async fn import_config(Json(request): Json<ImportConfigRequest>) -> Response
             match config::save_config(None) {
                 Ok(()) => true,
                 Err(e) => {
-                    errors.push(format!("Failed to save to disk: {}", e));
+                    errors.push(format!("Failed to save to disk: {e}"));
                     false
                 }
             }

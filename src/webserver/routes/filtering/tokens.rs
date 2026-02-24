@@ -83,7 +83,7 @@ pub async fn export_rejected_tokens(Query(params): Query<RejectedTokensQuery>) -
                 return error_response(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "CSV_ERROR",
-                    &format!("Failed to write CSV header: {}", e),
+                    &format!("Failed to write CSV header: {e}"),
                     None,
                 );
             }
@@ -99,7 +99,7 @@ pub async fn export_rejected_tokens(Query(params): Query<RejectedTokensQuery>) -
                     return error_response(
                         StatusCode::INTERNAL_SERVER_ERROR,
                         "CSV_ERROR",
-                        &format!("Failed to write CSV record: {}", e),
+                        &format!("Failed to write CSV record: {e}"),
                         None,
                     );
                 }
@@ -129,7 +129,7 @@ pub async fn export_rejected_tokens(Query(params): Query<RejectedTokensQuery>) -
                 Err(e) => error_response(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "CSV_ERROR",
-                    &format!("Failed to finalize CSV: {}", e),
+                    &format!("Failed to finalize CSV: {e}"),
                     None,
                 ),
             }

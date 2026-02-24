@@ -50,7 +50,7 @@ async fn find_available_port() -> Result<u16, String> {
     for (attempt, port) in ports_to_try.into_iter().enumerate() {
         let addr: SocketAddr = format!("{}:{}", DEFAULT_HOST, port)
             .parse()
-            .map_err(|e| format!("Invalid address: {}", e))?;
+            .map_err(|e| format!("Invalid address: {e}"))?;
 
         // Try to bind - if successful, the port is available
         match TcpListener::bind(&addr).await {
@@ -201,7 +201,7 @@ pub async fn start_server(
     // Parse bind address
     let addr: SocketAddr = format!("{}:{}", host, port)
         .parse()
-        .map_err(|e| format!("Invalid bind address: {}", e))?;
+        .map_err(|e| format!("Invalid bind address: {e}"))?;
 
     // Create TCP listener
     let listener = TcpListener::bind(&addr).await.map_err(|e| {
@@ -255,7 +255,7 @@ pub async fn start_server(
     axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal)
         .await
-        .map_err(|e| format!("Server error: {}", e))?;
+        .map_err(|e| format!("Server error: {e}"))?;
 
     logger::debug(LogTag::Webserver, "Webserver stopped gracefully");
 

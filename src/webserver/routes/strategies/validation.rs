@@ -18,7 +18,7 @@ pub async fn validate_strategy_handler(Path(id): Path<String>) -> Response {
         Err(e) => {
             return err(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get strategy: {}", e),
+                &format!("Failed to get strategy: {e}"),
             )
         }
     };
@@ -54,7 +54,7 @@ pub async fn validate_strategy_inline_handler(Json(request): Json<StrategyReques
         Err(e) => {
             return success_response(serde_json::json!({
                 "valid": false,
-                "errors": [format!("Invalid rules JSON: {}", e)]
+                "errors": [format!("Invalid rules JSON: {e}")]
             }));
         }
     };

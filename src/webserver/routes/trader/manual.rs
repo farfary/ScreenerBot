@@ -533,7 +533,7 @@ pub async fn quote_preview_handler(
         Err(e) => error_response(
             StatusCode::BAD_GATEWAY,
             "QuoteFailed",
-            &format!("Failed to fetch quote: {}", e),
+            &format!("Failed to fetch quote: {e}"),
             None,
         ),
     }

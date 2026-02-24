@@ -223,7 +223,7 @@ async fn get_ohlcv_data_handler(
         Err(e) => Err(error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "ohlcv_fetch_failed",
-            &format!("Failed to fetch OHLCV data: {}", e),
+            &format!("Failed to fetch OHLCV data: {e}"),
             None,
         )),
     }
@@ -248,7 +248,7 @@ async fn get_pools_handler(Path(mint): Path<String>) -> Result<Response, Respons
         Err(e) => Err(error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "ohlcv_pools_failed",
-            &format!("Failed to fetch pools: {}", e),
+            &format!("Failed to fetch pools: {e}"),
             None,
         )),
     }
@@ -287,7 +287,7 @@ async fn get_gaps_handler(
         Err(e) => Err(error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "ohlcv_gaps_failed",
-            &format!("Failed to fetch gaps: {}", e),
+            &format!("Failed to fetch gaps: {e}"),
             None,
         )),
     }
@@ -349,7 +349,7 @@ async fn refresh_handler(Path(mint): Path<String>) -> Result<Response, Response>
         Err(e) => Err(error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "ohlcv_refresh_failed",
-            &format!("Failed to refresh: {}", e),
+            &format!("Failed to refresh: {e}"),
             None,
         )),
     }
@@ -392,7 +392,7 @@ async fn add_monitoring_handler(
         Err(e) => Err(error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "ohlcv_monitor_start_failed",
-            &format!("Failed to start monitoring: {}", e),
+            &format!("Failed to start monitoring: {e}"),
             None,
         )),
     }
@@ -407,7 +407,7 @@ async fn remove_monitoring_handler(Path(mint): Path<String>) -> Result<Response,
         Err(e) => Err(error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "ohlcv_monitor_stop_failed",
-            &format!("Failed to stop monitoring: {}", e),
+            &format!("Failed to stop monitoring: {e}"),
             None,
         )),
     }
@@ -422,7 +422,7 @@ async fn record_view_handler(Path(mint): Path<String>) -> Result<Response, Respo
         Err(e) => Err(error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "ohlcv_activity_failed",
-            &format!("Failed to record activity: {}", e),
+            &format!("Failed to record activity: {e}"),
             None,
         )),
     }
@@ -531,7 +531,7 @@ async fn get_all_tokens_handler() -> Result<Response, Response> {
         Err(e) => Err(error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "ohlcv_list_failed",
-            &format!("Failed to list OHLCV tokens: {}", e),
+            &format!("Failed to list OHLCV tokens: {e}"),
             None,
         )),
     }
@@ -582,7 +582,7 @@ async fn delete_token_handler(Path(mint): Path<String>) -> Result<Response, Resp
         Err(e) => Err(error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "ohlcv_delete_failed",
-            &format!("Failed to delete token data: {}", e),
+            &format!("Failed to delete token data: {e}"),
             None,
         )),
     }
@@ -604,7 +604,7 @@ async fn cleanup_inactive_handler(Json(body): Json<CleanupRequest>) -> Result<Re
         Err(e) => Err(error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "ohlcv_cleanup_failed",
-            &format!("Failed to cleanup inactive tokens: {}", e),
+            &format!("Failed to cleanup inactive tokens: {e}"),
             None,
         )),
     }

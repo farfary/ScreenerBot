@@ -132,7 +132,7 @@ async fn reboot_system() -> Response {
             return error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "System Error",
-                &format!("Failed to get current executable path: {}", e),
+                &format!("Failed to get current executable path: {e}"),
                 None,
             );
         }
@@ -191,7 +191,7 @@ async fn reboot_system() -> Response {
                 Err(e) => {
                     logger::error(
                         LogTag::Webserver,
-                        &format!("Failed to spawn new process: {}", e),
+                        &format!("Failed to spawn new process: {e}"),
                     );
                     std::process::exit(1);
                 }

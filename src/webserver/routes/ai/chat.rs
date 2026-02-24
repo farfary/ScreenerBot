@@ -77,7 +77,7 @@ pub async fn send_chat_message(
             return error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "DB_ERROR",
-                &format!("Failed to validate session: {}", e),
+                &format!("Failed to validate session: {e}"),
                 None,
             )
         }
@@ -120,7 +120,7 @@ pub async fn send_chat_message(
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "CHAT_ERROR",
-            &format!("Failed to process chat message: {}", e),
+            &format!("Failed to process chat message: {e}"),
             None,
         ),
     }
@@ -145,7 +145,7 @@ pub async fn list_chat_sessions(State(_state): State<Arc<AppState>>) -> Response
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to list chat sessions: {}", e),
+            &format!("Failed to list chat sessions: {e}"),
             None,
         ),
     }
@@ -184,7 +184,7 @@ pub async fn create_chat_session(
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to create chat session: {}", e),
+            &format!("Failed to create chat session: {e}"),
             None,
         ),
     }
@@ -222,7 +222,7 @@ pub async fn get_chat_session(
             return error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "DB_ERROR",
-                &format!("Failed to get chat session: {}", e),
+                &format!("Failed to get chat session: {e}"),
                 None,
             )
         }
@@ -234,7 +234,7 @@ pub async fn get_chat_session(
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to get chat messages: {}", e),
+            &format!("Failed to get chat messages: {e}"),
             None,
         ),
     }
@@ -267,7 +267,7 @@ pub async fn delete_chat_session(
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to delete chat session: {}", e),
+            &format!("Failed to delete chat session: {e}"),
             None,
         ),
     }
@@ -297,7 +297,7 @@ pub async fn summarize_chat_session(
             return error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "DB_ERROR",
-                &format!("Failed to get messages: {}", e),
+                &format!("Failed to get messages: {e}"),
                 None,
             )
         }
@@ -373,7 +373,7 @@ pub async fn summarize_chat_session(
                 return error_response(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "DB_ERROR",
-                    &format!("Failed to save summary: {}", e),
+                    &format!("Failed to save summary: {e}"),
                     None,
                 );
             }
@@ -386,7 +386,7 @@ pub async fn summarize_chat_session(
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "LLM_ERROR",
-            &format!("Failed to generate summary: {}", e),
+            &format!("Failed to generate summary: {e}"),
             None,
         ),
     }
@@ -416,7 +416,7 @@ pub async fn generate_session_title(
             return error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "DB_ERROR",
-                &format!("Failed to get messages: {}", e),
+                &format!("Failed to get messages: {e}"),
                 None,
             )
         }
@@ -524,7 +524,7 @@ Rules:
         Err(e) => {
             logger::warning(
                 LogTag::Api,
-                &format!("Failed to generate title with LLM: {}", e),
+                &format!("Failed to generate title with LLM: {e}"),
             );
             // Fallback: use first few words of user message
             let words: Vec<&str> = first_user_msg.split_whitespace().take(5).collect();
@@ -542,7 +542,7 @@ Rules:
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to update session title: {}", e),
+            &format!("Failed to update session title: {e}"),
             None,
         );
     }
@@ -597,7 +597,7 @@ pub async fn confirm_tool_execution(
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "CHAT_ERROR",
-            &format!("Failed to process confirmation: {}", e),
+            &format!("Failed to process confirmation: {e}"),
             None,
         ),
     }
@@ -667,7 +667,7 @@ pub async fn update_permissions(
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "CONFIG_ERROR",
-            &format!("Failed to update permissions: {}", e),
+            &format!("Failed to update permissions: {e}"),
             None,
         ),
     }

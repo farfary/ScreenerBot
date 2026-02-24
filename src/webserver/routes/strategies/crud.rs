@@ -52,7 +52,7 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
                     Err(e) => {
                         return err(
                             StatusCode::INTERNAL_SERVER_ERROR,
-                            &format!("Failed to get strategies: {}", e),
+                            &format!("Failed to get strategies: {e}"),
                         );
                     }
                 }
@@ -65,7 +65,7 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
                     Err(e) => {
                         return err(
                             StatusCode::INTERNAL_SERVER_ERROR,
-                            &format!("Failed to get strategies: {}", e),
+                            &format!("Failed to get strategies: {e}"),
                         );
                     }
                 }
@@ -79,7 +79,7 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
                 Err(e) => {
                     return err(
                         StatusCode::INTERNAL_SERVER_ERROR,
-                        &format!("Failed to get strategies: {}", e),
+                        &format!("Failed to get strategies: {e}"),
                     );
                 }
             }
@@ -90,7 +90,7 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
             Err(e) => {
                 return err(
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    &format!("Failed to get strategies: {}", e),
+                    &format!("Failed to get strategies: {e}"),
                 );
             }
         }
@@ -100,7 +100,7 @@ pub async fn list_strategies(Query(query): Query<StrategyListQuery>) -> Response
             Err(e) => {
                 return err(
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    &format!("Failed to get strategies: {}", e),
+                    &format!("Failed to get strategies: {e}"),
                 );
             }
         }
@@ -143,7 +143,7 @@ pub async fn get_strategy_detail(Path(id): Path<String>) -> Response {
         Err(e) => {
             return err(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get strategy: {}", e),
+                &format!("Failed to get strategy: {e}"),
             );
         }
     };
@@ -153,7 +153,7 @@ pub async fn get_strategy_detail(Path(id): Path<String>) -> Response {
         Err(e) => {
             return err(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to serialize rules: {}", e),
+                &format!("Failed to serialize rules: {e}"),
             );
         }
     };
@@ -201,7 +201,7 @@ pub async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
         Err(e) => {
             return err(
                 StatusCode::BAD_REQUEST,
-                &format!("Invalid rules JSON: {}", e),
+                &format!("Invalid rules JSON: {e}"),
             );
         }
     };
@@ -244,7 +244,7 @@ pub async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
     if let Err(e) = strategies::validate_strategy(&strategy).await {
         return err(
             StatusCode::BAD_REQUEST,
-            &format!("Strategy validation failed: {}", e),
+            &format!("Strategy validation failed: {e}"),
         );
     }
 
@@ -252,7 +252,7 @@ pub async fn create_strategy(Json(request): Json<StrategyRequest>) -> Response {
     if let Err(e) = insert_strategy(&strategy) {
         return err(
             StatusCode::INTERNAL_SERVER_ERROR,
-            &format!("Failed to create strategy: {}", e),
+            &format!("Failed to create strategy: {e}"),
         );
     }
 
@@ -284,7 +284,7 @@ pub async fn update_strategy_handler(
         Err(e) => {
             return err(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get strategy: {}", e),
+                &format!("Failed to get strategy: {e}"),
             );
         }
     };
@@ -307,7 +307,7 @@ pub async fn update_strategy_handler(
         Err(e) => {
             return err(
                 StatusCode::BAD_REQUEST,
-                &format!("Invalid rules JSON: {}", e),
+                &format!("Invalid rules JSON: {e}"),
             );
         }
     };
@@ -332,7 +332,7 @@ pub async fn update_strategy_handler(
     if let Err(e) = strategies::validate_strategy(&strategy).await {
         return err(
             StatusCode::BAD_REQUEST,
-            &format!("Strategy validation failed: {}", e),
+            &format!("Strategy validation failed: {e}"),
         );
     }
 
@@ -340,7 +340,7 @@ pub async fn update_strategy_handler(
     if let Err(e) = update_strategy(&strategy) {
         return err(
             StatusCode::INTERNAL_SERVER_ERROR,
-            &format!("Failed to update strategy: {}", e),
+            &format!("Failed to update strategy: {e}"),
         );
     }
 
@@ -348,7 +348,7 @@ pub async fn update_strategy_handler(
     if let Err(e) = strategies::clear_evaluation_cache().await {
         logger::info(
             LogTag::Webserver,
-            &format!("Failed to clear evaluation cache: {}", e),
+            &format!("Failed to clear evaluation cache: {e}"),
         );
     }
 
@@ -378,7 +378,7 @@ pub async fn delete_strategy_handler(Path(id): Path<String>) -> Response {
         Err(e) => {
             return err(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get strategy: {}", e),
+                &format!("Failed to get strategy: {e}"),
             );
         }
     }
@@ -387,7 +387,7 @@ pub async fn delete_strategy_handler(Path(id): Path<String>) -> Response {
     if let Err(e) = delete_strategy(&id) {
         return err(
             StatusCode::INTERNAL_SERVER_ERROR,
-            &format!("Failed to delete strategy: {}", e),
+            &format!("Failed to delete strategy: {e}"),
         );
     }
 
@@ -395,7 +395,7 @@ pub async fn delete_strategy_handler(Path(id): Path<String>) -> Response {
     if let Err(e) = strategies::clear_evaluation_cache().await {
         logger::info(
             LogTag::Webserver,
-            &format!("Failed to clear evaluation cache: {}", e),
+            &format!("Failed to clear evaluation cache: {e}"),
         );
     }
 

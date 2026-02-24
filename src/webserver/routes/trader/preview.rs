@@ -338,7 +338,7 @@ pub async fn apply_template(Json(request): Json<ApplyTemplateRequest>) -> Respon
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "ConfigUpdateFailed",
-            &format!("Failed to update positions config: {}", e),
+            &format!("Failed to update positions config: {e}"),
             None,
         );
     }
@@ -362,7 +362,7 @@ pub async fn apply_template(Json(request): Json<ApplyTemplateRequest>) -> Respon
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "ConfigUpdateFailed",
-            &format!("Failed to update trader config: {}", e),
+            &format!("Failed to update trader config: {e}"),
             None,
         );
     }

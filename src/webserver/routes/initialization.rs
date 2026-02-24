@@ -157,7 +157,7 @@ async fn complete_onboarding() -> Response {
     ) {
         logger::error(
             LogTag::Webserver,
-            &format!("Failed to update onboarding state: {}", e),
+            &format!("Failed to update onboarding state: {e}"),
         );
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -203,7 +203,7 @@ async fn validate_credentials(Json(request): Json<ValidateCredentialsRequest>) -
             );
         }
         Err(e) => {
-            errors.push(format!("Invalid wallet private key: {}", e));
+            errors.push(format!("Invalid wallet private key: {e}"));
         }
     }
 
@@ -307,7 +307,7 @@ async fn complete_initialization(Json(request): Json<CompleteInitializationReque
     let keypair = match parse_wallet_private_key(&request.wallet_private_key) {
         Ok(kp) => kp,
         Err(e) => {
-            errors.push(format!("Invalid wallet private key: {}", e));
+            errors.push(format!("Invalid wallet private key: {e}"));
             return error_response(
                 StatusCode::BAD_REQUEST,
                 "INVALID_CREDENTIALS",
@@ -369,7 +369,7 @@ async fn complete_initialization(Json(request): Json<CompleteInitializationReque
     let encrypted = match crate::secure_storage::encrypt_private_key(&request.wallet_private_key) {
         Ok(enc) => enc,
         Err(e) => {
-            errors.push(format!("Failed to encrypt private key: {}", e));
+            errors.push(format!("Failed to encrypt private key: {e}"));
             return error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "ENCRYPTION_FAILED",
@@ -402,7 +402,7 @@ async fn complete_initialization(Json(request): Json<CompleteInitializationReque
     if let Err(e) =
         config::utils::save_config_to_file(&config, &config_path.to_string_lossy(), true)
     {
-        errors.push(format!("Failed to save configuration: {}", e));
+        errors.push(format!("Failed to save configuration: {e}"));
         return error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "CONFIG_SAVE_FAILED",
@@ -482,9 +482,9 @@ async fn complete_initialization(Json(request): Json<CompleteInitializationReque
         Err(e) => {
             logger::error(
                 LogTag::Webserver,
-                &format!("Failed to start some services: {}", e),
+                &format!("Failed to start some services: {e}"),
             );
-            errors.push(format!("Service startup incomplete: {}", e));
+            errors.push(format!("Service startup incomplete: {e}"));
         }
     }
 

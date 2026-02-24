@@ -152,7 +152,7 @@ async fn fetch_from_website() -> Result<Vec<BillboardToken>, String> {
         .timeout(Duration::from_secs(10))
         .send()
         .await
-        .map_err(|e| format!("Failed to fetch billboard: {}", e))?;
+        .map_err(|e| format!("Failed to fetch billboard: {e}"))?;
 
     if !response.status().is_success() {
         return Err(format!(
@@ -164,7 +164,7 @@ async fn fetch_from_website() -> Result<Vec<BillboardToken>, String> {
     let wrapper: WebsiteBillboardResponse = response
         .json()
         .await
-        .map_err(|e| format!("Failed to parse billboard: {}", e))?;
+        .map_err(|e| format!("Failed to parse billboard: {e}"))?;
 
     if !wrapper.success {
         return Err("Billboard API returned success=false".to_string());
@@ -259,7 +259,7 @@ async fn fetch_dexscreener_trending() -> Result<Vec<ExternalToken>, String> {
         .dexscreener
         .get_top_boosted_tokens(Some("solana"))
         .await
-        .map_err(|e| format!("DexScreener trending fetch failed: {}", e))?;
+        .map_err(|e| format!("DexScreener trending fetch failed: {e}"))?;
 
     Ok(tokens
         .into_iter()

@@ -35,7 +35,7 @@ pub async fn scan_burnable_tokens() -> Response {
         Err(e) => {
             logger::error(
                 LogTag::Tools,
-                &format!("Failed to get wallet address: {}", e),
+                &format!("Failed to get wallet address: {e}"),
             );
             return error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -52,7 +52,7 @@ pub async fn scan_burnable_tokens() -> Response {
         Err(e) => {
             logger::error(
                 LogTag::Tools,
-                &format!("Failed to get token accounts: {}", e),
+                &format!("Failed to get token accounts: {e}"),
             );
             return error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -353,7 +353,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
                     mint: mint.clone(),
                     success: false,
                     signature: None,
-                    error: Some(format!("Invalid wallet address: {}", e)),
+                    error: Some(format!("Invalid wallet address: {e}")),
                 });
                 failed += 1;
                 continue;
@@ -367,7 +367,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
                     mint: mint.clone(),
                     success: false,
                     signature: None,
-                    error: Some(format!("Invalid mint address: {}", e)),
+                    error: Some(format!("Invalid mint address: {e}")),
                 });
                 failed += 1;
                 continue;
@@ -381,7 +381,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
                     mint: mint.clone(),
                     success: false,
                     signature: None,
-                    error: Some(format!("Invalid ATA address: {}", e)),
+                    error: Some(format!("Invalid ATA address: {e}")),
                 });
                 failed += 1;
                 continue;
@@ -410,7 +410,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
                     mint: mint.clone(),
                     success: false,
                     signature: None,
-                    error: Some(format!("Failed to create burn instruction: {}", e)),
+                    error: Some(format!("Failed to create burn instruction: {e}")),
                 });
                 failed += 1;
                 continue;
@@ -425,7 +425,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
                     mint: mint.clone(),
                     success: false,
                     signature: None,
-                    error: Some(format!("Failed to get blockhash: {}", e)),
+                    error: Some(format!("Failed to get blockhash: {e}")),
                 });
                 failed += 1;
                 continue;
@@ -471,7 +471,7 @@ pub async fn burn_selected_tokens(Json(request): Json<BurnTokensRequest>) -> Res
                     mint: mint.clone(),
                     success: false,
                     signature: None,
-                    error: Some(format!("Transaction failed: {}", e)),
+                    error: Some(format!("Transaction failed: {e}")),
                 });
                 failed += 1;
             }

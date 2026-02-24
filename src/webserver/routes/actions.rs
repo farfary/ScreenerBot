@@ -203,7 +203,7 @@ async fn get_action_history(
         Err(e) => {
             crate::logger::error(
                 crate::logger::LogTag::System,
-                &format!("Failed to fetch action history: {}", e),
+                &format!("Failed to fetch action history: {e}"),
             );
             Json(ActionHistoryResponse {
                 actions: vec![],

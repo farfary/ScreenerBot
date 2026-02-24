@@ -202,7 +202,7 @@ pub async fn test_provider(
             error_response(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "PROVIDER_TEST_FAILED",
-                &format!("Provider test failed: {}", e),
+                &format!("Provider test failed: {e}"),
                 None,
             )
         }
@@ -401,7 +401,7 @@ pub async fn update_provider(
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "CONFIG_UPDATE_FAILED",
-            &format!("Failed to update provider config: {}", e),
+            &format!("Failed to update provider config: {e}"),
             None,
         ),
     }

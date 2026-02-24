@@ -26,7 +26,7 @@ pub async fn scan_atas() -> Response {
         Err(e) => {
             logger::error(
                 LogTag::Wallet,
-                &format!("Failed to get wallet address: {}", e),
+                &format!("Failed to get wallet address: {e}"),
             );
             return error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -43,7 +43,7 @@ pub async fn scan_atas() -> Response {
         Err(e) => {
             logger::error(
                 LogTag::Wallet,
-                &format!("Failed to get token accounts: {}", e),
+                &format!("Failed to get token accounts: {e}"),
             );
             return error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -126,7 +126,7 @@ pub async fn cleanup_atas() -> Response {
             })
         }
         Err(e) => {
-            logger::error(LogTag::Wallet, &format!("ATA cleanup failed: {}", e));
+            logger::error(LogTag::Wallet, &format!("ATA cleanup failed: {e}"));
             error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 "CLEANUP_ERROR",
@@ -147,7 +147,7 @@ pub async fn clear_ata_cache() -> Response {
             }))
         }
         Err(e) => {
-            logger::error(LogTag::Wallet, &format!("Failed to clear ATA cache: {}", e));
+            logger::error(LogTag::Wallet, &format!("Failed to clear ATA cache: {e}"));
             error_response(
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                 "CACHE_ERROR",

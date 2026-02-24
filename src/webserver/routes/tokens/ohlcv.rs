@@ -334,7 +334,7 @@ pub async fn get_token_dexscreener(
         let db = crate::tokens::get_global_database()
             .ok_or_else(|| "Token database not initialized".to_string())?;
         db.get_dexscreener_data(&mint_clone)
-            .map_err(|e| format!("Database error: {}", e))
+            .map_err(|e| format!("Database error: {e}"))
     })
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?

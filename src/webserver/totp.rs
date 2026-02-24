@@ -31,7 +31,7 @@ pub fn generate_secret() -> String {
 fn create_totp(secret: &str, account: &str, issuer: &str) -> Result<TOTP, String> {
     let secret = Secret::Encoded(secret.to_string())
         .to_bytes()
-        .map_err(|e| format!("Invalid secret: {}", e))?;
+        .map_err(|e| format!("Invalid secret: {e}"))?;
 
     TOTP::new(
         TOTP_ALGORITHM,
@@ -42,7 +42,7 @@ fn create_totp(secret: &str, account: &str, issuer: &str) -> Result<TOTP, String
         Some(issuer.to_string()),
         account.to_string(),
     )
-    .map_err(|e| format!("Failed to create TOTP: {}", e))
+    .map_err(|e| format!("Failed to create TOTP: {e}"))
 }
 
 /// Generate an otpauth:// URI for use with authenticator apps
@@ -68,7 +68,7 @@ pub fn verify_totp(secret: &str, code: &str) -> Result<bool, String> {
     // Use current time for verification
     let time = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| format!("Time error: {}", e))?
+        .map_err(|e| format!("Time error: {e}"))?
         .as_secs();
 
     Ok(totp.check(code, time))
@@ -81,7 +81,7 @@ pub fn generate_current_code(secret: &str) -> Result<String, String> {
 
     let time = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| format!("Time error: {}", e))?
+        .map_err(|e| format!("Time error: {e}"))?
         .as_secs();
 
     Ok(totp.generate(time))
@@ -93,7 +93,7 @@ pub fn generate_current_code(secret: &str) -> Result<String, String> {
 pub fn generate_qr_data_url(secret: &str, account: &str) -> Result<String, String> {
     let uri = get_totp_uri(secret, account)?;
 
-    let code = QrCode::new(uri.as_bytes()).map_err(|e| format!("QR generation failed: {}", e))?;
+    let code = QrCode::new(uri.as_bytes()).map_err(|e| format!("QR generation failed: {e}"))?;
 
     let svg_string = code
         .render()

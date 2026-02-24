@@ -20,7 +20,7 @@ pub async fn get_condition_schemas() -> Response {
         Err(e) => {
             return err(
                 StatusCode::INTERNAL_SERVER_ERROR,
-                &format!("Failed to get condition schemas: {}", e),
+                &format!("Failed to get condition schemas: {e}"),
             );
         }
     };

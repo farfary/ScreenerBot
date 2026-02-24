@@ -46,7 +46,7 @@ pub async fn list_instructions(State(_state): State<Arc<AppState>>) -> Response 
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to list instructions: {}", e),
+            &format!("Failed to list instructions: {e}"),
             None,
         ),
     }
@@ -74,7 +74,7 @@ pub async fn get_instruction(State(_state): State<Arc<AppState>>, Path(id): Path
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to get instruction: {}", e),
+            &format!("Failed to get instruction: {e}"),
             None,
         ),
     }
@@ -115,7 +115,7 @@ pub async fn create_instruction(
                 Err(e) => error_response(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "DB_ERROR",
-                    &format!("Failed to retrieve created instruction: {}", e),
+                    &format!("Failed to retrieve created instruction: {e}"),
                     None,
                 ),
             }
@@ -123,7 +123,7 @@ pub async fn create_instruction(
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to create instruction: {}", e),
+            &format!("Failed to create instruction: {e}"),
             None,
         ),
     }
@@ -170,7 +170,7 @@ pub async fn update_instruction(
                 Err(e) => error_response(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "DB_ERROR",
-                    &format!("Failed to retrieve updated instruction: {}", e),
+                    &format!("Failed to retrieve updated instruction: {e}"),
                     None,
                 ),
             }
@@ -178,7 +178,7 @@ pub async fn update_instruction(
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to update instruction: {}", e),
+            &format!("Failed to update instruction: {e}"),
             None,
         ),
     }
@@ -199,7 +199,7 @@ pub async fn delete_instruction(
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to delete instruction: {}", e),
+            &format!("Failed to delete instruction: {e}"),
             None,
         ),
     }
@@ -223,7 +223,7 @@ pub async fn reorder_instructions(
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to reorder instructions: {}", e),
+            &format!("Failed to reorder instructions: {e}"),
             None,
         ),
     }
@@ -314,7 +314,7 @@ pub async fn list_history(
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to list decision history: {}", e),
+            &format!("Failed to list decision history: {e}"),
             None,
         ),
     }
@@ -350,7 +350,7 @@ pub async fn get_history_detail(
         Err(e) => error_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "DB_ERROR",
-            &format!("Failed to get decision: {}", e),
+            &format!("Failed to get decision: {e}"),
             None,
         ),
     }

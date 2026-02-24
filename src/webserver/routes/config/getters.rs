@@ -330,7 +330,7 @@ where
         match section_name {
             "TraderConfig" => {
                 let new_config: config::TraderConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid TraderConfig: {}", e))?;
+                    .map_err(|e| format!("Invalid TraderConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.trader = new_config;
@@ -340,7 +340,7 @@ where
             }
             "PositionsConfig" => {
                 let new_config: config::PositionsConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid PositionsConfig: {}", e))?;
+                    .map_err(|e| format!("Invalid PositionsConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.positions = new_config;
@@ -350,7 +350,7 @@ where
             }
             "FilteringConfig" => {
                 let new_config: config::FilteringConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid FilteringConfig: {}", e))?;
+                    .map_err(|e| format!("Invalid FilteringConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.filtering = new_config;
@@ -360,7 +360,7 @@ where
             }
             "SwapsConfig" => {
                 let new_config: config::SwapsConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid SwapsConfig: {}", e))?;
+                    .map_err(|e| format!("Invalid SwapsConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.swaps = new_config;
@@ -370,7 +370,7 @@ where
             }
             "TokensConfig" => {
                 let new_config: config::TokensConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid TokensConfig: {}", e))?;
+                    .map_err(|e| format!("Invalid TokensConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.tokens = new_config;
@@ -380,7 +380,7 @@ where
             }
             "PoolsConfig" => {
                 let new_config: config::PoolsConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid PoolsConfig: {}", e))?;
+                    .map_err(|e| format!("Invalid PoolsConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.pools = new_config;
@@ -390,7 +390,7 @@ where
             }
             "MaintenanceConfig" => {
                 let new_config: config::MaintenanceConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid MaintenanceConfig: {}", e))?;
+                    .map_err(|e| format!("Invalid MaintenanceConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.maintenance = new_config;
@@ -400,7 +400,7 @@ where
             }
             "RpcConfig" => {
                 let new_config: config::RpcConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid RpcConfig: {}", e))?;
+                    .map_err(|e| format!("Invalid RpcConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.rpc = new_config;
@@ -410,7 +410,7 @@ where
             }
             "SolPriceConfig" => {
                 let new_config: config::SolPriceConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid SolPriceConfig: {}", e))?;
+                    .map_err(|e| format!("Invalid SolPriceConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.sol_price = new_config;
@@ -420,7 +420,7 @@ where
             }
             "EventsConfig" => {
                 let new_config: config::EventsConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid EventsConfig: {}", e))?;
+                    .map_err(|e| format!("Invalid EventsConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.events = new_config;
@@ -430,7 +430,7 @@ where
             }
             "ServicesConfig" => {
                 let new_config: config::ServicesConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid ServicesConfig: {}", e))?;
+                    .map_err(|e| format!("Invalid ServicesConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.services = new_config;
@@ -440,7 +440,7 @@ where
             }
             "MonitoringConfig" => {
                 let new_config: config::MonitoringConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid MonitoringConfig: {}", e))?;
+                    .map_err(|e| format!("Invalid MonitoringConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.monitoring = new_config;
@@ -450,7 +450,7 @@ where
             }
             "OhlcvConfig" => {
                 let new_config: config::OhlcvConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid OhlcvConfig: {}", e))?;
+                    .map_err(|e| format!("Invalid OhlcvConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.ohlcv = new_config;
@@ -460,7 +460,7 @@ where
             }
             "GuiConfig" => {
                 let new_config: config::GuiConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid GuiConfig: {}", e))?;
+                    .map_err(|e| format!("Invalid GuiConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.gui = new_config;
@@ -470,7 +470,7 @@ where
             }
             "TelegramConfig" => {
                 let new_config: config::TelegramConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid TelegramConfig: {}", e))?;
+                    .map_err(|e| format!("Invalid TelegramConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.telegram = new_config;
@@ -480,7 +480,7 @@ where
             }
             "AiConfig" => {
                 let new_config: config::AiConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid AiConfig: {}", e))?;
+                    .map_err(|e| format!("Invalid AiConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.ai = new_config;
@@ -491,7 +491,7 @@ where
             "StrategiesConfig" => {
                 let new_config: config::StrategiesConfig =
                     serde_json::from_value(section_json)
-                        .map_err(|e| format!("Invalid StrategiesConfig: {}", e))?;
+                        .map_err(|e| format!("Invalid StrategiesConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.strategies = new_config;
@@ -502,7 +502,7 @@ where
             "HolderWatchConfig" => {
                 let new_config: config::HolderWatchConfig =
                     serde_json::from_value(section_json)
-                        .map_err(|e| format!("Invalid HolderWatchConfig: {}", e))?;
+                        .map_err(|e| format!("Invalid HolderWatchConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.holder_watch = new_config;
@@ -512,7 +512,7 @@ where
             }
             "WalletConfig" => {
                 let new_config: config::WalletConfig = serde_json::from_value(section_json)
-                    .map_err(|e| format!("Invalid WalletConfig: {}", e))?;
+                    .map_err(|e| format!("Invalid WalletConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.wallet = new_config;
@@ -523,7 +523,7 @@ where
             "PerformanceConfig" => {
                 let new_config: config::PerformanceConfig =
                     serde_json::from_value(section_json)
-                        .map_err(|e| format!("Invalid PerformanceConfig: {}", e))?;
+                        .map_err(|e| format!("Invalid PerformanceConfig: {e}"))?;
                 config::update_config_section(
                     |cfg| {
                         cfg.performance = new_config;
@@ -551,7 +551,7 @@ where
         Err(e) => error_response(
             StatusCode::BAD_REQUEST,
             "CONFIG_UPDATE_FAILED",
-            &format!("Failed to update config: {}", e),
+            &format!("Failed to update config: {e}"),
             None,
         ),
     }

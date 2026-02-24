@@ -66,7 +66,7 @@ pub async fn add_to_blacklist(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
                   "success": false,
-                  "error": format!("Failed to blacklist token: {}", e)
+                  "error": format!("Failed to blacklist token: {e}")
                 })),
             ))
         }
@@ -134,7 +134,7 @@ pub async fn remove_from_blacklist(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
                   "success": false,
-                  "error": format!("Failed to remove from blacklist: {}", e)
+                  "error": format!("Failed to remove from blacklist: {e}")
                 })),
             ))
         }
@@ -208,7 +208,7 @@ pub async fn get_blacklist_status(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(serde_json::json!({
                   "success": false,
-                  "error": format!("Failed to check blacklist status: {}", e)
+                  "error": format!("Failed to check blacklist status: {e}")
                 })),
             ))
         }
