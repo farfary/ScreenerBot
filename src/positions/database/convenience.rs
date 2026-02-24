@@ -389,7 +389,13 @@ pub async fn get_exit_history(position_id: i64) -> Result<Vec<ExitRecord>, Strin
                 id: row.get(0)?,
                 position_id: row.get(1)?,
                 timestamp: DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)
-                    .unwrap()
+                    .map_err(|e| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            2,
+                            rusqlite::types::Type::Text,
+                            Box::new(e),
+                        )
+                    })?
                     .with_timezone(&Utc),
                 amount: row.get::<_, i64>(3)? as u64,
                 price: row.get(4)?,
@@ -487,7 +493,13 @@ pub async fn get_entry_history(position_id: i64) -> Result<Vec<EntryRecord>, Str
                 id: row.get(0)?,
                 position_id: row.get(1)?,
                 timestamp: DateTime::parse_from_rfc3339(&row.get::<_, String>(2)?)
-                    .unwrap()
+                    .map_err(|e| {
+                        rusqlite::Error::FromSqlConversionFailure(
+                            2,
+                            rusqlite::types::Type::Text,
+                            Box::new(e),
+                        )
+                    })?
                     .with_timezone(&Utc),
                 amount: row.get::<_, i64>(3)? as u64,
                 price: row.get(4)?,
