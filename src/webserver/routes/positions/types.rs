@@ -1,3 +1,5 @@
+//! Position route types — data structures for position API responses.
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 

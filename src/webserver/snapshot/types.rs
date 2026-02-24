@@ -1,3 +1,5 @@
+//! Snapshot types — data structures for system state snapshots sent via SSE.
+
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::collections::HashMap;

@@ -1,3 +1,5 @@
+//! Dashboard route types — data structures for dashboard API responses.
+
 use serde::{Deserialize, Serialize};
 
 // ============================================================================

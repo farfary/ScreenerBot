@@ -1,3 +1,5 @@
+//! UI state route — persists and retrieves user interface state (collapsed panels, etc.).
+
 use axum::{
     extract::Json,
     http::StatusCode,

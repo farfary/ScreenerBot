@@ -1,3 +1,5 @@
+//! Header route — renders the dashboard header bar with connection and system info.
+
 use axum::{response::Json, routing::get, Router};
 use serde::Serialize;
 use std::sync::Arc;

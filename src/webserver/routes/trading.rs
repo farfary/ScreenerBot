@@ -1,3 +1,5 @@
+//! Trading route — manages trading engine controls and configuration via the UI.
+
 use axum::{response::Response, routing::get, Router};
 use serde::Serialize;
 use std::sync::Arc;

@@ -1,3 +1,5 @@
+//! System route — serves system information (version, uptime, resource usage).
+
 use axum::{
     extract::State,
     http::StatusCode,

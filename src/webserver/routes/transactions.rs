@@ -1,3 +1,5 @@
+//! Transactions route — serves recent transaction history and details.
+
 // Transactions API routes
 //
 // Provides endpoints for listing, filtering, and viewing transaction details

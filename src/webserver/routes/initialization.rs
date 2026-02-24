@@ -1,3 +1,5 @@
+//! Initialization route — reports bot startup progress and initialization status.
+
 use axum::{
     extract::Json,
     http::StatusCode,

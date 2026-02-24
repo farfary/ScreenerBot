@@ -1,3 +1,5 @@
+//! Actions route — handles user-triggered actions like start, stop, and reset.
+
 use axum::{
     extract::{Path, Query, State},
     response::{

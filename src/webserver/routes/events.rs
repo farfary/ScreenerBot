@@ -1,3 +1,5 @@
+//! Events route — Server-Sent Events (SSE) endpoint for real-time UI updates.
+
 use axum::{extract::Query, http::StatusCode, routing::get, Json, Router};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

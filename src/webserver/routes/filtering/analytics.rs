@@ -1,3 +1,5 @@
+//! Filtering analytics route — serves filter rejection statistics and charts.
+
 use axum::{extract::Query, http::StatusCode, response::Response};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;

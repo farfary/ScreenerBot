@@ -1,3 +1,5 @@
+//! Strategies route utilities — helper functions for strategy response formatting.
+
 use axum::http::StatusCode;
 use axum::response::Response;
 

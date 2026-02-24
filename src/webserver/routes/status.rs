@@ -1,3 +1,5 @@
+//! Status route — reports overall bot health and component readiness.
+
 use axum::{response::Response, routing::get, Router};
 use chrono::Utc;
 use serde::Serialize;

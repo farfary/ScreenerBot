@@ -1,3 +1,5 @@
+//! Connectivity route — reports RPC and WebSocket connection status to the dashboard.
+
 use axum::{extract::Path, http::StatusCode, response::Response, routing::get, Router};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

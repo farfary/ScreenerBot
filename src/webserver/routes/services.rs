@@ -1,3 +1,5 @@
+//! Services route — manages background service controls (start, stop, restart).
+
 use axum::{
     extract::{Path, State},
     http::StatusCode,

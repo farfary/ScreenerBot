@@ -1,3 +1,5 @@
+//! Strategies deployment route — activates and deactivates trading strategies.
+
 use axum::{extract::Path, http::StatusCode, response::Response};
 use chrono::Utc;
 

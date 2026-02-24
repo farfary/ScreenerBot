@@ -1,3 +1,5 @@
+//! Blacklist route — manages token blacklist additions and removals via the UI.
+
 use axum::{extract::State, response::Json, routing::get, Router};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;

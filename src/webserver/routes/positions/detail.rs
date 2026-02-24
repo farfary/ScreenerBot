@@ -1,3 +1,5 @@
+//! Position detail route — serves detailed data for a single position view.
+
 use axum::{extract::Path, http::StatusCode, response::Response};
 use chrono::Utc;
 

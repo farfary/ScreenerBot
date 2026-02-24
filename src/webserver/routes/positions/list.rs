@@ -1,3 +1,5 @@
+//! Positions list route — serves paginated position listings with sort and filter.
+
 use axum::{extract::Query, Json};
 
 use super::types::*;

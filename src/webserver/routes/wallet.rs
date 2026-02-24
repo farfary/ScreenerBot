@@ -1,3 +1,5 @@
+//! Wallet route — manages wallet operations (add, remove, set main) via the UI.
+
 use axum::{
     response::Json,
     routing::{get, post},

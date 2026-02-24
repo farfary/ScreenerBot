@@ -1,3 +1,5 @@
+//! Strategies performance route — serves strategy PnL and win/loss statistics.
+
 use axum::{extract::Path, http::StatusCode, response::Response};
 
 use crate::{

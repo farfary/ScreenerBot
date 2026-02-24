@@ -1,3 +1,5 @@
+//! Strategies templates route — serves built-in strategy templates for quick setup.
+
 use axum::response::Response;
 use chrono::Utc;
 use std::collections::HashMap;

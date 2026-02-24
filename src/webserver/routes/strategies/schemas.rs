@@ -1,3 +1,5 @@
+//! Strategies schemas route — serves condition and action schema definitions for the UI.
+
 use axum::http::StatusCode;
 use axum::response::Response;
 use chrono::Utc;

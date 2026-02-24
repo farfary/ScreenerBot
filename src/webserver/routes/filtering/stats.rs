@@ -1,3 +1,5 @@
+//! Filtering stats route — computes and returns token filtering pass/fail rates.
+
 use axum::{http::StatusCode, response::Response};
 use chrono::Utc;
 use std::collections::HashMap;

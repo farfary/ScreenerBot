@@ -1,3 +1,5 @@
+//! Filtering route types — data structures for filtering API responses.
+
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

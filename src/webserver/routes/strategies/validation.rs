@@ -1,3 +1,5 @@
+//! Strategies validation route — validates strategy configurations before saving.
+
 use axum::{extract::Path, http::StatusCode, response::Response, Json};
 use chrono::Utc;
 

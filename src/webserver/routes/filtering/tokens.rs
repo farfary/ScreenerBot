@@ -1,3 +1,5 @@
+//! Filtering tokens route — lists tokens with their current filter evaluation results.
+
 use axum::{extract::Query, http::StatusCode, response::Response};
 use chrono::{DateTime, Utc};
 

@@ -1,3 +1,5 @@
+//! Dashboard home route — renders the main dashboard page with summary statistics.
+
 use axum::{extract::State, response::Json};
 use std::sync::Arc;
 

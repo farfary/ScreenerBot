@@ -1,3 +1,5 @@
+//! Strategies CRUD route — create, read, update, delete strategy configurations.
+
 use axum::{
     extract::{Path, Query},
     http::StatusCode,

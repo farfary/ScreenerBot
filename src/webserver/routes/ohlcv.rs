@@ -1,3 +1,5 @@
+//! OHLCV route — serves candlestick chart data for token price history.
+
 // OHLCV API routes
 
 use crate::ohlcvs::{

@@ -1,3 +1,5 @@
+//! Dashboard overview — aggregates key metrics for the dashboard home view.
+
 use axum::{extract::State, response::Json};
 use std::sync::Arc;
 

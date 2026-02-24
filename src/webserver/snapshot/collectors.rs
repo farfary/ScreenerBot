@@ -1,3 +1,5 @@
+//! Snapshot collectors — gathers system state snapshots for SSE broadcast.
+
 use chrono::Utc;
 use std::collections::HashMap;
 use std::sync::atomic::Ordering;

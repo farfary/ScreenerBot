@@ -1,3 +1,5 @@
+//! Strategies route types — data structures for strategy API responses.
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

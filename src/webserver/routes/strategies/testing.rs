@@ -1,3 +1,5 @@
+//! Strategies testing route — runs strategy backtests and simulations.
+
 use axum::{extract::Path, http::StatusCode, response::Response, Json};
 use chrono::{DateTime, Utc};
 
