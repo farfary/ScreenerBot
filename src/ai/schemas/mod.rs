@@ -1,3 +1,4 @@
+//! Typed response schemas for structured AI decisions (filter, trade, exit).
 mod exit_suggestion;
 mod filter_decision;
 mod trade_decision;

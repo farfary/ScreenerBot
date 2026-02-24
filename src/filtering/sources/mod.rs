@@ -1,3 +1,4 @@
+//! Token data sources and rejection origins for the filtering pipeline.
 use std::fmt;
 
 pub mod ai;

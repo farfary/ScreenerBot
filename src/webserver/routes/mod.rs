@@ -1,3 +1,4 @@
+//! Web API route registration, static asset serving, and top-level request handlers.
 use crate::webserver::{state::AppState, templates};
 use axum::{
     http::{header as http_header, StatusCode},

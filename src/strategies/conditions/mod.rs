@@ -1,3 +1,4 @@
+//! Strategy condition evaluators for rule-tree nodes (price, volume, candle patterns).
 mod candle_size;
 mod consecutive_candles;
 mod liquidity_level;

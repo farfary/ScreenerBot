@@ -1,3 +1,4 @@
+//! Background service coordinating real-time transaction monitoring and WebSocket processing.
 // Background service and coordination for the transactions module
 //
 // This module provides the main background service that coordinates

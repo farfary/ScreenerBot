@@ -1,3 +1,4 @@
+//! Real-time system state snapshot assembly for the dashboard.
 mod collectors;
 mod types;
 

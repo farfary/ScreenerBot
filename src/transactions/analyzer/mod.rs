@@ -1,3 +1,4 @@
+//! Transaction classification, balance extraction, and pattern analysis engine.
 // Transaction analyzer submodule - Main coordination and interface
 //
 // This module provides comprehensive transaction analysis following industry standards:

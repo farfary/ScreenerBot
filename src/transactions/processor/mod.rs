@@ -1,3 +1,4 @@
+//! Transaction processing pipeline: extraction, analysis, and classification of on-chain data.
 // Transaction processing pipeline for the transactions module
 //
 // This module handles the core transaction processing logic including

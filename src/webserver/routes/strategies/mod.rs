@@ -1,3 +1,4 @@
+//! Strategy CRUD and configuration routes for the web UI.
 use axum::{
     routing::{delete, get, post, put},
     Router,

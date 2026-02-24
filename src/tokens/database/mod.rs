@@ -1,3 +1,4 @@
+//! SQLite persistence layer for token metadata, market data, and blacklists.
 mod assembly;
 mod async_api;
 mod authority;

@@ -1,3 +1,4 @@
+//! Configuration schema type definitions for all bot subsystems.
 // Config schema submodule - splits the monolithic schemas.rs into manageable files
 
 use crate::config_struct;

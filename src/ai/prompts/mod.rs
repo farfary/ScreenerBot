@@ -1,3 +1,4 @@
+//! AI prompt construction, templates, and builder for analysis requests.
 mod builder;
 mod templates;
 

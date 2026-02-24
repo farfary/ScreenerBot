@@ -1,3 +1,4 @@
+//! SQLite persistence and caching layer for transaction history and statistics.
 // Database operations and persistence for the transactions module
 //
 // This module provides high-performance SQLite-based caching and persistence

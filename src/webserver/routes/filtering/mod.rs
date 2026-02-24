@@ -1,3 +1,4 @@
+//! Filtering configuration and analytics routes for the web UI.
 use axum::{
     routing::{get, post},
     Router,

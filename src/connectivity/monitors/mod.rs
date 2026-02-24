@@ -1,3 +1,4 @@
+//! Health monitors for external API endpoints (DEX, RPC, Jupiter, etc.).
 pub mod dexscreener;
 pub mod geckoterminal;
 pub mod gmgn;

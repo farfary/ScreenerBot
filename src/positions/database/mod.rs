@@ -1,3 +1,4 @@
+//! SQLite persistence layer for position management with connection pooling.
 mod convenience;
 mod global;
 mod operations;

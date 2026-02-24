@@ -1,3 +1,4 @@
+//! Dashboard page routes (home, overview, and related utilities).
 use axum::{routing::get, Router};
 use std::sync::Arc;
 

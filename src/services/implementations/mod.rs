@@ -1,3 +1,4 @@
+//! Concrete background service implementations for each bot subsystem.
 pub mod ai_service;
 pub mod ata_cleanup_service;
 pub mod connectivity_service;

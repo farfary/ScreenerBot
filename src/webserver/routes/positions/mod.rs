@@ -1,3 +1,4 @@
+//! Position management routes (list, detail, debug views).
 use axum::{routing::get, Router};
 use std::sync::Arc;
 
