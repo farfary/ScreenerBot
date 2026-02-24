@@ -252,7 +252,7 @@ impl SolanaWebSocketClient {
                                     );
 
                                     // Send signature to transaction processor
-                                    if let Err(_) = self.tx_sender.send(signature.to_string()) {
+                                    if self.tx_sender.send(signature.to_string()).is_err() {
                                         logger::info(
                       LogTag::Websocket,
                       "Failed to send signature to processor - channel closed"

@@ -223,7 +223,7 @@ pub fn write_to_file(message: &str) {
         Ok(mut logger_guard) => {
             if let Some(ref mut logger) = logger_guard.as_mut() {
                 let clean_message = strip_ansi_codes(message);
-                if let Err(_) = logger.write_to_file(&clean_message) {
+                if logger.write_to_file(&clean_message).is_err() {
                     static ERROR_COUNTER: std::sync::atomic::AtomicU64 =
                         std::sync::atomic::AtomicU64::new(0);
                     let count = ERROR_COUNTER.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
