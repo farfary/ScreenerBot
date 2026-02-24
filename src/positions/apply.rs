@@ -404,7 +404,7 @@ pub async fn apply_transition(transition: PositionTransition) -> Result<ApplyEff
 
         PositionTransition::RemoveOrphanEntry { position_id } => {
             if let Ok(mint) = find_mint_by_position_id(position_id).await {
-                if let Some(_) = remove_position(&mint).await {
+                if remove_position(&mint).await.is_some() {
                     effects.position_removed = true;
                     crate::events::record_position_event_flexible(
                         "orphan_entry_removed",
