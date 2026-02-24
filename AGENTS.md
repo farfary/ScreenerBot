@@ -996,3 +996,30 @@ cargo fmt --check          # Check Rust formatting
 - Use `.round()` before `as u16`/`as u64` for float-to-integer conversions — truncation loses precision.
 - Use `is_char_boundary()` loop for `String::truncate()` on user-facing data — UTF-8 multi-byte chars cause panics.
 - Centralize utility functions in `src/utils.rs` — never duplicate `lamports_to_sol`/`sol_to_lamports` in submodules.
+
+---
+
+## CI/CD (GitHub Actions)
+
+**Workflow:** `.github/workflows/build.yml` — manual trigger (`workflow_dispatch`)
+
+**Build Matrix (6 Rust builds → 6 packaging jobs):**
+
+| Platform | Arch | Runner | Notes |
+|----------|------|--------|-------|
+| macOS | arm64 | `macos-14` | Native build |
+| macOS | x64 | `macos-14` | Cross-compile, x86_64 Homebrew OpenSSL |
+| Linux | x64 | `ubuntu-22.04` | Native build |
+| Linux | arm64 | `ubuntu-22.04` | Cross-compile with `gcc-aarch64-linux-gnu` |
+| Windows | x64 | `windows-latest` | `--no-default-features` (no jemalloc), Strawberry Perl |
+| Windows | arm64 | `windows-latest` | `--no-default-features` (no jemalloc), Strawberry Perl |
+
+**Key Details:**
+- Public repo → unlimited free GitHub Actions minutes
+- jemalloc disabled on Windows (`--no-default-features`) — `tikv-jemallocator` doesn't support MSVC
+- Windows needs Strawberry Perl prepended to PATH (Git Bash's perl lacks OpenSSL build modules)
+- macOS x64 cross-compile needs x86_64 Homebrew + `openssl@3` (`OPENSSL_DIR` + `OPENSSL_STATIC`)
+- Linux arm64 cross-compile needs `CC`/`CXX`/`LINKER` env vars for aarch64
+- Electron Forge packaging produces DMG/ZIP (macOS), DEB/ZIP (Linux), MSI/ZIP (Windows)
+- Linux headless `.tar.gz` also built (Rust binary only, no Electron)
+- Optional GitHub Release creation with `create_release` input
