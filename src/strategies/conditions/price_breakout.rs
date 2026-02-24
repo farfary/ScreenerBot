@@ -1,3 +1,5 @@
+//! Price breakout condition — detects price breaking above/below recent highs/lows.
+
 use crate::strategies::conditions::{
     get_candles_for_timeframe, get_param_f64, get_param_string, get_param_string_optional,
     validate_timeframe_param, ConditionEvaluator,

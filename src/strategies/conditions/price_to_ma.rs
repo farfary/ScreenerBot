@@ -1,3 +1,5 @@
+//! Price-to-MA condition — compares current price against moving averages.
+
 use crate::strategies::conditions::{
     get_candles_for_timeframe, get_param_f64, get_param_string, get_param_string_optional,
     validate_timeframe_param, ConditionEvaluator,

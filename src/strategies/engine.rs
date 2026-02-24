@@ -1,3 +1,5 @@
+//! Strategy evaluation engine — evaluates condition trees against live market data.
+
 use crate::logger::{self, LogTag};
 use crate::strategies::conditions::ConditionRegistry;
 use crate::strategies::types::{

@@ -1,3 +1,5 @@
+//! Liquidity level condition — checks pool liquidity against thresholds.
+
 use crate::strategies::conditions::{get_param_f64, get_param_string, ConditionEvaluator};
 use crate::strategies::types::{Condition, EvaluationContext};
 use async_trait::async_trait;

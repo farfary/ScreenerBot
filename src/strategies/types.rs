@@ -1,3 +1,5 @@
+//! Strategy data types — conditions, templates, and evaluation context.
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

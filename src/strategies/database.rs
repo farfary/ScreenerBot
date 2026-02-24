@@ -1,3 +1,5 @@
+//! Strategy database — persistence for custom strategy templates.
+
 use crate::database;
 use crate::errors::{DatabaseError, Error};
 use crate::logger::{self, LogTag};
