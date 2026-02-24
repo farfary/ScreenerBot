@@ -1078,6 +1078,7 @@ mod tests {
             token_symbol: None,
             router: router.map(|s| s.to_string()),
             sol_delta,
+            token_amount: None,
             fee_sol: 0.0,
             fee_lamports: None,
             ata_rents: 0.0,
