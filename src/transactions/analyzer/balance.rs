@@ -196,13 +196,13 @@ async fn extract_sol_balance_changes(
     let pre_balances: &Vec<u64> = tx_data
         .meta
         .as_ref()
-        .and_then(|m| Some(m.pre_balances.as_ref()))
+        .map(|m| m.pre_balances.as_ref())
         .ok_or("Missing pre_balances in transaction meta")?;
 
     let post_balances: &Vec<u64> = tx_data
         .meta
         .as_ref()
-        .and_then(|m| Some(m.post_balances.as_ref()))
+        .map(|m| m.post_balances.as_ref())
         .ok_or("Missing post_balances in transaction meta")?;
 
     if account_keys.len() != pre_balances.len() || account_keys.len() != post_balances.len() {

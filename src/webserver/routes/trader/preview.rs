@@ -65,7 +65,7 @@ pub async fn get_trader_stats() -> Response {
         .iter()
         .filter_map(|p| {
             p.exit_time
-                .and_then(|exit_time| Some((exit_time - p.entry_time).num_seconds()))
+                .map(|exit_time| (exit_time - p.entry_time).num_seconds())
         })
         .sum();
 

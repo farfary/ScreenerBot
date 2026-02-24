@@ -203,13 +203,13 @@ async fn extract_from_balance_changes(
     let pre_balances = tx_data
         .meta
         .as_ref()
-        .and_then(|m| Some(m.pre_balances.as_ref()))
+        .map(|m| m.pre_balances.as_ref())
         .unwrap_or(&empty_pre_balances);
 
     let post_balances = tx_data
         .meta
         .as_ref()
-        .and_then(|m| Some(m.post_balances.as_ref()))
+        .map(|m| m.post_balances.as_ref())
         .unwrap_or(&empty_post_balances);
     // Align to minimum length to handle LUT keys present in balances
     let min_len = account_keys.len().min(pre_balances.len().min(post_balances.len()));
